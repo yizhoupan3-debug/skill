@@ -62,7 +62,7 @@ This skill owns request/response integration work when the problem is making sys
 ## Do not use
 
 - The main task is implementing backend route/controller/service internals → use `$node-backend` or `$python-pro`
-- The task is webhook receiver security and verification boundaries → use `$webhook-security`
+- The task is webhook receiver security and verification boundaries -> use `$security-audit` webhook reference
 - The task is API load/stress benchmarking rather than correctness/debugging → use `$api-load-tester`
 - The task is high-level threat modeling instead of concrete API integration behavior → use `$security-threat-model`
 
@@ -84,7 +84,7 @@ This skill does not own:
 If the task shifts to adjacent skill territory, route to:
 - `$node-backend`
 - `$python-pro`
-- `$webhook-security`
+- `$security-audit` webhook reference
 - `$api-load-tester`
 - `$security-audit`
 

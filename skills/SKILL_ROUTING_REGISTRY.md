@@ -17,15 +17,13 @@
 | `architect-review` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Review software architecture, system design, and major structural code changes w |
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Check whether a homework or course-project submission satisfies the stated requi |
 | `auth-implementation` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Produce server-enforced auth flows with clean separation between authentication, |
-| `autopilot` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Repo-native autopilot workflow for end-to-end execution on this repo's Rust supe |
 | `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 96.1 | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `backend-runtime-debugging` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Diagnose backend runtime failures: crashes, tracebacks, OOM, deadlocks, hanging  |
 | `brainstorm-research` | Active | P2 | L3 | owner | none | project | ✓ 95.8 | Expand early research ideas into multiple comparable directions and preserve the |
 | `build-tooling` | Active | P1 | L2 | owner | none | project | ✓ 98.1 | Debug and design JS/TS/Python build tooling across package managers, lockfiles,  |
 | `chatgpt-apps` | Active | P2 | L4 | owner | none | project | ✓ 94.7 | Build, scaffold, refactor, and troubleshoot ChatGPT Apps SDK applications that c |
 | `checklist-fixer` | Active | P1 | L2 | owner | none | project | ✓ 96.5 | Execute fix lists and implementation plans with mandatory per-item verification  |
-| `checklist-normalizer` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Rewrite a messy checklist into an execution-ready form with explicit serial/para |
-| `checklist-writting` | Active | P1 | L1 | owner | none | project | ✓ 100.0 | Write a versioned execution-ready checklist once the strategy is fixed. |
+| `checklist-planner` | Active | P1 | L1 | owner | none | project | ✓ 100.0 | Create or normalize execution-ready checklists before execution starts. |
 | `chrome-extension-dev` | Active | P2 | L4 | owner | none | project | ✓ 97.0 | Produce Chrome extensions for Manifest V3: Service Workers, minimal permissions, |
 | `citation-management` | Active | P2 | L1 | owner | none | project | ✓ 98.3 | Verify, normalize, de-duplicate, complete, and format academic citations and ref |
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate apps on Cloudflare Workers, Pages, Wrangle |
@@ -39,10 +37,7 @@
 | `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Repo-native deepinterview workflow for evidence-first clarification and converge |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `design-agent` | Active | P2 | L3 | gate | none | project | ✓ 100.0 | Route named-product design references and brand-plus-motion source grounding bef |
-| `design-md` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Analyze real UI assets and synthesize a reusable semantic design system into `DE |
-| `design-output-auditor` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Audit generated or redesigned UI outputs against `DESIGN.md`, prompt guardrails, |
-| `design-prompt-enhancer` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Transform vague UI or page-generation asks into structured, copy-ready design pr |
-| `design-workflow-protocol` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Establish a file-backed design iteration protocol that connects `DESIGN.md`, gen |
+| `design-workflow` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Own design-process artifacts such as DESIGN.md capture, UI-generation prompt sha |
 | `doc` | Active | P1 | L3 | gate | artifact | project | ✓ 94.3 | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
 | `docker` | Active | P2 | L3 | owner | none | project | ✓ 90.9 | Produce minimal, secure Docker images with correct layer caching, multi-stage bu |
 | `documentation-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Write, review, and maintain project documentation such as README, API docs, ADRs |
@@ -54,14 +49,12 @@
 | `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate complex execution with clear scope, state, delegation, and verificat |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Ensure and manage research experiment reproducibility: environment capture, rand |
 | `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Fetch, validate, normalize, and export real financial market data: OHLCV, OHLCV, |
-| `frontend-code-quality` | Active | P2 | L3 | overlay | none | project | ✓ 95.8 | Enforce frontend code-quality rules such as ≤150-line files, early returns, and  |
 | `frontend-debugging` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
 | `frontend-design` | Active | P2 | L3 | owner | none | project | ✓ 95.2 | Guide distinctive, high-end UI design: aesthetic direction, typography, color, m |
 | `gh-address-comments` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Triage and address GitHub PR review comments and review threads for the current  |
 | `gh-fix-ci` | Active | P2 | L0 | gate | source | project | ✓ 93.5 | Triage failing GitHub Actions PR checks with `gh` and the bundled Rust `gh-sourc |
 | `gh-pr-triage` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Triage GitHub pull requests by collecting PR metadata, comments, reviewer state, |
 | `github-actions-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
-| `github-investigator` | Active | P2 | L2 | owner | none | project | ⚠ 64.0 | Deep GitHub repo research with issue/PR timeline and code-history evidence |
 | `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-merge-push workflow end to end. |
 | `go-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver safe concurrent Go code with managed goroutine lifecycles, composable in |
 | `graphviz-expert` | Active | P2 | L3 | owner | none | project | ✓ 92.8 | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
@@ -71,7 +64,6 @@
 | `image-generated` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
 | `infographic` | Active | P2 | L3 | owner | none | project | ✓ 95.1 | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `information-retrieval` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Run multi-round research before acting or recommending |
-| `iterative-optimizer` | Active | P1 | L0 | overlay | none | project | ⚠ 66.4 | N-round optimization loops with built-in laziness immunity |
 | `javascript-pro` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Deliver correct JavaScript code for ESM/CJS boundaries, browser vs Node runtime  |
 | `jupyter-notebook` | Active | P2 | L3 | owner | none | project | ✓ 98.2 | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `latex-compile-acceleration` | Active | P1 | L4 | owner | none | project | ✓ 96.1 | Speed up LaTeX compile and preview workflows |
@@ -89,12 +81,8 @@
 | `npm-package-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Build, refactor, and publish npm packages and JavaScript/TypeScript libraries in |
 | `observability` | Active | P2 | L2 | owner | none | project | ✓ 94.6 | Make production systems observable through logs, metrics, traces, dashboards, an |
 | `openai-docs` | Active | P1 | L1 | gate | source | project | ✓ 100.0 | Use official OpenAI docs first for current OpenAI guidance |
-| `paper-length-tuner` | Active | P2 | L4 | owner | none | project | ✓ 97.8 | Diagnose paper length vs target page/word budget and produce a section-level exp |
-| `paper-logic` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Check whether a paper's claims are actually supported. Use for requests like "看论 |
-| `paper-notation-audit` | Active | P2 | L4 | owner | none | project | ✓ 97.1 | Audit and enforce notation consistency across an academic paper: abbreviations,  |
 | `paper-reviewer` | Active | P2 | L2 | owner | none | project | ✓ 95.8 | Specialist review lane behind `$paper-workbench`. Use when the user clearly want |
 | `paper-reviser` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Specialist revision lane behind `$paper-workbench`. Use when the route is alread |
-| `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
 | `paper-workbench` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Unified front door for paper work. Use when the user has a manuscript-level task |
 | `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Write, restructure, or polish bounded academic-paper prose after the claim/evide |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.8 | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
@@ -122,9 +110,6 @@
 | `seo-web` | Active | P2 | L4 | owner | none | project | ✓ 94.1 | Audit and optimize technical SEO for web apps: meta tags, structured data (JSON- |
 | `shell-cli` | Active | P2 | L2 | owner | none | project | ✓ 98.4 | Produce safe, portable shell commands, pipelines, and scripts that handle quotin |
 | `skill-framework-developer` | Active | P1 | L0 | owner | none | project | ✓ 97.5 | Design and tune Codex skill routing/framework behavior |
-| `skill-routing-repair` | Active | P1 | L0 | owner | none | project | ✓ 97.0 | Patch routing misses with the smallest safe skill fix |
-| `skill-scout` | Active | P2 | L1 | owner | none | project | ✓ 98.0 | Research external skill ecosystems and produce gap-analysis proposals for the lo |
-| `skill-writer` | Active | P1 | L0 | owner | none | project | ✓ 95.5 | Shape one skill's wording, boundary, and token budget |
 | `source-slide-formats` | Active | P2 | L4 | owner | none | project | ✓ 100.0 | Build presentation sources in Markdown, Slidev, Marp, or HTML/CSS and export the |
 | `sql-pro` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Write, optimize, debug, and review SQL for PostgreSQL, MySQL, SQLite, and analyt |
 | `statistical-analysis` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Guide research statistics for test choice, effect sizes, uncertainty reporting,  |
@@ -135,15 +120,10 @@
 | `tailwind-pro` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Produce Tailwind CSS configurations with design tokens, plugin hooks, and framew |
 | `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `tdd-workflow` | Active | P2 | L1 | overlay | none | project | ✓ 92.8 | Run a Test-Driven Development workflow centered on the RED-GREEN-REFACTOR loop w |
-| `team` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Repo-native team workflow for Rust-first supervisor-led delegation and worker li |
 | `test-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Choose the right test layer, write maintainable tests, and stabilize flaky behav |
 | `typescript-pro` | Active | P1 | L4 | owner | none | project | ✓ 96.3 | Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain con |
-| `vercel-react-best-practices` | Active | P2 | L4 | overlay | none | project | ✓ 96.8 | Apply Vercel-style React/Next.js best practices for App Router, Server Component |
 | `visual-review` | Active | P1 | L3 | gate | evidence | project | ✓ 95.0 | Review screenshots, rendered pages, charts, and UI artifacts with image-grounded |
 | `vue` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Deliver Vue 3 applications using Composition API with correct reactivity chains, |
 | `web-platform-basics` | Active | P2 | L2 | owner | none | project | ✓ 96.2 | Explain and fix browser-native behavior at the platform layer before reaching fo |
 | `web-scraping` | Active | P2 | L4 | owner | none | project | ✓ 99.2 | Plan and implement web scraping and structured data extraction workflows. Use wh |
-| `webhook-security` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Secure webhook receivers and callback endpoints for Stripe, GitHub, Slack, Clerk |
-| `writing-skills` | Active | P2 | L0 | overlay | none | project | ✓ 95.2 | Standardize and strengthen multiple `SKILL.md` files and shared skill-writing do |
-| `xlsx` | Active | P1 | L3 | gate | artifact | project | ✓ 98.3 | Gate `.xlsx` workbook work when formulas, formatting, workbook structure, or pri |
 | `youtube-summarizer` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Extract transcripts from YouTube videos and turn them into summaries, notes, key |

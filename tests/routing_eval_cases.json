@@ -176,7 +176,7 @@
       "focus_skill": "paper-workbench",
       "expected_owner": "paper-workbench",
       "expected_overlay": null,
-      "forbidden_owners": ["paper-reviser", "paper-writing", "paper-logic"],
+      "forbidden_owners": ["paper-reviser", "paper-writing", "paper-reviewer"],
       "first_turn": true
     },
     {
@@ -296,7 +296,7 @@
       "focus_skill": "humanizer",
       "expected_owner": "humanizer",
       "expected_overlay": null,
-      "forbidden_owners": ["paper-writing", "copywriting", "writing-skills"],
+      "forbidden_owners": ["paper-writing", "copywriting", "skill-framework-developer"],
       "first_turn": true
     },
     {
@@ -416,7 +416,7 @@
       "focus_skill": "paper-reviewer",
       "expected_owner": "paper-reviewer",
       "expected_overlay": null,
-      "forbidden_owners": ["paper-logic", "visual-review"],
+      "forbidden_owners": ["paper-reviewer", "visual-review"],
       "first_turn": true
     },
     {
@@ -430,11 +430,11 @@
       "first_turn": true
     },
     {
-      "id": "paper-logic-evidence-case",
+      "id": "paper-reviewer-logic-evidence-case",
       "category": "wrong-owner-near-miss",
       "task": "别润色，直接看这篇论文 claims 和 evidence 对不对齐，实验支撑够不够。",
-      "focus_skill": "paper-logic",
-      "expected_owner": "paper-logic",
+      "focus_skill": "paper-reviewer",
+      "expected_owner": "paper-reviewer",
       "expected_overlay": null,
       "forbidden_owners": ["paper-writing", "paper-reviser"],
       "first_turn": true

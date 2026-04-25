@@ -72,7 +72,7 @@ If the task shifts to adjacent skill territory, route to:
 - `$nextjs` for Next.js App Router / Server Actions
 - `$vue` / `$svelte` for other frameworks
 - `$typescript-pro` for deep type system design
-- `$vercel-react-best-practices` for rendering/data-flow audits
+- `$nextjs` with the Vercel best-practices reference for rendering/data-flow audits
 - **Dual-Dimension Audit (Pre: Spec/Logic, Post: Result Idealism)** → `$execution-audit` [Overlay]
 
 ## Required workflow

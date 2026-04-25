@@ -48,44 +48,41 @@
 ## 分层概览
 
 ```text
-L0  execution-controller-coding, skill-writer, skill-framework-developer, skill-routing-repair, writing-skills,
+L0  execution-controller-coding, skill-framework-developer,
     gh-address-comments, gh-fix-ci, sentry, subagent-delegation,
-    systematic-debugging, iterative-optimizer
-L1  checklist-writting, tdd-workflow, test-engineering, refactoring,
+    systematic-debugging
+L1  checklist-planner, tdd-workflow, test-engineering, refactoring,
     documentation-engineering, error-handling-patterns, frontend-debugging,
     backend-runtime-debugging,
     citation-management, coding-standards, prompt-engineer,
-    information-retrieval, skill-scout, anti-laziness
+    information-retrieval, anti-laziness
 L2  build-tooling, plan-to-code, api-integration-debugging,
     datastore-cache-queue, observability, web-platform-basics, gitx,
     css-pro, shell-cli, data-wrangling, dependency-migration,
-    checklist-normalizer, checklist-fixer, env-config-management, code-review,
-    architect-review, sustech-mailer, github-investigator
+    checklist-fixer, env-config-management, code-review,
+    architect-review, sustech-mailer, paper-workbench, research-workbench
 L3  accessibility-auditor, api-design, api-load-tester,
     brainstorm-research, cloudflare-deploy, doc, docker,
-    design-agent, experiment-reproducibility, frontend-code-quality, frontend-design,
+    design-agent, design-workflow, experiment-reproducibility, frontend-design,
     github-actions-authoring, graphviz-expert, i18n-l10n, image-generated,
     infographic, jupyter-notebook, linux-server-ops, mcp-builder,
     mermaid-expert, monorepo-tooling, native-app-debugging, npm-package-authoring, pdf,
     performance-expert, playwright, release-engineering, screenshot,
     security-threat-model,
-    spreadsheets, sustech-mailer, visual-review, xlsx
+    spreadsheets, sustech-mailer, visual-review
 L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
     ppt-beamer, ppt-pptx, source-slide-formats,
-    paper-logic, paper-notation-audit, paper-reviewer, paper-reviser,
-    paper-visuals, paper-writing, paper-length-tuner, assignment-compliance,
-    latex-compile-acceleration, security-audit, webhook-security,
+    paper-reviewer, paper-reviser, paper-writing, assignment-compliance,
+    latex-compile-acceleration, security-audit,
     mac-memory-management, ai-research, autoresearch, algo-trading,
     financial-data-fetching, agent-memory, agent-swarm-orchestration,
     literature-synthesis, statistical-analysis, chrome-extension-dev,
     humanizer, scientific-figure-plotting, tailwind-pro,
     typescript-pro, python-pro, javascript-pro, rust-pro, go-pro, sql-pro,
-    vercel-react-best-practices, seo-web, email-template, web-scraping,
+    seo-web, email-template, web-scraping,
     youtube-summarizer, copywriting, research-engineer, math-derivation
 Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
-          frontend-code-quality, writing-skills, iterative-optimizer,
-          skill-routing-repair, security-audit, i18n-l10n,
-          vercel-react-best-practices, anti-laziness
+          execution-audit, security-audit, i18n-l10n, anti-laziness
 ```
 
 > System skills（`.system/`）: `skill-creator`, `skill-installer`, `openai-docs`
@@ -102,24 +99,24 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 
 ## 易混淆边界
 
-- `skill-framework-developer` vs `skill-routing-repair` → 框架 redesign vs 事后最小修补
-- `skill-writer` vs `skill-creator` → 写法指导 vs 实际改 skill 包
+- `skill-framework-developer` vs `skill-creator` → 框架治理 / miss repair / wording modes vs 实际改一个 skill 包
 - `skill-creator` vs `skill-installer` → 本地 authoring vs 新 skill intake / relink
 - `systematic-debugging` vs 领域 owner → 根因未知 vs 根因已知
 - `design-agent` vs `frontend-design` → 先定参考源 / verified tokens / borrow-adapt map vs 直接做视觉改版
+- `design-workflow` vs `frontend-design` → DESIGN.md / prompt / 验收流程 vs 直接改 UI
 - `design-agent` vs `motion-design` → 先拆品牌与动效来源 vs 直接做动效实现
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
-- `spreadsheets` vs `xlsx` → 通用 spreadsheet artifact gate vs Excel workbook-native gate
+- `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
 - `slides` vs `ppt-pptx` → 通用 PPT / 现有 deck artifact gate vs 显式 `deck.plan.json` / Rust PPTX 源码工作流
 - `slides` vs `source-slide-formats` → 通用演示文稿入口 vs 显式 Markdown / Slidev / Marp / HTML source slides
 - `build-tooling` vs `typescript-pro` / `python-pro` / `javascript-pro` → 构建链 vs 语言语义
 - `latex-compile-acceleration` vs `ppt-beamer` → 编译优化 vs Beamer 内容/版式
-- `information-retrieval` vs `skill-scout` → 通用调研 vs skill 生态专项对标
-- `information-retrieval` vs `github-investigator` → 通用多源调研 vs repo / issue / PR / timeline 深挖
-- `github-investigator` vs `skill-scout` → 仓库拆解复盘 vs 为本地 skill 库做吸收式对标
-- `checklist-writting` vs `checklist-normalizer` → 从目标直接生 execution-ready checklist vs 整理已有 checklist / phase plan
-- `checklist-normalizer` vs `checklist-fixer` → 重写 checklist 结构 vs 按 checklist 执行
-- `plan-to-code` vs `checklist-normalizer` → spec/plan 直接落代码 vs 先把 checklist shape 稳定下来
+- `information-retrieval` GitHub mode vs `gh-pr-triage` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总
+- `information-retrieval` vs `skill-framework-developer` external scout mode → 通用调研 vs 为本地 skill 库做吸收式对标
+- `checklist-planner` vs `checklist-fixer` → 生成/整理 execution-ready checklist vs 按 checklist 执行
+- `plan-to-code` vs `checklist-planner` → spec/plan 直接落代码 vs 先把 checklist shape 稳定下来
+- `paper-workbench` vs `paper-reviewer` / `paper-reviser` / `paper-writing` → manuscript front door vs 明确只审 / 按 findings 改 / 局部文字
+- `security-audit` webhook reference vs `auth-implementation` → webhook 漏洞审计 vs webhook callback/auth flow 实现
 
 ## 重路由信号
 

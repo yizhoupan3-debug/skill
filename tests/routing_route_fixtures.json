@@ -235,12 +235,12 @@
       92.0
     ],
     [
-      "writing-skills",
+      "skill-framework-developer",
       "L2",
       "owner",
       "none",
       "P1",
-      "Repository-wide wording cleanup and SKILL.md standardization owner.",
+      "Skill framework governance owner for wording cleanup and SKILL.md standardization.",
       "n/a",
       [
         "wording cleanup",
@@ -460,7 +460,7 @@
       "expected": {
         "selected_skill": "plan-to-code",
         "overlay_skill": "execution-audit",
-        "layer": "L2"
+        "layer": "L0"
       }
     },
     {
@@ -477,8 +477,8 @@
       "query": "把这份 checklist 规范一下，串行的写在一点，并行的拆开",
       "expected": {
         "selected_skill": "checklist-planner",
-        "overlay_skill": null,
-        "layer": "L2"
+        "overlay_skill": "anti-laziness",
+        "layer": "L1"
       }
     },
     {
@@ -539,9 +539,9 @@
       "name": "wording-cleanup-does-not-hit-doc-gate",
       "query": "请统一多个 SKILL.md 的措辞和模板，做仓库级 wording cleanup",
       "expected": {
-        "selected_skill": "writing-skills",
+        "selected_skill": "skill-framework-developer",
         "overlay_skill": null,
-        "layer": "L2"
+        "layer": "L0"
       }
     },
     {

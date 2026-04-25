@@ -48,15 +48,15 @@ This skill owns rigorous research-grade technical judgment when correctness and 
 ## Do not use
 
 - The user wants one front door for a research-project task and has not yet committed to a critique-first lane → use `$research-workbench`
-- The task is reviewing a paper's scientific logic, novelty, or claims-vs-evidence **in the context of manuscript submission** → use `$paper-logic`
+- The task is reviewing a paper's scientific logic, novelty, or claims-vs-evidence **in the context of manuscript submission** → use `$paper-reviewer` logic mode
 - The user wants early-stage brainstorming → use `$brainstorm-research`
 - The task is broad AI/ML engineering implementation → use `$ai-research`
 - The user wants wording polish or friendly explanation instead of rigorous critique
 - The task is standard app coding without research-level rigor demands
 
-## Routing clarification: `research-engineer` vs `paper-logic`
+## Routing clarification: `research-engineer` vs paper logic mode
 
-| Dimension | `research-engineer` | `paper-logic` |
+| Dimension | `research-engineer` | `paper-reviewer` logic mode |
 |-----------|---------------------|---------------|
 | **Context** | Algorithm / method / implementation in isolation | Paper manuscript for submission |
 | **Input** | Code, spec, algorithm, proof, design doc | Paper draft, reviewer comments |
@@ -66,7 +66,7 @@ This skill owns rigorous research-grade technical judgment when correctness and 
 
 Rule of thumb:
 - **No manuscript context** — algorithm, code, spec, design doc → `research-engineer`
-- **Paper under peer review** — logic chain, novelty, evidence alignment → `paper-logic`
+- **Paper under peer review** — logic chain, novelty, evidence alignment -> `paper-reviewer` logic mode
 - **Gray zone**: if the user has both a paper draft AND an isolated algorithm question, ask which perspective they want.
 
 ## Task ownership and boundaries

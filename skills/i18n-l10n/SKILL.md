@@ -70,7 +70,7 @@ This skill owns:
 
 This skill does not own:
 - Actual content translation
-- General frontend patterns → `$frontend-code-quality`
+- General frontend patterns -> `$coding-standards` frontend-quality reference
 - Accessibility → `$accessibility-auditor`
 
 ## Core workflow

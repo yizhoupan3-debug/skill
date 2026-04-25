@@ -20,7 +20,7 @@ It is the contract source of truth for:
 Rust owns the default runtime and contract path.
 
 - `router-rs --route-json`, `--route-policy-json`, `--route-report-json` own route decisions.
-- `router-rs --profile-json` and `--profile-artifacts-json` own the Codex-only profile and `codex_adapter` artifact.
+- `router-rs --profile-json` and `--profile-artifacts-json` own the Codex-only profile and `codex_profile` artifact.
 - `router-rs --execute-json` owns the live/dry-run execution response contract.
 - `router-rs --framework-runtime-snapshot-json`, `--framework-contract-summary-json`, `--framework-memory-recall-json`, `--framework-session-artifact-write-json`, `--framework-memory-policy-json`, and `--framework-prompt-compression-json` own framework runtime read/write/policy surfaces.
 - `router-rs --sync-host-entrypoints-json` owns repo host-entrypoint materialization.
@@ -81,15 +81,15 @@ Retired surfaces stay retired:
 
 - Contract changes must be explicit and versioned.
 - Rust may replace implementations, not silently redefine semantics.
-- Codex host-private fields stay in `codex_adapter.host_adapter_payload`; they must not enter framework truth.
+- Codex host-private fields stay in `codex_profile.codex_host_payload`; they must not enter framework truth.
 - Compatibility inventory is not a regression baseline.
 - Generated host entrypoints are projections, not hand-authored truth.
 - Any new Python runtime, routing, artifact, hook, or host-integration implementation is a regression unless explicitly approved as a host-private edge script.
 
 ## Codex Profile Invariants
 
-- `codex_adapter` is the only default profile artifact key. The key is kept for compatibility and no longer represents a multi-host adapter layer.
-- Codex host-private fields stay in `codex_adapter.host_adapter_payload`.
+- `codex_profile` is the only default profile artifact key. The key is kept for compatibility and no longer represents a multi-host adapter layer.
+- Codex host-private fields stay in `codex_profile.codex_host_payload`.
 - CLI/Desktop split, parity snapshots, non-Codex projections, and generic fallback adapters are not default runtime surfaces.
 
 ## Route Contract

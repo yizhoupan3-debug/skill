@@ -71,10 +71,10 @@ Minimum structure:
 
 ## Escalate or reroute
 
-Escalate to `$github-investigator` when any of these become central:
+Stay in `$information-retrieval` GitHub mode when any of these become central:
 - repo architecture
 - issue / PR history
 - commit timeline
 - contributor or release evolution
 
-Escalate to `$skill-scout` when the real output is a local skill-library gap analysis.
+Hand off to `$skill-framework-developer` external scout mode when the real output is a local skill-library gap analysis.

@@ -9,10 +9,7 @@ use std::process::Command;
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
-const FRAMEWORK_START_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->";
-const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
-const RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH: &str = ".codex/model_instructions.md";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
     "fast-mode",
@@ -43,11 +40,11 @@ struct RuntimeRegistry {
 #[derive(Debug, Clone, Deserialize, Default)]
 struct RuntimeWorkspaceBootstrapDefaults {
     #[serde(default)]
-    skill_bridge: RuntimeSkillBridgeDefaults,
+    skills: RuntimeSkillsDefaults,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-struct RuntimeSkillBridgeDefaults {
+struct RuntimeSkillsDefaults {
     #[serde(default)]
     source_rel: Option<String>,
 }
@@ -65,7 +62,7 @@ enum Commands {
         #[arg(long)]
         repo_root: PathBuf,
     },
-    ResolveSkillBridgeSource {
+    ResolveSkillsSource {
         #[arg(long)]
         repo_root: PathBuf,
     },
@@ -121,14 +118,6 @@ enum Commands {
         #[arg(long)]
         active_task_id: String,
     },
-    PlanLegacyArtifactRoots {
-        #[arg(long)]
-        repo_root: PathBuf,
-    },
-    MigrateLegacyArtifactRoots {
-        #[arg(long)]
-        repo_root: PathBuf,
-    },
     EnsureDefaultBootstrap {
         #[arg(long)]
         repo_root: PathBuf,
@@ -137,8 +126,6 @@ enum Commands {
     },
     InstallNativeIntegration {
         #[arg(long)]
-        template_root: Option<PathBuf>,
-        #[arg(long)]
         repo_root: PathBuf,
         #[arg(long)]
         home_config_path: PathBuf,
@@ -146,8 +133,6 @@ enum Commands {
         home_codex_skills_path: PathBuf,
         #[arg(long)]
         bootstrap_output_dir: Option<PathBuf>,
-        #[arg(long)]
-        skip_framework_overlay_retirement: bool,
         #[arg(long)]
         skip_home_codex_skills_link: bool,
         #[arg(long)]
@@ -186,9 +171,9 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             serde_json::to_value(load_runtime_registry_payload(&repo_root)?)
                 .map_err(|err| err.to_string())?
         }
-        Commands::ResolveSkillBridgeSource { repo_root } => json!({
+        Commands::ResolveSkillsSource { repo_root } => json!({
             "path": normalize_path(&repo_root)?
-                .join(skill_bridge_source_rel(&repo_root)?)
+                .join(skills_source_rel(&repo_root)?)
                 .to_string_lossy(),
         }),
         Commands::ValidateDefaultBootstrap {
@@ -248,25 +233,15 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
         } => json!({
             "moved": migrate_current_artifact_clutter(&normalize_path(&repo_root)?, &active_task_id)?,
         }),
-        Commands::PlanLegacyArtifactRoots { repo_root } => json!({
-            "plans": migration_plan_values(&plan_legacy_artifact_root_migrations(
-                &normalize_path(&repo_root)?,
-            )?),
-        }),
-        Commands::MigrateLegacyArtifactRoots { repo_root } => json!({
-            "moved": migrate_legacy_artifact_roots(&normalize_path(&repo_root)?)?,
-        }),
         Commands::EnsureDefaultBootstrap {
             repo_root,
             output_dir,
         } => ensure_default_bootstrap(&repo_root, output_dir.as_deref())?,
         Commands::InstallNativeIntegration {
-            template_root: _,
             repo_root,
             home_config_path,
             home_codex_skills_path,
             bootstrap_output_dir,
-            skip_framework_overlay_retirement,
             skip_home_codex_skills_link,
             skip_default_bootstrap,
         } => install_native_integration(
@@ -274,7 +249,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             &home_config_path,
             &home_codex_skills_path,
             bootstrap_output_dir.as_deref(),
-            !skip_framework_overlay_retirement,
             !skip_home_codex_skills_link,
             !skip_default_bootstrap,
         )?,
@@ -343,11 +317,11 @@ fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
     serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| err.to_string())
 }
 
-fn skill_bridge_source_rel(repo_root: &Path) -> Result<String, String> {
+fn skills_source_rel(repo_root: &Path) -> Result<String, String> {
     let registry = load_runtime_registry(repo_root)?;
     Ok(registry
         .workspace_bootstrap_defaults
-        .skill_bridge
+        .skills
         .source_rel
         .unwrap_or_else(|| ".codex/skills".to_string()))
 }
@@ -407,7 +381,6 @@ fn install_native_integration(
     home_config_path: &Path,
     home_codex_skills_path: &Path,
     bootstrap_output_dir: Option<&Path>,
-    retire_framework_overlay_file: bool,
     install_home_codex_skills_link: bool,
     install_default_bootstrap: bool,
 ) -> Result<Value, String> {
@@ -424,11 +397,6 @@ fn install_native_integration(
     } else {
         false
     };
-    let framework_overlay_result = if retire_framework_overlay_file {
-        retire_overlay(&repo_root.join(RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH))?
-    } else {
-        Value::Null
-    };
     let default_bootstrap = if install_default_bootstrap {
         ensure_default_bootstrap(&repo_root, bootstrap_output_dir.as_deref())?
     } else {
@@ -444,7 +412,6 @@ fn install_native_integration(
         "codex_hooks_feature_changed": codex_hooks_feature_changed,
         "tui_status_line_changed": tui_changed,
         "home_codex_skills_link_changed": home_codex_skills_link_changed,
-        "framework_overlay_retirement": framework_overlay_result,
         "default_bootstrap": default_bootstrap,
     }))
 }
@@ -606,7 +573,6 @@ fn install_skill_tool(
             &home.join(".codex").join("skills"),
             bootstrap_output_dir,
             true,
-            true,
             !skip_default_bootstrap,
         )?;
         return Ok(json!({
@@ -630,11 +596,6 @@ fn install_native_integration_changed(payload: &Value) -> bool {
     .any(|key| payload.get(*key).and_then(Value::as_bool) == Some(true))
         || payload
             .get("default_bootstrap")
-            .and_then(|value| value.get("changed"))
-            .and_then(Value::as_bool)
-            == Some(true)
-        || payload
-            .get("framework_overlay_retirement")
             .and_then(|value| value.get("changed"))
             .and_then(Value::as_bool)
             == Some(true)
@@ -684,8 +645,7 @@ fn codex_install_status_with_bootstrap(
     let config_ok = codex_config_matches_contract(&config_path)?;
     let bootstrap_ok = validate_default_bootstrap(&bootstrap_path, repo_root)?;
     let codex_skills_ok = skills_stub_dir_matches_source(&codex_skills_path, &source)?;
-    let overlay_ok = retired_overlay_ok(&repo_root.join(RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH))?;
-    let ready = config_ok && bootstrap_ok && codex_skills_ok && overlay_ok;
+    let ready = config_ok && bootstrap_ok && codex_skills_ok;
 
     Ok(json!({
         "ready": ready,
@@ -696,7 +656,6 @@ fn codex_install_status_with_bootstrap(
             "config": config_ok,
             "bootstrap": bootstrap_ok,
             "codex_skills": codex_skills_ok,
-            "overlay": overlay_ok,
         },
     }))
 }
@@ -708,15 +667,8 @@ fn codex_config_matches_contract(config_path: &Path) -> Result<bool, String> {
     Ok(content.contains("[tui]") && content.lines().any(is_status_line))
 }
 
-fn retired_overlay_ok(path: &Path) -> Result<bool, String> {
-    let Some(content) = read_text_if_exists(path)? else {
-        return Ok(true);
-    };
-    Ok(!content.contains(FRAMEWORK_START_MARKER))
-}
-
 fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
-    Ok(repo_root.join(skill_bridge_source_rel(repo_root)?))
+    Ok(repo_root.join(skills_source_rel(repo_root)?))
 }
 
 fn skills_stub_dir_matches_source(
@@ -1027,23 +979,12 @@ fn run_memory_automation(
     } else {
         plan_current_artifact_clutter_migrations(&repo_root, &active_task_id)?
     };
-    let planned_legacy_root_migrations = if resolved_artifact_source_dir.is_some() {
-        Vec::new()
-    } else {
-        plan_legacy_artifact_root_migrations(&repo_root)?
-    };
     let moved_current_artifacts =
         if apply_artifact_migrations && resolved_artifact_source_dir.is_none() {
             migrate_current_artifact_clutter(&repo_root, &active_task_id)?
         } else {
             Vec::new()
         };
-    let moved_legacy_roots = if apply_artifact_migrations && resolved_artifact_source_dir.is_none()
-    {
-        migrate_legacy_artifact_roots(&repo_root)?
-    } else {
-        Vec::new()
-    };
 
     let consolidation = run_router_rs_json(
         &repo_root,
@@ -1114,7 +1055,6 @@ fn run_memory_automation(
         &changed_file_list,
         archive_object,
         &planned_current_artifact_migrations,
-        &planned_legacy_root_migrations,
         apply_artifact_migrations,
     );
 
@@ -1128,9 +1068,7 @@ fn run_memory_automation(
             "archive": archive,
             "changed_files": changed_files,
             "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
-            "planned_legacy_root_migrations": migration_plan_values(&planned_legacy_root_migrations),
             "moved_current_artifacts": moved_current_artifacts,
-            "moved_legacy_roots": moved_legacy_roots,
             "retrieval": retrieval,
             "apply_artifact_migrations": apply_artifact_migrations,
         }),
@@ -1156,9 +1094,7 @@ fn run_memory_automation(
         "changed_files": changed_files,
         "archive": archive,
         "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
-        "planned_legacy_root_migrations": migration_plan_values(&planned_legacy_root_migrations),
         "moved_current_artifacts": moved_current_artifacts,
-        "moved_legacy_roots": moved_legacy_roots,
         "apply_artifact_migrations": apply_artifact_migrations,
         "sqlite_result": sqlite_result,
         "storage_total_mib": report.get("total_mib").cloned().unwrap_or(Value::Null),
@@ -1173,9 +1109,7 @@ fn run_memory_automation(
         "changed_files": changed_files,
         "archive": archive,
         "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
-        "planned_legacy_root_migrations": migration_plan_values(&planned_legacy_root_migrations),
         "moved_current_artifacts": moved_current_artifacts,
-        "moved_legacy_roots": moved_legacy_roots,
         "apply_artifact_migrations": apply_artifact_migrations,
         "report": report,
         "sqlite_result": sqlite_result,
@@ -1237,7 +1171,6 @@ fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf {
         .unwrap_or(root)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn render_memory_automation_snapshot(
     workspace: &str,
     generated_at: &str,
@@ -1248,7 +1181,6 @@ fn render_memory_automation_snapshot(
     changed_files: &[String],
     archive_result: &Map<String, Value>,
     planned_current_artifact_migrations: &[MigrationPlan],
-    planned_legacy_root_migrations: &[MigrationPlan],
     apply_artifact_migrations: bool,
 ) -> String {
     let mut lines = vec![
@@ -1298,10 +1230,6 @@ fn render_memory_automation_snapshot(
         format!(
             "- planned_current_artifact_migrations: {}",
             planned_current_artifact_migrations.len()
-        ),
-        format!(
-            "- planned_legacy_root_migrations: {}",
-            planned_legacy_root_migrations.len()
         ),
     ];
     if changed_files.is_empty() {
@@ -1562,53 +1490,6 @@ fn migrate_current_artifact_clutter(
     active_task_id: &str,
 ) -> Result<Vec<String>, String> {
     let plans = plan_current_artifact_clutter_migrations(repo_root, active_task_id)?;
-    let mut moved = Vec::new();
-    for plan in plans {
-        moved.push(move_path(
-            Path::new(&plan.source),
-            Path::new(&plan.destination),
-        )?);
-    }
-    Ok(moved)
-}
-
-fn plan_legacy_artifact_root_migrations(repo_root: &Path) -> Result<Vec<MigrationPlan>, String> {
-    let artifacts_root = repo_root.join("artifacts");
-    if !artifacts_root.exists() {
-        return Ok(Vec::new());
-    }
-    let mut plans = Vec::new();
-    let legacy_memory_root = artifacts_root.join("memory_automation");
-    if legacy_memory_root.exists() {
-        plans.push(MigrationPlan {
-            source: legacy_memory_root.to_string_lossy().into_owned(),
-            destination: ops_memory_automation_root(repo_root)
-                .join("legacy-root")
-                .to_string_lossy()
-                .into_owned(),
-        });
-    }
-    for entry in fs::read_dir(&artifacts_root).map_err(|err| err.to_string())? {
-        let path = entry.map_err(|err| err.to_string())?.path();
-        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        if name.starts_with("tmp-") {
-            plans.push(MigrationPlan {
-                source: path.to_string_lossy().into_owned(),
-                destination: scratch_artifact_root(repo_root, None)
-                    .join(name)
-                    .to_string_lossy()
-                    .into_owned(),
-            });
-        }
-    }
-    plans.sort_by(|left, right| left.source.cmp(&right.source));
-    Ok(plans)
-}
-
-fn migrate_legacy_artifact_roots(repo_root: &Path) -> Result<Vec<String>, String> {
-    let plans = plan_legacy_artifact_root_migrations(repo_root)?;
     let mut moved = Vec::new();
     for plan in plans {
         moved.push(move_path(
@@ -1928,13 +1809,13 @@ fn ensure_stub_skill_directory(source: &Path, target_path: &Path) -> Result<bool
 }
 
 fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
-    let source = repo_root.join(skill_bridge_source_rel(repo_root)?);
+    let source = repo_root.join(skills_source_rel(repo_root)?);
     ensure_stub_skill_directory(&source, target_path)
 }
 
 fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
     let source = repo_root
-        .join(skill_bridge_source_rel(repo_root)?)
+        .join(skills_source_rel(repo_root)?)
         .canonicalize()
         .map_err(|err| err.to_string())?;
     let metadata = match fs::symlink_metadata(target_path) {
@@ -1951,60 +1832,6 @@ fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool,
     }
     remove_path(target_path).map_err(|err| err.to_string())?;
     Ok(true)
-}
-
-fn retire_overlay(path: &Path) -> Result<Value, String> {
-    if !path.exists() {
-        return Ok(json!({
-            "success": true,
-            "path": path.to_string_lossy(),
-            "changed": false,
-            "status": "already-retired",
-            "retirement_mode": "missing",
-        }));
-    }
-    let original = fs::read_to_string(path).map_err(|err| err.to_string())?;
-    let stripped = strip_managed_block(&original).trim().to_string();
-    if !stripped.is_empty() {
-        let updated = format!("{stripped}\n");
-        let changed = updated != original;
-        if changed {
-            fs::write(path, updated).map_err(|err| err.to_string())?;
-        }
-        return Ok(json!({
-            "success": true,
-            "path": path.to_string_lossy(),
-            "changed": changed,
-            "status": "retired-managed-block",
-            "retirement_mode": "preserved-user-content",
-        }));
-    }
-    remove_path(path).map_err(|err| err.to_string())?;
-    Ok(json!({
-        "success": true,
-        "path": path.to_string_lossy(),
-        "changed": true,
-        "status": "retired-file",
-        "retirement_mode": "deleted-empty-overlay",
-    }))
-}
-
-fn strip_managed_block(text: &str) -> String {
-    let start = text.find(FRAMEWORK_START_MARKER);
-    let end = text.find(FRAMEWORK_END_MARKER);
-    match (start, end) {
-        (Some(start_index), Some(end_index)) => {
-            let after = &text[end_index + FRAMEWORK_END_MARKER.len()..];
-            let merged = format!("{}{}", &text[..start_index], after);
-            let trimmed = merged.trim();
-            if trimmed.is_empty() {
-                String::new()
-            } else {
-                format!("{trimmed}\n")
-            }
-        }
-        _ => text.to_string(),
-    }
 }
 
 fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {

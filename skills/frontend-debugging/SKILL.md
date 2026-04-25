@@ -78,7 +78,7 @@ tools, mental models, and checklists for frontend runtime problems that generic
 - The issue is purely CSS layout without runtime behavior → use `$css-pro`
 - The issue is API integration (CORS, 401, payload mismatch) without frontend-specific symptoms → use `$api-integration-debugging`
 - The issue is purely performance (LCP, CLS, INP) without functional bugs → use `$performance-expert`
-- The concern is code quality and patterns, not runtime bugs → use `$frontend-code-quality`
+- The concern is code quality and patterns, not runtime bugs → use `$coding-standards` frontend-quality reference
 
 ## Task ownership and boundaries
 
@@ -97,7 +97,7 @@ This skill does not own:
 - CSS layout engineering → `$css-pro`
 - API layer debugging → `$api-integration-debugging`
 - Performance optimization → `$performance-expert`
-- Code quality review → `$frontend-code-quality`
+- Code quality review -> `$coding-standards` frontend-quality reference
 - Framework-specific feature implementation → `$react` / `$nextjs` / `$vue` / `$svelte`
 
 If the task shifts to adjacent skill territory, route to:

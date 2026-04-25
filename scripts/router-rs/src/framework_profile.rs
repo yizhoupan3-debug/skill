@@ -34,12 +34,7 @@ const CODEX_HOST_CAPABILITIES: [&str; 13] = [
     "host_tmux_worker_management",
     "framework_alias_entrypoints",
 ];
-const CODEX_HOST_PAYLOAD_KEY: &str = "host_adapter_payload";
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
-    "adapter_id",
-    "adapter_alias_of",
-    "automation_bridge_required",
-    "canonical_adapter_id",
     "checkpointing_supported",
     "config_root_env_var",
     "context_files",
@@ -53,7 +48,6 @@ const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "settings_paths",
     "settings_scope_order",
     "settings_scopes",
-    "shared_adapter",
     "structured_output_modes",
     "subagent_paths",
     "supports_batch",
@@ -62,7 +56,6 @@ const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "thread_binding",
     "transport",
 ];
-const CODEX_ADAPTER_ID: &str = "codex_adapter";
 const EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID: &str = "execution_controller_contract";
 const DELEGATION_CONTRACT_ARTIFACT_ID: &str = "delegation_contract";
 const SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID: &str = "supervisor_state_contract";
@@ -139,7 +132,7 @@ pub struct ProfileBundle {
     pub workspace_bootstrap: Map<String, Value>,
     pub host_capability_requirements: Map<String, Value>,
     pub metadata: Map<String, Value>,
-    pub codex_adapter: Value,
+    pub codex_profile: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -169,7 +162,7 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         &normalized_mcp_servers,
         &workspace_bootstrap,
     );
-    let codex_adapter = build_codex_adapter(
+    let codex_profile = build_codex_profile(
         profile,
         &normalized_memory_mounts,
         &normalized_mcp_servers,
@@ -200,7 +193,7 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         workspace_bootstrap: workspace_bootstrap.clone(),
         host_capability_requirements: profile.host_capability_requirements.clone(),
         metadata: profile.metadata.clone(),
-        codex_adapter: Value::Object(codex_adapter),
+        codex_profile: Value::Object(codex_profile),
     })
 }
 
@@ -209,7 +202,7 @@ pub fn build_codex_artifact_bundle(
 ) -> Result<Map<String, Value>, String> {
     let bundle = build_profile_bundle(profile)?;
     let mut artifacts = Map::new();
-    artifacts.insert("codex_adapter".to_string(), bundle.codex_adapter);
+    artifacts.insert("codex_profile".to_string(), bundle.codex_profile);
     Ok(artifacts)
 }
 
@@ -251,7 +244,7 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
         .collect::<Vec<_>>();
     if !host_specific_metadata.is_empty() {
         return Err(format!(
-            "framework profile metadata must stay Codex-core-only; move Codex host-private keys into codex_adapter.host_adapter_payload: {}",
+            "framework profile metadata must stay Codex-core-only; move Codex host-private keys into codex_profile.codex_host_payload: {}",
             host_specific_metadata.join(", ")
         ));
     }
@@ -278,7 +271,7 @@ fn normalize_mounts(memory_mounts: &[Value]) -> Vec<Value> {
                 ("mount_id", Value::String(value_to_string(other))),
                 ("source", Value::String(value_to_string(other))),
                 (
-                    "bridge_kind",
+                    "mount_kind",
                     Value::String("framework-memory-mount".to_string()),
                 ),
             ]),
@@ -312,35 +305,35 @@ fn compile_workspace_bootstrap(
     normalized_memory_mounts: &[Value],
 ) -> Map<String, Value> {
     let mut bootstrap = profile.workspace_bootstrap.clone();
-    let mut bridges = bootstrap
-        .get("bridges")
+    let mut resources = bootstrap
+        .get("resources")
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
 
-    if !bridges.contains_key("skills") {
-        let skills_bridge = bootstrap.get("skill_bridge").cloned().unwrap_or_else(|| {
+    if !resources.contains_key("skills") {
+        let skills = bootstrap.get("skills").cloned().unwrap_or_else(|| {
             value_object([
                 ("project_dir", Value::String(".codex/skills".to_string())),
                 ("user_dir", Value::String("~/.codex/skills".to_string())),
-                ("bridge_dir", Value::String(".codex/skills".to_string())),
+                ("source_dir", Value::String(".codex/skills".to_string())),
             ])
         });
-        bridges.insert("skills".to_string(), skills_bridge);
+        resources.insert("skills".to_string(), skills);
     }
-    if !bridges.contains_key("memory") {
-        let memory_bridge = bootstrap.get("memory_bridge").cloned().unwrap_or_else(|| {
+    if !resources.contains_key("memory") {
+        let memory = bootstrap.get("memory").cloned().unwrap_or_else(|| {
             value_object([
-                (
-                    "bridge_dir",
-                    Value::String(".codex/memory-bridge".to_string()),
-                ),
+                ("source_dir", Value::String(".codex/memory".to_string())),
                 ("mounts", Value::Array(normalized_memory_mounts.to_vec())),
             ])
         });
-        bridges.insert("memory".to_string(), memory_bridge);
+        resources.insert("memory".to_string(), memory);
     }
-    bootstrap.insert("bridges".to_string(), Value::Object(bridges));
+    bootstrap.insert("resources".to_string(), Value::Object(resources));
+    bootstrap.remove("bridges");
+    bootstrap.remove("skill_bridge");
+    bootstrap.remove("memory_bridge");
     bootstrap
 }
 
@@ -488,10 +481,6 @@ fn build_codex_profile_output_base(
     capabilities.insert("host".to_string(), string_array(&CODEX_HOST_CAPABILITIES));
 
     let mut metadata = Map::new();
-    metadata.insert(
-        "adapter_id".to_string(),
-        Value::String(CODEX_ADAPTER_ID.to_string()),
-    );
     metadata.insert("host_id".to_string(), Value::String("codex".to_string()));
     metadata.insert(
         "transport".to_string(),
@@ -619,7 +608,7 @@ fn build_host_alias_entrypoints(host_key: &str) -> Value {
     let aliases = fs::read_to_string(&registry_path)
         .ok()
         .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-        .and_then(|payload| payload.get("framework_native_aliases").cloned())
+        .and_then(|payload| payload.get("framework_commands").cloned())
         .and_then(|aliases| aliases.as_object().cloned());
     let mut entrypoints = Map::new();
     if let Some(aliases) = aliases {
@@ -685,7 +674,7 @@ fn build_codex_host_payload() -> Map<String, Value> {
     payload
 }
 
-fn build_codex_adapter(
+fn build_codex_profile(
     profile: &FrameworkProfileContract,
     normalized_memory_mounts: &[Value],
     normalized_mcp_servers: &[Value],
@@ -725,7 +714,7 @@ fn build_codex_adapter(
         ]),
     );
     payload.insert(
-        CODEX_HOST_PAYLOAD_KEY.to_string(),
+        "codex_host_payload".to_string(),
         Value::Object(complete_codex_host_payload(build_codex_host_payload())),
     );
     payload
@@ -733,7 +722,7 @@ fn build_codex_adapter(
 
 fn resolve_codex_capability_requirements(profile: &FrameworkProfileContract) -> Map<String, Value> {
     let mut merged = Map::new();
-    for key in ["default", "codex", CODEX_ADAPTER_ID] {
+    for key in ["default", "codex", "codex_profile"] {
         if let Some(Value::Object(requirements)) = profile.host_capability_requirements.get(key) {
             merge_json_maps(&mut merged, requirements);
         }
@@ -811,10 +800,7 @@ fn build_execution_controller_contract() -> Map<String, Value> {
     );
 
     let mut boundaries = Map::new();
-    boundaries.insert(
-        "codex_adapter_remains_compatibility_key".to_string(),
-        Value::Bool(true),
-    );
+    boundaries.insert("codex_profile_is_canonical".to_string(), Value::Bool(true));
     boundaries.insert(
         "runtime_branching_changes_required".to_string(),
         Value::Bool(false),
@@ -1140,13 +1126,9 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
         Value::Bool(true),
     );
 
-    let mut compatibility_rules = Map::new();
-    compatibility_rules.insert("rust_may_validate_or_emit".to_string(), Value::Bool(true));
-    compatibility_rules.insert(
-        "python_may_continue_to_author".to_string(),
-        Value::Bool(true),
-    );
-    compatibility_rules.insert(
+    let mut authority_rules = Map::new();
+    authority_rules.insert("rust_only_authority".to_string(), Value::Bool(true));
+    authority_rules.insert(
         "no_shadow_replacement_artifact".to_string(),
         Value::Bool(true),
     );
@@ -1181,8 +1163,8 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
         Value::Object(cross_artifact_alignment),
     );
     payload.insert(
-        "compatibility_rules".to_string(),
-        Value::Object(compatibility_rules),
+        "authority_rules".to_string(),
+        Value::Object(authority_rules),
     );
     payload
 }
@@ -1303,20 +1285,17 @@ mod tests {
         assert_eq!(bundle.profile_id, "fusion-default");
         assert_eq!(bundle.capabilities.core.len(), 4);
         assert_eq!(bundle.host_family, "codex");
+        assert!(bundle.codex_profile["metadata"].get("adapter_id").is_none());
         assert_eq!(
-            bundle.codex_adapter["metadata"]["adapter_id"],
-            Value::String("codex_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.codex_adapter["execution_surface"]["entrypoint_kind"],
+            bundle.codex_profile["execution_surface"]["entrypoint_kind"],
             Value::String("codex".to_string())
         );
         assert_eq!(
-            bundle.codex_adapter["execution_surface"]["controller_is_cli"],
+            bundle.codex_profile["execution_surface"]["controller_is_cli"],
             Value::Bool(false)
         );
         assert_eq!(
-            bundle.codex_adapter["host_adapter_payload"]["host_cli"],
+            bundle.codex_profile["codex_host_payload"]["host_cli"],
             Value::String("codex".to_string())
         );
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
@@ -1346,12 +1325,12 @@ mod tests {
             "source": ".codex/memory"
         })];
         profile.workspace_bootstrap = serde_json::from_value(json!({
-            "skill_bridge": {
+            "skills": {
                 "project_dir": ".codex/skills"
             },
-            "bridges": {
+            "resources": {
                 "memory": {
-                    "bridge_dir": ".memory-shadow",
+                    "source_dir": ".codex/memory",
                     "mounts": []
                 }
             }
@@ -1360,17 +1339,17 @@ mod tests {
 
         let bundle = build_profile_bundle(&profile).expect("bundle should build");
         let expected_bootstrap = json!({
-            "skill_bridge": {
-                "project_dir": ".codex/skills"
-            },
-            "bridges": {
+            "resources": {
                 "memory": {
-                    "bridge_dir": ".memory-shadow",
+                    "source_dir": ".codex/memory",
                     "mounts": []
                 },
                 "skills": {
                     "project_dir": ".codex/skills"
                 }
+            },
+            "skills": {
+                "project_dir": ".codex/skills"
             }
         });
 
@@ -1379,15 +1358,15 @@ mod tests {
             expected_bootstrap
         );
         assert_eq!(
-            bundle.codex_adapter["common_contract"]["workspace_bootstrap"],
+            bundle.codex_profile["common_contract"]["workspace_bootstrap"],
             expected_bootstrap
         );
         assert_eq!(
-            bundle.codex_adapter["runtime_surface"]["workspace_bootstrap"],
+            bundle.codex_profile["runtime_surface"]["workspace_bootstrap"],
             expected_bootstrap
         );
-        assert!(bundle.codex_adapter.get("bridge_contract").is_none());
-        assert!(bundle.codex_adapter.get("source_contract").is_none());
+        assert!(bundle.codex_profile.get("bridge_contract").is_none());
+        assert!(bundle.codex_profile.get("source_contract").is_none());
     }
 
     #[test]
@@ -1417,7 +1396,7 @@ mod tests {
             })
         );
         assert_eq!(
-            bundle.codex_adapter["host_capability_requirements"],
+            bundle.codex_profile["host_capability_requirements"],
             json!({
                 "required_host_capabilities": [
                     "artifact_contract",
@@ -1439,15 +1418,15 @@ mod tests {
     }
 
     #[test]
-    fn codex_adapter_preserves_framework_core_truth() {
+    fn codex_profile_preserves_framework_core_truth() {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         assert_eq!(
-            bundle.codex_adapter["common_contract"]["framework_surface_policy"]["default_surface"]
+            bundle.codex_profile["common_contract"]["framework_surface_policy"]["default_surface"]
                 ["default_loadouts"],
             json!(["default_surface_loadout"])
         );
         assert_eq!(
-            bundle.codex_adapter["execution_surface"]["controller_is_cli"],
+            bundle.codex_profile["execution_surface"]["controller_is_cli"],
             Value::Bool(false)
         );
     }
@@ -1477,12 +1456,12 @@ mod tests {
             build_codex_artifact_bundle(&sample_profile()).expect("artifacts should build");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(
-            artifacts["codex_adapter"]["host_adapter_payload"]["gpt_model_path_contract"]
+            artifacts["codex_profile"]["codex_host_payload"]["gpt_model_path_contract"]
                 ["preferred_for_gpt_family"],
             Value::Bool(true)
         );
         assert_eq!(
-            artifacts["codex_adapter"]["execution_surface"]["controller_is_cli"],
+            artifacts["codex_profile"]["execution_surface"]["controller_is_cli"],
             Value::Bool(false)
         );
         assert!(!artifacts.contains_key("codex_desktop_host_adapter"));
@@ -1493,7 +1472,7 @@ mod tests {
         let artifacts =
             build_codex_artifact_bundle(&sample_profile()).expect("artifacts should build");
         assert_eq!(artifacts.len(), 1);
-        assert!(artifacts.contains_key("codex_adapter"));
+        assert!(artifacts.contains_key("codex_profile"));
         assert!(!artifacts.contains_key("cli_common_adapter"));
         assert!(!artifacts.contains_key("codex_cli_adapter"));
         assert!(!artifacts.contains_key("codex_desktop_adapter"));

@@ -102,7 +102,7 @@ This skill does not own:
 - generic prose editing unrelated to prompts
 
 If the task shifts to adjacent skill territory, route to:
-- `$writing-skills` for skill-document writing
+- `$skill-framework-developer` for skill-document writing
 - `$subagent-delegation` for delegation strategy decisions
 - `$agent-swarm-orchestration` for multi-agent system architecture
 
@@ -111,7 +111,7 @@ If the task shifts to adjacent skill territory, route to:
 With `$subagent-delegation`, this skill improves the **prompt quality** while
 delegation still owns **whether / what / when** to delegate.
 
-With `$checklist-writting`, this skill can strengthen prompt specs inside a checklist
+With `$checklist-planner`, this skill can strengthen prompt specs inside a checklist
 without owning the checklist structure itself.
 
 ## Required workflow

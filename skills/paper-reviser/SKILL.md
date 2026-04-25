@@ -120,7 +120,7 @@ disk:
 
 For revision dimension modes, use
 [`references/revision-modes.md`](references/revision-modes.md).
-- Use `$paper-visuals`, `$visual-review`, and `$pdf` for final figure, table, or layout changes
+- Use `figure-table repair`, `$visual-review`, and `$pdf` for final figure, table, or layout changes
 - When multiple local cleanup surfaces are independent, run them as bounded sidecar lanes and merge locally before closing the gate
 
 ## Hard rules

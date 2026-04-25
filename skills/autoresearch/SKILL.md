@@ -218,7 +218,7 @@ slices as follows before expensive runs.
 | Reproducibility and experiment provenance | `experiment-reproducibility` |
 | Statistical analysis | `statistical-analysis` |
 | Paper drafting or revision | `paper-writing`, `paper-reviser` |
-| Paper review or logic review | `paper-reviewer`, `paper-logic` |
+| Paper review or logic review | `paper-workbench`, `paper-reviewer` logic mode |
 | Citation cleanup | `citation-management` |
 | Data analysis or notebooks | `jupyter-notebook`, language-specific execution owner |
 

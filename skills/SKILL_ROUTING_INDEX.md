@@ -45,7 +45,7 @@
 |---|---|---|
 | 需要审查问题清单 | `code-review` | Review code with structured findings and optional qualit |
 | 需要统一编码规范 | `coding-standards` | Enforce cross-stack coding standards: naming, readabilit |
-| 需要多轮优化直到收敛 | `iterative-optimizer` | N-round optimization loops with built-in laziness immuni |
+| 需要多轮优化直到收敛 | `execution-audit` | Audit execution quality with evidence, sidecar-first col |
 
 Need the full list? Use `skills/SKILL_ROUTING_RUNTIME.json` or `skills/SKILL_MANIFEST.json`.
 Still ambiguous? See `skills/SKILL_ROUTING_LAYERS.md` for owner/reroute exceptions.

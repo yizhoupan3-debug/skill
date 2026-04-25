@@ -6,7 +6,7 @@ TypeScript runtime.
 
 ## Rust-first Highlights
 
-- **Rust stdio entrypoint** — `router-rs --browser-mcp-stdio` is the default runtime path
+- **Rust stdio entrypoint** — `router-rs browser mcp-stdio` is the default runtime path
 - **Inline screenshot** — `browser_screenshot` returns a base64 PNG directly in the tool result (no separate file read needed)
 - **Session persistence** — `browser_save_session` / `browser_restore_session` persist cookies across conversations
 - **Network tracking** — records recent requests, response status/type, and failed requests (`errorText`)
@@ -44,7 +44,7 @@ TypeScript runtime.
 
 ### stdio (default)
 ```bash
-./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
+./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml browser mcp-stdio --repo-root /Users/joe/Documents/skill
 # Flags: --headless true|false
 #        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
@@ -53,7 +53,7 @@ TypeScript runtime.
 ## Smoke test
 
 ```bash
-printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
+printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml browser mcp-stdio --repo-root /Users/joe/Documents/skill
 ```
 
 ## Routing
@@ -73,7 +73,7 @@ If you already have a Rust-first runtime attach descriptor, browser-mcp can
 consume it directly for self-inspection:
 
 ```bash
-./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --browser-mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
+./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml browser mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
 # or
 BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json ./tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
