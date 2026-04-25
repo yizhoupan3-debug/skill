@@ -1,7 +1,7 @@
 # Paper Skill Severity Spec (Shared)
 
-All paper-related skills (`paper-reviewer`, `paper-reviser`, `paper-logic`,
-`paper-notation-audit`) use the same 4-level severity system.
+Paper review and revision modes (`paper-reviewer`, `paper-reviser`, logic mode,
+notation sweep) use the same 4-level severity system.
 
 ## Severity Levels
 
@@ -23,8 +23,8 @@ All paper-related skills (`paper-reviewer`, `paper-reviser`, `paper-logic`,
 ## Cross-Skill Consistency
 
 - `paper-reviewer` discovers and classifies issues using this scheme
-- `paper-logic` uses this scheme for logic audit findings
-- `paper-notation-audit` uses this scheme for notation issues
+- `paper-reviewer` logic mode uses this scheme for logic audit findings
+- `paper-reviewer` notation sweep uses this scheme for notation issues
 - `paper-reviser` receives issues tagged with this scheme and fixes by priority order
 - `paper-writing` output uses severity when multiple text issues are found
 

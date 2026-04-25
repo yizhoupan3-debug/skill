@@ -60,7 +60,7 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 
 ## Do not use
 
-- Task already handled by `$iterative-optimizer` (fused immunity prevents dual-layer overhead).
+- Task already handled by `$execution-audit` iteration loop (fused immunity prevents dual-layer overhead).
 - Pure information retrieval tasks where no action or verification is required.
 - Irreversible system-level destructive actions where human oversight is the primary safety layer.
 - First-turn execution where no previous context exists and no laziness signal is present.

@@ -45,7 +45,7 @@ citations verifiable, complete, deduplicated, and aligned with the manuscript.
 
 - Searching and synthesizing a topic literature corpus -> use `$literature-synthesis`.
 - Writing or polishing manuscript prose -> use `$paper-writing`.
-- Checking paper logic beyond citations -> use `$paper-logic` or `$paper-reviewer`.
+- Checking paper logic beyond citations -> use `$paper-reviewer` logic mode.
 - Formatting non-academic documents without citations.
 
 ## Truth Rules

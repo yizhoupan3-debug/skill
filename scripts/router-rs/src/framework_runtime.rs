@@ -805,7 +805,7 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
     if let Ok(raw) = fs::read_to_string(&registry_path) {
         if let Ok(payload) = serde_json::from_str::<Value>(&raw) {
             if let Some(record) = payload
-                .get("framework_native_aliases")
+                .get("framework_commands")
                 .and_then(Value::as_object)
                 .and_then(|aliases| aliases.get(alias_name))
                 .cloned()
@@ -3022,19 +3022,32 @@ fn move_to_archive(source: &Path, destination: &Path) -> Result<PathBuf, String>
     Ok(target)
 }
 
-fn archive_legacy_memory_surfaces(memory_root: &Path) -> Result<(), String> {
+pub(crate) fn migrate_legacy_memory_surfaces(memory_root: &Path) -> Result<Value, String> {
     let archive_root = memory_root
         .join("archive")
         .join(format!("pre-cutover-{}", current_local_date()));
+    let mut moved = Vec::new();
     let legacy_memory_auto = memory_root.join("MEMORY_AUTO.md");
     if legacy_memory_auto.exists() {
-        move_to_archive(&legacy_memory_auto, &archive_root.join("MEMORY_AUTO.md"))?;
+        moved.push(
+            move_to_archive(&legacy_memory_auto, &archive_root.join("MEMORY_AUTO.md"))?
+                .display()
+                .to_string(),
+        );
     }
     let sessions_dir = memory_root.join("sessions");
     if sessions_dir.exists() {
-        move_to_archive(&sessions_dir, &archive_root.join("sessions"))?;
+        moved.push(
+            move_to_archive(&sessions_dir, &archive_root.join("sessions"))?
+                .display()
+                .to_string(),
+        );
     }
-    Ok(())
+    Ok(json!({
+        "schema_version": "router-rs-legacy-memory-migration-v1",
+        "archive_root": archive_root.display().to_string(),
+        "moved": moved,
+    }))
 }
 
 fn default_memory_md(repo_root: &Path) -> String {
@@ -3086,7 +3099,6 @@ fn ensure_framework_memory_seeded(
     if memory_md_path.is_file() || artifact_root_override.is_some() {
         return Ok((Vec::new(), String::new()));
     }
-    archive_legacy_memory_surfaces(memory_root)?;
     let mut changed_files = Vec::new();
     let defaults = [
         ("MEMORY.md", default_memory_md(repo_root)),

@@ -1,6 +1,6 @@
 # Artifact Protocol
 
-Shared rules for artifact gates such as `$doc`, `$pdf`, and `$xlsx`.
+Shared rules for artifact gates such as `$doc`, `$pdf`, and `$spreadsheets`.
 
 ## Source of Truth
 

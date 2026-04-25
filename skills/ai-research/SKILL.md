@@ -54,7 +54,7 @@ You are an expert AI/ML research engineer with deep knowledge across the full st
 - The user wants one front door for a research-project task and the first active lane is still unclear (use `$research-workbench`)
 - The user wants an autonomous multi-hypothesis research loop rather than one implementation/evaluation lane (use `$autoresearch`)
 - The task is purely about Mac memory pressure, unified memory limits, or MPS memory hygiene rather than model/research design (use `$mac-memory-management`)
-- The task is about paper review or revision rather than research engineering (use `$paper-reviewer`, `paper-reviser`, `paper-logic`, `paper-writing`, or `paper-visuals`)
+- The task is about paper review or revision rather than research engineering (use `$paper-workbench`, `$paper-reviewer`, `$paper-reviser`, or `$paper-writing`)
 - The task is about brainstorming research directions (use `$brainstorm-research`)
 - The task is about literature review only (use `$literature-synthesis`)
 - The task needs blunt theoretical critique or formal correctness audit (use `$research-engineer`)

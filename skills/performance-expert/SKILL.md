@@ -42,7 +42,7 @@ It focuses on user-visible slowness, CWV metrics, asset weight, and delivery cos
 
 ## Do not use
 
-- React/Next rendering architecture as the main issue → use `$vercel-react-best-practices`
+- React/Next rendering architecture as the main issue -> use `$nextjs` with the Vercel best-practices reference
 - Backend / DB / API latency debugging → use the relevant backend skill
 - Implementation-level code acceleration such as pandas → polars, faster serializers, or hot-path library swaps → use `$code-acceleration`
 - Pure visual redesign with no performance concern

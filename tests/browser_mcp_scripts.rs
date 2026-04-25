@@ -341,7 +341,8 @@ fn launcher_prefers_explicit_attach_descriptor_env_over_auto_discovery() {
     assert_eq!(
         result["argv"],
         json!([
-            "--browser-mcp-stdio",
+            "browser",
+            "mcp-stdio",
             "--repo-root",
             repo_root.display().to_string(),
             "--runtime-attach-descriptor-path",
@@ -369,7 +370,8 @@ fn launcher_leaves_sqlite_attach_discovery_to_rust_runtime() {
     assert_eq!(
         result["argv"],
         json!([
-            "--browser-mcp-stdio",
+            "browser",
+            "mcp-stdio",
             "--repo-root",
             repo_root.display().to_string()
         ])
@@ -394,7 +396,8 @@ fn launcher_leaves_filesystem_attach_discovery_to_rust_runtime() {
     assert_eq!(
         result["argv"],
         json!([
-            "--browser-mcp-stdio",
+            "browser",
+            "mcp-stdio",
             "--repo-root",
             repo_root.display().to_string()
         ])
@@ -416,7 +419,8 @@ fn launcher_uses_canonical_attach_artifact_env() {
     assert_eq!(
         result["argv"],
         json!([
-            "--browser-mcp-stdio",
+            "browser",
+            "mcp-stdio",
             "--repo-root",
             repo_root.display().to_string(),
             "--runtime-attach-artifact-path",
@@ -446,7 +450,8 @@ fn launcher_prefers_descriptor_env_over_attach_artifact_env() {
     assert_eq!(
         result["argv"],
         json!([
-            "--browser-mcp-stdio",
+            "browser",
+            "mcp-stdio",
             "--repo-root",
             repo_root.display().to_string(),
             "--runtime-attach-descriptor-path",
@@ -463,7 +468,8 @@ fn launcher_falls_back_to_plain_start_when_no_attach_input_exists() {
     assert_eq!(
         result["argv"],
         json!([
-            "--browser-mcp-stdio",
+            "browser",
+            "mcp-stdio",
             "--repo-root",
             repo_root.display().to_string(),
             "--headless",
@@ -502,7 +508,7 @@ fn launcher_builds_router_rs_when_no_prebuilt_binary_exists() {
     );
     assert_eq!(
         read_json(&cargo_log)["argv"],
-        json!(["--browser-mcp-stdio", "--repo-root", repo_root])
+        json!(["browser", "mcp-stdio", "--repo-root", repo_root])
     );
 }
 
@@ -538,7 +544,7 @@ fn launcher_rebuilds_router_rs_when_sources_are_newer_than_binary() {
     common::assert_success(&run(command));
     assert_eq!(
         read_json(&cargo_log)["argv"],
-        json!(["--browser-mcp-stdio", "--repo-root", repo_root])
+        json!(["browser", "mcp-stdio", "--repo-root", repo_root])
     );
 }
 

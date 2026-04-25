@@ -34,15 +34,15 @@
 ## Hard Rules
 
 1. `core_capabilities` 必须覆盖 `runtime / memory / artifact / orchestration`，且 framework core 只允许 Codex 宿主。
-2. `router-rs` 是 profile、shared contract、adapter artifact、workspace bootstrap、memory policy 和 session normalization 的编译真源；不要新增 Python bridge/helper parity、fallback emitter 或第二套默认值。
-3. adapter 只能投影 `framework_profile`：`transport`、`context_files`、`mcp_config_paths`、`settings_paths` 等宿主私有字段只能留在 Codex adapter payload。
-4. `workspace_bootstrap.bridges` 是唯一 bridge 默认来源；`bridge_contract` 只能从它投影，不能平行维护第二份 bridge 表。
+2. `router-rs` 是 profile、shared contract、codex profile、workspace bootstrap、memory policy 和 session normalization 的编译真源；不要新增 Python helper parity、fallback emitter 或第二套默认值。
+3. `codex_profile` 只能投影 `framework_profile`：`transport`、`context_files`、`mcp_config_paths`、`settings_paths` 等宿主私有字段只能留在 `codex_host_payload`。
+4. `workspace_bootstrap.resources` 是唯一默认来源；不要平行维护第二份 skills/memory 投影表。
 5. continuity 真源是 task-scoped artifacts、`artifacts/current/active_task.json` 和 `.supervisor_state.json`；`artifacts/current/*` root 只能放 pointer、registry 或极薄兼容索引，不再复制整组恢复工件。
 
 ## Surface Policy
 
-默认面只保留 `routing / memory / continuity / host_projection` 四轴；research、implementation、audit、framework、ops 和 compatibility 都必须显式 opt-in。机器可读真源在 `configs/framework/FRAMEWORK_SURFACE_POLICY.json`，并由 `skills/SKILL_LOADOUTS.json` 与 `skills/SKILL_TIERS.json` 支撑。
+默认面只保留 `routing / memory / continuity / host_projection` 四轴；research、implementation、audit、framework、ops 和 ops 都必须显式 opt-in。机器可读真源在 `configs/framework/FRAMEWORK_SURFACE_POLICY.json`，并由 `skills/SKILL_LOADOUTS.json` 与 `skills/SKILL_TIERS.json` 支撑。
 
 ## History
 
-历史迁移、retired Python surface、compatibility alias 和旧 adapter inventory 只放 audit/history 文档或显式 retirement/compatibility artifacts，不进入 steady-state contract。
+历史迁移、retired Python surface、历史 alias 和旧 profile inventory 只放 audit/history 文档或显式 retirement/compatibility artifacts，不进入 steady-state contract。

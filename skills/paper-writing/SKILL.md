@@ -63,7 +63,7 @@ science, citations, results, or reviewer-facing promises.
 
 ## Do Not Use
 
-- Whole-paper judgment, novelty, or experimental validity review -> use `$paper-reviewer` or `$paper-logic`.
+- Whole-paper judgment, novelty, or experimental validity review -> use `$paper-reviewer` logic mode.
 - Literature search/synthesis before writing -> use `$literature-synthesis`.
 - Citation formatting or verification -> use `$citation-management`.
 - Generic non-academic prose -> use `$humanizer`.

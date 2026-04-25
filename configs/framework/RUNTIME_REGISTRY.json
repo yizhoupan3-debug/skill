@@ -1,7 +1,7 @@
 {
   "schema_version": "framework-runtime-registry-v1",
   "codex_host": {
-    "adapter_id": "codex_adapter",
+    "profile_id": "codex_profile",
     "host_id": "codex",
     "transport": "native-codex",
     "context_files": [
@@ -36,17 +36,17 @@
     ]
   },
   "workspace_bootstrap_defaults": {
-    "skill_bridge": {
+    "skills": {
       "source_rel": ".codex/skills",
       "project_dir": ".codex/skills",
       "user_dir": "~/.codex/skills",
-      "bridge_dir": ".codex/skills"
+      "source_dir": ".codex/skills"
     },
-    "memory_bridge": {
-      "bridge_dir": ".codex/memory-bridge"
+    "memory": {
+      "source_dir": ".codex/memory-bridge"
     }
   },
-  "framework_native_aliases": {
+  "framework_commands": {
     "autopilot": {
       "canonical_owner": "execution-controller-coding",
       "reroute_when_ambiguous": "idea-to-plan",

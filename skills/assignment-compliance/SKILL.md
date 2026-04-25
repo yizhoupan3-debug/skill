@@ -46,7 +46,7 @@ homework assignments and course projects.
 
 - The user wants a full paper-level reviewer critique → use `$paper-reviewer`
 - The task is only wording/writing polish → use `$paper-writing`
-- The task is scientific logic or claims-vs-evidence review → use `$paper-logic`
+- The task is manuscript scientific logic or claims-vs-evidence review -> use `$paper-reviewer` logic mode
 - The task is only code quality review → use `$coding-standards`
 - The task is debugging code errors → use `$systematic-debugging`
 - The user wants to actually write or fix content (not check) → use domain-specific skill
@@ -64,7 +64,7 @@ This skill owns:
 
 This skill does not own:
 - Actually rewriting content to fix gaps (delegate to appropriate skill)
-- Deep scientific logic review (delegate to `$paper-logic`)
+- Deep scientific logic review (delegate to `$paper-reviewer` logic mode)
 - Code rewriting or debugging
 
 ## Required workflow

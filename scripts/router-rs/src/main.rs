@@ -1,7 +1,7 @@
 #![recursion_limit = "256"]
 
 use chrono::Utc;
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, Args, Parser, Subcommand};
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 use regex::Regex;
@@ -66,7 +66,10 @@ use runtime_storage::{
     RuntimeStorageRequestPayload,
 };
 use session_supervisor::handle_session_supervisor_operation;
-use trace_runtime::{compact_trace_stream, record_trace_event};
+use trace_runtime::{
+    compact_trace_stream, record_trace_event, TraceCompactRequestPayload,
+    TraceRecordEventRequestPayload,
+};
 
 #[cfg(test)]
 use execution_contract::{
@@ -154,10 +157,265 @@ const MAX_COMPUTE_THREADS: usize = 64;
 const PARALLEL_RECORD_SCAN_MIN: usize = 48;
 const PARALLEL_EVAL_CASE_MIN: usize = 8;
 
+#[derive(Subcommand, Debug, Clone)]
+enum RouterCommand {
+    Route(RouteCommand),
+    Search(SearchCommand),
+    Framework {
+        #[command(subcommand)]
+        command: FrameworkCommand,
+    },
+    Codex {
+        #[command(subcommand)]
+        command: CodexCommand,
+    },
+    Trace {
+        #[command(subcommand)]
+        command: TraceCommand,
+    },
+    Storage {
+        #[command(subcommand)]
+        command: StorageCommand,
+    },
+    Browser {
+        #[command(subcommand)]
+        command: BrowserCommand,
+    },
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommand,
+    },
+    Migrate {
+        #[command(subcommand)]
+        command: MigrateCommand,
+    },
+}
+
+#[derive(Args, Debug, Clone)]
+struct RouteCommand {
+    query: String,
+    #[arg(long, default_value = "route-cli")]
+    session_id: String,
+    #[arg(long, default_value_t = true, action = ArgAction::Set, num_args = 1)]
+    allow_overlay: bool,
+    #[arg(long, default_value_t = true, action = ArgAction::Set, num_args = 1)]
+    first_turn: bool,
+    #[arg(long)]
+    runtime: Option<PathBuf>,
+    #[arg(long)]
+    manifest: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct SearchCommand {
+    query: String,
+    #[arg(long, default_value_t = 5)]
+    limit: usize,
+    #[arg(long)]
+    runtime: Option<PathBuf>,
+    #[arg(long)]
+    manifest: Option<PathBuf>,
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum FrameworkCommand {
+    Snapshot(FrameworkSnapshotCommand),
+    ContractSummary(RepoRootCommand),
+    MemoryRecall(FrameworkMemoryRecallCommand),
+    MemoryPolicy(JsonInputCommand),
+    PromptCompression(JsonInputCommand),
+    Refresh(FrameworkRefreshCommand),
+    Statusline(RepoRootCommand),
+    SessionArtifactWrite(JsonInputCommand),
+    Alias(FrameworkAliasCommand),
+    Contracts,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum CodexCommand {
+    HookProjection,
+    Sync(RepoRootCommand),
+    Check(RepoRootCommand),
+    Hook(CodexHookCommand),
+    HostIntegration(ForwardedArgsCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum TraceCommand {
+    RecordEvent(JsonInputCommand),
+    StreamReplay(JsonInputCommand),
+    StreamInspect(JsonInputCommand),
+    Compact(JsonInputCommand),
+    WriteCompactionDelta(JsonInputCommand),
+    WriteMetadata(JsonInputCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum StorageCommand {
+    Runtime(JsonInputCommand),
+    CheckpointControlPlane(JsonInputCommand),
+    BackendCatalog,
+    BackendParity(StorageBackendParityCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum BrowserCommand {
+    McpStdio(BrowserMcpStdioCommand),
+    ResolveAttachArtifact(BrowserResolveAttachCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum ProfileCommand {
+    Emit(ProfilePathCommand),
+    Artifacts(ProfilePathCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum MigrateCommand {
+    LegacyMemory(MigrateLegacyMemoryCommand),
+    CurrentArtifactClutter(CurrentArtifactClutterCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+struct RepoRootCommand {
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct JsonInputCommand {
+    #[arg(long)]
+    input_json: String,
+}
+
+#[derive(Args, Debug, Clone)]
+struct FrameworkSnapshotCommand {
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long)]
+    artifact_source_dir: Option<PathBuf>,
+    #[arg(long)]
+    task_id: Option<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct FrameworkMemoryRecallCommand {
+    query: String,
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long, default_value_t = 5)]
+    limit: usize,
+    #[arg(long, default_value = "stable")]
+    mode: String,
+    #[arg(long)]
+    memory_root: Option<PathBuf>,
+    #[arg(long)]
+    artifact_source_dir: Option<PathBuf>,
+    #[arg(long)]
+    task_id: Option<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct FrameworkRefreshCommand {
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long, default_value_t = 4)]
+    max_lines: usize,
+    #[arg(long)]
+    verbose: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+struct FrameworkAliasCommand {
+    alias: String,
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long, default_value_t = 4)]
+    max_lines: usize,
+    #[arg(long)]
+    compact: bool,
+    #[arg(long)]
+    host_id: Option<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct CodexHookCommand {
+    command: String,
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct ForwardedArgsCommand {
+    #[arg(num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
+    args: Vec<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct StorageBackendParityCommand {
+    #[arg(long)]
+    store: Option<String>,
+    #[arg(long)]
+    checkpointer: Option<String>,
+    #[arg(long)]
+    trace: Option<String>,
+    #[arg(long)]
+    state: Option<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct BrowserMcpStdioCommand {
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long)]
+    headless: Option<String>,
+    #[arg(long)]
+    runtime_attach_artifact_path: Option<String>,
+    #[arg(long)]
+    runtime_attach_descriptor_path: Option<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct BrowserResolveAttachCommand {
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long)]
+    search_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct ProfilePathCommand {
+    #[arg(long)]
+    framework_profile: PathBuf,
+}
+
+#[derive(Args, Debug, Clone)]
+struct MigrateLegacyMemoryCommand {
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long)]
+    memory_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct CurrentArtifactClutterCommand {
+    active_task_id: String,
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "router-rs")]
 #[command(about = "Fast Rust routing core for skill lookup")]
+#[command(override_usage = "router-rs <COMMAND>")]
+#[command(
+    help_template = "{about-section}\nUsage: {usage}\n\nCommands:\n{subcommands}\n\nUse `router-rs <command> --help` for command-specific options.\n"
+)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<RouterCommand>,
     #[arg(long)]
     repo_root: Option<PathBuf>,
     #[arg(long)]
@@ -1116,6 +1374,320 @@ fn print_json_value<T: Serialize>(payload: &T) -> Result<(), String> {
     Ok(())
 }
 
+fn parse_json_input<T>(raw: &str, context: &str) -> Result<T, String>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_str(raw).map_err(|err| format!("parse {context} input failed: {err}"))
+}
+
+fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
+    match command {
+        RouterCommand::Route(command) => {
+            let records = load_records(command.runtime.as_deref(), command.manifest.as_deref())?;
+            let decision = route_task(
+                &records,
+                &command.query,
+                &command.session_id,
+                command.allow_overlay,
+                command.first_turn,
+            )?;
+            print_json_value(&decision)
+        }
+        RouterCommand::Search(command) => {
+            let records = load_records(command.runtime.as_deref(), command.manifest.as_deref())?;
+            let rows = search_skills(&records, &command.query, command.limit);
+            let payload = build_search_results_payload(&command.query, rows.clone());
+            if command.json {
+                return print_json_value(&payload);
+            }
+            print_search_results(&command.query, &payload, rows);
+            Ok(())
+        }
+        RouterCommand::Framework { command } => dispatch_framework_command(command),
+        RouterCommand::Codex { command } => dispatch_codex_command(command),
+        RouterCommand::Trace { command } => dispatch_trace_command(command),
+        RouterCommand::Storage { command } => dispatch_storage_command(command),
+        RouterCommand::Browser { command } => dispatch_browser_command(command),
+        RouterCommand::Profile { command } => dispatch_profile_command(command),
+        RouterCommand::Migrate { command } => dispatch_migrate_command(command),
+    }
+}
+
+fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
+    match command {
+        FrameworkCommand::Snapshot(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&build_framework_runtime_snapshot_envelope(
+                &repo_root,
+                command.artifact_source_dir.as_deref(),
+                command.task_id.as_deref(),
+            )?)
+        }
+        FrameworkCommand::ContractSummary(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&build_framework_contract_summary_envelope(&repo_root)?)
+        }
+        FrameworkCommand::MemoryRecall(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&build_framework_memory_recall_envelope(
+                &repo_root,
+                &command.query,
+                command.limit,
+                &command.mode,
+                command.memory_root.as_deref(),
+                command.artifact_source_dir.as_deref(),
+                command.task_id.as_deref(),
+            )?)
+        }
+        FrameworkCommand::MemoryPolicy(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "framework memory policy")?;
+            print_json_value(&build_framework_memory_policy_envelope(payload)?)
+        }
+        FrameworkCommand::PromptCompression(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "framework prompt compression")?;
+            print_json_value(&build_framework_prompt_compression_envelope(payload)?)
+        }
+        FrameworkCommand::Refresh(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let refresh_payload =
+                build_framework_refresh_payload(&repo_root, command.max_lines, command.verbose)?;
+            let prompt = refresh_payload
+                .get("prompt")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "framework refresh payload is missing prompt".to_string())?;
+            let clipboard = copy_text_to_clipboard(prompt)?;
+            let mut refresh = refresh_payload
+                .as_object()
+                .cloned()
+                .ok_or_else(|| "framework refresh payload must be an object".to_string())?;
+            refresh.insert(
+                "confirmation".to_string(),
+                Value::String(FRAMEWORK_REFRESH_CONFIRMATION.to_string()),
+            );
+            refresh.insert("clipboard".to_string(), clipboard);
+            print_json_value(&json!({
+                "schema_version": FRAMEWORK_REFRESH_SCHEMA_VERSION,
+                "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
+                "refresh": Value::Object(refresh),
+            }))
+        }
+        FrameworkCommand::Statusline(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            println!("{}", build_framework_statusline(&repo_root)?);
+            Ok(())
+        }
+        FrameworkCommand::SessionArtifactWrite(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "framework session artifact write")?;
+            print_json_value(&write_framework_session_artifacts(payload)?)
+        }
+        FrameworkCommand::Alias(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&build_framework_alias_envelope(
+                &repo_root,
+                &command.alias,
+                FrameworkAliasBuildOptions {
+                    max_lines: command.max_lines,
+                    compact: command.compact,
+                    host_id: command.host_id.as_deref(),
+                },
+            )?)
+        }
+        FrameworkCommand::Contracts => {
+            print_json_value(&build_control_plane_contract_descriptors())
+        }
+    }
+}
+
+fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
+    match command {
+        CodexCommand::HookProjection => print_json_value(&build_codex_hook_projection()),
+        CodexCommand::Sync(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&sync_host_entrypoints(&repo_root, true)?)
+        }
+        CodexCommand::Check(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&sync_host_entrypoints(&repo_root, false)?)
+        }
+        CodexCommand::Hook(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            if let Some(payload) = run_codex_audit_hook(&command.command, &repo_root)? {
+                print_json_value(&payload)?;
+            }
+            Ok(())
+        }
+        CodexCommand::HostIntegration(command) => {
+            let payload = run_host_integration_from_args(&command.args)?;
+            print_json_value(&payload)
+        }
+    }
+}
+
+fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
+    match command {
+        TraceCommand::RecordEvent(command) => {
+            let payload = parse_json_input::<TraceRecordEventRequestPayload>(
+                &command.input_json,
+                "trace record event",
+            )?;
+            print_json_value(&record_trace_event(payload)?)
+        }
+        TraceCommand::StreamReplay(command) => {
+            let payload = parse_json_input::<TraceStreamReplayRequestPayload>(
+                &command.input_json,
+                "trace stream replay",
+            )?;
+            print_json_value(&replay_trace_stream(payload)?)
+        }
+        TraceCommand::StreamInspect(command) => {
+            let payload = parse_json_input::<TraceStreamInspectRequestPayload>(
+                &command.input_json,
+                "trace stream inspect",
+            )?;
+            print_json_value(&inspect_trace_stream(payload)?)
+        }
+        TraceCommand::Compact(command) => {
+            let payload = parse_json_input::<TraceCompactRequestPayload>(
+                &command.input_json,
+                "trace compact",
+            )?;
+            print_json_value(&compact_trace_stream(payload)?)
+        }
+        TraceCommand::WriteCompactionDelta(command) => {
+            let payload = parse_json_input::<TraceCompactionDeltaWriteRequestPayload>(
+                &command.input_json,
+                "trace compaction delta write",
+            )?;
+            print_json_value(&write_trace_compaction_delta(payload)?)
+        }
+        TraceCommand::WriteMetadata(command) => {
+            let payload = parse_json_input::<TraceMetadataWriteRequestPayload>(
+                &command.input_json,
+                "trace metadata write",
+            )?;
+            print_json_value(&write_trace_metadata(payload)?)
+        }
+    }
+}
+
+fn dispatch_storage_command(command: StorageCommand) -> Result<(), String> {
+    match command {
+        StorageCommand::Runtime(command) => {
+            let payload = parse_json_input::<RuntimeStorageRequestPayload>(
+                &command.input_json,
+                "runtime storage",
+            )?;
+            print_json_value(&runtime_storage_operation(payload)?)
+        }
+        StorageCommand::CheckpointControlPlane(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "runtime checkpoint control plane")?;
+            print_json_value(&build_checkpoint_control_plane_compiler_payload(payload)?)
+        }
+        StorageCommand::BackendCatalog => {
+            print_json_value(&runtime_backend_family_catalog_payload())
+        }
+        StorageCommand::BackendParity(command) => {
+            print_json_value(&runtime_backend_family_parity_payload(
+                command.store.as_deref(),
+                command.checkpointer.as_deref(),
+                command.trace.as_deref(),
+                command.state.as_deref(),
+            )?)
+        }
+    }
+}
+
+fn dispatch_browser_command(command: BrowserCommand) -> Result<(), String> {
+    match command {
+        BrowserCommand::McpStdio(command) => run_browser_mcp_stdio_loop(
+            command.repo_root.as_deref(),
+            BrowserAttachConfig::from_cli_and_env(
+                command.runtime_attach_descriptor_path,
+                command.runtime_attach_artifact_path,
+                command.headless,
+            ),
+        ),
+        BrowserCommand::ResolveAttachArtifact(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let Some(path) =
+                resolve_browser_mcp_attach_artifact(&repo_root, command.search_root.as_deref())
+            else {
+                return Err("no browser-mcp runtime attach artifact candidates found".to_string());
+            };
+            println!("{path}");
+            Ok(())
+        }
+    }
+}
+
+fn dispatch_profile_command(command: ProfileCommand) -> Result<(), String> {
+    match command {
+        ProfileCommand::Emit(command) => {
+            let profile = load_framework_profile(&command.framework_profile)?;
+            print_json_value(&build_profile_bundle(&profile)?)
+        }
+        ProfileCommand::Artifacts(command) => {
+            let profile = load_framework_profile(&command.framework_profile)?;
+            print_json_value(&build_codex_artifact_bundle(&profile)?)
+        }
+    }
+}
+
+fn dispatch_migrate_command(command: MigrateCommand) -> Result<(), String> {
+    match command {
+        MigrateCommand::LegacyMemory(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let memory_root = command
+                .memory_root
+                .unwrap_or_else(|| repo_root.join(".codex").join("memory"));
+            print_json_value(&framework_runtime::migrate_legacy_memory_surfaces(
+                &memory_root,
+            )?)
+        }
+        MigrateCommand::CurrentArtifactClutter(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let payload = run_host_integration_from_args(&[
+                "migrate-current-artifact-clutter".to_string(),
+                "--repo-root".to_string(),
+                repo_root.display().to_string(),
+                "--active-task-id".to_string(),
+                command.active_task_id,
+            ])?;
+            print_json_value(&payload)
+        }
+    }
+}
+
+fn print_search_results(query: &str, payload: &SearchResultsPayload, rows: Vec<MatchRow>) {
+    if payload.matches.is_empty() {
+        println!("No skills found matching: {}", query);
+        return;
+    }
+
+    println!("Found {} matches for '{}':", payload.matches.len(), query);
+    println!();
+    println!(
+        "{:<30} | {:<5} | {:<10} | {:<6} | Description",
+        "Skill", "Layer", "Gate", "Score"
+    );
+    println!("{}", "-".repeat(120));
+    for row in rows {
+        let mut description = row.description.clone();
+        if description.chars().count() > 60 {
+            description = description.chars().take(57).collect::<String>() + "...";
+        }
+        println!(
+            "{:<30} | {:<5} | {:<10} | {:<6.2} | {}",
+            row.slug, row.layer, row.gate, row.score, description
+        );
+    }
+}
+
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {
         next_step: next_step.to_string(),
@@ -1421,6 +1993,9 @@ fn write_trace_metadata(
 fn main() -> Result<(), String> {
     let args = Cli::parse();
     configure_compute_parallelism(args.compute_threads)?;
+    if let Some(command) = args.command.clone() {
+        return dispatch_router_command(command);
+    }
     let enabled_modes = enabled_cli_output_modes(&args);
     if enabled_modes.len() > 1 {
         return Err(format!(
@@ -2022,28 +2597,7 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
-    if payload.matches.is_empty() {
-        println!("No skills found matching: {}", query);
-        return Ok(());
-    }
-
-    println!("Found {} matches for '{}':", payload.matches.len(), query);
-    println!();
-    println!(
-        "{:<30} | {:<5} | {:<10} | {:<6} | Description",
-        "Skill", "Layer", "Gate", "Score"
-    );
-    println!("{}", "-".repeat(120));
-    for row in rows {
-        let mut description = row.description.clone();
-        if description.chars().count() > 60 {
-            description = description.chars().take(57).collect::<String>() + "...";
-        }
-        println!(
-            "{:<30} | {:<5} | {:<10} | {:<6.2} | {}",
-            row.slug, row.layer, row.gate, row.score, description
-        );
-    }
+    print_search_results(query, &payload, rows);
     Ok(())
 }
 
@@ -2709,6 +3263,10 @@ fn load_records(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
 ) -> Result<Vec<SkillRecord>, String> {
+    let default_runtime_path = std::env::current_dir()
+        .ok()
+        .map(|cwd| cwd.join("skills").join("SKILL_ROUTING_RUNTIME.json"));
+    let runtime_path = runtime_path.or(default_runtime_path.as_deref());
     if let Some(path) = runtime_path {
         if path.exists() {
             let mut records = load_records_from_runtime(path)?;
@@ -3173,7 +3731,6 @@ fn common_route_stop_tokens() -> &'static [&'static str] {
         "然后",
         "输出",
         "问题",
-        "checklist",
         "skill",
         "路由",
     ]
@@ -3184,6 +3741,51 @@ fn is_meta_routing_task(query_text: &str) -> bool {
         && ["路由", "触发", "routing", "router", "route"]
             .iter()
             .any(|marker| query_text.contains(marker))
+}
+
+fn has_checklist_execution_context(query_text: &str) -> bool {
+    query_text.contains("checklist")
+        && ![
+            "规范",
+            "规范化",
+            "normalize",
+            "normalise",
+            "serial",
+            "parallel",
+            "并行",
+            "串行",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(marker))
+        && [
+            "执行",
+            "一口气",
+            "彻底",
+            "落实",
+            "按",
+            "fix",
+            "implement",
+            "run",
+            "do it",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(marker))
+}
+
+fn has_checklist_normalization_context(query_text: &str) -> bool {
+    query_text.contains("checklist")
+        && [
+            "规范",
+            "规范化",
+            "normalize",
+            "normalise",
+            "serial",
+            "parallel",
+            "并行",
+            "串行",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(marker))
 }
 
 fn wordlike_token_regex() -> &'static Regex {
@@ -7224,12 +7826,7 @@ fn has_team_negation_context(query_text: &str, query_token_list: &[String]) -> b
 fn paper_skill_requires_context(slug: &str) -> bool {
     matches!(
         slug,
-        "paper-workbench"
-            | "paper-reviewer"
-            | "paper-reviser"
-            | "paper-writing"
-            | "paper-logic"
-            | "paper-visuals"
+        "paper-workbench" | "paper-reviewer" | "paper-reviser" | "paper-writing"
     )
 }
 
@@ -7441,6 +8038,44 @@ fn artifact_gate_matches_query(query_token_list: &[String]) -> bool {
         .any(|phrase| text_matches_phrase(query_token_list, phrase))
 }
 
+fn artifact_gate_target_slug(query_token_list: &[String]) -> Option<&'static str> {
+    const ARTIFACT_TARGETS: [(&str, &[&str]); 4] = [
+        (
+            "spreadsheets",
+            &[
+                "xlsx",
+                "excel",
+                "spreadsheet",
+                "xls",
+                "csv",
+                "tsv",
+                "sheet review",
+                "工作簿",
+            ],
+        ),
+        (
+            "slides",
+            &[
+                "ppt",
+                "pptx",
+                "slides",
+                "powerpoint",
+                "presentation",
+                "幻灯片",
+            ],
+        ),
+        ("doc", &["docx", "word 文档", "word 文件"]),
+        ("pdf", &["pdf"]),
+    ];
+
+    ARTIFACT_TARGETS.iter().find_map(|(slug, phrases)| {
+        phrases
+            .iter()
+            .any(|phrase| text_matches_phrase(query_token_list, phrase))
+            .then_some(*slug)
+    })
+}
+
 fn should_defer_to_artifact_gate(
     record: &SkillRecord,
     query_text: &str,
@@ -7464,14 +8099,14 @@ fn should_defer_to_artifact_gate(
                 .any(|hint| text_matches_phrase(query_token_list, hint)))
 }
 
-fn should_prefer_canonical_artifact_gate(
+fn should_suppress_non_target_artifact_gate(
     record: &SkillRecord,
     query_token_list: &[String],
 ) -> bool {
-    if record.slug != "spreadsheets" || !artifact_gate_matches_query(query_token_list) {
-        return false;
-    }
-    true
+    record.gate_lower == "artifact"
+        && artifact_gate_target_slug(query_token_list)
+            .map(|target| record.slug != target)
+            .unwrap_or(false)
 }
 
 fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
@@ -7543,6 +8178,29 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    let checklist_execution_context = has_checklist_execution_context(query_text);
+    let mut suppress_checklist_planner = false;
+    if record.slug == "checklist-fixer" && checklist_execution_context {
+        score += 45.0;
+        reasons.push(
+            "Checklist-fixer boost applied: checklist artifact plus execution wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "checklist-planner" && checklist_execution_context {
+        suppress_checklist_planner = true;
+        reasons.push(
+            "Checklist-planner suppression applied: execution wording should run an existing checklist."
+                .to_string(),
+        );
+    }
+    if record.slug == "checklist-planner" && has_checklist_normalization_context(query_text) {
+        score += 8.0;
+        reasons.push(
+            "Checklist-planner boost applied: checklist normalization wording detected."
+                .to_string(),
+        );
+    }
     let literal_framework_alias = framework_alias_requires_explicit_call(&record.slug)
         && has_literal_framework_alias_call(query_text, &record.slug);
     let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
@@ -7611,18 +8269,6 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    if record.slug == "paper-logic"
-        && has_paper_figure_layout_review_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: figure/layout-only paper review should stay on reviewer/visual lanes, not claim-evidence logic."
-                    .to_string(),
-            ],
-        };
-    }
     if record.slug == "literature-synthesis"
         && has_paper_ref_first_workflow_context(query_text, query_token_list)
     {
@@ -7682,12 +8328,12 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    if should_prefer_canonical_artifact_gate(record, query_token_list) {
+    if should_suppress_non_target_artifact_gate(record, query_token_list) {
         return RouteCandidate {
             record,
             score: 0.0,
             reasons: vec![
-                "Suppressed: generic spreadsheet artifact intake should start at the canonical spreadsheets gate."
+                "Suppressed: artifact wording targets a different canonical artifact gate."
                     .to_string(),
             ],
         };
@@ -8158,6 +8804,9 @@ fn score_route_candidate<'a>(
             record.slug
         ));
     }
+    if suppress_checklist_planner {
+        score *= 0.05;
+    }
 
     RouteCandidate {
         record,
@@ -8299,6 +8948,22 @@ fn pick_overlay(
             .iter()
             .any(|phrase| phrase.chars().count() > 3 && text_matches_phrase(query_tokens, phrase));
         if explicit_name_match || explicit_trigger_match {
+            return Some(record.slug.clone());
+        }
+        if record.slug == "execution-audit"
+            && [
+                "强验收",
+                "强制验收",
+                "execution audit",
+                "execution-audit",
+                "quality gate",
+            ]
+            .iter()
+            .any(|marker| {
+                query_text.contains(&normalize_text(marker))
+                    || text_matches_phrase(query_tokens, marker)
+            })
+        {
             return Some(record.slug.clone());
         }
     }
@@ -10541,11 +11206,11 @@ mod tests {
         assert_eq!(control_plane["backend_family"], json!("sqlite"));
         assert_eq!(
             control_plane["trace_service"]["delegate_kind"],
-            json!("sqlite-trace-store")
+            json!("filesystem-trace-store")
         );
         assert_eq!(
             control_plane["state_service"]["delegate_kind"],
-            json!("sqlite-state-store")
+            json!("filesystem-state-store")
         );
         assert_eq!(control_plane["supports_compaction"], json!(true));
         assert_eq!(control_plane["supports_snapshot_delta"], json!(true));

@@ -18,7 +18,7 @@ This skill does not own:
 
 If the task shifts to adjacent skill territory, route to:
 - `$gh-address-comments` for review comments
-- `$checklist-writting` if the user only wants a broader checklist or plan without CI inspection
+- `$checklist-planner` if the user only wants a broader checklist or plan without CI inspection
 - `$github-actions-authoring` if the root cause is a workflow structure issue (trigger, cache, matrix, permissions)
 
 > **Circular handoff with `$github-actions-authoring`**: When triage reveals the

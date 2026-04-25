@@ -8,15 +8,13 @@ REPO_ROOT=$(cd -- "$PACKAGE_DIR/../.." && pwd)
 cd "$REPO_ROOT"
 
 ROUTER_BIN=${BROWSER_MCP_ROUTER_RS_BIN:-}
-ROUTER_BIN_EXPLICIT=1
 ROUTER_LAUNCHER_ARGS=()
 if [ -z "$ROUTER_BIN" ]; then
-  ROUTER_BIN_EXPLICIT=0
   ROUTER_BIN="$REPO_ROOT/scripts/router-rs/run_router_rs.sh"
   ROUTER_LAUNCHER_ARGS=("$REPO_ROOT/scripts/router-rs/Cargo.toml")
 fi
 
-RUST_ARGS=(--browser-mcp-stdio --repo-root "$REPO_ROOT")
+RUST_ARGS=(browser mcp-stdio --repo-root "$REPO_ROOT")
 
 if [ -n "${BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH:-}" ]; then
   RUST_ARGS+=(--runtime-attach-descriptor-path "$BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH")

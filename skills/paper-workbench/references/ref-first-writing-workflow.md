@@ -23,7 +23,7 @@ This is not a citation-hunting workflow. The corpus teaches story architecture, 
 ## Lane Order
 
 1. `$literature-synthesis`: build the target-journal reference corpus and `ref_learning_brief.md`.
-2. `$paper-logic`: only if the corpus reveals novelty, baseline, or claim/evidence risk.
+2. `$paper-reviewer` logic mode: only if the corpus reveals novelty, baseline, or claim/evidence risk.
 3. `$paper-writing`: build the story card, section rewrite plan, and revised prose.
 4. `$citation-management`: final citation truth, `.bib`, and claim-to-citation cleanup.
 
@@ -96,7 +96,7 @@ This card is the single source of truth for abstract, introduction, discussion, 
 
 ## Stop Conditions
 
-Stop and route to `$paper-logic` when:
+Stop and route to `$paper-reviewer` logic mode when:
 
 - the desired story requires a claim stronger than the results support
 - the ref corpus shows a missing obvious baseline or competitor

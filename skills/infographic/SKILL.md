@@ -60,7 +60,7 @@ an HTML file rendered in-browser and optionally exported to PNG/PDF via screensh
 - The task is a Mermaid flow/sequence diagram → use `$mermaid-expert`
 - The task is a Graphviz/DOT precise-layout diagram → use `$graphviz-expert`
 - The task is a code-driven scientific plot (matplotlib, seaborn) → use `$scientific-figure-plotting`
-- The task is existing figure/table review → use `$paper-visuals`
+- The task is existing manuscript figure/table review -> use `$paper-reviewer` figure-table mode or `$visual-review`
 
 ## Boundary with `image-generated`
 

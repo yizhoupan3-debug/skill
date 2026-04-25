@@ -326,8 +326,8 @@ python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py \
   --batch-goal "Audit final-scale figures before gate closeout." \
   --frozen-input "G2 passed" \
   --frozen-input "G3 selected_claim_level locked" \
-  --lane "fig_a|figure_audit|figure:F1-F2|paper-visuals" \
-  --lane "fig_b|figure_audit|figure:F3-F4|paper-visuals"
+  --lane "fig_a|figure_audit|figure:F1-F2|figure-table-mode" \
+  --lane "fig_b|figure_audit|figure:F3-F4|figure-table-mode"
 ```
 
 Or let the script auto-fill a default batch for supported gates:

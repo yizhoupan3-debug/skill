@@ -23,6 +23,13 @@ trigger_hints:
   - 投稿前把关
   - 整篇严审
   - 整篇 review
+  - 检查符号
+  - 符号统一
+  - notation sweep
+  - 砍到 8 页
+  - length budget
+  - 只看图表
+  - figure table audit
   - paper review
   - paper review 不好用
   - paper review优化
@@ -102,7 +109,7 @@ dimension mode.
 - The user explicitly wants only one narrow lane and names it clearly:
   - local text polish only -> use `$paper-writing`
   - literature corpus / related work only -> use `$literature-synthesis`
-  - notation consistency only -> use `$paper-notation-audit`
+  - notation consistency only -> use `notation sweep` under `$paper-reviewer`
 
 ## Default front-door behavior
 
@@ -189,7 +196,7 @@ Behind the scenes, this skill may switch lanes. The user should not need to.
 When the user wants to learn target-journal references before writing:
 
 1. Route to `$literature-synthesis` to build the 20-paper target-journal corpus and ref-learning brief.
-2. Route to `$paper-logic` only if the corpus exposes a claim/evidence or novelty mismatch.
+2. Route to `$paper-reviewer` logic mode only if the corpus exposes a claim/evidence or novelty mismatch.
 3. Route to `$paper-writing` for story spine, section plan, and bounded prose rewrite.
 4. Keep `$citation-management` for final citation truth and `.bib` hygiene, not for the initial story-learning pass.
 

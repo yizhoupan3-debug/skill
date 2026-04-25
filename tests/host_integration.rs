@@ -207,7 +207,7 @@ fn validation_subcommands_cover_install_skills_contract() {
         repo_root.to_str().unwrap(),
     ]);
     let source_path = host_integration_json(&[
-        "resolve-skill-bridge-source",
+        "resolve-skills-source",
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]);
@@ -235,7 +235,7 @@ fn runtime_registry_missing_file_uses_default_registry() {
     std::fs::create_dir_all(&repo_root).unwrap();
     let payload = runtime_registry(&repo_root);
     assert_eq!(payload["schema_version"], "framework-runtime-registry-v1");
-    assert_eq!(payload["codex_host"]["adapter_id"], "codex_adapter");
+    assert_eq!(payload["codex_host"]["profile_id"], "codex_profile");
 }
 
 #[test]
@@ -247,25 +247,25 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
         &registry_path,
         &serde_json::to_string_pretty(&json!({
             "schema_version": "framework-runtime-registry-v1",
-            "codex_host": {"adapter_id": "repo-codex"},
-            "workspace_bootstrap_defaults": {"skill_bridge": {"source_rel": "repo-skills"}},
-            "framework_native_aliases": {"autopilot": {"canonical_owner": "repo-owner"}},
+            "codex_host": {"profile_id": "repo-codex"},
+            "workspace_bootstrap_defaults": {"skills": {"source_rel": "repo-skills"}},
+            "framework_commands": {"autopilot": {"canonical_owner": "repo-owner"}},
             "retired_surfaces": []
         }))
         .unwrap(),
     );
     let payload = runtime_registry(&repo_root);
-    assert_eq!(payload["codex_host"]["adapter_id"], "repo-codex");
+    assert_eq!(payload["codex_host"]["profile_id"], "repo-codex");
     assert_eq!(
-        payload["framework_native_aliases"]["autopilot"]["canonical_owner"],
+        payload["framework_commands"]["autopilot"]["canonical_owner"],
         "repo-owner"
     );
 }
 
 #[test]
-fn runtime_registry_exposes_framework_native_aliases_and_omc_retirement_contract() {
+fn runtime_registry_exposes_framework_commands_and_omc_retirement_contract() {
     let payload = runtime_registry(&project_root());
-    let aliases = &payload["framework_native_aliases"];
+    let aliases = &payload["framework_commands"];
     assert_eq!(
         aliases["autopilot"]["canonical_owner"],
         "execution-controller-coding"
@@ -298,7 +298,7 @@ fn runtime_registry_exposes_framework_native_aliases_and_omc_retirement_contract
 fn runtime_registry_codex_host_exposes_supervisor_capabilities() {
     let payload = runtime_registry(&project_root());
     let codex = &payload["codex_host"];
-    assert_eq!(codex["adapter_id"], "codex_adapter");
+    assert_eq!(codex["profile_id"], "codex_profile");
     let capabilities = codex["capabilities"].as_array().unwrap();
     for capability in [
         "external_session_supervisor",

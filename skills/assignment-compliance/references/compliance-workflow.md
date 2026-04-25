@@ -139,7 +139,7 @@ When the user has fixed only part of the work:
 
 - requirement PDFs → `$pdf`
 - image-based requirements → `$visual-review`
-- paper deliverables → `$paper-reviewer`, `$paper-writing`, `$paper-visuals`
+- paper deliverables -> `$paper-reviewer`, `$paper-writing`, or figure-table mode
 - code deliverables → `$coding-standards`, `$test-engineering`
 - slides -> `$slides` first, then `$ppt-beamer` / `$ppt-pptx` / `$source-slide-formats` as needed
-- notation / symbols → `$paper-notation-audit`
+- notation / symbols -> `$paper-reviewer` notation sweep

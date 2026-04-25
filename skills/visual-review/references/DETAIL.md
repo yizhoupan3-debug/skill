@@ -29,7 +29,7 @@ When another skill calls this one, keep the handoff compact. Prefer passing only
 
 Do not dump the full upstream task if the visual check is local and specific. Keep the visual audit focused on what must be decided from the artifact itself.
 
-When a paired `paper-visuals`, `paper-reviser`, or `scientific-figure-plotting` skill calls this one for recheck, prefer comparing the post-fix artifact against the original issue target and say explicitly whether the issue appears resolved, partially resolved, unchanged, or replaced by a new regression.
+When a paired `paper-reviewer` figure-table mode, `paper-reviser`, or `scientific-figure-plotting` skill calls this one for recheck, prefer comparing the post-fix artifact against the original issue target and say explicitly whether the issue appears resolved, partially resolved, unchanged, or replaced by a new regression.
 
 ### Input contract
 

@@ -11,7 +11,7 @@ Use when the user explicitly asks for `$autopilot` / `autopilot`, full auto, aut
 
 Do not load the whole skill library. For full workflow details, read only:
 
-`skills/execution-controller-coding/SKILL.md`
+`skills/autopilot/SKILL.md`
 
 Default shape:
 

@@ -289,7 +289,7 @@ fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), String>
     Ok(())
 }
 
-fn sqlite_lookup_keys(path: &Path, storage_root: &Path) -> Result<(String, String), String> {
+fn sqlite_lookup_key(path: &Path, storage_root: &Path) -> Result<String, String> {
     let resolved_path = normalize_runtime_path(&path.display().to_string())?;
     let resolved_root = normalize_runtime_path(&storage_root.display().to_string())?;
     let stable_key = resolved_path
@@ -303,20 +303,19 @@ fn sqlite_lookup_keys(path: &Path, storage_root: &Path) -> Result<(String, Strin
         })?
         .to_string_lossy()
         .replace('\\', "/");
-    let legacy_key = resolved_path.display().to_string();
-    Ok((stable_key, legacy_key))
+    Ok(stable_key)
 }
 
 fn sqlite_payload_exists(path: &Path, db_path: &Path, storage_root: &Path) -> Result<bool, String> {
-    let (stable_key, legacy_key) = sqlite_lookup_keys(path, storage_root)?;
+    let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
     let mut stmt = conn
         .prepare(&format!(
-            "SELECT 1 FROM {SQLITE_TABLE_NAME} WHERE payload_key = ?1 OR payload_key = ?2 LIMIT 1"
+            "SELECT 1 FROM {SQLITE_TABLE_NAME} WHERE payload_key = ?1 LIMIT 1"
         ))
         .map_err(|err| format!("prepare sqlite exists query failed: {err}"))?;
     let exists = stmt
-        .query_row(params![stable_key, legacy_key], |row| row.get::<_, i64>(0))
+        .query_row(params![stable_key], |row| row.get::<_, i64>(0))
         .optional()
         .map_err(|err| format!("run sqlite exists query failed: {err}"))?
         .is_some();
@@ -324,17 +323,15 @@ fn sqlite_payload_exists(path: &Path, db_path: &Path, storage_root: &Path) -> Re
 }
 
 fn sqlite_read_text(path: &Path, db_path: &Path, storage_root: &Path) -> Result<String, String> {
-    let (stable_key, legacy_key) = sqlite_lookup_keys(path, storage_root)?;
+    let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
     let mut stmt = conn
         .prepare(&format!(
-            "SELECT payload_text FROM {SQLITE_TABLE_NAME} WHERE payload_key = ?1 OR payload_key = ?2 LIMIT 1"
+            "SELECT payload_text FROM {SQLITE_TABLE_NAME} WHERE payload_key = ?1 LIMIT 1"
         ))
         .map_err(|err| format!("prepare sqlite read query failed: {err}"))?;
-    stmt.query_row(params![stable_key, legacy_key], |row| {
-        row.get::<_, String>(0)
-    })
-    .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
+    stmt.query_row(params![stable_key], |row| row.get::<_, String>(0))
+        .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
 }
 
 fn sqlite_write_text(
@@ -343,7 +340,7 @@ fn sqlite_write_text(
     storage_root: &Path,
     payload_text: &str,
 ) -> Result<(), String> {
-    let (stable_key, _) = sqlite_lookup_keys(path, storage_root)?;
+    let stable_key = sqlite_lookup_key(path, storage_root)?;
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
@@ -371,7 +368,7 @@ fn sqlite_append_text(
     storage_root: &Path,
     payload_text: &str,
 ) -> Result<(), String> {
-    let (stable_key, _) = sqlite_lookup_keys(path, storage_root)?;
+    let stable_key = sqlite_lookup_key(path, storage_root)?;
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
@@ -809,18 +806,6 @@ fn default_service_delegate_kind(service_name: &str, backend_family: &str) -> St
     format!("{normalized_backend}-{service_name}-store")
 }
 
-fn coerce_legacy_service_delegate_kind(
-    delegate_kind: &str,
-    service_name: &str,
-    backend_family: &str,
-) -> String {
-    let legacy_delegate = format!("filesystem-{service_name}-store");
-    if backend_family == "filesystem" || delegate_kind != legacy_delegate {
-        return delegate_kind.to_string();
-    }
-    default_service_delegate_kind(service_name, backend_family)
-}
-
 fn capability_bool(capabilities: &Map<String, Value>, field: &str, default: bool) -> bool {
     capabilities
         .get(field)
@@ -866,7 +851,7 @@ fn build_service_projection_for_backend(
     let delegate_kind = service
         .and_then(|value| value.get("delegate_kind"))
         .and_then(Value::as_str)
-        .map(|value| coerce_legacy_service_delegate_kind(value, service_name, backend_family))
+        .map(str::to_string)
         .unwrap_or_else(|| default_service_delegate_kind(service_name, backend_family));
 
     json!({

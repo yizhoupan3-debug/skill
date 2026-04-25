@@ -124,5 +124,5 @@ If blocked:
 - `accessibility-auditor`
 - `security-audit`
 - `systematic-debugging`
-- `paper-notation-audit`, `paper-logic` (academic upstream)
+- `paper-reviewer` notation/logic modes (academic upstream)
 - user-authored checklists

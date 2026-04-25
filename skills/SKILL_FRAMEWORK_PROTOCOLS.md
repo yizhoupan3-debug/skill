@@ -49,7 +49,7 @@
 1. 只携带 **delta**，不要整轮重述。
 2. 已执行项必须有验证状态。
 3. 若出现 regression，作为下一轮 finding。
-4. `iterative-optimizer` 只编排轮次，不替代 domain owner。
+4. `execution-audit` iteration loop 只编排验收轮次，不替代 domain owner。
 
 ## 5. Stop Rules
 

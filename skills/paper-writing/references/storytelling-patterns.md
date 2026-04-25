@@ -10,7 +10,7 @@ Every manuscript needs a spine the reader can repeat:
 Field wants [goal], but [specific bottleneck] prevents it under [scope]. Existing work solves [nearby thing] but not [this gap] because [reason]. We address this by [paper move]. The evidence shows [bounded result], which matters because [implication].
 ```
 
-If any slot is missing, do not hide it with fluent prose. Mark it with `[VERIFY: ...]` or hand back to `$paper-logic`.
+If any slot is missing, do not hide it with fluent prose. Mark it with `[VERIFY: ...]` or hand back to `$paper-reviewer` logic mode.
 
 ## Storyline Diagnosis
 
@@ -20,7 +20,7 @@ Before rewriting, classify the current manuscript problem:
 | --- | --- | --- |
 | No tension | The text says the topic is important but not why current work fails | Name the bottleneck and consequence |
 | Generic gap | "Few studies..." without a reason | Explain why the missing study matters |
-| Claim/evidence mismatch | Introduction promises more than experiments prove | Narrow claim or route to `$paper-logic` |
+| Claim/evidence mismatch | Introduction promises more than experiments prove | Narrow claim or route to `$paper-reviewer` logic mode |
 | Methods-first story | Paper starts with technique before reader sees the need | Move problem and constraint before method |
 | Literature dump | Related work lists papers without contrast | Cluster by gap and end with positioning |
 | Result list | Results report tables without a takeaway path | Order evidence by contribution claims |
@@ -128,7 +128,7 @@ For long manuscript work, keep a tiny story card and reuse it across sections:
 - Forbidden claims:
 ```
 
-Every rewritten section should agree with this card. If a section needs a stronger claim than the card allows, stop and route to `$paper-logic` instead of silently upgrading the prose.
+Every rewritten section should agree with this card. If a section needs a stronger claim than the card allows, stop and route to `$paper-reviewer` logic mode instead of silently upgrading the prose.
 
 ## Section Story Jobs
 

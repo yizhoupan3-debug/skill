@@ -55,12 +55,12 @@ This skill owns **statistical method selection, execution, and interpretation** 
 - The task is data wrangling or cleaning → use `$data-wrangling`
 - The task is plotting without statistical analysis → use `$scientific-figure-plotting`
 - The task is paper writing → use `$paper-writing` (but may co-invoke for results sections)
-- The task is about paper-level scientific logic or claims-vs-evidence alignment → use `$paper-logic` (but `paper-logic` may route statistical questions here)
+- The task is about paper-level scientific logic or claims-vs-evidence alignment → use `$paper-reviewer` logic mode (which may route statistical questions here)
 
 ## Cross-references
 
 - `$research-workbench` uses this skill as the statistics / uncertainty lane
-- `$paper-logic` routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
+- `$paper-reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
 - `$paper-reviewer` Tier-1 statistical rigor checks may route here for detailed analysis
 
 ### Comparing Groups
@@ -152,7 +152,7 @@ or interpretation is settled.
 
 ## Cross-references
 
-- `$paper-logic` routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
+- `$paper-reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
 - `$paper-reviewer` Tier-1 statistical rigor checks may route here
 - `$experiment-reproducibility` routes result validation statistics here
 

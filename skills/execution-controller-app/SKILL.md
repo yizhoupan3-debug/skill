@@ -83,7 +83,7 @@ This skill is the **APP ecosystem command layer**, not a generic coding controll
 ## Do not use
 
 - 只是单一前端视觉优化 → use [`$frontend-design`](/Users/joe/Documents/skill/skills/frontend-design/SKILL.md)
-- 只是前端代码规范/组件重构 → use [`$frontend-code-quality`](/Users/joe/Documents/skill/skills/frontend-code-quality/SKILL.md)
+- 只是前端代码规范/组件重构 → use [`$coding-standards`](/Users/joe/Documents/skill/skills/coding-standards/SKILL.md) frontend-quality reference
 - 只是后端分层或接口实现 → use [`$node-backend`](/Users/joe/Documents/skill/skills/node-backend/SKILL.md)
 - 只是 API / OpenAPI 设计 → use [`$api-design`](/Users/joe/Documents/skill/skills/api-design/SKILL.md)
 - 只是补测试或单独走 TDD → use [`$test-engineering`](/Users/joe/Documents/skill/skills/test-engineering/SKILL.md) or [`$tdd-workflow`](/Users/joe/Documents/skill/skills/tdd-workflow/SKILL.md)
@@ -102,7 +102,7 @@ This skill is the **APP ecosystem command layer**, not a generic coding controll
 
 ### Frontend lane
 
-Coordinate [`$frontend-design`](/Users/joe/Documents/skill/skills/frontend-design/SKILL.md), [`$frontend-code-quality`](/Users/joe/Documents/skill/skills/frontend-code-quality/SKILL.md), and the active framework skill.
+Coordinate [`$frontend-design`](/Users/joe/Documents/skill/skills/frontend-design/SKILL.md), [`$coding-standards`](/Users/joe/Documents/skill/skills/coding-standards/SKILL.md) frontend-quality reference, and the active framework skill.
 
 Default quality bar:
 

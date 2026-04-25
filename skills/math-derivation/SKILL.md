@@ -76,19 +76,19 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 
 - The task is choosing/running a statistical test → use `$statistical-analysis`
 - The task is research-grade technical critique of a method/algorithm → use `$research-engineer`
-- The task is auditing notation consistency in a paper → use `$paper-notation-audit`
+- The task is auditing notation consistency in a paper -> use `$paper-reviewer` notation sweep
 - The task is numerical computation or coding → use `$python-pro` or `$scientific-figure-plotting`
 - The task is explaining math intuitively without formal proof → answer directly
 - The task is ML model math with coding focus (loss function implementation, gradient code) → use `$ai-research`
-- The task is reviewing paper-level scientific logic → use `$paper-logic`
+- The task is reviewing paper-level scientific logic -> use `$paper-reviewer` logic mode
 - The task is LaTeX compilation or rendering → use `$latex-compile-acceleration`
 
 ## Cross-references
 
-- `$paper-logic` may route here when a paper's core claim requires formal proof verification
+- `$paper-reviewer` logic mode may route here when a paper's core claim requires formal proof verification
 - `$research-engineer` may co-invoke this skill for proof-oriented analysis of algorithms
 - `$statistical-analysis` handles statistical tests; this skill handles the underlying math (e.g., proving a test statistic's distribution)
-- `$paper-notation-audit` audits symbol consistency; this skill proves content correctness
+- `$paper-reviewer` notation sweep audits symbol consistency; this skill proves content correctness
 
 ## Derivation workflow
 

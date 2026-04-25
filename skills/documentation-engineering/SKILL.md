@@ -72,7 +72,7 @@ and automating developer-facing documentation artifacts.
 
 - The task is academic paper writing → use `$paper-writing`
 - The task is `.docx` Word document editing → use `$doc`
-- The task is `SKILL.md` or skill documentation → use `$skill-framework-developer` or `$writing-skills`
+- The task is `SKILL.md` or skill documentation → use `$skill-framework-developer` or `$skill-creator`
 - The task is code comment style enforcement only → use `$coding-standards`
 - The task is API interface design (not its documentation) → use `$api-design`
 - The task is PDF generation or manipulation → use `$pdf`

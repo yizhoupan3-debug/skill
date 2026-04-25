@@ -14,35 +14,6 @@ const HOST_ENTRYPOINT_SYNC_HINT: &str =
 const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 1] = [".codex/skills"];
 const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 2] = ["AGENTS.md", CODEX_HOOK_README_PATH];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [".codex/hooks.json"];
-const RETIRED_HOST_ENTRYPOINT_PATH_BYTES: [&[u8]; 17] = [
-    &[65, 71, 69, 78, 84, 46, 109, 100],
-    &[67, 76, 65, 85, 68, 69, 46, 109, 100],
-    &[71, 69, 77, 73, 78, 73, 46, 109, 100],
-    &[67, 85, 82, 83, 79, 82, 46, 109, 100],
-    &[46, 99, 108, 97, 117, 100, 101],
-    &[46, 103, 101, 109, 105, 110, 105],
-    &[46, 99, 117, 114, 115, 111, 114],
-    &[46, 97, 105, 111, 110, 117, 105],
-    &[97, 105, 111, 110, 117, 105],
-    &[119, 111, 114, 107, 98, 117, 100, 100, 121],
-    &[107, 105, 109, 105],
-    &[103, 108, 109],
-    &[46, 109, 99, 112, 46, 106, 115, 111, 110],
-    &[
-        99, 111, 110, 102, 105, 103, 115, 47, 99, 111, 100, 101, 120, 47, 65, 71, 69, 78, 84, 83,
-        46, 109, 100,
-    ],
-    &[
-        99, 111, 110, 102, 105, 103, 115, 47, 99, 108, 97, 117, 100, 101,
-    ],
-    &[
-        99, 111, 110, 102, 105, 103, 115, 47, 103, 101, 109, 105, 110, 105,
-    ],
-    &[
-        46, 99, 111, 100, 101, 120, 47, 109, 111, 100, 101, 108, 95, 105, 110, 115, 116, 114, 117,
-        99, 116, 105, 111, 110, 115, 46, 109, 100,
-    ],
-];
 const PROTECTED_GENERATED_PATH_BYTES: [&[u8]; 4] = [
     &[65, 71, 69, 78, 84, 83, 46, 109, 100],
     &[
@@ -73,7 +44,6 @@ struct HostEntrypointSyncSection {
     text_files: Vec<String>,
     json_files: Vec<String>,
     managed_directories: Vec<String>,
-    retired_paths: Vec<String>,
 }
 
 fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
@@ -90,7 +60,6 @@ fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
-        retired_paths: retired_host_entrypoint_paths(),
     }
 }
 
@@ -136,7 +105,6 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
-        retired_paths: retired_host_entrypoint_paths(),
     };
     let mut targets = vec![root.clone()];
     targets.extend(matched_worktrees);
@@ -194,8 +162,6 @@ fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec
 }
 
 fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>) -> Value {
-    let mut retired_paths = retired_host_entrypoint_paths();
-    retired_paths.sort();
     let full_text_files = desired_files
         .keys()
         .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
@@ -208,16 +174,14 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
             "text_files": full_text_files,
             "json_files": [
                 HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[0],
-                HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-            ],
-            "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
-            "retired_paths": retired_paths,
-        },
+            HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
+        ],
+        "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
+    },
         "partial_sync": {
             "text_files": HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES,
             "json_files": HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
             "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
-            "retired_paths": retired_paths,
         },
     })
 }
@@ -267,30 +231,7 @@ fn sync_host_entrypoints_single_root(
         )?;
     }
 
-    for relative in &section.retired_paths {
-        let path = target_root.join(relative);
-        let exists = path.exists() || symlink_exists(&path);
-        if exists && apply {
-            remove_path(&path).map_err(|err| err.to_string())?;
-        }
-        if exists {
-            report.written.push(describe_host_entrypoint_path(
-                report_root,
-                target_root,
-                &path,
-            ));
-        }
-    }
-
     Ok(report)
-}
-
-fn retired_host_entrypoint_paths() -> Vec<String> {
-    RETIRED_HOST_ENTRYPOINT_PATH_BYTES
-        .iter()
-        .filter_map(|bytes| std::str::from_utf8(bytes).ok())
-        .map(str::to_string)
-        .collect()
 }
 
 fn protected_generated_paths() -> Vec<&'static str> {

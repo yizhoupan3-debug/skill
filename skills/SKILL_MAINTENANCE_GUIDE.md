@@ -77,6 +77,6 @@ git worktree list --porcelain
 ### 2. 工作流凝结协议 (Workflow-to-Skill)
 当审计报告识别出“待批阅工作流”时，需严格执行以下流程：
 1. **模式确认**：人工批阅审计 Issue，确认该任务流具备独立凝结价值。
-2. **标准化生成**：必须基于 `$skill-creator` 协议，显式处理与 `iterative-optimizer` 等通用技能的 `Do not use` 边界。
+2. **标准化生成**：必须基于 `$skill-creator` 协议，显式处理与 `execution-audit` iteration loop 等通用验收模式的 `Do not use` 边界。
 3. **回归校验**：新技能就绪后，需运行 Rust skill compiler `--apply` 更新注册表。
 4. **闭环验证**：初始设为 `P2` 优先级，在接下来的会话中观察是否成功拦截原有的“通用型”路由。
