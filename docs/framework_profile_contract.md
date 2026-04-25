@@ -46,7 +46,7 @@
 
 ## Execution Protocol
 
-默认执行闭环是 `规范 -> 计划 -> 实施 -> 验证`。它是 runtime / route 的协议，不是 skill owner，也不把 `execution-controller-coding` 设为默认主 owner。
+默认执行闭环是 `讨论 -> 规划 -> 执行 -> 验证`。它是 runtime / route 的协议，不是 skill owner，也不把 `execution-controller-coding` 设为默认主 owner。内部 route 字段可继续用 `four_step` 作为稳定机器标识。
 
 `execution_protocol_contract` 只表达协议阶段、证据要求和 continuity 边界；`execution_controller_contract` 仅作为旧宿主兼容投影保留，不能重新引入 `primary_owner: execution-controller-coding` 或 `gsd` owner boost 语义。
 

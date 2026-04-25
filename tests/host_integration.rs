@@ -8,10 +8,8 @@ use tempfile::tempdir;
 fn install_native_integration_is_idempotent() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join(".codex")).unwrap();
-    write_stub_skill(&repo_root, "autopilot");
-    write_stub_skill(&repo_root, "deepinterview");
-    write_stub_skill(&repo_root, "gitx");
+    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    write_text(&repo_root.join("skills/gitx/SKILL.md"), "---\nname: gitx\n---\n");
     let plugin_root = repo_root.join("plugins/skill-framework-native/.codex-plugin");
     std::fs::create_dir_all(&plugin_root).unwrap();
     write_text(
@@ -50,17 +48,12 @@ fn install_native_integration_is_idempotent() {
         0
     );
     assert_eq!(content.matches("[tui]").count(), 1);
-    assert!(home_codex_skills_path.is_dir());
-    assert!(!std::fs::symlink_metadata(&home_codex_skills_path)
-        .unwrap()
-        .file_type()
-        .is_symlink());
-    assert!(home_codex_skills_path.join("gitx/SKILL.md").is_file());
+    assert!(!home_codex_skills_path.exists());
     assert_eq!(first["default_bootstrap"]["status"], "materialized");
     assert!(["already-present", "repaired-stale"]
         .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
-    assert_eq!(first["home_codex_skills_link_changed"], true);
-    assert_eq!(second["home_codex_skills_link_changed"], false);
+    assert_eq!(first["home_codex_skills_changed"], false);
+    assert_eq!(second["home_codex_skills_changed"], false);
 }
 
 #[test]
@@ -140,10 +133,8 @@ fn install_skills_rust_entrypoint_links_codex_only() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     let home = tmp.path().join("home");
-    std::fs::create_dir_all(repo_root.join(".codex")).unwrap();
-    write_stub_skill(&repo_root, "autopilot");
-    write_stub_skill(&repo_root, "deepinterview");
-    write_stub_skill(&repo_root, "gitx");
+    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    write_text(&repo_root.join("skills/gitx/SKILL.md"), "---\nname: gitx\n---\n");
     let plugin_root = repo_root.join("plugins/skill-framework-native/.codex-plugin");
     std::fs::create_dir_all(&plugin_root).unwrap();
     write_text(
@@ -175,14 +166,12 @@ fn install_skills_rust_entrypoint_links_codex_only() {
     assert_eq!(first["results"]["codex"]["status"], "installed");
     assert!(first["results"].get("agents").is_none());
     let codex_skills = home.join(".codex/skills");
-    assert!(codex_skills.is_dir());
-    assert!(!std::fs::symlink_metadata(&codex_skills)
-        .unwrap()
-        .file_type()
-        .is_symlink());
+    assert!(!codex_skills.exists());
+    assert_eq!(second["results"]["codex"]["checks"]["codex_skills"], true);
+    assert_eq!(second["results"]["codex"]["checks"]["config"], true);
     assert_eq!(
         second["results"]["codex"]["status"],
-        "native-integration-incomplete"
+        "native-integration-ready"
     );
 }
 
@@ -190,7 +179,7 @@ fn install_skills_rust_entrypoint_links_codex_only() {
 fn validation_subcommands_cover_install_skills_contract() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join(".codex/skills")).unwrap();
+    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
     let bootstrap_path = tmp.path().join("framework_default_bootstrap.json");
     host_integration_json(&[
         "ensure-default-bootstrap",
@@ -215,7 +204,7 @@ fn validation_subcommands_cover_install_skills_contract() {
     assert_path_eq(
         source_path["path"].as_str().unwrap(),
         &repo_root
-            .join(".codex/skills")
+            .join("skills")
             .canonicalize()
             .unwrap()
             .display()
@@ -336,9 +325,4 @@ fn normalize_macos_private_var(path: &str) -> String {
     } else {
         path.to_string()
     }
-}
-
-fn write_stub_skill(repo_root: &std::path::Path, skill: &str) {
-    let path = repo_root.join(".codex/skills").join(skill).join("SKILL.md");
-    write_text(&path, &format!("---\nname: {skill}\n---\n\n# {skill}\n"));
 }

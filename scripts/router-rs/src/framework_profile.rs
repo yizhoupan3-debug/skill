@@ -316,9 +316,9 @@ fn compile_workspace_bootstrap(
     if !resources.contains_key("skills") {
         let skills = bootstrap.get("skills").cloned().unwrap_or_else(|| {
             value_object([
-                ("project_dir", Value::String(".codex/skills".to_string())),
+                ("project_dir", Value::String("skills".to_string())),
                 ("user_dir", Value::String("~/.codex/skills".to_string())),
-                ("source_dir", Value::String(".codex/skills".to_string())),
+                ("source_dir", Value::String("skills".to_string())),
             ])
         });
         resources.insert("skills".to_string(), skills);
@@ -1392,7 +1392,7 @@ mod tests {
         })];
         profile.workspace_bootstrap = serde_json::from_value(json!({
             "skills": {
-                "project_dir": ".codex/skills"
+                "project_dir": "skills"
             },
             "resources": {
                 "memory": {
@@ -1411,11 +1411,11 @@ mod tests {
                     "mounts": []
                 },
                 "skills": {
-                    "project_dir": ".codex/skills"
+                    "project_dir": "skills"
                 }
             },
             "skills": {
-                "project_dir": ".codex/skills"
+                "project_dir": "skills"
             }
         });
 

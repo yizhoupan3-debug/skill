@@ -37,10 +37,10 @@
   },
   "workspace_bootstrap_defaults": {
     "skills": {
-      "source_rel": ".codex/skills",
-      "project_dir": ".codex/skills",
+      "source_rel": "skills",
+      "project_dir": "skills",
       "user_dir": "~/.codex/skills",
-      "source_dir": ".codex/skills"
+      "source_dir": "skills"
     },
     "memory": {
       "source_dir": ".codex/memory-bridge"

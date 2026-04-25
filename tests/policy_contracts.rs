@@ -36,7 +36,7 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
     for marker in [
         "name: gitx",
         "$gitx",
-        "review、修复、整理、提交、合并 worktree、推送",
+        "review、修复、整理、提交、合并分支、合并 worktree、推送",
         "git status --short --branch",
         "git worktree list --porcelain",
         "git diff --stat",
@@ -56,22 +56,13 @@ fn refresh_skill_is_not_projected_as_codex_entrypoint() {
 }
 
 #[test]
-fn codex_skill_projection_is_stub_only() {
-    for skill in ["gitx", "autopilot", "deepinterview"] {
-        let path = project_root().join(format!(".codex/skills/{skill}/SKILL.md"));
-        let content = read_text(&path);
-        assert!(path.is_file(), "missing stub for {skill}");
-        assert!(content.contains("Small Codex entry stub."));
-        if skill == "autopilot" {
-            assert!(content.contains("skills/execution-controller-coding/SKILL.md"));
-        } else {
-            assert!(content.contains(&format!("skills/{skill}/SKILL.md")));
-        }
-        assert!(
-            (20..=40).contains(&content.lines().count()),
-            "{skill} stub should stay tiny"
-        );
-    }
+fn codex_skill_projection_directory_stays_retired() {
+    assert!(!project_root().join(".codex/skills").exists());
+    let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
+    let manifest_text = manifest.to_string();
+    assert!(!manifest_text.contains(".codex/skills/gitx"));
+    assert!(!manifest_text.contains(".codex/skills/autopilot"));
+    assert!(manifest_text.contains("retired_directories"));
 }
 
 #[test]
@@ -252,6 +243,34 @@ fn router_rs_retired_top_level_flags_return_migration_guidance() {
 }
 
 #[test]
+fn router_rs_remaining_top_level_json_flags_return_migration_guidance() {
+    for (flag, canonical) in [
+        ("--route-snapshot-json", "route_snapshot"),
+        ("--runtime-control-plane-json", "runtime_control_plane"),
+        ("--trace-record-event-json", "trace record-event"),
+    ] {
+        let output = run(cargo_manifest_command(
+            &project_root().join("scripts/router-rs/Cargo.toml"),
+            &[flag],
+        ));
+        assert!(!output.status.success(), "{flag} unexpectedly succeeded");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("retired top-level flag"),
+            "{flag} stderr did not mention retired flag: {stderr}"
+        );
+        assert!(
+            stderr.contains(canonical),
+            "{flag} stderr did not mention {canonical}: {stderr}"
+        );
+        assert!(
+            !stderr.contains("unexpected argument"),
+            "{flag} fell through to clap instead of migration guidance: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn github_source_gate_python_helpers_are_retired() {
     for skill in ["skills/gh-fix-ci", "skills/gh-address-comments"] {
         let skill_path = project_root().join(skill);
@@ -295,6 +314,30 @@ fn generated_routing_surfaces_do_not_reference_retired_python_helpers() {
     assert!(!generated.contains("inspect_pr_checks.py"));
     assert!(!generated.contains("fetch_comments.py"));
     assert!(generated.contains("gh-source-gate"));
+}
+
+#[test]
+fn runtime_protocol_uses_behavior_driven_public_names() {
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let checklist = runtime["checklist"]
+        .as_array()
+        .expect("runtime checklist")
+        .iter()
+        .map(|item| item.as_str().expect("checklist item"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for marker in ["讨论:", "规划:", "执行:", "验证:"] {
+        assert!(checklist.contains(marker), "missing protocol marker: {marker}");
+    }
+    for stale in ["规范:", "计划:", "实施:"] {
+        assert!(
+            !checklist.contains(stale),
+            "stale protocol marker leaked: {stale}"
+        );
+    }
+    assert!(checklist.contains(
+        "Completion pressure changes route context only; it must not change selected owner."
+    ));
 }
 
 #[test]

@@ -18,7 +18,6 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "git-branch",
 ];
 const INSTALL_SKILLS_TOOLS: [&str; 1] = ["codex"];
-const CODEX_STUB_SKILLS: [&str; 3] = ["autopilot", "deepinterview", "gitx"];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
     ["active_task.json", "focus_task.json", "task_registry.json"];
 const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [
@@ -324,7 +323,7 @@ fn skills_source_rel(repo_root: &Path) -> Result<String, String> {
         .workspace_bootstrap_defaults
         .skills
         .source_rel
-        .unwrap_or_else(|| ".codex/skills".to_string()))
+        .unwrap_or_else(|| "skills".to_string()))
 }
 
 fn router_rs_crate_root() -> PathBuf {
@@ -393,8 +392,8 @@ fn install_native_integration(
     let created_config = ensure_config_file(&home_config_path)?;
     let codex_hooks_disabled_changed = ensure_codex_hooks_disabled(&home_config_path)?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
-    let home_codex_skills_link_changed = if install_home_codex_skills_link {
-        ensure_home_skills_link(&repo_root, &home_codex_skills_path)?
+    let home_codex_skills_changed = if install_home_codex_skills_link {
+        retire_codex_skills_directory(&home_codex_skills_path)?
     } else {
         false
     };
@@ -412,7 +411,7 @@ fn install_native_integration(
         "created_config": created_config,
         "codex_hooks_disabled_changed": codex_hooks_disabled_changed,
         "tui_status_line_changed": tui_changed,
-        "home_codex_skills_link_changed": home_codex_skills_link_changed,
+        "home_codex_skills_changed": home_codex_skills_changed,
         "default_bootstrap": default_bootstrap,
     }))
 }
@@ -591,7 +590,7 @@ fn install_native_integration_changed(payload: &Value) -> bool {
         "created_config",
         "codex_hooks_disabled_changed",
         "tui_status_line_changed",
-        "home_codex_skills_link_changed",
+        "home_codex_skills_changed",
     ]
     .iter()
     .any(|key| payload.get(*key).and_then(Value::as_bool) == Some(true))
@@ -602,12 +601,12 @@ fn install_native_integration_changed(payload: &Value) -> bool {
             == Some(true)
 }
 
-fn remove_skill_tool(repo_root: &Path, home: &Path, tool: &str) -> Result<Value, String> {
+fn remove_skill_tool(_repo_root: &Path, home: &Path, tool: &str) -> Result<Value, String> {
     if tool == "codex" {
         let target = home.join(".codex").join("skills");
-        let changed = retire_home_skills_link(repo_root, &target)?;
+        let changed = retire_codex_skills_directory(&target)?;
         return Ok(json!({
-            "status": if changed { "removed-link" } else { "native-surfaces-left-in-place" },
+            "status": if changed { "removed-codex-skills" } else { "native-surfaces-left-in-place" },
             "changed": changed,
             "target": target.to_string_lossy(),
         }));
@@ -645,7 +644,7 @@ fn codex_install_status_with_bootstrap(
 
     let config_ok = codex_config_matches_contract(&config_path)?;
     let bootstrap_ok = validate_default_bootstrap(&bootstrap_path, repo_root)?;
-    let codex_skills_ok = skills_stub_dir_matches_source(&codex_skills_path, &source)?;
+    let codex_skills_ok = !codex_skills_path.exists() && !symlink_exists(&codex_skills_path);
     let ready = config_ok && bootstrap_ok && codex_skills_ok;
 
     Ok(json!({
@@ -670,35 +669,6 @@ fn codex_config_matches_contract(config_path: &Path) -> Result<bool, String> {
 
 fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
     Ok(repo_root.join(skills_source_rel(repo_root)?))
-}
-
-fn skills_stub_dir_matches_source(
-    target_path: &Path,
-    expected_source: &Path,
-) -> Result<bool, String> {
-    let metadata = match fs::symlink_metadata(target_path) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(err) => return Err(err.to_string()),
-    };
-    if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
-        return Ok(false);
-    }
-    for entry in fs::read_dir(target_path).map_err(|err| err.to_string())? {
-        let entry = entry.map_err(|err| err.to_string())?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !CODEX_STUB_SKILLS.contains(&name.as_str()) {
-            return Ok(false);
-        }
-    }
-    for skill in CODEX_STUB_SKILLS {
-        let source = expected_source.join(skill).join("SKILL.md");
-        let target = target_path.join(skill).join("SKILL.md");
-        if fs::read(&source).ok() != fs::read(&target).ok() {
-            return Ok(false);
-        }
-    }
-    Ok(true)
 }
 
 fn count_top_level_skills(skills_root: &Path) -> Result<usize, String> {
@@ -1537,6 +1507,11 @@ fn migrate_current_artifact_clutter(
 }
 
 fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool {
+    let normalized_repo_root = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf())
+        .to_string_lossy()
+        .to_string();
     payload
         .get("bootstrap")
         .and_then(Value::as_object)
@@ -1551,7 +1526,7 @@ fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool
             bootstrap
                 .get("repo_root")
                 .and_then(Value::as_str)
-                .map(|value| value == repo_root.to_string_lossy())
+                .map(|value| value == normalized_repo_root)
                 .unwrap_or(false)
                 && skills.get("source").and_then(Value::as_str)
                     == Some("skills/SKILL_ROUTING_RUNTIME.json")
@@ -1794,81 +1769,12 @@ fn format_status_line() -> String {
     format!("status_line = [{items}]")
 }
 
-fn ensure_stub_skill_directory(source: &Path, target_path: &Path) -> Result<bool, String> {
-    if let Some(parent) = target_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-
-    let mut changed = false;
-    if symlink_exists(target_path) {
-        remove_path(target_path).map_err(|err| err.to_string())?;
-        changed = true;
-    } else if target_path.exists() {
-        let metadata = fs::symlink_metadata(target_path).map_err(|err| err.to_string())?;
-        if !metadata.file_type().is_dir() {
-            let backup_path = target_path.with_file_name(format!(
-                "{}.bak",
-                target_path
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or("skills")
-            ));
-            if backup_path.exists() || symlink_exists(&backup_path) {
-                remove_path(&backup_path).map_err(|err| err.to_string())?;
-            }
-            fs::rename(target_path, &backup_path).map_err(|err| err.to_string())?;
-            changed = true;
-        }
-    }
-
-    fs::create_dir_all(target_path).map_err(|err| err.to_string())?;
-    for entry in fs::read_dir(target_path).map_err(|err| err.to_string())? {
-        let entry = entry.map_err(|err| err.to_string())?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !CODEX_STUB_SKILLS.contains(&name.as_str()) {
-            remove_path(&entry.path()).map_err(|err| err.to_string())?;
-            changed = true;
-        }
-    }
-
-    for skill in CODEX_STUB_SKILLS {
-        let source_file = source.join(skill).join("SKILL.md");
-        let target_file = target_path.join(skill).join("SKILL.md");
-        if let Some(parent) = target_file.parent() {
-            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-        }
-        let desired = fs::read(&source_file).map_err(|err| err.to_string())?;
-        if fs::read(&target_file).ok().as_deref() != Some(desired.as_slice()) {
-            fs::write(&target_file, desired).map_err(|err| err.to_string())?;
-            changed = true;
-        }
-    }
-
-    Ok(changed)
-}
-
-fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
-    let source = repo_root.join(skills_source_rel(repo_root)?);
-    ensure_stub_skill_directory(&source, target_path)
-}
-
-fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
-    let source = repo_root
-        .join(skills_source_rel(repo_root)?)
-        .canonicalize()
-        .map_err(|err| err.to_string())?;
-    let metadata = match fs::symlink_metadata(target_path) {
+fn retire_codex_skills_directory(target_path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(target_path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
         Err(err) => return Err(err.to_string()),
     };
-    if !metadata.file_type().is_symlink() {
-        return Ok(false);
-    }
-    let resolved = target_path.canonicalize().map_err(|err| err.to_string())?;
-    if resolved != source {
-        return Ok(false);
-    }
     remove_path(target_path).map_err(|err| err.to_string())?;
     Ok(true)
 }

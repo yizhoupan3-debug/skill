@@ -2,19 +2,21 @@
 name: gitx
 description: |
   Codex 里的 Git 主入口。Use when the user says `$gitx` / `/gitx` / `gitx`, or
-  needs branch、rebase、push、worktree、仓库收口、推送失败排查等 Git 实操。
+  needs branch、merge、rebase、push、worktree、仓库收口、推送失败排查等 Git 实操。
   This skill owns practical Git work in this repo, from quick diagnosis to end-to-end closeout.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
-short_description: Run the safe Git review-fix-tidy-commit-merge-push workflow end to end.
+short_description: Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.
 trigger_hints:
   - $gitx
   - gitx
   - git 一条龙
   - review 修复 整理 提交 推送
+  - 合并分支
+  - merge branch
   - 合并 worktree 并推送
 allowed_tools:
   - shell
@@ -47,8 +49,8 @@ bridge_behavior: mobile_complete_once
 ## When to use
 
 - 用户明确说 `$gitx`、`/gitx`、`gitx`
-- 用户要查分支、rebase、push、远程、worktree、stash、仓库状态这类 Git 实操
-- 用户要把 review、修复、整理、提交、合并 worktree、推送当成一次连续动作做完
+- 用户要查分支、合并分支、rebase、push、远程、worktree、stash、仓库状态这类 Git 实操
+- 用户要把 review、修复、整理、提交、合并分支、合并 worktree、推送当成一次连续动作做完
 - 当前重点是把仓库安全收口，或把 Git 问题落到真实仓库状态上处理
 
 ## Do not use
@@ -64,7 +66,7 @@ bridge_behavior: mobile_complete_once
 
 1. 先看清真实 Git 状态，而不是直接提交
 2. 先 review 再 fix
-3. 先整理脏改动和 worktree，再决定怎么提交
+3. 先整理脏改动和 worktree，再决定怎么提交或合并分支
 4. 最后把应该推送的分支安全推上去
 
 如果当前目录不是 Git 仓库，不要擅自初始化；直接说明不是仓库并停下。
@@ -75,7 +77,7 @@ bridge_behavior: mobile_complete_once
 - 看提交面：`git diff --stat` + `git diff --cached --stat`
 - 看远端关系：`git rev-parse --abbrev-ref --symbolic-full-name @{u}` + `git status --short --branch`
 - 验证：直接运行本次改动面需要的 `cargo test` / `pytest` / `npm test` / smoke 命令
-- 收口：人工明确分支、提交、merge、push 路线；不要依赖已移除的 Python git helper
+- 收口：自动执行安全分支、提交、merge、push 路线；不要依赖已移除的 Python git helper
 
 ## Required workflow
 
@@ -100,17 +102,22 @@ bridge_behavior: mobile_complete_once
 6. 高输出验证默认优先走 repo 里的 RTK 规则：
    - `cargo test` / `npm test` / `git diff` 这类噪声命令，允许自动加 `rtk`
    - 若需要原始输出，用 `--no-rtk`
-7. 低风险场景也要显式确认提交面和目标分支，不走隐藏自动化。
-8. 整理提交面：
+7. 自动化覆盖低风险分支合并：
+   - 目标分支和源分支可由用户请求、当前分支、upstream 或 worktree 上下文明确推断时，可以继续执行
+   - merge 前确认 `git status --short --branch` 干净或只有本次已纳入提交面的改动
+   - 优先 `git merge --ff-only <source>`；需要 merge commit 时只在用户明确允许或仓库惯例明确时执行
+   - 遇到冲突、落后远端、分叉历史、未跟踪文件覆盖风险、目标/源分支不清楚时停止并说明下一步
+8. 低风险场景也要显式记录提交面、源分支、目标分支和远端，不走隐藏状态。
+9. 整理提交面：
    - 把真正源码改动和缓存/日志/临时文件分开
    - 保留用户无关改动，不要误吞
-9. 验证：
+10. 验证：
    - 运行最小但足够的测试、lint、build 或 smoke
    - 没法验证时要明确说明风险
-10. 提交与分支收口：
+11. 提交与分支收口：
    - 用清晰提交信息提交
-   - 若工作在 topic/worktree 分支上，优先用 `git merge --ff-only` 路线收口
-11. 推送：
+   - 若工作在 topic/worktree 分支上，优先用 `git merge --ff-only` 路线合并回目标分支
+12. 推送：
    - 推送前确认 upstream、ahead/behind、remote 目标
    - 用显式 remote 和 branch；不要盲推
 

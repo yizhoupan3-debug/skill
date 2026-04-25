@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const TRACE_RECORD_EVENT_SCHEMA_VERSION: &str = "router-rs-trace-record-event-v1";
@@ -806,7 +808,9 @@ fn append_text(path: &Path, payload: &str) -> Result<(), String> {
         fs::create_dir_all(parent)
             .map_err(|err| format!("create trace parent failed for {}: {err}", parent.display()))?;
     }
-    use std::io::Write;
+    let _guard = trace_append_lock()
+        .lock()
+        .map_err(|_| "trace append lock poisoned".to_string())?;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -814,6 +818,11 @@ fn append_text(path: &Path, payload: &str) -> Result<(), String> {
         .map_err(|err| format!("open trace append failed for {}: {err}", path.display()))?;
     file.write_all(payload.as_bytes())
         .map_err(|err| format!("append trace payload failed for {}: {err}", path.display()))
+}
+
+fn trace_append_lock() -> &'static Mutex<()> {
+    static TRACE_APPEND_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    TRACE_APPEND_LOCK.get_or_init(|| Mutex::new(()))
 }
 
 fn default_true() -> bool {

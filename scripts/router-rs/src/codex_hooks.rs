@@ -11,7 +11,7 @@ const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
-const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 1] = [".codex/skills"];
+const HOST_ENTRYPOINT_RETIRED_DIRECTORIES: [&str; 1] = [".codex/skills"];
 const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 2] = ["AGENTS.md", CODEX_HOOK_README_PATH];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
 const PROTECTED_GENERATED_PATH_BYTES: [&[u8]; 3] = [
@@ -36,7 +36,7 @@ pub fn build_codex_hook_manifest() -> Value {
 struct HostEntrypointSyncSection {
     text_files: Vec<String>,
     json_files: Vec<String>,
-    managed_directories: Vec<String>,
+    retired_directories: Vec<String>,
 }
 
 fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
@@ -49,7 +49,7 @@ fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
-        managed_directories: HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES
+        retired_directories: HOST_ENTRYPOINT_RETIRED_DIRECTORIES
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
@@ -91,7 +91,7 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
             .into_iter()
             .map(|path| path.to_string())
             .collect(),
-        managed_directories: HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES
+        retired_directories: HOST_ENTRYPOINT_RETIRED_DIRECTORIES
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
@@ -133,9 +133,6 @@ fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec
         "AGENTS.md".to_string(),
         build_codex_agent_policy().into_bytes(),
     );
-    for (slug, body) in build_codex_skill_stubs() {
-        files.insert(format!(".codex/skills/{slug}/SKILL.md"), body.into_bytes());
-    }
     files.insert(
         CODEX_HOOK_README_PATH.to_string(),
         build_codex_hooks_readme().into_bytes(),
@@ -161,12 +158,12 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
             "json_files": [
                 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
             ],
-        "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
+        "retired_directories": HOST_ENTRYPOINT_RETIRED_DIRECTORIES,
     },
         "partial_sync": {
             "text_files": HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES,
             "json_files": HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
-            "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
+            "retired_directories": HOST_ENTRYPOINT_RETIRED_DIRECTORIES,
         },
     })
 }
@@ -185,16 +182,13 @@ fn sync_host_entrypoints_single_root(
     section: &HostEntrypointSyncSection,
 ) -> Result<SingleSyncReport, String> {
     let mut report = SingleSyncReport::default();
-    for relative in &section.managed_directories {
+    for relative in &section.retired_directories {
         let directory = target_root.join(relative);
-        if symlink_exists(&directory) && apply {
-            remove_path(&directory).map_err(|err| err.to_string())?;
-        }
-        if !directory.exists() {
+        if directory.exists() || symlink_exists(&directory) {
             if apply {
-                fs::create_dir_all(&directory).map_err(|err| err.to_string())?;
+                remove_path(&directory).map_err(|err| err.to_string())?;
             }
-            report.created_dirs.push(describe_host_entrypoint_path(
+            report.written.push(describe_host_entrypoint_path(
                 report_root,
                 target_root,
                 &directory,
@@ -393,92 +387,6 @@ pub fn build_codex_hook_projection() -> Value {
 
 fn build_codex_agent_policy() -> String {
     include_str!("../../../AGENTS.md").to_string()
-}
-
-fn build_codex_skill_stubs() -> BTreeMap<&'static str, String> {
-    BTreeMap::from([
-        (
-            "autopilot",
-            r#"---
-name: autopilot
-description: Use for `$autopilot`, `autopilot`, full auto, or requests to keep executing end to end until a bounded task is verified.
----
-
-# autopilot
-
-Small Codex entry stub.
-
-Use when the user explicitly asks for `$autopilot` / `autopilot`, full auto, automatic end-to-end execution, or continuing until a concrete task converges.
-
-Do not load the whole skill library. For full workflow details, read only:
-
-`skills/execution-controller-coding/SKILL.md`
-
-Default shape:
-
-1. Clarify only if the task is still risky or vague.
-2. Plan the smallest executable path.
-3. Implement real changes.
-4. Verify with evidence.
-5. Leave recovery anchors if interrupted.
-"#
-            .to_string(),
-        ),
-        (
-            "deepinterview",
-            r#"---
-name: deepinterview
-description: Use for `$deepinterview`, deepinterview, deep clarification, convergence review, strict review, or one-question-at-a-time ambiguity reduction.
----
-
-# deepinterview
-
-Small Codex entry stub.
-
-Use when the user explicitly asks for `$deepinterview` / `deepinterview`, deep clarification, strict review, review to convergence, or "do not assume" style questioning.
-
-Do not load the whole skill library. For full workflow details, read only:
-
-`skills/deepinterview/SKILL.md`
-
-Default shape:
-
-1. Check repository evidence before asking.
-2. Ask one question at a time.
-3. Target the weakest unclear point.
-4. Prefer findings first for review.
-5. Handoff only when the scope is clear.
-"#
-            .to_string(),
-        ),
-        (
-            "gitx",
-            r#"---
-name: gitx
-description: Use for `$gitx`, `gitx`, or practical Git closeout work such as status, branch, rebase, worktree, commit, merge, or push.
----
-
-# gitx
-
-Small Codex entry stub.
-
-Use when the user explicitly asks for `$gitx` / `gitx`, Git closeout, branch cleanup, worktree handling, review-fix-commit-merge-push, or push failure triage.
-
-Do not load the whole skill library. For full workflow details, read only:
-
-`skills/gitx/SKILL.md`
-
-Default shape:
-
-1. Inspect real Git state first.
-2. Review the intended change surface before committing.
-3. Keep user changes safe.
-4. Verify the narrow useful slice.
-5. Push only with explicit remote and branch.
-"#
-            .to_string(),
-        ),
-    ])
 }
 
 fn build_codex_hooks_readme() -> String {

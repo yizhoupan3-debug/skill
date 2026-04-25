@@ -12,7 +12,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod background_state;
@@ -966,7 +966,8 @@ fn retired_top_level_flag_migration(args: impl IntoIterator<Item = String>) -> O
         "migrate",
         "help",
     ];
-    const RETIRED_FLAGS: [(&str, &str); 19] = [
+    const RETIRED_FLAGS: &[(&str, &str)] = &[
+        ("--json", "search <query> --json or route <query>"),
         ("--browser-mcp-stdio", "browser mcp-stdio"),
         (
             "--browser-mcp-resolve-attach-artifact",
@@ -976,6 +977,123 @@ fn retired_top_level_flag_migration(args: impl IntoIterator<Item = String>) -> O
         (
             "--route-policy-json",
             "--stdio-json with the `route_policy` operation",
+        ),
+        (
+            "--route-snapshot-json",
+            "--stdio-json with the `route_snapshot` operation",
+        ),
+        (
+            "--route-report-json",
+            "--stdio-json with the `route_report` operation",
+        ),
+        (
+            "--route-resolution-json",
+            "--stdio-json with the `route_resolution` operation",
+        ),
+        (
+            "--routing-eval-json",
+            "--stdio-json with route eval data or the router-rs test fixture",
+        ),
+        (
+            "--execute-json",
+            "--stdio-json with the `execute` operation",
+        ),
+        (
+            "--runtime-integrator-json",
+            "--stdio-json with the `runtime_integrator` operation",
+        ),
+        (
+            "--runtime-control-plane-json",
+            "--stdio-json with the `runtime_control_plane` operation",
+        ),
+        (
+            "--sandbox-control-json",
+            "--stdio-json with the `sandbox_control` operation",
+        ),
+        (
+            "--background-control-json",
+            "--stdio-json with the `background_control` operation",
+        ),
+        (
+            "--background-state-json",
+            "--stdio-json with the `background_state` operation",
+        ),
+        (
+            "--session-supervisor-json",
+            "--stdio-json with the `session_supervisor` operation",
+        ),
+        (
+            "--describe-transport-json",
+            "--stdio-json with the `describe_transport` operation",
+        ),
+        (
+            "--describe-handoff-json",
+            "--stdio-json with the `describe_handoff` operation",
+        ),
+        (
+            "--checkpoint-resume-manifest-json",
+            "--stdio-json with the `checkpoint_resume_manifest` operation",
+        ),
+        (
+            "--runtime-checkpoint-control-plane-json",
+            "storage checkpoint-control-plane --input-json <json>",
+        ),
+        (
+            "--write-transport-binding-json",
+            "--stdio-json with the `write_transport_binding` operation",
+        ),
+        (
+            "--write-checkpoint-resume-manifest-json",
+            "--stdio-json with the `write_checkpoint_resume_manifest` operation",
+        ),
+        (
+            "--attach-runtime-event-transport-json",
+            "--stdio-json with the `attach_runtime_event_transport` operation",
+        ),
+        (
+            "--subscribe-attached-runtime-events-json",
+            "--stdio-json with the `subscribe_attached_runtime_events` operation",
+        ),
+        (
+            "--cleanup-attached-runtime-event-transport-json",
+            "--stdio-json with the `cleanup_attached_runtime_event_transport` operation",
+        ),
+        (
+            "--runtime-observability-exporter-json",
+            "--stdio-json with the `runtime_observability_exporter_descriptor` operation",
+        ),
+        (
+            "--runtime-observability-metric-catalog-json",
+            "--stdio-json with the `runtime_observability_metric_catalog` operation",
+        ),
+        (
+            "--runtime-observability-dashboard-json",
+            "--stdio-json with the `runtime_observability_dashboard_schema` operation",
+        ),
+        (
+            "--runtime-metric-record-json",
+            "--stdio-json with the `runtime_metric_record` operation",
+        ),
+        (
+            "--trace-record-event-json",
+            "trace record-event --input-json <json>",
+        ),
+        (
+            "--trace-stream-replay-json",
+            "trace stream-replay --input-json <json>",
+        ),
+        (
+            "--trace-stream-inspect-json",
+            "trace stream-inspect --input-json <json>",
+        ),
+        ("--trace-compact-json", "trace compact --input-json <json>"),
+        (
+            "--write-trace-compaction-delta-json",
+            "trace write-compaction-delta --input-json <json>",
+        ),
+        (
+            "--write-trace-metadata-json",
+            "trace write-metadata --input-json <json>",
         ),
         ("--framework-runtime-snapshot-json", "framework snapshot"),
         (
@@ -1000,6 +1118,8 @@ fn retired_top_level_flag_migration(args: impl IntoIterator<Item = String>) -> O
             "framework session-artifact-write --input-json <json>",
         ),
         ("--framework-alias-json", "framework alias <alias>"),
+        ("--framework-statusline", "framework statusline"),
+        ("--control-plane-contracts-json", "framework contracts"),
         ("--profile-json", "profile emit --framework-profile <path>"),
         (
             "--profile-artifacts-json",
@@ -1024,7 +1144,7 @@ fn retired_top_level_flag_migration(args: impl IntoIterator<Item = String>) -> O
             RETIRED_FLAGS.iter().find(|(retired, _)| *retired == flag)
         {
             return Some(format!(
-                "{retired} is a retired top-level flag; use canonical router-rs subcommand `{canonical}` instead."
+                "{retired} is a retired top-level flag; use canonical router-rs entrypoint: {canonical}."
             ));
         }
     }
@@ -1334,6 +1454,36 @@ fn default_trace_framework_version() -> String {
 
 fn timestamp_now() -> String {
     Utc::now().to_rfc3339()
+}
+
+fn append_io_lock() -> &'static Mutex<()> {
+    static APPEND_IO_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    APPEND_IO_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn append_text_with_process_lock(path: &Path, payload: &str, context: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create {context} parent failed for {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+    let _guard = append_io_lock()
+        .lock()
+        .map_err(|_| format!("{context} append lock poisoned"))?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|err| format!("open {context} append failed for {}: {err}", path.display()))?;
+    file.write_all(payload.as_bytes()).map_err(|err| {
+        format!(
+            "write {context} append failed for {}: {err}",
+            path.display()
+        )
+    })
 }
 
 fn default_trace_runtime_path() -> PathBuf {
@@ -3059,26 +3209,7 @@ fn maybe_record_sandbox_event(
         .map_err(|err| format!("serialize sandbox event failed: {err}"))?
         + "\n";
     let path = PathBuf::from(path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create sandbox event parent failed for {}: {err}",
-                parent.display()
-            )
-        })?;
-    }
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|err| {
-            format!(
-                "open sandbox event log failed for {}: {err}",
-                path.display()
-            )
-        })?;
-    file.write_all(serialized.as_bytes())
-        .map_err(|err| format!("write sandbox event failed for {}: {err}", path.display()))?;
+    append_text_with_process_lock(&path, &serialized, "sandbox event log")?;
     response.event_log_path = Some(path.display().to_string());
     response.event_written = true;
     Ok(())
@@ -6300,31 +6431,7 @@ fn write_trace_compaction_delta(
     let serialized = serde_json::to_string(&payload.delta)
         .map_err(|err| format!("serialize trace compaction delta failed: {err}"))?
         + "\n";
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create trace compaction delta parent failed for {}: {err}",
-                parent.display()
-            )
-        })?;
-    }
-    use std::io::Write;
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|err| {
-            format!(
-                "open trace compaction delta failed for {}: {err}",
-                path.display()
-            )
-        })?;
-    file.write_all(serialized.as_bytes()).map_err(|err| {
-        format!(
-            "write trace compaction delta failed for {}: {err}",
-            path.display()
-        )
-    })?;
+    append_text_with_process_lock(&path, &serialized, "trace compaction delta")?;
     Ok(TraceCompactionDeltaWriteResponsePayload {
         schema_version: TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION.to_string(),
         authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
@@ -6336,10 +6443,12 @@ fn write_trace_compaction_delta(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::route::{read_json, value_to_string};
+    use crate::route::{
+        load_records_cached_for_stdio_with_default_runtime_path, read_json, value_to_string,
+    };
     use std::collections::HashMap;
     use std::sync::Arc;
-    use std::thread::sleep;
+    use std::thread::{sleep, spawn};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn fixture_path() -> PathBuf {
@@ -6830,6 +6939,103 @@ mod tests {
                 .is_some_and(|value| value.len() == 64)
         );
 
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_session_artifact_write_rejects_stale_focus_update() {
+        let repo_root = temp_dir_path("framework-session-cas");
+        let output_dir = repo_root.join("artifacts").join("current");
+        let first = write_framework_session_artifacts(json!({
+            "repo_root": repo_root,
+            "output_dir": output_dir,
+            "task_id": "cas-task",
+            "task": "CAS task",
+            "phase": "implementation",
+            "status": "in_progress",
+            "summary": "Initial write.",
+            "focus": true,
+            "next_actions": ["Continue"]
+        }))
+        .expect("first write");
+        assert_eq!(first["task_id"], json!("cas-task"));
+
+        let focus_path = repo_root.join("artifacts/current/focus_task.json");
+        let stale_hash = framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
+        write_text_fixture(
+            &focus_path,
+            r#"{"task_id":"other-task","task":"Other task","updated_at":"2026-04-25T00:00:00+08:00"}"#,
+        );
+
+        let err = write_framework_session_artifacts(json!({
+            "repo_root": repo_root,
+            "output_dir": output_dir,
+            "task_id": "cas-task",
+            "task": "CAS task",
+            "phase": "implementation",
+            "status": "in_progress",
+            "summary": "Stale write.",
+            "focus": true,
+            "expected_focus_task_hash": stale_hash,
+            "next_actions": ["Continue"]
+        }))
+        .expect_err("stale focus update should fail");
+        assert!(err.contains("stale focus task pointer update rejected"));
+
+        let focus = read_json(&focus_path).expect("read focus");
+        assert_eq!(focus["task_id"], json!("other-task"));
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_session_artifact_write_preserves_existing_roundtrip() {
+        let repo_root = temp_dir_path("framework-session-cas-roundtrip");
+        let output_dir = repo_root.join("artifacts").join("current");
+        let first = write_framework_session_artifacts(json!({
+            "repo_root": repo_root,
+            "output_dir": output_dir,
+            "task_id": "cas-roundtrip",
+            "task": "CAS roundtrip",
+            "phase": "implementation",
+            "status": "in_progress",
+            "summary": "Initial write.",
+            "focus": true,
+            "next_actions": ["Continue"]
+        }))
+        .expect("first write");
+        assert_eq!(first["task_id"], json!("cas-roundtrip"));
+
+        let active_path = repo_root.join("artifacts/current/active_task.json");
+        let focus_path = repo_root.join("artifacts/current/focus_task.json");
+        let supervisor_path = repo_root.join(".supervisor_state.json");
+        let active_hash = framework_runtime::hash_file_for_test(&active_path).expect("active hash");
+        let focus_hash = framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
+        let supervisor_hash =
+            framework_runtime::hash_file_for_test(&supervisor_path).expect("supervisor hash");
+
+        let second = write_framework_session_artifacts(json!({
+            "repo_root": repo_root,
+            "output_dir": output_dir,
+            "task_id": "cas-roundtrip",
+            "task": "CAS roundtrip",
+            "phase": "validation",
+            "status": "passed",
+            "summary": "Validated write.",
+            "focus": true,
+            "expected_active_task_hash": active_hash,
+            "expected_focus_task_hash": focus_hash,
+            "expected_supervisor_state_hash": supervisor_hash,
+            "next_actions": []
+        }))
+        .expect("roundtrip write");
+        assert_eq!(second["task_id"], json!("cas-roundtrip"));
+
+        let supervisor = read_json(&supervisor_path).expect("read supervisor");
+        assert_eq!(supervisor["active_phase"], json!("validation"));
+        assert_eq!(
+            supervisor["verification"]["verification_status"],
+            json!("passed")
+        );
         let _ = fs::remove_dir_all(&repo_root);
     }
 
@@ -7684,6 +7890,32 @@ mod tests {
     }
 
     #[test]
+    fn route_records_cache_refreshes_default_runtime_path() {
+        let repo_root = temp_dir_path("routing-default-runtime");
+        let skills_dir = repo_root.join("skills");
+        fs::create_dir_all(&skills_dir).expect("create skills dir");
+        let runtime_path = skills_dir.join("SKILL_ROUTING_RUNTIME.json");
+        write_runtime_fixture(&runtime_path, "default-alpha");
+
+        let first = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path, None)
+            .expect("first default load");
+        let second = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path, None)
+            .expect("second default load");
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(first[0].slug, "default-alpha");
+
+        sleep(Duration::from_millis(20));
+        write_runtime_fixture(&runtime_path, "default-beta");
+
+        let third = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path, None)
+            .expect("refreshed default load");
+        assert!(!Arc::ptr_eq(&second, &third));
+        assert_eq!(third[0].slug, "default-beta");
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
     fn route_decision_fixture_expectations_hold() {
         let fixture = fixture_path();
         let records = load_records(None, Some(&fixture)).expect("load fixture records");
@@ -7803,6 +8035,14 @@ mod tests {
         assert_eq!(
             results_by_id["skill-framework-developer-generic-review-case"].selected_overlay,
             Some("code-review".to_string())
+        );
+        assert_eq!(
+            results_by_id["skill-framework-subtraction-behavior-review"].selected_owner,
+            "skill-framework-developer"
+        );
+        assert_eq!(
+            results_by_id["skill-framework-subtraction-behavior-review"].selected_overlay,
+            None
         );
         assert_eq!(
             results_by_id["design-agent-brand-routing-case"].selected_owner,
@@ -8467,6 +8707,54 @@ mod tests {
             event["effective_capabilities"][1],
             Value::String("workspace_mutating".to_string())
         );
+    }
+
+    #[test]
+    fn sandbox_event_append_preserves_jsonl_records_under_concurrency() {
+        let event_path = temp_trace_path("sandbox-events-concurrent");
+        let mut workers = Vec::new();
+        for seq in 0..32 {
+            let path = event_path.clone();
+            workers.push(spawn(move || {
+                build_sandbox_control_response(SandboxControlRequestPayload {
+                    schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+                    operation: "admit".to_string(),
+                    sandbox_id: Some(format!("sandbox-{seq}")),
+                    profile_id: Some("workspace".to_string()),
+                    current_state: Some("warm".to_string()),
+                    tool_category: Some("read_only".to_string()),
+                    capability_categories: Some(vec!["read_only".to_string()]),
+                    budget_cpu: Some(1.0),
+                    budget_memory: Some(1024),
+                    budget_wall_clock: Some(5.0),
+                    budget_output_size: Some(4096),
+                    event_log_path: Some(path.display().to_string()),
+                    trace_event: Some(true),
+                    ..sandbox_control_request_defaults()
+                })
+                .expect("sandbox event response");
+            }));
+        }
+        for worker in workers {
+            worker.join().expect("join sandbox worker");
+        }
+
+        let persisted = fs::read_to_string(&event_path).expect("read sandbox jsonl");
+        let lines = persisted.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 32);
+        let mut seen = HashSet::new();
+        for line in lines {
+            let event = serde_json::from_str::<Value>(line).expect("parse sandbox jsonl");
+            seen.insert(
+                event["sandbox_id"]
+                    .as_str()
+                    .expect("sandbox id")
+                    .to_string(),
+            );
+        }
+        assert_eq!(seen.len(), 32);
+
+        fs::remove_file(&event_path).expect("cleanup sandbox path");
     }
 
     #[test]
@@ -10272,6 +10560,49 @@ mod tests {
         assert!(persisted.contains("\"delta_id\":\"delta-1\""));
 
         fs::remove_file(&delta_path).expect("cleanup delta path");
+    }
+
+    #[test]
+    fn trace_append_preserves_jsonl_records_under_concurrency() {
+        let trace_path = temp_trace_path("trace-record-event-concurrent");
+        let mut workers = Vec::new();
+        for seq in 0..32 {
+            let path = trace_path.clone();
+            workers.push(spawn(move || {
+                record_trace_event(TraceRecordEventRequestPayload {
+                    path: Some(path.display().to_string()),
+                    write_outputs: true,
+                    sink_schema_version: "runtime-trace-sink-v2".to_string(),
+                    event_schema_version: "runtime-trace-v2".to_string(),
+                    generation: 1,
+                    seq,
+                    session_id: "concurrent-trace".to_string(),
+                    job_id: None,
+                    kind: "test.event".to_string(),
+                    stage: "append".to_string(),
+                    status: "ok".to_string(),
+                    payload: Map::new(),
+                    compaction_manifest_path: None,
+                    compaction_manifest_text: None,
+                })
+                .expect("record trace event");
+            }));
+        }
+        for worker in workers {
+            worker.join().expect("join trace worker");
+        }
+
+        let persisted = fs::read_to_string(&trace_path).expect("read trace jsonl");
+        let lines = persisted.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 32);
+        let mut seen = HashSet::new();
+        for line in lines {
+            let record = serde_json::from_str::<Value>(line).expect("parse trace jsonl");
+            seen.insert(record["event"]["seq"].as_u64().expect("seq"));
+        }
+        assert_eq!(seen.len(), 32);
+
+        fs::remove_file(&trace_path).expect("cleanup trace path");
     }
 
     #[test]

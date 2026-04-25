@@ -63,6 +63,94 @@ The following old surfaces were removed instead of preserved behind compatibilit
 - Add explicit CAS, transaction, or file-lock boundaries around background/session state and trace append paths.
 - Reconcile stale docs or runbooks that still mention retired top-level compatibility flags.
 
+## 2026-04-25 Review Follow-Up Plan
+
+This follow-up records the concrete repair plan from the subtraction / first-principles review. The goal is to close the hidden stale-cache, multi-entrypoint, and concurrent-write risks without widening the runtime abstraction.
+
+### P1: Fix stdio route-cache freshness
+
+Problem: `load_records_cached_for_stdio(None, None)` uses `(None, None)` as the cache key and mtime pair, while `load_records()` later reads `skills/SKILL_ROUTING_RUNTIME.json` from the current working directory. A long-lived stdio router can therefore keep stale `SkillRecord` data after skill compiler output changes.
+
+Plan:
+
+- Resolve the effective default runtime path before building `RecordsCacheKey`.
+- Compute mtime from that effective path, not from the original optional argument.
+- Keep the cache process-local; do not introduce a cross-process cache.
+- Add a regression test that starts with a runtime file, routes once through cached stdio loading, rewrites the runtime file with a newer mtime, and verifies the next cached load observes the new skill.
+
+Validation:
+
+```bash
+cargo test --manifest-path scripts/router-rs/Cargo.toml route_records_cache_refreshes_default_runtime_path --quiet
+cargo test --manifest-path scripts/router-rs/Cargo.toml routing_eval_report_matches_expected_baseline --quiet
+```
+
+### P1: Collapse remaining top-level JSON live flags
+
+Problem: `Cli` still exposes executable top-level `--xxx-json` modes such as `--route-snapshot-json` and `--runtime-control-plane-json`. They do not show in help, but they still execute as a second live entrypoint family, contradicting the canonical-subcommand-only direction.
+
+Plan:
+
+- Decide which surfaces are canonical subcommands and which are stdio-only internal operations.
+- Move route snapshot/resolution/eval/report style surfaces under route-related subcommands or stdio-only operations.
+- Move runtime control-plane, integrator, observability, sandbox, background, checkpoint, transport, and trace write/read modes under existing `framework`, `trace`, `storage`, or a new narrow runtime/control subcommand only if an interactive CLI entrypoint is truly needed.
+- Convert retired top-level flags to the same fail-fast migration guidance used for earlier retired flags.
+- Update docs that currently claim those top-level branches are already deleted so the docs match actual behavior.
+
+Validation:
+
+```bash
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- --route-snapshot-json
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- --runtime-control-plane-json
+cargo test --test policy_contracts router_rs_top_level_help_exposes_only_canonical_subcommands --quiet
+cargo test --manifest-path scripts/router-rs/Cargo.toml --quiet
+```
+
+Expected result: retired top-level flags fail with migration guidance, and canonical subcommands or stdio ops continue to pass.
+
+### P1: Add CAS or single-writer semantics for session artifacts
+
+Problem: `write_text_if_changed()` performs read-then-write with plain `fs::write()`. Concurrent `framework_session_artifact_write` requests can race on `active_task.json`, `focus_task.json`, and `.supervisor_state.json`, causing silent last-writer-wins updates.
+
+Plan:
+
+- Introduce an artifact writer helper that writes via temp file plus atomic rename for all session artifacts.
+- Add an optional expected version/hash field for focus/active/supervisor writes, and reject stale writes when a caller supplies it.
+- For stdio concurrent mode, either route `framework_session_artifact_write` through a per-path single-writer lane or acquire a local file lock around the artifact set.
+- Keep the logical artifact shape unchanged; this is a persistence semantics change only.
+
+Validation:
+
+```bash
+cargo test --manifest-path scripts/router-rs/Cargo.toml framework_session_artifact_write_rejects_stale_focus_update --quiet
+cargo test --manifest-path scripts/router-rs/Cargo.toml framework_session_artifact_write_preserves_existing_roundtrip --quiet
+```
+
+### P2: Make trace and event append ownership explicit
+
+Problem: trace JSONL and sandbox event logs use `OpenOptions::append` plus `write_all()` without an explicit single-writer, file-lock, or storage-backend append contract. In concurrent stdio workers or multiple router processes, event ordering and record boundaries depend too much on platform behavior.
+
+Plan:
+
+- Define one append contract for trace/event streams: single process writer, file lock, or storage backend append operation.
+- Prefer reusing `runtime_storage` append semantics for trace/event writes so filesystem and SQLite behavior share one contract.
+- If filesystem append remains, add a local lock around append and document that cross-process safety requires the storage backend or platform lock.
+- Add a concurrency regression that appends many events through the chosen path and verifies every JSONL record parses and sequence/count metadata stays consistent.
+
+Validation:
+
+```bash
+cargo test --manifest-path scripts/router-rs/Cargo.toml trace_append_preserves_jsonl_records_under_concurrency --quiet
+cargo test --manifest-path scripts/router-rs/Cargo.toml sandbox_event_append_preserves_jsonl_records_under_concurrency --quiet
+```
+
+### Execution Order
+
+1. Fix route-cache freshness first because it can hide every later routing repair in long-lived stdio sessions.
+2. Collapse top-level JSON live flags next to restore the single-entrypoint contract.
+3. Add session artifact CAS/single-writer semantics before increasing stdio concurrency usage.
+4. Unify trace/event append ownership after session state writes are protected.
+
 ## Target Shape
 
 `main.rs` should eventually become only:
