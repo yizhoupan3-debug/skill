@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 
 pub const FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION: &str =
     "router-rs-framework-runtime-snapshot-v1";
@@ -171,6 +172,9 @@ struct SessionArtifactWritePlan {
     trace_metadata_payload: Value,
     supervisor_state_payload: Value,
     journal_payload: Value,
+    expected_active_task_hash: Option<String>,
+    expected_focus_task_hash: Option<String>,
+    expected_supervisor_state_hash: Option<String>,
     changed_paths: Vec<String>,
 }
 
@@ -3975,6 +3979,46 @@ fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+fn session_artifact_write_lock() -> &'static Mutex<()> {
+    static SESSION_ARTIFACT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    SESSION_ARTIFACT_WRITE_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(sha256_hex(&bytes))),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(format!(
+            "read file hash failed for {}: {err}",
+            path.display()
+        )),
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn hash_file_for_test(path: &Path) -> Result<String, String> {
+    current_file_hash(path)?.ok_or_else(|| format!("missing test file: {}", path.display()))
+}
+
+fn assert_expected_file_hash(
+    path: &Path,
+    expected_hash: Option<&str>,
+    label: &str,
+) -> Result<(), String> {
+    let Some(expected_hash) = expected_hash else {
+        return Ok(());
+    };
+    let current = current_file_hash(path)?;
+    if current.as_deref() == Some(expected_hash) {
+        return Ok(());
+    }
+    Err(format!(
+        "stale {label} update rejected for {}; expected hash {expected_hash}, current hash {}",
+        path.display(),
+        current.unwrap_or_else(|| "<missing>".to_string())
+    ))
+}
+
 fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
     let serialized = format!(
         "{}\n",
@@ -4731,6 +4775,11 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         trace_metadata_payload,
         supervisor_state_payload,
         journal_payload,
+        expected_active_task_hash: nonempty_string(payload.get("expected_active_task_hash")),
+        expected_focus_task_hash: nonempty_string(payload.get("expected_focus_task_hash")),
+        expected_supervisor_state_hash: nonempty_string(
+            payload.get("expected_supervisor_state_hash"),
+        ),
         changed_paths: Vec::new(),
     })
 }
@@ -4835,6 +4884,11 @@ fn write_focused_repo_mirrors(
     updated_at: &str,
 ) -> Result<(), String> {
     let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
+    assert_expected_file_hash(
+        &active_pointer,
+        plan.expected_active_task_hash.as_deref(),
+        "active task pointer",
+    )?;
     if write_json_if_changed(
         &active_pointer,
         &json!({
@@ -4853,10 +4907,20 @@ fn write_focused_repo_mirrors(
             .push(active_pointer.display().to_string());
     }
     let focus_pointer = mirror_root.join(FOCUS_TASK_POINTER_NAME);
+    assert_expected_file_hash(
+        &focus_pointer,
+        plan.expected_focus_task_hash.as_deref(),
+        "focus task pointer",
+    )?;
     if write_focus_task_pointer(mirror_root, &plan.task_id, &plan.task, updated_at)? {
         plan.changed_paths.push(focus_pointer.display().to_string());
     }
     let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
+    assert_expected_file_hash(
+        &supervisor_state_path,
+        plan.expected_supervisor_state_hash.as_deref(),
+        "supervisor state",
+    )?;
     if write_json_if_changed(&supervisor_state_path, &plan.supervisor_state_payload)? {
         plan.changed_paths
             .push(supervisor_state_path.display().to_string());
@@ -4879,6 +4943,9 @@ impl SessionArtifactWritePlan {
 }
 
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
+    let _guard = session_artifact_write_lock()
+        .lock()
+        .map_err(|_| "framework session artifact write lock poisoned".to_string())?;
     let mut plan = build_session_artifact_write_plan(&payload)?;
     write_primary_session_artifacts(&mut plan)?;
     write_optional_session_mirror(&mut plan)?;

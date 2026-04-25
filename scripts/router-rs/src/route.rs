@@ -589,6 +589,26 @@ fn apply_manifest_route_meta(
     });
 }
 
+fn default_runtime_path() -> Option<PathBuf> {
+    std::env::current_dir()
+        .ok()
+        .map(|cwd| cwd.join("skills").join("SKILL_ROUTING_RUNTIME.json"))
+}
+
+fn effective_runtime_path(runtime_path: Option<&Path>) -> Option<PathBuf> {
+    runtime_path
+        .map(Path::to_path_buf)
+        .or_else(default_runtime_path)
+}
+
+#[cfg(test)]
+pub(crate) fn load_records_cached_for_stdio_with_default_runtime_path(
+    default_runtime_path: &Path,
+    manifest_path: Option<&Path>,
+) -> Result<Arc<Vec<SkillRecord>>, String> {
+    load_records_cached_for_stdio_resolved(Some(default_runtime_path), manifest_path)
+}
+
 fn records_cache_key(runtime_path: Option<&Path>, manifest_path: Option<&Path>) -> RecordsCacheKey {
     RecordsCacheKey {
         runtime_path: runtime_path.map(Path::to_path_buf),
@@ -607,6 +627,15 @@ fn records_cache() -> &'static Mutex<HashMap<RecordsCacheKey, RecordsCacheEntry>
 }
 
 pub(crate) fn load_records_cached_for_stdio(
+    runtime_path: Option<&Path>,
+    manifest_path: Option<&Path>,
+) -> Result<Arc<Vec<SkillRecord>>, String> {
+    let runtime_path = effective_runtime_path(runtime_path);
+    let runtime_path = runtime_path.as_deref();
+    load_records_cached_for_stdio_resolved(runtime_path, manifest_path)
+}
+
+fn load_records_cached_for_stdio_resolved(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
 ) -> Result<Arc<Vec<SkillRecord>>, String> {

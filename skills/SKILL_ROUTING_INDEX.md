@@ -4,10 +4,10 @@
 > Only open `skills/SKILL_MANIFEST.json` or `skills/SKILL_ROUTING_LAYERS.md` when the first two still leave owner/reroute ambiguity.
 
 ## Quick gate checklist
-1. 规范: extract object / action / constraints / deliverable / success criteria first.
-2. 计划: check source, artifact, evidence, and delegation gates before owner selection.
-3. 计划: choose the narrowest domain owner and add at most one overlay.
-4. 实施: take the smallest route delta and do not widen the abstraction.
+1. 讨论: extract object / action / constraints / deliverable / success criteria first.
+2. 规划: check source, artifact, evidence, and delegation gates before owner selection.
+3. 规划: choose the narrowest domain owner and add at most one overlay.
+4. 执行: take the smallest route delta and do not widen the abstraction.
 5. 验证: close with tests, commands, screenshots, artifacts, or an explicit blocker.
 6. Completion pressure changes route context only; it must not change selected owner.
 
@@ -34,7 +34,7 @@
 | 前端运行时问题 | `frontend-debugging` | Diagnose frontend runtime bugs with a five-layer model ( |
 | README / ADR / 项目文档 | `documentation-engineering` | Write, review, and maintain project documentation such a |
 | 构建 / 打包 / 工具链 | `build-tooling` | Debug and design JS/TS/Python build tooling across packa |
-| Git 流程 / 合并 / 推送 | `gitx` | Run the safe Git review-fix-tidy-commit-merge-push workf |
+| Git 流程 / 分支合并 / 推送 | `gitx` | Run the safe Git review-fix-tidy-commit-branch-merge-pus |
 | 多轮调研 / 对比 / 检索 | `information-retrieval` | Run multi-round research before acting or recommending |
 | 科研项目 / 课题下一步 | `research-workbench` | Unified front door for non-manuscript research-project w |
 | 文献梳理 / 搜论文 / novelty check | `literature-synthesis` | Screen, cluster, compare, and synthesize academic litera |

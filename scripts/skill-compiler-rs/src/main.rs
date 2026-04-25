@@ -74,7 +74,7 @@ const INDEX_COMMON_LANES: [(&str, &str); 12] = [
     ("前端运行时问题", "frontend-debugging"),
     ("README / ADR / 项目文档", "documentation-engineering"),
     ("构建 / 打包 / 工具链", "build-tooling"),
-    ("Git 流程 / 合并 / 推送", "gitx"),
+    ("Git 流程 / 分支合并 / 推送", "gitx"),
     ("多轮调研 / 对比 / 检索", "information-retrieval"),
     ("科研项目 / 课题下一步", "research-workbench"),
     ("文献梳理 / 搜论文 / novelty check", "literature-synthesis"),
@@ -1001,10 +1001,10 @@ fn repo_relative_path(path: &Path) -> String {
 
 fn index_checklist() -> Vec<&'static str> {
     vec![
-        "规范: extract object / action / constraints / deliverable / success criteria first.",
-        "计划: check source, artifact, evidence, and delegation gates before owner selection.",
-        "计划: choose the narrowest domain owner and add at most one overlay.",
-        "实施: take the smallest route delta and do not widen the abstraction.",
+        "讨论: extract object / action / constraints / deliverable / success criteria first.",
+        "规划: check source, artifact, evidence, and delegation gates before owner selection.",
+        "规划: choose the narrowest domain owner and add at most one overlay.",
+        "执行: take the smallest route delta and do not widen the abstraction.",
         "验证: close with tests, commands, screenshots, artifacts, or an explicit blocker.",
         "Completion pressure changes route context only; it must not change selected owner.",
     ]
