@@ -1,14 +1,15 @@
 ---
 name: idea-to-plan
 description: |
-  内核级战略编排器 (L-1)：把模糊意图转成高成熟度计划、路线比较、决策日志与 Duo-Doc 交付。
-  适用于“意图到计划 / 蓝图设计 / 方案探索 / 先调研再给计划 / 先别写代码 / 先探索现状再提方案 / critical files / Pilot 验证 / 科研自动化 / outline.md / code_list.md / 主线程极简”。
-  每轮对话开始 / first-turn / conversation start，如任务仍处于模糊规划阶段，必须优先检查此控制层。
-routing_layer: L-1
-routing_owner: "@strategic-orchestrator"
-routing_gate: delegation
-routing_priority: P0
-session_start: required
+  Repo-local strategic planning lane for fuzzy intent that needs route comparison,
+  decision logs, assumptions, open questions, and handoff artifacts such as
+  `outline.md` and `code_list.md`. Use only when the user explicitly wants
+  planning before implementation or the task is not mature enough to execute.
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+routing_priority: P2
+session_start: preferred
 short_description: Turn ambiguous ideas into evidence-backed plans with branch routing and compressed context
 trigger_hints:
   - idea-to-plan
@@ -86,9 +87,9 @@ bridge_behavior: mobile_complete_once
 
 # idea-to-plan
 
-`idea-to-plan` is the strategic owner for work that is still ambiguous. Its job is to turn fuzzy intent into a decision-ready plan with explicit tradeoffs, assumptions, open questions, and handoff artifacts, not to start coding early.
+`idea-to-plan` is the repo-local strategic planning owner for work that is still ambiguous. Its job is to turn fuzzy intent into a decision-ready plan with explicit tradeoffs, assumptions, open questions, and handoff artifacts, not to start coding early.
 
-This skill is a **repo-local planning delta**, not the owner of the host's generic planning protocol. It should add this repository's planning artifacts, reroute rules, and owner boundaries on top of the host's native plan-mode behavior.
+This skill is a **repo-local planning delta**, not the owner of the host's generic planning protocol and not a default first-turn control layer. It should add this repository's planning artifacts, reroute rules, and owner boundaries only when planning is the actual deliverable.
 
 ## When to use
 
@@ -97,11 +98,12 @@ This skill is a **repo-local planning delta**, not the owner of the host's gener
 - 需要先调研、澄清、比较路线，再决定怎么做
 - 需要先探索代码库现状、现有模式、关键文件，再给方案
 - 需要把模糊意图变成 `outline.md`、`decision_log.md`、`assumptions.md`、`open_questions.md`、`plan_rubric.md` 和 `code_list.md`
-- 每轮对话开始 / first-turn / conversation start，主问题仍然是“到底该怎么做”
+- 主问题仍然是“到底该怎么做”，且直接执行会 risk material rework
 
 ## Do not use
 
 - 已有成熟 PRD / plan，只差实现 → [`$plan-to-code`](/Users/joe/Documents/skill/skills/plan-to-code/SKILL.md)
+- 用户只是要求“先规划/执行前想一下”，但交付物是代码或修复 → use the runtime 讨论/规划/执行/验证 protocol with the narrowest domain owner
 - 战略路线已经确定，只差拆执行清单 → [`$checklist-planner`](/Users/joe/Documents/skill/skills/checklist-planner/SKILL.md)
 - 已进入复杂执行编排 → [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md)
 - 根因定位或局部修 bug

@@ -45,7 +45,7 @@
 | `env-config-management` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Design, audit, debug, and implement app configuration across env vars, `.env`, s |
 | `error-handling-patterns` | Active | P2 | L1 | overlay | none | project | ✓ 97.2 | Design cross-language error-handling architectures such as custom errors, retry/ |
 | `execution-audit` | Active | P1 | L1 | overlay | none | project | ✓ 100.0 | Audit execution quality with evidence, sidecar-first collection, and compressed  |
-| `execution-controller-app` | Active | P0 | L0 | @app-controller | delegation | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
+| `execution-controller-app` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
 | `execution-controller-coding` | Active | P2 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate explicit supervisor, shared continuity, and multi-lane integration w |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Ensure and manage research experiment reproducibility: environment capture, rand |
 | `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Fetch, validate, normalize, and export real financial market data: OHLCV, OHLCV, |
@@ -55,12 +55,12 @@
 | `gh-fix-ci` | Active | P2 | L0 | gate | source | project | ✓ 93.5 | Triage failing GitHub Actions PR checks with `gh` and the bundled Rust `gh-sourc |
 | `gh-pr-triage` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Triage GitHub pull requests by collecting PR metadata, comments, reviewer state, |
 | `github-actions-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
-| `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-merge-push workflow end to end. |
+| `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end. |
 | `go-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver safe concurrent Go code with managed goroutine lifecycles, composable in |
 | `graphviz-expert` | Active | P2 | L3 | owner | none | project | ✓ 92.8 | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
 | `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Polish existing prose so it sounds natural, specific, and human while preserving |
 | `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Use for m |
-| `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | delegation | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
+| `idea-to-plan` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
 | `image-generated` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
 | `infographic` | Active | P2 | L3 | owner | none | project | ✓ 95.1 | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `information-retrieval` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Run multi-round research before acting or recommending |

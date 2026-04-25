@@ -341,6 +341,22 @@ fn runtime_protocol_uses_behavior_driven_public_names() {
 }
 
 #[test]
+fn runtime_hot_index_keeps_capability_gates_explicit() {
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let slugs = runtime["skills"]
+        .as_array()
+        .expect("runtime skills")
+        .iter()
+        .map(|skill| skill[0].as_str().expect("runtime skill slug"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(runtime["scope"]["kind"], "hot");
+    assert_eq!(runtime["scope"]["fallback_manifest"], "skills/SKILL_MANIFEST.json");
+    assert!(!slugs.contains(&"subagent-delegation"));
+    assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
+}
+
+#[test]
 fn github_source_gate_rust_cli_is_workspace_member() {
     let manifest = read_text(&project_root().join("rust_tools/Cargo.toml"));
     assert!(manifest.contains(r#""gh_source_gate_rs""#));

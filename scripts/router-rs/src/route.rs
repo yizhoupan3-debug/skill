@@ -774,7 +774,7 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
     Ok(collect_skill_records_from_rows(rows, indexes))
 }
 
-fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
+pub(crate) fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
     let payload = read_json(path)?;
     let rows = payload
         .get("skills")
@@ -1047,7 +1047,22 @@ fn is_overlay_record(record: &SkillRecord) -> bool {
 }
 
 fn can_be_primary_owner(record: &SkillRecord) -> bool {
-    !matches!(record.owner_lower.as_str(), "gate" | "overlay")
+    record.gate_lower == "none" && !matches!(record.owner_lower.as_str(), "gate" | "overlay")
+}
+
+fn can_be_fallback_owner(record: &SkillRecord) -> bool {
+    can_be_primary_owner(record)
+        && !matches!(
+            record.slug.as_str(),
+            "anti-laziness"
+                | "coding-standards"
+                | "error-handling-patterns"
+                | "execution-audit"
+                | "tdd-workflow"
+                | "code-review"
+                | "i18n-l10n"
+                | "security-audit"
+        )
 }
 
 fn phrase_token_matches(task_token: &str, phrase_token: &str) -> bool {
@@ -1252,6 +1267,42 @@ pub(crate) fn route_task(
                 "rust",
                 &fallback.slug,
                 None,
+                &fallback.layer,
+                0.0,
+                &fallback_reasons,
+            ),
+        });
+    }
+    if viable
+        .iter()
+        .all(|candidate| is_overlay_record(candidate.record))
+    {
+        let fallback = fallback_owner(records)?;
+        let fallback_reasons = compact_route_reasons(&[
+            "Only overlay signals matched; fell back to the generic implementation owner so overlays cannot become primary owners."
+                .to_string(),
+        ]);
+        let overlay = if allow_overlay {
+            pick_overlay(records, &normalized_query, &query_token_list, fallback)
+        } else {
+            None
+        };
+        return Ok(RouteDecision {
+            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+            authority: ROUTE_AUTHORITY.to_string(),
+            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+            task: query.to_string(),
+            session_id: session_id.to_string(),
+            selected_skill: fallback.slug.clone(),
+            overlay_skill: overlay.clone(),
+            route_context,
+            layer: fallback.layer.clone(),
+            score: 0.0,
+            reasons: fallback_reasons.clone(),
+            route_snapshot: build_route_snapshot(
+                "rust",
+                &fallback.slug,
+                overlay.as_deref(),
                 &fallback.layer,
                 0.0,
                 &fallback_reasons,
@@ -1946,6 +1997,36 @@ fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String
     })
 }
 
+fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    if has_paper_ref_first_workflow_context(query_text, query_token_list)
+        || has_paper_review_judgment_context(query_text, query_token_list)
+        || query_text.contains("别润色")
+        || query_text.contains("不润色")
+    {
+        return false;
+    }
+    [
+        "润色",
+        "文字精修",
+        "表达",
+        "故事线",
+        "重写摘要",
+        "重写引言",
+        "只改表达",
+        "polish",
+        "rewrite introduction",
+        "rewrite abstract",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn has_paper_review_judgment_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
@@ -2505,6 +2586,23 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
+    if record.slug == "paper-reviewer" && has_paper_writing_context(query_text, query_token_list) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: bounded manuscript prose polish should route to paper-writing, not paper-reviewer."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "paper-writing" && has_paper_writing_context(query_text, query_token_list) {
+        score += 40.0;
+        reasons.push(
+            "Paper-writing boost applied: bounded manuscript prose polish or storyline wording detected."
+                .to_string(),
+        );
+    }
     if record.slug == "information-retrieval"
         && has_research_workbench_context(query_text, query_token_list)
         && !has_paper_context(query_text, query_token_list)
@@ -2514,6 +2612,16 @@ fn score_route_candidate<'a>(
             "Research-workbench preference applied: academic project next-step wording should not default to generic retrieval."
                 .to_string(),
         );
+    }
+    if record.slug == "idea-to-plan" && is_meta_routing_task(query_text) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: skill-system planning and subtraction questions should stay on skill-framework-developer."
+                    .to_string(),
+            ],
+        };
     }
     if record.slug == "skill-framework-developer" && is_meta_routing_task(query_text) {
         score += 60.0;
@@ -2858,9 +2966,12 @@ fn score_route_candidate<'a>(
 }
 
 fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
+    if let Some(record) = records.iter().find(|record| record.slug == "plan-to-code") {
+        return Ok(record);
+    }
     let primary_owners = records
         .iter()
-        .filter(|record| can_be_primary_owner(record))
+        .filter(|record| can_be_fallback_owner(record))
         .collect::<Vec<_>>();
     let pool = if primary_owners.is_empty() {
         records.iter().collect::<Vec<_>>()
@@ -2904,9 +3015,27 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
         return top_gate;
     }
     let owner_pool = if owner_candidates.is_empty() {
-        candidates.clone()
+        candidates
+            .iter()
+            .filter(|candidate| !is_overlay_record(candidate.record))
+            .cloned()
+            .collect::<Vec<_>>()
     } else {
         owner_candidates.clone()
+    };
+    let owner_pool = if owner_pool.is_empty() {
+        candidates
+            .iter()
+            .filter(|candidate| can_be_fallback_owner(candidate.record))
+            .cloned()
+            .collect::<Vec<_>>()
+    } else {
+        owner_pool
+    };
+    let owner_pool = if owner_pool.is_empty() {
+        candidates.clone()
+    } else {
+        owner_pool
     };
 
     let mut layers = owner_pool

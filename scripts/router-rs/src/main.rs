@@ -62,10 +62,10 @@ use host_integration::run_host_integration_from_args;
 use route::{
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
     build_search_results_payload, evaluate_routing_cases, load_inline_records, load_records,
-    load_records_cached_for_stdio, load_routing_eval_cases, route_task, search_skills, MatchRow,
-    RouteDecision, RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload,
-    RouteSnapshotRequestPayload, SearchResultsPayload, SkillRecord, ROUTE_AUTHORITY,
-    ROUTE_SNAPSHOT_SCHEMA_VERSION,
+    load_records_cached_for_stdio, load_records_from_manifest, load_routing_eval_cases, route_task,
+    search_skills, MatchRow, RouteDecision, RouteDecisionSnapshotPayload,
+    RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SearchResultsPayload, SkillRecord,
+    ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
 };
 use runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
@@ -376,6 +376,8 @@ struct BrowserResolveAttachCommand {
 struct ProfilePathCommand {
     #[arg(long)]
     framework_profile: PathBuf,
+    #[arg(long, default_value_t = false)]
+    full: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -920,12 +922,84 @@ where
     serde_json::from_str(raw).map_err(|err| format!("parse {context} input failed: {err}"))
 }
 
+fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
+    decision.score < 25.0
+        || decision.reasons.iter().any(|reason| {
+            reason.contains("Fallback owner selected") || reason.contains("No explicit keyword hit")
+        })
+}
+
+fn manifest_fallback_path(
+    runtime_path: Option<&Path>,
+    manifest_path: Option<&Path>,
+) -> Option<PathBuf> {
+    if let Some(path) = manifest_path {
+        if path.exists() {
+            return Some(path.to_path_buf());
+        }
+    }
+    runtime_path
+        .and_then(Path::parent)
+        .map(|parent| parent.join("SKILL_MANIFEST.json"))
+        .filter(|path| path.exists())
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|cwd| cwd.join("skills").join("SKILL_MANIFEST.json"))
+                .filter(|path| path.exists())
+        })
+}
+
+fn route_task_with_manifest_fallback(
+    runtime_records: &[SkillRecord],
+    runtime_path: Option<&Path>,
+    manifest_path: Option<&Path>,
+    query: &str,
+    session_id: &str,
+    allow_overlay: bool,
+    first_turn: bool,
+) -> Result<RouteDecision, String> {
+    let hot_decision = route_task(
+        runtime_records,
+        query,
+        session_id,
+        allow_overlay,
+        first_turn,
+    )?;
+    if !should_retry_with_manifest(&hot_decision) {
+        return Ok(hot_decision);
+    }
+    let Some(fallback_path) = manifest_fallback_path(runtime_path, manifest_path) else {
+        return Ok(hot_decision);
+    };
+    let full_records = load_records_from_manifest(&fallback_path)?;
+    if full_records.len() <= runtime_records.len() {
+        return Ok(hot_decision);
+    }
+    let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
+    if full_decision.score > hot_decision.score
+        || (full_decision.score == hot_decision.score
+            && full_decision.overlay_skill.is_some()
+            && hot_decision.overlay_skill.is_none())
+        || (full_decision.score == hot_decision.score
+            && full_decision
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("Only overlay signals matched")))
+    {
+        return Ok(full_decision);
+    }
+    Ok(hot_decision)
+}
+
 fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
     match command {
         RouterCommand::Route(command) => {
             let records = load_records(command.runtime.as_deref(), command.manifest.as_deref())?;
-            let decision = route_task(
+            let decision = route_task_with_manifest_fallback(
                 &records,
+                command.runtime.as_deref(),
+                command.manifest.as_deref(),
                 &command.query,
                 &command.session_id,
                 command.allow_overlay,
@@ -934,7 +1008,13 @@ fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
             print_json_value(&decision)
         }
         RouterCommand::Search(command) => {
-            let records = load_records(command.runtime.as_deref(), command.manifest.as_deref())?;
+            let manifest_path =
+                manifest_fallback_path(command.runtime.as_deref(), command.manifest.as_deref());
+            let records = if let Some(path) = manifest_path.as_deref() {
+                load_records_from_manifest(path)?
+            } else {
+                load_records(command.runtime.as_deref(), command.manifest.as_deref())?
+            };
             let rows = search_skills(&records, &command.query, command.limit);
             let payload = build_search_results_payload(&command.query, rows.clone());
             if command.json {
@@ -1370,7 +1450,7 @@ fn dispatch_profile_command(command: ProfileCommand) -> Result<(), String> {
         }
         ProfileCommand::Artifacts(command) => {
             let profile = load_framework_profile(&command.framework_profile)?;
-            print_json_value(&build_codex_artifact_bundle(&profile)?)
+            print_json_value(&build_codex_artifact_bundle(&profile, command.full)?)
         }
     }
 }
@@ -2192,6 +2272,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
     let cached_records;
+    let using_inline_records = owned_inline_records.is_some();
     let records: &[SkillRecord] = if let Some(items) = owned_inline_records.as_ref() {
         items.as_slice()
     } else {
@@ -2199,14 +2280,20 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
             load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
         cached_records.as_ref()
     };
-    serde_json::to_value(route_task(
-        records,
-        &query,
-        &session_id,
-        allow_overlay,
-        first_turn,
-    )?)
-    .map_err(|err| format!("serialize route output failed: {err}"))
+    let decision = if using_inline_records {
+        route_task(records, &query, &session_id, allow_overlay, first_turn)?
+    } else {
+        route_task_with_manifest_fallback(
+            records,
+            runtime_path.as_deref(),
+            manifest_path.as_deref(),
+            &query,
+            &session_id,
+            allow_overlay,
+            first_turn,
+        )?
+    };
+    serde_json::to_value(decision).map_err(|err| format!("serialize route output failed: {err}"))
 }
 
 fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
@@ -2218,8 +2305,19 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
         .unwrap_or(5);
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
-    let records = load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
-    let matches = search_skills(records.as_ref(), &query, limit);
+    let manifest_fallback =
+        manifest_fallback_path(runtime_path.as_deref(), manifest_path.as_deref());
+    let owned_records;
+    let cached_records;
+    let records: &[SkillRecord] = if let Some(path) = manifest_fallback.as_deref() {
+        owned_records = load_records_from_manifest(path)?;
+        owned_records.as_slice()
+    } else {
+        cached_records =
+            load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
+        cached_records.as_ref()
+    };
+    let matches = search_skills(records, &query, limit);
     let resolved = build_search_results_payload(&query, matches);
     serde_json::to_value(resolved).map_err(|err| format!("serialize search output failed: {err}"))
 }
@@ -2382,8 +2480,9 @@ fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String
 fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Value, String> {
     let profile_path =
         required_non_empty_string(&payload, "profile_path", "stdio codex profile artifacts")?;
+    let full = optional_bool(&payload, "full").unwrap_or(false);
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let artifacts = build_codex_artifact_bundle(&profile)?;
+    let artifacts = build_codex_artifact_bundle(&profile, full)?;
     serde_json::to_value(artifacts)
         .map_err(|err| format!("serialize codex profile artifacts output failed: {err}"))
 }
@@ -8002,12 +8101,9 @@ mod tests {
 
     #[test]
     fn routing_eval_report_matches_expected_baseline() {
-        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let manifest_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-        let records =
-            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
+        let records = load_records_from_manifest(&manifest_path).expect("load routing records");
         let cases =
             load_routing_eval_cases(&routing_eval_case_path()).expect("load routing eval cases");
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
@@ -8017,13 +8113,20 @@ mod tests {
         assert!(report.metrics.trigger_hit >= 9);
         assert!(report.metrics.owner_correct >= 9);
         assert!(report.metrics.overlay_correct >= 9);
-        assert_eq!(report.metrics.overtrigger, 0);
-
         let results_by_id = report
             .results
             .iter()
             .filter_map(|row| row.id.as_ref().map(|id| (value_to_string(id), row)))
             .collect::<HashMap<_, _>>();
+        assert_eq!(
+            report
+                .results
+                .iter()
+                .filter(|row| row.overtrigger)
+                .map(|row| value_to_string(row.id.as_ref().expect("overtrigger id")))
+                .collect::<Vec<_>>(),
+            Vec::<String>::new()
+        );
         assert_eq!(
             results_by_id["systematic-debugging-gate-conflict"].selected_owner,
             "systematic-debugging"
@@ -8060,12 +8163,9 @@ mod tests {
 
     #[test]
     fn search_uses_route_scorer_for_framework_review() {
-        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let manifest_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-        let records =
-            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
+        let records = load_records_from_manifest(&manifest_path).expect("load routing records");
 
         let rows = search_skills(&records, "现在的路由系统，用减法原理review一下", 5);
 
@@ -8078,12 +8178,9 @@ mod tests {
 
     #[test]
     fn generic_xlsx_intake_hits_spreadsheet_gate_first() {
-        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let manifest_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-        let records =
-            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
+        let records = load_records_from_manifest(&manifest_path).expect("load routing records");
 
         let decision = route_task(
             &records,

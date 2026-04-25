@@ -5,9 +5,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const REQUIRED_CORE_CAPABILITIES: [&str; 4] = ["runtime", "memory", "artifact", "orchestration"];
-const RUNTIME_SURFACE_FIELDS: [&str; 13] = [
-    "artifact_contract",
+const RUNTIME_SURFACE_FIELDS: [&str; 4] = [
+    "routing",
     "memory_mounts",
+    "continuity_contract",
+    "codex_host_payload",
+];
+const CAPABILITY_SURFACE_FIELDS: [&str; 12] = [
+    "artifact_contract",
     "mcp_servers",
     "tool_policy",
     "approval_policy",
@@ -135,6 +140,7 @@ pub struct ProfileBundle {
     pub host_capability_requirements: Map<String, Value>,
     pub metadata: Map<String, Value>,
     pub codex_profile: Value,
+    pub full_codex_profile: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -164,12 +170,24 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         &normalized_mcp_servers,
         &workspace_bootstrap,
     );
+    let codex_host_payload = complete_codex_host_payload(build_codex_host_payload());
     let codex_profile = build_codex_profile(
         profile,
         &normalized_memory_mounts,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
+        &codex_host_payload,
+        false,
+    );
+    let full_codex_profile = build_codex_profile(
+        profile,
+        &normalized_memory_mounts,
+        &normalized_mcp_servers,
+        &workspace_bootstrap,
+        &shared_contract,
+        &codex_host_payload,
+        true,
     );
     Ok(ProfileBundle {
         profile_id: profile.profile_id.clone(),
@@ -196,15 +214,24 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         host_capability_requirements: profile.host_capability_requirements.clone(),
         metadata: profile.metadata.clone(),
         codex_profile: Value::Object(codex_profile),
+        full_codex_profile: Value::Object(full_codex_profile),
     })
 }
 
 pub fn build_codex_artifact_bundle(
     profile: &FrameworkProfileContract,
+    full: bool,
 ) -> Result<Map<String, Value>, String> {
     let bundle = build_profile_bundle(profile)?;
     let mut artifacts = Map::new();
-    artifacts.insert("codex_profile".to_string(), bundle.codex_profile);
+    artifacts.insert(
+        "codex_profile".to_string(),
+        if full {
+            bundle.full_codex_profile
+        } else {
+            bundle.codex_profile
+        },
+    );
     Ok(artifacts)
 }
 
@@ -395,6 +422,22 @@ fn build_codex_shared_contract(
     workspace_bootstrap: &Map<String, Value>,
 ) -> Map<String, Value> {
     let mut shared_contract = Map::new();
+    shared_contract.insert(
+        "routing".to_string(),
+        json!({
+            "runtime_index": "skills/SKILL_ROUTING_RUNTIME.json",
+            "fallback_manifest": "skills/SKILL_MANIFEST.json",
+            "policy": "hot routing index first, manifest fallback for specialist owner resolution"
+        }),
+    );
+    shared_contract.insert(
+        "continuity_contract".to_string(),
+        json!({
+            "task_scoped_artifacts": true,
+            "active_task_pointer": "artifacts/current/active_task.json",
+            "supervisor_state_path": ".supervisor_state.json"
+        }),
+    );
     shared_contract.insert(
         "artifact_contract".to_string(),
         Value::Object(profile.artifact_contract.clone()),
@@ -587,6 +630,16 @@ fn build_runtime_surface(shared_contract: &Map<String, Value>) -> Map<String, Va
     runtime_surface
 }
 
+fn build_capability_surface(shared_contract: &Map<String, Value>) -> Map<String, Value> {
+    let mut capability_surface = Map::new();
+    for field in CAPABILITY_SURFACE_FIELDS {
+        if let Some(value) = shared_contract.get(field) {
+            capability_surface.insert(field.to_string(), value.clone());
+        }
+    }
+    capability_surface
+}
+
 fn complete_codex_host_payload(codex_host_fields: Map<String, Value>) -> Map<String, Value> {
     let mut completed = Map::new();
     completed.insert("host_cli".to_string(), Value::String("codex".to_string()));
@@ -693,6 +746,8 @@ fn build_codex_profile(
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
     shared_contract: &Map<String, Value>,
+    codex_host_payload: &Map<String, Value>,
+    include_full_contract: bool,
 ) -> Map<String, Value> {
     let mut payload = build_codex_profile_output_base(
         profile,
@@ -702,14 +757,25 @@ fn build_codex_profile(
             workspace_bootstrap,
         },
     );
-    payload.insert(
-        "common_contract".to_string(),
-        Value::Object(shared_contract.clone()),
+    let mut runtime_surface = build_runtime_surface(shared_contract);
+    runtime_surface.insert(
+        "codex_host_payload".to_string(),
+        Value::Object(codex_host_payload.clone()),
     );
     payload.insert(
         "runtime_surface".to_string(),
-        Value::Object(build_runtime_surface(shared_contract)),
+        Value::Object(runtime_surface),
     );
+    if include_full_contract {
+        payload.insert(
+            "common_contract".to_string(),
+            Value::Object(shared_contract.clone()),
+        );
+        payload.insert(
+            "capability_surface".to_string(),
+            Value::Object(build_capability_surface(shared_contract)),
+        );
+    }
     payload.insert(
         "execution_surface".to_string(),
         value_object([
@@ -728,7 +794,7 @@ fn build_codex_profile(
     );
     payload.insert(
         "codex_host_payload".to_string(),
-        Value::Object(complete_codex_host_payload(build_codex_host_payload())),
+        Value::Object(codex_host_payload.clone()),
     );
     payload
 }
@@ -1423,13 +1489,22 @@ mod tests {
             Value::Object(bundle.workspace_bootstrap.clone()),
             expected_bootstrap
         );
+        assert_eq!(bundle.codex_profile.get("common_contract"), None);
         assert_eq!(
-            bundle.codex_profile["common_contract"]["workspace_bootstrap"],
+            bundle.full_codex_profile["common_contract"]["workspace_bootstrap"],
             expected_bootstrap
         );
         assert_eq!(
-            bundle.codex_profile["runtime_surface"]["workspace_bootstrap"],
-            expected_bootstrap
+            bundle.codex_profile["runtime_surface"].get("workspace_bootstrap"),
+            None
+        );
+        assert_eq!(
+            bundle.codex_profile["runtime_surface"].get("tool_policy"),
+            None
+        );
+        assert_eq!(
+            bundle.codex_profile["runtime_surface"]["codex_host_payload"]["host_cli"],
+            json!("codex")
         );
         assert!(bundle.codex_profile.get("bridge_contract").is_none());
         assert!(bundle.codex_profile.get("source_contract").is_none());
@@ -1486,11 +1561,16 @@ mod tests {
     #[test]
     fn codex_profile_preserves_framework_core_truth() {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
+        assert_eq!(bundle.codex_profile.get("common_contract"), None);
         assert_eq!(
-            bundle.codex_profile["common_contract"]["framework_surface_policy"]["default_surface"]
-                ["default_loadouts"],
+            bundle.full_codex_profile["common_contract"]["framework_surface_policy"]
+                ["default_surface"]["default_loadouts"],
             json!(["default_surface_loadout"])
         );
+        assert!(bundle
+            .full_codex_profile
+            .get("capability_surface")
+            .is_some());
         assert_eq!(
             bundle.codex_profile["execution_surface"]["controller_is_cli"],
             Value::Bool(false)
@@ -1523,8 +1603,9 @@ mod tests {
     #[test]
     fn codex_artifact_bundle_exposes_first_class_outputs() {
         let artifacts =
-            build_codex_artifact_bundle(&sample_profile()).expect("artifacts should build");
+            build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
         assert_eq!(artifacts.len(), 1);
+        assert!(artifacts["codex_profile"].get("common_contract").is_none());
         assert_eq!(
             artifacts["codex_profile"]["codex_host_payload"]["gpt_model_path_contract"]
                 ["preferred_for_gpt_family"],
@@ -1538,9 +1619,23 @@ mod tests {
     }
 
     #[test]
+    fn codex_artifact_bundle_full_exposes_debug_contracts() {
+        let artifacts =
+            build_codex_artifact_bundle(&sample_profile(), true).expect("artifacts should build");
+
+        assert!(artifacts["codex_profile"].get("common_contract").is_some());
+        assert!(artifacts["codex_profile"]
+            .get("capability_surface")
+            .is_some());
+        assert!(artifacts["codex_profile"]["capability_surface"]
+            .get("execution_controller_contract")
+            .is_some());
+    }
+
+    #[test]
     fn codex_artifact_bundle_ignores_removed_legacy_alias_opt_in() {
         let artifacts =
-            build_codex_artifact_bundle(&sample_profile()).expect("artifacts should build");
+            build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts.contains_key("codex_profile"));
         assert!(!artifacts.contains_key(&legacy_adapter_key("cli", "common")));
