@@ -67,3 +67,6 @@ opencode.jsonc
 !.codex/skills/
 !.codex/skills/*/
 !.codex/skills/*/SKILL.md
+
+# Private local aggregator; do not publish
+codex-aggregator/
