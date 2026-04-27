@@ -22,6 +22,13 @@ const INSTALL_SKILLS_TOOLS: [&str; 1] = ["codex"];
 const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
 const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const CODEX_SKILL_SURFACE_PINNED_SKILLS: [&str; 4] = ["autopilot", "deepinterview", "gitx", "team"];
+const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
+    "imagegen",
+    "openai-docs",
+    "plugin-creator",
+    "skill-creator",
+    "skill-installer",
+];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
     ["active_task.json", "focus_task.json", "task_registry.json"];
 const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [
@@ -813,6 +820,16 @@ fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, String> {
         }
     }
 
+    let generated_framework_commands = desired
+        .iter()
+        .filter(|slug| {
+            codex_skill_surface_source_path(&repo_root, slug)
+                .map(|source| source.is_none())
+                .unwrap_or(false)
+                && is_framework_command(&repo_root, slug).unwrap_or(false)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
     let manifest = json!({
         "schema_version": "codex-skill-surface-v1",
         "source": source_root.to_string_lossy(),
@@ -820,6 +837,7 @@ fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, String> {
         "policy": "runtime-hot-index-plus-pinned-explicit-entrypoints",
         "skills": desired,
         "count": desired.len(),
+        "generated_framework_commands": generated_framework_commands,
         "system_skills_linked": include_system,
         "generated_at": current_local_timestamp(),
     });
@@ -842,6 +860,10 @@ fn desired_codex_skill_surface_slugs(repo_root: &Path) -> Result<Vec<String>, St
     let source_root = shared_skills_source(repo_root)?;
     let mut desired = BTreeSet::new();
     for slug in runtime_hot_skill_slugs(repo_root)? {
+        if is_codex_system_provided_skill(&slug) || system_skill_source_exists(&source_root, &slug)
+        {
+            continue;
+        }
         if source_root.join(&slug).join("SKILL.md").is_file() {
             desired.insert(slug);
         }
@@ -866,6 +888,18 @@ fn desired_codex_skill_surface_slugs(repo_root: &Path) -> Result<Vec<String>, St
         }
     }
     Ok(desired.into_iter().collect())
+}
+
+fn system_skill_source_exists(source_root: &Path, slug: &str) -> bool {
+    source_root
+        .join(".system")
+        .join(slug)
+        .join("SKILL.md")
+        .is_file()
+}
+
+fn is_codex_system_provided_skill(slug: &str) -> bool {
+    CODEX_SYSTEM_PROVIDED_SKILLS.contains(&slug)
 }
 
 fn codex_skill_surface_source_path(

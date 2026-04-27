@@ -90,6 +90,21 @@ const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 3] = [
     ("需要多轮优化直到收敛", "execution-audit"),
 ];
 
+const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str]); 2] = [
+    (
+        "autopilot",
+        "Native repo autopilot command for end-to-end local Rust supervisor execution. Use only for explicit $autopilot or /autopilot entrypoints.",
+        "execution-controller-coding",
+        &["$autopilot", "/autopilot", "autopilot"],
+    ),
+    (
+        "team",
+        "Native repo team command for supervisor-led orchestration and worker lifecycle management. Use for explicit $team or /team, or strong team orchestration signals.",
+        "execution-controller-coding",
+        &["$team", "/team", "team orchestration", "worker lifecycle"],
+    ),
+];
+
 fn main() -> Result<(), String> {
     let args = Cli::parse();
     let source_manifest = load_source_manifest(&args.source_manifest)?;
@@ -737,7 +752,7 @@ fn build_index(manifest: &Value) -> String {
 fn build_runtime_index(manifest: &Value) -> Value {
     let selected = select_runtime_skills(manifest);
     let full_manifest_path = "skills/SKILL_MANIFEST.json";
-    let skills = selected
+    let mut skills = selected
         .iter()
         .map(|skill| {
             json!([
@@ -753,6 +768,9 @@ fn build_runtime_index(manifest: &Value) -> Value {
             ])
         })
         .collect::<Vec<_>>();
+    for row in framework_command_runtime_rows() {
+        skills.push(row);
+    }
     json!({
         "version": 2,
         "checklist": index_checklist(),
@@ -761,11 +779,33 @@ fn build_runtime_index(manifest: &Value) -> Value {
             "policy": "session-start required gates plus preferred first-turn owners; route/search loads fallback manifest when the hot index has no confident hit.",
             "fallback_manifest": full_manifest_path,
             "full_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
-            "hot_skill_count": selected.len(),
+            "hot_skill_count": skills.len(),
         },
         "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health", "priority"],
         "skills": skills,
     })
+}
+
+fn framework_command_runtime_rows() -> Vec<Value> {
+    FRAMEWORK_COMMAND_RUNTIME_ROWS
+        .iter()
+        .map(|(slug, description, _owner, triggers)| {
+            json!([
+                *slug,
+                "L0",
+                "owner",
+                "none",
+                "n/a",
+                *description,
+                triggers
+                    .iter()
+                    .map(|value| json!(value))
+                    .collect::<Vec<_>>(),
+                100.0,
+                "P1",
+            ])
+        })
+        .collect()
 }
 
 fn string_list_at(value: &Value, path: &[&str]) -> Vec<String> {
@@ -1652,8 +1692,18 @@ mod tests {
         assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(4));
         assert_eq!(
             bundle.runtime_index["skills"].as_array().map(Vec::len),
-            Some(3)
+            Some(5)
         );
+        assert!(bundle.runtime_index["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("autopilot"))));
+        assert!(bundle.runtime_index["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("team"))));
         assert_eq!(bundle.runtime_index["scope"]["kind"], json!("hot"));
         assert_eq!(bundle.tiers["summary"]["tier_counts"]["core"], json!(2));
         assert_eq!(
