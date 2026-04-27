@@ -168,7 +168,10 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
     if args.shared.dry_run {
         let mut payload = build_generate_payload(&args.shared, &prompt)?;
         payload["endpoint"] = json!(responses_url());
-        payload["outputs"] = json!(outputs.iter().map(path_string).collect::<Vec<_>>());
+        payload["outputs"] = json!(outputs
+            .iter()
+            .map(|path| path_string(path))
+            .collect::<Vec<_>>());
         print_json(&payload)?;
         return Ok(());
     }
@@ -202,7 +205,10 @@ fn run_edit(args: EditArgs) -> Result<()> {
             true,
         )?;
         payload["endpoint"] = json!(responses_url());
-        payload["outputs"] = json!(outputs.iter().map(path_string).collect::<Vec<_>>());
+        payload["outputs"] = json!(outputs
+            .iter()
+            .map(|path| path_string(path))
+            .collect::<Vec<_>>());
         print_json(&payload)?;
         return Ok(());
     }
@@ -241,7 +247,10 @@ fn run_batch(args: BatchArgs) -> Result<()> {
             let mut payload = build_generate_payload(&job_args, &prompt)?;
             payload["endpoint"] = json!(responses_url());
             payload["job"] = json!(idx + 1);
-            payload["outputs"] = json!(outputs.iter().map(path_string).collect::<Vec<_>>());
+            payload["outputs"] = json!(outputs
+                .iter()
+                .map(|path| path_string(path))
+                .collect::<Vec<_>>());
             print_json(&payload)?;
         }
         return Ok(());
@@ -1044,6 +1053,6 @@ fn print_json(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn path_string(path: &PathBuf) -> String {
+fn path_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }

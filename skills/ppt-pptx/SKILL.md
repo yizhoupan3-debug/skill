@@ -67,18 +67,23 @@ PowerPoint editing.
 ## Workflow
 
 1. Confirm audience, deck goal, output directory, and source-first requirement.
-2. Run the Text And Design Polishing Chain when content or visual quality matters: `$humanizer`, `$copywriting`, or `$paper-writing` for text; `$design-md`, `$frontend-design`, `$visual-review`, `$design-output-auditor`, and `$design-workflow-protocol` for the visual loop.
-3. Build or update `deck.plan.json` as the source of truth.
-4. Generate `.pptx` through the Rust `ppt` CLI.
-5. Inspect and render the deck when layout matters.
-6. Fix the source plan rather than patching generated output by hand.
-7. Return final `.pptx` and source plan links only when useful.
+2. If visual quality, brand consistency, or a reusable deck theme matters, run
+   `$design-md` before `deck.plan.json` so theme colors, type hierarchy, chart
+   palette, callout styles, and slide component rules are explicit.
+3. Run the Text And Design Polishing Chain when content or visual quality matters: `$humanizer`, `$copywriting`, or `$paper-writing` for text; `$frontend-design`, `$visual-review`, `$design-output-auditor`, and `$design-workflow-protocol` for the visual loop.
+4. Build or update `deck.plan.json` as the source of truth.
+5. Generate `.pptx` through the Rust `ppt` CLI.
+6. Inspect and render the deck when layout matters.
+7. Fix the source plan rather than patching generated output by hand.
+8. Return final `.pptx` and source plan links only when useful.
 
 ## Design Rules
 
 - Keep text editable where possible.
 - Prefer native charts/tables/shapes over screenshots.
 - Keep theme, typography, colors, and spacing consistent.
+- When a `DESIGN.md` exists, map its tokens into `deck.plan.json` theme fields
+  before inventing new slide styling.
 - Rust inspection boost: use the Rust inspector and rendered evidence before calling a deck done.
 - Move detailed layout recipes to references.
 

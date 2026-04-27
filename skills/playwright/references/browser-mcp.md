@@ -25,11 +25,10 @@ Add or verify this MCP server block in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.browser-mcp]
 command = "/Users/joe/Documents/skill/scripts/router-rs/run_router_rs.sh"
-args = ["/Users/joe/Documents/skill/scripts/router-rs/Cargo.toml", "--browser-mcp-stdio", "--repo-root", "/Users/joe/Documents/skill"]
+args = ["/Users/joe/Documents/skill/scripts/router-rs/Cargo.toml", "browser", "mcp-stdio", "--repo-root", "/Users/joe/Documents/skill"]
 cwd = "/Users/joe/Documents/skill"
 ```
 
 If you use the repo's native installer flow, keep the same Rust-owned route by
-passing `--with-browser-mcp` to `router-rs --host-integration
-install-native-integration`. Then restart Codex so it reloads MCP servers from
+running `router-rs codex host-integration install-native-integration`. Then restart Codex so it reloads MCP servers from
 `~/.codex/config.toml`.

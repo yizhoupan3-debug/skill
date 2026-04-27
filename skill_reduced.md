@@ -616,7 +616,7 @@ cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
 
 ```bash
 scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
-  --framework-runtime-snapshot-json \
+  framework snapshot \
   --repo-root /Users/joe/Documents/skill
 ```
 

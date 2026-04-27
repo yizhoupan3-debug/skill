@@ -644,8 +644,8 @@ async fn fetch_yahoo_ohlcv(
     let volumes = value_array(quote.get("volume"))?;
 
     let mut records = Vec::new();
-    for index in 0..timestamps.len() {
-        let timestamp = value_to_i64(&timestamps[index])?;
+    for (index, timestamp_value) in timestamps.iter().enumerate() {
+        let timestamp = value_to_i64(timestamp_value)?;
         let open = opt_value_to_f64(opens.get(index))?;
         let high = opt_value_to_f64(highs.get(index))?;
         let low = opt_value_to_f64(lows.get(index))?;

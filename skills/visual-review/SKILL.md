@@ -3,11 +3,12 @@ name: visual-review
 description: |
   Review screenshots, rendered pages, charts, and UI artifacts with
   image-grounded findings.
-  Use when the task is “看图”, screenshot review, UI/layout/rendering/accessibility checks,
+  Use when the task is “看图”, screenshot review, rendered UI/layout/rendering/accessibility checks,
   before/after comparisons, chart review, or visible defects such as
   truncation, overlap, hierarchy, and readability. As an evidence gate, check
-  this skill early at conversation start whenever a screenshot or rendered
-  artifact should anchor the answer.
+  this skill early at conversation start whenever an actual screenshot,
+  rendered page, image, chart, or visual artifact should anchor the answer. Do
+  not use for abstract UI redesign requests with no visual evidence attached.
 routing_layer: L3
 routing_owner: gate
 routing_gate: evidence
@@ -18,13 +19,13 @@ trigger_hints:
   - visual
   - review
   - screenshot
-  - UI
+  - screenshot UI
   - chart
   - audit
 metadata:
   version: "2.1.0"
   platforms: [codex]
-  tags: [visual, review, screenshot, UI, chart, audit, accessibility, evidence]
+  tags: [visual, review, screenshot, screenshot-ui, chart, audit, accessibility, evidence]
 framework_roles:
   - gate
   - detector
@@ -75,7 +76,7 @@ not assumptions about code or off-screen state.
 
 After this gate establishes visible evidence, route to a narrower owner when the real question is not just "what is visible" but:
 
-- design-system fidelity / style drift / AI-slop acceptance -> `$design-output-auditor`
+- design-system fidelity / style drift / AI-slop acceptance -> `$design-md` or `$design-workflow`
 - redesign direction -> `$frontend-design`
 - implementation debugging -> the relevant runtime owner
 

@@ -1686,10 +1686,12 @@ fn slide_xml(
     let bg = rect_shape(
         2,
         "Background",
-        0.0,
-        0.0,
-        13.333,
-        7.5,
+        ShapeBox {
+            x: 0.0,
+            y: 0.0,
+            w: 13.333,
+            h: 7.5,
+        },
         palette.stage,
         None,
         0,
@@ -1697,10 +1699,12 @@ fn slide_xml(
     let rail = rect_shape(
         3,
         "Glow Rail",
-        0.86,
-        6.86,
-        11.6,
-        0.018,
+        ShapeBox {
+            x: 0.86,
+            y: 6.86,
+            w: 11.6,
+            h: 0.018,
+        },
         palette.glow,
         None,
         25000,
@@ -1709,10 +1713,12 @@ fn slide_xml(
         rect_shape(
             4,
             "Hero Panel",
-            0.72,
-            0.72,
-            5.8,
-            6.0,
+            ShapeBox {
+                x: 0.72,
+                y: 0.72,
+                w: 5.8,
+                h: 6.0,
+            },
             palette.panel,
             Some(palette.line),
             16000,
@@ -1721,10 +1727,12 @@ fn slide_xml(
         rect_shape(
             4,
             "Content Panel",
-            0.86,
-            1.62,
-            11.6,
-            4.82,
+            ShapeBox {
+                x: 0.86,
+                y: 1.62,
+                w: 11.6,
+                h: 4.82,
+            },
             palette.panel_soft,
             Some(palette.line),
             10000,
@@ -1735,14 +1743,18 @@ fn slide_xml(
         10,
         "Slide Label",
         &slide.label,
-        0.9,
-        0.38,
-        2.7,
-        0.22,
-        9,
-        palette.text_mute,
-        false,
-        false,
+        ShapeBox {
+            x: 0.9,
+            y: 0.38,
+            w: 2.7,
+            h: 0.22,
+        },
+        TextStyle {
+            size_pt: 9,
+            color: palette.text_mute,
+            bold: false,
+            title_placeholder: false,
+        },
     ));
     let title_box = if slide.layout == "cover" {
         (0.96, 2.02, 4.9, 1.1, 31)
@@ -1755,28 +1767,36 @@ fn slide_xml(
         11,
         "Title",
         &slide.title,
-        title_box.0,
-        title_box.1,
-        title_box.2,
-        title_box.3,
-        title_box.4,
-        palette.text,
-        true,
-        true,
+        ShapeBox {
+            x: title_box.0,
+            y: title_box.1,
+            w: title_box.2,
+            h: title_box.3,
+        },
+        TextStyle {
+            size_pt: title_box.4,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
     ));
     if !slide.subtitle.is_empty() {
         shapes.push(text_shape(
             12,
             "Subtitle",
             &slide.subtitle,
-            0.96,
-            if slide.layout == "cover" { 3.2 } else { 1.28 },
-            6.7,
-            0.38,
-            13,
-            palette.text_soft,
-            false,
-            false,
+            ShapeBox {
+                x: 0.96,
+                y: if slide.layout == "cover" { 3.2 } else { 1.28 },
+                w: 6.7,
+                h: 0.38,
+            },
+            TextStyle {
+                size_pt: 13,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
         ));
     }
     for (idx, item) in slide.body.iter().take(6).enumerate() {
@@ -1790,28 +1810,36 @@ fn slide_xml(
             20 + idx as u32,
             "Body",
             &text,
-            1.18,
-            y,
-            10.9,
-            0.42,
-            15,
-            palette.text_soft,
-            false,
-            false,
+            ShapeBox {
+                x: 1.18,
+                y,
+                w: 10.9,
+                h: 0.42,
+            },
+            TextStyle {
+                size_pt: 15,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
         ));
     }
     shapes.push(text_shape(
         40,
         "Page",
         &format!("{slide_no:02} / {total:02}"),
-        11.82,
-        7.0,
-        0.8,
-        0.22,
-        9,
-        palette.text_mute,
-        false,
-        false,
+        ShapeBox {
+            x: 11.82,
+            y: 7.0,
+            w: 0.8,
+            h: 0.22,
+        },
+        TextStyle {
+            size_pt: 9,
+            color: palette.text_mute,
+            bold: false,
+            title_placeholder: false,
+        },
     ));
     Ok(format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="{}"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>{}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#,
@@ -1828,17 +1856,46 @@ fn notes_slide_xml(slide: &PptxSlideSpec, slide_no: usize) -> String {
     };
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>{}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>"#,
-        text_shape(2, "Notes", &notes, 0.7, 5.0, 5.5, 2.0, 12, "222222", false, false)
+        text_shape(
+            2,
+            "Notes",
+            &notes,
+            ShapeBox {
+                x: 0.7,
+                y: 5.0,
+                w: 5.5,
+                h: 2.0
+            },
+            TextStyle {
+                size_pt: 12,
+                color: "222222",
+                bold: false,
+                title_placeholder: false
+            }
+        )
     )
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ShapeBox {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TextStyle<'a> {
+    size_pt: u32,
+    color: &'a str,
+    bold: bool,
+    title_placeholder: bool,
 }
 
 fn rect_shape(
     id: u32,
     name: &str,
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
+    bounds: ShapeBox,
     fill: &str,
     line: Option<&str>,
     transparency: u32,
@@ -1851,42 +1908,31 @@ fn rect_shape(
         .unwrap_or_else(|| "<a:ln><a:noFill/></a:ln>".to_string());
     format!(
         r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="{fill}"><a:alpha val="{alpha}"/></a:srgbClr></a:solidFill>{line_xml}</p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>"#,
-        inch_emu(x),
-        inch_emu(y),
-        inch_emu(w),
-        inch_emu(h)
+        inch_emu(bounds.x),
+        inch_emu(bounds.y),
+        inch_emu(bounds.w),
+        inch_emu(bounds.h)
     )
 }
 
-fn text_shape(
-    id: u32,
-    name: &str,
-    text: &str,
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-    size_pt: u32,
-    color: &str,
-    bold: bool,
-    title_placeholder: bool,
-) -> String {
-    let bold_attr = if bold { r#" b="1""# } else { "" };
-    let placeholder = if title_placeholder {
+fn text_shape(id: u32, name: &str, text: &str, bounds: ShapeBox, style: TextStyle<'_>) -> String {
+    let bold_attr = if style.bold { r#" b="1""# } else { "" };
+    let placeholder = if style.title_placeholder {
         r#"<p:nvPr><p:ph type="title"/></p:nvPr>"#
     } else {
         "<p:nvPr/>"
     };
     format!(
-        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{name}"/><p:cNvSpPr txBox="1"/>{placeholder}</p:nvSpPr><p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" sz="{}"{}><a:solidFill><a:srgbClr val="{color}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:rPr><a:t>{}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="{}"/></a:p></p:txBody></p:sp>"#,
-        inch_emu(x),
-        inch_emu(y),
-        inch_emu(w),
-        inch_emu(h),
-        size_pt * 100,
+        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{name}"/><p:cNvSpPr txBox="1"/>{placeholder}</p:nvSpPr><p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" sz="{}"{}><a:solidFill><a:srgbClr val="{}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:rPr><a:t>{}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="{}"/></a:p></p:txBody></p:sp>"#,
+        inch_emu(bounds.x),
+        inch_emu(bounds.y),
+        inch_emu(bounds.w),
+        inch_emu(bounds.h),
+        style.size_pt * 100,
         bold_attr,
+        style.color,
         xml_escape(text),
-        size_pt * 100
+        style.size_pt * 100
     )
 }
 
@@ -2947,8 +2993,7 @@ impl ZipBundle {
             .files
             .get(&normalize_zip_path(path))
             .ok_or_else(|| anyhow!("missing zip entry {}", path))?;
-        Ok(String::from_utf8(data.clone())
-            .with_context(|| format!("{} is not valid utf-8 xml", path))?)
+        String::from_utf8(data.clone()).with_context(|| format!("{} is not valid utf-8 xml", path))
     }
 
     fn bytes(&self, path: &str) -> Option<&[u8]> {
@@ -3342,7 +3387,7 @@ fn build_montage(
         20
     };
     let row_height = cell_height + label_height;
-    let rows = (items.len() + num_col - 1) / num_col;
+    let rows = items.len().div_ceil(num_col);
     let canvas_w = num_col as u32 * cell_width + (num_col as u32 + 1) * gap;
     let canvas_h = rows as u32 * row_height + (rows as u32 + 1) * gap;
     let mut canvas = RgbaImage::from_pixel(canvas_w, canvas_h, Rgba([242, 242, 242, 255]));

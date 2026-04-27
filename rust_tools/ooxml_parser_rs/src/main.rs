@@ -89,6 +89,12 @@ struct DefinedNameEntry {
     value: Option<String>,
 }
 
+type WorkbookMetadata = (
+    Vec<SheetMeta>,
+    Vec<DefinedNameEntry>,
+    HashMap<usize, String>,
+);
+
 #[derive(Debug, Clone)]
 struct SheetMeta {
     name: String,
@@ -292,13 +298,7 @@ fn parse_relationships(xml: &str) -> Result<Vec<Relationship>> {
     Ok(relationships)
 }
 
-fn parse_workbook_metadata(
-    workbook_xml: &str,
-) -> Result<(
-    Vec<SheetMeta>,
-    Vec<DefinedNameEntry>,
-    HashMap<usize, String>,
-)> {
+fn parse_workbook_metadata(workbook_xml: &str) -> Result<WorkbookMetadata> {
     struct PendingDefinedName {
         name: String,
         hidden: Option<bool>,
@@ -342,7 +342,7 @@ fn parse_workbook_metadata(
             }
             Event::Text(text) => {
                 if let Some(entry) = pending_defined_name.as_mut() {
-                    entry.value.push_str(&text.unescape()?.into_owned());
+                    entry.value.push_str(&text.unescape()?);
                 }
             }
             Event::CData(text) => {
@@ -965,7 +965,7 @@ fn inspect_docx_summary(path: &Path) -> Result<DocxSummary> {
                 _ => {}
             },
             Event::Text(text) if in_text => {
-                current_paragraph_text.push_str(&text.unescape()?.into_owned());
+                current_paragraph_text.push_str(&text.unescape()?);
             }
             Event::CData(text) if in_text => {
                 current_paragraph_text.push_str(&String::from_utf8_lossy(text.as_ref()));

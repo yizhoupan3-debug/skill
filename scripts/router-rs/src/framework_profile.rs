@@ -1426,13 +1426,11 @@ mod tests {
         );
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
         assert!(serialized
-            .get(&legacy_adapter_key("cli", "common"))
+            .get(legacy_adapter_key("cli", "common"))
             .is_none());
+        assert!(serialized.get(legacy_adapter_key("codex", "cli")).is_none());
         assert!(serialized
-            .get(&legacy_adapter_key("codex", "cli"))
-            .is_none());
-        assert!(serialized
-            .get(&legacy_adapter_key("codex", "desktop"))
+            .get(legacy_adapter_key("codex", "desktop"))
             .is_none());
         assert!(serialized.get("codex_common_adapter").is_none());
         assert!(serialized.get("cli_family_capability_discovery").is_none());

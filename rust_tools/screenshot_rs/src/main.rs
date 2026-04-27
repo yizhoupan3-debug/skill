@@ -838,7 +838,7 @@ fn ensure_macos_permissions() -> Result<()> {
         bail!("screen capture checks are blocked in the sandbox; rerun outside the sandbox");
     }
 
-    let access = core_graphics::access::ScreenCaptureAccess::default();
+    let access = core_graphics::access::ScreenCaptureAccess;
     if access.preflight() {
         println!("Screen Recording permission already granted.");
         return Ok(());

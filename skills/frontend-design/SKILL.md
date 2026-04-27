@@ -4,8 +4,10 @@ description: |
   Guide distinctive, high-end UI design: aesthetic direction, typography, color, motion, and delivery quality.
   Use when the user wants a page or interface to look "Premium", "Stunning", "WOW", or needs help
   implementing Bento UI, Glassmorphism, Mesh Gradients, or sophisticated micro-interactions.
-  Not for `DESIGN.md` synthesis from existing UI assets, CSS mechanics, Tailwind config, accessibility
-  audit, or performance work.
+  Use with `$design-md` when a page/app needs a reusable design contract before
+  implementation. Not for `DESIGN.md` synthesis/lint/diff/read/application,
+  design-system capture, CSS mechanics, Tailwind config, accessibility audit,
+  or performance work.
 routing_layer: L3
 routing_owner: owner
 routing_gate: none
@@ -21,6 +23,7 @@ trigger_hints:
   - Premium UI
   - Glassmorphism
   - Mesh Gradients
+  - redesign UI
 metadata:
   version: "1.1.0"
   platforms: [codex]
@@ -46,13 +49,16 @@ look and feel like, not the low-level CSS or framework mechanics.
 - The user wants to beautify or redesign a web interface with a "Premium" or "High-end" feel
 - The user asks for aesthetic direction, Bento UI, Glassmorphism, or Mesh Gradient patterns
 - The task is landing-page, dashboard, portfolio, or product-UI visual quality with a "WOW" factor
-- The deliverable is a clearer design direction or a polished visual system for a modern web app
+- The deliverable is a clearer design direction or a polished visual execution for a modern web app
 - The user already knows they want implementation-facing redesign rather than a reference-mapping pass
+- A UI task has an existing `DESIGN.md` or visual contract and needs it applied
+  to page layout, component hierarchy, color, type, and motion
 
 ## Do not use
 
 - Named-product reference grounding, `参考源`, `verified tokens`, or brand-plus-motion decomposition before implementation -> use `$design-agent`
-- The user wants a stronger UI-generation prompt, DESIGN.md capture, or design acceptance workflow rather than implementation -> use `$design-workflow`
+- The user mentions `DESIGN.md`, design-system capture, design tokens, style-contract lint/diff/read/apply, or spec acceptance -> use `$design-md`
+- The user wants a stronger UI-generation prompt or workflow closure rather than implementation -> use `$design-workflow`
 - CSS engineering or layout mechanics → use `$css-pro`
 - Tailwind theming/config → use `$tailwind-pro`
 - Accessibility review → use `$accessibility-auditor`
@@ -63,7 +69,8 @@ look and feel like, not the low-level CSS or framework mechanics.
 ## Core workflow
 
 1. If the user starts from a named product/style reference and wants source grounding first, route to `$design-agent` before redesign.
-2. If the user starts from existing product surfaces and wants a reusable house style, prompt, or acceptance protocol captured first, route to `$design-workflow` before redesign.
+2. If the user starts from existing product surfaces and wants a reusable house style, design tokens, or `DESIGN.md` captured first, route to `$design-md` before redesign.
+3. If a `DESIGN.md` or visual contract exists, read it first and map tokens to the actual UI surfaces before inventing new style.
 4. Identify the interface goal, audience, and brand tone (e.g., Luxury, Professional, Playful).
 5. Choose one clear premium aesthetic direction (Bento, Glass, Minimal, etc.).
 6. Define typography, oklch-based color, and motion (Framer Motion) system.
@@ -73,6 +80,8 @@ look and feel like, not the low-level CSS or framework mechanics.
 ## Design rules
 
 - Pick one coherent direction instead of mixing styles.
+- If a `DESIGN.md` exists, preserve its tokens unless there is a concrete reason
+  to patch the contract through `$design-md`.
 - Favor memorable hierarchy over generic “AI-looking” defaults.
 - Respect accessibility and implementation constraints even when visual quality is primary.
 - Push style catalogs and long checklists into references.
@@ -86,7 +95,8 @@ look and feel like, not the low-level CSS or framework mechanics.
 ## Routing note
 
 - Use `$design-agent` first when the request is "make it feel like X product" and the user wants reference sources, verified tokens, or borrow/adapt decisions before any UI rewrite starts.
-- Use `$design-workflow` first when the request is "先把现有设计抽出来 / 先沉淀成 DESIGN.md / 设计 prompt / 页面生成提示词 / 设计验收".
+- Use `$design-md` first when the request is "先把现有设计抽出来 / 先沉淀成 DESIGN.md / 设计规范 / 设计 token / 设计验收".
+- Use `$design-workflow` first when the request is "设计 prompt / 页面生成提示词 / workflow closure".
 
 ## Trigger examples
 - "这个设计规范里的配色和阴影怎么在 CSS 里精确还原？"

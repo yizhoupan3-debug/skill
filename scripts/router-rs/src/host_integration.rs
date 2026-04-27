@@ -979,6 +979,7 @@ fn run_memory_automation(
         Some(&resolved_memory_root),
         resolved_artifact_source_dir.as_deref(),
     )?;
+    let continuity_health = inspect_continuity_health(&repo_root, &retrieval);
 
     let generated_at = current_local_timestamp();
     let run_id = build_framework_task_id(&format!("{workspace}-memory-automation"));
@@ -1002,18 +1003,20 @@ fn run_memory_automation(
     let archive_object = archive
         .as_object()
         .ok_or_else(|| "archive result must be an object".to_string())?;
-    let snapshot_md = render_memory_automation_snapshot(
-        &workspace,
-        &generated_at,
-        &resolved_memory_root,
-        &default_codex_root(),
-        report_object,
-        sqlite_object,
-        &changed_file_list,
-        archive_object,
-        &planned_current_artifact_migrations,
+    let storage_root = default_codex_root();
+    let snapshot_md = render_memory_automation_snapshot(MemoryAutomationSnapshot {
+        workspace: &workspace,
+        generated_at: &generated_at,
+        memory_root: &resolved_memory_root,
+        storage_root: &storage_root,
+        report: report_object,
+        sqlite_result: sqlite_object,
+        changed_files: &changed_file_list,
+        archive_result: archive_object,
+        planned_current_artifact_migrations: &planned_current_artifact_migrations,
         apply_artifact_migrations,
-    );
+        continuity_health: &continuity_health,
+    });
 
     write_json_if_changed(&resolved_output_dir.join("storage_audit.json"), &report)?;
     write_text_if_changed(&resolved_output_dir.join("snapshot.md"), &snapshot_md)?;
@@ -1027,6 +1030,7 @@ fn run_memory_automation(
             "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
             "moved_current_artifacts": moved_current_artifacts,
             "retrieval": retrieval,
+            "continuity_health": continuity_health,
             "apply_artifact_migrations": apply_artifact_migrations,
         }),
     )?;
@@ -1057,6 +1061,7 @@ fn run_memory_automation(
         "storage_total_mib": report.get("total_mib").cloned().unwrap_or(Value::Null),
         "top_storage_entries": report.get("top_entries").cloned().unwrap_or_else(|| json!([])),
         "retrieval": retrieval,
+        "continuity_health": continuity_health,
     });
     write_json_if_changed(&resolved_output_dir.join("run_summary.json"), &run_summary)?;
 
@@ -1071,10 +1076,134 @@ fn run_memory_automation(
         "report": report,
         "sqlite_result": sqlite_result,
         "retrieval": retrieval,
+        "continuity_health": continuity_health,
         "bootstrap": bootstrap,
         "output_dir": resolved_output_dir.to_string_lossy(),
         "consolidation": consolidation,
     }))
+}
+
+fn inspect_continuity_health(repo_root: &Path, retrieval: &Value) -> Value {
+    let source_artifacts = retrieval
+        .get("diagnostics")
+        .and_then(|diagnostics| diagnostics.get("source_artifacts"));
+    let current_control = source_artifacts.and_then(|source| source.get("current_control"));
+    let root_anchor = source_artifacts.and_then(|source| source.get("root_anchor"));
+    let continuity = retrieval
+        .get("diagnostics")
+        .and_then(|diagnostics| diagnostics.get("continuity"));
+    let prompt_payload = retrieval.get("prompt_payload");
+    let active_task_id = continuity
+        .and_then(|value| value.get("active_task_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    let mut anchors = Vec::new();
+    for key in ["active_task_pointer", "focus_task_pointer", "task_registry"] {
+        if let Some(path) = current_control
+            .and_then(|value| value.get(key))
+            .and_then(Value::as_str)
+            .filter(|path| !path.trim().is_empty())
+        {
+            anchors.push(anchor_status(key, path));
+        }
+    }
+    if let Some(path) = root_anchor
+        .and_then(|value| value.get("supervisor_state"))
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+    {
+        anchors.push(anchor_status("supervisor_state", path));
+    }
+
+    let current_root = repo_root.join("artifacts").join("current");
+    anchors.push(anchor_status(
+        "current_root",
+        &current_root.to_string_lossy(),
+    ));
+
+    if !active_task_id.trim().is_empty() {
+        let task_root = current_root.join(active_task_id);
+        anchors.push(anchor_status(
+            "active_task_root",
+            &task_root.to_string_lossy(),
+        ));
+        for name in TASK_ALLOWED_ARTIFACT_NAMES {
+            if name == ".supervisor_state.json" {
+                continue;
+            }
+            let label = format!("active_task_{name}");
+            anchors.push(anchor_status(
+                &label,
+                &task_root.join(name).to_string_lossy(),
+            ));
+        }
+    }
+
+    let mut blockers = Vec::new();
+    for anchor in &anchors {
+        let Some(path) = anchor.get("path").and_then(Value::as_str) else {
+            continue;
+        };
+        let exists = anchor
+            .get("exists")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if !exists {
+            let label = anchor
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or("anchor");
+            blockers.push(format!("{label} missing: {path}"));
+        }
+    }
+
+    if active_task_id.trim().is_empty() {
+        blockers.push("continuity active_task_id is empty".to_string());
+    }
+
+    for (label, value) in [
+        (
+            "prompt_payload.active_task.task_id",
+            prompt_payload
+                .and_then(|payload| payload.get("active_task"))
+                .and_then(|active_task| active_task.get("task_id")),
+        ),
+        (
+            "prompt_payload.active_task.task",
+            prompt_payload
+                .and_then(|payload| payload.get("active_task"))
+                .and_then(|active_task| active_task.get("task")),
+        ),
+    ] {
+        if value
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+        {
+            blockers.push(format!("{label} is empty"));
+        }
+    }
+
+    json!({
+        "ok": blockers.is_empty(),
+        "status": if blockers.is_empty() { "ok" } else { "blocked" },
+        "blockers": blockers,
+        "active_task_id": active_task_id,
+        "anchors": anchors,
+    })
+}
+
+fn anchor_status(label: &str, path: &str) -> Value {
+    let path_buf = PathBuf::from(path);
+    json!({
+        "label": label,
+        "path": path,
+        "exists": path_buf.exists(),
+        "is_file": path_buf.is_file(),
+        "is_dir": path_buf.is_dir(),
+    })
 }
 
 fn build_memory_automation_consolidation(memory_root: &Path) -> Result<Value, String> {
@@ -1179,18 +1308,34 @@ fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf {
         .unwrap_or(root)
 }
 
-fn render_memory_automation_snapshot(
-    workspace: &str,
-    generated_at: &str,
-    memory_root: &Path,
-    storage_root: &Path,
-    report: &Map<String, Value>,
-    sqlite_result: &Map<String, Value>,
-    changed_files: &[String],
-    archive_result: &Map<String, Value>,
-    planned_current_artifact_migrations: &[MigrationPlan],
+struct MemoryAutomationSnapshot<'a> {
+    workspace: &'a str,
+    generated_at: &'a str,
+    memory_root: &'a Path,
+    storage_root: &'a Path,
+    report: &'a Map<String, Value>,
+    sqlite_result: &'a Map<String, Value>,
+    changed_files: &'a [String],
+    archive_result: &'a Map<String, Value>,
+    planned_current_artifact_migrations: &'a [MigrationPlan],
     apply_artifact_migrations: bool,
-) -> String {
+    continuity_health: &'a Value,
+}
+
+fn render_memory_automation_snapshot(snapshot: MemoryAutomationSnapshot<'_>) -> String {
+    let MemoryAutomationSnapshot {
+        workspace,
+        generated_at,
+        memory_root,
+        storage_root,
+        report,
+        sqlite_result,
+        changed_files,
+        archive_result,
+        planned_current_artifact_migrations,
+        apply_artifact_migrations,
+        continuity_health,
+    } = snapshot;
     let mut lines = vec![
         "# CLI-common memory automation pipeline".to_string(),
         "".to_string(),
@@ -1239,12 +1384,38 @@ fn render_memory_automation_snapshot(
             "- planned_current_artifact_migrations: {}",
             planned_current_artifact_migrations.len()
         ),
+        format!(
+            "- continuity_health: {}",
+            continuity_health
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        ),
     ];
     if changed_files.is_empty() {
         lines.push("- changed_files: none".to_string());
     } else {
         lines.push("- changed_files:".to_string());
         lines.extend(changed_files.iter().map(|path| format!("  - {path}")));
+    }
+    lines.push("".to_string());
+    lines.push("## continuity_health".to_string());
+    lines.push("".to_string());
+    let continuity_blockers = continuity_health
+        .get("blockers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    if continuity_blockers.is_empty() {
+        lines.push("- ok".to_string());
+    } else {
+        lines.extend(
+            continuity_blockers
+                .into_iter()
+                .map(|blocker| format!("- blocker: {blocker}")),
+        );
     }
     lines.push("".to_string());
     lines.push("## recommendations".to_string());

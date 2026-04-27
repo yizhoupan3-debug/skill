@@ -33,6 +33,7 @@ const ARTIFACT_GATE_PHRASES: [&str; 12] = [
     "幻灯片",
 ];
 const PARALLEL_RECORD_SCAN_MIN: usize = 48;
+#[cfg(test)]
 const PARALLEL_EVAL_CASE_MIN: usize = 8;
 
 #[derive(Debug, Clone)]
@@ -234,6 +235,7 @@ pub(crate) struct RouteSnapshotEnvelopePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(test)]
 struct RoutingEvalCasePayload {
     id: Option<Value>,
     task: String,
@@ -248,6 +250,7 @@ struct RoutingEvalCasePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(test)]
 pub(crate) struct RoutingEvalCasesPayload {
     schema_version: String,
     #[serde(default)]
@@ -255,6 +258,7 @@ pub(crate) struct RoutingEvalCasesPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(test)]
 pub(crate) struct RoutingEvalResultPayload {
     pub(crate) id: Option<Value>,
     category: String,
@@ -272,6 +276,7 @@ pub(crate) struct RoutingEvalResultPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg(test)]
 pub(crate) struct RoutingEvalMetricsPayload {
     pub(crate) case_count: usize,
     pub(crate) trigger_hit: usize,
@@ -282,12 +287,14 @@ pub(crate) struct RoutingEvalMetricsPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(test)]
 pub(crate) struct RoutingEvalReportPayload {
     pub(crate) schema_version: String,
     pub(crate) metrics: RoutingEvalMetricsPayload,
     pub(crate) results: Vec<RoutingEvalResultPayload>,
 }
 
+#[cfg(test)]
 struct EvaluatedRoutingCase {
     input_index: usize,
     result: RoutingEvalResultPayload,
@@ -394,6 +401,7 @@ fn default_skill_session_start() -> String {
     "n/a".to_string()
 }
 
+#[cfg(test)]
 fn default_true() -> bool {
     true
 }
@@ -432,9 +440,14 @@ pub(crate) fn load_records(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
 ) -> Result<Vec<SkillRecord>, String> {
-    let default_runtime_path = std::env::current_dir()
-        .ok()
-        .map(|cwd| cwd.join("skills").join("SKILL_ROUTING_RUNTIME.json"));
+    if runtime_path.is_none() {
+        if let Some(path) = manifest_path {
+            if path.exists() {
+                return load_records_from_manifest(path);
+            }
+        }
+    }
+    let default_runtime_path = default_runtime_path();
     let runtime_path = runtime_path.or(default_runtime_path.as_deref());
     if let Some(path) = runtime_path {
         if path.exists() {
@@ -590,9 +603,12 @@ fn apply_manifest_route_meta(
 }
 
 fn default_runtime_path() -> Option<PathBuf> {
-    std::env::current_dir()
-        .ok()
-        .map(|cwd| cwd.join("skills").join("SKILL_ROUTING_RUNTIME.json"))
+    Some(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("skills")
+            .join("SKILL_ROUTING_RUNTIME.json"),
+    )
 }
 
 fn effective_runtime_path(runtime_path: Option<&Path>) -> Option<PathBuf> {
@@ -839,6 +855,7 @@ pub(crate) fn read_json(path: &Path) -> Result<Value, String> {
     serde_json::from_str(&text).map_err(|err| format!("failed parsing {}: {err}", path.display()))
 }
 
+#[cfg(test)]
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value.and_then(|raw| {
         let trimmed = raw.trim();
@@ -1524,6 +1541,7 @@ fn compare_route_contract_to_snapshot(
     (verified_fields, mismatch_fields)
 }
 
+#[cfg(test)]
 pub(crate) fn load_routing_eval_cases(path: &Path) -> Result<RoutingEvalCasesPayload, String> {
     let payload = read_json(path)?;
     let cases = serde_json::from_value::<RoutingEvalCasesPayload>(payload)
@@ -1537,6 +1555,7 @@ pub(crate) fn load_routing_eval_cases(path: &Path) -> Result<RoutingEvalCasesPay
     Ok(cases)
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_routing_cases(
     records: &[SkillRecord],
     cases_payload: RoutingEvalCasesPayload,
@@ -2179,6 +2198,29 @@ fn has_live_browser_action_context(query_text: &str, query_token_list: &[String]
     })
 }
 
+fn has_visual_evidence_review_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "看图",
+        "截图",
+        "界面图",
+        "视觉问题",
+        "可读性审查",
+        "重叠",
+        "层级",
+        "渲染",
+        "rendered",
+        "screenshot",
+        "visual review",
+        "ui overlap",
+        "readability review",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn artifact_gate_matches_query(query_token_list: &[String]) -> bool {
     ARTIFACT_GATE_PHRASES
         .iter()
@@ -2223,6 +2265,99 @@ fn artifact_gate_target_slug(query_token_list: &[String]) -> Option<&'static str
     })
 }
 
+fn has_design_contract_context(query_text: &str, query_token_list: &[String]) -> bool {
+    const MARKERS: [&str; 18] = [
+        "design.md",
+        "设计规范",
+        "设计系统",
+        "设计 token",
+        "design token",
+        "design tokens",
+        "视觉身份",
+        "视觉规范",
+        "品牌风格",
+        "品牌规范",
+        "house style",
+        "visual identity",
+        "style contract",
+        "统一设计规范",
+        "统一视觉",
+        "统一风格",
+        "风格漂移",
+        "根据 design.md",
+    ];
+    MARKERS.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_design_contract_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
+    const MARKERS: [&str; 10] = [
+        "不需要设计系统",
+        "不需要设计规范",
+        "不用设计系统",
+        "不用设计规范",
+        "无需设计系统",
+        "无需设计规范",
+        "不要设计系统",
+        "不要设计规范",
+        "no design system",
+        "without design system",
+    ];
+    MARKERS.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_design_output_audit_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "设计审计",
+        "设计验收",
+        "验收结论",
+        "风格漂移",
+        "ai 味",
+        "反模式",
+        "drift",
+        "anti-pattern",
+        "audit produced",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_design_workflow_protocol_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "设计工件协议",
+        "设计工作流",
+        "设计迭代协议",
+        "design workflow",
+        "design artifact protocol",
+        "prompt 到 screenshot 到 verdict",
+        "每轮都按这个工作流跑",
+        "工作流跑",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_quick_artifact_context(query_text: &str, query_token_list: &[String]) -> bool {
+    const MARKERS: [&str; 8] = [
+        "快速", "普通", "简单", "临时", "quick", "simple", "draft", "utility",
+    ];
+    MARKERS.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn should_defer_to_artifact_gate(
     record: &SkillRecord,
     query_text: &str,
@@ -2248,9 +2383,17 @@ fn should_defer_to_artifact_gate(
 
 fn should_suppress_non_target_artifact_gate(
     record: &SkillRecord,
+    query_text: &str,
     query_token_list: &[String],
 ) -> bool {
+    if record.slug == "design-md"
+        && has_design_contract_context(query_text, query_token_list)
+        && !has_design_contract_negation_context(query_text, query_token_list)
+    {
+        return false;
+    }
     record.gate_lower == "artifact"
+        && !is_meta_routing_task(query_text)
         && artifact_gate_target_slug(query_token_list)
             .map(|target| record.slug != target)
             .unwrap_or(false)
@@ -2327,6 +2470,16 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: skill-system subtraction or behavior-protocol reviews are framework routing tasks, not generic architecture reviews."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.gate_lower == "artifact" && is_meta_routing_task(query_text) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: meta-routing repair request should not be treated as artifact work."
                     .to_string(),
             ],
         };
@@ -2481,7 +2634,7 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    if should_suppress_non_target_artifact_gate(record, query_token_list) {
+    if should_suppress_non_target_artifact_gate(record, query_text, query_token_list) {
         return RouteCandidate {
             record,
             score: 0.0,
@@ -2630,6 +2783,54 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
+    if record.slug == "design-md"
+        && has_design_contract_negation_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: query explicitly says a design-system contract is not needed."
+                    .to_string(),
+            ],
+        };
+    }
+    let design_output_audit_context = has_design_output_audit_context(query_text, query_token_list);
+    let design_workflow_protocol_context =
+        has_design_workflow_protocol_context(query_text, query_token_list);
+    if record.slug == "design-output-auditor" && design_output_audit_context {
+        score += 44.0;
+        reasons.push(
+            "Design-output audit boost applied: UI drift, anti-pattern, or acceptance verdict wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "design-workflow-protocol" && design_workflow_protocol_context {
+        score += 44.0;
+        reasons.push(
+            "Design-workflow protocol boost applied: durable design artifact workflow wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "design-md"
+        && has_design_contract_context(query_text, query_token_list)
+        && !design_output_audit_context
+        && !design_workflow_protocol_context
+    {
+        if has_quick_artifact_context(query_text, query_token_list) {
+            score *= 0.65;
+            reasons.push(
+                "Design-md quick-task suppression applied: one-off artifact wording should not force a design contract."
+                    .to_string(),
+            );
+        } else {
+            score += 42.0;
+            reasons.push(
+                "Design-md boost applied: reusable visual contract or design-token wording detected."
+                    .to_string(),
+            );
+        }
+    }
 
     if explicit_framework_alias {
         score += 1000.0;
@@ -2746,6 +2947,36 @@ fn score_route_candidate<'a>(
 
     if record.owner_lower == "gate" && score > 0.0 {
         score += 2.0;
+    }
+
+    let visual_evidence_review_context =
+        has_visual_evidence_review_context(query_text, query_token_list);
+    let redesign_context = text_matches_phrase(query_token_list, "重新梳理")
+        || text_matches_phrase(query_token_list, "改版")
+        || text_matches_phrase(query_token_list, "redesign");
+
+    if record.slug == "frontend-design"
+        && first_turn
+        && visual_evidence_review_context
+        && !redesign_context
+    {
+        score *= 0.35;
+        reasons.push(
+            "Visual-evidence review preference applied: visible UI findings should hit visual-review before redesign."
+                .to_string(),
+        );
+    }
+
+    if record.slug == "visual-review"
+        && first_turn
+        && visual_evidence_review_context
+        && !redesign_context
+    {
+        score += 36.0;
+        reasons.push(
+            "Visual-review boost applied: visible UI evidence and concrete visual findings requested."
+                .to_string(),
+        );
     }
 
     if record.slug == "execution-controller-coding" {

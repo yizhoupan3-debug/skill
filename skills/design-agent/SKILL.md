@@ -4,8 +4,8 @@ description: |
   Route named-product design references and brand-plus-motion source grounding before implementation.
   Use when the user asks for a product to feel like Linear, Stripe, Apple, Vercel, or another named
   reference and explicitly wants reference sources, verified tokens, brand mapping, or borrowable
-  component/motion cues before any UI rewrite starts. Not for direct page redesign, CSS mechanics,
-  motion implementation, or screenshot review.
+  component/motion cues before any UI rewrite starts. Not for DESIGN.md artifact work,
+  direct page redesign, CSS mechanics, motion implementation, or screenshot review.
 routing_layer: L3
 routing_owner: gate
 routing_gate: none
@@ -19,6 +19,7 @@ trigger_hints:
   - Stripe 的品牌 token
   - liquid glass motion
   - 产品风格映射
+  - borrowable cues
 metadata:
   version: "0.1.0"
   platforms: [codex]
@@ -61,9 +62,9 @@ clear.
 
 ## Do not use
 
-- The user wants a structured generation prompt for their own UI request -> use `$design-prompt-enhancer`
+- The user wants a structured generation prompt for their own UI request -> use `$design-workflow`
 - The user already wants direct UI redesign or implementation -> use `$frontend-design`
-- The user wants to extract a reusable `DESIGN.md` from their own existing product surfaces -> use `$design-md`
+- The user wants to create/update/lint/diff/read/apply `DESIGN.md` or extract a reusable design-system contract from their own surfaces -> use `$design-md`
 - The request is specifically about Framer Motion, transitions, or micro-interactions -> use `$motion-design`
 - The task is CSS layout, tokens, responsive rules, or Tailwind mechanics -> use `$css-pro` or `$tailwind-pro`
 - The task depends on screenshots or visible artifact evidence -> use `$visual-review`
@@ -83,7 +84,7 @@ clear.
    - `risky`: likely to become imitation or conflict with the target product
 4. Produce a borrow / avoid / adapt decision map.
 5. Hand off to the narrowest downstream owner:
-   - `$design-prompt-enhancer` for structured generation prompts after the reference frame is settled
+   - `$design-workflow` for structured generation prompts after the reference frame is settled
    - `$design-md` for synthesizing the target product's own design source of truth
    - `$frontend-design` for visual direction
    - `$motion-design` for motion expression

@@ -34,10 +34,7 @@ use background_state::handle_background_state_operation;
 use browser_mcp::{
     resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
 };
-use cli_modes::{
-    dispatch_runtime_output_mode_stdio, enabled_runtime_output_mode_count,
-    handles_runtime_output_stdio_op, run_runtime_output_mode_cli,
-};
+use cli_modes::{dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op};
 use codex_hooks::{build_codex_hook_projection, run_codex_audit_hook, sync_host_entrypoints};
 use execution_contract::{
     build_execution_contract_bundle, build_execution_kernel_contracts_by_mode,
@@ -62,11 +59,10 @@ use framework_runtime::{
 use host_integration::run_host_integration_from_args;
 use route::{
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
-    build_search_results_payload, evaluate_routing_cases, load_inline_records, load_records,
-    load_records_cached_for_stdio, load_records_from_manifest, load_routing_eval_cases, route_task,
-    search_skills, MatchRow, RouteDecision, RouteDecisionSnapshotPayload,
-    RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SearchResultsPayload, SkillRecord,
-    ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
+    build_search_results_payload, load_inline_records, load_records, load_records_cached_for_stdio,
+    load_records_from_manifest, route_task, search_skills, MatchRow, RouteDecision,
+    RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload,
+    SearchResultsPayload, SkillRecord, ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
 };
 use runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
@@ -427,193 +423,6 @@ struct Cli {
     stdio_max_concurrency: Option<usize>,
     #[arg(long)]
     compute_threads: Option<usize>,
-    #[arg(long)]
-    route_snapshot_json: bool,
-    #[arg(long)]
-    execute_json: bool,
-    #[arg(long)]
-    runtime_integrator_json: bool,
-    #[arg(long)]
-    runtime_control_plane_json: bool,
-    #[arg(long)]
-    sandbox_control_json: bool,
-    #[arg(long)]
-    background_control_json: bool,
-    #[arg(long)]
-    background_state_json: bool,
-    #[arg(long)]
-    session_supervisor_json: bool,
-    #[arg(long)]
-    describe_transport_json: bool,
-    #[arg(long)]
-    describe_handoff_json: bool,
-    #[arg(long)]
-    checkpoint_resume_manifest_json: bool,
-    #[arg(long)]
-    runtime_checkpoint_control_plane_json: bool,
-    #[arg(long)]
-    write_transport_binding_json: bool,
-    #[arg(long)]
-    write_checkpoint_resume_manifest_json: bool,
-    #[arg(long)]
-    attach_runtime_event_transport_json: bool,
-    #[arg(long)]
-    subscribe_attached_runtime_events_json: bool,
-    #[arg(long)]
-    cleanup_attached_runtime_event_transport_json: bool,
-    #[arg(long)]
-    runtime_observability_exporter_json: bool,
-    #[arg(long)]
-    runtime_observability_metric_catalog_json: bool,
-    #[arg(long)]
-    runtime_observability_dashboard_json: bool,
-    #[arg(long)]
-    runtime_metric_record_json: bool,
-    #[arg(long)]
-    trace_record_event_json: bool,
-    #[arg(long)]
-    trace_stream_replay_json: bool,
-    #[arg(long)]
-    trace_stream_inspect_json: bool,
-    #[arg(long)]
-    trace_compact_json: bool,
-    #[arg(long)]
-    write_trace_compaction_delta_json: bool,
-    #[arg(long)]
-    write_trace_metadata_json: bool,
-    #[arg(long)]
-    framework_statusline: bool,
-    #[arg(long)]
-    control_plane_contracts_json: bool,
-    #[arg(long)]
-    routing_eval_json: bool,
-    #[arg(long)]
-    route_resolution_json: bool,
-    #[arg(long)]
-    cases: Option<PathBuf>,
-    #[arg(long)]
-    route_snapshot_input_json: Option<String>,
-    #[arg(long)]
-    execute_input_json: Option<String>,
-    #[arg(long)]
-    sandbox_control_input_json: Option<String>,
-    #[arg(long)]
-    background_control_input_json: Option<String>,
-    #[arg(long)]
-    background_state_input_json: Option<String>,
-    #[arg(long)]
-    session_supervisor_input_json: Option<String>,
-    #[arg(long)]
-    describe_transport_input_json: Option<String>,
-    #[arg(long)]
-    describe_handoff_input_json: Option<String>,
-    #[arg(long)]
-    checkpoint_resume_manifest_input_json: Option<String>,
-    #[arg(long)]
-    runtime_checkpoint_control_plane_input_json: Option<String>,
-    #[arg(long)]
-    write_transport_binding_input_json: Option<String>,
-    #[arg(long)]
-    write_checkpoint_resume_manifest_input_json: Option<String>,
-    #[arg(long)]
-    attach_runtime_event_transport_input_json: Option<String>,
-    #[arg(long)]
-    subscribe_attached_runtime_events_input_json: Option<String>,
-    #[arg(long)]
-    cleanup_attached_runtime_event_transport_input_json: Option<String>,
-    #[arg(long)]
-    runtime_metric_record_input_json: Option<String>,
-    #[arg(long)]
-    trace_record_event_input_json: Option<String>,
-    #[arg(long)]
-    trace_stream_replay_input_json: Option<String>,
-    #[arg(long)]
-    trace_stream_inspect_input_json: Option<String>,
-    #[arg(long)]
-    trace_compact_input_json: Option<String>,
-    #[arg(long)]
-    write_trace_compaction_delta_input_json: Option<String>,
-    #[arg(long)]
-    write_trace_metadata_input_json: Option<String>,
-    #[arg(long)]
-    route_resolution_input_json: Option<String>,
-}
-
-fn enabled_cli_output_modes(args: &Cli) -> Vec<&'static str> {
-    let mut modes = Vec::new();
-    macro_rules! push_mode {
-        ($enabled:expr, $name:literal) => {
-            if $enabled {
-                modes.push($name);
-            }
-        };
-    }
-
-    push_mode!(args.json, "--json");
-    push_mode!(args.stdio_json, "--stdio-json");
-    push_mode!(args.route_snapshot_json, "--route-snapshot-json");
-    push_mode!(args.execute_json, "--execute-json");
-    push_mode!(args.sandbox_control_json, "--sandbox-control-json");
-    push_mode!(args.background_control_json, "--background-control-json");
-    push_mode!(args.background_state_json, "--background-state-json");
-    push_mode!(args.session_supervisor_json, "--session-supervisor-json");
-    push_mode!(args.describe_transport_json, "--describe-transport-json");
-    push_mode!(args.describe_handoff_json, "--describe-handoff-json");
-    push_mode!(
-        args.checkpoint_resume_manifest_json,
-        "--checkpoint-resume-manifest-json"
-    );
-    push_mode!(
-        args.runtime_checkpoint_control_plane_json,
-        "--runtime-checkpoint-control-plane-json"
-    );
-    push_mode!(
-        args.write_transport_binding_json,
-        "--write-transport-binding-json"
-    );
-    push_mode!(
-        args.write_checkpoint_resume_manifest_json,
-        "--write-checkpoint-resume-manifest-json"
-    );
-    push_mode!(
-        args.attach_runtime_event_transport_json,
-        "--attach-runtime-event-transport-json"
-    );
-    push_mode!(
-        args.subscribe_attached_runtime_events_json,
-        "--subscribe-attached-runtime-events-json"
-    );
-    push_mode!(
-        args.cleanup_attached_runtime_event_transport_json,
-        "--cleanup-attached-runtime-event-transport-json"
-    );
-    push_mode!(args.trace_record_event_json, "--trace-record-event-json");
-    push_mode!(args.trace_stream_replay_json, "--trace-stream-replay-json");
-    push_mode!(
-        args.trace_stream_inspect_json,
-        "--trace-stream-inspect-json"
-    );
-    push_mode!(args.trace_compact_json, "--trace-compact-json");
-    push_mode!(
-        args.write_trace_compaction_delta_json,
-        "--write-trace-compaction-delta-json"
-    );
-    push_mode!(
-        args.write_trace_metadata_json,
-        "--write-trace-metadata-json"
-    );
-    push_mode!(args.framework_statusline, "--framework-statusline");
-    push_mode!(
-        args.control_plane_contracts_json,
-        "--control-plane-contracts-json"
-    );
-    push_mode!(args.routing_eval_json, "--routing-eval-json");
-    push_mode!(args.route_resolution_json, "--route-resolution-json");
-
-    for _ in 0..enabled_runtime_output_mode_count(args) {
-        modes.push("--runtime-output-json");
-    }
-    modes
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -931,25 +740,33 @@ fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
         })
 }
 
+fn repo_root_from_cargo_manifest_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
 fn manifest_fallback_path(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
-) -> Option<PathBuf> {
+) -> Result<Option<PathBuf>, String> {
     if let Some(path) = manifest_path {
         if path.exists() {
-            return Some(path.to_path_buf());
+            return Ok(Some(path.to_path_buf()));
         }
+        return Err(format!("manifest path does not exist: {}", path.display()));
     }
-    runtime_path
+    let fallback = runtime_path
         .and_then(Path::parent)
         .map(|parent| parent.join("SKILL_MANIFEST.json"))
         .filter(|path| path.exists())
         .or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .map(|cwd| cwd.join("skills").join("SKILL_MANIFEST.json"))
-                .filter(|path| path.exists())
-        })
+            Some(
+                repo_root_from_cargo_manifest_dir()
+                    .join("skills")
+                    .join("SKILL_MANIFEST.json"),
+            )
+            .filter(|path| path.exists())
+        });
+    Ok(fallback)
 }
 
 fn route_task_with_manifest_fallback(
@@ -971,7 +788,7 @@ fn route_task_with_manifest_fallback(
     if !should_retry_with_manifest(&hot_decision) {
         return Ok(hot_decision);
     }
-    let Some(fallback_path) = manifest_fallback_path(runtime_path, manifest_path) else {
+    let Some(fallback_path) = manifest_fallback_path(runtime_path, manifest_path)? else {
         return Ok(hot_decision);
     };
     let full_records = load_records_from_manifest(&fallback_path)?;
@@ -1011,7 +828,7 @@ fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         }
         RouterCommand::Search(command) => {
             let manifest_path =
-                manifest_fallback_path(command.runtime.as_deref(), command.manifest.as_deref());
+                manifest_fallback_path(command.runtime.as_deref(), command.manifest.as_deref())?;
             let records = if let Some(path) = manifest_path.as_deref() {
                 load_records_from_manifest(path)?
             } else {
@@ -1754,342 +1571,9 @@ fn main() -> Result<(), String> {
     if let Some(command) = args.command.clone() {
         return dispatch_router_command(command);
     }
-    let enabled_modes = enabled_cli_output_modes(&args);
-    if enabled_modes.len() > 1 {
-        return Err(format!(
-            "choose only one output mode; enabled: {}",
-            enabled_modes.join(", ")
-        ));
-    }
 
     if args.stdio_json {
         return run_stdio_json_loop(args.stdio_max_concurrency);
-    }
-
-    if args.sandbox_control_json {
-        let payload = serde_json::from_str::<SandboxControlRequestPayload>(
-            args.sandbox_control_input_json.as_deref().ok_or_else(|| {
-                "--sandbox-control-input-json is required with --sandbox-control-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse sandbox control input failed: {err}"))?;
-        print_json_value(&build_sandbox_control_response(payload)?)?;
-        return Ok(());
-    }
-
-    if args.background_control_json {
-        let payload = serde_json::from_str::<BackgroundControlRequestPayload>(
-            args.background_control_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--background-control-input-json is required with --background-control-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse background control input failed: {err}"))?;
-        print_json_value(&build_background_control_response(payload)?)?;
-        return Ok(());
-    }
-
-    if args.background_state_json {
-        let payload = serde_json::from_str::<Value>(
-            args.background_state_input_json.as_deref().ok_or_else(|| {
-                "--background-state-input-json is required with --background-state-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse background state input failed: {err}"))?;
-        print_json_value(&handle_background_state_operation(payload)?)?;
-        return Ok(());
-    }
-
-    if args.session_supervisor_json {
-        let payload = serde_json::from_str::<Value>(
-            args.session_supervisor_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--session-supervisor-input-json is required with --session-supervisor-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse session supervisor input failed: {err}"))?;
-        print_json_value(&handle_session_supervisor_operation(payload)?)?;
-        return Ok(());
-    }
-
-    if args.describe_transport_json {
-        let payload = serde_json::from_str::<Value>(
-            args.describe_transport_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--describe-transport-input-json is required with --describe-transport-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse describe transport input failed: {err}"))?;
-        print_json_value(&build_trace_transport_descriptor(payload)?)?;
-        return Ok(());
-    }
-
-    if args.describe_handoff_json {
-        let payload = serde_json::from_str::<Value>(
-            args.describe_handoff_input_json.as_deref().ok_or_else(|| {
-                "--describe-handoff-input-json is required with --describe-handoff-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse describe handoff input failed: {err}"))?;
-        print_json_value(&build_trace_handoff_descriptor(payload)?)?;
-        return Ok(());
-    }
-
-    if args.checkpoint_resume_manifest_json {
-        let payload = serde_json::from_str::<Value>(
-            args.checkpoint_resume_manifest_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--checkpoint-resume-manifest-input-json is required with --checkpoint-resume-manifest-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse checkpoint resume manifest input failed: {err}"))?;
-        print_json_value(&build_checkpoint_resume_manifest(payload)?)?;
-        return Ok(());
-    }
-
-    if args.runtime_checkpoint_control_plane_json {
-        let payload = serde_json::from_str::<Value>(
-            args.runtime_checkpoint_control_plane_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--runtime-checkpoint-control-plane-input-json is required with --runtime-checkpoint-control-plane-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse runtime checkpoint control plane input failed: {err}"))?;
-        print_json_value(&build_checkpoint_control_plane_compiler_payload(payload)?)?;
-        return Ok(());
-    }
-
-    if args.write_transport_binding_json {
-        let payload = serde_json::from_str::<Value>(
-            args.write_transport_binding_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--write-transport-binding-input-json is required with --write-transport-binding-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse write transport binding input failed: {err}"))?;
-        print_json_value(&write_transport_binding_payload(payload)?)?;
-        return Ok(());
-    }
-
-    if args.write_checkpoint_resume_manifest_json {
-        let payload = serde_json::from_str::<Value>(
-            args.write_checkpoint_resume_manifest_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--write-checkpoint-resume-manifest-input-json is required with --write-checkpoint-resume-manifest-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse write checkpoint resume manifest input failed: {err}"))?;
-        print_json_value(&write_checkpoint_resume_manifest_payload(payload)?)?;
-        return Ok(());
-    }
-
-    if args.attach_runtime_event_transport_json {
-        let payload = serde_json::from_str::<Value>(
-            args.attach_runtime_event_transport_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--attach-runtime-event-transport-input-json is required with --attach-runtime-event-transport-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse attach runtime event transport input failed: {err}"))?;
-        print_json_value(&attach_runtime_event_transport(payload)?)?;
-        return Ok(());
-    }
-
-    if args.subscribe_attached_runtime_events_json {
-        let payload = serde_json::from_str::<Value>(
-            args.subscribe_attached_runtime_events_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--subscribe-attached-runtime-events-input-json is required with --subscribe-attached-runtime-events-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse subscribe attached runtime events input failed: {err}"))?;
-        print_json_value(&subscribe_attached_runtime_events(payload)?)?;
-        return Ok(());
-    }
-
-    if args.cleanup_attached_runtime_event_transport_json {
-        let payload = serde_json::from_str::<Value>(
-            args.cleanup_attached_runtime_event_transport_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--cleanup-attached-runtime-event-transport-input-json is required with --cleanup-attached-runtime-event-transport-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse attached runtime event cleanup input failed: {err}"))?;
-        print_json_value(&cleanup_attached_runtime_event_transport(payload)?)?;
-        return Ok(());
-    }
-
-    if run_runtime_output_mode_cli(&args)? {
-        return Ok(());
-    }
-
-    if args.trace_stream_replay_json {
-        let payload = serde_json::from_str::<TraceStreamReplayRequestPayload>(
-            args.trace_stream_replay_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--trace-stream-replay-input-json is required with --trace-stream-replay-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse trace stream replay input failed: {err}"))?;
-        print_json_value(&replay_trace_stream(payload)?)?;
-        return Ok(());
-    }
-
-    if args.trace_record_event_json {
-        let payload =
-            serde_json::from_str(args.trace_record_event_input_json.as_deref().ok_or_else(
-                || {
-                    "--trace-record-event-input-json is required with --trace-record-event-json"
-                        .to_string()
-                },
-            )?)
-            .map_err(|err| format!("parse trace record event input failed: {err}"))?;
-        print_json_value(&record_trace_event(payload)?)?;
-        return Ok(());
-    }
-
-    if args.trace_stream_inspect_json {
-        let payload = serde_json::from_str::<TraceStreamInspectRequestPayload>(
-            args.trace_stream_inspect_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--trace-stream-inspect-input-json is required with --trace-stream-inspect-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse trace stream inspect input failed: {err}"))?;
-        print_json_value(&inspect_trace_stream(payload)?)?;
-        return Ok(());
-    }
-
-    if args.trace_compact_json {
-        let payload =
-            serde_json::from_str(args.trace_compact_input_json.as_deref().ok_or_else(|| {
-                "--trace-compact-input-json is required with --trace-compact-json".to_string()
-            })?)
-            .map_err(|err| format!("parse trace compact input failed: {err}"))?;
-        print_json_value(&compact_trace_stream(payload)?)?;
-        return Ok(());
-    }
-
-    if args.write_trace_compaction_delta_json {
-        let payload = serde_json::from_str::<TraceCompactionDeltaWriteRequestPayload>(
-            args.write_trace_compaction_delta_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--write-trace-compaction-delta-input-json is required with --write-trace-compaction-delta-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse trace compaction delta write input failed: {err}"))?;
-        print_json_value(&write_trace_compaction_delta(payload)?)?;
-        return Ok(());
-    }
-
-    if args.write_trace_metadata_json {
-        let payload = serde_json::from_str::<TraceMetadataWriteRequestPayload>(
-            args.write_trace_metadata_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--write-trace-metadata-input-json is required with --write-trace-metadata-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse trace metadata write input failed: {err}"))?;
-        print_json_value(&write_trace_metadata(payload)?)?;
-        return Ok(());
-    }
-
-    if args.framework_statusline {
-        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!("{}", build_framework_statusline(&repo_root)?);
-        return Ok(());
-    }
-
-    if args.control_plane_contracts_json {
-        print_json_value(&build_control_plane_contract_descriptors())?;
-        return Ok(());
-    }
-
-    if args.route_resolution_json {
-        let payload = serde_json::from_str::<Value>(
-            args.route_resolution_input_json.as_deref().ok_or_else(|| {
-                "--route-resolution-input-json is required with --route-resolution-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse route resolution input failed: {err}"))?;
-        print_json_value(&dispatch_stdio_route_resolution(payload)?)?;
-        return Ok(());
-    }
-
-    if args.route_snapshot_json {
-        let payload = serde_json::from_str::<RouteSnapshotRequestPayload>(
-            args.route_snapshot_input_json.as_deref().ok_or_else(|| {
-                "--route-snapshot-input-json is required with --route-snapshot-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse route snapshot input failed: {err}"))?;
-        let snapshot = build_route_snapshot(
-            &payload.engine,
-            &payload.selected_skill,
-            payload.overlay_skill.as_deref(),
-            &payload.layer,
-            payload.score,
-            &payload.reasons,
-        );
-        let envelope = RouteSnapshotEnvelopePayload {
-            snapshot_schema_version: ROUTE_SNAPSHOT_SCHEMA_VERSION.to_string(),
-            authority: ROUTE_AUTHORITY.to_string(),
-            route_snapshot: snapshot,
-        };
-        print_json_value(&envelope)?;
-        return Ok(());
-    }
-
-    if args.execute_json {
-        let payload = serde_json::from_str::<ExecuteRequestPayload>(
-            args.execute_input_json.as_deref().ok_or_else(|| {
-                "--execute-input-json is required with --execute-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse execute input failed: {err}"))?;
-        let response = execute_request(payload)?;
-        print_json_value(&response)?;
-        return Ok(());
-    }
-
-    if args.routing_eval_json {
-        let cases_path = args
-            .cases
-            .as_deref()
-            .ok_or_else(|| "--cases is required with --routing-eval-json".to_string())?;
-        let records = load_records(args.runtime.as_deref(), args.manifest.as_deref())?;
-        let payload = load_routing_eval_cases(cases_path)?;
-        let report = evaluate_routing_cases(&records, payload)?;
-        print_json_value(&report)?;
-        return Ok(());
     }
 
     Err("missing router-rs command; use `router-rs --help` for canonical subcommands".to_string())
@@ -2319,7 +1803,7 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
     let manifest_fallback =
-        manifest_fallback_path(runtime_path.as_deref(), manifest_path.as_deref());
+        manifest_fallback_path(runtime_path.as_deref(), manifest_path.as_deref())?;
     let owned_records;
     let cached_records;
     let records: &[SkillRecord] = if let Some(path) = manifest_fallback.as_deref() {
@@ -6566,7 +6050,8 @@ fn write_trace_compaction_delta(
 mod tests {
     use super::*;
     use crate::route::{
-        load_records_cached_for_stdio_with_default_runtime_path, read_json, value_to_string,
+        evaluate_routing_cases, load_records_cached_for_stdio_with_default_runtime_path,
+        load_routing_eval_cases, read_json, value_to_string,
     };
     use std::collections::HashMap;
     use std::sync::Arc;
