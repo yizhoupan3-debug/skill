@@ -17,8 +17,8 @@ pub(crate) const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2"
 pub(crate) const ROUTE_RESOLUTION_SCHEMA_VERSION: &str = "router-rs-route-resolution-v1";
 pub(crate) const ROUTE_AUTHORITY: &str = "rust-route-core";
 pub(crate) const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
-const OVERLAY_ONLY_SKILLS: [&str; 3] = ["execution-audit", "humanizer", "i18n-l10n"];
-const ARTIFACT_GATE_PHRASES: [&str; 12] = [
+const OVERLAY_ONLY_SKILLS: [&str; 2] = ["execution-audit", "i18n-l10n"];
+const ARTIFACT_GATE_PHRASES: [&str; 16] = [
     "pdf",
     "docx",
     "xlsx",
@@ -31,6 +31,10 @@ const ARTIFACT_GATE_PHRASES: [&str; 12] = [
     "表格",
     "工作簿",
     "幻灯片",
+    "演示文稿",
+    "presentation",
+    "deck",
+    "slide deck",
 ];
 const PARALLEL_RECORD_SCAN_MIN: usize = 48;
 #[cfg(test)]
@@ -941,6 +945,11 @@ fn common_route_stop_tokens() -> &'static [&'static str] {
         "我一个",
         "写一",
         "写一个",
+        "写",
+        "做",
+        "做一个",
+        "部署",
+        "文件",
         "看这",
         "这张",
         "然后",
@@ -952,7 +961,10 @@ fn common_route_stop_tokens() -> &'static [&'static str] {
 }
 
 fn is_meta_routing_task(query_text: &str) -> bool {
-    (query_text.contains("skill") || query_text.contains("skill.md"))
+    (query_text.contains("skill")
+        || query_text.contains("skill.md")
+        || query_text.contains("runtime")
+        || query_text.contains("框架"))
         && [
             "路由",
             "触发",
@@ -965,6 +977,15 @@ fn is_meta_routing_task(query_text: &str) -> bool {
             "行为驱动",
             "第一性原理",
             "减法",
+            "轻量化",
+            "兼容层",
+            "胶水层",
+            "减少入口",
+            "减入口",
+            "不损害功能",
+            "加重负担",
+            "没有用",
+            "runtime 轻量化",
             "讨论-规划-执行-验证",
         ]
         .iter()
@@ -972,7 +993,10 @@ fn is_meta_routing_task(query_text: &str) -> bool {
 }
 
 fn has_skill_subtraction_behavior_context(query_text: &str) -> bool {
-    (query_text.contains("skill") || query_text.contains("skill.md"))
+    (query_text.contains("skill")
+        || query_text.contains("skill.md")
+        || query_text.contains("runtime")
+        || query_text.contains("框架"))
         && [
             "行为驱动",
             "讨论-规划-执行-验证",
@@ -981,6 +1005,14 @@ fn has_skill_subtraction_behavior_context(query_text: &str) -> bool {
             "减法",
             "第一性原理",
             "抽象",
+            "轻量化",
+            "兼容层",
+            "胶水层",
+            "减少入口",
+            "减入口",
+            "不损害功能",
+            "加重负担",
+            "没有用",
         ]
         .iter()
         .any(|marker| query_text.contains(marker))
@@ -1029,6 +1061,162 @@ fn has_checklist_normalization_context(query_text: &str) -> bool {
         ]
         .iter()
         .any(|marker| query_text.contains(marker))
+}
+
+fn has_skill_creator_context(query_text: &str, query_token_list: &[String]) -> bool {
+    (query_text.contains("skill") || query_text.contains("skill.md"))
+        && [
+            "创建",
+            "新建",
+            "写一个",
+            "写个",
+            "做一个",
+            "做个",
+            "create",
+            "author",
+            "scaffold",
+            "update",
+            "revise",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_skill_installer_context(query_text: &str, query_token_list: &[String]) -> bool {
+    query_text.contains("skill")
+        && [
+            "安装",
+            "装一下",
+            "装一个",
+            "装个",
+            "导入",
+            "引入",
+            "install",
+            "installed",
+            "curated",
+            "github",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_planning_only_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "先给我方案",
+        "先做方案",
+        "先出方案",
+        "给我方案",
+        "技术方案",
+        "路线比较",
+        "先别写代码",
+        "不要写代码",
+        "先探索",
+        "assumptions",
+        "open questions",
+        "decision log",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_skill_framework_maintenance_context(query_text: &str, query_token_list: &[String]) -> bool {
+    (query_text.contains("skill")
+        || query_text.contains("skill.md")
+        || query_text.contains("runtime")
+        || query_text.contains("框架"))
+        && [
+            "不好用",
+            "持续优化",
+            "外部调研",
+            "路由没触发",
+            "触发不准",
+            "优化 skill",
+            "framework",
+            "routing",
+            "skill 系统",
+            "skill系统",
+            "轻量化",
+            "兼容层",
+            "胶水层",
+            "减少入口",
+            "减入口",
+            "不损害功能",
+            "加重负担",
+            "没有用",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_runtime_lightweighting_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "runtime 轻量化",
+        "轻量化",
+        "兼容层",
+        "胶水层",
+        "减少入口",
+        "减入口",
+        "不损害功能",
+        "加重负担",
+        "没有用",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_humanizer_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "润色",
+        "润色得自然",
+        "自然一点",
+        "改自然",
+        "自然化",
+        "文本精修",
+        "表达优化",
+        "去模板腔",
+        "像人写的",
+        "humanize",
+        "aigc",
+        "ai 味",
+        "ai味",
+        "ai 感",
+        "逐句评估",
+        "哪些句子",
+        "普通说明",
+        "说明文字",
+        "普通写作",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_copywriting_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "ux 微文案",
+        "ux",
+        "微文案",
+        "空状态",
+        "cta",
+        "转化",
+        "转化率",
+        "点击创建",
+        "创建项目",
+        "广告词",
+        "产品卖点",
+        "落地页",
+        "品牌故事",
+        "copywriting",
+        "in-app microcopy",
+        "tagline",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
 }
 
 fn wordlike_token_regex() -> &'static Regex {
@@ -1153,6 +1341,9 @@ fn gate_hint_phrases(gate: &str) -> Vec<String> {
             "subagent".to_string(),
             "delegation".to_string(),
             "并行 sidecar".to_string(),
+            "multiagent".to_string(),
+            "multi-agent".to_string(),
+            "多 agent".to_string(),
             "子代理".to_string(),
             "主线程".to_string(),
             "local-supervisor".to_string(),
@@ -1895,6 +2086,11 @@ fn has_bounded_subagent_context(query_text: &str, query_token_list: &[String]) -
         "subagent",
         "subagents",
         "delegation plan",
+        "multiagent",
+        "multi-agent",
+        "多 agent",
+        "多 agent 执行",
+        "多 agent 路由",
         "bounded sidecar",
         "bounded sidecars",
         "bounded subagent",
@@ -2016,6 +2212,65 @@ fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String
     })
 }
 
+fn has_paper_direct_revision_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    if [
+        "该删就删",
+        "藏到附录",
+        "改到能投",
+        "根据 reviewer comments 修改论文",
+        "根据 reviewer comments 改论文",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    }) {
+        return false;
+    }
+    [
+        "别先给方案",
+        "直接进入修改",
+        "直接改稿",
+        "不要再审",
+        "只进改稿",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_paper_workbench_frontdoor_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    [
+        "整体推进这篇论文",
+        "现在该审",
+        "该审",
+        "该改",
+        "该补实验",
+        "怎么处理",
+        "先审再改",
+        "改到能投",
+        "该删就删",
+        "藏到附录",
+        "根据 reviewer comments 修改论文",
+        "根据 reviewer comments 改论文",
+        "能不能投",
+        "整篇严审",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
@@ -2088,6 +2343,30 @@ fn has_paper_figure_layout_review_context(query_text: &str, query_token_list: &[
     })
 }
 
+fn has_paper_logic_evidence_review_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    let logic_markers = [
+        "claim",
+        "claims",
+        "evidence",
+        "证据",
+        "支撑",
+        "实验支撑",
+        "对齐",
+        "够不够",
+    ];
+    let review_markers = ["看", "检查", "评估", "review", "审", "别润色"];
+    logic_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    }) && review_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
@@ -2113,6 +2392,61 @@ fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[St
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
     }) && story_or_write_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_literature_corpus_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if has_paper_workbench_frontdoor_context(query_text, query_token_list)
+        || has_paper_review_judgment_context(query_text, query_token_list)
+        || has_paper_review_revision_intent(query_text, query_token_list)
+    {
+        return false;
+    }
+    [
+        "下载ref",
+        "下载 ref",
+        "目标期刊",
+        "相近文章",
+        "找20篇",
+        "20篇",
+        "ref",
+        "reference corpus",
+        "target journal references",
+        "comparable papers",
+        "对比表",
+        "写作套路",
+        "搜 arxiv",
+        "semantic scholar",
+        "文献",
+        "论文",
+        "literature review",
+        "related work",
+        "novelty check",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_design_reference_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "参考源",
+        "verified tokens",
+        "品牌 token",
+        "stripe",
+        "linear",
+        "apple",
+        "vercel",
+        "liquid glass motion",
+        "产品风格映射",
+        "borrowable cues",
+    ]
+    .iter()
+    .any(|marker| {
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
     })
@@ -2152,6 +2486,17 @@ fn has_external_retrieval_context(query_text: &str, query_token_list: &[String])
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
     })
+}
+
+fn has_general_information_retrieval_context(
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
+    has_external_retrieval_context(query_text, query_token_list)
+        && !has_paper_context(query_text, query_token_list)
+        && !has_research_workbench_context(query_text, query_token_list)
+        && !has_literature_corpus_context(query_text, query_token_list)
+        && !has_skill_framework_maintenance_context(query_text, query_token_list)
 }
 
 fn has_autoresearch_loop_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -2250,7 +2595,10 @@ fn artifact_gate_target_slug(query_token_list: &[String]) -> Option<&'static str
                 "slides",
                 "powerpoint",
                 "presentation",
+                "deck",
+                "slide deck",
                 "幻灯片",
+                "演示文稿",
             ],
         ),
         ("doc", &["docx", "word 文档", "word 文件"]),
@@ -2399,6 +2747,16 @@ fn should_suppress_non_target_artifact_gate(
             .unwrap_or(false)
 }
 
+fn should_prefer_design_contract_over_artifact(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
+    record.slug == "slides"
+        && has_design_contract_context(query_text, query_token_list)
+        && !has_design_contract_negation_context(query_text, query_token_list)
+}
+
 pub(crate) fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let base = RouteExecutionPolicyPayload {
@@ -2507,6 +2865,57 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
+    if record.slug == "skill-creator" && has_skill_creator_context(query_text, query_token_list) {
+        score += 70.0;
+        reasons.push(
+            "Skill-creator boost applied: concrete skill authoring or SKILL.md revision wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "skill-installer" && has_skill_installer_context(query_text, query_token_list)
+    {
+        score += 70.0;
+        reasons.push(
+            "Skill-installer boost applied: skill installation or import wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "skill-framework-developer"
+        && has_skill_framework_maintenance_context(query_text, query_token_list)
+    {
+        score += 70.0;
+        reasons.push(
+            "Skill-framework boost applied: skill-library maintenance or skill-quality repair wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "idea-to-plan" && has_planning_only_context(query_text, query_token_list) {
+        score += 44.0;
+        reasons.push(
+            "Idea-to-plan boost applied: user asks for planning before implementation.".to_string(),
+        );
+    }
+    if record.slug == "plan-to-code" && has_planning_only_context(query_text, query_token_list) {
+        score *= 0.25;
+        reasons.push(
+            "Plan-to-code suppression applied: planning-only wording should not execute code."
+                .to_string(),
+        );
+    }
+    if record.slug == "humanizer" && has_humanizer_context(query_text, query_token_list) {
+        score += 56.0;
+        reasons.push(
+            "Humanizer boost applied: prose naturalization or sentence-level AI-flavor audit detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "copywriting" && has_copywriting_context(query_text, query_token_list) {
+        score += 56.0;
+        reasons.push(
+            "Copywriting boost applied: conversion-oriented UX or marketing copy wording detected."
+                .to_string(),
+        );
+    }
     let literal_framework_alias = framework_alias_requires_explicit_call(&record.slug)
         && has_literal_framework_alias_call(query_text, &record.slug);
     let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
@@ -2587,6 +2996,80 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if record.slug == "information-retrieval"
+        && has_literature_corpus_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: academic paper search or target-journal corpus work belongs to literature-synthesis."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "information-retrieval"
+        && has_design_reference_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: named-product design reference grounding belongs to design-agent."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "design-workflow" && has_humanizer_context(query_text, query_token_list) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: prose AI-flavor wording is humanizer work, not design workflow."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "design-md"
+        && has_humanizer_context(query_text, query_token_list)
+        && !has_design_contract_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: prose naturalization should not route through the design artifact gate."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "execution-controller-app"
+        && !query_text.contains("app 全局")
+        && !query_text.contains("全栈")
+        && !query_text.contains("跨栈")
+        && !query_text.contains("app深度")
+        && !query_text.contains(".app_supervisor_state.json")
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: bare App wording is not whole-app orchestration.".to_string(),
+            ],
+        };
+    }
+    if record.slug == "native-app-debugging"
+        && has_copywriting_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: UX marketing or microcopy wording belongs to copywriting, not native-app debugging."
+                    .to_string(),
+            ],
+        };
+    }
     if record.slug == "research-workbench"
         && has_autoresearch_loop_context(query_text, query_token_list)
     {
@@ -2644,6 +3127,15 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if should_prefer_design_contract_over_artifact(record, query_text, query_token_list) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: reusable design contract must precede slide authoring.".to_string(),
+            ],
+        };
+    }
     if record.slug == "architect-review"
         && has_external_retrieval_context(query_text, query_token_list)
         && !query_text.contains("架构")
@@ -2696,9 +3188,9 @@ fn score_route_candidate<'a>(
         };
     }
     if record.slug == "information-retrieval"
-        && has_external_retrieval_context(query_text, query_token_list)
+        && has_general_information_retrieval_context(query_text, query_token_list)
     {
-        score += 28.0;
+        score += 62.0;
         reasons.push(
             "Information-retrieval boost applied: external research, ecosystem comparison, or technology-selection wording detected."
                 .to_string(),
@@ -2722,6 +3214,15 @@ fn score_route_candidate<'a>(
         );
     }
     if record.slug == "paper-workbench"
+        && has_paper_workbench_frontdoor_context(query_text, query_token_list)
+    {
+        score += 54.0;
+        reasons.push(
+            "Paper-workbench boost applied: manuscript front-door workflow or next-step triage detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "paper-workbench"
         && has_paper_review_judgment_context(query_text, query_token_list)
     {
         score += 36.0;
@@ -2739,6 +3240,33 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
+    if record.slug == "paper-reviewer"
+        && has_paper_logic_evidence_review_context(query_text, query_token_list)
+    {
+        score += 72.0;
+        reasons.push(
+            "Paper-reviewer boost applied: claim/evidence alignment review requested.".to_string(),
+        );
+    }
+    if record.slug == "paper-reviewer"
+        && has_paper_review_judgment_context(query_text, query_token_list)
+        && query_text.contains("别润色")
+    {
+        score += 74.0;
+        reasons.push(
+            "Paper-reviewer boost applied: claim/evidence review-only paper judgment requested."
+                .to_string(),
+        );
+    }
+    if record.slug == "paper-reviser"
+        && has_paper_direct_revision_context(query_text, query_token_list)
+    {
+        score += 82.0;
+        reasons.push(
+            "Paper-reviser boost applied: direct reviewer-comment manuscript revision requested."
+                .to_string(),
+        );
+    }
     if record.slug == "paper-reviewer" && has_paper_writing_context(query_text, query_token_list) {
         return RouteCandidate {
             record,
@@ -2753,6 +3281,16 @@ fn score_route_candidate<'a>(
         score += 40.0;
         reasons.push(
             "Paper-writing boost applied: bounded manuscript prose polish or storyline wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "literature-synthesis"
+        && has_literature_corpus_context(query_text, query_token_list)
+        && !has_paper_ref_first_workflow_context(query_text, query_token_list)
+    {
+        score += 58.0;
+        reasons.push(
+            "Literature-synthesis boost applied: academic literature search or target-journal corpus requested."
                 .to_string(),
         );
     }
@@ -2780,6 +3318,15 @@ fn score_route_candidate<'a>(
         score += 60.0;
         reasons.push(
             "Skill-framework boost applied: skill-system routing, behavior protocol, subtraction, or abstraction wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "skill-framework-developer"
+        && has_runtime_lightweighting_context(query_text, query_token_list)
+    {
+        score += 74.0;
+        reasons.push(
+            "Skill-framework boost applied: runtime lightweighting, compatibility-layer, glue-layer, or entrypoint-reduction wording detected."
                 .to_string(),
         );
     }
@@ -2812,6 +3359,13 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
+    if record.slug == "design-agent" && has_design_reference_context(query_text, query_token_list) {
+        score += 74.0;
+        reasons.push(
+            "Design-agent boost applied: named-product reference source grounding requested."
+                .to_string(),
+        );
+    }
     if record.slug == "design-md"
         && has_design_contract_context(query_text, query_token_list)
         && !design_output_audit_context
@@ -2831,7 +3385,6 @@ fn score_route_candidate<'a>(
             );
         }
     }
-
     if explicit_framework_alias {
         score += 1000.0;
         reasons.push("Framework alias entrypoint matched explicitly.".to_string());
@@ -2843,7 +3396,10 @@ fn score_route_candidate<'a>(
         );
     }
 
-    if !record.slug_lower.is_empty() && query_text.contains(&record.slug_lower) {
+    if !record.slug_lower.is_empty()
+        && (text_matches_phrase(query_token_list, &record.slug_lower)
+            || query_text.contains(&format!("${}", record.slug_lower)))
+    {
         score += 100.0;
         reasons.push(format!("Exact skill name matched: {}.", record.slug));
     }
@@ -3001,6 +3557,9 @@ fn score_route_candidate<'a>(
             "delegation",
             "子代理",
             "并行 sidecar",
+            "multiagent",
+            "multi-agent",
+            "多 agent",
         ]
         .iter()
         .any(|marker| query_text.contains(*marker));
@@ -3200,6 +3759,9 @@ fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
     if let Some(record) = records.iter().find(|record| record.slug == "plan-to-code") {
         return Ok(record);
     }
+    if let Some(record) = records.iter().find(|record| can_be_fallback_owner(record)) {
+        return Ok(record);
+    }
     let primary_owners = records
         .iter()
         .filter(|record| can_be_fallback_owner(record))
@@ -3226,6 +3788,11 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
         .cloned()
         .collect::<Vec<_>>();
     owner_candidates.sort_unstable_by(route_candidate_cmp);
+    if let Some(top_owner) = owner_candidates.first() {
+        if top_owner.score >= 60.0 {
+            return top_owner.clone();
+        }
+    }
     let top_owner_score = owner_candidates
         .first()
         .map(|candidate| candidate.score)

@@ -58,6 +58,54 @@
       "n/a"
     ],
     [
+      "idea-to-plan",
+      "L1",
+      "owner",
+      "none",
+      "Turn ambiguous ideas into evidence-backed plans before implementation.",
+      [
+        "先给我方案",
+        "先做方案",
+        "技术方案",
+        "先别写代码"
+      ],
+      100,
+      "P2",
+      "preferred"
+    ],
+    [
+      "skill-creator",
+      "L0",
+      "owner",
+      "none",
+      "Design or revise one Codex skill package.",
+      [
+        "create skill",
+        "创建 skill",
+        "新建 skill",
+        "写一个 skill"
+      ],
+      96.4,
+      "P1",
+      "preferred"
+    ],
+    [
+      "skill-installer",
+      "L0",
+      "owner",
+      "none",
+      "Install curated or remote Codex skills.",
+      [
+        "install skill",
+        "安装 skill",
+        "导入 skill",
+        "github skill"
+      ],
+      97,
+      "P1",
+      "preferred"
+    ],
+    [
       "python-pro",
       "L4",
       "owner",
@@ -71,6 +119,43 @@
       98,
       "P2",
       "n/a"
+    ],
+    [
+      "docker",
+      "L3",
+      "owner",
+      "none",
+      "Produce minimal, secure Docker images with correct layer caching, multi-stage builds, health checks, and Compose orchestration.",
+      [
+        "Docker",
+        "Dockerfile",
+        "docker-compose",
+        "容器化",
+        "Docker 部署"
+      ],
+      90.9,
+      "P2",
+      "n/a"
+    ],
+    [
+      "slides",
+      "L3",
+      "gate",
+      "artifact",
+      "Root-level entry proxy for the presentation-artifact gate.",
+      [
+        "PPT",
+        "pptx",
+        "做个PPT",
+        "生成演示文稿",
+        "slides",
+        "PowerPoint",
+        "presentation deck",
+        "presentation"
+      ],
+      100,
+      "P1",
+      "required"
     ],
     [
       "anti-laziness",
@@ -425,12 +510,66 @@
       }
     },
     {
+      "name": "dockerfile-does-not-hit-doc-artifact-gate",
+      "query": "写一个 Dockerfile 部署 FastAPI",
+      "expected": {
+        "selected_skill": "docker",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "chinese-presentation-hits-slides-gate",
+      "query": "帮我做一个演示文稿",
+      "expected": {
+        "selected_skill": "slides",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
       "name": "gate-precedence",
       "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
       "expected": {
         "selected_skill": "subagent-delegation",
         "overlay_skill": null,
         "layer": "L0"
+      }
+    },
+    {
+      "name": "generic-multi-agent-hits-delegation-gate",
+      "query": "需要多 agent 执行",
+      "expected": {
+        "selected_skill": "subagent-delegation",
+        "overlay_skill": null,
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "skill-creation-chinese-hits-skill-creator",
+      "query": "创建一个 skill",
+      "expected": {
+        "selected_skill": "skill-creator",
+        "overlay_skill": null,
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "skill-install-chinese-hits-skill-installer",
+      "query": "安装 skill",
+      "expected": {
+        "selected_skill": "skill-installer",
+        "overlay_skill": null,
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "planning-only-hits-idea-to-plan",
+      "query": "先给我方案",
+      "expected": {
+        "selected_skill": "idea-to-plan",
+        "overlay_skill": null,
+        "layer": "L1"
       }
     },
     {
@@ -475,7 +614,7 @@
       "expected": {
         "selected_skill": "checklist-planner",
         "overlay_skill": null,
-        "layer": "L1"
+        "layer": "L2"
       }
     },
     {

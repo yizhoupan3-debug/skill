@@ -111,6 +111,44 @@
       "first_turn": true
     },
     {
+      "id": "skill-framework-runtime-lightweighting-review",
+      "category": "should-trigger",
+      "task": "核查我现在的runtime，什么部分是没有用的或者加重负担的，值得去掉的？",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "backend-runtime-debugging",
+        "plan-to-code"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "skill-framework-compat-glue-entrypoint-plan",
+      "category": "should-trigger",
+      "task": "继续深度诊断，写更周密的可执行计划，我希望更加轻量化，减少兼容层和胶水层，减少入口，不要损害功能",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "backend-runtime-debugging",
+        "plan-to-code"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "backend-runtime-failure-still-routes-to-debugging",
+      "category": "should-trigger",
+      "task": "后端 Rust 服务运行时 OOM 并且请求一直 hang，先诊断 traceback、deadlock 和资源泄漏",
+      "focus_skill": "backend-runtime-debugging",
+      "expected_owner": "backend-runtime-debugging",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "skill-framework-developer"
+      ],
+      "first_turn": true
+    },
+    {
       "id": "openai-docs-source-gate-case",
       "category": "should-trigger",
       "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
@@ -186,6 +224,56 @@
       "expected_overlay": null,
       "forbidden_owners": [
         "systematic-debugging"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "skill-creator-chinese-first-turn-case",
+      "category": "should-trigger",
+      "task": "创建一个 skill，帮我把触发词和 frontmatter 写好。",
+      "focus_skill": "skill-creator",
+      "expected_owner": "skill-creator",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "plan-to-code",
+        "skill-framework-developer"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "skill-installer-chinese-first-turn-case",
+      "category": "should-trigger",
+      "task": "安装 skill，从 GitHub repo 里导入一个新的 Codex skill。",
+      "focus_skill": "skill-installer",
+      "expected_owner": "skill-installer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "plan-to-code",
+        "skill-framework-developer"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "generic-planning-only-first-turn-case",
+      "category": "should-trigger",
+      "task": "先给我方案，不要写代码，列出假设、open questions 和 decision log。",
+      "focus_skill": "idea-to-plan",
+      "expected_owner": "idea-to-plan",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "plan-to-code"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "generic-multi-agent-delegation-gate-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。",
+      "focus_skill": "subagent-delegation",
+      "expected_owner": "subagent-delegation",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "agent-swarm-orchestration"
       ],
       "first_turn": true
     },

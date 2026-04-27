@@ -4,6 +4,7 @@
 
 - `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.codex/skills` 当成主路径前提。
 - system skill 放 `skills/.system/`。不要同时保留两份 live source。
+- `~/.codex/skills` 只是 Codex/App/CLI 共用的轻量安装面，指向 `artifacts/codex-skill-surface/skills`。这个投影由 Rust host integration 生成，只放热路由和显式命令入口；没有独立 `SKILL.md` 的框架命令（例如 `autopilot`、`team`）会投到 `skill-framework-developer`，不要在这里手写或修 skill。
 
 ## 新增 Skill 最小清单
 
@@ -31,6 +32,7 @@
 - 触发词是否变化 → 更新 description
 - 边界是否变化 → 重新运行 Rust skill compiler `--apply`
 - 是否引入第二份 live source → 删除多余副本
+- 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `router-rs codex host-integration install-skills --repo-root /Users/joe/Documents/skill install codex`，不要手动改 `~/.codex/skills`
 
 ## 边界重叠处理
 

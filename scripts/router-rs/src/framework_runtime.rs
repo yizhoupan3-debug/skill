@@ -2049,17 +2049,21 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         || object_has_any_signal(&snapshot.evidence_index)
         || object_has_any_signal(&snapshot.trace_metadata)
         || !supervisor.is_empty();
-    let state = if !has_any_runtime_signal {
+    let has_missing_recovery_anchors = !missing_recovery_anchors.is_empty();
+    let state = if !has_any_runtime_signal || (task.is_empty() && has_missing_recovery_anchors) {
         "missing"
     } else if !inconsistency_reasons.is_empty() {
         "inconsistent"
     } else if !terminal_reasons.is_empty() {
         "completed"
+    } else if has_missing_recovery_anchors {
+        "inconsistent"
     } else if !stale_reasons.is_empty() {
         "stale"
     } else {
         "active"
     };
+    let can_resume = state == "active" && !has_missing_recovery_anchors && !task.is_empty();
     let recovery_hints = match state {
         "missing" => json!([
             "Refresh SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity."
@@ -2080,7 +2084,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
     };
     json!({
         "state": state,
-        "can_resume": state == "active",
+        "can_resume": can_resume,
         "task": task,
         "phase": phase,
         "status": status,

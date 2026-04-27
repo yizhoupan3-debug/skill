@@ -734,10 +734,118 @@ where
 }
 
 fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
-    decision.score < 25.0
+    decision.score < 35.0
+        || (decision.selected_skill == "systematic-debugging" && decision.score < 35.0)
+        || decision
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("fell back to highest-priority layer owner"))
         || decision.reasons.iter().any(|reason| {
             reason.contains("Fallback owner selected") || reason.contains("No explicit keyword hit")
         })
+}
+
+fn route_decision_is_no_hit(decision: &RouteDecision) -> bool {
+    decision.score <= 0.0
+        || decision.reasons.iter().any(|reason| {
+            reason.contains("No explicit keyword hit")
+                || reason.contains("fell back to highest-priority layer owner")
+                || reason.contains("Only overlay signals matched")
+        })
+}
+
+fn route_reason_terms(decision: &RouteDecision) -> Vec<String> {
+    decision
+        .reasons
+        .iter()
+        .filter_map(|reason| reason.split_once(':').map(|(_, terms)| terms))
+        .flat_map(|terms| terms.trim_end_matches('.').split(','))
+        .map(|term| term.trim().to_ascii_lowercase())
+        .filter(|term| !term.is_empty())
+        .collect()
+}
+
+fn has_non_generic_manifest_signal(decision: &RouteDecision) -> bool {
+    const GENERIC_FULL_MANIFEST_TERMS: [&str; 5] =
+        ["runtime", "debug", "backend", "review", "plan"];
+
+    if decision.reasons.iter().any(|reason| {
+        reason.contains("Exact skill name matched")
+            || reason.contains("Framework alias entrypoint matched explicitly")
+    }) {
+        return true;
+    }
+
+    let terms = route_reason_terms(decision);
+    if terms.iter().any(|term| term.contains("架构")) {
+        return true;
+    }
+    !terms.is_empty()
+        && terms.iter().any(|term| {
+            !GENERIC_FULL_MANIFEST_TERMS
+                .iter()
+                .any(|generic| term == generic)
+        })
+}
+
+fn should_accept_manifest_fallback(
+    hot_decision: &RouteDecision,
+    full_decision: &RouteDecision,
+    should_retry: bool,
+    explicit_manifest: bool,
+) -> bool {
+    if explicit_manifest {
+        return full_decision.score > hot_decision.score
+            || (full_decision.score == hot_decision.score
+                && full_decision.selected_skill != hot_decision.selected_skill)
+            || (full_decision.selected_skill == hot_decision.selected_skill
+                && full_decision.overlay_skill.is_some()
+                && hot_decision.overlay_skill.is_none());
+    }
+
+    if full_decision.selected_skill == hot_decision.selected_skill
+        && full_decision.overlay_skill.is_some()
+        && hot_decision.overlay_skill.is_none()
+    {
+        return true;
+    }
+
+    if !should_retry
+        || !(route_decision_is_no_hit(hot_decision)
+            || hot_decision.score < 25.0
+            || (hot_decision.score < 35.0
+                && matches!(
+                    hot_decision.selected_skill.as_str(),
+                    "subagent-delegation" | "doc" | "design-md" | "pdf" | "sentry"
+                ))
+            || hot_decision.selected_skill == "systematic-debugging")
+    {
+        return false;
+    }
+
+    let low_score_review_fallback = full_decision.score >= 20.0
+        && matches!(
+            full_decision.selected_skill.as_str(),
+            "architect-review" | "code-review"
+        );
+
+    if full_decision.score <= 10.0
+        && !matches!(
+            full_decision.selected_skill.as_str(),
+            "architect-review" | "code-review"
+        )
+    {
+        return false;
+    }
+
+    if !low_score_review_fallback && !has_non_generic_manifest_signal(full_decision) {
+        return false;
+    }
+
+    (full_decision.score > hot_decision.score
+        || (full_decision.score == hot_decision.score
+            && full_decision.selected_skill != hot_decision.selected_skill))
+        || low_score_review_fallback
 }
 
 fn repo_root_from_cargo_manifest_dir() -> PathBuf {
@@ -785,9 +893,7 @@ fn route_task_with_manifest_fallback(
         allow_overlay,
         first_turn,
     )?;
-    if !should_retry_with_manifest(&hot_decision) {
-        return Ok(hot_decision);
-    }
+    let should_retry = should_retry_with_manifest(&hot_decision);
     let Some(fallback_path) = manifest_fallback_path(runtime_path, manifest_path)? else {
         return Ok(hot_decision);
     };
@@ -796,16 +902,12 @@ fn route_task_with_manifest_fallback(
         return Ok(hot_decision);
     }
     let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
-    if full_decision.score > hot_decision.score
-        || (full_decision.score == hot_decision.score
-            && full_decision.overlay_skill.is_some()
-            && hot_decision.overlay_skill.is_none())
-        || (full_decision.score == hot_decision.score
-            && full_decision
-                .reasons
-                .iter()
-                .any(|reason| reason.contains("Only overlay signals matched")))
-    {
+    if should_accept_manifest_fallback(
+        &hot_decision,
+        &full_decision,
+        should_retry,
+        manifest_path.is_some(),
+    ) {
         return Ok(full_decision);
     }
     Ok(hot_decision)
@@ -6053,7 +6155,6 @@ mod tests {
         evaluate_routing_cases, load_records_cached_for_stdio_with_default_runtime_path,
         load_routing_eval_cases, read_json, value_to_string,
     };
-    use std::collections::HashMap;
     use std::sync::Arc;
     use std::thread::{sleep, spawn};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -6064,6 +6165,82 @@ mod tests {
 
     fn routing_eval_case_path() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/routing_eval_cases.json")
+    }
+
+    fn assert_routing_eval_cases_match<F>(label: &str, mut route_case: F)
+    where
+        F: FnMut(&str, &str, bool) -> Result<RouteDecision, String>,
+    {
+        let payload = read_json(&routing_eval_case_path()).expect("read routing eval fixture");
+        let cases = payload
+            .get("cases")
+            .and_then(Value::as_array)
+            .expect("routing eval cases array");
+        let mut failures = Vec::new();
+
+        for (index, case) in cases.iter().enumerate() {
+            let id = case
+                .get("id")
+                .map(value_to_string)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| (index + 1).to_string());
+            let task = case
+                .get("task")
+                .and_then(Value::as_str)
+                .expect("routing eval task");
+            let first_turn = case
+                .get("first_turn")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let decision = route_case(task, &format!("routing-eval::{label}::{id}"), first_turn)
+                .unwrap_or_else(|err| panic!("route eval {label}/{id} failed: {err}"));
+
+            if let Some(expected_owner) = case.get("expected_owner").and_then(Value::as_str) {
+                if decision.selected_skill != expected_owner {
+                    failures.push(format!(
+                        "{id}: expected owner {expected_owner}, got {} (score {})",
+                        decision.selected_skill, decision.score
+                    ));
+                }
+            }
+
+            let expected_overlay = case
+                .get("expected_overlay")
+                .and_then(Value::as_str)
+                .map(|value| value.to_string());
+            if decision.overlay_skill != expected_overlay {
+                failures.push(format!(
+                    "{id}: expected overlay {:?}, got {:?} (owner {}, score {})",
+                    expected_overlay,
+                    decision.overlay_skill,
+                    decision.selected_skill,
+                    decision.score
+                ));
+            }
+
+            if case
+                .get("forbidden_owners")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .any(|forbidden| forbidden == decision.selected_skill)
+                })
+                .unwrap_or(false)
+            {
+                failures.push(format!(
+                    "{id}: selected forbidden owner {} (score {})",
+                    decision.selected_skill, decision.score
+                ));
+            }
+        }
+
+        assert!(
+            failures.is_empty(),
+            "{label} routing eval strict failures:\n{}",
+            failures.join("\n")
+        );
     }
 
     fn sample_execute_request() -> ExecuteRequestPayload {
@@ -6440,6 +6617,32 @@ mod tests {
         assert!(statusline.contains("others=0"));
         assert!(statusline.contains("resumable=0"));
         assert!(statusline.contains("git=nogit"));
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_snapshot_missing_recovery_anchors_is_not_resumable() {
+        let repo_root = temp_dir_path("framework-missing-recovery-anchors");
+        let current_root = repo_root.join("artifacts").join("current");
+        write_text_fixture(
+            &current_root.join("EVIDENCE_INDEX.json"),
+            &json!({"artifacts": []}).to_string(),
+        );
+
+        let snapshot =
+            build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+        let continuity = &snapshot["runtime_snapshot"]["continuity"];
+        let missing_anchors = continuity["missing_recovery_anchors"]
+            .as_array()
+            .expect("missing anchors array");
+
+        assert_eq!(continuity["state"], json!("missing"));
+        assert_eq!(continuity["can_resume"], json!(false));
+        assert_eq!(continuity["current_execution"], Value::Null);
+        assert!(missing_anchors.contains(&json!("SESSION_SUMMARY")));
+        assert!(missing_anchors.contains(&json!("NEXT_ACTIONS")));
+        assert!(missing_anchors.contains(&json!("TRACE_METADATA")));
+
         let _ = fs::remove_dir_all(&repo_root);
     }
 
@@ -7617,56 +7820,30 @@ mod tests {
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
 
         assert_eq!(report.schema_version, "routing-eval-v1");
-        assert!(report.metrics.case_count >= 11);
-        assert!(report.metrics.trigger_hit >= 9);
-        assert!(report.metrics.owner_correct >= 9);
-        assert!(report.metrics.overlay_correct >= 9);
-        let results_by_id = report
-            .results
-            .iter()
-            .filter_map(|row| row.id.as_ref().map(|id| (value_to_string(id), row)))
-            .collect::<HashMap<_, _>>();
-        assert_eq!(
-            report
-                .results
-                .iter()
-                .filter(|row| row.overtrigger)
-                .map(|row| value_to_string(row.id.as_ref().expect("overtrigger id")))
-                .collect::<Vec<_>>(),
-            Vec::<String>::new()
-        );
-        assert_eq!(
-            results_by_id["systematic-debugging-gate-conflict"].selected_owner,
-            "systematic-debugging"
-        );
-        assert_eq!(
-            results_by_id["skill-framework-developer-generic-review-case"].selected_owner,
-            "skill-framework-developer"
-        );
-        assert_eq!(
-            results_by_id["skill-framework-developer-generic-review-case"].selected_overlay,
-            Some("code-review".to_string())
-        );
-        assert_eq!(
-            results_by_id["skill-framework-subtraction-behavior-review"].selected_owner,
-            "skill-framework-developer"
-        );
-        assert_eq!(
-            results_by_id["skill-framework-subtraction-behavior-review"].selected_overlay,
-            None
-        );
-        assert_eq!(
-            results_by_id["design-agent-brand-routing-case"].selected_owner,
-            "design-agent"
-        );
-        assert_eq!(
-            results_by_id["frontend-design-screenshot-review-reroute-case"].selected_owner,
-            "visual-review"
-        );
-        assert_eq!(
-            results_by_id["frontend-design-motion-boundary-case"].selected_owner,
-            "motion-design"
-        );
+        assert_eq!(report.metrics.case_count, 72);
+        assert_eq!(report.metrics.overtrigger, 0);
+        assert_routing_eval_cases_match("manifest", |task, session_id, first_turn| {
+            route_task(&records, task, session_id, true, first_turn)
+        });
+    }
+
+    #[test]
+    fn routing_eval_runtime_fallback_matches_expected_baseline() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+
+        assert_routing_eval_cases_match("runtime-fallback", |task, session_id, first_turn| {
+            route_task_with_manifest_fallback(
+                &records,
+                Some(&runtime_path),
+                None,
+                task,
+                session_id,
+                true,
+                first_turn,
+            )
+        });
     }
 
     #[test]

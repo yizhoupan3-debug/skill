@@ -21,7 +21,7 @@ Rust owns the default runtime and contract path.
 
 - `router-rs route <query>` owns route decisions; route diagnostics use the Rust stdio route policy/report operations.
 - `router-rs profile emit` and `router-rs profile artifacts` own the Codex-only profile and `codex_profile` artifact.
-- `router-rs --execute-json` owns the live/dry-run execution response contract.
+- Rust stdio `execute` operation owns the live/dry-run execution response contract.
 - `router-rs framework snapshot`, `contract-summary`, `memory-recall`, `session-artifact-write`, `memory-policy`, and `prompt-compression` own framework runtime read/write/policy surfaces.
 - `router-rs codex sync` owns repo host-entrypoint materialization.
 - `router-rs codex host-integration ...` owns native install, bootstrap, skill install, memory automation, and related host integration flows.

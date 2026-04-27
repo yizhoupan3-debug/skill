@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,9 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "git-branch",
 ];
 const INSTALL_SKILLS_TOOLS: [&str; 1] = ["codex"];
+const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
+const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
+const CODEX_SKILL_SURFACE_PINNED_SKILLS: [&str; 4] = ["autopilot", "deepinterview", "gitx", "team"];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
     ["active_task.json", "focus_task.json", "task_registry.json"];
 const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [
@@ -312,6 +316,32 @@ fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
     Ok(parsed)
 }
 
+fn load_runtime_registry_payload_if_repo_local(repo_root: &Path) -> Result<Option<Value>, String> {
+    let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let payload = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| err.to_string())?;
+    let schema_version = parsed
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "Runtime registry missing schema_version at {}",
+                path.to_string_lossy()
+            )
+        })?;
+    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
+        return Err(format!(
+            "Unsupported runtime registry schema_version {:?} at {}",
+            schema_version,
+            path.to_string_lossy()
+        ));
+    }
+    Ok(Some(parsed))
+}
+
 fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
     let payload = load_runtime_registry_payload(repo_root)?;
     serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| err.to_string())
@@ -392,8 +422,16 @@ fn install_native_integration(
     let created_config = ensure_config_file(&home_config_path)?;
     let codex_hooks_disabled_changed = ensure_codex_hooks_disabled(&home_config_path)?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
+    let surface = if install_home_codex_skills_link {
+        Some(ensure_codex_skill_surface(&repo_root)?)
+    } else {
+        None
+    };
     let home_codex_skills_changed = if install_home_codex_skills_link {
-        retire_codex_skills_directory(&home_codex_skills_path)?
+        ensure_codex_skills_symlink(
+            &home_codex_skills_path,
+            &shared_codex_skill_surface(&repo_root),
+        )?
     } else {
         false
     };
@@ -408,6 +446,7 @@ fn install_native_integration(
         "repo_root": repo_root.to_string_lossy(),
         "home_config_path": home_config_path.to_string_lossy(),
         "home_codex_skills_path": home_codex_skills_path.to_string_lossy(),
+        "codex_skill_surface": surface.unwrap_or(Value::Null),
         "created_config": created_config,
         "codex_hooks_disabled_changed": codex_hooks_disabled_changed,
         "tui_status_line_changed": tui_changed,
@@ -475,7 +514,9 @@ fn install_skills_command(
                 "repo_root": repo_root.to_string_lossy(),
                 "home": home.to_string_lossy(),
                 "skills_source": shared_skills_source(&repo_root)?.to_string_lossy(),
+                "codex_skill_surface": shared_codex_skill_surface(&repo_root).to_string_lossy(),
                 "total_skills": count_top_level_skills(&shared_skills_source(&repo_root)?)?,
+                "surface_skills": count_top_level_skills(&shared_codex_skill_surface(&repo_root)).unwrap_or(0),
                 "results": results,
             }))
         }
@@ -641,10 +682,12 @@ fn codex_install_status_with_bootstrap(
             default_bootstrap_output_dir(repo_root).join("framework_default_bootstrap.json")
         });
     let source = shared_skills_source(repo_root)?;
+    let surface = shared_codex_skill_surface(repo_root);
 
     let config_ok = codex_config_matches_contract(&config_path)?;
     let bootstrap_ok = validate_default_bootstrap(&bootstrap_path, repo_root)?;
-    let codex_skills_ok = !codex_skills_path.exists() && !symlink_exists(&codex_skills_path);
+    let surface_ok = codex_skill_surface_matches_contract(repo_root)?;
+    let codex_skills_ok = codex_skills_matches_source(&codex_skills_path, &surface)?;
     let ready = config_ok && bootstrap_ok && codex_skills_ok;
 
     Ok(json!({
@@ -652,9 +695,11 @@ fn codex_install_status_with_bootstrap(
         "status": if ready { "native-integration-ready" } else { "native-integration-incomplete" },
         "target": codex_skills_path.to_string_lossy(),
         "source": source.to_string_lossy(),
+        "surface": surface.to_string_lossy(),
         "checks": {
             "config": config_ok,
             "bootstrap": bootstrap_ok,
+            "codex_skill_surface": surface_ok,
             "codex_skills": codex_skills_ok,
         },
     }))
@@ -669,6 +714,266 @@ fn codex_config_matches_contract(config_path: &Path) -> Result<bool, String> {
 
 fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
     Ok(repo_root.join(skills_source_rel(repo_root)?))
+}
+
+fn shared_codex_skill_surface(repo_root: &Path) -> PathBuf {
+    repo_root.join(CODEX_SKILL_SURFACE_REL)
+}
+
+fn codex_skill_surface_manifest_path(repo_root: &Path) -> PathBuf {
+    shared_codex_skill_surface(repo_root).join(CODEX_SKILL_SURFACE_MANIFEST_NAME)
+}
+
+fn codex_skill_surface_matches_contract(repo_root: &Path) -> Result<bool, String> {
+    let manifest_path = codex_skill_surface_manifest_path(repo_root);
+    let Some(content) = read_text_if_exists(&manifest_path)? else {
+        return Ok(false);
+    };
+    let Ok(manifest) = serde_json::from_str::<Value>(&content) else {
+        return Ok(false);
+    };
+    let expected = desired_codex_skill_surface_slugs(repo_root)?;
+    let actual = manifest
+        .get("skills")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if actual != expected {
+        return Ok(false);
+    }
+    for slug in expected {
+        let link_path = shared_codex_skill_surface(repo_root).join(&slug);
+        if let Some(source_path) = codex_skill_surface_source_path(repo_root, &slug)? {
+            if !codex_skills_matches_source(&link_path, &source_path)? {
+                return Ok(false);
+            }
+            continue;
+        }
+        if is_framework_command(repo_root, &slug)? {
+            let Some(content) = read_text_if_exists(&link_path.join("SKILL.md"))? else {
+                return Ok(false);
+            };
+            if !content.contains(&format!("name: {slug}")) {
+                return Ok(false);
+            }
+            continue;
+        }
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, String> {
+    let repo_root = normalize_path(repo_root)?;
+    let source_root = shared_skills_source(&repo_root)?;
+    let surface_root = shared_codex_skill_surface(&repo_root);
+    let desired = desired_codex_skill_surface_slugs(&repo_root)?;
+    let mut changed = false;
+
+    if let Ok(metadata) = fs::symlink_metadata(&surface_root) {
+        if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+            remove_path(&surface_root).map_err(|err| err.to_string())?;
+            changed = true;
+        }
+    }
+    fs::create_dir_all(&surface_root).map_err(|err| err.to_string())?;
+
+    let desired_set = desired.iter().cloned().collect::<BTreeSet<_>>();
+    let system_source = source_root.join(".system");
+    let include_system = system_source.is_dir();
+    for entry in fs::read_dir(&surface_root).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == CODEX_SKILL_SURFACE_MANIFEST_NAME {
+            continue;
+        }
+        if name == ".system" && include_system {
+            continue;
+        }
+        if !desired_set.contains(&name) {
+            remove_path(&entry.path()).map_err(|err| err.to_string())?;
+            changed = true;
+        }
+    }
+
+    if include_system {
+        changed |= ensure_codex_skills_symlink(&surface_root.join(".system"), &system_source)?;
+    }
+    for slug in &desired {
+        if let Some(source_path) = codex_skill_surface_source_path(&repo_root, slug)? {
+            changed |= ensure_codex_skills_symlink(&surface_root.join(slug), &source_path)?;
+        } else if is_framework_command(&repo_root, slug)? {
+            changed |= ensure_framework_command_skill(&repo_root, &surface_root.join(slug), slug)?;
+        }
+    }
+
+    let manifest = json!({
+        "schema_version": "codex-skill-surface-v1",
+        "source": source_root.to_string_lossy(),
+        "surface": surface_root.to_string_lossy(),
+        "policy": "runtime-hot-index-plus-pinned-explicit-entrypoints",
+        "skills": desired,
+        "count": desired.len(),
+        "system_skills_linked": include_system,
+        "generated_at": current_local_timestamp(),
+    });
+    changed |= write_json_if_changed(
+        &surface_root.join(CODEX_SKILL_SURFACE_MANIFEST_NAME),
+        &manifest,
+    )?;
+
+    Ok(json!({
+        "changed": changed,
+        "source": source_root.to_string_lossy(),
+        "surface": surface_root.to_string_lossy(),
+        "skills": desired,
+        "count": desired.len(),
+        "system_skills_linked": include_system,
+    }))
+}
+
+fn desired_codex_skill_surface_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
+    let source_root = shared_skills_source(repo_root)?;
+    let mut desired = BTreeSet::new();
+    for slug in runtime_hot_skill_slugs(repo_root)? {
+        if source_root.join(&slug).join("SKILL.md").is_file() {
+            desired.insert(slug);
+        }
+    }
+    for slug in CODEX_SKILL_SURFACE_PINNED_SKILLS {
+        if codex_skill_surface_source_path(repo_root, slug)?.is_some()
+            || is_framework_command(repo_root, slug)?
+        {
+            desired.insert(slug.to_string());
+        }
+    }
+    if desired.is_empty() {
+        for entry in fs::read_dir(&source_root).map_err(|err| err.to_string())? {
+            let entry = entry.map_err(|err| err.to_string())?;
+            let slug = entry.file_name().to_string_lossy().to_string();
+            if slug.starts_with('.') || slug == "dist" {
+                continue;
+            }
+            if entry.path().join("SKILL.md").is_file() {
+                desired.insert(slug);
+            }
+        }
+    }
+    Ok(desired.into_iter().collect())
+}
+
+fn codex_skill_surface_source_path(
+    repo_root: &Path,
+    slug: &str,
+) -> Result<Option<PathBuf>, String> {
+    let source_root = shared_skills_source(repo_root)?;
+    let skill_source = source_root.join(slug);
+    if skill_source.join("SKILL.md").is_file() {
+        return Ok(Some(skill_source));
+    }
+    Ok(None)
+}
+
+fn is_framework_command(repo_root: &Path, slug: &str) -> Result<bool, String> {
+    Ok(framework_command_names(repo_root)?.contains(slug))
+}
+
+fn ensure_framework_command_skill(
+    repo_root: &Path,
+    target_path: &Path,
+    slug: &str,
+) -> Result<bool, String> {
+    if target_path.exists() || symlink_exists(target_path) {
+        let metadata = fs::symlink_metadata(target_path).map_err(|err| err.to_string())?;
+        if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
+            remove_path(target_path).map_err(|err| err.to_string())?;
+        }
+    }
+    fs::create_dir_all(target_path).map_err(|err| err.to_string())?;
+    let content = render_framework_command_skill(repo_root, slug)?;
+    write_text_if_changed(&target_path.join("SKILL.md"), &content)
+}
+
+fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Result<String, String> {
+    let registry = load_runtime_registry_payload(repo_root)?;
+    let command = registry
+        .get("framework_commands")
+        .and_then(Value::as_object)
+        .and_then(|commands| commands.get(slug))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let owner = command
+        .get("canonical_owner")
+        .and_then(Value::as_str)
+        .unwrap_or("skill-framework-developer");
+    let host_entrypoint = command
+        .get("host_entrypoints")
+        .and_then(|entrypoints| entrypoints.get("codex-cli"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let description = command
+        .get("lineage")
+        .and_then(|lineage| lineage.get("description"))
+        .and_then(Value::as_str)
+        .unwrap_or("Generated lightweight framework command alias.");
+    Ok(format!(
+        "---\nname: {slug}\ndescription: {description} Use when the user invokes `{host_entrypoint}` or `/{slug}`.\nrouting_layer: L0\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P1\nsession_start: n/a\nsource: generated-codex-skill-surface\n---\n# {slug}\n\nThis is a generated lightweight Codex/App/CLI alias for `{host_entrypoint}`.\n\nUse it only when the user explicitly invokes `{host_entrypoint}` or `/{slug}`. Resolve the live workflow through `router-rs framework alias {slug}` and keep the full framework policy in `skills/skill-framework-developer/SKILL.md`.\n\nCanonical owner: `{owner}`.\n"
+    ))
+}
+
+fn framework_command_names(repo_root: &Path) -> Result<BTreeSet<String>, String> {
+    let Some(registry) = load_runtime_registry_payload_if_repo_local(repo_root)? else {
+        return Ok(BTreeSet::new());
+    };
+    Ok(registry
+        .get("framework_commands")
+        .and_then(Value::as_object)
+        .map(|commands| commands.keys().cloned().collect())
+        .unwrap_or_default())
+}
+
+fn runtime_hot_skill_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
+    let runtime_path = shared_skills_source(repo_root)?.join("SKILL_ROUTING_RUNTIME.json");
+    let Some(content) = read_text_if_exists(&runtime_path)? else {
+        return Ok(Vec::new());
+    };
+    let runtime = serde_json::from_str::<Value>(&content).map_err(|err| err.to_string())?;
+    let Some(skills) = runtime.get("skills").and_then(Value::as_array) else {
+        return Ok(Vec::new());
+    };
+    Ok(skills
+        .iter()
+        .filter_map(Value::as_array)
+        .filter_map(|record| record.first())
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect())
+}
+
+fn codex_skills_matches_source(target_path: &Path, source_path: &Path) -> Result<bool, String> {
+    let source_path = normalize_path(source_path)?;
+    let Ok(metadata) = fs::symlink_metadata(target_path) else {
+        return Ok(false);
+    };
+    if !metadata.file_type().is_symlink() {
+        return Ok(false);
+    }
+    let link_target = fs::read_link(target_path).map_err(|err| err.to_string())?;
+    let resolved = if link_target.is_absolute() {
+        link_target
+    } else {
+        target_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(link_target)
+    };
+    normalize_path(&resolved).map(|resolved| resolved == source_path)
 }
 
 fn count_top_level_skills(skills_root: &Path) -> Result<usize, String> {
@@ -1948,6 +2253,31 @@ fn retire_codex_skills_directory(target_path: &Path) -> Result<bool, String> {
     };
     remove_path(target_path).map_err(|err| err.to_string())?;
     Ok(true)
+}
+
+fn ensure_codex_skills_symlink(target_path: &Path, source_path: &Path) -> Result<bool, String> {
+    let source_path = normalize_path(source_path)?;
+    if codex_skills_matches_source(target_path, &source_path)? {
+        return Ok(false);
+    }
+    if target_path.exists() || symlink_exists(target_path) {
+        remove_path(target_path).map_err(|err| err.to_string())?;
+    }
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    create_dir_symlink(&source_path, target_path)?;
+    Ok(true)
+}
+
+#[cfg(unix)]
+fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
+    std::os::unix::fs::symlink(source_path, target_path).map_err(|err| err.to_string())
+}
+
+#[cfg(windows)]
+fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
+    std::os::windows::fs::symlink_dir(source_path, target_path).map_err(|err| err.to_string())
 }
 
 fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
