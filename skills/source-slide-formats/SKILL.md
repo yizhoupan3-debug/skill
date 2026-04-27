@@ -68,10 +68,20 @@ or browser-matched PDF export.
 ## Workflow
 
 1. Confirm the source format: Markdown, Slidev, Marp, or HTML.
-2. Keep one source file as truth and make exports reproducible.
-3. Use bundled templates when starting from scratch.
-4. Render or preview before final export.
-5. Report only final source/export links unless the user asks for internals.
+2. If visual identity, brand consistency, or reusable styling matters, route
+   through `$design-md` before writing the source so tokens can become CSS
+   variables, Slidev theme values, or Marp/HTML style rules.
+3. Keep one source file as truth and make exports reproducible.
+4. Use bundled templates when starting from scratch.
+5. Render or preview before final export.
+6. Report only final source/export links unless the user asks for internals.
+
+## Design skill handoff
+
+Use `$design-md` for HTML/Slidev/Marp decks when the user wants a branded deck,
+theme consistency, design tokens, chart palettes, reusable section/title slide
+grammar, or acceptance against `DESIGN.md`. Skip it for quick text-only slide
+sources.
 
 ## Format Notes
 

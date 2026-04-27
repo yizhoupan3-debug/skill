@@ -190,6 +190,20 @@
       "first_turn": true
     },
     {
+      "id": "skill-framework-policy-root-entry-proxy-case",
+      "category": "should-trigger",
+      "task": "好多对话都说当前项目没有 skills/SKILL_ROUTING_RUNTIME.json，还去找共享 AGENT.md。请彻底修好 AGENTS.md policy root 和入口代理，不要留兼容。",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "doc",
+        "playwright",
+        "systematic-debugging"
+      ],
+      "first_turn": true
+    },
+    {
       "id": "image-generated-colloquial-chinese-case",
       "category": "should-trigger",
       "task": "现在帮我生图：一只蓝色小猫图标，白底，无文字。",
@@ -764,6 +778,59 @@
       "expected_overlay": null,
       "forbidden_owners": [
         "frontend-design"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-ui-contract-before-implementation",
+      "category": "gate-vs-owner-conflict",
+      "task": "做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "frontend-design",
+        "css-pro",
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-ppt-contract-before-slides",
+      "category": "gate-vs-artifact-gate-conflict",
+      "task": "做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides",
+        "ppt-pptx",
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "design-md-existing-contract-before-ppt",
+      "category": "gate-vs-artifact-gate-conflict",
+      "task": "根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides",
+        "ppt-pptx"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "slides-quick-ppt-stays-slides",
+      "category": "should-trigger",
+      "task": "快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。",
+      "focus_skill": "slides",
+      "expected_owner": "slides",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "design-md"
       ],
       "first_turn": true
     }

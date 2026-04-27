@@ -129,6 +129,41 @@ fn current_artifact_clutter_plan_moves_legacy_current_mirrors() {
 }
 
 #[test]
+fn memory_automation_reports_missing_continuity_control_plane() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(&repo_root).unwrap();
+
+    let result = host_integration_json(&[
+        "run-memory-automation",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--workspace",
+        "skill",
+        "--output-dir",
+        tmp.path().join("memory-automation").to_str().unwrap(),
+        "--query",
+        "memory audit",
+    ]);
+
+    let health = &result["continuity_health"];
+    assert_eq!(health["status"], "blocked");
+    let blockers = health["blockers"].as_array().unwrap();
+    assert!(blockers.iter().any(|item| item
+        .as_str()
+        .unwrap()
+        .contains("current_root missing")));
+    assert!(blockers.iter().any(|item| item
+        .as_str()
+        .unwrap()
+        .contains("supervisor_state missing")));
+    assert!(blockers.iter().any(|item| item
+        .as_str()
+        .unwrap()
+        .contains("continuity active_task_id is empty")));
+}
+
+#[test]
 fn install_skills_rust_entrypoint_links_codex_only() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");

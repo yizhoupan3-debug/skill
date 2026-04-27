@@ -65,12 +65,15 @@ boxes. Avoid startup-deck aesthetics unless the user explicitly asks for them.
 
 1. Create the Beamer workspace (`main.tex`, `assets/`, `build/`, source log, optional `refs.bib`).
 2. Turn the outline into a slide plan before styling.
-3. Define the visual system early: theme, footline policy, callout boxes, cover/closing rules, type scale.
-4. Choose local assets and the compilation stack (XeLaTeX by default for Chinese / mixed-language decks).
+3. If the deck needs reusable visual identity or brand consistency, route
+   through `$design-md` before theme macros so colors, typography roles,
+   callout boxes, chart colors, and cover/section grammar are explicit.
+4. Define the visual system early: theme, footline policy, callout boxes, cover/closing rules, type scale.
+5. Choose local assets and the compilation stack (XeLaTeX by default for Chinese / mixed-language decks).
    - If compile latency is the main complaint rather than slide authoring, route to `$latex-compile-acceleration`.
-5. Start from the template, compile early, and fix density in source rather than shrinking text.
-6. Render/audit the PDF page by page and use `$visual-review` for overlap / hierarchy / clipping checks.
-7. Deliver the `.tex`, compiled PDF, local assets, and source log together.
+6. Start from the template, compile early, and fix density in source rather than shrinking text.
+7. Render/audit the PDF page by page and use `$visual-review` for overlap / hierarchy / clipping checks.
+8. Deliver the `.tex`, compiled PDF, local assets, and source log together.
 
 For the detailed compile / density / QA / Mermaid path, see
 [references/workflow.md](./references/workflow.md).
@@ -83,6 +86,8 @@ Core rules enforced on every Beamer deck. For the full categorized list, read [r
 - Local paths only for all figures and assets.
 - 16:9 aspect ratio by default; XeLaTeX + `ctex` for Chinese decks.
 - Deliberate visual system in source: cover, footline, colors, emphasis boxes, closing.
+- When a `DESIGN.md` exists, map it into Beamer color/font/callout macros
+  before inventing new theme styling.
 - Readable type outranks maximal packing — `12pt` base, `\normalsize`–`\large` body.
 - No cover footer unless explicitly requested; page number centered in its footline block.
 - Never fabricate results. Label missing data as planned/pending/hypothesis.

@@ -1120,7 +1120,7 @@ fn repo_root() -> Result<PathBuf> {
     }
     let current = std::env::current_dir()?;
     for candidate in current.ancestors() {
-        if candidate.join("AGENT.md").exists() && candidate.join("skills").exists() {
+        if candidate.join("AGENTS.md").exists() && candidate.join("skills").exists() {
             return Ok(candidate.to_path_buf());
         }
     }

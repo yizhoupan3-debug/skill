@@ -58,11 +58,14 @@ fn refresh_skill_is_not_projected_as_codex_entrypoint() {
 #[test]
 fn codex_skill_projection_directory_stays_retired() {
     assert!(!project_root().join(".codex/skills").exists());
+    assert!(!project_root().join("AGENT.md").exists());
     let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
     let manifest_text = manifest.to_string();
     assert!(!manifest_text.contains(".codex/skills/gitx"));
     assert!(!manifest_text.contains(".codex/skills/autopilot"));
     assert!(manifest_text.contains("retired_directories"));
+    assert!(manifest_text.contains("retired_files"));
+    assert!(manifest_text.contains("AGENT.md"));
 }
 
 #[test]

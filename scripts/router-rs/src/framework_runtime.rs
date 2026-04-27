@@ -3081,9 +3081,9 @@ fn default_runbooks() -> String {
         "",
         "- 统一维护入口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>",
         "- 需要迁移旧 artifact 布局时显式执行：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace> --apply-artifact-migrations",
-        "- 合并稳定记忆：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex hook session-end --repo-root <repo_root> --max-lines 4",
+        "- 生成下一轮提示：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework refresh --repo-root <repo_root> --max-lines 4",
         "- 召回上下文：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework memory-recall <关键词> --repo-root <repo_root> --mode stable|active|history|debug --limit <N>",
-        "- 生命周期收口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex hook session-end --repo-root <repo_root> --max-lines 4",
+        "- 生命周期收口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework refresh --repo-root <repo_root> --max-lines 4",
         "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
         "",
     ]

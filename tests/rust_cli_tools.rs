@@ -174,8 +174,8 @@ fn run_image_generated_error(args: &[&str]) -> Output {
 
 fn parse_concatenated_json(text: &str) -> Vec<Value> {
     let mut payloads = Vec::new();
-    let mut stream = serde_json::Deserializer::from_str(text).into_iter::<Value>();
-    while let Some(payload) = stream.next() {
+    let stream = serde_json::Deserializer::from_str(text).into_iter::<Value>();
+    for payload in stream {
         payloads.push(payload.unwrap());
     }
     payloads

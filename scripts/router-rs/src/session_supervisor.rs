@@ -578,10 +578,8 @@ fn driver_id_for_host(host: &str) -> &'static str {
     }
 }
 
-fn default_resume_mode(host: &str) -> &'static str {
-    match host.trim().to_ascii_lowercase().as_str() {
-        _ => "last",
-    }
+fn default_resume_mode(_host: &str) -> &'static str {
+    "last"
 }
 
 #[derive(Debug)]

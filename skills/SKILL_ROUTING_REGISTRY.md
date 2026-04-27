@@ -37,7 +37,8 @@
 | `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Repo-native deepinterview workflow for evidence-first clarification and converge |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `design-agent` | Active | P2 | L3 | gate | none | project | ✓ 100.0 | Route named-product design references and brand-plus-motion source grounding bef |
-| `design-workflow` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Own design-process artifacts such as DESIGN.md capture, UI-generation prompt sha |
+| `design-md` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Gate for DESIGN.md-style design-system source of truth. Use at conversation star |
+| `design-workflow` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Own design-process artifacts after the design-system gate: UI-generation prompt  |
 | `doc` | Active | P1 | L3 | gate | artifact | project | ✓ 94.3 | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
 | `docker` | Active | P2 | L3 | owner | none | project | ✓ 90.9 | Produce minimal, secure Docker images with correct layer caching, multi-stage bu |
 | `documentation-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Write, review, and maintain project documentation such as README, API docs, ADRs |
@@ -91,7 +92,6 @@
 | `playwright` | Active | P2 | L3 | gate | evidence | project | ✓ 98.7 | Use a real browser when live evidence or page interaction is required |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | ✓ 95.3 | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Build source-first editable `.pptx` decks from `deck.plan.json` through the Rust |
-| `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route presentation-artifact work before choosing a slide-authoring lane. Use thi |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `prompt-engineer` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Transform vague instructions into structured prompts with explicit role, constra |
 | `python-pro` | Active | P1 | L4 | owner | none | project | ✓ 98.5 | Deliver production-grade Python 3.12+ code with clean async boundaries, strict t |
@@ -110,6 +110,7 @@
 | `seo-web` | Active | P2 | L4 | owner | none | project | ✓ 94.1 | Audit and optimize technical SEO for web apps: meta tags, structured data (JSON- |
 | `shell-cli` | Active | P2 | L2 | owner | none | project | ✓ 98.4 | Produce safe, portable shell commands, pipelines, and scripts that handle quotin |
 | `skill-framework-developer` | Active | P1 | L0 | owner | none | project | ✓ 97.5 | Design and tune Codex skill routing/framework behavior |
+| `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Root-level entry proxy for the presentation-artifact gate. Use this at conversat |
 | `source-slide-formats` | Active | P2 | L4 | owner | none | project | ✓ 100.0 | Build presentation sources in Markdown, Slidev, Marp, or HTML/CSS and export the |
 | `sql-pro` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Write, optimize, debug, and review SQL for PostgreSQL, MySQL, SQLite, and analyt |
 | `statistical-analysis` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Guide research statistics for test choice, effect sizes, uncertainty reporting,  |

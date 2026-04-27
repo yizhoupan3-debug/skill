@@ -669,8 +669,8 @@ fn fetch_check_log(
         return (log_text, String::new(), "ok".to_string());
     }
 
-    if is_log_pending_message(&log_error) && job_id.is_some() {
-        let (job_log, job_error) = fetch_job_log(job_id.expect("checked"), repo_root);
+    if let Some(job_id) = job_id.filter(|_| is_log_pending_message(&log_error)) {
+        let (job_log, job_error) = fetch_job_log(job_id, repo_root);
         if !job_log.is_empty() {
             return (job_log, String::new(), "ok".to_string());
         }

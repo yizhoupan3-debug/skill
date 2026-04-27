@@ -12,6 +12,7 @@ const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_m
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
 const HOST_ENTRYPOINT_RETIRED_DIRECTORIES: [&str; 1] = [".codex/skills"];
+const HOST_ENTRYPOINT_RETIRED_FILES: [&str; 1] = ["AGENT.md"];
 const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 2] = ["AGENTS.md", CODEX_HOOK_README_PATH];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
 const PROTECTED_GENERATED_PATH_BYTES: [&[u8]; 3] = [
@@ -37,6 +38,7 @@ struct HostEntrypointSyncSection {
     text_files: Vec<String>,
     json_files: Vec<String>,
     retired_directories: Vec<String>,
+    retired_files: Vec<String>,
 }
 
 fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
@@ -50,6 +52,10 @@ fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
             .map(|path| (*path).to_string())
             .collect(),
         retired_directories: HOST_ENTRYPOINT_RETIRED_DIRECTORIES
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect(),
+        retired_files: HOST_ENTRYPOINT_RETIRED_FILES
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
@@ -92,6 +98,10 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
             .map(|path| path.to_string())
             .collect(),
         retired_directories: HOST_ENTRYPOINT_RETIRED_DIRECTORIES
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect(),
+        retired_files: HOST_ENTRYPOINT_RETIRED_FILES
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
@@ -159,11 +169,13 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
                 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
             ],
         "retired_directories": HOST_ENTRYPOINT_RETIRED_DIRECTORIES,
+        "retired_files": HOST_ENTRYPOINT_RETIRED_FILES,
     },
         "partial_sync": {
             "text_files": HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES,
             "json_files": HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
             "retired_directories": HOST_ENTRYPOINT_RETIRED_DIRECTORIES,
+            "retired_files": HOST_ENTRYPOINT_RETIRED_FILES,
         },
     })
 }
@@ -192,6 +204,19 @@ fn sync_host_entrypoints_single_root(
                 report_root,
                 target_root,
                 &directory,
+            ));
+        }
+    }
+    for relative in &section.retired_files {
+        let file = target_root.join(relative);
+        if file.is_file() || symlink_exists(&file) {
+            if apply {
+                remove_path(&file).map_err(|err| err.to_string())?;
+            }
+            report.written.push(describe_host_entrypoint_path(
+                report_root,
+                target_root,
+                &file,
             ));
         }
     }
