@@ -688,7 +688,7 @@ fn codex_install_status_with_bootstrap(
     let bootstrap_ok = validate_default_bootstrap(&bootstrap_path, repo_root)?;
     let surface_ok = codex_skill_surface_matches_contract(repo_root)?;
     let codex_skills_ok = codex_skills_matches_source(&codex_skills_path, &surface)?;
-    let ready = config_ok && bootstrap_ok && codex_skills_ok;
+    let ready = config_ok && bootstrap_ok && surface_ok && codex_skills_ok;
 
     Ok(json!({
         "ready": ready,
