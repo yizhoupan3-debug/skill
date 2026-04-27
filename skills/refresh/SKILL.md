@@ -36,7 +36,7 @@ trigger_hints:
 1. 运行：
 
 ```bash
-PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --framework-refresh-json --repo-root "$PROJECT_DIR"
+PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml framework refresh --repo-root "$PROJECT_DIR"
 ```
 
 2. 然后严格回复：
@@ -47,7 +47,7 @@ PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null |
 
 ### 可选 debug 模式
 
-如果用户明确要求 verbose/debug refresh，就在同一条命令后追加 `--framework-refresh-verbose`，检查返回 JSON 里的 `refresh.debug`，只概括用户点名要看的诊断字段。
+如果用户明确要求 verbose/debug refresh，就在同一条命令后追加 `--verbose`，检查返回 JSON 里的 `refresh.debug`，只概括用户点名要看的诊断字段。
 正常执行 `$refresh` 时，不要改动默认确认语。
 
 ## 约束

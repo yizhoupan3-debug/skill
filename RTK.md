@@ -42,7 +42,7 @@ rtk npm test
 When a direct RTK subcommand is not available or not needed, wrap the original command explicitly:
 
 ```bash
-rtk cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"
+rtk cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- codex sync --repo-root "$PWD"
 rtk cargo test --manifest-path ./scripts/router-rs/Cargo.toml
 rtk npm test --prefix tools/browser-mcp
 ```

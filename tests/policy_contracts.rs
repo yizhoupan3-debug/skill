@@ -48,24 +48,57 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
 }
 
 #[test]
-fn refresh_skill_is_not_projected_as_codex_entrypoint() {
+fn refresh_skill_stays_out_of_project_host_entrypoints() {
     assert!(!project_root().join(".codex/skills/refresh").exists());
+    assert!(!project_root()
+        .join("artifacts/codex-skill-surface/skills/refresh")
+        .exists());
     let controller = read_text(&project_root().join("skills/execution-controller-coding/SKILL.md"));
     assert!(!controller.contains("$autopilot"));
     assert!(!controller.contains("autopilot"));
 }
 
 #[test]
-fn codex_skill_projection_directory_stays_retired() {
+fn project_codex_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!project_root().join(".codex/skills").exists());
     assert!(!project_root().join("AGENT.md").exists());
     let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
     let manifest_text = manifest.to_string();
     assert!(!manifest_text.contains(".codex/skills/gitx"));
     assert!(!manifest_text.contains(".codex/skills/autopilot"));
-    assert!(manifest_text.contains("retired_directories"));
+    assert!(manifest["full_sync"]["retired_directories"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(manifest["partial_sync"]["retired_directories"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     assert!(manifest_text.contains("retired_files"));
     assert!(manifest_text.contains("AGENT.md"));
+}
+
+#[test]
+fn codex_user_skill_surface_stays_lightweight_and_explicit() {
+    let surface_root = project_root().join("artifacts/codex-skill-surface/skills");
+    let manifest_path = surface_root.join(".codex-skill-surface.json");
+    if !manifest_path.exists() {
+        return;
+    }
+    let manifest = read_json(&manifest_path);
+    let skills = manifest["skills"].as_array().unwrap();
+    assert!(skills.len() < 40, "surface loaded too many skills: {}", skills.len());
+    assert!(skills.iter().any(|item| item.as_str() == Some("autopilot")));
+    assert!(skills.iter().any(|item| item.as_str() == Some("gitx")));
+    assert!(skills
+        .iter()
+        .any(|item| item.as_str() == Some("deepinterview")));
+    assert!(skills.iter().any(|item| item.as_str() == Some("team")));
+    assert!(!skills.iter().any(|item| item.as_str() == Some("refresh")));
+    assert!(surface_root.join("autopilot/SKILL.md").exists());
+    assert!(surface_root.join("gitx/SKILL.md").exists());
+    assert!(surface_root.join("deepinterview/SKILL.md").exists());
+    assert!(surface_root.join("team/SKILL.md").exists());
 }
 
 #[test]
@@ -320,6 +353,63 @@ fn generated_routing_surfaces_do_not_reference_retired_python_helpers() {
 }
 
 #[test]
+fn retired_router_flags_are_absent_from_user_docs() {
+    let docs = [
+        "skills/refresh/SKILL.md",
+        "RTK.md",
+        "docs/rust_contracts.md",
+        "docs/deerflow2_runtime_benchmark.md",
+    ]
+    .iter()
+    .map(|path| read_text(&project_root().join(path)))
+    .collect::<Vec<_>>()
+    .join("\n");
+
+    for retired in [
+        "--framework-refresh-json",
+        "--framework-refresh-verbose",
+        "--sync-host-entrypoints-json",
+        "router-rs --execute-json",
+    ] {
+        assert!(!docs.contains(retired), "retired flag leaked: {retired}");
+    }
+    assert!(docs.contains("framework refresh --repo-root"));
+    assert!(docs.contains("codex sync --repo-root"));
+    assert!(docs.contains("stdio `execute` operation"));
+}
+
+#[test]
+fn framework_surface_policy_is_the_activation_source_of_truth() {
+    let surface =
+        read_json(&project_root().join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"));
+    let tiers = read_json(&project_root().join("skills/SKILL_TIERS.json"));
+    let loadouts = read_json(&project_root().join("skills/SKILL_LOADOUTS.json"));
+
+    assert_eq!(surface["source_of_truth"], true);
+    assert_eq!(surface["derived_reports"], serde_json::json!(["skills/SKILL_TIERS.json"]));
+    assert_eq!(
+        surface["deprecated_or_foldable_reports"],
+        serde_json::json!(["skills/SKILL_LOADOUTS.json"])
+    );
+    assert_eq!(tiers["source_of_truth"], false);
+    assert_eq!(
+        tiers["derived_from"],
+        "configs/framework/FRAMEWORK_SURFACE_POLICY.json"
+    );
+    assert_eq!(tiers["report_status"], "generated_debug_report");
+    assert_eq!(loadouts["source_of_truth"], false);
+    assert_eq!(
+        loadouts["derived_from"],
+        "configs/framework/FRAMEWORK_SURFACE_POLICY.json"
+    );
+    assert_eq!(loadouts["report_status"], "foldable_generated_report");
+    assert_eq!(
+        surface["skill_system"]["activation_counts"],
+        tiers["summary"]["activation_counts"]
+    );
+}
+
+#[test]
 fn runtime_protocol_uses_behavior_driven_public_names() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
     let checklist = runtime["checklist"]
@@ -355,7 +445,16 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
 
     assert_eq!(runtime["scope"]["kind"], "hot");
     assert_eq!(runtime["scope"]["fallback_manifest"], "skills/SKILL_MANIFEST.json");
-    assert!(!slugs.contains(&"subagent-delegation"));
+    for expected in [
+        "subagent-delegation",
+        "skill-creator",
+        "skill-installer",
+        "idea-to-plan",
+        "plan-to-code",
+        "skill-framework-developer",
+    ] {
+        assert!(slugs.contains(&expected), "missing hot runtime slug: {expected}");
+    }
     assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
 }
 
@@ -838,6 +937,34 @@ fn ppt_skill_references_source_first_and_editable_rules() {
     assert!(visualization.contains("Prefer editable primitives"));
     assert!(install.contains("There is no skill-local package install step"));
     assert!(install.contains("these companion skills make the text and design intentional"));
+}
+
+#[test]
+fn slides_gate_is_executable_and_evidence_closed() {
+    let skill = read_text(&project_root().join("skills/slides/SKILL.md"));
+    for marker in [
+        "Do not stop to ask for goal, audience, visual bar, or format when a safe default exists",
+        "Re-run routing or consult the fallback manifest for that exact owner",
+        "Rust `ppt` CLI",
+        "cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- <command>",
+        "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json",
+        "## Existing PPTX Safety",
+        "Preserve the original file by writing a new output path",
+        "## Verification Standard",
+        "ppt slides-test --fail-on-overflow",
+        "ppt detect-fonts --json",
+        "## Evidence Index",
+        "EVIDENCE_INDEX.json",
+        "Final response stays concise but includes the `.pptx` link and the verification evidence used",
+        "workspace",
+        "temp",
+        "artifacts/scratch",
+    ] {
+        assert!(skill.contains(marker), "missing slides gate marker: {marker}");
+    }
+    assert!(!skill.contains("@oai/artifact-tool"));
+    assert!(!skill.contains("compact verification pass"));
+    assert!(!skill.contains("Final response contains only"));
 }
 
 #[test]

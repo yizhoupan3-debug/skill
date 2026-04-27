@@ -111,8 +111,43 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.apply {
+        println!("{}", build_apply_summary(&bundle));
+        return Ok(());
+    }
+
     println!("{}", bundle.registry);
     Ok(())
+}
+
+fn build_apply_summary(bundle: &SkillBundle) -> String {
+    let manifest_skill_count = bundle
+        .manifest
+        .get("skills")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let runtime_skill_count = bundle
+        .runtime_index
+        .get("skills")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let runtime_keys = bundle
+        .runtime_index
+        .get("keys")
+        .and_then(Value::as_array)
+        .map(|keys| {
+            keys.iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    format!(
+        "Applied skill routing artifacts.\n- manifest skills: {manifest_skill_count}\n- hot runtime skills: {runtime_skill_count}\n- runtime keys: {runtime_keys}"
+    )
 }
 
 fn write_bundle(skills_root: &Path, bundle: &SkillBundle) -> Result<(), String> {
@@ -179,9 +214,9 @@ fn compile_bundle(
     let runtime_index = build_runtime_index(&manifest);
     let shadow_map = build_shadow_map(skill_entries, source_manifest);
     let approval_policy = build_approval_policy(docs);
-    let loadouts = build_loadouts();
     let tiers = build_tier_catalog(&manifest);
     let framework_surface_policy = build_framework_surface_policy(&tiers);
+    let loadouts = build_loadouts(&framework_surface_policy);
     Ok(SkillBundle {
         registry,
         index,
@@ -714,6 +749,7 @@ fn build_runtime_index(manifest: &Value) -> Value {
                 summarize_text(&string_at(&skill, 5), 96),
                 value_at(&skill, 7),
                 value_at(&skill, 8),
+                string_at(&skill, 4),
             ])
         })
         .collect::<Vec<_>>();
@@ -722,32 +758,56 @@ fn build_runtime_index(manifest: &Value) -> Value {
         "checklist": index_checklist(),
         "scope": {
             "kind": "hot",
-            "policy": "session-start source/artifact/evidence gates only; route/search loads fallback manifest when the hot index has no confident hit.",
+            "policy": "session-start required gates plus preferred first-turn owners; route/search loads fallback manifest when the hot index has no confident hit.",
             "fallback_manifest": full_manifest_path,
             "full_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
             "hot_skill_count": selected.len(),
         },
-        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health"],
+        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health", "priority"],
         "skills": skills,
     })
 }
 
-fn build_loadouts() -> Value {
+fn string_list_at(value: &Value, path: &[&str]) -> Vec<String> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key).unwrap_or(&Value::Null);
+    }
+    current
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn build_loadouts(surface_policy: &Value) -> Value {
+    let default_loadouts = string_list_at(surface_policy, &["default_surface", "default_loadouts"]);
+    let explicit_opt_in_loadouts = string_list_at(
+        surface_policy,
+        &["default_surface", "explicit_opt_in_loadouts"],
+    );
+    let tier_activation_defaults = surface_policy
+        .get("default_surface")
+        .and_then(|surface| surface.get("tier_activation_defaults"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     json!({
         "version": 2,
         "schema_version": "skill-loadouts-v2",
         "source": "generated-by-skill-compiler-rs",
+        "source_of_truth": false,
+        "derived_from": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+        "report_status": "foldable_generated_report",
         "activation_policy": {
-            "default_loadouts": ["default_surface_loadout"],
-            "explicit_opt_in_loadouts": [
-                "research_loadout",
-                "implementation_loadout",
-                "audit_loadout",
-                "framework_loadout",
-                "ops_loadout"
-            ],
-            "experimental_tiers": "explicit_opt_in",
-            "deprecated_tiers": "disabled",
+            "default_loadouts": default_loadouts,
+            "explicit_opt_in_loadouts": explicit_opt_in_loadouts,
+            "experimental_tiers": tier_activation_defaults.get("experimental").cloned().unwrap_or_else(|| json!("explicit_opt_in")),
+            "deprecated_tiers": tier_activation_defaults.get("deprecated").cloned().unwrap_or_else(|| json!("disabled")),
             "compatibility_surfaces": "explicit_opt_in"
         },
         "loadouts": {
@@ -818,6 +878,9 @@ fn build_framework_surface_policy(tiers: &Value) -> Value {
         "version": 1,
         "schema_version": "framework-surface-policy-v1",
         "source": "generated-by-skill-compiler-rs",
+        "source_of_truth": true,
+        "derived_reports": ["skills/SKILL_TIERS.json"],
+        "deprecated_or_foldable_reports": ["skills/SKILL_LOADOUTS.json"],
         "kernel": {
             "canonical_axes": ["routing", "memory", "continuity", "codex_host_payload"],
             "policy": "Keep only routing, memory, continuity, and Codex host payload on the mainline; everything else is an opt-in capability."
@@ -1000,9 +1063,12 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         "version": 1,
         "schema_version": "skill-tier-catalog-v1",
         "source": "generated-by-skill-compiler-rs",
+        "source_of_truth": false,
+        "derived_from": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+        "report_status": "generated_debug_report",
         "tier_order": ["core", "optional", "experimental", "deprecated"],
         "generation_policy": {
-            "core": "session-start required source/artifact/evidence gate skills only; capability-plane gates stay explicit",
+            "core": "session-start required source/artifact/evidence/delegation gate skills only; preferred first-turn owners are hot-runtime entries, not default loadout members",
             "optional": "all non-core skills; route can still select them from the manifest fallback",
             "experimental": "reserved for unstable or low-health routing signals",
             "deprecated": "reserved for very-low-health and unused skills with reroute pressure"
@@ -1043,7 +1109,7 @@ fn is_core_surface_skill(skill: &[Value]) -> bool {
         && string_at(skill, 6) == "required"
         && matches!(
             string_at(skill, 3).as_str(),
-            "source" | "artifact" | "evidence"
+            "source" | "artifact" | "evidence" | "delegation"
         )
 }
 
@@ -1173,6 +1239,8 @@ fn select_all_runtime_skills(manifest: &Value) -> Vec<Vec<Value>> {
 
 fn is_hot_runtime_skill(skill: &[Value]) -> bool {
     is_core_surface_skill(skill)
+        || is_required_delegation_gate(skill)
+        || is_first_turn_preferred_owner(skill)
 }
 
 fn runtime_rank(skill: &[Value]) -> (i32, i32, i32) {
@@ -1191,6 +1259,17 @@ fn runtime_rank(skill: &[Value]) -> (i32, i32, i32) {
         _ => 99,
     };
     (session_rank, gate_rank, layer_rank)
+}
+
+fn is_required_delegation_gate(skill: &[Value]) -> bool {
+    string_at(skill, 2) == "gate"
+        && string_at(skill, 6) == "required"
+        && string_at(skill, 3) == "delegation"
+}
+
+fn is_first_turn_preferred_owner(skill: &[Value]) -> bool {
+    string_at(skill, 2) == "owner"
+        && matches!(string_at(skill, 6).as_str(), "required" | "preferred")
 }
 
 fn extract_trigger_hints(
@@ -1503,9 +1582,11 @@ mod tests {
             ])
         );
         assert_eq!(runtime["keys"][6], json!("trigger_hints"));
+        assert_eq!(runtime["keys"][8], json!("priority"));
         assert_eq!(shadow_map["winning_rule"], json!("highest-position-wins"));
         assert!(manifest["skills"][0][7].is_array());
         assert!(runtime["skills"][0][6].is_array());
+        assert_eq!(runtime["skills"][0][8], json!("P2"));
     }
 
     #[test]
@@ -1549,6 +1630,12 @@ mod tests {
             "---\nname: delegation-gate\ndescription: delegation gate\nrouting_layer: L0\nrouting_owner: gate\nrouting_gate: delegation\nrouting_priority: P1\nsession_start: required\n---\n## When to use\n- delegation gate\n",
         )
         .expect("write delegation skill");
+        fs::create_dir_all(skills_root.join("preferred-owner")).expect("create preferred dir");
+        fs::write(
+            skills_root.join("preferred-owner").join("SKILL.md"),
+            "---\nname: preferred-owner\ndescription: preferred owner\nrouting_layer: L1\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P1\nsession_start: preferred\n---\n## When to use\n- preferred owner\n",
+        )
+        .expect("write preferred owner skill");
         write_skill(&skills_root.join("optional-owner"), "optional-owner");
 
         let docs = load_skill_documents(&skills_root).expect("load skill docs");
@@ -1562,19 +1649,23 @@ mod tests {
         let bundle =
             compile_bundle(&docs, &entries, &source_manifest, &HashMap::new()).expect("compile");
 
-        assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(3));
+        assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(4));
         assert_eq!(
             bundle.runtime_index["skills"].as_array().map(Vec::len),
-            Some(1)
+            Some(3)
         );
         assert_eq!(bundle.runtime_index["scope"]["kind"], json!("hot"));
-        assert_eq!(bundle.tiers["summary"]["tier_counts"]["core"], json!(1));
+        assert_eq!(bundle.tiers["summary"]["tier_counts"]["core"], json!(2));
         assert_eq!(
             bundle.tiers["summary"]["activation_counts"]["default"],
-            json!(1)
+            json!(2)
         );
         assert_eq!(
             bundle.tiers["skills"]["delegation-gate"]["surface"]["activation_mode"],
+            json!("default")
+        );
+        assert_eq!(
+            bundle.tiers["skills"]["preferred-owner"]["surface"]["activation_mode"],
             json!("explicit_opt_in")
         );
         assert_eq!(
@@ -1582,8 +1673,29 @@ mod tests {
             json!("generated-by-skill-compiler-rs")
         );
         assert_eq!(
+            bundle.loadouts["derived_from"],
+            json!("configs/framework/FRAMEWORK_SURFACE_POLICY.json")
+        );
+        assert_eq!(bundle.loadouts["source_of_truth"], json!(false));
+        assert_eq!(
             bundle.framework_surface_policy["source"],
             json!("generated-by-skill-compiler-rs")
+        );
+        assert_eq!(
+            bundle.framework_surface_policy["source_of_truth"],
+            json!(true)
+        );
+        assert_eq!(
+            bundle.framework_surface_policy["derived_reports"],
+            json!(["skills/SKILL_TIERS.json"])
+        );
+        assert_eq!(
+            bundle.tiers["derived_from"],
+            json!("configs/framework/FRAMEWORK_SURFACE_POLICY.json")
+        );
+        assert_eq!(
+            bundle.tiers["report_status"],
+            json!("generated_debug_report")
         );
     }
 }

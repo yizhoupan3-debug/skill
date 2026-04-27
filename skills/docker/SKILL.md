@@ -12,6 +12,9 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
+  - Docker
+  - Dockerfile
+  - docker-compose
   - 容器化
   - 镜像构建
   - Docker 部署

@@ -29,6 +29,12 @@ trigger_hints:
   - 不必要抽象
   - 减法视角
   - 第一性原理
+  - runtime 轻量化
+  - 兼容层
+  - 胶水层
+  - 减少入口
+  - 减入口
+  - 不损害功能
   - skill 维护
   - sync health checks
   - registry drift cleanup

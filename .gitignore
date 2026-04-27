@@ -30,6 +30,7 @@ output/
 archives/artifact-history/
 artifacts/current/
 artifacts/bootstrap/
+artifacts/codex-skill-surface/
 artifacts/ops/
 artifacts/evidence/
 artifacts/scratch/
@@ -64,9 +65,6 @@ main-*.js
 my_ccs.css
 opencode.jsonc
 .codex/*
-!.codex/skills/
-!.codex/skills/*/
-!.codex/skills/*/SKILL.md
 
 # Private local aggregator; do not publish
 codex-aggregator/

@@ -156,7 +156,7 @@ round:
   reading the raw semaphore permit value
 - runtime execution now flows through a single execution-kernel adapter seam
   instead of inlining dry/live execution branches in `runtime.py`
-- live execution now enters a Rust-owned `router-rs --execute-json` contract,
+- live execution now enters a Rust-owned stdio `execute` operation contract,
   so Python no longer owns the actual live model call or run-response
   normalization on the primary path
 

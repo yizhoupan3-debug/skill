@@ -54,8 +54,11 @@ acquire_build_lock() {
   mkdir -p "$SHARED_TARGET_DIR"
   while true; do
     if mkdir "$BUILD_LOCK_DIR" 2>/dev/null; then
-      printf '%s\n' "$$" >"$BUILD_LOCK_DIR/pid"
-      return 0
+      if printf '%s\n' "$$" >"$BUILD_LOCK_DIR/pid" 2>/dev/null; then
+        return 0
+      fi
+      rmdir "$BUILD_LOCK_DIR" 2>/dev/null || true
+      continue
     fi
     if [ -f "$BUILD_LOCK_DIR/pid" ]; then
       lock_owner=$(cat "$BUILD_LOCK_DIR/pid" 2>/dev/null || true)
@@ -72,8 +75,14 @@ acquire_build_lock() {
 }
 
 release_build_lock() {
-  rm -f "$BUILD_LOCK_DIR/pid"
-  rmdir "$BUILD_LOCK_DIR" 2>/dev/null || true
+  local lock_owner=""
+  if [ -f "$BUILD_LOCK_DIR/pid" ]; then
+    lock_owner=$(cat "$BUILD_LOCK_DIR/pid" 2>/dev/null || true)
+  fi
+  if [ "$lock_owner" = "$$" ]; then
+    rm -f "$BUILD_LOCK_DIR/pid"
+    rmdir "$BUILD_LOCK_DIR" 2>/dev/null || true
+  fi
 }
 
 ROUTER_BIN=$(pick_router_bin)

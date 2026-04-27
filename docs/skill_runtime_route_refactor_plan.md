@@ -264,7 +264,7 @@ Command 是用户显式进入的模式，不是默认 skill owner。
 
 本次不做：
 
-- 不修改 `.codex/skills/autopilot/SKILL.md`。
+- 不修改 Codex user-skill 安装面的 `autopilot/SKILL.md`。
 - 不把 `autopilot` 合并进默认执行协议。
 - 不用 `autopilot` 修复默认 skill 体系。
 - 不新增一个 `gsd` skill。

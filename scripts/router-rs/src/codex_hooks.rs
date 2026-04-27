@@ -11,7 +11,7 @@ const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
-const HOST_ENTRYPOINT_RETIRED_DIRECTORIES: [&str; 1] = [".codex/skills"];
+const HOST_ENTRYPOINT_RETIRED_DIRECTORIES: [&str; 0] = [];
 const HOST_ENTRYPOINT_RETIRED_FILES: [&str; 1] = ["AGENT.md"];
 const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 2] = ["AGENTS.md", CODEX_HOOK_README_PATH];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
