@@ -17,7 +17,7 @@ pub(crate) const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2"
 pub(crate) const ROUTE_RESOLUTION_SCHEMA_VERSION: &str = "router-rs-route-resolution-v1";
 pub(crate) const ROUTE_AUTHORITY: &str = "rust-route-core";
 pub(crate) const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
-const OVERLAY_ONLY_SKILLS: [&str; 2] = ["execution-audit", "i18n-l10n"];
+const OVERLAY_ONLY_SKILLS: [&str; 1] = ["i18n-l10n"];
 const ARTIFACT_GATE_PHRASES: [&str; 16] = [
     "pdf",
     "docx",
@@ -1047,22 +1047,6 @@ fn has_checklist_execution_context(query_text: &str) -> bool {
         .any(|marker| query_text.contains(marker))
 }
 
-fn has_checklist_normalization_context(query_text: &str) -> bool {
-    query_text.contains("checklist")
-        && [
-            "规范",
-            "规范化",
-            "normalize",
-            "normalise",
-            "serial",
-            "parallel",
-            "并行",
-            "串行",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker))
-}
-
 fn has_skill_creator_context(query_text: &str, query_token_list: &[String]) -> bool {
     (query_text.contains("skill") || query_text.contains("skill.md"))
         && [
@@ -1259,10 +1243,8 @@ fn can_be_fallback_owner(record: &SkillRecord) -> bool {
     can_be_primary_owner(record)
         && !matches!(
             record.slug.as_str(),
-            "anti-laziness"
-                | "coding-standards"
+            "coding-standards"
                 | "error-handling-patterns"
-                | "execution-audit"
                 | "tdd-workflow"
                 | "code-review"
                 | "i18n-l10n"
@@ -1431,6 +1413,35 @@ pub(crate) fn route_task(
         .collect::<HashSet<String>>();
     let route_context = build_route_context(&normalized_query, &query_token_list);
 
+    if let Some(record) = records
+        .iter()
+        .find(|record| has_literal_framework_alias_call(&normalized_query, &record.slug))
+    {
+        let reasons =
+            compact_route_reasons(&["Framework alias entrypoint matched explicitly.".to_string()]);
+        return Ok(RouteDecision {
+            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+            authority: ROUTE_AUTHORITY.to_string(),
+            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+            task: query.to_string(),
+            session_id: session_id.to_string(),
+            selected_skill: record.slug.clone(),
+            overlay_skill: None,
+            route_context,
+            layer: record.layer.clone(),
+            score: 100.0,
+            route_snapshot: build_route_snapshot(
+                "rust",
+                &record.slug,
+                None,
+                &record.layer,
+                100.0,
+                &reasons,
+            ),
+            reasons,
+        });
+    }
+
     let score = |record| {
         score_route_candidate(
             record,
@@ -1455,7 +1466,7 @@ pub(crate) fn route_task(
     };
 
     if viable.is_empty() {
-        let fallback = fallback_owner(records)?;
+        let fallback = fallback_owner(records, &route_context)?;
         let fallback_reasons = compact_route_reasons(&[
             "No explicit keyword hit; fell back to highest-priority layer owner.".to_string(),
         ]);
@@ -1485,7 +1496,7 @@ pub(crate) fn route_task(
         .iter()
         .all(|candidate| is_overlay_record(candidate.record))
     {
-        let fallback = fallback_owner(records)?;
+        let fallback = fallback_owner(records, &route_context)?;
         let fallback_reasons = compact_route_reasons(&[
             "Only overlay signals matched; fell back to the generic implementation owner so overlays cannot become primary owners."
                 .to_string(),
@@ -1601,6 +1612,31 @@ fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteCo
         query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
     });
     let delegation_candidate = has_bounded_subagent_context(query_text, query_token_list);
+    let audit_requested = [
+        "核查",
+        "审查",
+        "审计",
+        "诊断",
+        "有什么问题",
+        "哪里错了",
+        "audit",
+        "review",
+        "diagnose",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker));
+    let implementation_requested = [
+        "实现",
+        "修复",
+        "开发",
+        "落地",
+        "直接做代码",
+        "implement",
+        "fix",
+        "code",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker));
     let route_reason = if supervisor_required {
         "explicit_supervisor_continuity"
     } else if delegation_candidate {
@@ -1612,9 +1648,16 @@ fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteCo
     };
 
     RouteContextPayload {
-        execution_protocol: "four_step".to_string(),
+        execution_protocol: if implementation_requested && !audit_requested {
+            "implementation"
+        } else if audit_requested {
+            "audit"
+        } else {
+            "four_step"
+        }
+        .to_string(),
         verification_required: true,
-        evidence_required: true,
+        evidence_required: audit_requested || !implementation_requested,
         supervisor_required,
         delegation_candidate,
         continue_safe_local_steps: completion_requested,
@@ -1922,21 +1965,6 @@ fn supervisor_execution_markers() -> [&'static str; 9] {
     ]
 }
 
-fn quality_risk_markers() -> [&'static str; 10] {
-    [
-        "anti-laziness",
-        "anti laziness",
-        "别糊弄",
-        "严格落实",
-        "没有验证",
-        "无证据完成",
-        "别猜",
-        "要证据",
-        "偷懒",
-        "糊弄",
-    ]
-}
-
 fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
     match slug {
         "autopilot" => &["/autopilot", "$autopilot"],
@@ -1999,45 +2027,6 @@ fn has_explicit_framework_alias_call(
             has_explicit_entrypoint_term(query_text, &normalize_text(entrypoint))
                 || query_token_list.iter().any(|token| token == entrypoint)
         })
-}
-
-fn has_team_orchestration_context(query_text: &str, query_token_list: &[String]) -> bool {
-    let orchestration_markers = [
-        "team orchestration",
-        "worker lifecycle",
-        "worker 生命周期",
-        "multi agent execution",
-        "多 agent 执行",
-        "团队编排",
-        "supervisor",
-        "supervisor 主线",
-        "supervisor-owned continuity",
-        "共享 continuity",
-    ];
-    let lifecycle_markers = [
-        "multi-phase",
-        "多阶段",
-        "integration",
-        "集成",
-        "qa",
-        "cleanup",
-        "resume",
-        "恢复续跑",
-        "恢复锚点",
-        "recovery anchor",
-        "lane-local",
-        "worker output",
-        "worker 输出",
-    ];
-    let matched_orchestration = orchestration_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    });
-    let matched_lifecycle = lifecycle_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    });
-    matched_orchestration && matched_lifecycle
 }
 
 fn has_bounded_subagent_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -2108,6 +2097,30 @@ fn has_team_negation_context(query_text: &str, query_token_list: &[String]) -> b
         "不要 team orchestration",
         "只是 sidecar",
         "only sidecar",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_team_orchestration_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "team orchestration",
+        "team workflow",
+        "team mode",
+        "team supervisor",
+        "worker lifecycle",
+        "worker orchestration",
+        "multi-worker",
+        "multi worker",
+        "team 协作",
+        "团队编排",
+        "多 worker",
+        "worker 生命周期",
+        "supervisor-led",
+        "supervisor led",
     ]
     .iter()
     .any(|marker| {
@@ -2480,30 +2493,6 @@ fn has_autoresearch_loop_context(query_text: &str, query_token_list: &[String]) 
     })
 }
 
-fn has_live_browser_action_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "打开",
-        "访问",
-        "导航",
-        "点击",
-        "输入",
-        "登录",
-        "截图",
-        "重现",
-        "open",
-        "navigate",
-        "click",
-        "type",
-        "login",
-        "screenshot",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
 fn has_visual_evidence_review_context(query_text: &str, query_token_list: &[String]) -> bool {
     [
         "看图",
@@ -2798,29 +2787,7 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    let checklist_execution_context = has_checklist_execution_context(query_text);
-    let mut suppress_checklist_planner = false;
-    if record.slug == "checklist-fixer" && checklist_execution_context {
-        score += 45.0;
-        reasons.push(
-            "Checklist-fixer boost applied: checklist artifact plus execution wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "checklist-planner" && checklist_execution_context {
-        suppress_checklist_planner = true;
-        reasons.push(
-            "Checklist-planner suppression applied: execution wording should run an existing checklist."
-                .to_string(),
-        );
-    }
-    if record.slug == "checklist-planner" && has_checklist_normalization_context(query_text) {
-        score += 8.0;
-        reasons.push(
-            "Checklist-planner boost applied: checklist normalization wording detected."
-                .to_string(),
-        );
-    }
+    let _checklist_execution_context = has_checklist_execution_context(query_text);
     if record.slug == "skill-creator" && has_skill_creator_context(query_text, query_token_list) {
         score += 70.0;
         reasons.push(
@@ -2858,10 +2825,13 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
-    if record.slug == "humanizer" && has_humanizer_context(query_text, query_token_list) {
-        score += 56.0;
+    if record.slug == "documentation-engineering"
+        && has_humanizer_context(query_text, query_token_list)
+        && !has_paper_context(query_text, query_token_list)
+    {
+        score += 52.0;
         reasons.push(
-            "Humanizer boost applied: prose naturalization or sentence-level AI-flavor audit detected."
+            "Documentation-engineering polish boost applied: prose naturalization or sentence-level AI-flavor audit detected."
                 .to_string(),
         );
     }
@@ -2889,6 +2859,16 @@ fn score_route_candidate<'a>(
     }
     let explicit_framework_alias = framework_alias_requires_explicit_call(&record.slug)
         && has_explicit_framework_alias_call(query_text, query_token_list, &record.slug);
+    if record.slug == "agent-swarm-orchestration"
+        && (bounded_subagent_context
+            || has_team_orchestration_context(query_text, query_token_list))
+    {
+        score += 60.0;
+        reasons.push(
+            "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
+                .to_string(),
+        );
+    }
     if framework_alias_requires_explicit_call(&record.slug) && !explicit_framework_alias {
         return RouteCandidate {
             record,
@@ -2911,7 +2891,7 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    if matches!(record.slug.as_str(), "gh-address-comments" | "gh-pr-triage")
+    if matches!(record.slug.as_str(), "gh-address-comments")
         && has_paper_context(query_text, query_token_list)
         && !has_github_pr_context(query_text, query_token_list)
     {
@@ -2965,17 +2945,7 @@ fn score_route_candidate<'a>(
             record,
             score: 0.0,
             reasons: vec![
-                "Suppressed: named-product design reference grounding belongs to design-agent."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "design-workflow" && has_humanizer_context(query_text, query_token_list) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: prose AI-flavor wording is humanizer work, not design workflow."
+                "Suppressed: named-product design reference grounding belongs to design-md."
                     .to_string(),
             ],
         };
@@ -2990,21 +2960,6 @@ fn score_route_candidate<'a>(
             reasons: vec![
                 "Suppressed: prose naturalization should not route through the design artifact gate."
                     .to_string(),
-            ],
-        };
-    }
-    if record.slug == "execution-controller-app"
-        && !query_text.contains("app 全局")
-        && !query_text.contains("全栈")
-        && !query_text.contains("跨栈")
-        && !query_text.contains("app深度")
-        && !query_text.contains(".app_supervisor_state.json")
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: bare App wording is not whole-app orchestration.".to_string(),
             ],
         };
     }
@@ -3028,31 +2983,6 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: explicit autonomous loop wording should route directly to autoresearch."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "brainstorm-research"
-        && has_autoresearch_loop_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: explicit autonomous loop wording is execution, not brainstorming."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "playwright"
-        && has_external_retrieval_context(query_text, query_token_list)
-        && !has_live_browser_action_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: generic browser-automation ecosystem research does not require a live browser evidence gate."
                     .to_string(),
             ],
         };
@@ -3295,24 +3225,24 @@ fn score_route_candidate<'a>(
     let design_output_audit_context = has_design_output_audit_context(query_text, query_token_list);
     let design_workflow_protocol_context =
         has_design_workflow_protocol_context(query_text, query_token_list);
-    if record.slug == "design-output-auditor" && design_output_audit_context {
+    if record.slug == "design-md" && design_output_audit_context {
         score += 44.0;
         reasons.push(
-            "Design-output audit boost applied: UI drift, anti-pattern, or acceptance verdict wording detected."
+            "Design-md audit boost applied: UI drift, anti-pattern, or acceptance verdict wording detected."
                 .to_string(),
         );
     }
-    if record.slug == "design-workflow-protocol" && design_workflow_protocol_context {
+    if record.slug == "design-md" && design_workflow_protocol_context {
         score += 44.0;
         reasons.push(
-            "Design-workflow protocol boost applied: durable design artifact workflow wording detected."
+            "Design-md workflow boost applied: durable design artifact workflow wording detected."
                 .to_string(),
         );
     }
-    if record.slug == "design-agent" && has_design_reference_context(query_text, query_token_list) {
+    if record.slug == "design-md" && has_design_reference_context(query_text, query_token_list) {
         score += 74.0;
         reasons.push(
-            "Design-agent boost applied: named-product reference source grounding requested."
+            "Design-md reference boost applied: named-product reference source grounding requested."
                 .to_string(),
         );
     }
@@ -3479,34 +3409,7 @@ fn score_route_candidate<'a>(
         );
     }
 
-    if record.slug == "execution-controller-coding" {
-        let controller_markers = supervisor_execution_markers()
-            .iter()
-            .filter(|marker| query_text.contains(*marker))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !controller_markers.is_empty() {
-            score += 24.0;
-            reasons.push(format!(
-                "Execution-controller boost applied: {}.",
-                controller_markers.join(", ")
-            ));
-        }
-    }
-
     if record.slug == "subagent-delegation" && score > 0.0 {
-        let explicit_delegation = [
-            "sidecar",
-            "subagent",
-            "delegation",
-            "子代理",
-            "并行 sidecar",
-            "multiagent",
-            "multi-agent",
-            "多 agent",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(*marker));
         if bounded_subagent_context {
             score += 22.0;
             reasons.push(
@@ -3521,28 +3424,10 @@ fn score_route_candidate<'a>(
                     .to_string(),
             );
         }
-        let team_orchestration = has_team_orchestration_context(query_text, query_token_list);
-        let controller_markers = supervisor_execution_markers()
-            .iter()
-            .any(|marker| query_text.contains(*marker));
-        if controller_markers && !explicit_delegation {
-            score *= 0.7;
-            reasons.push(
-                "Delegation-gate suppression applied: controller-orchestration signals dominate."
-                    .to_string(),
-            );
-        }
         if team_negation_context {
             score += 16.0;
             reasons.push(
                 "Team-negation boost applied: query says bounded multi-agent routing should avoid team."
-                    .to_string(),
-            );
-        }
-        if team_orchestration && !explicit_delegation {
-            score *= 0.4;
-            reasons.push(
-                "Delegation-gate suppression applied: full team orchestration signals dominate bounded sidecars."
                     .to_string(),
             );
         }
@@ -3677,10 +3562,6 @@ fn score_route_candidate<'a>(
             record.slug
         ));
     }
-    if suppress_checklist_planner {
-        score *= 0.05;
-    }
-
     RouteCandidate {
         record,
         score,
@@ -3688,9 +3569,28 @@ fn score_route_candidate<'a>(
     }
 }
 
-fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
-    if let Some(record) = records.iter().find(|record| record.slug == "plan-to-code") {
-        return Ok(record);
+fn fallback_owner<'a>(
+    records: &'a [SkillRecord],
+    route_context: &RouteContextPayload,
+) -> Result<&'a SkillRecord, String> {
+    if route_context.evidence_required || route_context.verification_required {
+        if let Some(record) = records
+            .iter()
+            .find(|record| record.slug == "skill-framework-developer")
+        {
+            return Ok(record);
+        }
+        if let Some(record) = records
+            .iter()
+            .find(|record| record.slug == "systematic-debugging")
+        {
+            return Ok(record);
+        }
+    }
+    if route_context.execution_protocol == "implementation" {
+        if let Some(record) = records.iter().find(|record| record.slug == "plan-to-code") {
+            return Ok(record);
+        }
     }
     if let Some(record) = records.iter().find(|record| can_be_fallback_owner(record)) {
         return Ok(record);
@@ -3847,29 +3747,6 @@ fn pick_overlay(
             .iter()
             .any(|phrase| phrase.chars().count() > 3 && text_matches_phrase(query_tokens, phrase));
         if explicit_name_match || explicit_trigger_match {
-            return Some(record.slug.clone());
-        }
-        if record.slug == "anti-laziness"
-            && quality_risk_markers().iter().any(|marker| {
-                query_text.contains(*marker) || text_matches_phrase(query_tokens, marker)
-            })
-        {
-            return Some(record.slug.clone());
-        }
-        if record.slug == "execution-audit"
-            && [
-                "强验收",
-                "强制验收",
-                "execution audit",
-                "execution-audit",
-                "quality gate",
-            ]
-            .iter()
-            .any(|marker| {
-                query_text.contains(&normalize_text(marker))
-                    || text_matches_phrase(query_tokens, marker)
-            })
-        {
             return Some(record.slug.clone());
         }
     }

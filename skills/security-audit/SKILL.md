@@ -46,7 +46,7 @@ risk: medium
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Vuln-Surface/Logic, Post: Penetration-Scan/OWASP-Compliance Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Vuln-Surface/Logic, Post: Penetration-Scan/OWASP-Compliance Results)** → runtime verification gate
 # security-audit
 
 This skill owns implementation-level security auditing: finding real exploitable weaknesses in code, not just architectural threat modeling.
@@ -187,7 +187,7 @@ Recommended structure:
 - If a concrete fix point and validation method are available, always provide them.
 - Prioritize findings by actual exploitability, not theoretical severity alone.
 - Do not skip access control review in favor of lower-priority categories.
-- **Superior Quality Audit**: For critical security boundaries, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For critical security boundaries, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 
@@ -195,5 +195,5 @@ Recommended structure:
 - "帮我做代码安全审计，重点看鉴权和输入校验。"
 - "检查这个项目有没有 SSRF 或 secret 泄露。"
 - "强制进行安全深度审计 / 检查漏洞面与 OWASP 合规结果。"
-- "Use $execution-audit to audit this security implementation for penetration-scan idealism."
+- "Use the runtime verification gate to audit this security implementation for penetration-scan idealism."
 - "看下这个文件上传是否安全。"

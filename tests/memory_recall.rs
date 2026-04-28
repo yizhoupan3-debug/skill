@@ -526,7 +526,7 @@ fn seed_runtime(repo_root: &std::path::Path, task: &str) {
     );
     write_json(
         &task_root.join("TRACE_METADATA.json"),
-        &json!({"task": task, "matched_skills": ["execution-controller-coding"]}),
+        &json!({"task": task, "matched_skills": ["plan-to-code"]}),
     );
     write_json(
         &repo_root.join("artifacts/current/active_task.json"),

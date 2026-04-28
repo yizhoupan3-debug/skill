@@ -33,7 +33,7 @@ source: community
 # docker
 
 This skill owns Docker containerization: image building, Compose orchestration, container debugging, security hardening, and CI/CD integration patterns.
-- **Dual-Dimension Audit (Pre: Layers/Config, Post: Build-Size/Runtime Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Layers/Config, Post: Build-Size/Runtime Results)** → runtime verification gate
 
 ## When to use
 
@@ -49,10 +49,10 @@ This skill owns Docker containerization: image building, Compose orchestration, 
 - The task is Cloudflare Workers deployment → use `$cloudflare-deploy`
 
 ## Hard Constraints
-- **Superior Quality Audit**: For production images, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production images, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 - Do not run containers as root.
 - Use multi-stage builds for minimal production footprint.
 
 ## Trigger examples
 - "强制进行 Docker 深度审计 / 检查镜像构建结果与运行时隔离状态。"
-- "Use $execution-audit to audit this Dockerfile for layer-caching idealism."
+- "Use the runtime verification gate to audit this Dockerfile for layer-caching idealism."

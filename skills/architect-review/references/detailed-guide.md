@@ -138,7 +138,7 @@ Recommended structure:
 In PLANNING mode:
 - Highlight architectural risks and alternatives in implementation_plan.md
 - Attach tradeoff analysis to design decisions
-- Use Mermaid diagrams (via `$mermaid-expert`) to visualize architecture
+- Use Mermaid diagrams (via `$diagramming`) to visualize architecture
 
 In EXECUTION mode:
 - Verify new code follows established architectural conventions

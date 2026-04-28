@@ -54,33 +54,6 @@ Codex or MCP live startup to execute the Node build.
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
 ```
 
-### Claude Desktop (minimal local config)
-
-Add this server directly to `claude_desktop_config.json`; it uses Claude Desktop → local stdio → `router-rs` only, with no Docker image, HTTP proxy, Node runtime, or extra bridge:
-
-```json
-{
-  "mcpServers": {
-    "browser-mcp": {
-      "command": "/Users/joe/Documents/skill/scripts/router-rs/run_router_rs.sh",
-      "args": [
-        "/Users/joe/Documents/skill/scripts/router-rs/Cargo.toml",
-        "browser",
-        "mcp-stdio",
-        "--repo-root",
-        "/Users/joe/Documents/skill"
-      ]
-    }
-  }
-}
-```
-
-For an idempotent repo-owned write into an explicit Claude Desktop config path:
-
-```bash
-./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex host-integration install-claude-desktop-mcp --repo-root /Users/joe/Documents/skill --config-path /path/to/claude_desktop_config.json
-```
-
 ## Smoke test
 
 ```bash

@@ -1,0 +1,23 @@
+schema_version = 1
+
+[filters.skill-compiler-rs]
+description = "Compact Rust skill compiler runs while preserving compiler errors and summaries"
+match_command = "^cargo\\s+run\\b.*scripts/skill-compiler-rs/Cargo\\.toml"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*Compiling\\s+",
+  "^\\s*Finished\\s+",
+  "^\\s*Running\\s+",
+]
+max_lines = 80
+on_empty = "skill compiler: ok"
+
+[[tests.skill-compiler-rs]]
+name = "strips cargo wrapper noise"
+input = """
+   Compiling skill-compiler-rs v0.1.0 (/repo/scripts/skill-compiler-rs)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running `scripts/skill-compiler-rs/target/debug/skill-compiler-rs --apply`
+compiled 109 skills
+"""
+expected = "compiled 109 skills"

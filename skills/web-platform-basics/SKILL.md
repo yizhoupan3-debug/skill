@@ -54,10 +54,10 @@ This skill owns browser-native frontend fundamentals when the problem should be 
 ## Do not use
 
 - The task is CSS **engineering**: architecture decisions, design systems, animation optimization, CSS methodology selection → use `$css-pro`
-- The task is **Tailwind CSS** configuration, theming, or plugins → use `$tailwind-pro`
+- The task is **Tailwind CSS** configuration, theming, or plugins → use `$css-pro`
 - The main task is framework-specific React/Next/Vue/Svelte implementation → use the relevant framework skill
 - The task is primarily a11y auditing against WCAG rather than platform implementation → use `$accessibility-auditor`
-- The task is browser automation or live-page reproduction → use `$playwright`
+- The task is browser automation or live-page reproduction → use the built-in browser/browser-use capability
 - The task is visual critique from screenshots rather than DOM/CSS mechanics → use `$visual-review`
 - The task is SEO audit or meta tag / structured data optimization → use `$seo-web`
 - The task is HTML email template development (table-based layout, Outlook compatibility) → use `$email-template`

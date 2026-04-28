@@ -80,6 +80,6 @@ Use `--json` when another tool or host process needs stable machine-readable out
 ## Do not use
 
 - Analyzing or reviewing an existing screenshot → use `$visual-review`
-- Browser automation to capture web page content → use `$playwright`
+- Browser automation to capture web page content → use the built-in browser/browser-use capability
 - Generating or editing images with AI → use `$image-generated`
-- Web page screenshots needing navigation/login/interaction → use `$playwright`
+- Web page screenshots needing navigation/login/interaction → use the built-in browser/browser-use capability

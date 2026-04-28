@@ -66,7 +66,7 @@ science, citations, results, or reviewer-facing promises.
 - Whole-paper judgment, novelty, or experimental validity review -> use `$paper-reviewer` logic mode.
 - Literature search/synthesis before writing -> use `$literature-synthesis`.
 - Citation formatting or verification -> use `$citation-management`.
-- Generic non-academic prose -> use `$humanizer`.
+- Generic non-academic prose -> use the owning domain skill, or `$documentation-engineering` for project docs.
 
 ## Claim-Safety Rules
 

@@ -50,13 +50,12 @@ approval_required_tools: []
 
 显式入口：
 - Codex：`$deepinterview`
-- Claude：`/deepinterview`
 
 ## Native Workflow
 
 - 本仓来源：`skills/deepinterview/SKILL.md` + `configs/framework/RUNTIME_REGISTRY.json`
 - 主流程：one-question-at-a-time -> target weakest dimension -> score ambiguity each round -> handoff only below threshold
-- 外部依赖：无外部 Claude 插件、无旧插件状态目录、无插件运行态
+- 外部依赖：无外部插件、无旧插件状态目录、无插件运行态
 
 ## When to use
 
@@ -90,7 +89,7 @@ approval_required_tools: []
 - 架构面：[`$architect-review`](/Users/joe/Documents/skill/skills/architect-review/SKILL.md)
 - 安全面：[`$security-audit`](/Users/joe/Documents/skill/skills/security-audit/SKILL.md)
 - 测试面：[`$test-engineering`](/Users/joe/Documents/skill/skills/test-engineering/SKILL.md)
-- 收敛验收：[`$execution-audit`](/Users/joe/Documents/skill/skills/execution-audit/SKILL.md)
+- 收敛验收：[`runtime verification gate`](runtime policy)
 
 ## Local runtime
 
@@ -112,5 +111,5 @@ approval_required_tools: []
 
 - 这是本仓自有澄清协议，不是外部插件兼容壳。
 - 用本仓 review skill 和验证证据解释结论。
-- 不在 Claude 和 Codex 上分叉 `deepinterview` 的意义。
+- 不在不同 host 上分叉 `deepinterview` 的意义。
 - 用户看到的是本仓原生 `deepinterview`，不是外部兼容层。

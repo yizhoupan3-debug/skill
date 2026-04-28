@@ -1,7 +1,7 @@
 # Structured-Path Delegation
 
 Use this reference when `plan-to-code` owns the content work and
-`$subagent-delegation` is being consulted for runtime execution.
+`$runtime delegation gate` is being consulted for runtime execution.
 
 ## Ownership split
 
@@ -13,7 +13,7 @@ Use this reference when `plan-to-code` owns the content work and
 - deciding what "complete" means
 - final integration judgment
 
-`$subagent-delegation` owns:
+`$runtime delegation gate` owns:
 
 - whether delegation is worthwhile
 - which sidecars to spawn

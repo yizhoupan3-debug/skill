@@ -35,7 +35,7 @@ trigger_hints:
   - npm
 ---
 
-- **Dual-Dimension Audit (Pre: Package-JSON/Exports, Post: Publish-DryRun/Bundle-Size Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Package-JSON/Exports, Post: Publish-DryRun/Bundle-Size Results)** → runtime verification gate
 # npm-package-authoring
 
 This skill owns npm package and library authoring so packaging, exports, release shape, and publishability are handled as first-class concerns instead of an afterthought.
@@ -141,7 +141,7 @@ Recommended structure:
 - Do not assume ESM/CJS compatibility without testing the actual package boundary.
 - Do not publish incidental source junk if `files` or output filtering should be used.
 - Do not design package metadata only for local dev; think about downstream consumers.
-- **Superior Quality Audit**: For production-grade npm packages, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production-grade npm packages, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 - If publishability depends on registry credentials or org settings, say so explicitly.
 
 ## Trigger examples
@@ -150,4 +150,4 @@ Recommended structure:
 - "帮我把这个项目做成 npm 包并写好 package.json。"
 - "这个 exports / ESM/CJS 兼容到底该怎么配？"
 - "强制进行 NPM 包发布审计 / 检查 Exports 定义与打包体积结果。"
-- "Use $execution-audit to audit this npm package for consumer-compatibility idealism."
+- "Use the runtime verification gate to audit this npm package for consumer-compatibility idealism."

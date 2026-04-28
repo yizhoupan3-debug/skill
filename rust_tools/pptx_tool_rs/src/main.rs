@@ -827,7 +827,7 @@ fn init_workspace(workdir: &Path, template: &DeckTemplate, force: bool) -> Resul
 
 fn starter_sources_markdown(template: &DeckTemplate) -> String {
     format!(
-        "# Sources\n\n- Deck source plan: `deck.plan.json`\n- Editable output: `deck.pptx`\n- Runtime: Rust `ppt` CLI\n- Template: `{}`\n\n## Workflow Notes\n\n- Text pass: use `$humanizer` for ordinary prose, `$copywriting` for pitch / sales / product-message decks, and `$paper-writing` for academic prose.\n- Design pass: use `$design-md` for source-material design extraction, `$frontend-design` for a fresh premium direction, `$visual-review` for rendered PNG evidence, and `$design-output-auditor` for drift acceptance.\n\nAdd source URLs, local asset paths, and review notes here before final delivery.\n",
+        "# Sources\n\n- Deck source plan: `deck.plan.json`\n- Editable output: `deck.pptx`\n- Runtime: Rust `ppt` CLI\n- Template: `{}`\n\n## Workflow Notes\n\n- Text pass: use built-in Rust copy naturalization for ordinary prose, `$copywriting` for pitch / sales / product-message decks, and `$paper-writing` for academic prose.\n- Design pass: use `$design-md` for source-material design extraction, `$frontend-design` for a fresh premium direction, and `$visual-review` for rendered PNG evidence before the `$design-md` drift verdict.\n\nAdd source URLs, local asset paths, and review notes here before final delivery.\n",
         format!("{:?}", template).to_ascii_lowercase()
     )
 }
@@ -1135,9 +1135,9 @@ fn generate_outline_deck_source(outline: &Value, _template: &DeckTemplate) -> Re
         "format": "ppt-rust-outline-plan",
         "design_brief": {
             "source": "DESIGN.md visual contract when source materials or brand examples exist; otherwise choose a frontend-design direction before styling",
-            "copy": "run a text pass before layout: $humanizer for natural prose, $copywriting for persuasive decks, $paper-writing for academic decks; keep direct claims and remove generic AI filler",
+            "copy": "run built-in Rust copy naturalization before layout; use $copywriting for persuasive decks and $paper-writing for academic decks; keep direct claims and remove generic AI filler",
             "layout": "one visual lead, readable type, no equal-weight card farm; encode the chosen design roles in deck.plan.json",
-            "audit": "render evidence, visual-review findings, design-output-auditor drift verdict, then strict Rust QA"
+            "audit": "render evidence, visual-review findings, design-md drift verdict, then strict Rust QA"
         },
         "outline": outline
     }))
@@ -4246,10 +4246,10 @@ mod tests {
         });
         let source = generate_outline_deck_source(&outline, &DeckTemplate::Dark).unwrap();
         assert!(source.contains("ppt-rust-outline-plan"));
-        assert!(source.contains("$humanizer"));
+        assert!(source.contains("built-in Rust copy naturalization"));
         assert!(source.contains("$copywriting"));
         assert!(source.contains("$paper-writing"));
-        assert!(source.contains("design-output-auditor drift verdict"));
+        assert!(source.contains("design-md drift verdict"));
         assert!(!source.contains("本页展示增长路径"));
         assert!(source.contains("增长路径"));
         assert!(source.contains("支持业务"));

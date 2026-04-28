@@ -107,7 +107,7 @@ The main thread should contain only:
 
 If multiple non-blocking evidence slices can run independently and runtime policy permits:
 
-- consult [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md) for bounded evidence collection
+- consult [`runtime delegation gate`](runtime policy) for bounded evidence collection
 
 If runtime policy does **not** permit spawning:
 
@@ -181,7 +181,7 @@ During investigation, choose the right evidence-gathering tool:
 
 ## Anti-laziness integration
 
-This skill activates `$anti-laziness` enforcement when:
+This skill activates `runtime quality guard` enforcement when:
 - Two or more fix attempts used the same approach without variation (Spinning Wheels).
 - A "fix" is proposed based on theory before any tool output has been collected.
 - Output contains `...` or partial code snippets instead of full diagnostic output.

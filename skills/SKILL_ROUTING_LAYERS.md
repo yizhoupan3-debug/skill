@@ -36,38 +36,37 @@
 
 | Gate | 先检查条件 | 角色 |
 |---|---|---|
-| `subagent-delegation` | 复杂任务 + 可并行 sidecar + 仓库授权 | 运行时派单决策 |
+| `runtime delegation gate` | 复杂任务 + 可并行 sidecar + 仓库授权 | 运行时派单决策 |
 | `systematic-debugging` | bug / 异常 / 失败 + 根因未知 | 先复现定位，再交回 owner |
 | `openai-docs` | OpenAI API / 模型 / 产品 + 需官方当前文档 | source-of-truth gate |
-| `design-agent` | 用户先要命名产品参考、品牌 token、参考源、风格映射，而不是直接改页面 | design source-grounding gate |
+| `design-md` | 用户需要持久设计 token、参考源、风格映射或验收合同，而不是直接改页面 | design source-grounding gate |
 | `visual-review` | 已有截图 / 渲染图 / 可见证据 | evidence-first visual read |
 | `pdf` / `doc` / `spreadsheets` | 主对象是 artifact 文件 | artifact-native workflow |
 | `sentry` / `gh-address-comments` / `gh-fix-ci` | 任务由外部证据源触发 | source evidence gate |
-| `playwright` | 需要 live browser 交互取证 | execution gate |
 
 ## 分层概览
 
 ```text
-L0  execution-controller-coding, skill-framework-developer,
-    gh-address-comments, gh-fix-ci, sentry, subagent-delegation,
+L0  runtime execution controller, skill-framework-developer,
+    gh-address-comments, gh-fix-ci, sentry, runtime delegation gate,
     systematic-debugging
-L1  checklist-planner, tdd-workflow, test-engineering, refactoring,
+L1  runtime checklist planning, tdd-workflow, test-engineering, refactoring,
     documentation-engineering, error-handling-patterns, frontend-debugging,
     backend-runtime-debugging,
     citation-management, coding-standards, prompt-engineer,
-    information-retrieval, anti-laziness
+    information-retrieval, runtime quality guard
 L2  build-tooling, plan-to-code, api-integration-debugging,
     datastore-cache-queue, observability, web-platform-basics, gitx,
     css-pro, shell-cli, data-wrangling, dependency-migration,
-    checklist-fixer, env-config-management, code-review,
+    runtime checklist execution, env-config-management, code-review,
     architect-review, sustech-mailer, paper-workbench, research-workbench
 L3  accessibility-auditor, api-design, api-load-tester,
-    brainstorm-research, cloudflare-deploy, doc, docker,
-    design-agent, design-workflow, experiment-reproducibility, frontend-design,
-    github-actions-authoring, graphviz-expert, i18n-l10n, image-generated,
+    research-workbench, cloudflare-deploy, doc, docker,
+    design-md, experiment-reproducibility, frontend-design,
+    github-actions-authoring, diagramming, i18n-l10n, image-generated,
     infographic, jupyter-notebook, linux-server-ops, mcp-builder,
-    mermaid-expert, monorepo-tooling, native-app-debugging, npm-package-authoring, pdf,
-    performance-expert, playwright, release-engineering, screenshot,
+    diagramming, monorepo-tooling, native-app-debugging, npm-package-authoring, pdf,
+    performance-expert, release-engineering, screenshot,
     security-threat-model,
     spreadsheets, sustech-mailer, visual-review
 L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
@@ -77,12 +76,12 @@ L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
     mac-memory-management, ai-research, autoresearch, algo-trading,
     financial-data-fetching, agent-memory, agent-swarm-orchestration,
     literature-synthesis, statistical-analysis, chrome-extension-dev,
-    humanizer, scientific-figure-plotting, tailwind-pro,
+    scientific-figure-plotting, css-pro,
     typescript-pro, python-pro, javascript-pro, rust-pro, go-pro, sql-pro,
     seo-web, email-template, web-scraping,
     youtube-summarizer, copywriting, research-engineer, math-derivation
 Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
-          execution-audit, security-audit, i18n-l10n, anti-laziness
+          runtime verification gate, security-audit, i18n-l10n, runtime quality guard
 ```
 
 > System skills（`.system/`）: `skill-creator`, `skill-installer`, `openai-docs`
@@ -91,7 +90,7 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 
 | 层 | 做主 owner 的条件 | 不要误用 |
 |---|---|---|
-| **L0** | 任务本身是 skill 治理、路由、触发修复、框架自优化，或需要跨文件长周期的内核级指挥 (`execution-controller-coding`) | 不要把普通实现问题抬到 L0 |
+| **L0** | 任务本身是 skill 治理、路由、触发修复、框架自优化，或需要跨文件长周期的内核级指挥 (`runtime execution controller`) | 不要把普通实现问题抬到 L0 |
 | **L1** | 执行方式是核心：计划、TDD、调试、重构、文档 | 根因已知时别默认 `systematic-debugging` |
 | **L2** | 技术底座或运行时问题 | 语言/框架语义问题走更窄 skill |
 | **L3** | 明确的平台、工具、产物、领域边界 | 不要把 L3 当泛化兜底 |
@@ -102,19 +101,19 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 - `skill-framework-developer` vs `skill-creator` → 框架治理 / miss repair / wording modes vs 实际改一个 skill 包
 - `skill-creator` vs `skill-installer` → 本地 authoring vs 新 skill intake / relink
 - `systematic-debugging` vs 领域 owner → 根因未知 vs 根因已知
-- `design-agent` vs `frontend-design` → 先定参考源 / verified tokens / borrow-adapt map vs 直接做视觉改版
-- `design-workflow` vs `frontend-design` → DESIGN.md / prompt / 验收流程 vs 直接改 UI
-- `design-agent` vs `motion-design` → 先拆品牌与动效来源 vs 直接做动效实现
+- `design-md` vs `frontend-design` → 先定参考源 / verified tokens / borrow-adapt map vs 直接做视觉改版
+- `design-md` vs `frontend-design` → DESIGN.md / prompt / 验收流程 vs 直接改 UI
+- `design-md` vs `frontend-design` → 先拆品牌与动效来源 vs 直接做动效实现
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
 - `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
 - `slides` vs `ppt-pptx` → 通用 PPT / 现有 deck artifact gate vs 显式 `deck.plan.json` / Rust PPTX 源码工作流
 - `slides` vs `source-slide-formats` → 通用演示文稿入口 vs 显式 Markdown / Slidev / Marp / HTML source slides
 - `build-tooling` vs `typescript-pro` / `python-pro` / `javascript-pro` → 构建链 vs 语言语义
 - `latex-compile-acceleration` vs `ppt-beamer` → 编译优化 vs Beamer 内容/版式
-- `information-retrieval` GitHub mode vs `gh-pr-triage` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总
+- `information-retrieval` GitHub mode vs `gh-address-comments` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总
 - `information-retrieval` vs `skill-framework-developer` external scout mode → 通用调研 vs 为本地 skill 库做吸收式对标
-- `checklist-planner` vs `checklist-fixer` → 生成/整理 execution-ready checklist vs 按 checklist 执行
-- `plan-to-code` vs `checklist-planner` → spec/plan 直接落代码 vs 先把 checklist shape 稳定下来
+- `runtime checklist planning` vs `runtime checklist execution` → 生成/整理 execution-ready checklist vs 按 checklist 执行
+- `plan-to-code` vs `runtime checklist planning` → spec/plan 直接落代码 vs 先把 checklist shape 稳定下来
 - `paper-workbench` vs `paper-reviewer` / `paper-reviser` / `paper-writing` → manuscript front door vs 明确只审 / 按 findings 改 / 局部文字
 - `security-audit` webhook reference vs `auth-implementation` → webhook 漏洞审计 vs webhook callback/auth flow 实现
 

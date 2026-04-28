@@ -8,26 +8,18 @@ on:
       - 'scripts/**'
       - 'rust_tools/**'
       - 'tests/**'
-      - 'AGENT.md'
       - 'AGENTS.md'
-      - 'GEMINI.md'
-      - '.mcp.json'
-      - '.gemini/**'
+      - '.codex/**'
       - 'configs/codex/**'
-      - 'configs/gemini/**'
   pull_request:
     paths:
       - 'skills/**'
       - 'scripts/**'
       - 'rust_tools/**'
       - 'tests/**'
-      - 'AGENT.md'
       - 'AGENTS.md'
-      - 'GEMINI.md'
-      - '.mcp.json'
-      - '.gemini/**'
+      - '.codex/**'
       - 'configs/codex/**'
-      - 'configs/gemini/**'
   workflow_dispatch:
 
 jobs:
@@ -49,6 +41,9 @@ jobs:
       - name: Run Rust policy tests
         run: cargo test --test policy_contracts
 
+      - name: Run router-rs crate tests
+        run: cargo test --manifest-path scripts/router-rs/Cargo.toml
+
       - name: Check generated artifact drift
         run: |
           cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
@@ -56,7 +51,7 @@ jobs:
             --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
             --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
             --apply
-          if ! git diff --quiet -- skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_INDEX.md skills/SKILL_ROUTING_RUNTIME.json skills/SKILL_SOURCE_MANIFEST.json skills/SKILL_SHADOW_MAP.json skills/SKILL_LOADOUTS.json skills/SKILL_APPROVAL_POLICY.json skills/SKILL_HEALTH_MANIFEST.json AGENT.md AGENTS.md GEMINI.md .mcp.json .gemini/settings.json configs/codex/AGENTS.md configs/gemini/GEMINI.md; then
+          if ! git diff --quiet -- skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_INDEX.md skills/SKILL_ROUTING_RUNTIME.json skills/SKILL_SOURCE_MANIFEST.json skills/SKILL_SHADOW_MAP.json skills/SKILL_LOADOUTS.json skills/SKILL_APPROVAL_POLICY.json skills/SKILL_HEALTH_MANIFEST.json AGENTS.md .codex/host_entrypoints_sync_manifest.json configs/framework/FRAMEWORK_SURFACE_POLICY.json; then
             echo "::error::Generated skill artifacts or shared CLI entrypoints are out of date. Run scripts/skill-compiler-rs with --apply locally."
             exit 1
           fi

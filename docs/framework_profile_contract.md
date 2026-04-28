@@ -44,6 +44,8 @@
 
 默认面只保留 `routing / memory / continuity / host_projection` 四轴；research、implementation、audit、framework、ops 和 ops 都必须显式 opt-in。机器可读真源在 `configs/framework/FRAMEWORK_SURFACE_POLICY.json`，并由 `skills/SKILL_LOADOUTS.json` 与 `skills/SKILL_TIERS.json` 支撑。
 
+这里的“默认面”不是 `SKILL_ROUTING_RUNTIME.json` 的 hot routing index。默认面只统计 `session_start: required` 的 source/artifact/evidence gate；hot routing index 还会包含少量 `session_start: preferred` owner 和显式 `$` framework command alias，用于首轮路由发现。完整 specialist 只能通过 `SKILL_MANIFEST.json` fallback 被选中，不能被解释成默认加载或恢复旧入口。
+
 ## Execution Protocol
 
 默认执行闭环是 `讨论 -> 规划 -> 执行 -> 验证`。它是 runtime / route 的协议，不是 skill owner，也不把 `execution-controller-coding` 设为默认主 owner。内部 route 字段可继续用 `four_step` 作为稳定机器标识。

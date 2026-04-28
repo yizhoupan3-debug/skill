@@ -61,7 +61,7 @@ source: local
 This skill is the one front door for non-manuscript research-project work.
 
 It exists so the user does not need to decide first whether the job is
-`$brainstorm-research`, `$literature-synthesis`, `$autoresearch`,
+`$literature-synthesis`, `$autoresearch`,
 `$ai-research`, `$research-engineer`,
 `$experiment-reproducibility`, `$statistical-analysis`, or
 `$scientific-figure-plotting`.
@@ -84,7 +84,7 @@ manuscript, or "这篇论文", route to `$paper-workbench` first.
 ## Do not use
 
 - The user clearly names a narrow research lane and only wants that slice:
-  - early ideation only -> use `$brainstorm-research`
+  - early ideation only -> keep it in this workbench unless the user asks for a standalone brainstorming artifact
   - paper search only -> use `$literature-synthesis`
   - literature synthesis or novelty check only -> use `$literature-synthesis`
   - autonomous experiment loop -> use `$autoresearch`
@@ -146,7 +146,7 @@ Use these gates before picking a lane:
 
 ## Internal lane map
 
-- idea expansion -> `$brainstorm-research`
+- idea expansion -> `$research-workbench`
 - paper discovery / synthesis / novelty / related work -> `$literature-synthesis`
 - autonomous experiment loop -> `$autoresearch`
 - AI/ML build and evaluation -> `$ai-research`

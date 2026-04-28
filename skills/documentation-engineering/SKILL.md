@@ -45,7 +45,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Doc-Structure/Logic, Post: Links-Freshness/Completeness Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Doc-Structure/Logic, Post: Links-Freshness/Completeness Results)** → runtime verification gate
 
 # documentation-engineering
 
@@ -159,8 +159,8 @@ This skill does not own:
 - Use the project's existing documentation conventions if they exist
 - Flag any documentation that contradicts the current codebase
 - ADRs should be immutable once accepted; create new ADRs to supersede old ones
-- **Superior Quality Audit**: For production-grade documentation, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production-grade documentation, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 - "强制进行文档工程深度审计 / 检查内容完整性与链接有效性。"
-- "Use $execution-audit to audit this README for completeness idealism."
+- "Use the runtime verification gate to audit this README for completeness idealism."

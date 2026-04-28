@@ -12,13 +12,13 @@ session_start: n/a
 trigger_hints:
   - 多 agent 协作
   - agent 编排
-  - swarm
-  - orchestrator
-  - router
+  - swarm architecture
+  - agent orchestrator
+  - task routing system
   - planner-coder-reviewer
-  - 共享记忆
-  - agent
-  - orchestration
+  - shared agent memory
+  - agent supervisor
+  - multi-agent workflow
 metadata:
   version: "1.1.0"
   platforms: [codex]
@@ -28,7 +28,7 @@ metadata:
     - orchestration
 ---
 
-- **Dual-Dimension Audit (Pre: Swarm-Graph/Handoff-Logic, Post: Consensus/Task-Completion Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Swarm-Graph/Handoff-Logic, Post: Consensus/Task-Completion Results)** → runtime verification gate
 # agent-swarm-orchestration
 
 ## Overview
@@ -99,11 +99,11 @@ If the discussion touches current-session execution:
 - preserve local-supervisor fallback as the conceptual downgrade path
 
 ## Hard Constraints
-- **Superior Quality Audit**: For multi-agent swarm architectures, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 - "强制进行 Agent 编排深度审计 / 检查协作链路与任务达成结果。"
-- "Use $execution-audit to audit this agent swarm for orchestration-consensus idealism."
+- "Use the runtime verification gate to audit this agent swarm for orchestration-consensus idealism."
 
 ## Reference
 

@@ -4,8 +4,8 @@
 
 - [ ] 将当前 skill 系统从“大而全的技能库”收敛为“少入口、窄 owner、强 gate、可解释”的运行系统。
 - [ ] 优先删除历史兼容壳、重复入口、低价值专科 skill，而不是继续增加边界说明。
-- [ ] 将当前约 `145` 个 skill 压缩到约 `90-100` 个有效入口。
-- [ ] 将默认可见面从约 `26` 个入口压缩到约 `12-16` 个。
+- [ ] 当前 runtime 基线已是 `109` 个 manifest skill、`21` 个 hot routing entry、`11` 个 default/core gate；不要再按旧 `145/26` 基线回退。
+- [ ] 下一步只按重叠簇继续收敛到约 `90-100` 个有效入口；默认可见面以 `FRAMEWORK_SURFACE_POLICY.json` 的 `default=11` 为准，不再用 hot index 当 default surface。
 - [ ] 保留 Rust-owned / Codex-only 的运行时方向，不恢复非 Codex 旧宿主或 Python bridge 兼容面。
 - [ ] 保留“一个 front door + 少量内部 mode/reference”的结构，避免多个同类 skill 争抢首轮路由。
 
@@ -23,9 +23,9 @@
 
 ## 当前基线
 
-- [ ] 记录当前 skill 数量：`skills/SKILL_HEALTH_MANIFEST.json` 约 `145`。
-- [ ] 记录当前 tier：`core=20`、`optional=123`、`experimental=2`、`deprecated=0`。
-- [ ] 记录当前 default activation：约 `26`。
+- [ ] 记录当前 skill 数量：`skills/SKILL_MANIFEST.json` 为 `109`；`SKILL_HEALTH_MANIFEST.json` 只能作为健康输入快照，不能作为入口数量真源。
+- [ ] 记录当前 tier：`core=11`、`optional=98`、`experimental=0`、`deprecated=0`。
+- [ ] 记录当前 default activation：`11`；hot routing entry 为 `21`，两者不可混用。
 - [ ] 记录当前明显异常：`iterative-optimizer` 使用高但 reroute 高。
 - [ ] 记录当前明显异常：`github-investigator` 动态分低且已有 reroute。
 - [ ] 记录当前结构问题：skill 维护簇入口过多。
@@ -41,7 +41,7 @@
 - [ ] 不删除核心证据 gate：`systematic-debugging`、`visual-review`、`playwright`。
 - [ ] 不删除核心 source gate：`openai-docs`、`gh-address-comments`、`gh-fix-ci`、`sentry`。
 - [ ] 不删除核心 artifact gate：`pdf`、`doc`、`slides`、`spreadsheets`。
-- [ ] 不删除主执行入口：`idea-to-plan`、`execution-controller-coding`、`plan-to-code`、`gitx`。
+- [ ] 不删除主执行入口：`idea-to-plan`、`plan-to-code`、`plan-to-code`、`gitx`。
 - [ ] 不删除语言专家簇第一轮：`python-pro`、`typescript-pro`、`javascript-pro`、`rust-pro`、`go-pro`、`sql-pro` 先保留为显式 opt-in。
 - [ ] 不删除近期工作中的用户变更；任何删除前先确认文件确实属于本轮减法目标。
 
@@ -159,7 +159,7 @@
 
 - [ ] 从 `checklist-writting` 保留：版本化文件输出规则、agent 数量建议、先 plan 后执行边界。
 - [ ] 从 `checklist-normalizer` 保留：串行写在一点、并行拆开、验收/约束/停止条件、更新规则。
-- [ ] 从两个 skill 删除重复的 subagent / local-supervisor 大段说明，只保留一句转交 `subagent-delegation`。
+- [ ] 从两个 skill 删除重复的 subagent / local-supervisor 大段说明，只保留一句转交 `agent-swarm-orchestration`。
 - [ ] 将详细 checklist 模板放入 `checklist-planner/references/checklist-template.md`。
 
 ### 路由规则
@@ -180,29 +180,29 @@
 
 ### 当前问题
 
-- [ ] `autopilot` 和 `team` 自己声明 canonical owner 是 `execution-controller-coding`。
+- [ ] `autopilot` 和 `team` 自己声明 canonical owner 是 `plan-to-code`。
 - [ ] 它们实际更像用户显式命令 alias，而不是独立 skill。
-- [ ] `subagent-delegation` 已经承担 local / subagent / team 的运行时判断。
+- [ ] `agent-swarm-orchestration` 已经承担 local / subagent / team 的运行时判断。
 
 ### 目标结构
 
-- [ ] 保留 `execution-controller-coding` 作为复杂执行唯一主 owner。
-- [ ] 保留 `subagent-delegation` 作为是否拆 sidecar / team 的 gate。
-- [ ] 将 `autopilot` 降成 `execution-controller-coding` 的 alias mode。
-- [ ] 将 `team` 降成 `subagent-delegation` 或 `execution-controller-coding` 的 alias mode。
+- [ ] 保留 `plan-to-code` 作为复杂执行唯一主 owner。
+- [ ] 保留 `agent-swarm-orchestration` 作为是否拆 sidecar / team 的 gate。
+- [ ] 将 `autopilot` 降成 `plan-to-code` 的 alias mode。
+- [ ] 将 `team` 降成 `agent-swarm-orchestration` 或 `plan-to-code` 的 alias mode。
 - [ ] 保留 Codex CLI/App 可直接读取的 `$autopilot` / `$team` 极短 stub；只删除普通 skill owner 竞争，不删除 `$` 入口。
 
 ### 合并内容
 
-- [ ] `autopilot` 的 Expansion -> Planning -> Execution -> QA -> Validation -> Cleanup 变成 `execution-controller-coding/references/autopilot-mode.md`。
-- [ ] `team` 的 scoping -> delegation -> execution -> integration -> qa -> cleanup 变成 `subagent-delegation/references/team-mode.md`。
-- [ ] `execution-controller-coding/SKILL.md` 增加显式入口：`$autopilot` / “一路执行到底”。
-- [ ] `subagent-delegation/SKILL.md` 增加显式入口：`$team` / “多 agent 执行”。
+- [ ] `autopilot` 的 Expansion -> Planning -> Execution -> QA -> Validation -> Cleanup 变成 `plan-to-code/references/autopilot-mode.md`。
+- [ ] `team` 的 scoping -> delegation -> execution -> integration -> qa -> cleanup 变成 `agent-swarm-orchestration/references/team-mode.md`。
+- [ ] `plan-to-code/SKILL.md` 增加显式入口：`$autopilot` / “一路执行到底”。
+- [ ] `agent-swarm-orchestration/SKILL.md` 增加显式入口：`$team` / “多 agent 执行”。
 
 ### 验收
 
-- [ ] 用户说 `$autopilot` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后进入 `execution-controller-coding`。
-- [ ] 用户说 `$team` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后由 `subagent-delegation` 判断是否真的需要 team orchestration。
+- [ ] 用户说 `$autopilot` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后进入 `plan-to-code`。
+- [ ] 用户说 `$team` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后由 `agent-swarm-orchestration` 判断是否真的需要 team orchestration。
 - [ ] `SKILL_TIERS.json` 不再把 `autopilot`、`team` 当 optional skill。
 - [ ] `RUNTIME_REGISTRY.json` 保留 alias 状态机，`artifacts/codex-skill-surface/skills/{autopilot,team}/SKILL.md` 保留生成 stub。
 
@@ -275,32 +275,32 @@
 
 ### 当前问题
 
-- [ ] `design-agent`、`frontend-design`、`design-md`、`design-output-auditor`、`design-prompt-enhancer`、`design-workflow-protocol` 入口过细。
+- [ ] `design-md`、`frontend-design`、`design-md`、`design-md`、`design-prompt-enhancer`、`design-md` 入口过细。
 - [ ] 多个 skill 都处理 DESIGN.md / prompt / screenshot / verdict 的链路。
 - [ ] `visual-review` 已经是截图/渲染 evidence gate，不需要 design audit 再抢证据入口。
 
 ### 目标结构
 
-- [ ] 保留 `design-agent`：named-product reference grounding gate。
+- [ ] 保留 `design-md`：named-product reference grounding gate。
 - [ ] 保留 `frontend-design`：直接 UI redesign / visual direction owner。
 - [ ] 保留 `visual-review`：截图/渲染证据 gate。
-- [ ] 合并 `design-md`、`design-prompt-enhancer`、`design-output-auditor`、`design-workflow-protocol` 为 `design-workflow`，或全部降为 `frontend-design/references/`。
+- [ ] 合并 `design-md`、`design-prompt-enhancer`、`design-md`、`design-md` 为 `design-md`，或全部降为 `frontend-design/references/`。
 - [ ] 保留 `motion-design` 为显式高端动效实现 owner，但不进入 default surface。
 - [ ] 保留 `infographic` 为产物类型明确的 HTML infographic owner。
 
 ### 合并内容
 
-- [ ] `design-md` 变成 `design-workflow` 的 `capture DESIGN.md` mode。
-- [ ] `design-prompt-enhancer` 变成 `design-workflow` 的 `prompt generation` mode。
-- [ ] `design-output-auditor` 变成 `design-workflow` 的 `acceptance verdict` mode。
-- [ ] `design-workflow-protocol` 变成 `design-workflow` 的主文档或 reference。
-- [ ] `frontend-design` 只链接 `design-workflow`，不复制工作流协议。
+- [ ] `design-md` 变成 `design-md` 的 `capture DESIGN.md` mode。
+- [ ] `design-prompt-enhancer` 变成 `design-md` 的 `prompt generation` mode。
+- [ ] `design-md` 变成 `design-md` 的 `acceptance verdict` mode。
+- [ ] `design-md` 变成 `design-md` 的主文档或 reference。
+- [ ] `frontend-design` 只链接 `design-md`，不复制工作流协议。
 
 ### 路由规则
 
-- [ ] 用户说“像 Linear / Stripe / Apple”：`design-agent`。
+- [ ] 用户说“像 Linear / Stripe / Apple”：`design-md`。
 - [ ] 用户说“直接改 UI / 做高级感”：`frontend-design`。
-- [ ] 用户说“先沉淀 DESIGN.md / 设计 prompt / 设计验收 / 设计闭环”：`design-workflow`。
+- [ ] 用户说“先沉淀 DESIGN.md / 设计 prompt / 设计验收 / 设计闭环”：`design-md`。
 - [ ] 用户给截图要看问题：`visual-review`。
 - [ ] 用户明确要 Framer Motion / GSAP / micro-interactions：`motion-design`。
 
@@ -460,7 +460,7 @@
 
 ### 目标结构
 
-- [ ] 保留 `execution-audit`：强验收 overlay。
+- [ ] 保留 `code-review`：强验收 overlay。
 - [ ] 保留 `code-review`：代码审查 findings overlay。
 - [ ] 保留 `security-audit`：安全审计 overlay。
 - [ ] 保留 `coding-standards`：跨栈代码规范 overlay。
@@ -474,7 +474,7 @@
 
 ### 合并方式
 
-- [ ] `iterative-optimizer` 的多轮收敛规则合入 `execution-audit/references/iteration-loop.md`。
+- [ ] `iterative-optimizer` 的多轮收敛规则合入 `code-review/references/iteration-loop.md`。
 - [ ] `frontend-code-quality` 的文件长度/early return/RORO 规则合入 `coding-standards` 或 frontend references。
 - [ ] `vercel-react-best-practices` 合入 `nextjs` references。
 
@@ -526,13 +526,13 @@
 
 ### 当前问题
 
-- [ ] `documentation-engineering`、`copywriting`、`humanizer`、`paper-writing`、`prompt-engineer`、`email-template` 都与写作有关，但对象不同。
+- [ ] `documentation-engineering`、`copywriting`、`documentation-engineering`、`paper-writing`、`prompt-engineer`、`email-template` 都与写作有关，但对象不同。
 
 ### 目标结构
 
 - [ ] 保留 `documentation-engineering`：项目文档。
 - [ ] 保留 `paper-writing`：学术论文 prose。
-- [ ] 保留 `humanizer`：自然化润色。
+- [ ] 保留 `documentation-engineering`：自然化润色。
 - [ ] 保留 `copywriting`：商业转化文案，但 explicit opt-in。
 - [ ] 保留 `prompt-engineer`：非设计 prompt。
 - [ ] 保留 `email-template`：HTML email artifact。
@@ -542,7 +542,7 @@
 
 - [ ] `writing-skills` 删除或合并后，不再和普通 writing 混淆。
 - [ ] “写 README” 命中 `documentation-engineering`。
-- [ ] “润色这段话” 命中 `humanizer`。
+- [ ] “润色这段话” 命中 `documentation-engineering`。
 - [ ] “论文润色” 命中 `paper-writing`。
 - [ ] “广告/落地页文案” 命中 `copywriting`。
 
@@ -632,9 +632,9 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 
 ### execution alias
 
-- [ ] “$autopilot 一路执行到底” -> `execution-controller-coding`。
-- [ ] “$team 多 agent 执行” -> `subagent-delegation` gate 后进入 controller。
-- [ ] “需要并行 sidecar” -> `subagent-delegation`。
+- [ ] “$autopilot 一路执行到底” -> `plan-to-code`。
+- [ ] “$team 多 agent 执行” -> `agent-swarm-orchestration` gate 后进入 controller。
+- [ ] “需要并行 sidecar” -> `agent-swarm-orchestration`。
 - [ ] “普通单文件修复” -> 不进 controller。
 
 ### artifact
@@ -657,11 +657,11 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 
 ### design
 
-- [ ] “像 Linear 一样，先找参考源” -> `design-agent`。
+- [ ] “像 Linear 一样，先找参考源” -> `design-md`。
 - [ ] “直接把 UI 做高级感” -> `frontend-design`。
-- [ ] “先沉淀 DESIGN.md” -> `design-workflow`。
-- [ ] “优化 UI 生成提示词” -> `design-workflow`。
-- [ ] “按 DESIGN.md 做设计验收” -> `design-workflow` 或 `visual-review` 先取证。
+- [ ] “先沉淀 DESIGN.md” -> `design-md`。
+- [ ] “优化 UI 生成提示词” -> `design-md`。
+- [ ] “按 DESIGN.md 做设计验收” -> `design-md` 或 `visual-review` 先取证。
 - [ ] “看这张截图哪里不对” -> `visual-review`。
 
 ### research
@@ -714,7 +714,7 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 - [ ] `plan-to-code`。
 - [ ] `gitx`。
 - [ ] `shell-cli`。
-- [ ] `execution-controller-coding` 仅在明确复杂执行时，不常驻普通任务。
+- [ ] `plan-to-code` 仅在明确复杂执行时，不常驻普通任务。
 - [ ] `python-pro` / `typescript-pro` 视使用习惯保留或移出 default。
 - [ ] default overlays 建议只保留 `anti-laziness`，或连它也改成行为规则而非 overlay。
 

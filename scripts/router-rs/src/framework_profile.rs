@@ -729,7 +729,7 @@ fn build_codex_host_payload() -> Map<String, Value> {
             "avoidable_loss_sources": [],
             "reduce_loss_by": [
                 "use /v1 OpenAI-compatible endpoint directly",
-                "avoid Anthropic-compatible request/response translation for GPT-default work"
+                "avoid third-party request/response translation for GPT-default work"
             ]
         }),
     );

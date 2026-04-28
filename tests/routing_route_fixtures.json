@@ -12,11 +12,11 @@
   ],
   "skills": [
     [
-      "execution-controller-coding",
+      "agent-swarm-orchestration",
       "L0",
       "@kernel-controller",
       "高负载,跨文件,sidecar,delegation",
-      "Kernel orchestrator for high-load, cross-file execution.",
+      "Agent orchestration owner for high-load, cross-file execution.",
       [
         "高负载",
         "跨文件",
@@ -28,7 +28,7 @@
       "required"
     ],
     [
-      "subagent-delegation",
+      "agent-swarm-orchestration",
       "L0",
       "gate",
       "delegation",
@@ -158,7 +158,7 @@
       "required"
     ],
     [
-      "anti-laziness",
+      "code-review",
       "L1",
       "overlay",
       "none",
@@ -172,7 +172,7 @@
       "preferred"
     ],
     [
-      "checklist-planner",
+      "skill-framework-developer",
       "L1",
       "owner",
       "none",
@@ -187,7 +187,7 @@
       "n/a"
     ],
     [
-      "checklist-planner",
+      "skill-framework-developer",
       "L2",
       "owner",
       "none",
@@ -202,7 +202,7 @@
       "n/a"
     ],
     [
-      "checklist-fixer",
+      "plan-to-code",
       "L2",
       "owner",
       "none",
@@ -235,7 +235,7 @@
       "n/a"
     ],
     [
-      "execution-audit",
+      "code-review",
       "L0",
       "overlay",
       "none",
@@ -323,7 +323,7 @@
       "n/a"
     ],
     [
-      "design-agent",
+      "design-md",
       "L3",
       "gate",
       "none",
@@ -374,7 +374,7 @@
       "n/a"
     ],
     [
-      "design-output-auditor",
+      "visual-review",
       "L3",
       "owner",
       "none",
@@ -391,7 +391,7 @@
       "n/a"
     ],
     [
-      "design-workflow-protocol",
+      "design-md",
       "L3",
       "owner",
       "none",
@@ -426,7 +426,7 @@
       "n/a"
     ],
     [
-      "motion-design",
+      "frontend-design",
       "L3",
       "owner",
       "none",
@@ -531,7 +531,7 @@
       "name": "gate-precedence",
       "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
       "expected": {
-        "selected_skill": "subagent-delegation",
+        "selected_skill": "agent-swarm-orchestration",
         "overlay_skill": null,
         "layer": "L0"
       }
@@ -540,7 +540,7 @@
       "name": "generic-multi-agent-hits-delegation-gate",
       "query": "需要多 agent 执行",
       "expected": {
-        "selected_skill": "subagent-delegation",
+        "selected_skill": "agent-swarm-orchestration",
         "overlay_skill": null,
         "layer": "L0"
       }
@@ -580,9 +580,9 @@
         "overlay_skill": null,
         "layer": "L2",
         "route_context": {
-          "execution_protocol": "four_step",
+          "execution_protocol": "implementation",
           "verification_required": true,
-          "evidence_required": true,
+          "evidence_required": false,
           "supervisor_required": false,
           "delegation_candidate": false,
           "continue_safe_local_steps": true,
@@ -595,7 +595,7 @@
       "query": "按方案实现这个需求，直接做代码，使用 plan-to-code 主导，并附加强验收 audit",
       "expected": {
         "selected_skill": "plan-to-code",
-        "overlay_skill": "execution-audit",
+        "overlay_skill": "code-review",
         "layer": "L2"
       }
     },
@@ -603,25 +603,25 @@
       "name": "review-checklist-routing",
       "query": "review checklist 看这轮是否结束",
       "expected": {
-        "selected_skill": "checklist-planner",
+        "selected_skill": "skill-framework-developer",
         "overlay_skill": null,
         "layer": "L1"
       }
     },
     {
-      "name": "checklist-planner-normalizer-routing",
+      "name": "checklist-normalizer-routing",
       "query": "把这份 checklist 规范一下，串行的写在一点，并行的拆开",
       "expected": {
-        "selected_skill": "checklist-planner",
+        "selected_skill": "skill-framework-developer",
         "overlay_skill": null,
         "layer": "L2"
       }
     },
     {
-      "name": "checklist-fixer-routing",
+      "name": "checklist-selected-items-routing",
       "query": "按这份 checklist 逐项修复，先做 1-3",
       "expected": {
-        "selected_skill": "checklist-fixer",
+        "selected_skill": "plan-to-code",
         "overlay_skill": null,
         "layer": "L2"
       }
@@ -699,10 +699,10 @@
       }
     },
     {
-      "name": "design-agent-brand-reference-routing",
+      "name": "design-md-brand-reference-routing",
       "query": "先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和组件气质",
       "expected": {
-        "selected_skill": "design-agent",
+        "selected_skill": "design-md",
         "overlay_skill": null,
         "layer": "L3"
       }
@@ -735,10 +735,10 @@
       }
     },
     {
-      "name": "design-output-auditor-drift-routing",
+      "name": "visual-review-drift-routing",
       "query": "按 DESIGN.md 审计这版 UI 有没有风格漂移、AI 味和反模式回流，给我一个验收结论",
       "expected": {
-        "selected_skill": "design-output-auditor",
+        "selected_skill": "visual-review",
         "overlay_skill": null,
         "layer": "L3"
       }
@@ -747,7 +747,7 @@
       "name": "design-artifact-protocol-routing",
       "query": "给这个项目建立一套 DESIGN.md 到 prompt 到 screenshot 到 verdict 的设计工件协议，后面每轮都按这个工作流跑",
       "expected": {
-        "selected_skill": "design-workflow-protocol",
+        "selected_skill": "design-md",
         "overlay_skill": null,
         "layer": "L3"
       }
@@ -773,12 +773,12 @@
       }
     },
     {
-      "name": "overlay-disabled-suppresses-anti-laziness-overlay",
+      "name": "overlay-disabled-keeps-agent-swarm-owner",
       "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
       "first_turn": null,
       "allow_overlay": false,
       "expected": {
-        "selected_skill": "subagent-delegation",
+        "selected_skill": "agent-swarm-orchestration",
         "overlay_skill": null,
         "layer": "L0"
       }
@@ -787,7 +787,7 @@
       "name": "frontend-design-motion-boundary",
       "query": "用 Framer Motion 给这个界面做磁性按钮、page transition 和微交互，重点是动效质感",
       "expected": {
-        "selected_skill": "motion-design",
+        "selected_skill": "frontend-design",
         "overlay_skill": null,
         "layer": "L3"
       }

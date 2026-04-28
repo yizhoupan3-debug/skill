@@ -11,7 +11,7 @@ Before using this catalog for implementation-facing redesign, check whether the 
 - "先给我参考源和取舍"
 - "不要直接改页面"
 
-If yes, route to `$design-agent` first. That gate should decide what is truly borrowable, what needs adaptation, and whether the next owner is `frontend-design`, `motion-design`, or `css-pro`.
+If yes, route to `$design-agent` first. That gate should decide what is truly borrowable, what needs adaptation, and whether the next owner is `frontend-design`, `frontend-design`, or `css-pro`.
 
 If the user instead says things like:
 

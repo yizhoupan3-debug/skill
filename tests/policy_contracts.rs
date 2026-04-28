@@ -56,9 +56,8 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
     assert!(!project_root()
         .join("artifacts/codex-skill-surface/skills/refresh")
         .exists());
-    let controller = read_text(&project_root().join("skills/execution-controller-coding/SKILL.md"));
-    assert!(!controller.contains("$autopilot"));
-    assert!(!controller.contains("autopilot"));
+    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    assert!(registry["framework_commands"]["refresh"].is_null());
 }
 
 #[test]
@@ -73,7 +72,6 @@ fn project_codex_skill_projection_is_generated_outside_host_entrypoints() {
     let manifest_text = manifest.to_string();
     assert!(!manifest_text.contains(".codex/skills/gitx"));
     assert!(!manifest_text.contains(".codex/skills/autopilot"));
-    assert!(!project_root().join("CLAUDE.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
         serde_json::json!(["codex-cli", "codex-app"])
@@ -90,15 +88,10 @@ fn project_codex_skill_projection_is_generated_outside_host_entrypoints() {
         .as_array()
         .unwrap()
         .contains(&serde_json::json!("AGENTS.md")));
-    assert!(!manifest_text.contains("CLAUDE.md"));
-    assert!(!manifest_text.contains("claude-code"));
     assert!(!manifest_text.contains("retired_files"));
     assert!(!manifest_text.contains("retired_directories"));
     assert!(!manifest_text.contains("AGENT.md"));
     assert!(!manifest_text.contains(".codex/README.md"));
-    assert!(!manifest_text.contains(".claude/commands"));
-    assert!(!manifest_text.contains(".claude/hooks"));
-    assert!(!manifest_text.contains(".claude/skills"));
 }
 
 #[test]
@@ -279,7 +272,6 @@ fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
         "search",
         "framework",
         "codex",
-        "claude",
         "trace",
         "storage",
         "browser",
@@ -402,6 +394,33 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
         surface["skill_system"]["activation_counts"],
         tiers["summary"]["activation_counts"]
     );
+    for (name, loadout) in loadouts["loadouts"]
+        .as_object()
+        .expect("loadout catalog")
+    {
+        let owners = loadout["owners"].as_array().expect("loadout owners");
+        assert!(
+            !owners.is_empty(),
+            "loadout {name} must carry real owner memberships"
+        );
+    }
+}
+
+#[test]
+fn generated_approval_policy_is_sparse() {
+    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
+    let approval = read_json(&project_root().join("skills/SKILL_APPROVAL_POLICY.json"));
+    let manifest_count = manifest["skills"].as_array().expect("manifest skills").len();
+    let override_count = approval["skills"]
+        .as_object()
+        .expect("approval overrides")
+        .len();
+
+    assert_eq!(approval["schema_version"], "skill-approval-policy-v2");
+    assert!(
+        override_count < manifest_count,
+        "approval policy should emit only non-default overrides"
+    );
 }
 
 #[test]
@@ -434,11 +453,13 @@ fn runtime_protocol_uses_behavior_driven_public_names() {
 #[test]
 fn runtime_hot_index_keeps_capability_gates_explicit() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let keys = runtime["keys"].as_array().expect("runtime keys");
+    let slug_idx = key_index(keys, "slug");
     let slugs = runtime["skills"]
         .as_array()
         .expect("runtime skills")
         .iter()
-        .map(|skill| skill[0].as_str().expect("runtime skill slug"))
+        .map(|skill| skill[slug_idx].as_str().expect("runtime skill slug"))
         .collect::<Vec<_>>();
 
     assert_eq!(runtime["scope"]["kind"], "hot");
@@ -447,9 +468,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "skills/SKILL_MANIFEST.json"
     );
     for expected in [
-        "subagent-delegation",
-        "skill-creator",
-        "skill-installer",
         "idea-to-plan",
         "plan-to-code",
         "skill-framework-developer",
@@ -459,7 +477,147 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
             "missing hot runtime slug: {expected}"
         );
     }
+    for excluded in [
+        "plugin-creator",
+        "skill-creator",
+        "skill-installer",
+        "citation-management",
+        "research-workbench",
+    ] {
+        assert!(
+            !slugs.contains(&excluded),
+            "broad first-turn owner should stay out of hot runtime: {excluded}"
+        );
+    }
+    assert!(
+        slugs.len() <= 16,
+        "hot runtime surface should stay bounded; got {}",
+        slugs.len()
+    );
     assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
+}
+
+#[test]
+fn deprecated_routing_root_is_only_a_pointer() {
+    let root = read_text(&project_root().join("skills/SKILL_ROUTING_ROOT.md"));
+    assert!(root.contains("Deprecated Routing Root"));
+    assert!(root.contains("SKILL_ROUTING_RUNTIME.json"));
+    for stale in [
+        "skill-evolution-guardian",
+        "iterative-optimizer",
+        "checklist-writting",
+        "writing-skills",
+        "`xlsx`",
+    ] {
+        assert!(!root.contains(stale), "stale routing root ref: {stale}");
+    }
+}
+
+#[test]
+fn manifest_and_runtime_skill_paths_are_loadable() {
+    for relative in ["skills/SKILL_MANIFEST.json", "skills/SKILL_ROUTING_RUNTIME.json"] {
+        let payload = read_json(&project_root().join(relative));
+        let keys = payload["keys"].as_array().expect("keys");
+        let slug_idx = key_index(keys, "slug");
+        let skill_path_idx = key_index(keys, "skill_path");
+        for row in payload["skills"].as_array().expect("skills") {
+            let row = row.as_array().expect("skill row");
+            let slug = row[slug_idx].as_str().expect("slug");
+            let skill_path = row[skill_path_idx].as_str().expect("skill_path");
+            assert!(
+                !skill_path.starts_with('/') && !skill_path.contains(".."),
+                "{relative} has unsafe skill_path for {slug}: {skill_path}"
+            );
+            assert!(
+                project_root().join(skill_path).is_file(),
+                "{relative} missing skill_path for {slug}: {skill_path}"
+            );
+        }
+    }
+}
+
+#[test]
+fn routing_eval_cases_reference_existing_manifest_skills() {
+    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
+    let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
+    let manifest_slug_idx = key_index(manifest_keys, "slug");
+    let manifest_slugs = manifest["skills"]
+        .as_array()
+        .expect("manifest skills")
+        .iter()
+        .map(|row| row[manifest_slug_idx].as_str().expect("manifest slug"))
+        .collect::<std::collections::HashSet<_>>();
+    let eval_cases = read_json(&project_root().join("tests/routing_eval_cases.json"));
+    for case in eval_cases["cases"].as_array().expect("eval cases") {
+        let id = case["id"].as_str().unwrap_or("<missing id>");
+        for key in ["focus_skill", "expected_owner", "expected_overlay"] {
+            if let Some(slug) = case.get(key).and_then(|value| value.as_str()) {
+                assert!(manifest_slugs.contains(slug), "case {id} {key} references missing slug {slug}");
+            }
+        }
+        for slug in case
+            .get("forbidden_owners")
+            .and_then(|value| value.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|value| value.as_str())
+        {
+            assert!(manifest_slugs.contains(slug), "case {id} forbidden_owners references missing slug {slug}");
+        }
+    }
+}
+
+#[test]
+fn health_manifest_and_framework_aliases_reference_manifest_skills() {
+    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
+    let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
+    let manifest_slug_idx = key_index(manifest_keys, "slug");
+    let manifest_slugs = manifest["skills"]
+        .as_array()
+        .expect("manifest skills")
+        .iter()
+        .map(|row| row[manifest_slug_idx].as_str().expect("manifest slug"))
+        .collect::<std::collections::HashSet<_>>();
+
+    let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
+    let health_slugs = health["skills"]
+        .as_object()
+        .expect("health skills")
+        .keys()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(health_slugs, manifest_slugs);
+
+    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    for (alias, record) in registry["framework_commands"]
+        .as_object()
+        .expect("framework commands")
+    {
+        if let Some(owner) = record.get("canonical_owner").and_then(|value| value.as_str()) {
+            assert!(
+                manifest_slugs.contains(owner),
+                "framework alias {alias} canonical_owner references missing slug {owner}"
+            );
+        }
+        for slug in record
+            .get("execution_owners")
+            .and_then(|value| value.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|value| value.as_str())
+        {
+            assert!(
+                manifest_slugs.contains(slug),
+                "framework alias {alias} execution_owners references missing slug {slug}"
+            );
+        }
+    }
+}
+
+fn key_index(keys: &[serde_json::Value], name: &str) -> usize {
+    keys.iter()
+        .position(|key| key.as_str() == Some(name))
+        .unwrap_or_else(|| panic!("missing key {name}"))
 }
 
 #[test]
@@ -554,106 +712,6 @@ fn installed_project_hooks_stay_disabled() {
 }
 
 #[test]
-fn claude_hooks_are_rust_owned_and_low_token() {
-    let settings = read_json(&project_root().join(".claude/settings.json"));
-    let settings_text = settings.to_string();
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-        assert!(settings["hooks"].get(event).is_some(), "missing hook event: {event}");
-    }
-    assert!(settings_text.contains("scripts/router-rs/run_router_rs.sh"));
-    assert!(settings_text.contains("Claude hook router launcher not found"));
-    assert!(settings_text.contains("claude hook pre-tool-use"));
-    assert!(settings_text.contains("claude hook user-prompt-submit"));
-    assert!(settings_text.contains("claude hook post-tool-use"));
-    assert!(settings_text.contains("claude hook stop"));
-    assert!(!settings_text.contains("cargo run"));
-    assert!(!settings_text.contains(".codex/hooks.json"));
-
-    let output = common::run_ok({
-        let mut command = common::router_rs_command([
-            "claude",
-            "hook",
-            "pre-tool-use",
-            "--repo-root",
-            project_root().to_str().unwrap(),
-        ]);
-        command.stdin(std::process::Stdio::piped());
-        command
-    });
-    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(payload["suppressOutput"], true);
-}
-
-#[test]
-fn claude_pre_tool_hook_denies_destructive_git() {
-    let mut command = common::router_rs_command([
-        "claude",
-        "hook",
-        "pre-tool-use",
-        "--repo-root",
-        project_root().to_str().unwrap(),
-    ]);
-    command
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped());
-    let mut child = command.spawn().unwrap();
-    {
-        use std::io::Write;
-        let stdin = child.stdin.as_mut().unwrap();
-        stdin
-            .write_all(
-                br#"{"tool_name":"Bash","tool_input":{"command":"git push -f origin main"}}"#,
-            )
-            .unwrap();
-    }
-    let output = child.wait_with_output().unwrap();
-    common::assert_success(&output);
-    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(
-        payload["hookSpecificOutput"]["permissionDecision"],
-        "deny"
-    );
-}
-
-#[test]
-fn claude_post_tool_state_blocks_stop_until_validation() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path();
-    std::fs::create_dir_all(repo_root.join(".claude")).unwrap();
-
-    let mut post = common::router_rs_command([
-        "claude",
-        "hook",
-        "post-tool-use",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-    ]);
-    post.stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped());
-    let mut child = post.spawn().unwrap();
-    {
-        use std::io::Write;
-        child
-            .stdin
-            .as_mut()
-            .unwrap()
-            .write_all(br#"{"tool_name":"Write","tool_input":{"file_path":".claude/settings.json"}}"#)
-            .unwrap();
-    }
-    common::assert_success(&child.wait_with_output().unwrap());
-
-    let output = router_rs_json(&[
-        "claude",
-        "hook",
-        "stop",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-    ]);
-    assert_eq!(output["decision"], "block");
-    assert!(output["reason"].as_str().unwrap().contains("Validate Claude"));
-}
-
-#[test]
 fn repo_local_codex_omits_framework_mcp_entrypoint() {
     let source = read_text(&project_root().join(".codex/config.toml"));
     assert!(!source.contains("python3"));
@@ -681,6 +739,21 @@ fn browser_mcp_live_config_never_points_to_node_runtime() {
     assert!(!joined.contains(&node_entrypoint));
     assert!(!joined.contains(&quoted_dist_entrypoint));
     assert!(!joined.contains("npm run dev"));
+}
+
+#[test]
+fn browser_mcp_exposes_repo_skill_router_tools() {
+    let source = read_text(&project_root().join("scripts/router-rs/src/browser_mcp.rs"));
+    for marker in [
+        "skill_route",
+        "skill_search",
+        "skill_read",
+        "skill_route_status",
+        "skills/SKILL_ROUTING_RUNTIME.json",
+        "Read selected_skill_path from the canonical skills/ source before doing task work.",
+    ] {
+        assert!(source.contains(marker), "missing marker: {marker}");
+    }
 }
 
 #[test]
@@ -925,9 +998,7 @@ fn ppt_skill_documents_design_and_aigc_gates() {
         "$design-md",
         "$frontend-design",
         "$visual-review",
-        "$design-output-auditor",
-        "$design-workflow-protocol",
-        "$humanizer",
+        "built-in Rust copy naturalization",
         "$copywriting",
         "$paper-writing",
         "Source Contract",
@@ -939,7 +1010,7 @@ fn ppt_skill_documents_design_and_aigc_gates() {
     }
     assert!(skill.contains(
         "outline -> text-owner polish -> DESIGN.md or visual contract -> deck.plan.json -> deck.pptx -> rendered\n\
-PNG -> visual-review evidence -> design-output-auditor verdict -> ppt\n\
+PNG -> visual-review evidence -> design-md verdict -> ppt\n\
 qa/build-qa sign-off"
     ));
     for marker in [
@@ -949,8 +1020,8 @@ qa/build-qa sign-off"
         "$paper-writing",
         "DESIGN.md / visual contract",
         "$visual-review",
-        "$design-output-auditor",
-        "match / minor drift / material drift /\nhard fail",
+        "match / minor drift / material drift",
+        "hard fail",
         "Run `ppt office doctor` for Rust outline",
         "Do not introduce a parallel authoring engine",
         "rendered PNGs or montage when visual QA mattered",
@@ -984,7 +1055,7 @@ qa/build-qa sign-off"
     for marker in [
         "本页展示",
         "AI-slop",
-        "$humanizer",
+        "built-in Rust copy naturalization",
         "$copywriting",
         "$paper-writing",
         "Rendered slides reviewed through `$visual-review`",
@@ -1036,10 +1107,10 @@ fn ppt_skill_references_source_first_and_editable_rules() {
     assert!(method.contains("change `deck.plan.json`, then rebuild"));
     assert!(rust_cli.contains("Rust `ppt office ...` owns inspection"));
     assert!(rust_cli.contains("not a package wrapper or\na second runtime"));
-    assert!(rust_cli.contains("$humanizer` / `$copywriting` / `$paper-writing"));
+    assert!(rust_cli.contains("built-in Rust copy naturalization plus `$copywriting` / `$paper-writing"));
     assert!(visualization.contains("Prefer editable primitives"));
     assert!(install.contains("There is no skill-local package install step"));
-    assert!(install.contains("these companion skills make the text and design intentional"));
+    assert!(install.contains("text and design intentional"));
 }
 
 #[test]
@@ -1078,10 +1149,10 @@ fn ppt_rust_outline_generation_naturalizes_copy_and_design_chain() {
         "fn naturalize_copy_text(",
         "let outline = naturalize_outline_value(outline);",
         "generic AI filler",
-        "$humanizer",
+        "built-in Rust copy naturalization",
         "$copywriting",
         "$paper-writing",
-        "design-output-auditor drift verdict",
+        "design-md drift verdict",
         r#""本页展示""#,
         r#""赋能""#,
     ] {

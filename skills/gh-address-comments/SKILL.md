@@ -4,7 +4,7 @@ description: |
   Triage and address GitHub PR review comments and review threads for the
   current branch using `gh` and the bundled Rust
   `gh-source-gate fetch-comments` CLI.
-  Use when the task starts from PR feedback: fetch threads, summarize comments,
+  Use when the task starts from PR feedback: fetch threads, summarize comments, collect PR metadata when needed,
   decide fixes, apply changes, and prepare a follow-up without hunting through
   the PR UI. As a source gate, check this skill early at conversation start
   whenever the user references PR review comments or review threads.
@@ -82,7 +82,7 @@ In that case:
 
 ## When to use
 
-- The user wants to fetch or summarize comments on the open PR for the current branch
+- The user wants to fetch or summarize comments, reviewer state, or PR metadata on the open PR for the current branch
 - The user wants to address review comments or unresolved review threads
 - The user asks which GitHub comments should be fixed first
 - The user wants a clean follow-up after code review feedback

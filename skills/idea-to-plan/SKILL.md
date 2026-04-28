@@ -104,8 +104,8 @@ This skill is a **repo-local planning delta**, not the owner of the host's gener
 
 - 已有成熟 PRD / plan，只差实现 → [`$plan-to-code`](/Users/joe/Documents/skill/skills/plan-to-code/SKILL.md)
 - 用户只是要求“先规划/执行前想一下”，但交付物是代码或修复 → use the runtime 讨论/规划/执行/验证 protocol with the narrowest domain owner
-- 战略路线已经确定，只差拆执行清单 → [`$checklist-planner`](/Users/joe/Documents/skill/skills/checklist-planner/SKILL.md)
-- 已进入复杂执行编排 → [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md)
+- 战略路线已经确定，只差拆执行清单 → [`runtime checklist planning`](runtime policy)
+- 已进入复杂执行编排 → [`runtime execution controller`](runtime policy)
 - 根因定位或局部修 bug
 
 ## Output Contract
@@ -154,15 +154,15 @@ This skill is a **repo-local planning delta**, not the owner of the host's gener
 这个 owner 只补三类 repo-local 信息：
 
 1. 本仓库需要的 planning artifacts 与验收面
-2. `idea-to-plan` 与 `checklist-planner`、`plan-to-code` 的边界
+2. `idea-to-plan` 与 runtime checklist planning、`plan-to-code` 的边界
 3. strategic planning 在本仓库里的 reroute / handoff 规则
 
 ## Reroute Rules
 
 - 已有明确实现面：reroute to `$plan-to-code`
-- 战略路径已定、主需求是执行拆解：reroute to `$checklist-planner`
-- 已进入高负载执行：reroute to `$execution-controller-coding`
-- 需要并行探索：先过 `$subagent-delegation`
+- 战略路径已定、主需求是执行拆解：reroute to `runtime checklist planning`
+- 已进入高负载执行：reroute to `runtime execution controller`
+- 需要并行探索：先过 `runtime delegation gate`
 
 ## References
 

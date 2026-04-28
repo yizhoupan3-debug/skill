@@ -7,7 +7,7 @@ Use this when the request is research-shaped but the first active lane is unclea
 | User intent | Active lane | Why |
 |---|---|---|
 | "这个课题下一步怎么做" | `research-workbench` | The lane choice is part of the job |
-| "帮我 brainstorm 研究点" | `brainstorm-research` | Divergent early ideation only |
+| "帮我 brainstorm 研究点" | `research-workbench` | Divergent early ideation only |
 | "帮我搜论文 / 文献梳理 / related work" | `literature-synthesis` | Academic corpus building and synthesis |
 | "这个 idea 别人做过没有" | `literature-synthesis` | Novelty check needs evidence |
 | "跑多假设实验循环" | `autoresearch` | Repeated hypothesis-control-reflection loop |

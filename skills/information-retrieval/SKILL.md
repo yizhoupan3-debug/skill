@@ -80,7 +80,7 @@ The main thread should contain only:
 
 If multiple independent retrieval slices materially help and runtime policy permits:
 
-- route them through [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)
+- route them through [`runtime delegation gate`](runtime policy)
 
 If runtime policy does **not** permit spawning:
 

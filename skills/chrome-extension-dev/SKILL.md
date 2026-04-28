@@ -53,7 +53,7 @@ This skill owns Chrome extension engineering: Manifest V3 architecture, Service 
 
 - The task is general web development without extension context → use framework skills
 - The task is Firefox-only extension → adapt patterns but note divergences
-- The task is primarily about web scraping without extension context → use `$web-scraping` (or `$playwright` for browser automation)
+- The task is primarily about web scraping without extension context → use `$web-scraping` (or built-in browser/browser-use capability for browser automation)
 
 ## Task ownership and boundaries
 
@@ -70,7 +70,7 @@ This skill does not own:
 - general web app development without extension context
 - Firefox/Safari extension-specific APIs
 - server-side APIs that the extension consumes
-- **Dual-Dimension Audit (Pre: Manifest/Script-Logic, Post: Runtime-Permission/DOM-Interaction Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Manifest/Script-Logic, Post: Runtime-Permission/DOM-Interaction Results)** → runtime verification gate
 
 ## Capabilities
 
@@ -126,7 +126,7 @@ This skill does not own:
 - Always validate message origins in `chrome.runtime.onMessage` handlers.
 - Do not inject content scripts into all URLs unless explicitly required.
 - Store sensitive data in `chrome.storage.session` (not `local`) when possible.
-- **Superior Quality Audit**: For production browser extensions, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production browser extensions, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Cross-Browser Compatibility
 
@@ -167,4 +167,4 @@ This skill does not own:
 - "content script 怎么和 Service Worker 通信？"
 - "Chrome 扩展怎么发布到 Web Store？"
 - "强制进行 Chrome 扩展深度审计 / 检查 Manifest 配置与 Runtime 运行结果。"
-- "Use $execution-audit to audit this Chrome extension for runtime-interaction idealism."
+- "Use the runtime verification gate to audit this Chrome extension for runtime-interaction idealism."

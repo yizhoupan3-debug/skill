@@ -57,7 +57,7 @@
 2. 只携带 **delta**，不要整轮重述。
 3. 已执行项必须有验证状态。
 4. 若出现 regression，作为下一轮 finding。
-5. `execution-audit` iteration loop 只编排验收轮次，不替代 domain owner。
+5. `runtime verification gate` iteration loop 只编排验收轮次，不替代 domain owner。
 
 ## 5. Stop Rules
 

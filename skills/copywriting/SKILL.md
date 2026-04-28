@@ -74,13 +74,13 @@ For detailed guidance, use:
 
 ## Do not use
 
-- The task is naturalizing or de-templating existing prose → use `$humanizer`
+- The task is naturalizing or de-templating existing prose with no commercial goal → use the owning domain skill, or `$documentation-engineering` for project docs
 - The task is academic paper writing or polishing → use `$paper-writing`
 - The task is HTML email template development (rendering, compatibility) → use `$email-template`
 - The task is project documentation (README, API docs, ADR) → use `$documentation-engineering`
 - The task is SEO technical implementation (structured data, meta tags, sitemap) → use `$seo-web`
 - The task is Word document formatting → use `$doc`
-- The task is general prose rewriting with no commercial goal → use `$humanizer`
+- The task is general prose rewriting with no commercial goal → use the owning domain skill, or `$documentation-engineering` for project docs
 
 ## Task ownership and boundaries
 
@@ -94,33 +94,25 @@ This skill owns:
 - A/B variant generation for copy testing
 
 This skill does not own:
-- style naturalization of existing drafts (→ `$humanizer`)
+- style naturalization of existing drafts with no conversion goal
 - academic or scientific prose (→ `$paper-writing`)
 - HTML email rendering and client compatibility (→ `$email-template`)
 - SEO technical implementation (→ `$seo-web`)
 - developer documentation (→ `$documentation-engineering`)
 
 If the task shifts to adjacent skill territory, route to:
-- `$humanizer` when the user mainly wants to polish existing text, not create new copy
 - `$seo-web` when the task shifts from content to technical SEO markup
 - `$email-template` when the focus becomes email rendering, not email content
 
-## Handoff to humanizer
+## Handoff for generic prose
 
-Route to `$humanizer` when one or more become true:
+Do not keep the task in `$copywriting` when one or more become true:
 
 - the user already has a draft and mainly wants it to sound less robotic or AI-generated
 - the request is "改自然 / 去模板腔 / 降 AI 味" without any conversion or brand goal
 - the text is not commercial copy but a general paragraph, email, or statement
 
-When handing off:
-- state briefly that the task is better treated as prose naturalization
-- keep any brand-tone context the user gave
-- let `$humanizer` own the style pass
-
-## Handoff from humanizer
-
-Accept handoff from `$humanizer` when:
+Accept the task back when:
 
 - the rewrite reveals the text is actually commercial copy that needs strategic restructuring, not just style cleanup
 - the user shifts from "改自然" to "重写一版更有卖点的"

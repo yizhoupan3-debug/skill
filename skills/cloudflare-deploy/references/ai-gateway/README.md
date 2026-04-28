@@ -4,7 +4,7 @@ Expert guidance for implementing Cloudflare AI Gateway - a universal gateway for
 
 ## When to Use This Reference
 
-- Setting up AI Gateway for any AI provider (OpenAI, Anthropic, Workers AI, etc.)
+- Setting up AI Gateway for AI providers such as OpenAI, Google AI Studio, and Workers AI
 - Implementing caching, rate limiting, or request retry/fallback
 - Configuring dynamic routing with A/B testing or model fallbacks
 - Managing provider API keys securely with BYOK
@@ -50,13 +50,13 @@ const { text } = await generateText({
 const { text } = await generateText({
   model: gateway([
     openai('gpt-4o'),              // Try first
-    anthropic('claude-sonnet-4-5'), // Fallback
+    openai('gpt-4o-mini'),         // Fallback
   ]),
   prompt: 'Hello'
 });
 ```
 
-**Install:** `npm install ai-gateway-provider ai @ai-sdk/openai @ai-sdk/anthropic`
+**Install:** `npm install ai-gateway-provider ai @ai-sdk/openai`
 
 ## Pattern 2: OpenAI SDK
 
@@ -75,7 +75,7 @@ const client = new OpenAI({
 
 // Switch providers by changing model format: {provider}/{model}
 const response = await client.chat.completions.create({
-  model: 'openai/gpt-4o', // or 'anthropic/claude-sonnet-4-5'
+  model: 'openai/gpt-4o',
   messages: [{ role: 'user', content: 'Hello!' }]
 });
 ```
@@ -140,7 +140,7 @@ export default {
 AI Gateway acts as a proxy between your application and AI providers:
 
 ```
-Your App → AI Gateway → AI Provider (OpenAI, Anthropic, etc.)
+Your App -> AI Gateway -> AI Provider
          ↓
     Analytics, Caching, Rate Limiting, Logging
 ```

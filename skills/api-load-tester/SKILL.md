@@ -33,7 +33,7 @@ metadata:
     - tester
 ---
 
-- **Dual-Dimension Audit (Pre: Load-Profile/Logic, Post: Latency-P99/Throughput Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Load-Profile/Logic, Post: Latency-P99/Throughput Results)** → runtime verification gate
 # api-load-tester
 
 ## Overview
@@ -161,10 +161,10 @@ metadata:
 - 流量模型是否真实
 - 阈值是否定义
 - 是否区分限流与故障
-- **Superior Quality Audit**: For production-scale load tests, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production-scale load tests, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 - 是否输出了明确结论
 
 ## Trigger examples
 - "强制进行压测深度审计 / 检查负载曲线与 P99 延迟结果。"
-- "Use $execution-audit to audit this load test for p99-latency idealism."
+- "Use the runtime verification gate to audit this load test for p99-latency idealism."
 

@@ -23,7 +23,7 @@
 - On dark slides, readability is a hard constraint — no low-contrast gray-on-black.
 
 ### Text Quality
-- Outline text was polished by the right owner before layout: `$humanizer` for
+- Outline text was polished before layout: built-in Rust copy naturalization for
   ordinary prose, `$copywriting` for persuasive decks, or `$paper-writing` for
   academic decks.
 - Generated titles, bullets, captions, and speaker notes use direct claims

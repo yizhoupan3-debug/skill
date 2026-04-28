@@ -5,7 +5,7 @@ description: |
   systems with explicit browser-support tradeoffs.
   Use when the user asks for CSS engineering, aesthetic layouts, animation
   optimization, or phrases like “CSS 布局策略”, “响应式方案”, “oklch 配色”, or “Grid
-  subgrid”. Route Tailwind-specific work to `$tailwind-pro` and browser-mechanism
+  subgrid”. This also owns Tailwind configuration/theme/plugin work; route browser-mechanism
   explanations to `$web-platform-basics`.
 metadata:
   version: "1.0.0"
@@ -28,11 +28,11 @@ trigger_hints:
   - oklch 配色
   - Grid subgrid
   - CSS engineering
+  - Tailwind configuration
+  - design token CSS
   - aesthetic layouts
   - animation optimization
-  - css
-  - layout
-  - responsive
+  - layout architecture
 ---
 
 # css-pro
@@ -52,11 +52,12 @@ This skill owns CSS engineering work: layout systems, responsive design, animati
   - "CSS 动画性能优化"
   - "设计一个 CSS 架构方案"
   - "配置 Tailwind 主题"
+  - "Tailwind v4 怎么迁移"
+  - "写 Tailwind 插件 / custom theme"
 
 ## Do not use
 
 - The task is explaining browser-native CSS **behavior mechanics** (box model rules, cascade/specificity theory, overflow/stacking defaults, why a layout behaves a certain way) without engineering action → use `$web-platform-basics`
-- The task is **Tailwind CSS** configuration, theming, plugins, or v3→v4 migration → use `$tailwind-pro`
 - The task is pure HTML structure or DOM events without CSS focus → `$web-platform-basics`
 - The task is JavaScript logic without styling concerns
 - The task is framework component design → use framework skills
@@ -80,7 +81,7 @@ This skill owns:
 This skill does not own:
 - HTML semantics and accessibility → `$web-platform-basics`
 - JavaScript logic and framework state
-- **Dual-Dimension Audit (Pre: Layout/Spec, Post: Cross-browser/Visual Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Layout/Spec, Post: Cross-browser/Visual Results)** → runtime verification gate
 
 ## Required workflow
 
@@ -156,7 +157,7 @@ This skill does not own:
 - `source-map-explorer` for CSS bundle analysis
 
 > [!NOTE]
-> For Tailwind CSS configuration, theming, and plugins, use `$tailwind-pro`.
+> For Tailwind CSS configuration, theming, and plugins, use `$css-pro`.
 
 ## Output defaults
 
@@ -184,9 +185,9 @@ Recommended structure:
 - Do not animate `width`, `height`, `top`, `left` when `transform` works.
 - Check browser support before using cutting-edge features without fallbacks.
 - Prefer logical properties (`inline-start`, `block-end`) over physical when i18n matters.
-- CSS methodology decision tree: CSS Modules / BEM for large-scale apps needing strict specificity control; CSS-in-JS for tightly-coupled component logic+style. For utility-first (Tailwind), route to `$tailwind-pro`.
-- When Tailwind questions arise, route to `$tailwind-pro` rather than providing in-line guidance.
-- **Superior Quality Audit**: For "Premium" or layout-critical designs, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- CSS methodology decision tree: CSS Modules / BEM for large-scale apps needing strict specificity control; CSS-in-JS for tightly-coupled component logic+style. For utility-first (Tailwind), route to `$css-pro`.
+- When Tailwind questions arise, route to `$css-pro` rather than providing in-line guidance.
+- **Superior Quality Audit**: For "Premium" or layout-critical designs, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 
@@ -195,4 +196,4 @@ Recommended structure:
 - "这个动画在移动端卡顿怎么优化？"
 - "配置 Tailwind 主题和 design tokens。"
 - "强制进行 CSS 深度审计 / 检查布局逻辑与视觉复现结果。"
-- "Use $execution-audit to audit this layout for pixel-perfect result idealism."
+- "Use the runtime verification gate to audit this layout for pixel-perfect result idealism."

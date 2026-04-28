@@ -36,43 +36,15 @@
     ]
   },
   "host_targets": {
-    "policy": "multi-host-shared-system",
+    "policy": "codex-only-shared-system",
     "supported": [
       "codex-cli",
-      "codex-app",
-      "claude-code-cli",
-      "claude-desktop"
+      "codex-app"
     ],
     "shared_system_source": "skills",
     "entrypoint_files": {
       "codex-cli": "AGENTS.md",
-      "codex-app": "AGENTS.md",
-      "claude-code-cli": ".claude/CLAUDE.md",
-      "claude-desktop": "CLAUDE.md"
-    }
-  },
-  "mcp_clients": {
-    "claude-desktop": {
-      "role": "edge-mcp-client",
-      "default_server": "browser-mcp",
-      "config_file": "claude_desktop_config.json",
-      "install_command": "router-rs codex host-integration install-claude-desktop-mcp",
-      "transport": "stdio",
-      "command": "scripts/router-rs/run_router_rs.sh",
-      "args": [
-        "scripts/router-rs/Cargo.toml",
-        "browser",
-        "mcp-stdio",
-        "--repo-root",
-        "<repo-root>"
-      ],
-      "uses_runtime_surfaces": [
-        "router-rs",
-        "browser-mcp"
-      ],
-      "uses_skill_surface": false,
-      "image_required": false,
-      "bridge_policy": "no-docker-no-http-proxy-no-node-runtime"
+      "codex-app": "AGENTS.md"
     }
   },
   "workspace_bootstrap_defaults": {
@@ -88,7 +60,7 @@
   },
   "framework_commands": {
     "autopilot": {
-      "canonical_owner": "execution-controller-coding",
+      "canonical_owner": "plan-to-code",
       "reroute_when_ambiguous": "idea-to-plan",
       "reroute_when_root_cause_unknown": "systematic-debugging",
       "official_workflow": {
@@ -113,10 +85,9 @@
         "use deepinterview as the first-class clarification gate for vague requests"
       ],
       "execution_owners": [
-        "execution-controller-coding",
         "plan-to-code",
-        "subagent-delegation",
-        "execution-audit"
+        "test-engineering",
+        "code-review"
       ],
       "decision_contract": {
         "execute_when": [
@@ -149,9 +120,7 @@
       },
       "host_entrypoints": {
         "codex-cli": "$autopilot",
-        "codex-app": "$autopilot",
-        "claude-code-cli": "/autopilot",
-        "claude-desktop": "/autopilot"
+        "codex-app": "$autopilot"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -191,13 +160,11 @@
         "architect-review",
         "security-audit",
         "test-engineering",
-        "execution-audit"
+        "code-review"
       ],
       "host_entrypoints": {
         "codex-cli": "$deepinterview",
-        "codex-app": "$deepinterview",
-        "claude-code-cli": "/deepinterview",
-        "claude-desktop": "/deepinterview"
+        "codex-app": "$deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -213,8 +180,8 @@
       }
     },
     "team": {
-      "canonical_owner": "execution-controller-coding",
-      "delegation_gate": "subagent-delegation",
+      "canonical_owner": "plan-to-code",
+      "delegation_gate": "agent-swarm-orchestration",
       "auto_route_allowed": true,
       "route_mode": "team-orchestration",
       "selection_signals": {
@@ -268,9 +235,9 @@
         "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
       ],
       "execution_owners": [
-        "execution-controller-coding",
-        "subagent-delegation",
-        "execution-audit"
+        "plan-to-code",
+        "agent-swarm-orchestration",
+        "code-review"
       ],
       "supervisor_contract": {
         "shared_continuity_owner": "supervisor",
@@ -345,9 +312,7 @@
       },
       "host_entrypoints": {
         "codex-cli": "$team",
-        "codex-app": "$team",
-        "claude-code-cli": "/team",
-        "claude-desktop": "/team"
+        "codex-app": "$team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,

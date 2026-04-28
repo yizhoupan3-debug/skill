@@ -68,7 +68,7 @@ This skill owns:
 
 This skill does not own:
 - backend service implementation code
-- **Dual-Dimension Audit (Pre: Schema/Spec, Post: Spec-Accuracy/Client Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Schema/Spec, Post: Spec-Accuracy/Client Results)** → runtime verification gate
 - database schema design
 - authorization implementation
 - infrastructure and deployment
@@ -181,7 +181,7 @@ Recommended structure:
 - Always include a consistent error response structure.
 - Do not expose internal IDs or implementation details in public APIs.
 - Always document rate limits and pagination behavior.
-- **Superior Quality Audit**: For API contracts, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For API contracts, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 
@@ -190,4 +190,4 @@ Recommended structure:
 - "帮我写 OpenAPI 3.1 specification。"
 - "这个 API 的版本策略怎么做？"
 - "强制进行 API 设计深度审计 / 检查 Schema 定义与文档一致性结果。"
-- "Use $execution-audit to audit this API design for contract idealism."
+- "Use the runtime verification gate to audit this API design for contract idealism."

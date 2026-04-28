@@ -39,13 +39,9 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add \
-            AGENT.md \
             AGENTS.md \
-            GEMINI.md \
-            .mcp.json \
-            .gemini/settings.json \
+            .codex/host_entrypoints_sync_manifest.json \
             configs/codex/AGENTS.md \
-            configs/gemini/GEMINI.md \
             skills/SKILL_HEALTH_MANIFEST.json \
             skills/.routing_feedback.md \
             skills/SKILL_ROUTING_REGISTRY.md \

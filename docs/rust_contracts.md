@@ -36,8 +36,7 @@ Rust owns the default runtime and contract path.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, `memory`, and `background`.
 - Framework snapshot, contract summary, memory recall, session artifact writing, and prompt/memory policy use direct `router-rs` surfaces.
 - Memory policy extraction reports source/fact counts and can persist to both `memory.sqlite3` and the stable `decisions.md` journal without introducing an alternate writer.
-- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the supported host entrypoints are Codex CLI, Codex App, Claude Code CLI, and Claude Desktop.
-- Claude Desktop and Claude Code support use generated thin policy entrypoints, repo-managed settings/hooks where applicable, and the same `skills/` runtime source. Claude Desktop may also install a minimal `mcpServers.browser-mcp` stdio client config pointing directly at `router-rs browser mcp-stdio`; that edge must not become a copied skill mirror, Docker/image layer, HTTP bridge, Node runtime, or host-private policy fork.
+- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the supported host entrypoints are Codex CLI and Codex App.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.
 - SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains the safe default storage.
@@ -72,7 +71,7 @@ Rust owns the default runtime and contract path.
 - `codex_profile` is the only default profile artifact key.
 - Codex host-private fields stay in `codex_profile.codex_host_payload`.
 - Host-specific generated artifacts are not default runtime surfaces.
-- Host entrypoint sync materializes `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, and `.codex/host_entrypoints_sync_manifest.json`.
+- Host entrypoint sync materializes `AGENTS.md` and `.codex/host_entrypoints_sync_manifest.json`.
 
 ## Route Contract
 
@@ -96,7 +95,8 @@ Invariants:
 - at most one overlay
 - `route_engine` and primary authority stay Rust
 - unknown selected skills fail closed in consumers
-- fallback selection may choose a safe owner, but must not introduce a second route authority
+- fallback selection may choose a safe owner from `SKILL_MANIFEST.json`, but must not introduce a second route authority
+- generated framework command aliases must name an existing manifest owner as `canonical_owner`; deleted historical owners may only appear under `docs/history/`
 
 ## Runtime Control Contracts
 

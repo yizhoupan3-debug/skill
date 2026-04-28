@@ -86,7 +86,7 @@ This skill owns:
 This skill does **not** own:
 - trading signal design
 - portfolio construction logic
-- **Dual-Dimension Audit (Pre: Provider/Probe, Post: Data-Fidelity/Normalization Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Provider/Probe, Post: Data-Fidelity/Normalization Results)** → runtime verification gate
 - live execution architecture beyond data ingress
 
 ## Safety and data-integrity rules
@@ -162,7 +162,7 @@ cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_r
 ```
 
 - Only call a source **verified here** if its probe returns `ok: true`.
-- **Superior Quality Audit**: For research-grade financial pipelines, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For research-grade financial pipelines, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 
@@ -173,4 +173,4 @@ cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_r
 - "导出 backtrader 输入数据"
 - "获取 A 股市值和 PE"
 - "强制进行金融数据审计 / 检查行情数据真实性与标准化结果。"
-- "Use $execution-audit to audit this data fetcher for normalization-fidelity idealism."
+- "Use the runtime verification gate to audit this data fetcher for normalization-fidelity idealism."

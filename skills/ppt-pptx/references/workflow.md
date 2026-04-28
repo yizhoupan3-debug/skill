@@ -94,22 +94,20 @@ outline / notes / old deck structure
 -> deck.pptx
 -> rendered PNG evidence
 -> visual-review notes
--> design-output-auditor verdict
+-> design-md verdict
 -> ppt qa / build-qa sign-off
 ```
 
 Use `$design-md` for extracting a deck design system, `$frontend-design` for a
-new premium direction, `$design-workflow-protocol` for repeatable multi-round
-artifact tracking, and `$design-output-auditor` for final drift / AI-slop /
-anti-pattern checks.
+new premium direction, and `$visual-review` plus `$design-md` for repeatable
+multi-round artifact tracking plus final drift / AI-slop / anti-pattern checks.
 
 ## Text Skill Loop
 
-The text pass happens before layout. Pick one owner, then encode the improved
-copy back into `deck.plan.json`:
+The text pass happens before layout. Use built-in Rust copy naturalization for
+ordinary prose, pick a specialist only when the deck needs one, then encode the
+improved copy back into `deck.plan.json`:
 
-- `$humanizer`: ordinary prose, rough notes, speaker notes, "去模板腔", and
-  outline text that sounds machine-generated.
 - `$copywriting`: pitch decks, product decks, sales decks, fundraising decks,
   landing narratives, taglines, CTAs, and persuasive section titles.
 - `$paper-writing`: academic talks, research reports, manuscript-to-slide
@@ -181,8 +179,8 @@ Run a light text pass before layout, especially for outline-generated decks:
 8. Fix the source plan and repeat.
 
 If a `DESIGN.md` or visual contract exists, add one more pass after rendered
-review: ask `$design-output-auditor` for `match / minor drift / material drift /
-hard fail`, then fix only the smallest set needed to restore fidelity.
+review: use `$design-md` verdict language (`match / minor drift / material drift /
+hard fail`), then fix only the smallest set needed to restore fidelity.
 
 If the deck is using fallback placeholder panels because images are missing, treat the build as structurally valid but not visually final.
 

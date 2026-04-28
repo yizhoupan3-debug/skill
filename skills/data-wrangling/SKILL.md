@@ -85,7 +85,7 @@ This skill does not own:
 - ML model training or statistical analysis
 - Build toolchain issues
 - Full-stack API design
-- **Dual-Dimension Audit (Pre: Mapping/Logic, Post: Schema-Match/Row-Count Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Mapping/Logic, Post: Schema-Match/Row-Count Results)** → runtime verification gate
 
 ## Core workflow
 
@@ -127,8 +127,8 @@ Finish with a `Data Wrangling Summary` covering: source (format/size/issues), ta
 - Prefer explicit type coercion over implicit casting
 - Always validate output against the stated schema before declaring done
 - If data volume exceeds what can be processed in memory, say so and suggest chunked/streaming approaches
-- **Superior Quality Audit**: For production ETL pipelines, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production ETL pipelines, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 - "强制进行数据清洗审计 / 检查 Schema 校验结果与数据丢弃报告。"
-- "Use $execution-audit to audit this ETL pipeline for row-count idealism."
+- "Use the runtime verification gate to audit this ETL pipeline for row-count idealism."

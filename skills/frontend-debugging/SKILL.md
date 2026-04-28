@@ -167,7 +167,7 @@ Key patterns covered: blank screen, component not updating, event handler not fi
 
 ## Tool Selection Matrix
 
-When browser tooling is available (Codex with `browser-mcp` or `playwright`):
+When browser tooling is available (Codex with browser-use or `browser-mcp`):
 
 | Five-Layer | Preferred Tool | Key Call |
 |---|---|---|
@@ -186,7 +186,7 @@ When browser tooling is available (Codex with `browser-mcp` or `playwright`):
 Default output: layer identification → symptom & evidence → root cause → fix or next step → verification.
 ## Anti-laziness integration
 
-This skill activates `$anti-laziness` enforcement when:
+This skill activates `runtime quality guard` enforcement when:
 - A fix is applied to a component without first checking the DevTools Evidence layer.
 - Output claims "should work now" without providing screenshot or network trace.
 - The debugging jumps directly to code edits without working through the five layers.

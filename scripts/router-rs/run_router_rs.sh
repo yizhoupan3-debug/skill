@@ -14,6 +14,18 @@ REPO_ROOT=$(cd -- "$CRATE_ROOT/../.." && pwd)
 SHARED_TARGET_DIR=${CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/skill-cargo-target}
 BUILD_LOCK_DIR="$SHARED_TARGET_DIR/.router-rs-build.lock"
 
+router_bin_compatible() {
+  local candidate=$1
+  [ -x "$candidate" ] || return 1
+  case "$(uname -s 2>/dev/null):$(uname -m 2>/dev/null)" in
+    Linux:x86_64) file "$candidate" 2>/dev/null | grep -Eq 'ELF 64-bit.*x86-64' ;;
+    Linux:aarch64|Linux:arm64) file "$candidate" 2>/dev/null | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64)' ;;
+    Darwin:arm64) file "$candidate" 2>/dev/null | grep -Eq 'Mach-O 64-bit.*arm64' ;;
+    Darwin:x86_64) file "$candidate" 2>/dev/null | grep -Eq 'Mach-O 64-bit.*x86_64' ;;
+    *) "$candidate" --help >/dev/null 2>&1 ;;
+  esac
+}
+
 pick_router_bin() {
   local best=""
   for candidate in \
@@ -22,7 +34,7 @@ pick_router_bin() {
     "$SHARED_TARGET_DIR/release/router-rs" \
     "$SHARED_TARGET_DIR/debug/router-rs"
   do
-    if [ -x "$candidate" ] && { [ -z "$best" ] || [ "$candidate" -nt "$best" ]; }; then
+    if router_bin_compatible "$candidate" && { [ -z "$best" ] || [ "$candidate" -nt "$best" ]; }; then
       best=$candidate
     fi
   done
@@ -33,7 +45,7 @@ router_source_newer_than() {
   local binary=$1
   local source
 
-  for source in "$CRATE_ROOT/Cargo.toml" "$CRATE_ROOT/Cargo.lock" "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/.claude/CLAUDE.md"; do
+  for source in "$CRATE_ROOT/Cargo.toml" "$CRATE_ROOT/Cargo.lock" "$REPO_ROOT/AGENTS.md"; do
     if [ -e "$source" ] && [ "$source" -nt "$binary" ]; then
       return 0
     fi
@@ -47,6 +59,11 @@ router_source_newer_than() {
 }
 
 build_router_bin() {
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "router-rs launcher needs cargo to build a compatible router-rs binary, but cargo was not found on PATH." >&2
+    echo "Install Rust/Cargo or provide a compatible router-rs binary under $SHARED_TARGET_DIR/{release,debug}/router-rs." >&2
+    return 127
+  fi
   CARGO_TARGET_DIR="$SHARED_TARGET_DIR" cargo build --manifest-path "$MANIFEST_PATH" --release >/dev/null
 }
 

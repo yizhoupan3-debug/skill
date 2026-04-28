@@ -5,6 +5,7 @@
 - `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.codex/skills` 当成主路径前提。
 - system skill 放 `skills/.system/`。不要同时保留两份 live source。
 - `~/.codex/skills` 只是 Codex/App/CLI 共用的轻量安装面，指向 `artifacts/codex-skill-surface/skills`。这个投影由 Rust host integration 生成，只放热路由和显式命令入口；没有独立 `SKILL.md` 的框架命令（例如 `autopilot`、`team`）会投到 `skill-framework-developer`，不要在这里手写或修 skill。
+- `SKILL_HEALTH_MANIFEST.json` 只是健康输入快照，不是入口真源；删除、合并或新增 skill 后必须让它的 slug 集合与 `SKILL_MANIFEST.json` 对齐，不能让健康快照把已删除 skill 拉回路由 contract。
 
 ## 新增 Skill 最小清单
 
@@ -79,6 +80,6 @@ git worktree list --porcelain
 ### 2. 工作流凝结协议 (Workflow-to-Skill)
 当审计报告识别出“待批阅工作流”时，需严格执行以下流程：
 1. **模式确认**：人工批阅审计 Issue，确认该任务流具备独立凝结价值。
-2. **标准化生成**：必须基于 `$skill-creator` 协议，显式处理与 `execution-audit` iteration loop 等通用验收模式的 `Do not use` 边界。
+2. **标准化生成**：必须基于 `$skill-creator` 协议，显式处理与 `runtime verification gate` iteration loop 等通用验收模式的 `Do not use` 边界。
 3. **回归校验**：新技能就绪后，需运行 Rust skill compiler `--apply` 更新注册表。
 4. **闭环验证**：初始设为 `P2` 优先级，在接下来的会话中观察是否成功拦截原有的“通用型”路由。

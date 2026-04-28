@@ -1,4 +1,4 @@
-use crate::framework_runtime::resolve_framework_memory_root;
+use crate::framework_runtime::{resolve_framework_memory_root, write_framework_session_artifacts};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use rusqlite::Connection;
@@ -12,8 +12,6 @@ use std::process::Command;
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
-const CLAUDE_DESKTOP_CONFIG_SCHEMA_VERSION: &str = "claude-desktop-mcp-config-v1";
-const CLAUDE_DESKTOP_BROWSER_MCP_SERVER_NAME: &str = "browser-mcp";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
@@ -152,12 +150,6 @@ enum Commands {
         #[arg(long)]
         skip_default_bootstrap: bool,
     },
-    InstallClaudeDesktopMcp {
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long)]
-        config_path: PathBuf,
-    },
     InstallSkills {
         #[arg(long)]
         repo_root: PathBuf,
@@ -272,9 +264,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             !skip_home_codex_skills_link,
             !skip_default_bootstrap,
         )?,
-        Commands::InstallClaudeDesktopMcp { repo_root, config_path } => {
-            install_claude_desktop_mcp(&repo_root, &config_path)?
-        }
         Commands::InstallSkills {
             repo_root,
             home,
@@ -1290,6 +1279,9 @@ fn run_memory_automation(
         .map(str::to_owned)
         .unwrap_or_else(|| workspace_name_from_root(&repo_root));
 
+    let continuity_seed =
+        ensure_memory_automation_continuity(&repo_root, &workspace, query, artifact_source_dir)?;
+
     let mut runtime_args = vec!["framework".to_string(), "snapshot".to_string()];
     if let Some(path) = resolved_artifact_source_dir.as_ref() {
         runtime_args.push("--artifact-source-dir".to_string());
@@ -1318,7 +1310,12 @@ fn run_memory_automation(
             Vec::new()
         };
 
-    let consolidation = build_memory_automation_consolidation(&resolved_memory_root)?;
+    let consolidation = build_memory_automation_consolidation(
+        &resolved_memory_root,
+        &workspace,
+        query,
+        &continuity_seed,
+    )?;
     let changed_files = consolidation
         .get("changed_files")
         .and_then(Value::as_array)
@@ -1343,6 +1340,7 @@ fn run_memory_automation(
         resolved_artifact_source_dir.as_deref(),
     )?;
     let continuity_health = inspect_continuity_health(&repo_root, &retrieval);
+    let continuity_audit = build_memory_automation_continuity_audit(&runtime_payload);
 
     let generated_at = current_local_timestamp();
     let run_id = build_framework_task_id(&format!("{workspace}-memory-automation"));
@@ -1363,6 +1361,9 @@ fn run_memory_automation(
     let sqlite_object = sqlite_result
         .as_object()
         .ok_or_else(|| "sqlite_result must be an object".to_string())?;
+    let continuity_audit_object = continuity_audit
+        .as_object()
+        .ok_or_else(|| "continuity_audit must be an object".to_string())?;
     let archive_object = archive
         .as_object()
         .ok_or_else(|| "archive result must be an object".to_string())?;
@@ -1374,6 +1375,7 @@ fn run_memory_automation(
         storage_root: &storage_root,
         report: report_object,
         sqlite_result: sqlite_object,
+        continuity_audit: continuity_audit_object,
         changed_files: &changed_file_list,
         archive_result: archive_object,
         planned_current_artifact_migrations: &planned_current_artifact_migrations,
@@ -1390,10 +1392,12 @@ fn run_memory_automation(
             "generated_at": generated_at,
             "archive": archive,
             "changed_files": changed_files,
+            "continuity_seed": continuity_seed,
             "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
             "moved_current_artifacts": moved_current_artifacts,
             "retrieval": retrieval,
             "continuity_health": continuity_health,
+            "continuity_audit": continuity_audit,
             "apply_artifact_migrations": apply_artifact_migrations,
         }),
     )?;
@@ -1416,6 +1420,7 @@ fn run_memory_automation(
         "memory_root": resolved_memory_root.to_string_lossy(),
         "output_dir": resolved_output_dir.to_string_lossy(),
         "changed_files": changed_files,
+        "continuity_seed": continuity_seed,
         "archive": archive,
         "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
         "moved_current_artifacts": moved_current_artifacts,
@@ -1425,6 +1430,7 @@ fn run_memory_automation(
         "top_storage_entries": report.get("top_entries").cloned().unwrap_or_else(|| json!([])),
         "retrieval": retrieval,
         "continuity_health": continuity_health,
+        "continuity_audit": continuity_audit,
     });
     write_json_if_changed(&resolved_output_dir.join("run_summary.json"), &run_summary)?;
 
@@ -1433,6 +1439,7 @@ fn run_memory_automation(
         "memory_root": resolved_memory_root.to_string_lossy(),
         "changed_files": changed_files,
         "archive": archive,
+        "continuity_seed": continuity_seed,
         "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
         "moved_current_artifacts": moved_current_artifacts,
         "apply_artifact_migrations": apply_artifact_migrations,
@@ -1440,9 +1447,157 @@ fn run_memory_automation(
         "sqlite_result": sqlite_result,
         "retrieval": retrieval,
         "continuity_health": continuity_health,
+        "continuity_audit": continuity_audit,
         "bootstrap": bootstrap,
         "output_dir": resolved_output_dir.to_string_lossy(),
         "consolidation": consolidation,
+    }))
+}
+
+fn build_memory_automation_continuity_audit(runtime_payload: &Value) -> Value {
+    let runtime = runtime_payload
+        .get("runtime_snapshot")
+        .and_then(Value::as_object);
+    let continuity = runtime
+        .and_then(|runtime| runtime.get("continuity"))
+        .and_then(Value::as_object);
+    let missing_recovery_anchors = continuity
+        .and_then(|continuity| continuity.get("missing_recovery_anchors"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let missing_control_plane_anchors = continuity
+        .and_then(|continuity| continuity.get("missing_control_plane_anchors"))
+        .cloned()
+        .or_else(|| {
+            runtime
+                .and_then(|runtime| runtime.get("control_plane_missing"))
+                .cloned()
+        })
+        .unwrap_or_else(|| json!([]));
+    let blockers = continuity
+        .and_then(|continuity| continuity.get("blockers"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let continuity_state = continuity
+        .and_then(|continuity| continuity.get("state"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let can_resume = continuity
+        .and_then(|continuity| continuity.get("can_resume"))
+        .cloned()
+        .unwrap_or(Value::Bool(false));
+    let active_task_id = runtime
+        .and_then(|runtime| runtime.get("active_task_id"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let focus_task_id = runtime
+        .and_then(|runtime| runtime.get("focus_task_id"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let control_plane_present = runtime
+        .and_then(|runtime| runtime.get("control_plane_present"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let missing_recovery_count = missing_recovery_anchors
+        .as_array()
+        .map(Vec::len)
+        .unwrap_or(0);
+    let missing_control_count = missing_control_plane_anchors
+        .as_array()
+        .map(Vec::len)
+        .unwrap_or(0);
+    let blocker_count = blockers.as_array().map(Vec::len).unwrap_or(0);
+    let residual_blocker_count = missing_recovery_count + missing_control_count + blocker_count;
+
+    json!({
+        "ok": residual_blocker_count == 0 && control_plane_present && can_resume == Value::Bool(true),
+        "status": if residual_blocker_count == 0 && control_plane_present {
+            "ready"
+        } else {
+            "blocked"
+        },
+        "continuity_state": continuity_state,
+        "can_resume": can_resume,
+        "active_task_id": active_task_id,
+        "focus_task_id": focus_task_id,
+        "control_plane_present": control_plane_present,
+        "missing_recovery_anchors": missing_recovery_anchors,
+        "missing_control_plane_anchors": missing_control_plane_anchors,
+        "blockers": blockers,
+        "residual_blocker_count": residual_blocker_count,
+    })
+}
+
+fn ensure_memory_automation_continuity(
+    repo_root: &Path,
+    workspace: &str,
+    query: &str,
+    artifact_source_dir: Option<&Path>,
+) -> Result<Value, String> {
+    if artifact_source_dir.is_some() {
+        return Ok(json!({
+            "attempted": false,
+            "status": "skipped-artifact-source-override",
+            "changed_paths": [],
+        }));
+    }
+    let task = if query.trim().is_empty() {
+        format!("{workspace} memory automation")
+    } else {
+        query.trim().to_string()
+    };
+    let task_id = safe_slug(&format!("{workspace}-{task}"));
+    let payload = json!({
+        "repo_root": repo_root,
+        "output_dir": repo_root.join("artifacts").join("current"),
+        "task_id": task_id,
+        "task": task,
+        "phase": "memory_automation",
+        "status": "in_progress",
+        "summary": "Maintain the repo-local memory root, sqlite index, bootstrap bundle, and continuity control plane from the Rust host-integration entrypoint.",
+        "focus": true,
+        "next_actions": [
+            "Run memory automation through router-rs host-integration.",
+            "Verify memory.sqlite3 memory_items count and current continuity anchors.",
+            "Use run_summary.json as the closeout report for changed files, bootstrap, and blockers."
+        ],
+        "matched_skills": ["skill-framework-native", "agent-memory"],
+        "execution_contract": {
+            "goal": "Keep memory automation usable as a restartable repo-local control loop.",
+            "acceptance_criteria": [
+                "repo-local .codex/memory exists",
+                "memory.sqlite3 has a queryable memory_items table",
+                "artifacts/current pointers and task-scoped continuity artifacts exist",
+                ".supervisor_state.json points to the same active task"
+            ],
+            "evidence_required": [
+                "artifacts/ops/memory_automation/current/run_summary.json",
+                "artifacts/bootstrap/framework_default_bootstrap.json",
+                "artifacts/current/active_task.json",
+                ".codex/memory/memory.sqlite3"
+            ]
+        },
+        "evidence": [
+            {
+                "kind": "run_summary",
+                "path": repo_root.join("artifacts").join("ops").join("memory_automation").join("current").join("run_summary.json").display().to_string()
+            }
+        ],
+        "continuity": {
+            "story_state": "active",
+            "resume_allowed": true,
+            "state_reason": "memory automation run materialized continuity anchors"
+        }
+    });
+    let response = write_framework_session_artifacts(payload)?;
+    Ok(json!({
+        "attempted": true,
+        "status": "materialized",
+        "task_id": response.get("task_id").cloned().unwrap_or(Value::Null),
+        "changed_paths": response
+            .get("changed_paths")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(Vec::new())),
     }))
 }
 
@@ -1569,12 +1724,17 @@ fn anchor_status(label: &str, path: &str) -> Value {
     })
 }
 
-fn build_memory_automation_consolidation(memory_root: &Path) -> Result<Value, String> {
+fn build_memory_automation_consolidation(
+    memory_root: &Path,
+    workspace: &str,
+    query: &str,
+    continuity_seed: &Value,
+) -> Result<Value, String> {
     fs::create_dir_all(memory_root)
         .map_err(|err| format!("create framework memory root failed: {err}"))?;
     let memory_md = memory_root.join("MEMORY.md");
     let existing_memory = read_text_if_exists(&memory_md)?;
-    let changed_files = match existing_memory {
+    let mut changed_files = match existing_memory {
         Some(existing) if !existing.trim().is_empty() => Vec::new(),
         _ => {
             if write_text_if_changed(&memory_md, &default_memory_summary())? {
@@ -1584,9 +1744,21 @@ fn build_memory_automation_consolidation(memory_root: &Path) -> Result<Value, St
             }
         }
     };
+    let sqlite_seed =
+        ensure_memory_automation_sqlite(memory_root, workspace, query, continuity_seed)?;
+    if sqlite_seed
+        .get("changed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        if let Some(path) = sqlite_seed.get("db_path").and_then(Value::as_str) {
+            changed_files.push(Value::String(path.to_string()));
+        }
+    }
     let sqlite_result = inspect_memory_sqlite(memory_root)?;
     Ok(json!({
         "changed_files": changed_files,
+        "sqlite_seed": sqlite_seed,
         "archive": {
             "ok": true,
             "status": "explicit-migration-only",
@@ -1594,6 +1766,100 @@ fn build_memory_automation_consolidation(memory_root: &Path) -> Result<Value, St
         },
         "sqlite_result": sqlite_result,
     }))
+}
+
+fn ensure_memory_automation_sqlite(
+    memory_root: &Path,
+    workspace: &str,
+    query: &str,
+    continuity_seed: &Value,
+) -> Result<Value, String> {
+    fs::create_dir_all(memory_root)
+        .map_err(|err| format!("create framework memory root failed: {err}"))?;
+    let db_path = memory_root.join("memory.sqlite3");
+    let conn = Connection::open(&db_path).map_err(|err| {
+        format!(
+            "open memory automation sqlite failed for {}: {err}",
+            db_path.display()
+        )
+    })?;
+    ensure_host_memory_items_table(&conn)?;
+    let now = current_local_timestamp();
+    let summary = format!(
+        "Rust memory automation is active for workspace {workspace}; query '{}'; continuity task {}.",
+        if query.trim().is_empty() {
+            "memory audit"
+        } else {
+            query.trim()
+        },
+        continuity_seed
+            .get("task_id")
+            .and_then(Value::as_str)
+            .unwrap_or("memory-automation")
+    );
+    let metadata_json = serde_json::to_string(&json!({
+        "schema_version": "memory-automation-seed-v1",
+        "authority": "rust-host-integration",
+        "continuity_seed": continuity_seed,
+    }))
+    .map_err(|err| format!("serialize memory automation metadata failed: {err}"))?;
+    let keywords_json = serde_json::to_string(&json!([
+        "memory",
+        "automation",
+        "continuity",
+        "bootstrap",
+        "sqlite"
+    ]))
+    .map_err(|err| format!("serialize memory automation keywords failed: {err}"))?;
+    let changed = conn
+        .execute(
+            "INSERT OR REPLACE INTO memory_items (
+                item_id, workspace, category, source, confidence, status, summary, notes,
+                evidence_json, metadata_json, keywords_json, created_at, updated_at
+            ) VALUES (
+                ?1, ?2, 'fact', 'run_memory_automation', 0.9, 'active', ?3, ?4,
+                ?5, ?6, ?7, COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?8), ?8
+            )",
+            rusqlite::params![
+                "memory-automation-control-loop",
+                workspace,
+                summary,
+                "Seed item created by run-memory-automation so memory recall has a durable sqlite-backed control-loop fact.",
+                "[]",
+                metadata_json,
+                keywords_json,
+                now,
+            ],
+        )
+        .map_err(|err| format!("seed memory automation sqlite item failed: {err}"))?;
+    Ok(json!({
+        "db_path": db_path.display().to_string(),
+        "item_id": "memory-automation-control-loop",
+        "changed": changed > 0,
+    }))
+}
+
+fn ensure_host_memory_items_table(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS memory_items (
+            item_id TEXT PRIMARY KEY,
+            workspace TEXT NOT NULL,
+            category TEXT NOT NULL,
+            source TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 0.5,
+            status TEXT NOT NULL DEFAULT 'active',
+            summary TEXT NOT NULL,
+            notes TEXT NOT NULL DEFAULT '',
+            evidence_json TEXT NOT NULL DEFAULT '[]',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            keywords_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .map_err(|err| format!("create memory_items table failed: {err}"))?;
+    Ok(())
 }
 
 fn default_memory_summary() -> String {
@@ -1684,6 +1950,7 @@ struct MemoryAutomationSnapshot<'a> {
     storage_root: &'a Path,
     report: &'a Map<String, Value>,
     sqlite_result: &'a Map<String, Value>,
+    continuity_audit: &'a Map<String, Value>,
     changed_files: &'a [String],
     archive_result: &'a Map<String, Value>,
     planned_current_artifact_migrations: &'a [MigrationPlan],
@@ -1699,6 +1966,7 @@ fn render_memory_automation_snapshot(snapshot: MemoryAutomationSnapshot<'_>) -> 
         storage_root,
         report,
         sqlite_result,
+        continuity_audit,
         changed_files,
         archive_result,
         planned_current_artifact_migrations,
@@ -1735,6 +2003,41 @@ fn render_memory_automation_snapshot(snapshot: MemoryAutomationSnapshot<'_>) -> 
                 .unwrap_or(0)
         ),
         format!(
+            "- sqlite_exists: {}",
+            sqlite_result
+                .get("exists")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        ),
+        format!(
+            "- continuity_status: {}",
+            continuity_audit
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        ),
+        format!(
+            "- continuity_state: {}",
+            continuity_audit
+                .get("continuity_state")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        ),
+        format!(
+            "- continuity_residual_blockers: {}",
+            continuity_audit
+                .get("residual_blocker_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+        ),
+        format!(
+            "- continuity_control_plane_present: {}",
+            continuity_audit
+                .get("control_plane_present")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        ),
+        format!(
             "- archived_rows: {}",
             archive_result
                 .get("archived_row_count")
@@ -1766,6 +2069,29 @@ fn render_memory_automation_snapshot(snapshot: MemoryAutomationSnapshot<'_>) -> 
     } else {
         lines.push("- changed_files:".to_string());
         lines.extend(changed_files.iter().map(|path| format!("  - {path}")));
+    }
+    let missing_control_plane = continuity_audit
+        .get("missing_control_plane_anchors")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let missing_recovery = continuity_audit
+        .get("missing_recovery_anchors")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if !missing_control_plane.is_empty() || !missing_recovery.is_empty() {
+        lines.push("- residual_blockers:".to_string());
+        for item in missing_control_plane {
+            if let Some(name) = item.as_str() {
+                lines.push(format!("  - missing control-plane anchor: {name}"));
+            }
+        }
+        for item in missing_recovery {
+            if let Some(name) = item.as_str() {
+                lines.push(format!("  - missing recovery anchor: {name}"));
+            }
+        }
     }
     lines.push("".to_string());
     lines.push("## continuity_health".to_string());
@@ -2171,75 +2497,6 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
 
 fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
     repo_root.join("scripts/router-rs/run_router_rs.sh")
-}
-
-fn install_claude_desktop_mcp(repo_root: &Path, config_path: &Path) -> Result<Value, String> {
-    let repo_root = normalize_path(repo_root)?;
-    let config_path = normalize_path(config_path)?;
-    let command = router_rs_launcher_command(&repo_root);
-    let args = vec![
-        repo_root
-            .join("scripts/router-rs/Cargo.toml")
-            .to_string_lossy()
-            .to_string(),
-        "browser".to_string(),
-        "mcp-stdio".to_string(),
-        "--repo-root".to_string(),
-        repo_root.to_string_lossy().to_string(),
-    ];
-    let changed = ensure_claude_desktop_mcp_server(
-        &config_path,
-        CLAUDE_DESKTOP_BROWSER_MCP_SERVER_NAME,
-        &command,
-        &args,
-    )?;
-
-    Ok(json!({
-        "success": true,
-        "schema_version": CLAUDE_DESKTOP_CONFIG_SCHEMA_VERSION,
-        "server_name": CLAUDE_DESKTOP_BROWSER_MCP_SERVER_NAME,
-        "config_path": config_path.to_string_lossy(),
-        "changed": changed,
-        "command": command.to_string_lossy(),
-        "args": args,
-        "bridge_layers": ["claude-desktop", "router-rs-stdio"],
-        "image_required": false,
-    }))
-}
-
-fn ensure_claude_desktop_mcp_server(
-    config_path: &Path,
-    server_name: &str,
-    command: &Path,
-    args: &[String],
-) -> Result<bool, String> {
-    let mut root = match read_text_if_exists(config_path)? {
-        Some(content) if !content.trim().is_empty() => {
-            serde_json::from_str::<Value>(&content).map_err(|err| err.to_string())?
-        }
-        _ => json!({}),
-    };
-    if !root.is_object() {
-        return Err("Claude Desktop config must be a JSON object".to_string());
-    }
-
-    let root_obj = root.as_object_mut().expect("root object checked");
-    let servers = root_obj
-        .entry("mcpServers".to_string())
-        .or_insert_with(|| json!({}));
-    if !servers.is_object() {
-        return Err("Claude Desktop config field 'mcpServers' must be a JSON object".to_string());
-    }
-
-    servers.as_object_mut().expect("mcpServers object checked").insert(
-        server_name.to_string(),
-        json!({
-            "command": command.to_string_lossy(),
-            "args": args,
-        }),
-    );
-
-    write_json_if_changed(config_path, &root)
 }
 
 fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {

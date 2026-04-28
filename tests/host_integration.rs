@@ -1,6 +1,6 @@
 mod common;
 
-use common::{host_integration_json, project_root, read_json, read_text, write_json, write_text};
+use common::{host_integration_json, project_root, read_text, write_json, write_text};
 use serde_json::json;
 use std::path::Path;
 use tempfile::tempdir;
@@ -101,90 +101,6 @@ fn install_native_integration_is_idempotent() {
 }
 
 #[test]
-fn install_claude_desktop_mcp_writes_minimal_stdio_server() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("scripts/router-rs")).unwrap();
-    write_text(&repo_root.join("scripts/router-rs/run_router_rs.sh"), "#!/bin/sh\n");
-    write_text(&repo_root.join("scripts/router-rs/Cargo.toml"), "[package]\n");
-    let config_path = tmp.path().join("Claude/claude_desktop_config.json");
-
-    let args = vec![
-        "install-claude-desktop-mcp".to_string(),
-        "--repo-root".to_string(),
-        repo_root.display().to_string(),
-        "--config-path".to_string(),
-        config_path.display().to_string(),
-    ];
-    let refs = string_refs(&args);
-    let first = host_integration_json(&refs);
-    let second = host_integration_json(&refs);
-    let config = read_json(&config_path);
-    let server = &config["mcpServers"]["browser-mcp"];
-
-    assert_eq!(first["success"], true);
-    assert_eq!(first["changed"], true);
-    assert_eq!(second["success"], true);
-    assert_eq!(second["changed"], false);
-    assert_eq!(
-        server["command"],
-        repo_root
-            .join("scripts/router-rs/run_router_rs.sh")
-            .to_string_lossy()
-            .to_string()
-    );
-    assert_eq!(
-        server["args"],
-        json!([
-            repo_root
-                .join("scripts/router-rs/Cargo.toml")
-                .to_string_lossy()
-                .to_string(),
-            "browser",
-            "mcp-stdio",
-            "--repo-root",
-            repo_root.to_string_lossy().to_string(),
-        ])
-    );
-}
-
-#[test]
-fn install_claude_desktop_mcp_preserves_existing_servers() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("scripts/router-rs")).unwrap();
-    let config_path = tmp.path().join("claude_desktop_config.json");
-    write_json(
-        &config_path,
-        &json!({
-            "mcpServers": {
-                "existing": {
-                    "command": "/bin/echo",
-                    "args": ["ok"]
-                }
-            },
-            "otherSetting": true
-        }),
-    );
-
-    let args = vec![
-        "install-claude-desktop-mcp".to_string(),
-        "--repo-root".to_string(),
-        repo_root.display().to_string(),
-        "--config-path".to_string(),
-        config_path.display().to_string(),
-    ];
-    let refs = string_refs(&args);
-    let result = host_integration_json(&refs);
-    let config = read_json(&config_path);
-
-    assert_eq!(result["success"], true);
-    assert_eq!(config["otherSetting"], true);
-    assert_eq!(config["mcpServers"]["existing"]["command"], "/bin/echo");
-    assert_eq!(config["mcpServers"]["browser-mcp"]["args"][1], "browser");
-}
-
-#[test]
 fn ensure_default_bootstrap_is_idempotent() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
@@ -257,9 +173,10 @@ fn current_artifact_clutter_plan_archives_current_mirrors() {
 }
 
 #[test]
-fn memory_automation_reports_missing_continuity_control_plane() {
+fn memory_automation_materializes_sqlite_and_continuity_control_plane() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
+    let output_dir = tmp.path().join("memory-automation");
     std::fs::create_dir_all(&repo_root).unwrap();
 
     let result = host_integration_json(&[
@@ -269,24 +186,54 @@ fn memory_automation_reports_missing_continuity_control_plane() {
         "--workspace",
         "skill",
         "--output-dir",
-        tmp.path().join("memory-automation").to_str().unwrap(),
+        output_dir.to_str().unwrap(),
         "--query",
         "memory audit",
     ]);
 
+    assert_eq!(result["sqlite_result"]["exists"], true);
+    assert_eq!(result["sqlite_result"]["memory_items"], 1);
+    assert_eq!(result["continuity_seed"]["status"], "materialized");
+    assert_eq!(result["continuity_audit"]["status"], "ready");
+    assert_eq!(result["continuity_audit"]["control_plane_present"], true);
+    assert_eq!(
+        result["continuity_audit"]["missing_control_plane_anchors"],
+        json!([])
+    );
+    assert_eq!(result["continuity_audit"]["residual_blocker_count"], 0);
+
     let health = &result["continuity_health"];
-    assert_eq!(health["status"], "blocked");
-    let blockers = health["blockers"].as_array().unwrap();
-    assert!(blockers
-        .iter()
-        .any(|item| item.as_str().unwrap().contains("current_root missing")));
-    assert!(blockers
-        .iter()
-        .any(|item| item.as_str().unwrap().contains("supervisor_state missing")));
-    assert!(blockers.iter().any(|item| item
-        .as_str()
-        .unwrap()
-        .contains("continuity active_task_id is empty")));
+    assert_eq!(health["status"], "ok");
+
+    let active = common::read_json(&repo_root.join("artifacts/current/active_task.json"));
+    let task_id = active["task_id"].as_str().unwrap();
+    let task_root = repo_root.join("artifacts/current").join(task_id);
+    for path in [
+        repo_root.join("artifacts/current/active_task.json"),
+        repo_root.join("artifacts/current/focus_task.json"),
+        repo_root.join("artifacts/current/task_registry.json"),
+        repo_root.join(".supervisor_state.json"),
+        repo_root.join(".codex/memory/memory.sqlite3"),
+        task_root.join("SESSION_SUMMARY.md"),
+        task_root.join("NEXT_ACTIONS.json"),
+        task_root.join("EVIDENCE_INDEX.json"),
+        task_root.join("TRACE_METADATA.json"),
+        task_root.join("CONTINUITY_JOURNAL.json"),
+        output_dir.join("run_summary.json"),
+        output_dir.join("snapshot.json"),
+        output_dir.join("storage_audit.json"),
+        repo_root.join("artifacts/bootstrap/framework_default_bootstrap.json"),
+    ] {
+        assert!(path.is_file(), "missing {}", path.display());
+    }
+
+    let run_summary = common::read_json(&output_dir.join("run_summary.json"));
+    assert_eq!(run_summary["sqlite_result"]["memory_items"], 1);
+    assert_eq!(run_summary["continuity_audit"]["status"], "ready");
+    let snapshot = read_text(&output_dir.join("snapshot.md"));
+    assert!(snapshot.contains("- sqlite_exists: true"));
+    assert!(snapshot.contains("- continuity_status: ready"));
+    assert!(snapshot.contains("- continuity_residual_blockers: 0"));
 }
 
 #[test]
@@ -395,7 +342,6 @@ fn assert_framework_alias_skill(surface_root: &Path, slug: &str) {
     assert!(content.contains("generated lightweight Codex CLI/App alias"));
     assert!(content.contains(&format!("`{dollar_entrypoint}`")));
     assert!(content.contains(&format!("`/{slug}`")));
-    assert!(!content.contains("claude-code="));
     assert!(content.contains("skills/skill-framework-developer/SKILL.md"));
 }
 
@@ -478,10 +424,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
 fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let payload = runtime_registry(&project_root());
     let aliases = &payload["framework_commands"];
-    assert_eq!(
-        aliases["autopilot"]["canonical_owner"],
-        "execution-controller-coding"
-    );
+    assert_eq!(aliases["autopilot"]["canonical_owner"], "plan-to-code");
     assert_eq!(
         aliases["autopilot"]["host_entrypoints"]["codex-cli"],
         "$autopilot"
@@ -508,18 +451,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         payload["host_targets"]["supported"],
         json!(["codex-cli", "codex-app"])
     );
-    assert_eq!(
-        payload["mcp_clients"]["claude-desktop"]["uses_runtime_surfaces"],
-        json!(["router-rs", "browser-mcp"])
-    );
-    assert_eq!(
-        payload["mcp_clients"]["claude-desktop"]["uses_skill_surface"],
-        false
-    );
-    assert_eq!(
-        payload["mcp_clients"]["claude-desktop"]["image_required"],
-        false
-    );
+    assert!(payload.get("mcp_clients").is_none());
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");
     let autopilot = &aliases["autopilot"];
     assert_eq!(autopilot["lineage"]["source"], "repo-native");

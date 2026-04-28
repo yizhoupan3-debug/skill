@@ -213,7 +213,7 @@ slices as follows before expensive runs.
 | Training, fine-tuning, or model-level experiments | `ai-research` primary; on Apple Silicon or MPS first check `mac-memory-management`; add `code-acceleration` when a generic hot path remains after runtime policy is settled |
 | Data pipelines, preprocessing, evaluation harnesses, inference hot paths, or agent loops | `ai-research`; on Mac add `mac-memory-management` first; add `code-acceleration` when generic dataflow or serializer bottlenecks remain |
 | Literature search or novelty checking | `literature-synthesis` |
-| Brainstorming | `brainstorm-research` |
+| Brainstorming | `research-workbench` |
 | Reproducibility and experiment provenance | `experiment-reproducibility` |
 | Statistical analysis | `statistical-analysis` |
 | Paper drafting or revision | `paper-writing`, `paper-reviser` |

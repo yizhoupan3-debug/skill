@@ -41,7 +41,7 @@ approval_required_tools:
   - git push
 ---
 
-- **Dual-Dimension Audit (Pre: Config/Lockfile, Post: Bundle-Success/Dep-Graph Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Config/Lockfile, Post: Bundle-Success/Dep-Graph Results)** → runtime verification gate
 # build-tooling
 
 This skill owns dependency, compiler, bundler, and toolchain problems when the main blocker is build infrastructure rather than the app's runtime business logic.
@@ -148,7 +148,7 @@ Recommended structure:
 - Do not delete lockfiles or caches as a "fix" unless the underlying inconsistency is identified.
 - Do not mix package managers casually in one project without an explicit reason.
 - Always preserve the exact failing command and environment in the diagnosis.
-- **Superior Quality Audit**: For stable build infrastructure and toolchains, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For stable build infrastructure and toolchains, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 - If a build succeeds only because of a local cache or undeclared global dependency, call that out.
 
 ## Trigger examples
@@ -157,4 +157,4 @@ Recommended structure:
 - "帮我排查 pnpm/bun/poetry 依赖安装和 lockfile 漂移问题。"
 - "为什么这个 ESM/CJS、alias、tsconfig、bundler 配置总是打不通？"
 - "强制进行构建工具深度审计 / 检查依赖图谱与打包结果一致性。"
-- "Use $execution-audit to audit this build toolchain for dependency-integrity idealism."
+- "Use the runtime verification gate to audit this build toolchain for dependency-integrity idealism."
