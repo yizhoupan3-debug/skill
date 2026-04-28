@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -18,6 +17,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod background_state;
 mod browser_mcp;
+mod claude_hooks;
 mod cli_modes;
 mod codex_hooks;
 mod execution_contract;
@@ -34,6 +34,7 @@ use background_state::handle_background_state_operation;
 use browser_mcp::{
     resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
 };
+use claude_hooks::run_claude_hook;
 use cli_modes::{dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op};
 use codex_hooks::{build_codex_hook_projection, run_codex_audit_hook, sync_host_entrypoints};
 use execution_contract::{
@@ -154,6 +155,10 @@ enum RouterCommand {
         #[command(subcommand)]
         command: CodexCommand,
     },
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeCommand,
+    },
     Trace {
         #[command(subcommand)]
         command: TraceCommand,
@@ -228,6 +233,11 @@ enum CodexCommand {
 }
 
 #[derive(Subcommand, Debug, Clone)]
+enum ClaudeCommand {
+    Hook(ClaudeHookCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
 enum TraceCommand {
     RecordEvent(JsonInputCommand),
     StreamReplay(JsonInputCommand),
@@ -259,7 +269,7 @@ enum ProfileCommand {
 
 #[derive(Subcommand, Debug, Clone)]
 enum MigrateCommand {
-    LegacyMemory(MigrateLegacyMemoryCommand),
+    ArchivedMemory(MigrateArchivedMemoryCommand),
     CurrentArtifactClutter(CurrentArtifactClutterCommand),
 }
 
@@ -333,6 +343,13 @@ struct CodexHookCommand {
 }
 
 #[derive(Args, Debug, Clone)]
+struct ClaudeHookCommand {
+    command: String,
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
 struct ForwardedArgsCommand {
     #[arg(num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
     args: Vec<String>,
@@ -379,7 +396,7 @@ struct ProfilePathCommand {
 }
 
 #[derive(Args, Debug, Clone)]
-struct MigrateLegacyMemoryCommand {
+struct MigrateArchivedMemoryCommand {
     #[arg(long)]
     repo_root: Option<PathBuf>,
     #[arg(long)]
@@ -946,210 +963,13 @@ fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Codex { command } => dispatch_codex_command(command),
+        RouterCommand::Claude { command } => dispatch_claude_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
         RouterCommand::Browser { command } => dispatch_browser_command(command),
         RouterCommand::Profile { command } => dispatch_profile_command(command),
         RouterCommand::Migrate { command } => dispatch_migrate_command(command),
     }
-}
-
-fn retired_top_level_flag_migration(args: impl IntoIterator<Item = String>) -> Option<String> {
-    const COMMANDS: [&str; 10] = [
-        "route",
-        "search",
-        "framework",
-        "codex",
-        "trace",
-        "storage",
-        "browser",
-        "profile",
-        "migrate",
-        "help",
-    ];
-    const RETIRED_FLAGS: &[(&str, &str)] = &[
-        ("--json", "search <query> --json or route <query>"),
-        ("--browser-mcp-stdio", "browser mcp-stdio"),
-        (
-            "--browser-mcp-resolve-attach-artifact",
-            "browser resolve-attach-artifact",
-        ),
-        ("--route-json", "route <query>"),
-        (
-            "--route-policy-json",
-            "--stdio-json with the `route_policy` operation",
-        ),
-        (
-            "--route-snapshot-json",
-            "--stdio-json with the `route_snapshot` operation",
-        ),
-        (
-            "--route-report-json",
-            "--stdio-json with the `route_report` operation",
-        ),
-        (
-            "--route-resolution-json",
-            "--stdio-json with the `route_resolution` operation",
-        ),
-        (
-            "--routing-eval-json",
-            "--stdio-json with route eval data or the router-rs test fixture",
-        ),
-        (
-            "--execute-json",
-            "--stdio-json with the `execute` operation",
-        ),
-        (
-            "--runtime-integrator-json",
-            "--stdio-json with the `runtime_integrator` operation",
-        ),
-        (
-            "--runtime-control-plane-json",
-            "--stdio-json with the `runtime_control_plane` operation",
-        ),
-        (
-            "--sandbox-control-json",
-            "--stdio-json with the `sandbox_control` operation",
-        ),
-        (
-            "--background-control-json",
-            "--stdio-json with the `background_control` operation",
-        ),
-        (
-            "--background-state-json",
-            "--stdio-json with the `background_state` operation",
-        ),
-        (
-            "--session-supervisor-json",
-            "--stdio-json with the `session_supervisor` operation",
-        ),
-        (
-            "--describe-transport-json",
-            "--stdio-json with the `describe_transport` operation",
-        ),
-        (
-            "--describe-handoff-json",
-            "--stdio-json with the `describe_handoff` operation",
-        ),
-        (
-            "--checkpoint-resume-manifest-json",
-            "--stdio-json with the `checkpoint_resume_manifest` operation",
-        ),
-        (
-            "--runtime-checkpoint-control-plane-json",
-            "storage checkpoint-control-plane --input-json <json>",
-        ),
-        (
-            "--write-transport-binding-json",
-            "--stdio-json with the `write_transport_binding` operation",
-        ),
-        (
-            "--write-checkpoint-resume-manifest-json",
-            "--stdio-json with the `write_checkpoint_resume_manifest` operation",
-        ),
-        (
-            "--attach-runtime-event-transport-json",
-            "--stdio-json with the `attach_runtime_event_transport` operation",
-        ),
-        (
-            "--subscribe-attached-runtime-events-json",
-            "--stdio-json with the `subscribe_attached_runtime_events` operation",
-        ),
-        (
-            "--cleanup-attached-runtime-event-transport-json",
-            "--stdio-json with the `cleanup_attached_runtime_event_transport` operation",
-        ),
-        (
-            "--runtime-observability-exporter-json",
-            "--stdio-json with the `runtime_observability_exporter_descriptor` operation",
-        ),
-        (
-            "--runtime-observability-metric-catalog-json",
-            "--stdio-json with the `runtime_observability_metric_catalog` operation",
-        ),
-        (
-            "--runtime-observability-dashboard-json",
-            "--stdio-json with the `runtime_observability_dashboard_schema` operation",
-        ),
-        (
-            "--runtime-metric-record-json",
-            "--stdio-json with the `runtime_metric_record` operation",
-        ),
-        (
-            "--trace-record-event-json",
-            "trace record-event --input-json <json>",
-        ),
-        (
-            "--trace-stream-replay-json",
-            "trace stream-replay --input-json <json>",
-        ),
-        (
-            "--trace-stream-inspect-json",
-            "trace stream-inspect --input-json <json>",
-        ),
-        ("--trace-compact-json", "trace compact --input-json <json>"),
-        (
-            "--write-trace-compaction-delta-json",
-            "trace write-compaction-delta --input-json <json>",
-        ),
-        (
-            "--write-trace-metadata-json",
-            "trace write-metadata --input-json <json>",
-        ),
-        ("--framework-runtime-snapshot-json", "framework snapshot"),
-        (
-            "--framework-contract-summary-json",
-            "framework contract-summary",
-        ),
-        (
-            "--framework-memory-recall-json",
-            "framework memory-recall <query>",
-        ),
-        (
-            "--framework-memory-policy-json",
-            "framework memory-policy --input-json <json>",
-        ),
-        (
-            "--framework-prompt-compression-json",
-            "framework prompt-compression --input-json <json>",
-        ),
-        ("--framework-refresh-json", "framework refresh"),
-        (
-            "--framework-session-artifact-write-json",
-            "framework session-artifact-write --input-json <json>",
-        ),
-        ("--framework-alias-json", "framework alias <alias>"),
-        ("--framework-statusline", "framework statusline"),
-        ("--control-plane-contracts-json", "framework contracts"),
-        ("--profile-json", "profile emit --framework-profile <path>"),
-        (
-            "--profile-artifacts-json",
-            "profile artifacts --framework-profile <path>",
-        ),
-        (
-            "--runtime-storage-json",
-            "storage runtime --input-json <json>",
-        ),
-        ("--codex-hook-projection-json", "codex hook-projection"),
-        ("--sync-host-entrypoints-json", "codex sync"),
-        ("--check-host-entrypoints-json", "codex check"),
-        ("--host-integration", "codex host-integration <args...>"),
-    ];
-
-    for arg in args {
-        if arg == "--" || COMMANDS.contains(&arg.as_str()) {
-            return None;
-        }
-        let flag = arg.split_once('=').map_or(arg.as_str(), |(flag, _)| flag);
-        if let Some((retired, canonical)) =
-            RETIRED_FLAGS.iter().find(|(retired, _)| *retired == flag)
-        {
-            return Some(format!(
-                "{retired} is a retired top-level flag; use canonical router-rs entrypoint: {canonical}."
-            ));
-        }
-    }
-    None
 }
 
 fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
@@ -1260,6 +1080,16 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
         }
         CodexCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
+            print_json_value(&payload)
+        }
+    }
+}
+
+fn dispatch_claude_command(command: ClaudeCommand) -> Result<(), String> {
+    match command {
+        ClaudeCommand::Hook(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let payload = run_claude_hook(&command.command, &repo_root)?;
             print_json_value(&payload)
         }
     }
@@ -1378,12 +1208,12 @@ fn dispatch_profile_command(command: ProfileCommand) -> Result<(), String> {
 
 fn dispatch_migrate_command(command: MigrateCommand) -> Result<(), String> {
     match command {
-        MigrateCommand::LegacyMemory(command) => {
+        MigrateCommand::ArchivedMemory(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let memory_root = command
                 .memory_root
                 .unwrap_or_else(|| repo_root.join(".codex").join("memory"));
-            print_json_value(&framework_runtime::migrate_legacy_memory_surfaces(
+            print_json_value(&framework_runtime::archive_pre_cutover_memory_surfaces(
                 &memory_root,
             )?)
         }
@@ -1665,9 +1495,6 @@ fn write_trace_metadata(
 }
 
 fn main() -> Result<(), String> {
-    if let Some(message) = retired_top_level_flag_migration(env::args().skip(1)) {
-        return Err(message);
-    }
     let args = Cli::parse();
     configure_compute_parallelism(args.compute_threads)?;
     if let Some(command) = args.command.clone() {
@@ -4855,11 +4682,10 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
         "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
         "default_route_mode": "rust",
         "default_route_authority": ROUTE_AUTHORITY,
-        "rustification_status": {
+        "runtime_status": {
             "runtime_primary_owner": "rust-control-plane",
             "runtime_primary_owner_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "hot_path_projection_mode": "descriptor-driven",
-            "framework_runtime_python_projection_required": false,
             "framework_runtime_replacement": "router-rs::framework_runtime",
             "framework_runtime_replacement_authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
         },
@@ -4919,8 +4745,8 @@ fn build_runtime_integrator_payload() -> Value {
         .get("services")
         .cloned()
         .unwrap_or(Value::Null);
-    let rustification_status = control_plane
-        .get("rustification_status")
+    let runtime_status = control_plane
+        .get("runtime_status")
         .cloned()
         .unwrap_or(Value::Null);
     let concurrency_contract = runtime_host
@@ -4943,7 +4769,7 @@ fn build_runtime_integrator_payload() -> Value {
         "control_plane": control_plane,
         "runtime_host": runtime_host,
         "services": services,
-        "rustification_status": rustification_status,
+        "runtime_status": runtime_status,
         "concurrency_contract": concurrency_contract,
         "subagent_limit_contract": subagent_limit_contract,
         "observability": {
@@ -7847,6 +7673,49 @@ mod tests {
     }
 
     #[test]
+    fn framework_command_aliases_require_literal_entrypoints() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+
+        let autopilot = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "$autopilot",
+            "alias-autopilot",
+            true,
+            true,
+        )
+        .expect("route explicit autopilot alias");
+        assert_eq!(autopilot.selected_skill, "autopilot");
+
+        let team = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "$team",
+            "alias-team",
+            true,
+            true,
+        )
+        .expect("route explicit team alias");
+        assert_eq!(team.selected_skill, "team");
+
+        let natural_language_team = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "需要 team orchestration 多 agent 执行",
+            "natural-language-team",
+            true,
+            true,
+        )
+        .expect("route natural language team ask");
+        assert_eq!(natural_language_team.selected_skill, "subagent-delegation");
+    }
+
+    #[test]
     fn search_uses_route_scorer_for_framework_review() {
         let manifest_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
@@ -7927,8 +7796,8 @@ mod tests {
         assert!(!rust.diagnostic_report_required);
         assert!(!rust.strict_verification_required);
 
-        let retired_python = build_route_policy("python").expect_err("python route mode retired");
-        assert!(retired_python.contains("retired route policy mode"));
+        let unsupported = build_route_policy("python").expect_err("unsupported route mode");
+        assert!(unsupported.contains("unsupported route policy mode"));
     }
 
     #[test]
@@ -7952,27 +7821,20 @@ mod tests {
             Value::String(ROUTE_AUTHORITY.to_string())
         );
         assert_eq!(
-            payload["rustification_status"]["runtime_primary_owner"],
+            payload["runtime_status"]["runtime_primary_owner"],
             Value::String("rust-control-plane".to_string())
         );
         assert_eq!(
-            payload["rustification_status"]["hot_path_projection_mode"],
+            payload["runtime_status"]["hot_path_projection_mode"],
             Value::String("descriptor-driven".to_string())
         );
-        assert!(payload["rustification_status"]
+        assert!(payload["runtime_status"]
             .get("framework_runtime_package_status")
             .is_none());
         assert_eq!(
-            payload["rustification_status"]["framework_runtime_python_projection_required"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            payload["rustification_status"]["framework_runtime_replacement"],
+            payload["runtime_status"]["framework_runtime_replacement"],
             Value::String("router-rs::framework_runtime".to_string())
         );
-        assert!(payload
-            .get("framework_runtime_package_retirement")
-            .is_none());
         assert_eq!(
             payload["runtime_host"]["role"],
             Value::String("runtime-orchestration".to_string())
@@ -9043,7 +8905,7 @@ mod tests {
             snapshot_schema_version: ROUTE_SNAPSHOT_SCHEMA_VERSION.to_string(),
             authority: ROUTE_AUTHORITY.to_string(),
             route_snapshot: build_route_snapshot(
-                "legacy",
+                "rust",
                 "plan-to-code",
                 Some("anti-laziness"),
                 "L2",
@@ -9060,7 +8922,7 @@ mod tests {
             ROUTE_SNAPSHOT_SCHEMA_VERSION
         );
         assert_eq!(snapshot.authority, ROUTE_AUTHORITY);
-        assert_eq!(snapshot.route_snapshot.engine, "legacy");
+        assert_eq!(snapshot.route_snapshot.engine, "rust");
         assert_eq!(snapshot.route_snapshot.selected_skill, "plan-to-code");
         assert_eq!(
             snapshot.route_snapshot.overlay_skill.as_deref(),

@@ -35,6 +35,46 @@
       "framework_alias_entrypoints"
     ]
   },
+  "host_targets": {
+    "policy": "multi-host-shared-system",
+    "supported": [
+      "codex-cli",
+      "codex-app",
+      "claude-code-cli",
+      "claude-desktop"
+    ],
+    "shared_system_source": "skills",
+    "entrypoint_files": {
+      "codex-cli": "AGENTS.md",
+      "codex-app": "AGENTS.md",
+      "claude-code-cli": ".claude/CLAUDE.md",
+      "claude-desktop": "CLAUDE.md"
+    }
+  },
+  "mcp_clients": {
+    "claude-desktop": {
+      "role": "edge-mcp-client",
+      "default_server": "browser-mcp",
+      "config_file": "claude_desktop_config.json",
+      "install_command": "router-rs codex host-integration install-claude-desktop-mcp",
+      "transport": "stdio",
+      "command": "scripts/router-rs/run_router_rs.sh",
+      "args": [
+        "scripts/router-rs/Cargo.toml",
+        "browser",
+        "mcp-stdio",
+        "--repo-root",
+        "<repo-root>"
+      ],
+      "uses_runtime_surfaces": [
+        "router-rs",
+        "browser-mcp"
+      ],
+      "uses_skill_surface": false,
+      "image_required": false,
+      "bridge_policy": "no-docker-no-http-proxy-no-node-runtime"
+    }
+  },
   "workspace_bootstrap_defaults": {
     "skills": {
       "source_rel": "skills",
@@ -43,7 +83,7 @@
       "source_dir": "skills"
     },
     "memory": {
-      "source_dir": ".codex/memory-bridge"
+      "source_dir": "memory"
     }
   },
   "framework_commands": {
@@ -108,7 +148,10 @@
         ]
       },
       "host_entrypoints": {
-        "codex-cli": "$autopilot"
+        "codex-cli": "$autopilot",
+        "codex-app": "$autopilot",
+        "claude-code-cli": "/autopilot",
+        "claude-desktop": "/autopilot"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -118,13 +161,10 @@
         ],
         "implicit_route_policy": "never"
       },
-      "omc_dependency": false,
       "lineage": {
         "source": "repo-native",
-        "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor.",
-        "external_runtime_dependency": false
-      },
-      "external_runtime_dependency": false
+        "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
+      }
     },
     "deepinterview": {
       "canonical_owner": "code-review",
@@ -154,7 +194,10 @@
         "execution-audit"
       ],
       "host_entrypoints": {
-        "codex-cli": "$deepinterview"
+        "codex-cli": "$deepinterview",
+        "codex-app": "$deepinterview",
+        "claude-code-cli": "/deepinterview",
+        "claude-desktop": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -164,13 +207,10 @@
         ],
         "implicit_route_policy": "never"
       },
-      "omc_dependency": false,
       "lineage": {
         "source": "repo-native",
-        "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review.",
-        "external_runtime_dependency": false
-      },
-      "external_runtime_dependency": false
+        "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review."
+      }
     },
     "team": {
       "canonical_owner": "execution-controller-coding",
@@ -304,7 +344,10 @@
         "verification_evidence_required_before_cleanup": true
       },
       "host_entrypoints": {
-        "codex-cli": "$team"
+        "codex-cli": "$team",
+        "codex-app": "$team",
+        "claude-code-cli": "/team",
+        "claude-desktop": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -320,22 +363,10 @@
           "resume/recovery supervisor"
         ]
       },
-      "omc_dependency": false,
       "lineage": {
         "source": "repo-native",
-        "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management.",
-        "external_runtime_dependency": false
-      },
-      "external_runtime_dependency": false
+        "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
+      }
     }
-  },
-  "retired_surfaces": [
-    "non-codex-host-projections",
-    "generic-host-adapter",
-    "cli-common-adapter",
-    "codex-desktop-adapter",
-    "codex-cli-adapter",
-    "cli-family-parity-snapshot",
-    "non-codex-plugin-runtime"
-  ]
+  }
 }

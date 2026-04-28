@@ -1988,44 +1988,6 @@ fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool {
     })
 }
 
-fn framework_alias_activation_labels(slug: &str) -> &'static [&'static str] {
-    match slug {
-        "autopilot" => &["autopilot", "auto-pilot", "auto pilot"],
-        "deepinterview" => &["deepinterview", "deep-interview", "deep interview"],
-        "team" => &["team"],
-        _ => &[],
-    }
-}
-
-fn has_framework_alias_activation_phrase(
-    query_text: &str,
-    query_token_list: &[String],
-    slug: &str,
-) -> bool {
-    let activation_prefixes = [
-        "进入",
-        "切到",
-        "切换到",
-        "用",
-        "使用",
-        "开启",
-        "start",
-        "enter",
-        "use",
-        "switch to",
-    ];
-    framework_alias_activation_labels(slug).iter().any(|label| {
-        activation_prefixes.iter().any(|prefix| {
-            let spaced = format!("{prefix} {label}");
-            let compact = format!("{prefix}{label}");
-            query_text.contains(&normalize_text(&spaced))
-                || query_text.contains(&normalize_text(&compact))
-                || text_matches_phrase(query_token_list, &spaced)
-                || text_matches_phrase(query_token_list, &compact)
-        })
-    })
-}
-
 fn has_explicit_framework_alias_call(
     query_text: &str,
     query_token_list: &[String],
@@ -2037,7 +1999,6 @@ fn has_explicit_framework_alias_call(
             has_explicit_entrypoint_term(query_text, &normalize_text(entrypoint))
                 || query_token_list.iter().any(|token| token == entrypoint)
         })
-        || has_framework_alias_activation_phrase(query_text, query_token_list, slug)
 }
 
 fn has_team_orchestration_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -2782,11 +2743,6 @@ pub(crate) fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPaylo
             ..base
         },
         "rust" => base,
-        "python" => {
-            return Err(
-                "retired route policy mode: python; use rust, shadow, or verify".to_string(),
-            )
-        }
         _ => return Err(format!("unsupported route policy mode: {mode}")),
     };
     if policy.diagnostic_report_required && policy.diagnostic_route_mode == "none" {
@@ -2933,18 +2889,12 @@ fn score_route_candidate<'a>(
     }
     let explicit_framework_alias = framework_alias_requires_explicit_call(&record.slug)
         && has_explicit_framework_alias_call(query_text, query_token_list, &record.slug);
-    let implicit_team_route = record.slug == "team"
-        && !explicit_framework_alias
-        && has_team_orchestration_context(query_text, query_token_list);
-    if framework_alias_requires_explicit_call(&record.slug)
-        && !explicit_framework_alias
-        && !implicit_team_route
-    {
+    if framework_alias_requires_explicit_call(&record.slug) && !explicit_framework_alias {
         return RouteCandidate {
             record,
             score: 0.0,
             reasons: vec![
-                "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints unless strong team-orchestration signals are present."
+                "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
                     .to_string(),
             ],
         };
@@ -3388,12 +3338,6 @@ fn score_route_candidate<'a>(
     if explicit_framework_alias {
         score += 1000.0;
         reasons.push("Framework alias entrypoint matched explicitly.".to_string());
-    } else if implicit_team_route {
-        score += 120.0;
-        reasons.push(
-            "Implicit framework alias route allowed: strong team-orchestration signals detected."
-                .to_string(),
-        );
     }
 
     if !record.slug_lower.is_empty()
@@ -3622,19 +3566,8 @@ fn score_route_candidate<'a>(
     }
 
     if record.slug == "team" && score > 0.0 && !explicit_framework_alias {
-        if implicit_team_route {
-            score += 32.0;
-            reasons.push(
-                "Team-orchestration boost applied: multi-phase supervisor workflow detected."
-                    .to_string(),
-            );
-        } else {
-            score *= 0.25;
-            reasons.push(
-                "Team suppression applied: team needs explicit entry or strong orchestration signals."
-                    .to_string(),
-            );
-        }
+        score *= 0.25;
+        reasons.push("Team suppression applied: team needs explicit entry.".to_string());
     }
 
     if record.slug == "visual-review" && score > 0.0 {

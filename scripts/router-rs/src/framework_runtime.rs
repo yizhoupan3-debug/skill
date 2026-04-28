@@ -831,8 +831,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             "skill_path": "skills/autopilot/SKILL.md",
             "lineage": {
                 "source": "repo-native",
-                "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor.",
-                "external_runtime_dependency": false
+                "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
             },
             "official_workflow": {
                 "phases": ["expansion", "planning", "execution", "qa", "validation", "cleanup"]
@@ -883,7 +882,10 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                     "verification status is not yet passed or completed"
                 ]
             },
-            "host_entrypoints": {"codex-cli": "$autopilot"},
+            "host_entrypoints": {
+                "codex-cli": "$autopilot",
+                "codex-app": "$autopilot"
+            },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/autopilot", "$autopilot"],
@@ -895,8 +897,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             "skill_path": "skills/deepinterview/SKILL.md",
             "lineage": {
                 "source": "repo-native",
-                "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review.",
-                "external_runtime_dependency": false
+                "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review."
             },
             "official_workflow": {
                 "loop_rules": [
@@ -923,7 +924,10 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "test-engineering",
                 "execution-audit"
             ],
-            "host_entrypoints": {"codex-cli": "$deepinterview"},
+            "host_entrypoints": {
+                "codex-cli": "$deepinterview",
+                "codex-app": "$deepinterview"
+            },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/deepinterview", "$deepinterview"],
@@ -949,8 +953,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             "skill_path": "skills/team/SKILL.md",
             "lineage": {
                 "source": "repo-native",
-                "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management.",
-                "external_runtime_dependency": false
+                "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
             },
             "official_workflow": {
                 "phases": ["scoping", "delegation", "execution", "integration", "qa", "cleanup"],
@@ -1041,7 +1044,10 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "integration_requires_local_judgment": true,
                 "verification_evidence_required_before_cleanup": true
             },
-            "host_entrypoints": {"codex-cli": "$team"},
+            "host_entrypoints": {
+                "codex-cli": "$team",
+                "codex-app": "$team"
+            },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/team", "$team"],
@@ -2993,11 +2999,18 @@ fn build_continuity_source_hash(snapshot: &FrameworkRuntimeView) -> String {
     format!("{:x}", hasher.finish())
 }
 
-fn resolve_framework_memory_root(repo_root: &Path, memory_root_override: Option<&Path>) -> PathBuf {
-    memory_root_override.map_or_else(
-        || repo_root.join(".codex").join("memory"),
-        Path::to_path_buf,
-    )
+pub(crate) fn resolve_framework_memory_root(
+    repo_root: &Path,
+    memory_root_override: Option<&Path>,
+) -> PathBuf {
+    if let Some(memory_root) = memory_root_override {
+        return memory_root.to_path_buf();
+    }
+    let project_memory_root = repo_root.join("memory");
+    if project_memory_root.is_dir() {
+        return project_memory_root;
+    }
+    repo_root.join(".codex").join("memory")
 }
 
 fn current_local_date() -> String {
@@ -3030,15 +3043,15 @@ fn move_to_archive(source: &Path, destination: &Path) -> Result<PathBuf, String>
     Ok(target)
 }
 
-pub(crate) fn migrate_legacy_memory_surfaces(memory_root: &Path) -> Result<Value, String> {
+pub(crate) fn archive_pre_cutover_memory_surfaces(memory_root: &Path) -> Result<Value, String> {
     let archive_root = memory_root
         .join("archive")
         .join(format!("pre-cutover-{}", current_local_date()));
     let mut moved = Vec::new();
-    let legacy_memory_auto = memory_root.join("MEMORY_AUTO.md");
-    if legacy_memory_auto.exists() {
+    let memory_auto = memory_root.join("MEMORY_AUTO.md");
+    if memory_auto.exists() {
         moved.push(
-            move_to_archive(&legacy_memory_auto, &archive_root.join("MEMORY_AUTO.md"))?
+            move_to_archive(&memory_auto, &archive_root.join("MEMORY_AUTO.md"))?
                 .display()
                 .to_string(),
         );
@@ -3052,7 +3065,7 @@ pub(crate) fn migrate_legacy_memory_surfaces(memory_root: &Path) -> Result<Value
         );
     }
     Ok(json!({
-        "schema_version": "router-rs-legacy-memory-migration-v1",
+        "schema_version": "router-rs-pre-cutover-memory-archive-v1",
         "archive_root": archive_root.display().to_string(),
         "moved": moved,
     }))
@@ -3084,7 +3097,7 @@ fn default_runbooks() -> String {
         "## 标准操作",
         "",
         "- 统一维护入口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>",
-        "- 需要迁移旧 artifact 布局时显式执行：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace> --apply-artifact-migrations",
+        "- 需要迁移旧 artifact 布局时显式执行：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml migrate current-artifact-clutter <active_task_id> --repo-root <repo_root>",
         "- 生成下一轮提示：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework refresh --repo-root <repo_root> --max-lines 4",
         "- 召回上下文：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework memory-recall <关键词> --repo-root <repo_root> --mode stable|active|history|debug --limit <N>",
         "- 生命周期收口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework refresh --repo-root <repo_root> --max-lines 4",
@@ -3131,7 +3144,7 @@ fn ensure_framework_memory_seeded(
     }
     Ok((
         changed_files,
-        "memory_workspace was empty; bridge ran one-shot consolidation".to_string(),
+        "memory_workspace was empty; ran one-shot consolidation".to_string(),
     ))
 }
 
@@ -3144,7 +3157,7 @@ fn describe_project_local_memory_layout(memory_root: &Path) -> Value {
         "logical_root": logical_root.display().to_string(),
         "physical_root": physical_root.display().to_string(),
         "is_symlink": logical_root.is_symlink(),
-        "mapping_note": "Treat the logical .codex/memory path and the physical target as one shared framework memory root.",
+        "mapping_note": "Default project memory resolves to tracked memory/ when present; .codex/memory is a local symlink or explicit override only.",
     })
 }
 
@@ -3892,13 +3905,97 @@ fn usize_to_f64(value: usize) -> f64 {
 }
 
 fn query_tokens(query: &str) -> Vec<String> {
-    query
-        .split(|value: char| value.is_whitespace() || matches!(value, ',' | '/' | '|'))
-        .filter_map(|part| {
-            let trimmed = part.trim().to_lowercase();
-            (!trimmed.is_empty()).then_some(trimmed)
-        })
-        .collect()
+    let mut tokens = Vec::new();
+    let mut seen = HashSet::new();
+    for part in query.split(|value: char| value.is_whitespace() || is_query_delimiter(value)) {
+        push_query_token_variants(part, &mut tokens, &mut seen);
+    }
+    tokens
+}
+
+fn push_query_token_variants(raw: &str, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
+    let trimmed = raw.trim_matches(is_query_delimiter).trim().to_lowercase();
+    if trimmed.is_empty() {
+        return;
+    }
+    push_query_token(&trimmed, tokens, seen);
+
+    let mut ascii_run = String::new();
+    let mut cjk_run = String::new();
+    for ch in trimmed.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            flush_cjk_query_run(&mut cjk_run, tokens, seen);
+            ascii_run.push(ch);
+        } else if is_cjk_char(ch) {
+            flush_ascii_query_run(&mut ascii_run, tokens, seen);
+            cjk_run.push(ch);
+        } else {
+            flush_ascii_query_run(&mut ascii_run, tokens, seen);
+            flush_cjk_query_run(&mut cjk_run, tokens, seen);
+        }
+    }
+    flush_ascii_query_run(&mut ascii_run, tokens, seen);
+    flush_cjk_query_run(&mut cjk_run, tokens, seen);
+}
+
+fn push_query_token(token: &str, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
+    if token.is_empty() || !seen.insert(token.to_string()) {
+        return;
+    }
+    tokens.push(token.to_string());
+}
+
+fn flush_ascii_query_run(run: &mut String, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
+    if run.chars().count() >= 2 {
+        push_query_token(run, tokens, seen);
+    }
+    run.clear();
+}
+
+fn flush_cjk_query_run(run: &mut String, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
+    let chars = run.chars().collect::<Vec<_>>();
+    if chars.len() >= 2 {
+        for window in chars.windows(2) {
+            push_query_token(&window.iter().collect::<String>(), tokens, seen);
+        }
+    }
+    run.clear();
+}
+
+fn is_query_delimiter(ch: char) -> bool {
+    matches!(
+        ch,
+        ',' | '/'
+            | '|'
+            | ';'
+            | ':'
+            | '，'
+            | '。'
+            | '、'
+            | '；'
+            | '：'
+            | '！'
+            | '？'
+            | '!'
+            | '?'
+            | '('
+            | ')'
+            | '['
+            | ']'
+            | '{'
+            | '}'
+            | '<'
+            | '>'
+            | '"'
+            | '\''
+            | '`'
+    )
+}
+
+fn is_cjk_char(ch: char) -> bool {
+    ('\u{4e00}'..='\u{9fff}').contains(&ch)
+        || ('\u{3400}'..='\u{4dbf}').contains(&ch)
+        || ('\u{f900}'..='\u{faff}').contains(&ch)
 }
 
 fn normalize_match_text(text: &str) -> String {

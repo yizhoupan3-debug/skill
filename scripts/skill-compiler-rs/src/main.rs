@@ -93,15 +93,15 @@ const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 3] = [
 const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str]); 2] = [
     (
         "autopilot",
-        "Native repo autopilot command for end-to-end local Rust supervisor execution. Use only for explicit $autopilot or /autopilot entrypoints.",
+        "Explicit Codex CLI/App command alias for end-to-end local Rust supervisor execution. Use only for $autopilot or /autopilot.",
         "execution-controller-coding",
-        &["$autopilot", "/autopilot", "autopilot"],
+        &["$autopilot", "/autopilot"],
     ),
     (
         "team",
-        "Native repo team command for supervisor-led orchestration and worker lifecycle management. Use for explicit $team or /team, or strong team orchestration signals.",
+        "Explicit Codex CLI/App command alias for supervisor-led delegation. Use only for $team or /team.",
         "execution-controller-coding",
-        &["$team", "/team", "team orchestration", "worker lifecycle"],
+        &["$team", "/team"],
     ),
 ];
 
@@ -1704,6 +1704,21 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("team"))));
+        let alias_rows = bundle.runtime_index["skills"].as_array().unwrap();
+        assert_eq!(
+            alias_rows
+                .iter()
+                .find(|row| row.get(0) == Some(&json!("autopilot")))
+                .and_then(|row| row.get(6)),
+            Some(&json!(["$autopilot", "/autopilot"]))
+        );
+        assert_eq!(
+            alias_rows
+                .iter()
+                .find(|row| row.get(0) == Some(&json!("team")))
+                .and_then(|row| row.get(6)),
+            Some(&json!(["$team", "/team"]))
+        );
         assert_eq!(bundle.runtime_index["scope"]["kind"], json!("hot"));
         assert_eq!(bundle.tiers["summary"]["tier_counts"]["core"], json!(2));
         assert_eq!(

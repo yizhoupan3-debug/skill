@@ -28,14 +28,14 @@
 - `host_capability_requirements`
 - `metadata`
 - `execution_protocol_contract`
-- `execution_controller_contract` (compatibility projection only)
+- `execution_controller_contract` (debug contract view only)
 - `delegation_contract`
 - `supervisor_state_contract`
 
 ## Hard Rules
 
 1. `core_capabilities` 必须覆盖 `runtime / memory / artifact / orchestration`，且 framework core 只允许 Codex 宿主。
-2. `router-rs` 是 profile、shared contract、codex profile、workspace bootstrap、memory policy 和 session normalization 的编译真源；不要新增 Python helper parity、fallback emitter 或第二套默认值。
+2. `router-rs` 是 profile、shared contract、codex profile、workspace bootstrap、memory policy 和 session normalization 的编译真源；不要新增第二套 helper、emitter 或默认值。
 3. `codex_profile` 只能投影 `framework_profile`：`transport`、`context_files`、`mcp_config_paths`、`settings_paths` 等宿主私有字段只能留在 `codex_host_payload`。
 4. `workspace_bootstrap.resources` 是唯一默认来源；不要平行维护第二份 skills/memory 投影表。
 5. continuity 真源是 task-scoped artifacts、`artifacts/current/active_task.json` 和 `.supervisor_state.json`；`artifacts/current/*` root 只能放 pointer、registry 或极薄兼容索引，不再复制整组恢复工件。
@@ -48,8 +48,8 @@
 
 默认执行闭环是 `讨论 -> 规划 -> 执行 -> 验证`。它是 runtime / route 的协议，不是 skill owner，也不把 `execution-controller-coding` 设为默认主 owner。内部 route 字段可继续用 `four_step` 作为稳定机器标识。
 
-`execution_protocol_contract` 只表达协议阶段、证据要求和 continuity 边界；`execution_controller_contract` 仅作为旧宿主兼容投影保留，不能重新引入 `primary_owner: execution-controller-coding` 或 `gsd` owner boost 语义。
+`execution_protocol_contract` 只表达协议阶段、证据要求和 continuity 边界；`execution_controller_contract` 仅作为显式 debug contract view 保留，不能重新引入 `primary_owner: execution-controller-coding` 或 `gsd` owner boost 语义。
 
 ## History
 
-历史迁移、retired Python surface、历史 alias 和旧 profile inventory 只放 audit/history 文档或显式 retirement/compatibility artifacts，不进入 steady-state contract。
+历史迁移、旧 alias 和旧 profile inventory 只放 `docs/history/`，不进入 steady-state contract。

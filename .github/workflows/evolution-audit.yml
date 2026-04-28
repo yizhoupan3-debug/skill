@@ -41,15 +41,9 @@ jobs:
           git add \
             AGENT.md \
             AGENTS.md \
-            CLAUDE.md \
             GEMINI.md \
             .mcp.json \
-            .claude/CLAUDE.md \
-            .claude/settings.json \
-            .claude/agents/README.md \
-            .claude/hooks/README.md \
             .gemini/settings.json \
-            configs/claude/CLAUDE.md \
             configs/codex/AGENTS.md \
             configs/gemini/GEMINI.md \
             skills/SKILL_HEALTH_MANIFEST.json \

@@ -353,7 +353,7 @@ fn compile_workspace_bootstrap(
     if !resources.contains_key("memory") {
         let memory = bootstrap.get("memory").cloned().unwrap_or_else(|| {
             value_object([
-                ("source_dir", Value::String(".codex/memory".to_string())),
+                ("source_dir", Value::String("memory".to_string())),
                 ("mounts", Value::Array(normalized_memory_mounts.to_vec())),
             ])
         });
@@ -361,13 +361,9 @@ fn compile_workspace_bootstrap(
     }
     bootstrap.insert("resources".to_string(), Value::Object(resources));
     bootstrap.remove("bridges");
-    bootstrap.remove(&legacy_bridge_key("skill"));
-    bootstrap.remove(&legacy_bridge_key("memory"));
+    bootstrap.remove("skill_bridge");
+    bootstrap.remove("memory_bridge");
     bootstrap
-}
-
-fn legacy_bridge_key(kind: &str) -> String {
-    format!("{kind}_bridge")
 }
 
 fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
@@ -729,7 +725,7 @@ fn build_codex_host_payload() -> Map<String, Value> {
         json!({
             "path_kind": "native-openai-compatible",
             "preferred_for_gpt_family": true,
-            "adapter_loss_profile": "minimal",
+            "transport_loss_profile": "minimal",
             "avoidable_loss_sources": [],
             "reduce_loss_by": [
                 "use /v1 OpenAI-compatible endpoint directly",
@@ -977,11 +973,11 @@ fn build_execution_controller_contract() -> Map<String, Value> {
     );
     payload.insert(
         "status_contract".to_string(),
-        Value::String("execution_controller_contract_compat_v1".to_string()),
+        Value::String("execution_controller_contract_v1".to_string()),
     );
     payload.insert(
         "artifact_role".to_string(),
-        Value::String("compatibility-projection".to_string()),
+        Value::String("debug-contract-view".to_string()),
     );
     payload.insert("controller".to_string(), Value::Object(controller));
     payload.insert(
@@ -989,7 +985,7 @@ fn build_execution_controller_contract() -> Map<String, Value> {
         Value::String(EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID.to_string()),
     );
     payload.insert(
-        "compatibility_notes".to_string(),
+        "boundary_notes".to_string(),
         json!([
             "does_not_declare_primary_owner",
             "does_not_encode_gsd_or_autopilot_owner_boost",
@@ -1325,11 +1321,6 @@ fn value_to_string(value: &Value) -> String {
     }
 }
 
-#[cfg(test)]
-fn legacy_adapter_key(host: &str, surface: &str) -> String {
-    format!("{host}_{surface}_adapter")
-}
-
 fn string_array(values: &[&str]) -> Value {
     Value::Array(
         values
@@ -1425,26 +1416,9 @@ mod tests {
             Value::String("codex".to_string())
         );
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
-        assert!(serialized
-            .get(legacy_adapter_key("cli", "common"))
-            .is_none());
-        assert!(serialized.get(legacy_adapter_key("codex", "cli")).is_none());
-        assert!(serialized
-            .get(legacy_adapter_key("codex", "desktop"))
-            .is_none());
-        assert!(serialized.get("codex_common_adapter").is_none());
-        assert!(serialized.get("cli_family_capability_discovery").is_none());
-        assert!(serialized.get("cli_family_parity_snapshot").is_none());
-        assert!(serialized.get("codex_dual_entry_parity_snapshot").is_none());
         assert!(serialized.get("execution_controller_contract").is_none());
         assert!(serialized.get("delegation_contract").is_none());
         assert!(serialized.get("supervisor_state_contract").is_none());
-        assert!(serialized
-            .get("execution_kernel_live_fallback_retirement_status")
-            .is_none());
-        assert!(serialized
-            .get("execution_kernel_live_response_serialization_contract")
-            .is_none());
     }
 
     #[test]
@@ -1452,7 +1426,7 @@ mod tests {
         let mut profile = sample_profile();
         profile.memory_mounts = vec![json!({
             "mount_id": "project",
-            "source": ".codex/memory"
+            "source": "memory"
         })];
         profile.workspace_bootstrap = serde_json::from_value(json!({
             "skills": {
@@ -1460,7 +1434,7 @@ mod tests {
             },
             "resources": {
                 "memory": {
-                    "source_dir": ".codex/memory",
+                    "source_dir": "memory",
                     "mounts": []
                 }
             }
@@ -1471,7 +1445,7 @@ mod tests {
         let expected_bootstrap = json!({
             "resources": {
                 "memory": {
-                    "source_dir": ".codex/memory",
+                    "source_dir": "memory",
                     "mounts": []
                 },
                 "skills": {
@@ -1546,14 +1520,16 @@ mod tests {
     }
 
     #[test]
-    fn profile_bundle_legacy_alias_opt_in_stays_out_of_runtime_bundle() {
+    fn profile_bundle_keeps_default_surface_minimal() {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
-        assert!(serialized.get("compatibility_lane").is_none());
-        assert!(serialized.get("codex_desktop_host_adapter").is_none());
-        assert!(serialized
-            .get("codex_desktop_alias_retirement_status")
-            .is_none());
+        assert_eq!(
+            serialized["host_family"],
+            Value::String("codex".to_string())
+        );
+        assert!(serialized.get("codex_profile").is_some());
+        assert!(serialized.get("full_codex_profile").is_some());
+        assert!(serialized.get("host_entrypoint_outputs").is_none());
     }
 
     #[test]
@@ -1613,7 +1589,10 @@ mod tests {
             artifacts["codex_profile"]["execution_surface"]["controller_is_cli"],
             Value::Bool(false)
         );
-        assert!(!artifacts.contains_key("codex_desktop_host_adapter"));
+        assert_eq!(
+            artifacts.keys().cloned().collect::<Vec<_>>(),
+            vec!["codex_profile".to_string()]
+        );
     }
 
     #[test]
@@ -1631,28 +1610,20 @@ mod tests {
     }
 
     #[test]
-    fn codex_artifact_bundle_ignores_removed_legacy_alias_opt_in() {
+    fn codex_artifact_bundle_default_surface_is_single_profile() {
         let artifacts =
             build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
         assert_eq!(artifacts.len(), 1);
-        assert!(artifacts.contains_key("codex_profile"));
-        assert!(!artifacts.contains_key(&legacy_adapter_key("cli", "common")));
-        assert!(!artifacts.contains_key(&legacy_adapter_key("codex", "cli")));
-        assert!(!artifacts.contains_key(&legacy_adapter_key("codex", "desktop")));
-        assert!(!artifacts.contains_key("codex_common_adapter"));
-        assert!(!artifacts.contains_key("cli_family_capability_discovery"));
-        assert!(!artifacts.contains_key("cli_family_parity_snapshot"));
-        assert!(!artifacts.contains_key("codex_dual_entry_parity_snapshot"));
-        assert!(!artifacts.contains_key("execution_kernel_live_fallback_retirement_status"));
-        assert!(!artifacts.contains_key("execution_kernel_live_response_serialization_contract"));
-        assert!(!artifacts.contains_key("codex_desktop_host_adapter"));
-        assert!(!artifacts.contains_key("codex_desktop_alias_retirement_status"));
+        assert_eq!(
+            artifacts.keys().cloned().collect::<Vec<_>>(),
+            vec!["codex_profile".to_string()]
+        );
     }
 
     #[test]
     fn validation_rejects_non_codex_host_family() {
         let mut profile = sample_profile();
-        profile.host_family = "legacy-host".to_string();
+        profile.host_family = "unsupported-host".to_string();
         let error = build_profile_bundle(&profile).expect_err("should reject pinned host family");
         assert!(error.contains("must be pinned to Codex"));
     }

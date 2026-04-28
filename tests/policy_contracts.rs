@@ -1,6 +1,9 @@
 mod common;
 
-use common::{cargo_manifest_command, json_from_output, project_root, read_json, read_text, run};
+use common::{
+    cargo_manifest_command, json_from_output, project_root, read_json, read_text, router_rs_json,
+    run,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
@@ -62,20 +65,40 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
 fn project_codex_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!project_root().join(".codex/skills").exists());
     assert!(!project_root().join("AGENT.md").exists());
-    let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(&repo_root).unwrap();
+    router_rs_json(&["codex", "sync", "--repo-root", repo_root.to_str().unwrap()]);
+    let manifest = read_json(&repo_root.join(".codex/host_entrypoints_sync_manifest.json"));
     let manifest_text = manifest.to_string();
     assert!(!manifest_text.contains(".codex/skills/gitx"));
     assert!(!manifest_text.contains(".codex/skills/autopilot"));
-    assert!(manifest["full_sync"]["retired_directories"]
+    assert!(!project_root().join("CLAUDE.md").exists());
+    assert_eq!(
+        manifest["shared_system"]["supported_hosts"],
+        serde_json::json!(["codex-cli", "codex-app"])
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["codex-cli"],
+        "AGENTS.md"
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["codex-app"],
+        "AGENTS.md"
+    );
+    assert!(manifest["full_sync"]["text_files"]
         .as_array()
         .unwrap()
-        .is_empty());
-    assert!(manifest["partial_sync"]["retired_directories"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert!(manifest_text.contains("retired_files"));
-    assert!(manifest_text.contains("AGENT.md"));
+        .contains(&serde_json::json!("AGENTS.md")));
+    assert!(!manifest_text.contains("CLAUDE.md"));
+    assert!(!manifest_text.contains("claude-code"));
+    assert!(!manifest_text.contains("retired_files"));
+    assert!(!manifest_text.contains("retired_directories"));
+    assert!(!manifest_text.contains("AGENT.md"));
+    assert!(!manifest_text.contains(".codex/README.md"));
+    assert!(!manifest_text.contains(".claude/commands"));
+    assert!(!manifest_text.contains(".claude/hooks"));
+    assert!(!manifest_text.contains(".claude/skills"));
 }
 
 #[test]
@@ -87,7 +110,11 @@ fn codex_user_skill_surface_stays_lightweight_and_explicit() {
     }
     let manifest = read_json(&manifest_path);
     let skills = manifest["skills"].as_array().unwrap();
-    assert!(skills.len() < 40, "surface loaded too many skills: {}", skills.len());
+    assert!(
+        skills.len() < 40,
+        "surface loaded too many skills: {}",
+        skills.len()
+    );
     assert!(skills.iter().any(|item| item.as_str() == Some("autopilot")));
     assert!(skills.iter().any(|item| item.as_str() == Some("gitx")));
     assert!(skills
@@ -99,6 +126,12 @@ fn codex_user_skill_surface_stays_lightweight_and_explicit() {
     assert!(surface_root.join("gitx/SKILL.md").exists());
     assert!(surface_root.join("deepinterview/SKILL.md").exists());
     assert!(surface_root.join("team/SKILL.md").exists());
+    let autopilot = read_text(&surface_root.join("autopilot/SKILL.md"));
+    let team = read_text(&surface_root.join("team/SKILL.md"));
+    assert!(autopilot.contains("`$autopilot`"));
+    assert!(autopilot.contains("`/autopilot`"));
+    assert!(team.contains("`$team`"));
+    assert!(team.contains("`/team`"));
 }
 
 #[test]
@@ -106,11 +139,11 @@ fn latex_compile_acceleration_discovery_surface_is_precise() {
     let content = read_text(&project_root().join("skills/latex-compile-acceleration/SKILL.md"));
     for marker in [
         "name: latex-compile-acceleration",
-        "At 每轮对话开始 / first-turn / conversation start",
+        "session_start: n/a",
         "LaTeX 编译太慢",
         "TikZ externalization",
         "preamble 预编译",
-        "prefer this skill over ppt-beamer",
+        "Prefer this skill over ppt-beamer",
         "## Do not use",
     ] {
         assert!(content.contains(marker), "missing marker: {marker}");
@@ -246,6 +279,7 @@ fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
         "search",
         "framework",
         "codex",
+        "claude",
         "trace",
         "storage",
         "browser",
@@ -262,47 +296,6 @@ fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
         "profile-json",
     ] {
         assert!(!stdout.contains(retired), "retired flag leaked: {retired}");
-    }
-}
-
-#[test]
-fn router_rs_retired_top_level_flags_return_migration_guidance() {
-    let output = run(cargo_manifest_command(
-        &project_root().join("scripts/router-rs/Cargo.toml"),
-        &["--browser-mcp-stdio"],
-    ));
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("retired top-level flag"));
-    assert!(stderr.contains("browser mcp-stdio"));
-    assert!(!stderr.contains("unexpected argument"));
-}
-
-#[test]
-fn router_rs_remaining_top_level_json_flags_return_migration_guidance() {
-    for (flag, canonical) in [
-        ("--route-snapshot-json", "route_snapshot"),
-        ("--runtime-control-plane-json", "runtime_control_plane"),
-        ("--trace-record-event-json", "trace record-event"),
-    ] {
-        let output = run(cargo_manifest_command(
-            &project_root().join("scripts/router-rs/Cargo.toml"),
-            &[flag],
-        ));
-        assert!(!output.status.success(), "{flag} unexpectedly succeeded");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains("retired top-level flag"),
-            "{flag} stderr did not mention retired flag: {stderr}"
-        );
-        assert!(
-            stderr.contains(canonical),
-            "{flag} stderr did not mention {canonical}: {stderr}"
-        );
-        assert!(
-            !stderr.contains("unexpected argument"),
-            "{flag} fell through to clap instead of migration guidance: {stderr}"
-        );
     }
 }
 
@@ -358,7 +351,6 @@ fn retired_router_flags_are_absent_from_user_docs() {
         "skills/refresh/SKILL.md",
         "RTK.md",
         "docs/rust_contracts.md",
-        "docs/deerflow2_runtime_benchmark.md",
     ]
     .iter()
     .map(|path| read_text(&project_root().join(path)))
@@ -386,7 +378,10 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
     let loadouts = read_json(&project_root().join("skills/SKILL_LOADOUTS.json"));
 
     assert_eq!(surface["source_of_truth"], true);
-    assert_eq!(surface["derived_reports"], serde_json::json!(["skills/SKILL_TIERS.json"]));
+    assert_eq!(
+        surface["derived_reports"],
+        serde_json::json!(["skills/SKILL_TIERS.json"])
+    );
     assert_eq!(
         surface["deprecated_or_foldable_reports"],
         serde_json::json!(["skills/SKILL_LOADOUTS.json"])
@@ -420,7 +415,10 @@ fn runtime_protocol_uses_behavior_driven_public_names() {
         .collect::<Vec<_>>()
         .join("\n");
     for marker in ["讨论:", "规划:", "执行:", "验证:"] {
-        assert!(checklist.contains(marker), "missing protocol marker: {marker}");
+        assert!(
+            checklist.contains(marker),
+            "missing protocol marker: {marker}"
+        );
     }
     for stale in ["规范:", "计划:", "实施:"] {
         assert!(
@@ -444,7 +442,10 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         .collect::<Vec<_>>();
 
     assert_eq!(runtime["scope"]["kind"], "hot");
-    assert_eq!(runtime["scope"]["fallback_manifest"], "skills/SKILL_MANIFEST.json");
+    assert_eq!(
+        runtime["scope"]["fallback_manifest"],
+        "skills/SKILL_MANIFEST.json"
+    );
     for expected in [
         "subagent-delegation",
         "skill-creator",
@@ -453,7 +454,10 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "plan-to-code",
         "skill-framework-developer",
     ] {
-        assert!(slugs.contains(&expected), "missing hot runtime slug: {expected}");
+        assert!(
+            slugs.contains(&expected),
+            "missing hot runtime slug: {expected}"
+        );
     }
     assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
 }
@@ -550,6 +554,106 @@ fn installed_project_hooks_stay_disabled() {
 }
 
 #[test]
+fn claude_hooks_are_rust_owned_and_low_token() {
+    let settings = read_json(&project_root().join(".claude/settings.json"));
+    let settings_text = settings.to_string();
+    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+        assert!(settings["hooks"].get(event).is_some(), "missing hook event: {event}");
+    }
+    assert!(settings_text.contains("scripts/router-rs/run_router_rs.sh"));
+    assert!(settings_text.contains("Claude hook router launcher not found"));
+    assert!(settings_text.contains("claude hook pre-tool-use"));
+    assert!(settings_text.contains("claude hook user-prompt-submit"));
+    assert!(settings_text.contains("claude hook post-tool-use"));
+    assert!(settings_text.contains("claude hook stop"));
+    assert!(!settings_text.contains("cargo run"));
+    assert!(!settings_text.contains(".codex/hooks.json"));
+
+    let output = common::run_ok({
+        let mut command = common::router_rs_command([
+            "claude",
+            "hook",
+            "pre-tool-use",
+            "--repo-root",
+            project_root().to_str().unwrap(),
+        ]);
+        command.stdin(std::process::Stdio::piped());
+        command
+    });
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(payload["suppressOutput"], true);
+}
+
+#[test]
+fn claude_pre_tool_hook_denies_destructive_git() {
+    let mut command = common::router_rs_command([
+        "claude",
+        "hook",
+        "pre-tool-use",
+        "--repo-root",
+        project_root().to_str().unwrap(),
+    ]);
+    command
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    {
+        use std::io::Write;
+        let stdin = child.stdin.as_mut().unwrap();
+        stdin
+            .write_all(
+                br#"{"tool_name":"Bash","tool_input":{"command":"git push -f origin main"}}"#,
+            )
+            .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    common::assert_success(&output);
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        payload["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+}
+
+#[test]
+fn claude_post_tool_state_blocks_stop_until_validation() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path();
+    std::fs::create_dir_all(repo_root.join(".claude")).unwrap();
+
+    let mut post = common::router_rs_command([
+        "claude",
+        "hook",
+        "post-tool-use",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    post.stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped());
+    let mut child = post.spawn().unwrap();
+    {
+        use std::io::Write;
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(br#"{"tool_name":"Write","tool_input":{"file_path":".claude/settings.json"}}"#)
+            .unwrap();
+    }
+    common::assert_success(&child.wait_with_output().unwrap());
+
+    let output = router_rs_json(&[
+        "claude",
+        "hook",
+        "stop",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    assert_eq!(output["decision"], "block");
+    assert!(output["reason"].as_str().unwrap().contains("Validate Claude"));
+}
+
+#[test]
 fn repo_local_codex_omits_framework_mcp_entrypoint() {
     let source = read_text(&project_root().join(".codex/config.toml"));
     assert!(!source.contains("python3"));
@@ -563,7 +667,6 @@ fn repo_local_codex_omits_framework_mcp_entrypoint() {
 fn browser_mcp_live_config_never_points_to_node_runtime() {
     let surfaces = [
         ".codex/config.toml",
-        ".codex/README.md",
         "tools/browser-mcp/scripts/start_browser_mcp.sh",
         "tools/browser-mcp/README.md",
     ];

@@ -1,6 +1,6 @@
 mod common;
 
-use common::{host_integration_json, project_root, read_text, write_json, write_text};
+use common::{host_integration_json, project_root, read_json, read_text, write_json, write_text};
 use serde_json::json;
 use std::path::Path;
 use tempfile::tempdir;
@@ -14,7 +14,10 @@ fn install_native_integration_is_idempotent() {
         &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
         r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
     );
-    write_text(&repo_root.join("skills/gitx/SKILL.md"), "---\nname: gitx\n---\n");
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
     write_text(
         &repo_root.join("skills/deepinterview/SKILL.md"),
         "---\nname: deepinterview\n---\n",
@@ -75,7 +78,10 @@ fn install_native_integration_is_idempotent() {
     assert_eq!(content.matches("[tui]").count(), 1);
     let surface_root = repo_root.join("artifacts/codex-skill-surface/skills");
     assert!(is_symlink_to(&home_codex_skills_path, &surface_root));
-    assert!(is_symlink_to(&surface_root.join("gitx"), &repo_root.join("skills/gitx")));
+    assert!(is_symlink_to(
+        &surface_root.join("gitx"),
+        &repo_root.join("skills/gitx")
+    ));
     assert!(is_symlink_to(
         &surface_root.join("deepinterview"),
         &repo_root.join("skills/deepinterview")
@@ -92,6 +98,90 @@ fn install_native_integration_is_idempotent() {
         .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
     assert_eq!(first["home_codex_skills_changed"], true);
     assert_eq!(second["home_codex_skills_changed"], false);
+}
+
+#[test]
+fn install_claude_desktop_mcp_writes_minimal_stdio_server() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("scripts/router-rs")).unwrap();
+    write_text(&repo_root.join("scripts/router-rs/run_router_rs.sh"), "#!/bin/sh\n");
+    write_text(&repo_root.join("scripts/router-rs/Cargo.toml"), "[package]\n");
+    let config_path = tmp.path().join("Claude/claude_desktop_config.json");
+
+    let args = vec![
+        "install-claude-desktop-mcp".to_string(),
+        "--repo-root".to_string(),
+        repo_root.display().to_string(),
+        "--config-path".to_string(),
+        config_path.display().to_string(),
+    ];
+    let refs = string_refs(&args);
+    let first = host_integration_json(&refs);
+    let second = host_integration_json(&refs);
+    let config = read_json(&config_path);
+    let server = &config["mcpServers"]["browser-mcp"];
+
+    assert_eq!(first["success"], true);
+    assert_eq!(first["changed"], true);
+    assert_eq!(second["success"], true);
+    assert_eq!(second["changed"], false);
+    assert_eq!(
+        server["command"],
+        repo_root
+            .join("scripts/router-rs/run_router_rs.sh")
+            .to_string_lossy()
+            .to_string()
+    );
+    assert_eq!(
+        server["args"],
+        json!([
+            repo_root
+                .join("scripts/router-rs/Cargo.toml")
+                .to_string_lossy()
+                .to_string(),
+            "browser",
+            "mcp-stdio",
+            "--repo-root",
+            repo_root.to_string_lossy().to_string(),
+        ])
+    );
+}
+
+#[test]
+fn install_claude_desktop_mcp_preserves_existing_servers() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("scripts/router-rs")).unwrap();
+    let config_path = tmp.path().join("claude_desktop_config.json");
+    write_json(
+        &config_path,
+        &json!({
+            "mcpServers": {
+                "existing": {
+                    "command": "/bin/echo",
+                    "args": ["ok"]
+                }
+            },
+            "otherSetting": true
+        }),
+    );
+
+    let args = vec![
+        "install-claude-desktop-mcp".to_string(),
+        "--repo-root".to_string(),
+        repo_root.display().to_string(),
+        "--config-path".to_string(),
+        config_path.display().to_string(),
+    ];
+    let refs = string_refs(&args);
+    let result = host_integration_json(&refs);
+    let config = read_json(&config_path);
+
+    assert_eq!(result["success"], true);
+    assert_eq!(config["otherSetting"], true);
+    assert_eq!(config["mcpServers"]["existing"]["command"], "/bin/echo");
+    assert_eq!(config["mcpServers"]["browser-mcp"]["args"][1], "browser");
 }
 
 #[test]
@@ -119,7 +209,7 @@ fn ensure_default_bootstrap_is_idempotent() {
 }
 
 #[test]
-fn current_artifact_clutter_plan_moves_legacy_current_mirrors() {
+fn current_artifact_clutter_plan_archives_current_mirrors() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     let current_root = repo_root.join("artifacts/current");
@@ -187,14 +277,12 @@ fn memory_automation_reports_missing_continuity_control_plane() {
     let health = &result["continuity_health"];
     assert_eq!(health["status"], "blocked");
     let blockers = health["blockers"].as_array().unwrap();
-    assert!(blockers.iter().any(|item| item
-        .as_str()
-        .unwrap()
-        .contains("current_root missing")));
-    assert!(blockers.iter().any(|item| item
-        .as_str()
-        .unwrap()
-        .contains("supervisor_state missing")));
+    assert!(blockers
+        .iter()
+        .any(|item| item.as_str().unwrap().contains("current_root missing")));
+    assert!(blockers
+        .iter()
+        .any(|item| item.as_str().unwrap().contains("supervisor_state missing")));
     assert!(blockers.iter().any(|item| item
         .as_str()
         .unwrap()
@@ -211,7 +299,10 @@ fn install_skills_rust_entrypoint_links_codex_only() {
         &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
         r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
     );
-    write_text(&repo_root.join("skills/gitx/SKILL.md"), "---\nname: gitx\n---\n");
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
     write_text(
         &repo_root.join("skills/deepinterview/SKILL.md"),
         "---\nname: deepinterview\n---\n",
@@ -299,8 +390,12 @@ fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
 
 fn assert_framework_alias_skill(surface_root: &Path, slug: &str) {
     let content = read_text(&surface_root.join(slug).join("SKILL.md"));
+    let dollar_entrypoint = format!("${slug}");
     assert!(content.contains(&format!("name: {slug}")));
-    assert!(content.contains("generated lightweight Codex/App/CLI alias"));
+    assert!(content.contains("generated lightweight Codex CLI/App alias"));
+    assert!(content.contains(&format!("`{dollar_entrypoint}`")));
+    assert!(content.contains(&format!("`/{slug}`")));
+    assert!(!content.contains("claude-code="));
     assert!(content.contains("skills/skill-framework-developer/SKILL.md"));
 }
 
@@ -342,7 +437,7 @@ fn validation_subcommands_cover_install_skills_contract() {
 }
 
 #[test]
-fn python_runtime_package_is_retired() {
+fn framework_runtime_package_stays_absent() {
     assert!(!project_root().join("framework_runtime").exists());
 }
 
@@ -367,8 +462,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
             "schema_version": "framework-runtime-registry-v1",
             "codex_host": {"profile_id": "repo-codex"},
             "workspace_bootstrap_defaults": {"skills": {"source_rel": "repo-skills"}},
-            "framework_commands": {"autopilot": {"canonical_owner": "repo-owner"}},
-            "retired_surfaces": []
+            "framework_commands": {"autopilot": {"canonical_owner": "repo-owner"}}
         }))
         .unwrap(),
     );
@@ -381,7 +475,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
 }
 
 #[test]
-fn runtime_registry_exposes_framework_commands_and_omc_retirement_contract() {
+fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let payload = runtime_registry(&project_root());
     let aliases = &payload["framework_commands"];
     assert_eq!(
@@ -393,6 +487,10 @@ fn runtime_registry_exposes_framework_commands_and_omc_retirement_contract() {
         "$autopilot"
     );
     assert_eq!(
+        aliases["autopilot"]["host_entrypoints"]["codex-app"],
+        "$autopilot"
+    );
+    assert_eq!(
         aliases["autopilot"]["interaction_invariants"]["implicit_route_policy"],
         "never"
     );
@@ -400,13 +498,32 @@ fn runtime_registry_exposes_framework_commands_and_omc_retirement_contract() {
         aliases["deepinterview"]["host_entrypoints"]["codex-cli"],
         "$deepinterview"
     );
+    assert_eq!(
+        aliases["deepinterview"]["host_entrypoints"]["codex-app"],
+        "$deepinterview"
+    );
     assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "$team");
+    assert_eq!(aliases["team"]["host_entrypoints"]["codex-app"], "$team");
+    assert_eq!(
+        payload["host_targets"]["supported"],
+        json!(["codex-cli", "codex-app"])
+    );
+    assert_eq!(
+        payload["mcp_clients"]["claude-desktop"]["uses_runtime_surfaces"],
+        json!(["router-rs", "browser-mcp"])
+    );
+    assert_eq!(
+        payload["mcp_clients"]["claude-desktop"]["uses_skill_surface"],
+        false
+    );
+    assert_eq!(
+        payload["mcp_clients"]["claude-desktop"]["image_required"],
+        false
+    );
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");
-    let retirement = &aliases["autopilot"];
-    assert_eq!(retirement["external_runtime_dependency"], false);
-    assert_eq!(retirement["omc_dependency"], false);
-    assert_eq!(retirement["lineage"]["source"], "repo-native");
-    assert!(retirement["implementation_bar"]
+    let autopilot = &aliases["autopilot"];
+    assert_eq!(autopilot["lineage"]["source"], "repo-native");
+    assert!(autopilot["implementation_bar"]
         .as_array()
         .unwrap()
         .contains(&json!("resume-and-recovery-required")));

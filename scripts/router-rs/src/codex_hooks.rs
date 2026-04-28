@@ -11,23 +11,22 @@ const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
-const HOST_ENTRYPOINT_RETIRED_DIRECTORIES: [&str; 0] = [];
-const HOST_ENTRYPOINT_RETIRED_FILES: [&str; 1] = ["AGENT.md"];
-const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 2] = ["AGENTS.md", CODEX_HOOK_README_PATH];
+const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
+const CLAUDE_POLICY_PATH: &str = "CLAUDE.md";
+const CLAUDE_CODE_ENTRYPOINT_PATH: &str = ".claude/CLAUDE.md";
+const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 3] = [
+    CODEX_AGENT_POLICY_PATH,
+    CLAUDE_POLICY_PATH,
+    CLAUDE_CODE_ENTRYPOINT_PATH,
+];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
-const PROTECTED_GENERATED_PATH_BYTES: [&[u8]; 3] = [
-    &[65, 71, 69, 78, 84, 83, 46, 109, 100],
-    &[
-        46, 99, 111, 100, 101, 120, 47, 82, 69, 65, 68, 77, 69, 46, 109, 100,
-    ],
-    &[
-        46, 99, 111, 100, 101, 120, 47, 104, 111, 115, 116, 95, 101, 110, 116, 114, 121, 112, 111,
-        105, 110, 116, 115, 95, 115, 121, 110, 99, 95, 109, 97, 110, 105, 102, 101, 115, 116, 46,
-        106, 115, 111, 110,
-    ],
+const PROTECTED_GENERATED_PATHS: [&str; 4] = [
+    CODEX_AGENT_POLICY_PATH,
+    CLAUDE_POLICY_PATH,
+    CLAUDE_CODE_ENTRYPOINT_PATH,
+    HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
 ];
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
-const CODEX_HOOK_README_PATH: &str = ".codex/README.md";
 pub fn build_codex_hook_manifest() -> Value {
     json!({
         "hooks": {}
@@ -37,8 +36,6 @@ pub fn build_codex_hook_manifest() -> Value {
 struct HostEntrypointSyncSection {
     text_files: Vec<String>,
     json_files: Vec<String>,
-    retired_directories: Vec<String>,
-    retired_files: Vec<String>,
 }
 
 fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
@@ -48,14 +45,6 @@ fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
             .map(|path| (*path).to_string())
             .collect(),
         json_files: HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
-            .iter()
-            .map(|path| (*path).to_string())
-            .collect(),
-        retired_directories: HOST_ENTRYPOINT_RETIRED_DIRECTORIES
-            .iter()
-            .map(|path| (*path).to_string())
-            .collect(),
-        retired_files: HOST_ENTRYPOINT_RETIRED_FILES
             .iter()
             .map(|path| (*path).to_string())
             .collect(),
@@ -97,14 +86,6 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
             .into_iter()
             .map(|path| path.to_string())
             .collect(),
-        retired_directories: HOST_ENTRYPOINT_RETIRED_DIRECTORIES
-            .iter()
-            .map(|path| (*path).to_string())
-            .collect(),
-        retired_files: HOST_ENTRYPOINT_RETIRED_FILES
-            .iter()
-            .map(|path| (*path).to_string())
-            .collect(),
     };
     let mut targets = vec![root.clone()];
     targets.extend(matched_worktrees);
@@ -140,12 +121,16 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
 fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut files = BTreeMap::new();
     files.insert(
-        "AGENTS.md".to_string(),
-        build_codex_agent_policy().into_bytes(),
+        CODEX_AGENT_POLICY_PATH.to_string(),
+        build_shared_agent_policy().into_bytes(),
     );
     files.insert(
-        CODEX_HOOK_README_PATH.to_string(),
-        build_codex_hooks_readme().into_bytes(),
+        CLAUDE_POLICY_PATH.to_string(),
+        build_shared_claude_policy().into_bytes(),
+    );
+    files.insert(
+        CLAUDE_CODE_ENTRYPOINT_PATH.to_string(),
+        build_claude_code_entrypoint_policy().into_bytes(),
     );
     files.insert(
         HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
@@ -163,19 +148,26 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
         .collect::<Vec<_>>();
     json!({
         "schema_version": "host-entrypoints-sync-manifest-v1",
+        "shared_system": {
+            "policy": "shared-agent-policy-v1",
+            "source_of_truth": "skills/",
+            "supported_hosts": ["codex-cli", "codex-app", "claude-code-cli", "claude-desktop"],
+            "host_entrypoints": {
+                "codex-cli": CODEX_AGENT_POLICY_PATH,
+                "codex-app": CODEX_AGENT_POLICY_PATH,
+                "claude-code-cli": CLAUDE_CODE_ENTRYPOINT_PATH,
+                "claude-desktop": CLAUDE_POLICY_PATH,
+            },
+        },
         "full_sync": {
             "text_files": full_text_files,
             "json_files": [
                 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
             ],
-        "retired_directories": HOST_ENTRYPOINT_RETIRED_DIRECTORIES,
-        "retired_files": HOST_ENTRYPOINT_RETIRED_FILES,
-    },
+        },
         "partial_sync": {
             "text_files": HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES,
             "json_files": HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
-            "retired_directories": HOST_ENTRYPOINT_RETIRED_DIRECTORIES,
-            "retired_files": HOST_ENTRYPOINT_RETIRED_FILES,
         },
     })
 }
@@ -194,33 +186,6 @@ fn sync_host_entrypoints_single_root(
     section: &HostEntrypointSyncSection,
 ) -> Result<SingleSyncReport, String> {
     let mut report = SingleSyncReport::default();
-    for relative in &section.retired_directories {
-        let directory = target_root.join(relative);
-        if directory.exists() || symlink_exists(&directory) {
-            if apply {
-                remove_path(&directory).map_err(|err| err.to_string())?;
-            }
-            report.written.push(describe_host_entrypoint_path(
-                report_root,
-                target_root,
-                &directory,
-            ));
-        }
-    }
-    for relative in &section.retired_files {
-        let file = target_root.join(relative);
-        if file.is_file() || symlink_exists(&file) {
-            if apply {
-                remove_path(&file).map_err(|err| err.to_string())?;
-            }
-            report.written.push(describe_host_entrypoint_path(
-                report_root,
-                target_root,
-                &file,
-            ));
-        }
-    }
-
     for relative in section.text_files.iter().chain(section.json_files.iter()) {
         let desired = desired_files
             .get(relative)
@@ -239,10 +204,7 @@ fn sync_host_entrypoints_single_root(
 }
 
 fn protected_generated_paths() -> Vec<&'static str> {
-    PROTECTED_GENERATED_PATH_BYTES
-        .iter()
-        .filter_map(|bytes| std::str::from_utf8(bytes).ok())
-        .collect()
+    PROTECTED_GENERATED_PATHS.to_vec()
 }
 
 fn sync_host_entrypoint_file(
@@ -382,26 +344,11 @@ fn describe_host_entrypoint_path(report_root: &Path, target_root: &Path, path: &
     path.to_string_lossy().into_owned()
 }
 
-fn remove_path(path: &Path) -> io::Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    }
-}
-
-fn symlink_exists(path: &Path) -> bool {
-    fs::symlink_metadata(path)
-        .map(|metadata| metadata.file_type().is_symlink())
-        .unwrap_or(false)
-}
-
 pub fn build_codex_hook_projection() -> Value {
     json!({
         "schema_version": "router-rs-codex-hook-projection-v1",
         "authority": CODEX_HOOK_AUTHORITY,
-        "codex_agent_policy": build_codex_agent_policy(),
+        "codex_agent_policy": build_shared_agent_policy(),
         "codex_hooks_readme": build_codex_hooks_readme(),
         "codex_hooks": build_codex_hook_manifest(),
         "codex_audit_commands": {
@@ -410,8 +357,29 @@ pub fn build_codex_hook_projection() -> Value {
     })
 }
 
-fn build_codex_agent_policy() -> String {
+fn build_shared_agent_policy() -> String {
     include_str!("../../../AGENTS.md").to_string()
+}
+
+fn build_shared_claude_policy() -> String {
+    "# CLAUDE.md\n\n\
+This is the generated Claude Desktop / Claude Code policy entrypoint for the shared skill system.\n\n\
+This repository uses a single-source skill system shared by Codex CLI, Codex Desktop, Claude Code CLI, and Claude Desktop. The repository root is the policy root.\n\n\
+- `skills/` is the only live skill source. Do not treat `.claude/skills`, `.codex/skills`, or `artifacts/*-skill-surface/skills` as source of truth.\n\
+- Before loading skill bodies, consult `skills/SKILL_ROUTING_RUNTIME.json` and then read only the matched `skills/<name>/SKILL.md`.\n\
+- Host-facing skill surfaces are Rust-generated thin projections for discovery only; regenerate them through router-rs host entrypoint sync or install-skills commands instead of editing them directly.\n\
+- Claude Code CLI uses `.claude/CLAUDE.md` and `.claude/settings.json` as the minimal generated entrypoint and hook settings.\n\
+- Claude Desktop should use repo-managed stdio MCP servers from `router-rs` and the same `skills/` runtime source; do not add copied skill mirrors or host-private policy forks.\n\
+- Keep Claude Desktop and Claude Code integration minimal: prefer generated pointers, symlinks, MCP stdio, and aliases over copied mirrors.\n"
+        .to_string()
+}
+
+fn build_claude_code_entrypoint_policy() -> String {
+    "# Claude Code entrypoint\n\n\
+This is a generated thin entrypoint for Claude Code CLI.\n\n\
+Use the repository root `CLAUDE.md` as the shared policy entrypoint. `skills/` remains the only live skill source; `.claude/skills` may be a generated discovery symlink and must not be edited as a mirror.\n\n\
+For skill routing, consult `skills/SKILL_ROUTING_RUNTIME.json`, then load only the selected `skills/<name>/SKILL.md`.\n"
+        .to_string()
 }
 
 fn build_codex_hooks_readme() -> String {
@@ -587,7 +555,7 @@ fn classify_protected_generated_path(path: &str) -> Option<&'static str> {
 
 fn pre_tool_use_message(path: &str) -> String {
     format!(
-        "[codex-pre-tool-use] blocked direct edits to generated Codex surface {path}; rerun `{}` instead."
+        "[codex-pre-tool-use] blocked direct edits to generated Codex agent surface {path}; rerun `{}` instead."
         ,
         HOST_ENTRYPOINT_SYNC_HINT
     )
