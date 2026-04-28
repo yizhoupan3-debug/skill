@@ -7,7 +7,7 @@
       "task": "彻底核查 runtime 系统 contract、manifest 漂移、测试可信度和 CI 覆盖，不要直接实现业务代码。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
-      "expected_overlay": "code-review",
+      "expected_overlay": null,
       "forbidden_owners": [
         "plan-to-code"
       ],
@@ -19,7 +19,7 @@
       "task": "这是一个高负载跨文件长运行的治理任务，主线程保持极简并维护 .supervisor_state.json。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
-      "expected_overlay": "code-review",
+      "expected_overlay": null,
       "first_turn": true
     },
     {
@@ -79,7 +79,7 @@
       "task": "这个 skill 框架 owner gate overlay 边界重叠了，顺手把路由策略修一下并减少 token 消耗。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
-      "expected_overlay": "code-review",
+      "expected_overlay": null,
       "forbidden_owners": [
         "idea-to-plan"
       ],
@@ -180,7 +180,7 @@
     {
       "id": "framework-checklist-post-strategy-case",
       "category": "should-trigger",
-      "task": "路线已经定了，不用再论证，直接写 execution-ready checklist，拆成里程碑和串行步骤。",
+      "task": "skill 框架路线已经定了，不用再论证，直接写 execution-ready cleanup checklist，拆成里程碑和串行步骤。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
@@ -189,7 +189,7 @@
     {
       "id": "framework-checklist-serial-parallel-case",
       "category": "should-trigger",
-      "task": "把这份 checklist 规范一下，串行的写在一点，并行的拆开，补齐验收和约束。",
+      "task": "把这份 skill 框架 cleanup checklist 规范一下，串行的写在一点，并行的拆开，补齐验收和约束。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
@@ -202,7 +202,7 @@
     {
       "id": "checklist-selected-items-framework-case",
       "category": "should-trigger",
-      "task": "按这份 checklist 逐项修复，先做 1-3。",
+      "task": "按这份 skill 框架 cleanup checklist 逐项修复，先做 1-3。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,

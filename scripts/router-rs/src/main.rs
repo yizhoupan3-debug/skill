@@ -819,6 +819,11 @@ fn should_accept_manifest_fallback(
                 ))
             || hot_decision.selected_skill == "systematic-debugging")
     {
+        if full_decision.score >= hot_decision.score + 8.0
+            && has_non_generic_manifest_signal(full_decision)
+        {
+            return true;
+        }
         return false;
     }
 
