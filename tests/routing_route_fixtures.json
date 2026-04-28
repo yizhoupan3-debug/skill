@@ -569,7 +569,7 @@
       "expected": {
         "selected_skill": "idea-to-plan",
         "overlay_skill": null,
-        "layer": "L1"
+        "layer": "L0"
       }
     },
     {
@@ -595,7 +595,7 @@
       "query": "按方案实现这个需求，直接做代码，使用 plan-to-code 主导，并附加强验收 audit",
       "expected": {
         "selected_skill": "plan-to-code",
-        "overlay_skill": "code-review",
+        "overlay_skill": null,
         "layer": "L2"
       }
     },
@@ -604,7 +604,7 @@
       "query": "review checklist 看这轮是否结束",
       "expected": {
         "selected_skill": "skill-framework-developer",
-        "overlay_skill": null,
+        "overlay_skill": "code-review",
         "layer": "L1"
       }
     },
@@ -667,7 +667,7 @@
       "query": "全面 review 这个仓库，做 code review",
       "expected": {
         "selected_skill": "repo-review-owner",
-        "overlay_skill": "code-review",
+        "overlay_skill": null,
         "layer": "L2"
       }
     },

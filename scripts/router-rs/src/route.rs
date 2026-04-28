@@ -2868,6 +2868,13 @@ fn score_route_candidate<'a>(
             "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
                 .to_string(),
         );
+        if bounded_subagent_context && token_budget_pressure {
+            score += 8.0;
+            reasons.push(
+                "Token-budget boost applied: bounded sidecars fit prompt-budget pressure better than wider orchestration."
+                    .to_string(),
+            );
+        }
     }
     if framework_alias_requires_explicit_call(&record.slug) && !explicit_framework_alias {
         return RouteCandidate {
@@ -3741,6 +3748,14 @@ fn pick_overlay(
         if !is_overlay_record(record) {
             continue;
         }
+        if selected_skill.slug == "skill-framework-developer"
+            && record.slug == "code-review"
+            && text_matches_phrase(query_tokens, "checklist")
+            && !query_text.contains("code review")
+            && !query_text.contains("代码 review")
+        {
+            continue;
+        }
         let explicit_name_match = text_matches_phrase(query_tokens, &record.slug_lower);
         let explicit_trigger_match = record
             .trigger_hints
@@ -3748,23 +3763,6 @@ fn pick_overlay(
             .any(|phrase| phrase.chars().count() > 3 && text_matches_phrase(query_tokens, phrase));
         if explicit_name_match || explicit_trigger_match {
             return Some(record.slug.clone());
-        }
-    }
-
-    if selected_skill.slug == "skill-framework-developer"
-        && !has_skill_subtraction_behavior_context(query_text)
-        && [
-            "review",
-            "framework-review",
-            "routing-review",
-            "审查",
-            "审核",
-        ]
-        .iter()
-        .any(|marker| text_matches_phrase(query_tokens, marker))
-    {
-        if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
-            return Some(skill.slug.clone());
         }
     }
 
