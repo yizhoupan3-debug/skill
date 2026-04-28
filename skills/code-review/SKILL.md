@@ -37,8 +37,6 @@ trigger_hints:
   - 代码 review
   - 代码审核
   - PR review
-  - framework-review
-  - routing-review
   - 代码审查
   - 实现质量
   - 回归风险

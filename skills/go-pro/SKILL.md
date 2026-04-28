@@ -116,7 +116,7 @@ This skill does not own:
 - Error handling patterns (sentinel errors, custom types, wrapping)
 - Generics (Go 1.18+) and type constraints
 - Stdlib patterns and idiomatic Go
-- **Critical implementation auditing (Memory, Speed, Platform-native)** → `$execution-audit` [Overlay]
+- **Critical implementation auditing (Memory, Speed, Platform-native)** → runtime verification gate
 
 If the task shifts to adjacent skill territory, route to:
 - Chi, Gin, Echo router frameworks

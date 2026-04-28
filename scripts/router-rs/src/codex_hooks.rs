@@ -12,20 +12,10 @@ const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_m
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
 const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
-const CLAUDE_POLICY_PATH: &str = "CLAUDE.md";
-const CLAUDE_CODE_ENTRYPOINT_PATH: &str = ".claude/CLAUDE.md";
-const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 3] = [
-    CODEX_AGENT_POLICY_PATH,
-    CLAUDE_POLICY_PATH,
-    CLAUDE_CODE_ENTRYPOINT_PATH,
-];
+const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 1] = [CODEX_AGENT_POLICY_PATH];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
-const PROTECTED_GENERATED_PATHS: [&str; 4] = [
-    CODEX_AGENT_POLICY_PATH,
-    CLAUDE_POLICY_PATH,
-    CLAUDE_CODE_ENTRYPOINT_PATH,
-    HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-];
+const PROTECTED_GENERATED_PATHS: [&str; 2] =
+    [CODEX_AGENT_POLICY_PATH, HOST_ENTRYPOINT_SYNC_MANIFEST_PATH];
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 pub fn build_codex_hook_manifest() -> Value {
     json!({
@@ -125,14 +115,6 @@ fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec
         build_shared_agent_policy().into_bytes(),
     );
     files.insert(
-        CLAUDE_POLICY_PATH.to_string(),
-        build_shared_claude_policy().into_bytes(),
-    );
-    files.insert(
-        CLAUDE_CODE_ENTRYPOINT_PATH.to_string(),
-        build_claude_code_entrypoint_policy().into_bytes(),
-    );
-    files.insert(
         HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
         serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files))?,
     );
@@ -151,12 +133,10 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
         "shared_system": {
             "policy": "shared-agent-policy-v1",
             "source_of_truth": "skills/",
-            "supported_hosts": ["codex-cli", "codex-app", "claude-code-cli", "claude-desktop"],
+            "supported_hosts": ["codex-cli", "codex-app"],
             "host_entrypoints": {
                 "codex-cli": CODEX_AGENT_POLICY_PATH,
                 "codex-app": CODEX_AGENT_POLICY_PATH,
-                "claude-code-cli": CLAUDE_CODE_ENTRYPOINT_PATH,
-                "claude-desktop": CLAUDE_POLICY_PATH,
             },
         },
         "full_sync": {
@@ -359,27 +339,6 @@ pub fn build_codex_hook_projection() -> Value {
 
 fn build_shared_agent_policy() -> String {
     include_str!("../../../AGENTS.md").to_string()
-}
-
-fn build_shared_claude_policy() -> String {
-    "# CLAUDE.md\n\n\
-This is the generated Claude Desktop / Claude Code policy entrypoint for the shared skill system.\n\n\
-This repository uses a single-source skill system shared by Codex CLI, Codex Desktop, Claude Code CLI, and Claude Desktop. The repository root is the policy root.\n\n\
-- `skills/` is the only live skill source. Do not treat `.claude/skills`, `.codex/skills`, or `artifacts/*-skill-surface/skills` as source of truth.\n\
-- Before loading skill bodies, consult `skills/SKILL_ROUTING_RUNTIME.json` and then read only the matched `skills/<name>/SKILL.md`.\n\
-- Host-facing skill surfaces are Rust-generated thin projections for discovery only; regenerate them through router-rs host entrypoint sync or install-skills commands instead of editing them directly.\n\
-- Claude Code CLI uses `.claude/CLAUDE.md` and `.claude/settings.json` as the minimal generated entrypoint and hook settings.\n\
-- Claude Desktop should use repo-managed stdio MCP servers from `router-rs` and the same `skills/` runtime source; do not add copied skill mirrors or host-private policy forks.\n\
-- Keep Claude Desktop and Claude Code integration minimal: prefer generated pointers, symlinks, MCP stdio, and aliases over copied mirrors.\n"
-        .to_string()
-}
-
-fn build_claude_code_entrypoint_policy() -> String {
-    "# Claude Code entrypoint\n\n\
-This is a generated thin entrypoint for Claude Code CLI.\n\n\
-Use the repository root `CLAUDE.md` as the shared policy entrypoint. `skills/` remains the only live skill source; `.claude/skills` may be a generated discovery symlink and must not be edited as a mirror.\n\n\
-For skill routing, consult `skills/SKILL_ROUTING_RUNTIME.json`, then load only the selected `skills/<name>/SKILL.md`.\n"
-        .to_string()
 }
 
 fn build_codex_hooks_readme() -> String {

@@ -17,7 +17,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod background_state;
 mod browser_mcp;
-mod claude_hooks;
 mod cli_modes;
 mod codex_hooks;
 mod execution_contract;
@@ -34,7 +33,6 @@ use background_state::handle_background_state_operation;
 use browser_mcp::{
     resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
 };
-use claude_hooks::run_claude_hook;
 use cli_modes::{dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op};
 use codex_hooks::{build_codex_hook_projection, run_codex_audit_hook, sync_host_entrypoints};
 use execution_contract::{
@@ -155,10 +153,6 @@ enum RouterCommand {
         #[command(subcommand)]
         command: CodexCommand,
     },
-    Claude {
-        #[command(subcommand)]
-        command: ClaudeCommand,
-    },
     Trace {
         #[command(subcommand)]
         command: TraceCommand,
@@ -230,11 +224,6 @@ enum CodexCommand {
     Check(RepoRootCommand),
     Hook(CodexHookCommand),
     HostIntegration(ForwardedArgsCommand),
-}
-
-#[derive(Subcommand, Debug, Clone)]
-enum ClaudeCommand {
-    Hook(ClaudeHookCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -337,13 +326,6 @@ struct FrameworkAliasCommand {
 
 #[derive(Args, Debug, Clone)]
 struct CodexHookCommand {
-    command: String,
-    #[arg(long)]
-    repo_root: Option<PathBuf>,
-}
-
-#[derive(Args, Debug, Clone)]
-struct ClaudeHookCommand {
     command: String,
     #[arg(long)]
     repo_root: Option<PathBuf>,
@@ -833,7 +815,7 @@ fn should_accept_manifest_fallback(
             || (hot_decision.score < 35.0
                 && matches!(
                     hot_decision.selected_skill.as_str(),
-                    "subagent-delegation" | "doc" | "design-md" | "pdf" | "sentry"
+                    "agent-swarm-orchestration" | "doc" | "design-md" | "pdf" | "sentry"
                 ))
             || hot_decision.selected_skill == "systematic-debugging")
     {
@@ -963,7 +945,6 @@ fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Codex { command } => dispatch_codex_command(command),
-        RouterCommand::Claude { command } => dispatch_claude_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
         RouterCommand::Browser { command } => dispatch_browser_command(command),
@@ -1080,16 +1061,6 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
         }
         CodexCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
-            print_json_value(&payload)
-        }
-    }
-}
-
-fn dispatch_claude_command(command: ClaudeCommand) -> Result<(), String> {
-    match command {
-        ClaudeCommand::Hook(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let payload = run_claude_hook(&command.command, &repo_root)?;
             print_json_value(&payload)
         }
     }
@@ -3050,7 +3021,7 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     }
     if payload.selected_skill == "idea-to-plan" {
         lines.push("Planning output: converge the strategy into outline.md, decision_log.md, assumptions.md, open_questions.md, plan_rubric.md, and code_list.md.".to_string());
-        lines.push("Switch to checklist-planner only after the direction is fixed and the remaining work is execution breakdown.".to_string());
+        lines.push("Switch to plan-to-code only after the direction is fixed and the remaining work is execution breakdown.".to_string());
     }
     lines.push("Use the selected skill to solve the user's actual task.".to_string());
     lines.join("\n")
@@ -6231,7 +6202,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding","skill-framework-developer"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code","skill-framework-developer"]}"#,
         )
         .expect("write trace metadata");
         fs::create_dir_all(repo_root.join("artifacts").join("current"))
@@ -6385,8 +6356,7 @@ mod tests {
         );
         write_text_fixture(
             &task_root.join("TRACE_METADATA.json"),
-            &json!({"matched_skills": ["execution-controller-coding", "checklist-fixer"]})
-                .to_string(),
+            &json!({"matched_skills": ["plan-to-code", "skill-framework-developer"]}).to_string(),
         );
         write_text_fixture(
             &repo_root
@@ -6439,7 +6409,7 @@ mod tests {
         assert!(statusline.contains("task=Validate status line"));
         assert!(statusline.contains("next=/refresh"));
         assert!(statusline.contains("integration/in_progress"));
-        assert!(statusline.contains("route=execution-controller-coding+1"));
+        assert!(statusline.contains("route=plan-to-code+1"));
         assert!(statusline.contains("others=0"));
         assert!(statusline.contains("resumable=0"));
         assert!(statusline.contains("git=nogit"));
@@ -6486,7 +6456,7 @@ mod tests {
             "summary": "Make Rust continuity recoverable without manual mirror repair.",
             "focus": true,
             "next_actions": ["Run targeted tests"],
-            "matched_skills": ["execution-controller-coding", "rust-pro"],
+            "matched_skills": ["plan-to-code", "rust-pro"],
             "execution_contract": {
                 "goal": "Improve continuity artifacts",
                 "acceptance_criteria": ["writer emits all recovery anchors"]
@@ -6531,7 +6501,7 @@ mod tests {
         );
         assert_eq!(
             supervisor["trace_metadata"]["matched_skills"],
-            json!(["execution-controller-coding", "rust-pro"])
+            json!(["plan-to-code", "rust-pro"])
         );
         assert_eq!(
             supervisor["artifact_refs"]["task_root"],
@@ -6765,7 +6735,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code"]}"#,
         )
         .expect("write trace metadata");
         fs::write(
@@ -6817,16 +6787,16 @@ mod tests {
         assert!(prompt.contains("路由："));
         assert_eq!(
             alias["state_machine"]["current_state"],
-            json!("resume_active_needs_verification")
+            json!("resume_requires_repair")
         );
         assert_eq!(
             alias["state_machine"]["recommended_action"],
-            json!("verify_before_done")
+            json!("repair_continuity_then_resume")
         );
         assert_eq!(alias["state_machine"]["evidence_missing"], json!(true));
         assert_eq!(
             alias["entry_contract"]["context"]["execution_readiness"],
-            json!("needs_verification")
+            json!("needs_recovery")
         );
         assert_eq!(
             alias["entry_contract"]["route_rules"][0],
@@ -6959,7 +6929,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code"]}"#,
         )
         .expect("write trace metadata");
         fs::write(
@@ -7006,20 +6976,17 @@ mod tests {
         assert_eq!(alias["name"], json!("team"));
         assert_eq!(alias["host_entrypoint"], json!("$team"));
         assert_eq!(alias["compact"], json!(false));
-        assert_eq!(
-            alias["canonical_owner"],
-            json!("execution-controller-coding")
-        );
+        assert_eq!(alias["canonical_owner"], json!("plan-to-code"));
         assert_eq!(
             alias["state_machine"]["handoff"]["rules"][1]["target"],
-            json!("subagent-delegation")
+            json!("agent-swarm-orchestration")
         );
         assert_eq!(
             alias["entry_contract"]["route_rules"][0],
-            json!("主 owner -> `execution-controller-coding`")
+            json!("主 owner -> `plan-to-code`")
         );
         assert!(prompt.contains("进入 team"));
-        assert!(prompt.contains("bounded subagent lane -> `subagent-delegation`"));
+        assert!(prompt.contains("bounded subagent lane -> `agent-swarm-orchestration`"));
         assert!(prompt.contains("worker write scope -> `lane-local-delta-only`"));
 
         let _ = fs::remove_dir_all(&repo_root);
@@ -7055,7 +7022,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code"]}"#,
         )
         .expect("write trace metadata");
         fs::write(
@@ -7098,7 +7065,7 @@ mod tests {
         assert_eq!(alias["state_machine"]["evidence_missing"], json!(true));
         assert_eq!(
             alias["entry_contract"]["context"]["execution_readiness"],
-            json!("needs_verification")
+            json!("needs_recovery")
         );
         assert_eq!(
             alias["state_machine"]["required_anchors"],
@@ -7150,7 +7117,7 @@ mod tests {
         .expect("write repo evidence index");
         fs::write(
             repo_task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"repo default task","matched_skills":["execution-controller-coding"]}"#,
+            r#"{"task":"repo default task","matched_skills":["plan-to-code"]}"#,
         )
         .expect("write repo trace metadata");
         fs::write(
@@ -7170,7 +7137,7 @@ mod tests {
         .expect("write isolated evidence index");
         fs::write(
             isolated_task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"isolated active task","matched_skills":["execution-controller-coding"]}"#,
+            r#"{"task":"isolated active task","matched_skills":["plan-to-code"]}"#,
         )
         .expect("write isolated trace metadata");
         fs::write(
@@ -7261,11 +7228,14 @@ mod tests {
     #[test]
     fn stdio_route_supports_inline_skill_catalog_and_token_budget_bias() {
         let response = handle_stdio_json_line(
-            r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要 team orchestration","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"subagent-delegation","description":"Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"team","description":"Supervisor-led worker lifecycle with integration qa cleanup and resume phases.","routing_layer":"L0","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["team orchestration","supervisor","worker lifecycle","integration","qa","cleanup"]},{"name":"anti-laziness","description":"Push work to completion.","routing_layer":"L1","routing_owner":"overlay","routing_gate":"none","routing_priority":"P1"}]}}"#,
+            r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要 team orchestration","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"agent-swarm-orchestration","description":"Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"team","description":"Supervisor-led worker lifecycle with integration qa cleanup and resume phases.","routing_layer":"L0","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["team orchestration","supervisor","worker lifecycle","integration","qa","cleanup"]},{"name":"code-review","description":"Review code with structured findings.","routing_layer":"L1","routing_owner":"overlay","routing_gate":"none","routing_priority":"P1"}]}}"#,
         );
         assert!(response.ok, "{:?}", response.error);
         let payload = response.payload.expect("payload");
-        assert_eq!(payload["selected_skill"], json!("subagent-delegation"));
+        assert_eq!(
+            payload["selected_skill"],
+            json!("agent-swarm-orchestration")
+        );
         assert_eq!(payload["overlay_skill"], Value::Null);
         let reasons = payload["reasons"]
             .as_array()
@@ -7646,7 +7616,7 @@ mod tests {
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
 
         assert_eq!(report.schema_version, "routing-eval-v1");
-        assert_eq!(report.metrics.case_count, 72);
+        assert_eq!(report.metrics.case_count, 73);
         assert_eq!(report.metrics.overtrigger, 0);
         assert_routing_eval_cases_match("manifest", |task, session_id, first_turn| {
             route_task(&records, task, session_id, true, first_turn)
@@ -7712,7 +7682,10 @@ mod tests {
             true,
         )
         .expect("route natural language team ask");
-        assert_eq!(natural_language_team.selected_skill, "subagent-delegation");
+        assert_eq!(
+            natural_language_team.selected_skill,
+            "agent-swarm-orchestration"
+        );
     }
 
     #[test]
@@ -7753,7 +7726,7 @@ mod tests {
         let rust_snapshot = build_route_snapshot(
             "rust",
             "plan-to-code",
-            Some("anti-laziness"),
+            Some("code-review"),
             "L2",
             39.0,
             &["Trigger phrase matched: 直接做代码.".to_string()],
@@ -8907,7 +8880,7 @@ mod tests {
             route_snapshot: build_route_snapshot(
                 "rust",
                 "plan-to-code",
-                Some("anti-laziness"),
+                Some("code-review"),
                 "L2",
                 39.4,
                 &[
@@ -8926,7 +8899,7 @@ mod tests {
         assert_eq!(snapshot.route_snapshot.selected_skill, "plan-to-code");
         assert_eq!(
             snapshot.route_snapshot.overlay_skill.as_deref(),
-            Some("anti-laziness")
+            Some("code-review")
         );
         assert_eq!(snapshot.route_snapshot.score_bucket, "30-39");
         assert_eq!(
@@ -9019,7 +8992,7 @@ mod tests {
         payload.dry_run = false;
         payload.prompt_preview = None;
         payload.selected_skill = "idea-to-plan".to_string();
-        payload.overlay_skill = Some("anti-laziness".to_string());
+        payload.overlay_skill = Some("code-review".to_string());
         payload.layer = "L-1".to_string();
         payload.reasons = vec!["Trigger hint matched: 先探索现状再提方案.".to_string()];
 
@@ -9029,7 +9002,7 @@ mod tests {
         assert!(prompt.contains("outline.md"));
         assert!(prompt.contains("decision_log.md"));
         assert!(prompt.contains("code_list.md"));
-        assert!(prompt.contains("checklist-planner"));
+        assert!(prompt.contains("plan-to-code"));
         assert!(!prompt.contains("READ-ONLY planning route"));
         assert!(!prompt.contains("<proposed_plan>"));
     }
@@ -10281,8 +10254,8 @@ mod tests {
             mirror_paths: vec![mirror_path.display().to_string()],
             write_outputs: true,
             task: "trace metadata rustification".to_string(),
-            matched_skills: vec!["execution-controller-coding".to_string()],
-            owner: "execution-controller-coding".to_string(),
+            matched_skills: vec!["plan-to-code".to_string()],
+            owner: "plan-to-code".to_string(),
             gate: "none".to_string(),
             overlay: None,
             reroute_count: Some(0),
@@ -10340,7 +10313,7 @@ mod tests {
     fn stdio_request_dispatches_write_trace_metadata_payload() {
         let output_path = temp_json_path("trace-metadata-write-stdio");
         let response = handle_stdio_json_line(&format!(
-            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"execution-controller-coding\"],\"owner\":\"execution-controller-coding\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
+            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"plan-to-code\"],\"owner\":\"plan-to-code\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
             output_path.display()
         ));
         assert!(response.ok);
@@ -10364,7 +10337,7 @@ mod tests {
             write_outputs: true,
             task: "trace metadata missing source".to_string(),
             matched_skills: Vec::new(),
-            owner: "execution-controller-coding".to_string(),
+            owner: "plan-to-code".to_string(),
             gate: "none".to_string(),
             overlay: None,
             reroute_count: Some(0),

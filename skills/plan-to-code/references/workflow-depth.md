@@ -25,7 +25,7 @@ This document provides the full 7-phase workflow for `plan-to-code`. Use this fo
 - Cover the full path from input to observable behavior: storage, logic, APIs, UI, validation, errors, and tests.
 - Use [completeness-checklist.md](completeness-checklist.md) for cross-layer work.
 - Split work into separately verifiable execution slices.
-- Identify which slices can be delegated after consulting `$subagent-delegation`.
+- Identify which slices can be delegated after consulting `$runtime delegation gate`.
 - Define each slice using the template in [delegation-prompts.md](delegation-prompts.md).
 
 ## Phase 4: Implement end to end
@@ -45,7 +45,7 @@ This document provides the full 7-phase workflow for `plan-to-code`. Use this fo
 
 - **Critique own work**: Before concluding implementation, act as a strict reviewer.
 - **Find "Blind Spots"**: Search for unhandled errors, unwired UI states, or potential race conditions.
-- **Reinforce**: If the user requested "Superior Quality", proactively trigger `$execution-audit` findings and fix them before concluding.
+- **Reinforce**: If the user requested "Superior Quality", proactively trigger `$runtime verification gate` findings and fix them before concluding.
 
 ## Phase 6: Review
 

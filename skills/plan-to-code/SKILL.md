@@ -57,10 +57,10 @@ If the user's primary artifact is a plan, PRD, spec, or task breakdown **and** t
 
 ## Do not use
 
-- The user only wants a plan, checklist, or breakdown → use `$checklist-planner`
+- The user only wants a plan, checklist, or breakdown → use `runtime checklist planning`
 - The task is debugging an unknown failure → use `$systematic-debugging`
-- Fixing a numbered issue list item by item → use `$checklist-fixer`
-- The source is still a messy checklist / phase blueprint and the main need is to stabilize serial/parallel boundaries, goals, constraints, acceptance, or update rules before coding → use `$checklist-planner`
+- Fixing a numbered issue list item by item → use `runtime checklist execution`
+- The source is still a messy checklist / phase blueprint and the main need is to stabilize serial/parallel boundaries, goals, constraints, acceptance, or update rules before coding → use `runtime checklist planning`
 - The request is a review or summary of a document with no implementation intent.
 
 ## Primary operating principle
@@ -87,7 +87,7 @@ The main thread should contain only:
 
 If runtime policy permits delegation:
 
-- consult [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md) for bounded implementation or review sidecars
+- consult [`runtime delegation gate`](runtime policy) for bounded implementation or review sidecars
 - keep integration and final completion judgment local
 
 If runtime policy does **not** permit spawning:
@@ -101,7 +101,7 @@ If runtime policy does **not** permit spawning:
 1. **Parse & Classify**: Read the brief, classify maturity (Level 1-4), and choose mode (Fast vs Structured).
 2. **Inspect & Map**: Locate entrypoints and map necessary changes (Storage -> Logic -> API -> UI).
 3. **Implement & Reflect**: Edit files directly; wire all layers; perform **Self-Reflection** to identify bugs/edge cases before concluding implementation.
-4. **Audit & Review**: Run spec-compliance checks. If **Reinforced Quality** is requested, trigger `$execution-audit` as a mandatory overlay.
+4. **Audit & Review**: Run spec-compliance checks. If **Reinforced Quality** is requested, apply the runtime verification gate as a mandatory overlay.
 5. **Verify**: Run final builds/tests.
 
 For complex tasks, refer to the [Detailed Implementation Workflow](references/workflow-depth.md).
@@ -116,7 +116,7 @@ See [references/execution-modes.md](references/execution-modes.md).
 
 When using subagents for execution slices or review sidecars:
 - `plan-to-code` owns the brief interpretation and integration judgment.
-- `$subagent-delegation` owns the sidecar strategy and runtime adaptation.
+- `runtime delegation gate` owns the sidecar strategy and runtime adaptation.
 - Use prompts from [references/delegation-prompts.md](references/delegation-prompts.md).
 
 ## Quality Bar

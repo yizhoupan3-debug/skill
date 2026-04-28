@@ -8,12 +8,14 @@ routing_priority: P1
 session_start: n/a
 short_description: Speed up code with measured rewrites, batching, caching, and parallel execution
 trigger_hints:
-  - performance
-  - optimization
   - acceleration
   - profiling
+  - hot path
   - batching
   - caching
+  - pandas to polars
+  - faster serializer
+  - parallelize workload
 metadata:
   version: "1.5.0"
   platforms: [codex]
@@ -192,7 +194,7 @@ This skill does not own:
 - Do not reuse artifacts without an explicit completeness contract for the shard, seed, or summary being reused.
 - Do not validate behavior or speed against stale pre-run config when runtime produces an effective config that can diverge from the input config.
 - If the performance issue is not reproducible, say so and define the missing evidence.
-- For critical acceleration work, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- For critical acceleration work, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 

@@ -23,11 +23,12 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - research
   - algorithm analysis
   - formal reasoning
-  - critique
-  - experiment rigor
+  - technical critique
+  - experiment rigor audit
+  - 方法站不站得住
+  - 算法复杂度和正确性
 ---
 
 # Research Engineer
@@ -49,7 +50,7 @@ This skill owns rigorous research-grade technical judgment when correctness and 
 
 - The user wants one front door for a research-project task and has not yet committed to a critique-first lane → use `$research-workbench`
 - The task is reviewing a paper's scientific logic, novelty, or claims-vs-evidence **in the context of manuscript submission** → use `$paper-reviewer` logic mode
-- The user wants early-stage brainstorming → use `$brainstorm-research`
+- The user wants early-stage brainstorming → use `$research-workbench`
 - The task is broad AI/ML engineering implementation → use `$ai-research`
 - The user wants wording polish or friendly explanation instead of rigorous critique
 - The task is standard app coding without research-level rigor demands
@@ -84,7 +85,7 @@ This skill does not own:
 - prose polishing
 
 If the task shifts to adjacent skill territory, route to:
-- `$brainstorm-research` for idea generation
+- `$research-workbench` for idea generation
 - `$ai-research` for broader AI/ML engineering execution
 
 ## Required workflow

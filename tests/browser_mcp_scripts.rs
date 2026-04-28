@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use serde_json::json;
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use tempfile::tempdir;
 
 const SOURCE_FILES: &[&str] = &[
@@ -376,6 +376,81 @@ fn launcher_leaves_sqlite_attach_discovery_to_rust_runtime() {
             repo_root.display().to_string()
         ])
     );
+}
+
+#[test]
+fn browser_mcp_stdio_exposes_repository_skill_router_tools() {
+    let repo_root = project_root();
+    let request = [
+        serde_json::to_string(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {}
+        }))
+        .unwrap(),
+        serde_json::to_string(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "skill_route",
+                "arguments": {"query": "路由系统触发稳定吗"}
+            }
+        }))
+        .unwrap(),
+        serde_json::to_string(&json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "skill_read",
+                "arguments": {"skill": "skill-framework-developer", "maxChars": 2000}
+            }
+        }))
+        .unwrap(),
+    ]
+    .join("\n");
+    let mut command = router_rs_command([
+        "browser",
+        "mcp-stdio",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    command.stdin(Stdio::piped()).stdout(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    {
+        use std::io::Write;
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(request.as_bytes())
+            .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    common::assert_success(&output);
+    let payloads = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    let tool_names = payloads[0]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(serde_json::Value::as_str))
+        .collect::<Vec<_>>();
+    assert!(tool_names.contains(&"skill_route"));
+    assert!(tool_names.contains(&"skill_search"));
+    assert!(tool_names.contains(&"skill_read"));
+    assert_eq!(
+        payloads[1]["result"]["structuredContent"]["decision"]["selected_skill"],
+        "skill-framework-developer"
+    );
+    assert!(payloads[2]["result"]["structuredContent"]["content"]
+        .as_str()
+        .unwrap()
+        .contains("# skill-framework-developer"));
 }
 
 #[test]

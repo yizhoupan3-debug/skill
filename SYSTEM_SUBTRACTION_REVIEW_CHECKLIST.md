@@ -10,7 +10,7 @@
 - [x] 明确 steady-state 主链路：`AGENTS.md` -> `skills/SKILL_ROUTING_RUNTIME.json` -> `skills/<name>/SKILL.md` -> Codex 工具执行。
 - [x] 明确当前最大问题：系统不是缺能力，而是保留了过多控制面、兼容面、迁移面和自描述面。
 - [x] 明确减法方向：默认面只保留 routing、Codex host、必要 continuity、必要 artifact；其余作为显式工具或历史文档。
-- [x] 明确 Codex-only 前提：不再为 Claude、Gemini、Cursor、旧 Python、桌面/CLI 多 adapter parity 保留默认代码路径。
+- [x] 明确 Codex-only 前提：不再为非 Codex host、旧 Python、桌面/CLI 多 adapter parity 保留默认代码路径。
 
 ## 1. 高优先级问题
 
@@ -40,7 +40,7 @@
 - [x] `framework_runtime.rs` 的 legacy memory archive 仍保留：`MEMORY_AUTO.md` 与 `sessions/` 迁移。
 - [x] `framework_runtime.rs` 的 supervisor fallback route 仍保留：trace 不匹配时回落到 supervisor controller 字段。
 - [x] `framework_profile.rs` 的 `compatibility_rules.python_may_continue_to_author = true` 与当前“Rust 真源，不恢复 Python”目标冲突。
-- [x] `codex_hooks.rs` 仍显式清理 Claude/Gemini/Cursor/AionUI 等 retired entrypoint。
+- [x] `codex_hooks.rs` 不再维护非 Codex retired entrypoint 清理面。
 - [x] `.codex/hooks.json` 不再由 host-entrypoint sync 生成，`.codex/config.toml` 保持 `codex_hooks = false`，默认不安装/启用 hook。
 - [x] `tools/browser-mcp/scripts/start_browser_mcp.sh` 是 shell wrapper，实际只是转发到 router-rs 的 `--browser-mcp-stdio`。
 - [x] `tools/browser-mcp/src/index.ts` 仍支持 HTTP transport；如果只在 Codex MCP stdio 下使用，可降为开发调试路径或删除。

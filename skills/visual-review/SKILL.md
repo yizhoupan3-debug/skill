@@ -70,7 +70,7 @@ not assumptions about code or off-screen state.
 
 - The task does not depend on visible evidence
 - The user mainly needs code changes, text rewriting, or architecture advice without image-grounded judgment
-- A browser interaction is still needed to obtain evidence first → use `$playwright` before this skill
+- A browser interaction is still needed to obtain evidence first → use the built-in browser/browser-use capability before this skill
 
 ## Downstream routing note
 

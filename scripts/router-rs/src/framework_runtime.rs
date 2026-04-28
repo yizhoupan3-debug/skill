@@ -191,6 +191,9 @@ struct FrameworkRuntimeView {
     current_root: PathBuf,
     mirror_root: PathBuf,
     task_root: PathBuf,
+    active_task_pointer_present: bool,
+    focus_task_pointer_present: bool,
+    task_registry_present: bool,
     active_task_id: Option<String>,
     focus_task_id: Option<String>,
     known_task_ids: Vec<String>,
@@ -260,6 +263,11 @@ pub fn build_framework_runtime_snapshot_envelope(
             "current_root": snapshot.current_root.display().to_string(),
             "mirror_root": snapshot.mirror_root.display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
+            "control_plane_present": snapshot.active_task_pointer_present
+                && snapshot.focus_task_pointer_present
+                && snapshot.task_registry_present
+                && !snapshot.supervisor_state.is_empty(),
+            "control_plane_missing": missing_control_plane_anchors(&snapshot),
             "active_task_id": snapshot.active_task_id,
             "focus_task_id": snapshot.focus_task_id,
             "known_task_ids": snapshot.known_task_ids,
@@ -825,10 +833,10 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
 fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
     match alias_name {
         "autopilot" => Some(json!({
-            "canonical_owner": "execution-controller-coding",
+            "canonical_owner": "plan-to-code",
             "reroute_when_ambiguous": "idea-to-plan",
             "reroute_when_root_cause_unknown": "systematic-debugging",
-            "skill_path": "skills/autopilot/SKILL.md",
+            "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
             "lineage": {
                 "source": "repo-native",
                 "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
@@ -848,10 +856,9 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "use deepinterview as the first-class clarification gate for vague requests"
             ],
             "execution_owners": [
-                "execution-controller-coding",
                 "plan-to-code",
-                "subagent-delegation",
-                "execution-audit"
+                "test-engineering",
+                "code-review"
             ],
             "decision_contract": {
                 "execute_when": [
@@ -922,7 +929,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "architect-review",
                 "security-audit",
                 "test-engineering",
-                "execution-audit"
+                "code-review"
             ],
             "host_entrypoints": {
                 "codex-cli": "$deepinterview",
@@ -935,8 +942,8 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             }
         })),
         "team" => Some(json!({
-            "canonical_owner": "execution-controller-coding",
-            "delegation_gate": "subagent-delegation",
+            "canonical_owner": "plan-to-code",
+            "delegation_gate": "agent-swarm-orchestration",
             "auto_route_allowed": true,
             "route_mode": "team-orchestration",
             "selection_signals": {
@@ -950,7 +957,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                     "bounded sidecars are enough and orchestration overhead would dominate"
                 ]
             },
-            "skill_path": "skills/team/SKILL.md",
+            "skill_path": "artifacts/codex-skill-surface/skills/team/SKILL.md",
             "lineage": {
                 "source": "repo-native",
                 "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
@@ -984,9 +991,9 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
             ],
             "execution_owners": [
-                "execution-controller-coding",
-                "subagent-delegation",
-                "execution-audit"
+                "plan-to-code",
+                "agent-swarm-orchestration",
+                "code-review"
             ],
             "supervisor_contract": {
                 "shared_continuity_owner": "supervisor",
@@ -1104,9 +1111,9 @@ fn alias_skill_path(alias_name: &str, alias_record: &Value) -> String {
         return upstream_path;
     }
     match alias_name {
-        "autopilot" => "skills/autopilot/SKILL.md".to_string(),
+        "autopilot" => "artifacts/codex-skill-surface/skills/autopilot/SKILL.md".to_string(),
         "deepinterview" => "skills/deepinterview/SKILL.md".to_string(),
-        "team" => "skills/team/SKILL.md".to_string(),
+        "team" => "artifacts/codex-skill-surface/skills/team/SKILL.md".to_string(),
         _ => String::new(),
     }
 }
@@ -1591,7 +1598,7 @@ fn build_framework_alias_state_machine(
             "rules": [
                 {
                     "when": "task is still a single-lane change",
-                    "target": "execution-controller-coding",
+                    "target": "plan-to-code",
                     "action": "keep_local_ownership",
                 },
                 {
@@ -1606,7 +1613,7 @@ fn build_framework_alias_state_machine(
                 },
                 {
                     "when": "worker outputs are ready to merge",
-                    "target": "execution-audit",
+                    "target": "code-review",
                     "action": "verify_and_close_loop",
                 }
             ]
@@ -1755,13 +1762,22 @@ fn load_framework_runtime_view(
     let artifact_base =
         artifact_root_override.map_or_else(|| repo_root.join("artifacts"), Path::to_path_buf);
     let mirror_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
-    let supervisor_state = normalize_supervisor_state(&read_json_if_exists(
-        &repo_root.join(SUPERVISOR_STATE_FILENAME),
-    ));
-    let pointer = read_json_if_exists(&mirror_root.join(ACTIVE_TASK_POINTER_NAME));
-    let focus_pointer = read_json_if_exists(&mirror_root.join(FOCUS_TASK_POINTER_NAME));
+    let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
+    let supervisor_state = if supervisor_state_path.is_file() {
+        normalize_supervisor_state(&read_json_if_exists(&supervisor_state_path))
+    } else {
+        Map::new()
+    };
+    let active_task_pointer_path = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
+    let focus_task_pointer_path = mirror_root.join(FOCUS_TASK_POINTER_NAME);
+    let task_registry_path = mirror_root.join(TASK_REGISTRY_NAME);
+    let active_task_pointer_present = active_task_pointer_path.is_file();
+    let focus_task_pointer_present = focus_task_pointer_path.is_file();
+    let task_registry_present = task_registry_path.is_file();
+    let pointer = read_json_if_exists(&active_task_pointer_path);
+    let focus_pointer = read_json_if_exists(&focus_task_pointer_path);
     let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
-        normalized_task_registry(&read_json_if_exists(&mirror_root.join(TASK_REGISTRY_NAME)));
+        normalized_task_registry(&read_json_if_exists(&task_registry_path));
     let focus_task_id = {
         let direct = safe_slug(&value_text(focus_pointer.get("task_id")));
         if direct.is_empty().not() {
@@ -1849,6 +1865,9 @@ fn load_framework_runtime_view(
         current_root: preferred_root,
         mirror_root,
         task_root,
+        active_task_pointer_present,
+        focus_task_pointer_present,
+        task_registry_present,
         active_task_id,
         focus_task_id,
         known_task_ids,
@@ -2055,21 +2074,28 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         || object_has_any_signal(&snapshot.evidence_index)
         || object_has_any_signal(&snapshot.trace_metadata)
         || !supervisor.is_empty();
+    let missing_control_plane_anchors = missing_control_plane_anchors(snapshot);
+    let has_missing_control_plane_anchors = !missing_control_plane_anchors.is_empty();
     let has_missing_recovery_anchors = !missing_recovery_anchors.is_empty();
-    let state = if !has_any_runtime_signal || (task.is_empty() && has_missing_recovery_anchors) {
+    let state = if !has_any_runtime_signal
+        || (task.is_empty() && (has_missing_recovery_anchors || has_missing_control_plane_anchors))
+    {
         "missing"
     } else if !inconsistency_reasons.is_empty() {
         "inconsistent"
     } else if !terminal_reasons.is_empty() {
         "completed"
-    } else if has_missing_recovery_anchors {
+    } else if has_missing_recovery_anchors || has_missing_control_plane_anchors {
         "inconsistent"
     } else if !stale_reasons.is_empty() {
         "stale"
     } else {
         "active"
     };
-    let can_resume = state == "active" && !has_missing_recovery_anchors && !task.is_empty();
+    let can_resume = state == "active"
+        && !has_missing_recovery_anchors
+        && !has_missing_control_plane_anchors
+        && !task.is_empty();
     let recovery_hints = match state {
         "missing" => json!([
             "Refresh SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity."
@@ -2083,7 +2109,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             "Do not continue from the stale snapshot without a new supervisor-owned continuity refresh."
         ]),
         "inconsistent" => json!([
-            "Reconcile SESSION_SUMMARY.md, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity.",
+            "Reconcile SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, artifacts/current pointers, task_registry.json, and .supervisor_state.json before injecting continuity.",
             "Treat the current snapshot as blocked until the supervisor rewrites a consistent continuity bundle."
         ]),
         _ => json!([]),
@@ -2101,6 +2127,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         "evidence_missing": evidence_missing,
         "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status.clone()) },
         "missing_recovery_anchors": missing_recovery_anchors,
+        "missing_control_plane_anchors": missing_control_plane_anchors,
         "current_execution": if state == "active" && !task.is_empty() { current_execution } else { Value::Null },
         "recent_completed_execution": if state == "completed" && !task.is_empty() { recent_completed_execution } else { Value::Null },
         "stale_reasons": stale_reasons,
@@ -2125,6 +2152,31 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             "supervisor_state": snapshot.repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
         }
     })
+}
+
+fn missing_control_plane_anchors(snapshot: &FrameworkRuntimeView) -> Vec<String> {
+    stable_line_items(vec![
+        if snapshot.active_task_pointer_present {
+            String::new()
+        } else {
+            ACTIVE_TASK_POINTER_NAME.to_string()
+        },
+        if snapshot.focus_task_pointer_present {
+            String::new()
+        } else {
+            FOCUS_TASK_POINTER_NAME.to_string()
+        },
+        if snapshot.task_registry_present {
+            String::new()
+        } else {
+            TASK_REGISTRY_NAME.to_string()
+        },
+        if snapshot.supervisor_state.is_empty() {
+            SUPERVISOR_STATE_FILENAME.to_string()
+        } else {
+            String::new()
+        },
+    ])
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2582,15 +2634,12 @@ fn collect_stable_memory_sections(
     if query.trim().is_empty() {
         return stable_documents
             .iter()
-            .filter_map(|(name, text)| {
-                let compact = compact_memory_document_without_query(text, 2);
-                if compact.is_empty() {
-                    None
-                } else {
-                    Some((name.clone(), compact))
-                }
+            .find(|(name, _)| name == "MEMORY.md")
+            .and_then(|(name, text)| {
+                let compact = compact_memory_document_without_query(text, 4);
+                (!compact.is_empty()).then(|| vec![(name.clone(), compact)])
             })
-            .collect();
+            .unwrap_or_default();
     }
     let mut ranked = Vec::new();
     for (name, text) in stable_documents {
@@ -3228,7 +3277,7 @@ fn compact_memory_retrieval_for_prompt(retrieval: &Value) -> Value {
             .cloned()
             .unwrap_or_default()
             .into_iter()
-            .take(8)
+            .take(3)
             .collect::<Vec<_>>(),
     })
 }

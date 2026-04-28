@@ -95,7 +95,7 @@ This skill does not own:
 - Pure Rust panic without native interface involvement → `$backend-runtime-debugging`
 - Tauri Rust business logic implementation → `$rust-pro`
 - Build chain → `$build-tooling`
-- **Dual-Dimension Audit (Pre: Cross-Layer-Logic, Post: IPC-Fidelity/OS-Native Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Cross-Layer-Logic, Post: IPC-Fidelity/OS-Native Results)** → runtime verification gate
 
 ## Cross-layer diagnostic model
 
@@ -164,11 +164,11 @@ This skill does not own:
 - Do not assume a frontend fix when the Web-Native bridge is the likely cause.
 - Always check if the issue is packaging-only vs dev-mode to narrow the layer.
 - Label platform-version-specific behavior explicitly (macOS version, WkWebView version).
-- **Superior Quality Audit**: For cross-boundary desktop apps, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For cross-boundary desktop apps, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 - "强制进行原生应用深度审计 / 检查 IPC 通信与 OS 交互运行结果。"
-- "Use $execution-audit to audit this native app bridge for IPC-fidelity idealism."
+- "Use the runtime verification gate to audit this native app bridge for IPC-fidelity idealism."
 
 ## References
 

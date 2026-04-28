@@ -25,7 +25,6 @@ const { text } = await generateText({
 const { text } = await generateText({
   model: gateway([
     openai('gpt-4o'),
-    anthropic('claude-sonnet-4-5'),
     openai('gpt-4o-mini')
   ]),
   prompt: 'Complex task'
@@ -52,18 +51,8 @@ const client = new OpenAI({
   defaultHeaders: { 'cf-aig-authorization': `Bearer ${cfToken}` }
 });
 
-// Unified API - switch providers via model name
-model: 'openai/gpt-4o'  // or 'anthropic/claude-sonnet-4-5'
-```
-
-## Anthropic SDK
-
-```typescript
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/anthropic`,
-  defaultHeaders: { 'cf-aig-authorization': `Bearer ${cfToken}` }
-});
+// Unified API - switch supported providers via model name
+model: 'openai/gpt-4o'
 ```
 
 ## Workers AI Binding

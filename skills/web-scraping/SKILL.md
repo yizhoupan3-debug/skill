@@ -6,7 +6,7 @@ description: |
   crawl multiple pages, build a spider, or says “抓取网页数据”, “爬虫”, “网页信息提取”,
   “批量抓取”, or “web crawler”. Covers static and dynamic scraping, pagination,
   anti-bot tactics, and JSON/CSV/database output. This skill owns extraction;
-  call `playwright` only when live browser interaction is required.
+  use built-in browser/browser-use capability only when live interaction is required.
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -16,7 +16,6 @@ metadata:
     - crawler
     - cheerio
     - beautifulsoup
-    - playwright
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -54,7 +53,7 @@ measures, and structuring output data.
 
 ## Do not use
 
-- The task is browser automation for testing or UI interaction without data extraction → use `$playwright`
+- The task is browser automation for testing or UI interaction without data extraction → use the built-in browser/browser-use capability
 - The task is API integration / calling a documented REST/GraphQL API → use `$api-integration-debugging`
 - The task is data cleaning/transformation of already-extracted data → use `$data-wrangling`
 - The task is building a search engine or indexing system → broader architecture
@@ -70,21 +69,21 @@ This skill owns:
 - output formatting and persistence
 
 This skill does not own:
-- browser automation for non-extraction purposes → `$playwright`
+- browser automation for non-extraction purposes → built-in browser/browser-use capability
 - API client implementation → `$api-integration-debugging`
 - data cleaning of already-extracted datasets → `$data-wrangling`
 - legal/compliance advice on scraping (flag concerns but do not provide legal counsel)
-- **Dual-Dimension Audit (Pre: Selectors/Flow, Post: Extraction-Fidelity/Anti-bot Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Selectors/Flow, Post: Extraction-Fidelity/Anti-bot Results)** → runtime verification gate
 
 If the task shifts to adjacent skill territory, route to:
-- `$playwright` for browser automation beyond extraction
+- built-in browser/browser-use capability for browser automation beyond extraction
 - `$data-wrangling` for post-extraction data cleaning
 - `$api-integration-debugging` if the site offers a documented API
 
 ## Required workflow
 
 1. Analyze the target: static HTML, JS-rendered, login-required, API-backed?
-2. Choose approach: static fetch vs Playwright vs API-first.
+2. Choose approach: static fetch vs browser automation vs API-first.
 3. Implement extraction with proper selectors.
 4. Handle pagination, rate limits, and error recovery.
 5. Format and validate output data.
@@ -114,7 +113,7 @@ Before writing any scraping code, determine:
 | Scenario | Approach | Tools |
 |----------|----------|-------|
 | Static HTML, no JS rendering | HTTP fetch + parse | Node: `fetch` + `cheerio`; Python: `httpx` + `BeautifulSoup` / `lxml` |
-| JS-rendered content | Headless browser | Pair with `$playwright` for browser automation |
+| JS-rendered content | Headless browser | Use built-in browser/browser-use capability when interaction is required |
 | API available | Direct API calls | `fetch` / `httpx` with proper headers |
 | Large-scale crawl | Crawler framework | Python: `Scrapy`; Node: `crawlee` |
 
@@ -188,7 +187,7 @@ for (let page = 1; page <= maxPages; page++) {
 - Prefer API endpoints over HTML scraping when available.
 - Always handle errors gracefully: retry on transient failures, skip and log on persistent ones.
 - Validate extracted data before outputting: check for empty fields, duplicates, malformed entries.
-- **Superior Quality Audit**: For large-scale or high-fidelity scraping, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For large-scale or high-fidelity scraping, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 
@@ -197,4 +196,4 @@ for (let page = 1; page <= maxPages; page++) {
 - "Scrape this page and save the results as CSV."
 - "批量提取这些页面的价格和标题。"
 - "强制进行爬虫深度审计 / 检查字段提取完整性与防封结果。"
-- "Use $execution-audit to audit this scraper for extraction-fidelity idealism."
+- "Use the runtime verification gate to audit this scraper for extraction-fidelity idealism."

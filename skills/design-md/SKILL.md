@@ -77,11 +77,11 @@ identity persistent across coding sessions by turning design intent into a
 
 ## Do not use
 
-- Named-product reference grounding ("像 Linear/Stripe/Apple") -> use `$design-agent`
+- Named-product reference grounding ("像 Linear/Stripe/Apple") without a persistent design contract -> use `$frontend-design`
 - Direct UI redesign or implementation without a spec artifact -> use `$frontend-design`
-- CSS layout mechanics, Tailwind config, or framework-specific theming -> use `$css-pro` or `$tailwind-pro`
+- CSS layout mechanics, Tailwind config, or framework-specific theming -> use `$css-pro` or `$css-pro`
 - Screenshot-only visible evidence -> use `$visual-review` first
-- Motion implementation -> use `$motion-design`
+- Motion implementation -> use `$frontend-design`
 
 ## Priority routing rule
 
@@ -94,8 +94,8 @@ contract is clear, hand off to the narrowest downstream owner.
 1. Decide mode: `capture`, `update`, `lint/diff`, `apply-to-implementation`, or `acceptance`.
 2. Locate existing style sources: `DESIGN.md`, CSS variables, Tailwind theme,
    screenshots, component code, brand notes, or named references.
-3. For named external references, route through `$design-agent` before writing
-   tokens so borrow/adapt/avoid decisions stay explicit.
+3. For named external references, record borrow/adapt/avoid decisions before
+   writing tokens so the visual contract stays explicit.
 4. Write or revise `DESIGN.md` with two layers:
    - YAML front matter for normative tokens
    - Markdown sections for rationale and usage rules
@@ -105,7 +105,7 @@ contract is clear, hand off to the narrowest downstream owner.
    CLI is acceptable in the environment, run `npx @google/design.md lint DESIGN.md`.
 7. Hand off:
    - `$frontend-design` for visual direction or implementation
-   - `$css-pro` / `$tailwind-pro` for token wiring
+   - `$css-pro` / `$css-pro` for token wiring
    - `$slides`, `$ppt-pptx`, `$source-slide-formats`, or `$ppt-beamer` for deck authoring
    - `$visual-review` for rendered UI/deck proof
    - `$design-workflow` for prompt shaping or final acceptance summary
@@ -135,7 +135,7 @@ For `apply-to-implementation`, return a compact mapping before handoff:
 
 - `source tokens`: exact `DESIGN.md` token names and values used
 - `target surfaces`: CSS variables, Tailwind theme keys, component props, or deck theme fields
-- `owner`: `$css-pro`, `$tailwind-pro`, `$frontend-design`, or a slide/deck artifact owner
+- `owner`: `$css-pro`, `$css-pro`, `$frontend-design`, or a slide/deck artifact owner
 - `verification`: lint, rendered screenshot review, or route-specific test
 
 ## UI and PPT trigger scenarios

@@ -48,7 +48,7 @@ const client = new OpenAI({
   defaultHeaders: { 'cf-aig-authorization': `Bearer ${cfToken}` }
 });
 ```
-Supports: OpenAI, Anthropic, Google AI Studio
+Supports: OpenAI, Google AI Studio, Workers AI
 
 **2. BYOK** - store keys in dashboard (Provider Keys > Add), no key in code
 

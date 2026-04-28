@@ -31,10 +31,18 @@ git diff --staged > artifacts/ops/git-checkpoint/staged.patch
 
 ## 主分支切片
 
-如果脏改堆在 `main`，先做 checkpoint，再显式创建 topic 分支：
+禁止默认主动切分分支或创建 worktree。即使脏改堆在 `main`，也只能先做只读检查和必要 checkpoint；如果确实需要 topic 分支或 worktree 来隔离风险，先停下说明原因并等待用户明确要求。
+
+只有用户主动要求创建分支时，才使用显式命令：
 
 ```bash
 git switch -c topic/<task-name>
+```
+
+只有用户主动要求创建 worktree 时，才使用显式命令：
+
+```bash
+git worktree add <path> <branch-or-commit>
 ```
 
 提交、merge、push 都要串行执行。推送前确认 upstream、远端名和目标分支，不要盲推。

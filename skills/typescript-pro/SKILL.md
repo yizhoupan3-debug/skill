@@ -69,7 +69,7 @@ This skill does not own:
 - Language-idiomatic TS error handling (union types, discriminated errors, `never` exhaustiveness) is owned by this skill
 - Cross-language error **architecture** (error taxonomies, retry/circuit-breaker) → `$error-handling-patterns`
 - Web frontend performance audits → `$performance-expert`
-- **Critical implementation auditing (Memory, Speed, Platform-native)** → `$execution-audit` [Overlay]
+- **Critical implementation auditing (Memory, Speed, Platform-native)** → runtime verification gate
 
 If the task shifts to adjacent skill territory, route to:
 - `$javascript-pro`

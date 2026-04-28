@@ -41,7 +41,7 @@ This skill owns source-first native PPTX authoring. The reusable
 Source Contract: `deck.plan.json` stays the source of truth. Typical high-bar
 flow is:
 outline -> text-owner polish -> DESIGN.md or visual contract -> deck.plan.json -> deck.pptx -> rendered
-PNG -> visual-review evidence -> design-output-auditor verdict -> ppt
+PNG -> visual-review evidence -> design-md verdict -> ppt
 qa/build-qa sign-off.
 
 ## Routing Rule
@@ -70,7 +70,7 @@ PowerPoint editing.
 2. If visual quality, brand consistency, or a reusable deck theme matters, run
    `$design-md` before `deck.plan.json` so theme colors, type hierarchy, chart
    palette, callout styles, and slide component rules are explicit.
-3. Run the Text And Design Polishing Chain when content or visual quality matters: `$humanizer`, `$copywriting`, or `$paper-writing` for text; `$frontend-design`, `$visual-review`, `$design-output-auditor`, and `$design-workflow-protocol` for the visual loop.
+3. Run the Text And Design Polishing Chain when content or visual quality matters: built-in Rust copy naturalization plus `$copywriting` or `$paper-writing` for text; `$frontend-design`, `$visual-review`, and `$design-md` for the visual loop.
 4. Build or update `deck.plan.json` as the source of truth.
 5. Generate `.pptx` through the Rust `ppt` CLI.
 6. Inspect and render the deck when layout matters.

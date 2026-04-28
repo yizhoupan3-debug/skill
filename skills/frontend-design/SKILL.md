@@ -7,7 +7,7 @@ description: |
   Use with `$design-md` when a page/app needs a reusable design contract before
   implementation. Not for `DESIGN.md` synthesis/lint/diff/read/application,
   design-system capture, CSS mechanics, Tailwind config, accessibility audit,
-  or performance work.
+  motion implementation, or performance work.
 routing_layer: L3
 routing_owner: owner
 routing_gate: none
@@ -37,7 +37,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Layout-Spec/Logic, Post: Visual-Fidelity/Responsive Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Layout-Spec/Logic, Post: Visual-Fidelity/Responsive Results)** → runtime verification gate
 
 # frontend-design
 
@@ -56,26 +56,22 @@ look and feel like, not the low-level CSS or framework mechanics.
 
 ## Do not use
 
-- Named-product reference grounding, `参考源`, `verified tokens`, or brand-plus-motion decomposition before implementation -> use `$design-agent`
 - The user mentions `DESIGN.md`, design-system capture, design tokens, style-contract lint/diff/read/apply, or spec acceptance -> use `$design-md`
-- The user wants a stronger UI-generation prompt or workflow closure rather than implementation -> use `$design-workflow`
 - CSS engineering or layout mechanics → use `$css-pro`
-- Tailwind theming/config → use `$tailwind-pro`
+- Tailwind theming/config → use `$css-pro`
 - Accessibility review → use `$accessibility-auditor`
-- High-end animations or micro-interaction implementation → use `$motion-design`
 - Frontend performance / CWV optimization → use `$performance-expert`
 - Frontend runtime bug diagnosis → use `$frontend-debugging`
 
 ## Core workflow
 
-1. If the user starts from a named product/style reference and wants source grounding first, route to `$design-agent` before redesign.
-2. If the user starts from existing product surfaces and wants a reusable house style, design tokens, or `DESIGN.md` captured first, route to `$design-md` before redesign.
-3. If a `DESIGN.md` or visual contract exists, read it first and map tokens to the actual UI surfaces before inventing new style.
-4. Identify the interface goal, audience, and brand tone (e.g., Luxury, Professional, Playful).
-5. Choose one clear premium aesthetic direction (Bento, Glass, Minimal, etc.).
-6. Define typography, oklch-based color, and motion (Framer Motion) system.
-7. Ensure key interactive states and micro-animations (staggered reveals) are covered.
-8. Deliver a concise design rationale plus production-ready guidance or code.
+1. If the user starts from existing product surfaces and wants a reusable house style, design tokens, or `DESIGN.md` captured first, route to `$design-md` before redesign.
+2. If a `DESIGN.md` or visual contract exists, read it first and map tokens to the actual UI surfaces before inventing new style.
+3. Identify the interface goal, audience, brand tone, and any named product/style references.
+4. Choose one clear premium aesthetic direction (Bento, Glass, Minimal, etc.).
+5. Define typography, oklch-based color, and motion system.
+6. Ensure key interactive states and micro-animations are covered.
+7. Deliver a concise design rationale plus production-ready guidance or code.
 
 ## Design rules
 
@@ -85,7 +81,7 @@ look and feel like, not the low-level CSS or framework mechanics.
 - Favor memorable hierarchy over generic “AI-looking” defaults.
 - Respect accessibility and implementation constraints even when visual quality is primary.
 - Push style catalogs and long checklists into references.
-- **Superior Quality Audit**: For premium UI development, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For premium UI development, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## References
 
@@ -94,11 +90,10 @@ look and feel like, not the low-level CSS or framework mechanics.
 
 ## Routing note
 
-- Use `$design-agent` first when the request is "make it feel like X product" and the user wants reference sources, verified tokens, or borrow/adapt decisions before any UI rewrite starts.
 - Use `$design-md` first when the request is "先把现有设计抽出来 / 先沉淀成 DESIGN.md / 设计规范 / 设计 token / 设计验收".
-- Use `$design-workflow` first when the request is "设计 prompt / 页面生成提示词 / workflow closure".
+- Keep named-product references and UI-generation prompt shaping inside this skill unless the user needs a persistent `DESIGN.md` contract.
 
 ## Trigger examples
 - "这个设计规范里的配色和阴影怎么在 CSS 里精确还原？"
 - "强制进行前端设计深度审计 / 检查布局规范与多端渲染结果。"
-- "Use $execution-audit to audit this UI for visual-fidelity idealism."
+- "Use the runtime verification gate to audit this UI for visual-fidelity idealism."

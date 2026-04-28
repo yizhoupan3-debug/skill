@@ -18,7 +18,7 @@ Select the right chart family based on your **data shape** and **communication g
 | Ranked values | Magnitude comparison | Horizontal bar chart | matplotlib |
 | Spatial / grid data | Field visualization | Contour / imshow + colorbar | matplotlib |
 | 3D surface or volumetric | Geometry / topology | 3D surface / scatter | matplotlib `mplot3d` |
-| Network / graph | Connections / topology | → use `$graphviz-expert` or `$mermaid-expert` | — |
+| Network / graph | Connections / topology | → use `$diagramming` or `$diagramming` | — |
 | Survival / Kaplan-Meier | Time-to-event | Step plot + CI bands | lifelines / matplotlib |
 
 ## Decision flowchart

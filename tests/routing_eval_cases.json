@@ -2,12 +2,24 @@
   "schema_version": "routing-eval-cases-v1",
   "cases": [
     {
-      "id": "execution-controller-coding-should-trigger",
+      "id": "runtime-audit-chinese-no-plan-to-code-fallback",
+      "category": "should-trigger",
+      "task": "彻底核查 runtime 系统 contract、manifest 漂移、测试可信度和 CI 覆盖，不要直接实现业务代码。",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": "code-review",
+      "forbidden_owners": [
+        "plan-to-code"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "framework-governance-long-running-case",
       "category": "should-trigger",
       "task": "这是一个高负载跨文件长运行的治理任务，主线程保持极简并维护 .supervisor_state.json。",
-      "focus_skill": "execution-controller-coding",
-      "expected_owner": "execution-controller-coding",
-      "expected_overlay": null,
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": "code-review",
       "first_turn": true
     },
     {
@@ -19,8 +31,7 @@
       "expected_overlay": null,
       "first_turn": true,
       "forbidden_owners": [
-        "execution-controller-coding",
-        "anti-laziness"
+        "code-review"
       ]
     },
     {
@@ -58,7 +69,7 @@
       "expected_owner": "systematic-debugging",
       "expected_overlay": null,
       "forbidden_owners": [
-        "execution-controller-coding"
+        "plan-to-code"
       ],
       "first_turn": true
     },
@@ -68,7 +79,7 @@
       "task": "这个 skill 框架 owner gate overlay 边界重叠了，顺手把路由策略修一下并减少 token 消耗。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
-      "expected_overlay": null,
+      "expected_overlay": "code-review",
       "forbidden_owners": [
         "idea-to-plan"
       ],
@@ -93,7 +104,6 @@
       "forbidden_owners": [
         "research-workbench",
         "paper-writing",
-        "humanizer",
         "literature-synthesis"
       ],
       "first_turn": true
@@ -168,36 +178,36 @@
       "first_turn": true
     },
     {
-      "id": "checklist-planner-post-strategy-case",
+      "id": "framework-checklist-post-strategy-case",
       "category": "should-trigger",
       "task": "路线已经定了，不用再论证，直接写 execution-ready checklist，拆成里程碑和串行步骤。",
-      "focus_skill": "checklist-planner",
-      "expected_owner": "checklist-planner",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "first_turn": true
     },
     {
-      "id": "checklist-planner-serial-parallel-case",
+      "id": "framework-checklist-serial-parallel-case",
       "category": "should-trigger",
       "task": "把这份 checklist 规范一下，串行的写在一点，并行的拆开，补齐验收和约束。",
-      "focus_skill": "checklist-planner",
-      "expected_owner": "checklist-planner",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "forbidden_owners": [
         "idea-to-plan",
-        "checklist-fixer"
+        "plan-to-code"
       ],
       "first_turn": true
     },
     {
-      "id": "checklist-fixer-selected-items-case",
+      "id": "checklist-selected-items-framework-case",
       "category": "should-trigger",
       "task": "按这份 checklist 逐项修复，先做 1-3。",
-      "focus_skill": "checklist-fixer",
-      "expected_owner": "checklist-fixer",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "forbidden_owners": [
-        "checklist-planner"
+        "idea-to-plan"
       ],
       "first_turn": true
     },
@@ -269,12 +279,10 @@
       "id": "generic-multi-agent-delegation-gate-case",
       "category": "gate-vs-owner-conflict",
       "task": "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。",
-      "focus_skill": "subagent-delegation",
-      "expected_owner": "subagent-delegation",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
-      "forbidden_owners": [
-        "agent-swarm-orchestration"
-      ],
+      "forbidden_owners": [],
       "first_turn": true
     },
     {
@@ -286,7 +294,6 @@
       "expected_overlay": null,
       "forbidden_owners": [
         "doc",
-        "playwright",
         "systematic-debugging"
       ],
       "first_turn": true
@@ -306,12 +313,13 @@
       "first_turn": true
     },
     {
-      "id": "execution-controller-coding-should-not-overtrigger",
+      "id": "small-shell-script-should-not-overtrigger-plan-to-code",
       "category": "should-not-trigger",
       "task": "只改一个单文件 shell 脚本，别上复杂编排。",
-      "focus_skill": "execution-controller-coding",
+      "focus_skill": "shell-cli",
+      "expected_owner": "shell-cli",
       "forbidden_owners": [
-        "execution-controller-coding"
+        "plan-to-code"
       ],
       "first_turn": true
     },
@@ -408,8 +416,7 @@
       "expected_overlay": null,
       "forbidden_owners": [
         "literature-synthesis",
-        "paper-reviewer",
-        "humanizer"
+        "paper-reviewer"
       ],
       "first_turn": true
     },
@@ -421,7 +428,6 @@
       "expected_owner": "paper-writing",
       "expected_overlay": null,
       "forbidden_owners": [
-        "humanizer",
         "paper-reviewer",
         "literature-synthesis"
       ],
@@ -456,11 +462,11 @@
       "first_turn": true
     },
     {
-      "id": "humanizer-sentence-audit-case",
+      "id": "documentation-polish-sentence-audit-case",
       "category": "should-trigger",
       "task": "不要直接改写，先逐句评估这段话的 AIGC 痕迹，并判断哪些句子不需要改、哪些需要自然话改写、哪些需要完全重写。",
-      "focus_skill": "humanizer",
-      "expected_owner": "humanizer",
+      "focus_skill": "documentation-engineering",
+      "expected_owner": "documentation-engineering",
       "expected_overlay": null,
       "forbidden_owners": [
         "paper-writing",
@@ -469,11 +475,11 @@
       "first_turn": true
     },
     {
-      "id": "humanizer-audit-then-patch-case",
+      "id": "documentation-polish-audit-then-patch-case",
       "category": "wrong-owner-near-miss",
       "task": "先判断哪些句子 AI 味最重，再只改这些句子，不要整段重写。",
-      "focus_skill": "humanizer",
-      "expected_owner": "humanizer",
+      "focus_skill": "documentation-engineering",
+      "expected_owner": "documentation-engineering",
       "expected_overlay": null,
       "forbidden_owners": [
         "paper-writing"
@@ -481,11 +487,11 @@
       "first_turn": true
     },
     {
-      "id": "humanizer-ordinary-polish-case",
+      "id": "documentation-polish-ordinary-case",
       "category": "wrong-owner-near-miss",
       "task": "帮我把这段普通中文说明润色得自然一点，不要做 AIGC 表格，直接给改后版本。",
-      "focus_skill": "humanizer",
-      "expected_owner": "humanizer",
+      "focus_skill": "documentation-engineering",
+      "expected_owner": "documentation-engineering",
       "expected_overlay": null,
       "forbidden_owners": [
         "paper-writing",
@@ -495,11 +501,11 @@
       "first_turn": true
     },
     {
-      "id": "humanizer-draft-from-notes-case",
+      "id": "documentation-polish-draft-from-notes-case",
       "category": "wrong-owner-near-miss",
       "task": "根据这些要点写一段普通说明文字，只用我给的信息，不要写成营销文案。",
-      "focus_skill": "humanizer",
-      "expected_owner": "humanizer",
+      "focus_skill": "documentation-engineering",
+      "expected_owner": "documentation-engineering",
       "expected_overlay": null,
       "forbidden_owners": [
         "copywriting",
@@ -516,7 +522,6 @@
       "expected_owner": "copywriting",
       "expected_overlay": null,
       "forbidden_owners": [
-        "humanizer",
         "email-template",
         "documentation-engineering"
       ],
@@ -632,9 +637,9 @@
     {
       "id": "gh-pr-triage-review-summary-case",
       "category": "wrong-owner-near-miss",
-      "task": "给我一个 PR review summary，看 reviewers 主要卡在哪。",
-      "focus_skill": "gh-pr-triage",
-      "expected_owner": "gh-pr-triage",
+      "task": "用 gh 拉取 GitHub PR review comments，给我一个 PR review summary，看 reviewers 主要卡在哪。",
+      "focus_skill": "gh-address-comments",
+      "expected_owner": "gh-address-comments",
       "expected_overlay": "code-review",
       "forbidden_owners": [
         "paper-workbench",
@@ -703,7 +708,6 @@
       "expected_owner": "research-workbench",
       "expected_overlay": null,
       "forbidden_owners": [
-        "brainstorm-research",
         "autoresearch",
         "paper-workbench"
       ],
@@ -771,8 +775,7 @@
       "expected_owner": "autoresearch",
       "expected_overlay": null,
       "forbidden_owners": [
-        "research-workbench",
-        "brainstorm-research"
+        "research-workbench"
       ],
       "first_turn": true
     },
@@ -799,35 +802,32 @@
       "forbidden_owners": [
         "idea-to-plan",
         "css-pro",
-        "motion-design",
         "visual-review"
       ],
       "first_turn": true
     },
     {
-      "id": "design-agent-brand-routing-case",
+      "id": "design-md-brand-routing-case",
       "category": "should-trigger",
       "task": "先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。",
-      "focus_skill": "design-agent",
-      "expected_owner": "design-agent",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
       "expected_overlay": null,
       "forbidden_owners": [
         "frontend-design",
-        "motion-design",
         "visual-review"
       ],
       "first_turn": true
     },
     {
-      "id": "design-agent-mixed-source-case",
+      "id": "design-md-mixed-source-case",
       "category": "wrong-owner-near-miss",
       "task": "我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。",
-      "focus_skill": "design-agent",
-      "expected_owner": "design-agent",
+      "focus_skill": "design-md",
+      "expected_owner": "design-md",
       "expected_overlay": null,
       "forbidden_owners": [
         "frontend-design",
-        "motion-design",
         "css-pro"
       ],
       "first_turn": true
@@ -847,12 +847,11 @@
     {
       "id": "frontend-design-motion-boundary-case",
       "category": "wrong-owner-near-miss",
-      "task": "用 Framer Motion 给这个界面做磁性按钮、page transition 和微交互，重点是动效质感。",
-      "focus_skill": "motion-design",
-      "expected_owner": "motion-design",
+      "task": "给这个网页 UI 实现 Framer Motion 磁性按钮、page transition 和微交互，重点是动效质感。",
+      "focus_skill": "frontend-design",
+      "expected_owner": "frontend-design",
       "expected_overlay": null,
       "forbidden_owners": [
-        "frontend-design",
         "css-pro"
       ],
       "first_turn": true

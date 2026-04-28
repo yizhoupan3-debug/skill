@@ -8,8 +8,6 @@ In the upstream README, RTK positions itself as a tool that reduces LLM token co
 rtk init -g --codex
 ```
 
-Upstream also states that the Codex integration method is `AGENTS.md + RTK.md instructions`, unlike Claude/Gemini hook integrations that can transparently rewrite shell commands.
-
 ## What this means in this repo
 
 For this repository, treat RTK as **instruction-driven**, not as something you should assume is auto-rewriting every shell command.
@@ -61,9 +59,7 @@ This repository already contains a project-scoped RTK filter file at [`/.rtk/fil
 
 Current local filters are targeted and narrow:
 
-- `cargo test`
-- `npm test`
-- `git diff`
+- `cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...`
 
 Do not assume every repo script has a custom RTK filter. If a command is uncommon, RTK may still help, but it may only provide generic compaction.
 

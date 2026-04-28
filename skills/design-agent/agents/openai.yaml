@@ -1,4 +1,0 @@
-interface:
-  display_name: "Design Agent"
-  short_description: "Ground design references before implementation"
-

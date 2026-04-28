@@ -79,7 +79,7 @@ This skill does not own:
 - Rust-specific profiling (criterion, flamegraph, cargo bench) is owned by this skill
 - Rust-specific safety, borrowing, and macro issues are owned by this skill.
 - Rust-specific safety, borrowing, and macro issues are owned by this skill.
-- **Dual-Dimension Audit (Pre: Cargo-Toml/Feat-Logic, Post: Build-Artifact/Binary-Size Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Cargo-Toml/Feat-Logic, Post: Build-Artifact/Binary-Size Results)** → runtime verification gate
 
 If the task shifts to adjacent skill territory, route to:
 
@@ -176,7 +176,7 @@ Recommended structure:
 - Do not ignore clippy warnings without `#[allow()]` with justification.
 - In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for noisy `cargo check`, `cargo clippy`, and `cargo test` runs when compact output is enough.
 - Prefer `&str` over `String` in function parameters when ownership isn't needed.
-- **Superior Quality Audit**: For production Rust binaries, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production Rust binaries, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 - Do not clone to satisfy the borrow checker without exploring alternatives first.
 - Do not run repo-local prebuilt Rust binaries when the source tree is newer than the artifact; rebuild first and restart any long-lived bridge/client that keys off that binary.
 
@@ -187,4 +187,4 @@ Recommended structure:
 - "这个 Rust 生命周期错误怎么解？"
 - "设计一个 trait-based 插件系统。"
 - "强制进行 Rust 构建深度审计 / 检查特性开关与产物二进制结果。"
-- "Use $execution-audit to audit this Rust project for binary-size idealism."
+- "Use the runtime verification gate to audit this Rust project for binary-size idealism."

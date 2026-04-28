@@ -88,7 +88,7 @@ artifact_outputs:
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
 ---
-- **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results)** → runtime verification gate
 
 # skill-framework-developer
 
@@ -148,7 +148,7 @@ The main thread should contain only:
 
 If bounded framework inspection benefits from parallelism and runtime policy permits:
 
-- route it through [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)
+- route it through [`runtime delegation gate`](runtime policy)
 
 If runtime policy does **not** permit spawning:
 
@@ -212,8 +212,8 @@ Before finishing, verify:
 - description carries real trigger phrasing users will say
 - optional examples live in `references/` instead of bloating `SKILL.md`
 - the framework is more precise, faster to scan, and cheaper to load than before
-- **Superior Quality Audit**: For framework-level redesigns, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For framework-level redesigns, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 - "强制进行 Codex 框架深度审计 / 检查路由策略与同步状态。"
-- "Use $execution-audit to audit this framework-policy for sync-health idealism."
+- "Use the runtime verification gate to audit this framework-policy for sync-health idealism."

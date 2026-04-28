@@ -70,7 +70,7 @@ If the task shifts to adjacent skill territory, route to:
 - `$react` / `$vue` for other UI frameworks
 - `$node-backend` for standalone backend services
 - `$typescript-pro` for deep TS type design
-- **Dual-Dimension Audit (Pre: Runes/Compile-time, Post: SSR/JS-size Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Runes/Compile-time, Post: SSR/JS-size Results)** → runtime verification gate
 
 ## Required workflow
 
@@ -188,7 +188,7 @@ Recommended structure:
 - Do not skip `svelte-check` before concluding changes.
 - Preserve progressive enhancement in form actions.
 - Keep client-side JavaScript minimal by default.
-- **Superior Quality Audit**: For high-performance Svelte apps, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For high-performance Svelte apps, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 
@@ -198,4 +198,4 @@ Recommended structure:
 - "设计一个 Svelte 组件库。"
 - "SvelteKit 的 form actions 怎么用？"
 - "强制进行 Svelte 深度审计 / 检查 Runes 响应式与 SSR 结果。"
-- "Use $execution-audit to audit this Svelte 5 implementation for perfect execution."
+- "Use the runtime verification gate to audit this Svelte 5 implementation for perfect execution."

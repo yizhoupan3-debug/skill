@@ -38,7 +38,7 @@ framework_contracts:
   emits_verification_results: false
 ---
 
-- **Dual-Dimension Audit (Pre: A11y-Plan/ARIA-Logic, Post: Lighthouse-Score/Screen-Reader Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: A11y-Plan/ARIA-Logic, Post: Lighthouse-Score/Screen-Reader Results)** → runtime verification gate
 # accessibility-auditor
 
 This skill owns accessibility quality review for web pages and components,
@@ -74,9 +74,9 @@ When reporting accessibility issues, prefer a compact finding shape:
 - `evidence`
 - `impact`
 - `fix`
-- **Superior Quality Audit**: For accessibility compliance, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For accessibility compliance, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 - `verification_method`
 
 ## Trigger examples
 - "强制进行无障碍深度审计 / 检查 ARIA 属性与屏幕阅读器运行结果。"
-- "Use $execution-audit to audit this page for WCAG-compliance idealism."
+- "Use the runtime verification gate to audit this page for WCAG-compliance idealism."

@@ -16,9 +16,9 @@ configs/codex/sub_accounts.state.json
 .pytest_cache/
 .codebuddy/
 .serena/
-.claude/worktrees/
 .opencode/
-.rtk/
+.rtk/*
+!.rtk/filters.toml
 .agents/plugins/marketplace.json
 skill/
 tmp/
@@ -46,7 +46,6 @@ codex_agno_runtime/data/runtime_sandbox_events.jsonl
 memory/*.db
 memory/*.sqlite3
 memory/.*.sqlite3
-memory/CLAUDE_MEMORY.md
 memory/archive/
 memory/state.json
 skills/.evolution_journal.jsonl

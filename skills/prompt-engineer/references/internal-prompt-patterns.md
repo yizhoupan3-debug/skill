@@ -213,7 +213,7 @@ Use for turn-level instructions within a multi-turn agent conversation.
 
 ## Template 7: Delegation Prompt Wrapper
 
-Use when `$subagent-delegation` hands off a task and needs `$prompt-engineer`
+Use when `$runtime delegation gate` hands off a task and needs `$prompt-engineer`
 to polish the prompt before spawning.
 
 ```text

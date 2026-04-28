@@ -21,7 +21,7 @@ the shared design skills and include:
 Use `$design-md` to extract these fields from old decks, screenshots, or brand
 assets. Use `$frontend-design` when no source style exists but the deck still
 needs a fresh premium visual direction. After rendering, use `$visual-review`
-for image-grounded findings and `$design-output-auditor` for the final drift
+for image-grounded findings and `$design-md` for the final drift
 verdict against this contract.
 
 Map those fields into `deck.plan.json`: palette roles, typography scale, panel/card
@@ -184,7 +184,7 @@ Do not add a new bright color every time a slide feels weak.
 
 ## Design Audit Verdicts
 
-For rendered review, use the same verdict language as `$design-output-auditor`:
+For rendered review, use the shared `$design-md` verdict language:
 
 - `match`: output follows the declared deck design system.
 - `minor drift`: small spacing, emphasis, or tone issue that does not change the

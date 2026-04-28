@@ -1,33 +1,50 @@
 #!/bin/sh
 set -eu
 
-# Run skill sync (Rust-owned)
-cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+NEEDS_SKILL_COMPILE=0
+for path in $STAGED_FILES; do
+    case "$path" in
+        skills/*/SKILL.md|skills/.system/*/SKILL.md|skills/SKILL_SOURCE_MANIFEST.json|skills/SKILL_HEALTH_MANIFEST.json|scripts/skill-compiler-rs/*|scripts/skill-compiler-rs/*/*)
+            NEEDS_SKILL_COMPILE=1
+            ;;
+    esac
+done
+
+if [ "$NEEDS_SKILL_COMPILE" != "1" ]; then
+    exit 0
+fi
+
+LOG_FILE=$(mktemp "${TMPDIR:-/tmp}/skill-pre-commit.XXXXXX")
+trap 'rm -f "$LOG_FILE"' EXIT
+
+if ! cargo run --quiet --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --skills-root skills \
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
   --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
-  >/dev/null
+  --apply >"$LOG_FILE" 2>&1; then
+    echo "[pre-commit] skill compiler failed; rerun this command for details:"
+    echo "  cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply"
+    tail -n 40 "$LOG_FILE"
+    exit 1
+fi
 
-# Quality score guard for changed skills
-CHANGED_SKILLS=$(git diff --cached --name-only --diff-filter=ACMR | grep '^skills/.*/SKILL\.md$' || true)
-if [ -n "$CHANGED_SKILLS" ]; then
-    SKILL_DIRS=""
-    for f in $CHANGED_SKILLS; do
-        dir=$(dirname "$f")
-        # Skip system and dist
-        case "$dir" in
-            skills/.system/*|skills/dist) continue ;;
-        esac
-        SKILL_DIRS="$SKILL_DIRS $dir"
-    done
-
-    if [ -n "$SKILL_DIRS" ]; then
-        echo "[pre-commit] Validating changed skills..."
-        # shellcheck disable=SC2086
-        cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
-          --skills-root skills \
-          --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-          --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
-          >/dev/null
-    fi
+if ! git diff --quiet -- \
+  skills/SKILL_APPROVAL_POLICY.json \
+  skills/SKILL_LOADOUTS.json \
+  skills/SKILL_MANIFEST.json \
+  skills/SKILL_ROUTING_INDEX.md \
+  skills/SKILL_ROUTING_REGISTRY.md \
+  skills/SKILL_ROUTING_RUNTIME.json \
+  skills/SKILL_SHADOW_MAP.json \
+  skills/SKILL_TIERS.json \
+  configs/framework/FRAMEWORK_SURFACE_POLICY.json; then
+    echo "[pre-commit] skill compiler updated generated routing artifacts."
+    echo "Stage those files, then commit again:"
+    echo "  git add skills/SKILL_APPROVAL_POLICY.json skills/SKILL_LOADOUTS.json skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_INDEX.md skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_ROUTING_RUNTIME.json skills/SKILL_SHADOW_MAP.json skills/SKILL_TIERS.json configs/framework/FRAMEWORK_SURFACE_POLICY.json"
+    exit 1
 fi

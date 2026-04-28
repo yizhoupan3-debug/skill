@@ -67,7 +67,7 @@ This skill does not own:
 - general backend endpoint implementation by itself
 - whole-system architecture review without data-runtime focus
 - pure API protocol debugging
-- **Dual-Dimension Audit (Pre: Logic/Patterns, Post: Consistency/State Results)** → `$execution-audit` [Overlay]
+- **Dual-Dimension Audit (Pre: Logic/Patterns, Post: Consistency/State Results)** → runtime verification gate
 
 If the task shifts to adjacent skill territory, route to:
 - `$sql-pro`
@@ -137,7 +137,7 @@ Recommended structure:
 - Do not recommend cache invalidation patterns without naming the source of truth.
 - Always mention failure-mode behavior, not just happy path.
 - If transactionality or consistency is inferred rather than verified, label it explicitly.
-- **Superior Quality Audit**: For system-critical data flows, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For system-critical data flows, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
 
 ## Trigger examples
 
@@ -145,4 +145,4 @@ Recommended structure:
 - "帮我排查 worker 重试、重复消费、缓存失效和事务边界问题。"
 - "这个 ORM + migration + 连接池 + idempotency 方案稳不稳？"
 - "强制进行数据层深度审计 / 检查缓存一致性与队列状态结果。"
-- "Use $execution-audit to audit this datastore design for consistency-state idealism."
+- "Use the runtime verification gate to audit this datastore design for consistency-state idealism."

@@ -1,4 +1,8 @@
 use crate::framework_runtime::resolve_repo_root_arg;
+use crate::route::{
+    build_search_results_payload, load_records, load_records_from_manifest, route_task,
+    search_skills, RouteDecision, SkillRecord,
+};
 use crate::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
@@ -203,7 +207,7 @@ fn handle_browser_mcp_request(request: &Value, runtime: &mut BrowserRuntime) -> 
             "capabilities": {"tools": {"listChanged": false}},
         })),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({"tools": tool_definitions()})),
+        "tools/list" => Ok(json!({"tools": tool_definitions(&runtime.repo_root)})),
         "tools/call" => handle_tools_call(&params, runtime),
         _ => Err(browser_error(
             "UNSUPPORTED_OPERATION",
@@ -240,6 +244,10 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         "browser_save_session" => runtime.save_session(&arguments),
         "browser_restore_session" => runtime.restore_session(&arguments),
         "browser_get_attached_runtime_events" => runtime.get_attached_runtime_events(&arguments),
+        "skill_route" => runtime.skill_route(&arguments),
+        "skill_search" => runtime.skill_search(&arguments),
+        "skill_read" => runtime.skill_read(&arguments),
+        "skill_route_status" => runtime.skill_route_status(),
         "browser_diagnostics" => runtime.diagnostics(&arguments),
         _ => Err(browser_error(
             "INVALID_INPUT",
@@ -269,9 +277,10 @@ fn tool_result(structured: Result<Value, Value>) -> Result<Value, Value> {
     }
 }
 
-fn tool_definitions() -> Vec<Value> {
+fn tool_definitions(repo_root: &Path) -> Vec<Value> {
     let empty_output = json!({"type": "object", "additionalProperties": true});
-    vec![
+    let skill_tools_available = skill_runtime_available(repo_root);
+    let mut tools = vec![
         tool_definition(
             "browser_open",
             "Open Browser Page",
@@ -377,11 +386,50 @@ fn tool_definitions() -> Vec<Value> {
             json!({"type": "object", "properties": {"afterEventId": {"type": "string"}, "limit": {"type": "integer", "minimum": 1}, "heartbeat": {"type": "boolean"}}}),
             empty_output.clone(),
         ),
-        tool_definition(
-            "browser_diagnostics",
-            "Browser Diagnostics",
-            "Return runtime health information.",
+    ];
+    if skill_tools_available {
+        tools.extend(skill_tool_definitions(empty_output.clone()));
+    }
+    tools.push(tool_definition(
+        "browser_diagnostics",
+        "Browser Diagnostics",
+        "Return runtime health information, including whether repository skill routing tools are exposed.",
+        json!({"type": "object", "properties": {}}),
+        empty_output,
+    ));
+    if !skill_tools_available {
+        tools.push(tool_definition(
+            "skill_route_status",
+            "Repository Skill Route Status",
+            "Explain why repository skill routing tools are not exposed for this repo root.",
             json!({"type": "object", "properties": {}}),
+            json!({"type": "object", "additionalProperties": true}),
+        ));
+    }
+    tools
+}
+
+fn skill_tool_definitions(empty_output: Value) -> Vec<Value> {
+    vec![
+        tool_definition(
+            "skill_route",
+            "Route Skill Request",
+            "Route a user request through this repository's skills/SKILL_ROUTING_RUNTIME.json, with SKILL_MANIFEST.json fallback, and return the selected skill plus the exact SKILL.md path to read.",
+            json!({"type": "object", "properties": {"query": {"type": "string"}, "sessionId": {"type": "string"}, "allowOverlay": {"type": "boolean"}, "firstTurn": {"type": "boolean"}}, "required": ["query"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "skill_search",
+            "Search Repository Skills",
+            "Search this repository's full skills/SKILL_MANIFEST.json catalog and return the best matching skill records.",
+            json!({"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, "required": ["query"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "skill_read",
+            "Read Repository Skill",
+            "Read one matched skills/<name>/SKILL.md body from this repository's canonical skills/ source.",
+            json!({"type": "object", "properties": {"skill": {"type": "string"}, "maxChars": {"type": "integer", "minimum": 1, "maximum": 50000}}, "required": ["skill"]}),
             empty_output,
         ),
     ]
@@ -579,6 +627,113 @@ impl BrowserRuntime {
             request_counter: 0,
             screenshot_counter: 0,
         }
+    }
+
+    fn skill_route(&self, input: &Value) -> Result<Value, Value> {
+        let query = required_string_arg(input, "query")?;
+        let session_id =
+            optional_string(input, "sessionId").unwrap_or_else(|| "cowork-mcp".to_string());
+        let allow_overlay = optional_bool(input, "allowOverlay").unwrap_or(true);
+        let first_turn = optional_bool(input, "firstTurn").unwrap_or(true);
+        let runtime_path = skill_runtime_path(&self.repo_root);
+        let manifest_path = skill_manifest_path(&self.repo_root);
+        if !runtime_path.is_file() {
+            return Err(skill_error(
+                "SKILL_RUNTIME_MISSING",
+                &format!(
+                    "Missing repository skill runtime: {}",
+                    runtime_path.display()
+                ),
+            ));
+        }
+        let records = load_records(Some(&runtime_path), Some(&manifest_path))
+            .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
+        let decision = route_with_full_manifest_fallback(
+            &records,
+            &manifest_path,
+            &query,
+            &session_id,
+            allow_overlay,
+            first_turn,
+        )
+        .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
+        let selected_path = skill_body_path(&self.repo_root, &decision.selected_skill)
+            .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?;
+        let overlay_path = decision
+            .overlay_skill
+            .as_ref()
+            .map(|slug| skill_body_path(&self.repo_root, slug))
+            .transpose()
+            .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?;
+        Ok(json!({
+            "schema_version": "cowork-skill-route-v1",
+            "authority": "router-rs-browser-mcp",
+            "repo_root": self.repo_root.to_string_lossy(),
+            "runtime_path": runtime_path.to_string_lossy(),
+            "manifest_path": manifest_path.to_string_lossy(),
+            "decision": decision,
+            "selected_skill_path": selected_path.to_string_lossy(),
+            "overlay_skill_path": overlay_path.map(|path| path.to_string_lossy().to_string()),
+            "next_step": "Read selected_skill_path from the canonical skills/ source before doing task work.",
+        }))
+    }
+
+    fn skill_search(&self, input: &Value) -> Result<Value, Value> {
+        let query = required_string_arg(input, "query")?;
+        let limit = optional_u64(input, "limit")?.unwrap_or(10).clamp(1, 50) as usize;
+        let manifest_path = skill_manifest_path(&self.repo_root);
+        if !manifest_path.is_file() {
+            return Err(skill_error(
+                "SKILL_MANIFEST_MISSING",
+                &format!(
+                    "Missing repository skill manifest: {}",
+                    manifest_path.display()
+                ),
+            ));
+        }
+        let records = load_records_from_manifest(&manifest_path)
+            .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err))?;
+        let rows = search_skills(&records, &query, limit);
+        let results = build_search_results_payload(&query, rows);
+        serde_json::to_value(results)
+            .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err.to_string()))
+    }
+
+    fn skill_read(&self, input: &Value) -> Result<Value, Value> {
+        let slug = required_string_arg(input, "skill")?;
+        let max_chars = optional_u64(input, "maxChars")?
+            .unwrap_or(20_000)
+            .clamp(1, 50_000) as usize;
+        let path = skill_body_path(&self.repo_root, &slug)
+            .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?;
+        let content = fs::read_to_string(&path).map_err(|err| {
+            skill_error("SKILL_READ_FAILED", &format!("{}: {err}", path.display()))
+        })?;
+        let truncated = content.chars().count() > max_chars;
+        Ok(json!({
+            "schema_version": "cowork-skill-read-v1",
+            "authority": "router-rs-browser-mcp",
+            "skill": slug,
+            "path": path.to_string_lossy(),
+            "content": truncate_text(&content, max_chars),
+            "truncated": truncated,
+        }))
+    }
+
+    fn skill_route_status(&self) -> Result<Value, Value> {
+        let runtime_path = skill_runtime_path(&self.repo_root);
+        let manifest_path = skill_manifest_path(&self.repo_root);
+        Ok(json!({
+            "schema_version": "cowork-skill-route-status-v1",
+            "authority": "router-rs-browser-mcp",
+            "repo_root": self.repo_root.to_string_lossy(),
+            "skills_dir_exists": self.repo_root.join("skills").is_dir(),
+            "runtime_path": runtime_path.to_string_lossy(),
+            "runtime_exists": runtime_path.is_file(),
+            "manifest_path": manifest_path.to_string_lossy(),
+            "manifest_exists": manifest_path.is_file(),
+            "routing_tools_exposed": skill_runtime_available(&self.repo_root),
+        }))
     }
 
     fn open(&mut self, input: &Value) -> Result<Value, Value> {
@@ -3378,6 +3533,138 @@ fn browser_error(
     })
 }
 
+fn skill_error(code: &str, message: &str) -> Value {
+    browser_error(
+        code,
+        message,
+        &[
+            "ensure the MCP server was started with --repo-root pointing at the repository root",
+            "ensure skills/SKILL_ROUTING_RUNTIME.json and skills/SKILL_MANIFEST.json are generated",
+        ],
+        true,
+    )
+}
+
+fn skill_runtime_path(repo_root: &Path) -> PathBuf {
+    repo_root.join("skills/SKILL_ROUTING_RUNTIME.json")
+}
+
+fn skill_manifest_path(repo_root: &Path) -> PathBuf {
+    repo_root.join("skills/SKILL_MANIFEST.json")
+}
+
+fn skill_runtime_available(repo_root: &Path) -> bool {
+    skill_runtime_path(repo_root).is_file() && repo_root.join("skills").is_dir()
+}
+
+fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
+    let clean = slug.trim();
+    if clean.is_empty()
+        || clean.contains('/')
+        || clean.contains('\\')
+        || clean.contains("..")
+        || clean.starts_with('.')
+    {
+        return Err(format!("invalid skill slug: {slug}"));
+    }
+
+    let manifest_path = skill_manifest_path(repo_root);
+    if manifest_path.is_file() {
+        if let Some(path) = skill_body_path_from_manifest(repo_root, &manifest_path, clean)? {
+            return Ok(path);
+        }
+    }
+
+    let path = repo_root.join("skills").join(clean).join("SKILL.md");
+    if !path.is_file() {
+        return Err(format!("skill body not found: {}", path.display()));
+    }
+    Ok(path)
+}
+
+fn skill_body_path_from_manifest(
+    repo_root: &Path,
+    manifest_path: &Path,
+    slug: &str,
+) -> Result<Option<PathBuf>, String> {
+    let payload = crate::route::read_json(manifest_path)?;
+    let keys = payload
+        .get("keys")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("manifest missing keys: {}", manifest_path.display()))?;
+    let key_index = keys
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, key)| key.as_str().map(|raw| (raw.to_string(), idx)))
+        .collect::<std::collections::HashMap<_, _>>();
+    let idx_slug = *key_index
+        .get("slug")
+        .ok_or_else(|| format!("manifest missing slug key: {}", manifest_path.display()))?;
+    let Some(idx_skill_path) = key_index.get("skill_path").copied() else {
+        return Ok(None);
+    };
+    let rows = payload
+        .get("skills")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("manifest missing skills rows: {}", manifest_path.display()))?;
+    for row in rows.iter().filter_map(Value::as_array) {
+        if row.get(idx_slug).and_then(Value::as_str) != Some(slug) {
+            continue;
+        }
+        let Some(skill_path) = row.get(idx_skill_path).and_then(Value::as_str) else {
+            continue;
+        };
+        if skill_path.starts_with('/')
+            || skill_path.contains("..")
+            || !skill_path.ends_with("SKILL.md")
+        {
+            return Err(format!("invalid skill_path for {slug}: {skill_path}"));
+        }
+        let path = repo_root.join(skill_path);
+        if !path.is_file() {
+            return Err(format!("skill body not found: {}", path.display()));
+        }
+        return Ok(Some(path));
+    }
+    Ok(None)
+}
+
+fn route_with_full_manifest_fallback(
+    runtime_records: &[SkillRecord],
+    manifest_path: &Path,
+    query: &str,
+    session_id: &str,
+    allow_overlay: bool,
+    first_turn: bool,
+) -> Result<RouteDecision, String> {
+    let hot_decision = route_task(
+        runtime_records,
+        query,
+        session_id,
+        allow_overlay,
+        first_turn,
+    )?;
+    if !manifest_path.is_file() {
+        return Ok(hot_decision);
+    }
+    let full_records = load_records_from_manifest(manifest_path)?;
+    if full_records.len() <= runtime_records.len() {
+        return Ok(hot_decision);
+    }
+    let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
+    if full_decision.score > hot_decision.score
+        || (full_decision.score == hot_decision.score
+            && full_decision.selected_skill != hot_decision.selected_skill)
+        || (full_decision.selected_skill == hot_decision.selected_skill
+            && full_decision.overlay_skill.is_some()
+            && hot_decision.overlay_skill.is_none())
+    {
+        Ok(full_decision)
+    } else {
+        Ok(hot_decision)
+    }
+}
+
 fn session_not_found_error() -> Value {
     browser_error(
         "SESSION_NOT_FOUND",
@@ -3637,9 +3924,83 @@ mod tests {
                 "browser_restore_session",
                 "browser_get_attached_runtime_events",
                 "browser_diagnostics",
+                "skill_route_status",
             ]
         );
+        let status_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_route_status", "arguments": {}}}),
+            &mut runtime,
+        )
+        .expect("status response");
+        assert_eq!(status_response["result"]["isError"], false);
+        assert_eq!(
+            status_response["result"]["structuredContent"]["routing_tools_exposed"],
+            false
+        );
         fs::remove_dir_all(repo_root).expect("cleanup");
+    }
+
+    #[test]
+    fn browser_mcp_exposes_repo_skill_routing_tools_when_runtime_exists() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("canonical repo root");
+        let mut runtime = BrowserRuntime::new(repo_root.clone());
+        let list_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}),
+            &mut runtime,
+        )
+        .expect("list response");
+        let names = list_response["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"skill_route"));
+        assert!(names.contains(&"skill_search"));
+        assert!(names.contains(&"skill_read"));
+
+        let route_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "skill_route", "arguments": {"query": "路由系统触发稳定吗"}}}),
+            &mut runtime,
+        )
+        .expect("route response");
+        assert_eq!(route_response["result"]["isError"], false);
+        assert_eq!(
+            route_response["result"]["structuredContent"]["decision"]["selected_skill"],
+            "skill-framework-developer"
+        );
+        assert!(
+            route_response["result"]["structuredContent"]["selected_skill_path"]
+                .as_str()
+                .unwrap()
+                .ends_with("skills/skill-framework-developer/SKILL.md")
+        );
+
+        let search_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "路由系统", "limit": 5}}}),
+            &mut runtime,
+        )
+        .expect("search response");
+        assert_eq!(search_response["result"]["isError"], false);
+        assert!(search_response["result"]["structuredContent"]["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["record"]["name"] == "skill-framework-developer"));
+
+        let read_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "skill_read", "arguments": {"skill": "skill-framework-developer"}}}),
+            &mut runtime,
+        )
+        .expect("read response");
+        assert_eq!(read_response["result"]["isError"], false);
+        assert!(read_response["result"]["structuredContent"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("# skill-framework-developer"));
     }
 
     #[test]

@@ -78,7 +78,7 @@ system prompt design).
 - The task is general skill-authoring rather than prompt writing
 - The user wants direct task execution, not a prompt to use elsewhere
 - The task is domain implementation or debugging rather than prompt design
-- The task is deciding **whether** to delegate → use `$subagent-delegation`
+- The task is deciding **whether** to delegate → use `runtime delegation gate`
 - The task is agent architecture or multi-agent system design → use `$agent-swarm-orchestration`
 - The task is generic prose editing unrelated to prompts
 
@@ -96,22 +96,22 @@ This skill owns:
 
 This skill does not own:
 - executing the domain task instead of writing the prompt
-- deciding whether delegation should happen → `$subagent-delegation`
+- deciding whether delegation should happen → `runtime delegation gate`
 - agent architecture design → `$agent-swarm-orchestration`
 - Codex skill-routing diagnosis
 - generic prose editing unrelated to prompts
 
 If the task shifts to adjacent skill territory, route to:
 - `$skill-framework-developer` for skill-document writing
-- `$subagent-delegation` for delegation strategy decisions
+- `runtime delegation gate` for delegation strategy decisions
 - `$agent-swarm-orchestration` for multi-agent system architecture
 
 ## Cross-skill integration
 
-With `$subagent-delegation`, this skill improves the **prompt quality** while
+With `runtime delegation gate`, this skill improves the **prompt quality** while
 delegation still owns **whether / what / when** to delegate.
 
-With `$checklist-planner`, this skill can strengthen prompt specs inside a checklist
+With `runtime checklist planning`, this skill can strengthen prompt specs inside a checklist
 without owning the checklist structure itself.
 
 ## Required workflow
