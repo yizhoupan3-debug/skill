@@ -3,12 +3,11 @@ name: autoresearch
 description: |
   Orchestrate autonomous research through a recoverable loop of hypothesis,
   experiment, reflection, and synthesis.
-  Check this skill early at 每轮对话开始 / first-turn / conversation start for multi-hypothesis, cross-session,
-  or autonomous research projects.
+  Use when the user explicitly asks for a multi-hypothesis, cross-session, or autonomous research loop.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
-session_start: preferred
+session_start: n/a
 trigger_hints:
   - autonomous research
   - autonomous research loop

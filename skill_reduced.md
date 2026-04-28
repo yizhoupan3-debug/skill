@@ -6,7 +6,7 @@
 - [ ] 优先删除历史兼容壳、重复入口、低价值专科 skill，而不是继续增加边界说明。
 - [ ] 将当前约 `145` 个 skill 压缩到约 `90-100` 个有效入口。
 - [ ] 将默认可见面从约 `26` 个入口压缩到约 `12-16` 个。
-- [ ] 保留 Rust-owned / Codex-only 的运行时方向，不恢复 Claude/Gemini/Python bridge 兼容面。
+- [ ] 保留 Rust-owned / Codex-only 的运行时方向，不恢复非 Codex 旧宿主或 Python bridge 兼容面。
 - [ ] 保留“一个 front door + 少量内部 mode/reference”的结构，避免多个同类 skill 争抢首轮路由。
 
 ## 总原则
@@ -54,26 +54,14 @@
 
 ### 删除候选
 
-- [ ] 删除 `.claude/commands/refresh.md`。
-- [ ] 删除 `.claude/hooks/README.md`。
-- [ ] 删除 `.claude/settings.json`。
-- [ ] 删除 `.claude/skills`。
-- [ ] 删除 `.gemini/memory`。
-- [ ] 删除 `.gemini/settings.json`。
-- [ ] 删除 `.geminiignore`。
-- [ ] 删除 `AGENT.md`。
-- [ ] 删除 `CLAUDE.md`。
-- [ ] 删除 `GEMINI.md`。
-- [ ] 删除 `docs/claude_entrypoint_maintenance.md`。
-- [ ] 删除 `openai_proxy/start_anthropic_bridge.sh`。
-- [ ] 删除 `rust_tools/anthropic_openai_bridge_rs/`。
-- [ ] 删除 `scripts/router-rs/src/claude_hooks.rs`。
+- [x] 旧宿主入口文件、旧宿主配置目录和旧 bridge 目录已不作为当前清单逐项保留。
+- [x] `AGENTS.md` 是唯一 repo policy 入口；Codex CLI/App 共享它。
 - [ ] 删除 `scripts/router-rs/src/framework_mcp.rs`。
 - [ ] 删除 `plugins/skill-framework-native/.mcp.json`。
 
 ### 验收
 
-- [ ] `rg -n "Claude|Gemini|Anthropic|anthropic|claude|gemini" AGENTS.md configs docs scripts skills plugins rust_tools openai_proxy` 不再出现运行时入口要求。
+- [ ] targeted grep 不再出现非 Codex 旧宿主运行时入口要求。
 - [ ] 允许历史说明出现，但不得作为当前运行路径、同步路径、入口路径。
 - [ ] `configs/framework/RUNTIME_REGISTRY.json` 不再引用已删除旧宿主入口。
 - [ ] `scripts/router-rs` 编译通过。
@@ -93,7 +81,6 @@
 - [ ] 保留 `skills/image-generated/` 作为唯一生图入口。
 - [ ] 删除 `skills/.system/openai-docs/`。
 - [ ] 保留 `skills/openai-docs/` 作为唯一 OpenAI 官方文档 gate。
-- [ ] 删除 `skills/claude-api/`。
 - [ ] 删除 `skills/ppt-html-export/`。
 - [ ] 删除 `skills/ppt-markdown/`。
 - [ ] 删除 `skills/slides-source-first/`。
@@ -203,7 +190,7 @@
 - [ ] 保留 `subagent-delegation` 作为是否拆 sidecar / team 的 gate。
 - [ ] 将 `autopilot` 降成 `execution-controller-coding` 的 alias mode。
 - [ ] 将 `team` 降成 `subagent-delegation` 或 `execution-controller-coding` 的 alias mode。
-- [ ] 删除独立 `autopilot/SKILL.md` 和 `team/SKILL.md`，或保留极短 stub 且不进入 runtime skills。
+- [ ] 保留 Codex CLI/App 可直接读取的 `$autopilot` / `$team` 极短 stub；只删除普通 skill owner 竞争，不删除 `$` 入口。
 
 ### 合并内容
 
@@ -214,10 +201,10 @@
 
 ### 验收
 
-- [ ] 用户说 `$autopilot` 时不产生独立 owner 竞争。
-- [ ] 用户说 `$team` 时先由 `subagent-delegation` 判断是否真的需要 team orchestration。
+- [ ] 用户说 `$autopilot` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后进入 `execution-controller-coding`。
+- [ ] 用户说 `$team` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后由 `subagent-delegation` 判断是否真的需要 team orchestration。
 - [ ] `SKILL_TIERS.json` 不再把 `autopilot`、`team` 当 optional skill。
-- [ ] `RUNTIME_REGISTRY.json` 仍可保留 alias 状态机，但不要求独立 skill 目录。
+- [ ] `RUNTIME_REGISTRY.json` 保留 alias 状态机，`artifacts/codex-skill-surface/skills/{autopilot,team}/SKILL.md` 保留生成 stub。
 
 ## P1：spreadsheet / xlsx 合并
 
@@ -339,8 +326,8 @@
 - [ ] 保留 `information-retrieval`：通用 pre-action research owner。
 - [ ] 将 `github-investigator` 降为 `information-retrieval` 的 GitHub deep-dive mode。
 - [ ] 将 `skill-scout` 并入 `skill-framework-developer`。
-- [ ] 保留 `brainstorm-research` 仅显式 opt-in，不做 preferred session_start。
-- [ ] 保留 `autoresearch` 仅显式 opt-in，不做 preferred session_start。
+- [x] 保留 `brainstorm-research` 仅显式 opt-in，不做 preferred session_start。
+- [x] 保留 `autoresearch` 仅显式 opt-in，不做 preferred session_start。
 - [ ] 保留 `ai-research`、`research-engineer` 为窄专家，但从 default surface 排除。
 
 ### 路由规则
@@ -358,7 +345,7 @@
 - [ ] `github-investigator` 不再作为独立 runtime slug。
 - [ ] `research-workbench` 不吞 manuscript paper work；仍转 `paper-workbench`。
 - [ ] `information-retrieval` 顶层增加 GitHub mode，但不膨胀成长文档。
-- [ ] research default loadout 不含 `brainstorm-research` 和 `autoresearch`。
+- [x] research/default hot surface 不含 `brainstorm-research` 和 `autoresearch`。
 
 ## P2：security 簇收口
 
@@ -453,7 +440,7 @@
 - [ ] `sustech-mailer`。
 - [ ] `chrome-extension-dev`。
 - [ ] `jupyter-notebook`。
-- [ ] `latex-compile-acceleration`。
+- [x] `latex-compile-acceleration`。
 - [ ] `scientific-figure-plotting`。
 - [ ] `infographic`。
 - [ ] `accessibility-auditor`。

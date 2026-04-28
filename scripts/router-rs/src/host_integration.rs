@@ -1,3 +1,4 @@
+use crate::framework_runtime::resolve_framework_memory_root;
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use rusqlite::Connection;
@@ -11,6 +12,8 @@ use std::process::Command;
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
+const CLAUDE_DESKTOP_CONFIG_SCHEMA_VERSION: &str = "claude-desktop-mcp-config-v1";
+const CLAUDE_DESKTOP_BROWSER_MCP_SERVER_NAME: &str = "browser-mcp";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
@@ -149,6 +152,12 @@ enum Commands {
         #[arg(long)]
         skip_default_bootstrap: bool,
     },
+    InstallClaudeDesktopMcp {
+        #[arg(long)]
+        repo_root: PathBuf,
+        #[arg(long)]
+        config_path: PathBuf,
+    },
     InstallSkills {
         #[arg(long)]
         repo_root: PathBuf,
@@ -263,6 +272,9 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             !skip_home_codex_skills_link,
             !skip_default_bootstrap,
         )?,
+        Commands::InstallClaudeDesktopMcp { repo_root, config_path } => {
+            install_claude_desktop_mcp(&repo_root, &config_path)?
+        }
         Commands::InstallSkills {
             repo_root,
             home,
@@ -792,8 +804,7 @@ fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, String> {
     fs::create_dir_all(&surface_root).map_err(|err| err.to_string())?;
 
     let desired_set = desired.iter().cloned().collect::<BTreeSet<_>>();
-    let system_source = source_root.join(".system");
-    let include_system = system_source.is_dir();
+    let include_system = false;
     for entry in fs::read_dir(&surface_root).map_err(|err| err.to_string())? {
         let entry = entry.map_err(|err| err.to_string())?;
         let name = entry.file_name().to_string_lossy().to_string();
@@ -809,9 +820,6 @@ fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, String> {
         }
     }
 
-    if include_system {
-        changed |= ensure_codex_skills_symlink(&surface_root.join(".system"), &system_source)?;
-    }
     for slug in &desired {
         if let Some(source_path) = codex_skill_surface_source_path(&repo_root, slug)? {
             changed |= ensure_codex_skills_symlink(&surface_root.join(slug), &source_path)?;
@@ -946,18 +954,34 @@ fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Result<String
         .get("canonical_owner")
         .and_then(Value::as_str)
         .unwrap_or("skill-framework-developer");
-    let host_entrypoint = command
-        .get("host_entrypoints")
+    let host_entrypoints = command.get("host_entrypoints").and_then(Value::as_object);
+    let default_host_entrypoint = format!("${slug}");
+    let host_entrypoint = host_entrypoints
         .and_then(|entrypoints| entrypoints.get("codex-cli"))
         .and_then(Value::as_str)
-        .unwrap_or("");
+        .map(str::to_string)
+        .unwrap_or_else(|| default_host_entrypoint.clone());
+    let host_entrypoint_summary = host_entrypoints
+        .map(|entrypoints| {
+            entrypoints
+                .iter()
+                .filter_map(|(host, entrypoint)| {
+                    entrypoint
+                        .as_str()
+                        .map(|entrypoint| format!("{host}={entrypoint}"))
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .filter(|summary| !summary.is_empty())
+        .unwrap_or_else(|| format!("codex-cli={0}, codex-app={0}", default_host_entrypoint));
     let description = command
         .get("lineage")
         .and_then(|lineage| lineage.get("description"))
         .and_then(Value::as_str)
         .unwrap_or("Generated lightweight framework command alias.");
     Ok(format!(
-        "---\nname: {slug}\ndescription: {description} Use when the user invokes `{host_entrypoint}` or `/{slug}`.\nrouting_layer: L0\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P1\nsession_start: n/a\nsource: generated-codex-skill-surface\n---\n# {slug}\n\nThis is a generated lightweight Codex/App/CLI alias for `{host_entrypoint}`.\n\nUse it only when the user explicitly invokes `{host_entrypoint}` or `/{slug}`. Resolve the live workflow through `router-rs framework alias {slug}` and keep the full framework policy in `skills/skill-framework-developer/SKILL.md`.\n\nCanonical owner: `{owner}`.\n"
+        "---\nname: {slug}\ndescription: {description} Use when the user invokes `{host_entrypoint}` or `/{slug}`.\nrouting_layer: L0\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P1\nsession_start: n/a\nsource: generated-codex-skill-surface\n---\n# {slug}\n\nThis is a generated lightweight Codex CLI/App alias for `{host_entrypoint}`.\n\nSupported host entrypoints: {host_entrypoint_summary}.\n\nUse it only when the user explicitly invokes `{host_entrypoint}` or `/{slug}`. Resolve the live workflow through `router-rs framework alias {slug}` and keep the full framework policy in `skills/skill-framework-developer/SKILL.md`.\n\nCanonical owner: `{owner}`.\n"
     ))
 }
 
@@ -1260,7 +1284,7 @@ fn run_memory_automation(
     let resolved_memory_root = memory_root
         .map(normalize_path)
         .transpose()?
-        .unwrap_or_else(|| repo_root.join(".codex").join("memory"));
+        .unwrap_or_else(|| resolve_framework_memory_root(&repo_root, None));
     let resolved_artifact_source_dir = artifact_source_dir.map(normalize_path).transpose()?;
     let workspace = workspace_override
         .map(str::to_owned)
@@ -1549,10 +1573,16 @@ fn build_memory_automation_consolidation(memory_root: &Path) -> Result<Value, St
     fs::create_dir_all(memory_root)
         .map_err(|err| format!("create framework memory root failed: {err}"))?;
     let memory_md = memory_root.join("MEMORY.md");
-    let changed_files = if write_text_if_changed(&memory_md, &default_memory_summary())? {
-        vec![Value::String(memory_md.display().to_string())]
-    } else {
-        Vec::new()
+    let existing_memory = read_text_if_exists(&memory_md)?;
+    let changed_files = match existing_memory {
+        Some(existing) if !existing.trim().is_empty() => Vec::new(),
+        _ => {
+            if write_text_if_changed(&memory_md, &default_memory_summary())? {
+                vec![Value::String(memory_md.display().to_string())]
+            } else {
+                Vec::new()
+            }
+        }
     };
     let sqlite_result = inspect_memory_sqlite(memory_root)?;
     Ok(json!({
@@ -1560,7 +1590,7 @@ fn build_memory_automation_consolidation(memory_root: &Path) -> Result<Value, St
         "archive": {
             "ok": true,
             "status": "explicit-migration-only",
-            "legacy_memory_item_count": 0,
+            "archived_memory_item_count": 0,
         },
         "sqlite_result": sqlite_result,
     }))
@@ -1705,16 +1735,16 @@ fn render_memory_automation_snapshot(snapshot: MemoryAutomationSnapshot<'_>) -> 
                 .unwrap_or(0)
         ),
         format!(
-            "- legacy_rows_archived: {}",
+            "- archived_rows: {}",
             archive_result
-                .get("legacy_row_count")
+                .get("archived_row_count")
                 .and_then(Value::as_i64)
                 .unwrap_or(0)
         ),
         format!(
-            "- legacy_memory_items_archived: {}",
+            "- archived_memory_items: {}",
             archive_result
-                .get("legacy_memory_item_count")
+                .get("archived_memory_item_count")
                 .and_then(Value::as_i64)
                 .unwrap_or(0)
         ),
@@ -1926,7 +1956,7 @@ fn destination_for_current_artifact(
             repo_root
                 .join("artifacts")
                 .join("bootstrap")
-                .join("legacy-current")
+                .join("archived-current")
                 .join(suffix),
         );
     }
@@ -1942,7 +1972,7 @@ fn destination_for_current_artifact(
         };
         return Some(
             ops_memory_automation_root(repo_root)
-                .join("legacy-current")
+                .join("archived-current")
                 .join(suffix),
         );
     }
@@ -1950,7 +1980,7 @@ fn destination_for_current_artifact(
         return Some(if path.parent() == Some(current_root.as_path()) {
             scratch_artifact_root(repo_root, None).join(name)
         } else {
-            scratch_artifact_root(repo_root, Some("legacy-current"))
+            scratch_artifact_root(repo_root, Some("archived-current"))
                 .join(active_task_id)
                 .join(name)
         });
@@ -1960,7 +1990,7 @@ fn destination_for_current_artifact(
     } else {
         PathBuf::from(active_task_id).join(name)
     };
-    Some(evidence_artifact_root(repo_root, Some("legacy-current")).join(suffix))
+    Some(evidence_artifact_root(repo_root, Some("archived-current")).join(suffix))
 }
 
 fn plan_current_artifact_clutter_migrations(
@@ -2141,6 +2171,75 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
 
 fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
     repo_root.join("scripts/router-rs/run_router_rs.sh")
+}
+
+fn install_claude_desktop_mcp(repo_root: &Path, config_path: &Path) -> Result<Value, String> {
+    let repo_root = normalize_path(repo_root)?;
+    let config_path = normalize_path(config_path)?;
+    let command = router_rs_launcher_command(&repo_root);
+    let args = vec![
+        repo_root
+            .join("scripts/router-rs/Cargo.toml")
+            .to_string_lossy()
+            .to_string(),
+        "browser".to_string(),
+        "mcp-stdio".to_string(),
+        "--repo-root".to_string(),
+        repo_root.to_string_lossy().to_string(),
+    ];
+    let changed = ensure_claude_desktop_mcp_server(
+        &config_path,
+        CLAUDE_DESKTOP_BROWSER_MCP_SERVER_NAME,
+        &command,
+        &args,
+    )?;
+
+    Ok(json!({
+        "success": true,
+        "schema_version": CLAUDE_DESKTOP_CONFIG_SCHEMA_VERSION,
+        "server_name": CLAUDE_DESKTOP_BROWSER_MCP_SERVER_NAME,
+        "config_path": config_path.to_string_lossy(),
+        "changed": changed,
+        "command": command.to_string_lossy(),
+        "args": args,
+        "bridge_layers": ["claude-desktop", "router-rs-stdio"],
+        "image_required": false,
+    }))
+}
+
+fn ensure_claude_desktop_mcp_server(
+    config_path: &Path,
+    server_name: &str,
+    command: &Path,
+    args: &[String],
+) -> Result<bool, String> {
+    let mut root = match read_text_if_exists(config_path)? {
+        Some(content) if !content.trim().is_empty() => {
+            serde_json::from_str::<Value>(&content).map_err(|err| err.to_string())?
+        }
+        _ => json!({}),
+    };
+    if !root.is_object() {
+        return Err("Claude Desktop config must be a JSON object".to_string());
+    }
+
+    let root_obj = root.as_object_mut().expect("root object checked");
+    let servers = root_obj
+        .entry("mcpServers".to_string())
+        .or_insert_with(|| json!({}));
+    if !servers.is_object() {
+        return Err("Claude Desktop config field 'mcpServers' must be a JSON object".to_string());
+    }
+
+    servers.as_object_mut().expect("mcpServers object checked").insert(
+        server_name.to_string(),
+        json!({
+            "command": command.to_string_lossy(),
+            "args": args,
+        }),
+    );
+
+    write_json_if_changed(config_path, &root)
 }
 
 fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {

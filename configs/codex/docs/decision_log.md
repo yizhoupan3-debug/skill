@@ -10,7 +10,7 @@
 | 活跃度 | ★★★★★ (3/22 仍在更新) | ★★☆ (2/19 最后更新) | ★★★★ (npm 发布) | ★★★★ (npm 发布) |
 | 多账号 RR | ✅ 原生支持 | ❌ 仅单账号 | ✅ 多账号 per provider | ✅ 多账号 per provider |
 | OpenAI OAuth | ✅ Codex OAuth 原生 | ❌ 手动 Session Token | ✅ Codex OAuth | ✅ Codex OAuth |
-| 多 Provider | ✅ Gemini/Claude/Codex/Qwen/iFlow | ❌ 仅 ChatGPT | ✅ 44+ | ✅ 44+ |
+| 多 Provider | ✅ Gemini/Codex/Qwen/iFlow | ❌ 仅 ChatGPT | ✅ 44+ | ✅ 44+ |
 | TLS 指纹 | ❌ 无内置 (依赖外部 Sing-box utls) | ✅ curl_cffi Chrome 131 | ✅ wreq-js | ✅ wreq-js + CLI Fingerprint |
 | CLI 指纹匹配 | ❌ | ❌ | ❌ | ✅ header/body 排序匹配 CLI 二进制特征 |
 | Circuit Breaker | ❌ 需自建 | ❌ | ✅ Combo CB | ✅ per-model CB + Anti-Herd |

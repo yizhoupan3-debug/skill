@@ -2,21 +2,18 @@
 name: brainstorm-research
 description: |
   Expand early research ideas into multiple comparable directions and preserve them in a local workspace.
-  Use when the user asks 帮我 brainstorm 研究点、先发散研究思路、给我多个论文方向、把脑暴记录下来, or wants structured option generation before committing to a question, method, dataset, experiment plan, or paper framing. Check this skill early at 每轮对话开始 / first-turn / conversation start for early-stage ideation.
+  Use when the user explicitly asks 帮我 brainstorm 研究点、先发散研究思路、给我多个论文方向、把脑暴记录下来, or wants structured research-idea generation before committing to a question, method, dataset, experiment plan, or paper framing.
 routing_layer: L3
 routing_owner: owner
 routing_gate: none
-session_start: preferred
+session_start: n/a
 trigger_hints:
   - 帮我 brainstorm 研究点
   - 先发散研究思路
   - 给我多个论文方向
   - 把脑暴记录下来
-  - method
-  - dataset
-  - experiment plan
-  - paper framing
-  - research
+  - 发散研究方向
+  - research brainstorming
   - brainstorming
 metadata:
   version: "2.1.0"
@@ -37,7 +34,7 @@ source: local
 
 Turn thin research inputs into a broad option space **and** preserve the reasoning on disk when the task is more than a one-shot brainstorm. This skill follows a **brainstorm + file-backed planning** pattern: generate many directions → keep them comparable → record what was considered → make the space resumable.
 
-This skill is a valid **opening-turn owner** for early-stage research ideation.
+This skill is an **explicit ideation owner**, not a default first-turn research gate.
 
 ## When to use
 

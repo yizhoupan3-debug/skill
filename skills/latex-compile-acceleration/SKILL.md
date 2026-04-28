@@ -5,13 +5,12 @@ description: |
   latexmk, Tectonic, TeXpresso, TikZ/PGFPlots externalization, \includeonly/subfiles,
   mylatexformat, draft mode, .latexmkrc, caching, and stable error recovery. Use for
   LaTeX 编译太慢, watch 太慢, preamble 预编译, TikZ 很慢, CI 缓存优化, or LaTeX build stability.
-  At 每轮对话开始 / first-turn / conversation start, prefer this skill over ppt-beamer
-  or build-tooling when the main problem is compile speed.
+  Prefer this skill over ppt-beamer or build-tooling only when the main problem is clearly LaTeX compile speed.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
 routing_priority: P1
-session_start: preferred
+session_start: n/a
 short_description: Speed up LaTeX compile and preview workflows
 trigger_hints:
   - LaTeX 编译太慢

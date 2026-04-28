@@ -11,7 +11,7 @@ shift
 
 CRATE_ROOT=$(cd -- "$(dirname -- "$MANIFEST_PATH")" && pwd)
 REPO_ROOT=$(cd -- "$CRATE_ROOT/../.." && pwd)
-SHARED_TARGET_DIR=${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}
+SHARED_TARGET_DIR=${CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/skill-cargo-target}
 BUILD_LOCK_DIR="$SHARED_TARGET_DIR/.router-rs-build.lock"
 
 pick_router_bin() {
@@ -33,7 +33,7 @@ router_source_newer_than() {
   local binary=$1
   local source
 
-  for source in "$CRATE_ROOT/Cargo.toml" "$CRATE_ROOT/Cargo.lock" "$REPO_ROOT/AGENTS.md"; do
+  for source in "$CRATE_ROOT/Cargo.toml" "$CRATE_ROOT/Cargo.lock" "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/.claude/CLAUDE.md"; do
     if [ -e "$source" ] && [ "$source" -nt "$binary" ]; then
       return 0
     fi

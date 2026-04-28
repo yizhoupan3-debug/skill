@@ -1,6 +1,8 @@
 mod common;
 
-use common::{json_from_output, read_json, router_rs_command, write_json, write_text};
+use common::{
+    host_integration_json, json_from_output, read_json, router_rs_command, write_json, write_text,
+};
 use rusqlite::Connection;
 use serde_json::json;
 use std::fs;
@@ -161,6 +163,90 @@ fn stable_mode_without_topic_compacts_stable_documents() {
         .contains("avoid full document injection"));
     assert!(runbook_item["content"].as_str().unwrap().contains("step 1"));
     assert!(!runbook_item["content"].as_str().unwrap().contains("step 3"));
+}
+
+#[test]
+fn default_recall_prefers_tracked_project_memory_over_stale_codex_memory() {
+    let tmp = tempdir().unwrap();
+    seed_runtime(tmp.path(), "active bootstrap repair");
+    write_text(
+        &tmp.path().join("memory/decisions.md"),
+        "# decisions\n\n- Rust-owned tracked memory is canonical for runtime recall.\n",
+    );
+    write_text(
+        &tmp.path().join(".codex/memory/decisions.md"),
+        "# decisions\n\n- stale codex memory should not be selected.\n",
+    );
+
+    let result = render_context(tmp.path(), "runtime", "stable", 8);
+    let expected_memory_root = tmp.path().canonicalize().unwrap().join("memory");
+    assert_eq!(
+        canonical_value_path(&result["memory_root"]),
+        expected_memory_root.display().to_string()
+    );
+    let content = items(&result)
+        .into_iter()
+        .map(|item| item["content"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content.contains("Rust-owned tracked memory is canonical"));
+    assert!(!content.contains("stale codex memory"));
+}
+
+#[test]
+fn stable_recall_tokenizes_cjk_punctuation_and_mixed_runtime_terms() {
+    let tmp = tempdir().unwrap();
+    seed_runtime(tmp.path(), "active bootstrap repair");
+    write_text(
+        &tmp.path().join("memory/decisions.md"),
+        "# decisions\n\n- Rust 是路由、host entrypoint、hook、framework runtime 和记忆策略的真源。\n",
+    );
+
+    let result = render_context(tmp.path(), "记忆系统，runtime系统", "stable", 8);
+    let content = items(&result)
+        .into_iter()
+        .map(|item| item["content"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content.contains("framework runtime 和记忆策略"));
+}
+
+#[test]
+fn memory_automation_uses_same_default_memory_root_as_recall() {
+    let tmp = tempdir().unwrap();
+    write_text(
+        &tmp.path().join("memory/MEMORY.md"),
+        "# 项目长期记忆\n\n## Runtime\n\n- tracked memory powers automation.\n",
+    );
+    write_text(
+        &tmp.path().join(".codex/memory/MEMORY.md"),
+        "# stale codex memory\n",
+    );
+
+    let repo_root = tmp.path().to_string_lossy().to_string();
+    let output = host_integration_json(&[
+        "run-memory-automation",
+        "--repo-root",
+        &repo_root,
+        "--workspace",
+        "skill",
+        "--query",
+        "runtime",
+        "--top",
+        "8",
+    ]);
+    let expected_memory_root = tmp.path().canonicalize().unwrap().join("memory");
+    assert_eq!(
+        canonical_value_path(&output["memory_root"]),
+        expected_memory_root.display().to_string()
+    );
+    assert_eq!(
+        canonical_value_path(&output["retrieval"]["memory_root"]),
+        expected_memory_root.display().to_string()
+    );
+    let memory_text = fs::read_to_string(tmp.path().join("memory/MEMORY.md")).unwrap();
+    assert!(memory_text.contains("tracked memory powers automation"));
+    assert!(!memory_text.contains("Project-local memory is managed"));
 }
 
 #[test]
@@ -552,4 +638,11 @@ fn insert_memory_item(
 
 fn items(result: &serde_json::Value) -> Vec<serde_json::Value> {
     result["items"].as_array().unwrap().clone()
+}
+
+fn canonical_value_path(value: &serde_json::Value) -> String {
+    fs::canonicalize(value.as_str().unwrap())
+        .unwrap()
+        .display()
+        .to_string()
 }

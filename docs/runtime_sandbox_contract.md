@@ -227,7 +227,7 @@ Any future implementation, schema, or runtime change that alters one of the mach
 
 ## Current Minimal Implementation Status
 
-The current Rust-owned runtime exposes the contract-backed minimal sandbox control surface without re-promoting any Python host authority:
+The current Rust-owned runtime exposes the contract-backed minimal sandbox control surface without adding a second host authority:
 
 - sandbox control requests route through an explicit lifecycle manager instead of ad-hoc inline handling
 - lifecycle transitions are validated against the frozen state graph before the kernel delegate runs

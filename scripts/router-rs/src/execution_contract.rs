@@ -462,25 +462,17 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
     );
     dry_run.insert("fallback_reason_present".to_string(), Value::Bool(false));
 
-    let mut retirement_gates = Map::new();
-    retirement_gates.insert(
+    let mut steady_state_gates = Map::new();
+    steady_state_gates.insert(
         "response_shape_contract_externalized".to_string(),
         Value::Bool(true),
     );
-    retirement_gates.insert(
+    steady_state_gates.insert(
         "live_primary_response_contract_externalized".to_string(),
         Value::Bool(true),
     );
-    retirement_gates.insert(
-        "compatibility_live_response_serialization_still_native_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "compatibility_live_response_serialization_still_python_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "runtime_control_flow_change_required_for_removal".to_string(),
+    steady_state_gates.insert(
+        "runtime_control_flow_change_required".to_string(),
         Value::Bool(false),
     );
 
@@ -509,7 +501,7 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
     );
     payload.insert(
         "scope".to_string(),
-        Value::String("compatibility_live_response_serialization".to_string()),
+        Value::String("live_response_serialization".to_string()),
     );
     payload.insert(
         "artifact_role".to_string(),
@@ -548,8 +540,8 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
         }),
     );
     payload.insert(
-        "retirement_gates".to_string(),
-        Value::Object(retirement_gates),
+        "steady_state_gates".to_string(),
+        Value::Object(steady_state_gates),
     );
     payload.insert("guardrails".to_string(), Value::Object(guardrails));
     payload
@@ -874,7 +866,7 @@ fn validate_execution_kernel_steady_state_metadata_impl(
     ] {
         if metadata.contains_key(field) {
             return Err(format!(
-                "execution-kernel steady-state metadata returned a retired compatibility fallback field: {field}"
+                "execution-kernel steady-state metadata returned an unsupported compatibility field: {field}"
             ));
         }
     }

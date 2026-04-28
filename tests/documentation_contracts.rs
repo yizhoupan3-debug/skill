@@ -182,8 +182,8 @@ fn rust_contracts_doc_keeps_the_three_part_status_ledger() {
     let text = rust_contracts_doc();
     for heading in [
         "## Current Status Ledger",
-        "### 已实现",
-        "### 已退休",
+        "### 当前真源",
+        "### 默认面边界",
         "### 下一 safe slice",
     ] {
         assert!(text.contains(heading), "missing heading: {heading}");
@@ -210,11 +210,11 @@ fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {
 fn rust_contracts_doc_records_current_minimal_implementation_truth() {
     let text = rust_contracts_doc();
     for required_phrase in [
-        "Compatibility live fallback request surface has been removed",
-        "framework_runtime/` Python package is retired",
+        "Routing authority is Rust",
+        "Live execution and dry-run preview use Rust stdio",
         "SQLite is the strongest local backend for WAL",
         "Sandbox lifecycle contract is frozen",
-        "Any new Python runtime, routing, artifact, hook, or host-integration implementation is a regression",
+        "Any alternate runtime, routing, artifact, hook, or host-integration implementation is a regression",
     ] {
         assert!(
             text.contains(required_phrase),

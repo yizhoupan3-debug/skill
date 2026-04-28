@@ -3,8 +3,8 @@
 ## Purpose
 
 This document freezes the Rust-owned runtime contracts for this repository.
-Older migration notes may still mention Python cutover work, but current runtime
-truth lives in `router-rs` and related Rust tools.
+Historical migration notes live under `docs/history/`; this file describes only
+the current runtime truth in `router-rs` and related Rust tools.
 
 It is the contract source of truth for:
 
@@ -20,54 +20,36 @@ It is the contract source of truth for:
 Rust owns the default runtime and contract path.
 
 - `router-rs route <query>` owns route decisions; route diagnostics use the Rust stdio route policy/report operations.
-- `router-rs profile emit` and `router-rs profile artifacts` own the Codex-only profile and `codex_profile` artifact.
+- `router-rs profile emit` and `router-rs profile artifacts` own the Codex profile and `codex_profile` artifact.
 - Rust stdio `execute` operation owns the live/dry-run execution response contract.
 - `router-rs framework snapshot`, `contract-summary`, `memory-recall`, `session-artifact-write`, `memory-policy`, and `prompt-compression` own framework runtime read/write/policy surfaces.
 - `router-rs codex sync` owns repo host-entrypoint materialization.
 - `router-rs codex host-integration ...` owns native install, bootstrap, skill install, memory automation, and related host integration flows.
 - Rust memory policy persistence writes SQLite rows and, by default, appends deduped stable facts to `decisions.md`; `stable_journal: false` is the explicit opt-out.
 
-Retired surfaces stay retired:
-
-- no `framework_runtime/` Python package
-- no Python route shim
-- no Python live fallback
-- no Python/Rust parity report
-- no Python artifact emitter as a second truth
-- no OMC or `.omc/**` runtime state
-
 ## Current Status Ledger
 
-### 已实现
+### 当前真源
 
-- Routing authority defaults to Rust; the old `python` route engine is retired.
-- Live execution and dry-run preview stay Rust-only by default.
-- Compatibility live fallback request surface has been removed; historical fallback metadata may appear only as retired legacy evidence.
+- Routing authority is Rust.
+- Live execution and dry-run preview use Rust stdio.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, `memory`, and `background`.
-- `framework_runtime/` Python package is retired; framework snapshot, contract summary, memory recall, session artifact writing, and prompt/memory policy use direct `router-rs` surfaces.
-- Memory policy extraction reports source/fact counts and can persist to both `memory.sqlite3` and the stable `decisions.md` journal without introducing a Python writer.
-- Host entrypoint sync and native integration are Rust-owned through `router-rs`.
+- Framework snapshot, contract summary, memory recall, session artifact writing, and prompt/memory policy use direct `router-rs` surfaces.
+- Memory policy extraction reports source/fact counts and can persist to both `memory.sqlite3` and the stable `decisions.md` journal without introducing an alternate writer.
+- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the supported host entrypoints are Codex CLI, Codex App, Claude Code CLI, and Claude Desktop.
+- Claude Desktop and Claude Code support use generated thin policy entrypoints, repo-managed settings/hooks where applicable, and the same `skills/` runtime source. Claude Desktop may also install a minimal `mcpServers.browser-mcp` stdio client config pointing directly at `router-rs browser mcp-stdio`; that edge must not become a copied skill mirror, Docker/image layer, HTTP bridge, Node runtime, or host-private policy fork.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
-- Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed parity between store/checkpointer/trace/state families.
-- SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains compatibility-safe default storage.
-- Session supervisor and background state expose Rust-owned tmux/session/rate-limit/resume control-plane records without OMC dependency.
+- Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.
+- SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains the safe default storage.
+- Session supervisor and background state expose Rust-owned tmux/session/rate-limit/resume control-plane records without external runtime dependency.
 - Observability vocabulary, exporter descriptor, metric catalog, dashboard schema, and metric record payloads are Rust-owned.
 - Sandbox lifecycle contract is frozen and has a minimal Rust-owned control-plane surface.
 
-### 已退休
+### 默认面边界
 
-- `scripts/route.py`
-- `scripts/materialize_cli_host_entrypoints.py`
-- `scripts/install_codex_native_integration.py`
-- `scripts/write_session_artifacts.py`
-- `scripts/framework_hook_bridge.py`
-- `scripts/runtime_background_cli.py`
-- `framework_runtime/`
-- `pytest.ini` and Python test entrypoints
-- `rust_execute_fallback_to_python`
-- `rust_python_artifact_parity_report.json`
-- default emission of fallback host artifacts
-- non-Codex host overlays as live runtime, prompt, plugin, or state dependency
+- Do not add a second route authority, default artifact emitter, host-specific generated layer, or parallel runtime state root.
+- Generated host entrypoints are limited sync outputs, not hand-authored truth.
+- Historical migration inventory belongs in `docs/history/`, not in steady-state contracts.
 
 ### 下一 safe slice
 
@@ -82,15 +64,15 @@ Retired surfaces stay retired:
 - Contract changes must be explicit and versioned.
 - Rust may replace implementations, not silently redefine semantics.
 - Codex host-private fields stay in `codex_profile.codex_host_payload`; they must not enter framework truth.
-- Compatibility inventory is not a regression baseline.
-- Generated host entrypoints are projections, not hand-authored truth.
-- Any new Python runtime, routing, artifact, hook, or host-integration implementation is a regression unless explicitly approved as a host-private edge script.
+- Active contracts must describe current owners and outputs, not migration inventory.
+- Any alternate runtime, routing, artifact, hook, or host-integration implementation is a regression unless explicitly approved as a host-private edge script.
 
 ## Codex Profile Invariants
 
-- `codex_profile` is the only default profile artifact key. The key is kept for compatibility and no longer represents a multi-host adapter layer.
+- `codex_profile` is the only default profile artifact key.
 - Codex host-private fields stay in `codex_profile.codex_host_payload`.
-- CLI/Desktop split, parity snapshots, non-Codex projections, and generic fallback adapters are not default runtime surfaces.
+- Host-specific generated artifacts are not default runtime surfaces.
+- Host entrypoint sync materializes `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, and `.codex/host_entrypoints_sync_manifest.json`.
 
 ## Route Contract
 
@@ -114,7 +96,7 @@ Invariants:
 - at most one overlay
 - `route_engine` and primary authority stay Rust
 - unknown selected skills fail closed in consumers
-- fallback selection may choose a safe owner, but must not reintroduce a Python route authority
+- fallback selection may choose a safe owner, but must not introduce a second route authority
 
 ## Runtime Control Contracts
 
