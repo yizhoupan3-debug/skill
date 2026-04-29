@@ -7780,7 +7780,7 @@ mod tests {
             rows.first().map(|row| row.slug.as_str()),
             Some("design-md")
         );
-        assert!(!rows.iter().any(|row| row.slug == "skill-framework-developer"));
+        assert!(!rows.iter().any(|row| row.slug == "css-pro"));
     }
 
     #[test]
