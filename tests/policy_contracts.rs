@@ -78,16 +78,9 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     let manifest_text = manifest.to_string();
     assert!(!manifest_text.contains(".codex/skills/gitx"));
     assert!(!manifest_text.contains(".codex/skills/autopilot"));
-    assert!(manifest["full_sync"]["text_files"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!(".codex/prompts/autopilot.md")));
-    assert!(manifest["full_sync"]["text_files"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!(".codex/prompts/gitx.md")));
-    assert!(repo_root.join(".codex/prompts/autopilot.md").is_file());
-    assert!(repo_root.join(".codex/prompts/gitx.md").is_file());
+    assert!(!manifest_text.contains(".codex/prompts/"));
+    assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
+    assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
         serde_json::json!(["codex-cli", "claude-code-cli"])

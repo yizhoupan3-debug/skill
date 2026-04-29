@@ -1070,7 +1070,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 ]
             },
             "host_entrypoints": {
-                "codex-cli": "$autopilot",
+                "codex-cli": "/autopilot",
                 "claude-code-cli": "/autopilot"
             },
             "interaction_invariants": {
@@ -1112,7 +1112,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "code-review"
             ],
             "host_entrypoints": {
-                "codex-cli": "$deepinterview",
+                "codex-cli": "/deepinterview",
                 "claude-code-cli": "/deepinterview"
             },
             "interaction_invariants": {
@@ -1134,8 +1134,28 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 ],
                 "avoid_when": [
                     "task is a small tightly coupled local change",
-                    "bounded sidecars are enough and orchestration overhead would dominate"
+                    "bounded sidecars are enough and orchestration overhead would dominate",
+                    "the next supervisor step is blocked on the delegated result",
+                    "worker write scopes would overlap or require shared editing context"
                 ]
+            },
+            "spawn_admission_policy": {
+                "default": "deny",
+                "allow_when": [
+                    "read-heavy exploration can run independently",
+                    "independent hypotheses or domains can be investigated in parallel",
+                    "review or verification can run without blocking the supervisor",
+                    "write scopes are fully disjoint and lane-local"
+                ],
+                "reject_reasons": [
+                    "small_task",
+                    "shared_context_heavy",
+                    "write_scope_overlap",
+                    "next_step_blocked",
+                    "verification_missing",
+                    "token_overhead_dominates"
+                ],
+                "fallback": "local-supervisor-queue"
             },
             "skill_path": "artifacts/codex-skill-surface/skills/team/SKILL.md",
             "lineage": {
@@ -1232,7 +1252,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "verification_evidence_required_before_cleanup": true
             },
             "host_entrypoints": {
-                "codex-cli": "$team",
+                "codex-cli": "/team",
                 "claude-code-cli": "/team"
             },
             "interaction_invariants": {

@@ -138,8 +138,8 @@ const RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION: &str = "runtime-observabil
 const RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION: &str =
     "runtime-observability-health-snapshot-v1";
 const RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY: &str = "shared-runtime-v1";
-const DEFAULT_MAX_CONCURRENT_SUBAGENTS: usize = 8;
-const MAX_CONCURRENT_SUBAGENTS_LIMIT: usize = 32;
+const DEFAULT_MAX_CONCURRENT_SUBAGENTS: usize = 4;
+const MAX_CONCURRENT_SUBAGENTS_LIMIT: usize = 12;
 const DEFAULT_SUBAGENT_TIMEOUT_SECONDS: u64 = 900;
 const DEFAULT_MAX_BACKGROUND_JOBS: usize = 16;
 const MAX_BACKGROUND_JOBS_LIMIT: usize = 64;
@@ -6834,7 +6834,7 @@ mod tests {
             json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
         );
         assert_eq!(alias["name"], json!("autopilot"));
-        assert_eq!(alias["host_entrypoint"], json!("$autopilot"));
+        assert_eq!(alias["host_entrypoint"], json!("/autopilot"));
         assert_eq!(alias["compact"], json!(false));
         assert!(prompt.contains("进入 autopilot"));
         assert!(prompt.contains("本地 Rust"));
@@ -6935,7 +6935,7 @@ mod tests {
             json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
         );
         assert_eq!(alias["name"], json!("deepinterview"));
-        assert_eq!(alias["host_entrypoint"], json!("$deepinterview"));
+        assert_eq!(alias["host_entrypoint"], json!("/deepinterview"));
         assert_eq!(alias["compact"], json!(false));
         assert_eq!(alias["canonical_owner"], json!("code-review"));
         assert_eq!(
@@ -7028,7 +7028,7 @@ mod tests {
             json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
         );
         assert_eq!(alias["name"], json!("team"));
-        assert_eq!(alias["host_entrypoint"], json!("$team"));
+        assert_eq!(alias["host_entrypoint"], json!("/team"));
         assert_eq!(alias["compact"], json!(false));
         assert_eq!(alias["canonical_owner"], json!("plan-to-code"));
         assert_eq!(
@@ -7670,7 +7670,7 @@ mod tests {
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
 
         assert_eq!(report.schema_version, "routing-eval-v1");
-        assert_eq!(report.metrics.case_count, 73);
+        assert_eq!(report.metrics.case_count, 74);
         assert_eq!(report.metrics.overtrigger, 0);
         assert_routing_eval_cases_match("manifest", |task, session_id, first_turn| {
             route_task(&records, task, session_id, true, first_turn)

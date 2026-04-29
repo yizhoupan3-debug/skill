@@ -546,6 +546,15 @@
       }
     },
     {
+      "name": "disjoint-worker-write-scope-hits-delegation-gate",
+      "query": "use parallel workers to implement disjoint files with lane-local write scopes",
+      "expected": {
+        "selected_skill": "agent-swarm-orchestration",
+        "overlay_skill": null,
+        "layer": "L0"
+      }
+    },
+    {
       "name": "skill-creation-chinese-hits-skill-creator",
       "query": "创建一个 skill",
       "expected": {

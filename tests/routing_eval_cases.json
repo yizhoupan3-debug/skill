@@ -286,6 +286,18 @@
       "first_turn": true
     },
     {
+      "id": "disjoint-worker-write-scope-delegation-gate-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "use parallel workers to implement disjoint files with lane-local write scopes",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "idea-to-plan"
+      ],
+      "first_turn": true
+    },
+    {
       "id": "skill-framework-policy-root-entry-proxy-case",
       "category": "should-trigger",
       "task": "好多对话都说当前项目没有 skills/SKILL_ROUTING_RUNTIME.json，还去找共享 AGENT.md。请彻底修好 AGENTS.md policy root 和入口代理，不要留兼容。",
