@@ -5,17 +5,13 @@
 | `plugin-creator` | Active | P1 | L0 | owner | none | system | ✓ 94.0 | Scaffold a local Codex plugin and optional marketplace entry |
 | `skill-creator` | Active | P1 | L0 | owner | none | system | ✓ 94.0 | Design or revise one Codex skill package |
 | `skill-installer` | Active | P1 | L0 | owner | none | system | ✓ 94.0 | Install curated or remote Codex skills |
-| `agent-memory` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Design persistent agent memory across sessions |
 | `agent-swarm-orchestration` | Active | P1 | L0 | gate | delegation | project | ✓ 94.0 | Decide whether work should stay local, use bounded sidecars, or escalate to team |
 | `ai-research` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | AI/ML research engineering for model training, experiment pipelines, evaluation, |
 | `algo-trading` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Design, analyze, and implement algorithmic trading strategies, backtests, execut |
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Check whether a homework or course-project submission satisfies the stated requi |
 | `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
-| `chatgpt-apps` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Build, scaffold, refactor, and troubleshoot ChatGPT Apps SDK applications that c |
 | `citation-management` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Verify and format academic citations and bibliographies. |
-| `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Deploy, publish, migrate, and operate apps on Cloudflare Workers, Pages, Wrangle |
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
-| `data-wrangling` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Clean, transform, validate, and pipeline structured or semi-structured data acro |
 | `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Repo-native deepinterview workflow for evidence-first clarification and converge |
 | `design-md` | Active | P1 | L3 | gate | artifact | project | ✓ 94.0 | Manage DESIGN.md design-system contracts and visual tokens. |
 | `diagramming` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequen |
@@ -35,18 +31,15 @@
 | `literature-synthesis` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Screen, cluster, compare, and synthesize academic literature into a topic review |
 | `mac-memory-management` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stab |
 | `math-derivation` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Execute rigorous mathematical derivations and proofs |
-| `mcp-builder` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Design, build, review, and improve MCP servers and agent-facing tool interfaces. |
 | `openai-docs` | Active | P1 | L1 | gate | source | project | ✓ 94.0 | Use official OpenAI docs first for current OpenAI guidance |
 | `paper-reviewer` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Specialist review lane behind `$paper-workbench`. Use when the user clearly want |
 | `paper-reviser` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Specialist revision lane behind `$paper-workbench`. Use when the route is alread |
 | `paper-workbench` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Unified front door for paper work. Use when the user has a manuscript-level task |
 | `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Write, restructure, or polish bounded academic-paper prose after the claim/evide |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.0 | Handle layout-aware PDF reading, editing, repair, and review. |
-| `performance-expert` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Build source-first editable `.pptx` decks from `deck.plan.json` through the Rust |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 94.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
-| `prompt-engineer` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Transform vague instructions into structured prompts with explicit role, constra |
 | `refresh` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | 使用 Rust refresh 命令生成并复制下一轮执行提示 |
 | `research-engineer` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Provide rigorous technical critique, algorithm analysis, formal reasoning, compl |
 | `research-workbench` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Coordinate non-manuscript research project workflows. |
@@ -60,5 +53,4 @@
 | `systematic-debugging` | Active | P1 | L0 | gate | evidence | project | ✓ 94.0 | Investigate unknown failures before fixing |
 | `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `visual-review` | Active | P1 | L3 | gate | evidence | project | ✓ 94.0 | Review screenshots and rendered visual artifacts. |
-| `web-scraping` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Plan and implement web scraping and structured data extraction workflows. Use wh |
 | `youtube-summarizer` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Extract transcripts from YouTube videos and turn them into summaries, notes, key |

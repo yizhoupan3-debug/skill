@@ -61,6 +61,14 @@ const RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "typescript-pro",
     "vue",
     "web-platform-basics",
+    "agent-memory",
+    "chatgpt-apps",
+    "cloudflare-deploy",
+    "data-wrangling",
+    "mcp-builder",
+    "performance-expert",
+    "prompt-engineer",
+    "web-scraping",
 ];
 
 fn runtime_owned_skill_slugs() -> HashSet<&'static str> {

@@ -142,6 +142,16 @@ const RUNTIME_LANGUAGE_FRAMEWORK_SLUGS: &[&str] = &[
     "vue",
     "web-platform-basics",
 ];
+const RUNTIME_PLATFORM_INTEGRATION_SLUGS: &[&str] = &[
+    "agent-memory",
+    "chatgpt-apps",
+    "cloudflare-deploy",
+    "data-wrangling",
+    "mcp-builder",
+    "performance-expert",
+    "prompt-engineer",
+    "web-scraping",
+];
 const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str], &str); 3] = [
     (
         "autopilot",
@@ -867,6 +877,7 @@ fn build_registry_and_manifest(
 fn is_runtime_owned_skill(slug: &str) -> bool {
     RUNTIME_EXECUTION_CODE_SLUGS.contains(&slug)
         || RUNTIME_LANGUAGE_FRAMEWORK_SLUGS.contains(&slug)
+        || RUNTIME_PLATFORM_INTEGRATION_SLUGS.contains(&slug)
 }
 
 fn select_manifest_docs<'a>(
@@ -1253,6 +1264,9 @@ fn build_framework_surface_policy(tiers: &Value) -> Value {
 fn build_shadow_map(skill_entries: &[SkillEntry], source_manifest: &Value) -> Value {
     let mut grouped: HashMap<String, Vec<&SkillEntry>> = HashMap::new();
     for entry in skill_entries {
+        if is_runtime_owned_skill(&entry.slug) {
+            continue;
+        }
         grouped.entry(entry.slug.clone()).or_default().push(entry);
     }
 
@@ -1295,6 +1309,9 @@ fn build_shadow_map(skill_entries: &[SkillEntry], source_manifest: &Value) -> Va
 fn build_approval_policy(docs: &[SkillDoc]) -> Value {
     let mut skills = serde_json::Map::new();
     for doc in docs {
+        if is_runtime_owned_skill(&doc.slug) {
+            continue;
+        }
         let allowed_tools = normalize_list(doc.metadata.get("allowed_tools"));
         let approval_required_tools = normalize_list(doc.metadata.get("approval_required_tools"));
         let filesystem_scope = doc
@@ -1425,7 +1442,7 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         "tier_order": ["core", "optional", "experimental", "deprecated"],
         "generation_policy": {
             "core": "session-start required source/artifact/evidence/delegation gate skills only; generic control owners are explicit or fallback-only, not hot-runtime entries",
-            "optional": "non-core skills that have not been folded into runtime-owned execution, code, language, or framework capabilities",
+            "optional": "non-core skills that have not been folded into runtime-owned execution, code, language, framework, platform, or integration capabilities",
             "experimental": "reserved for unstable or low-health routing signals",
             "deprecated": "reserved for very-low-health and unused skills with reroute pressure"
         },
