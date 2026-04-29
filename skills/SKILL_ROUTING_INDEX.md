@@ -24,6 +24,14 @@
 ## Common lanes
 | Common need | Route to | Why |
 |---|---|---|
+| 已有方案，直接落代码 | `autopilot` | Run the local framework autopilot supervisor entrypoint. |
+| 多 agent / 并行 lane / worker 边界 | `agent-swarm-orchestration` | Decide whether work should stay local, use bounded sidec |
+| 截图 / 页面 / 图表可视核查 | `visual-review` | Review screenshots and rendered visual artifacts. |
+| Git 流程 / 分支合并 / 推送 | `gitx` | Run the safe Git review-fix-tidy-commit-branch-merge-pus |
+| PPT / slides / deck | `slides` | Route presentation, PPT, PPTX, and slide deck tasks. |
+| PDF / DOCX / 表格产物 | `pdf` | Handle layout-aware PDF reading, editing, repair, and re |
+| 设计规范 / DESIGN.md / token | `design-md` | Manage DESIGN.md design-system contracts and visual toke |
+| OpenAI API / 模型 / 官方当前文档 | `openai-docs` | Use official OpenAI docs first for current OpenAI guidan |
 
 ## Optional overlays
 | Add when... | Overlay | Why |

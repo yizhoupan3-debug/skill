@@ -65,9 +65,10 @@ use route::{
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
     build_search_results_payload, literal_framework_alias_decision, load_inline_records,
     load_records, load_records_cached_for_stdio, load_records_from_manifest, route_task,
-    search_skills, MatchRow, RouteDecision, RouteDecisionSnapshotPayload,
-    RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SearchResultsPayload, SkillRecord,
-    ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
+    search_skills, should_accept_manifest_fallback, should_retry_with_manifest, MatchRow,
+    RouteDecision, RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload,
+    RouteSnapshotRequestPayload, SearchResultsPayload, SkillRecord, ROUTE_AUTHORITY,
+    ROUTE_SNAPSHOT_SCHEMA_VERSION,
 };
 use runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
@@ -747,126 +748,6 @@ where
     T: serde::de::DeserializeOwned,
 {
     serde_json::from_str(raw).map_err(|err| format!("parse {context} input failed: {err}"))
-}
-
-fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
-    decision.score < 35.0
-        || (decision.selected_skill == "systematic-debugging" && decision.score < 35.0)
-        || decision
-            .reasons
-            .iter()
-            .any(|reason| reason.contains("fell back to highest-priority layer owner"))
-        || decision.reasons.iter().any(|reason| {
-            reason.contains("Fallback owner selected") || reason.contains("No explicit keyword hit")
-        })
-}
-
-fn route_decision_is_no_hit(decision: &RouteDecision) -> bool {
-    decision.score <= 0.0
-        || decision.reasons.iter().any(|reason| {
-            reason.contains("No explicit keyword hit")
-                || reason.contains("fell back to highest-priority layer owner")
-                || reason.contains("Only overlay signals matched")
-        })
-}
-
-fn route_reason_terms(decision: &RouteDecision) -> Vec<String> {
-    decision
-        .reasons
-        .iter()
-        .filter_map(|reason| reason.split_once(':').map(|(_, terms)| terms))
-        .flat_map(|terms| terms.trim_end_matches('.').split(','))
-        .map(|term| term.trim().to_ascii_lowercase())
-        .filter(|term| !term.is_empty())
-        .collect()
-}
-
-fn has_non_generic_manifest_signal(decision: &RouteDecision) -> bool {
-    const GENERIC_FULL_MANIFEST_TERMS: [&str; 5] =
-        ["runtime", "debug", "backend", "review", "plan"];
-
-    if decision.reasons.iter().any(|reason| {
-        reason.contains("Exact skill name matched")
-            || reason.contains("Framework alias entrypoint matched explicitly")
-    }) {
-        return true;
-    }
-
-    let terms = route_reason_terms(decision);
-    if terms.iter().any(|term| term.contains("架构")) {
-        return true;
-    }
-    !terms.is_empty()
-        && terms.iter().any(|term| {
-            !GENERIC_FULL_MANIFEST_TERMS
-                .iter()
-                .any(|generic| term == generic)
-        })
-}
-
-fn should_accept_manifest_fallback(
-    hot_decision: &RouteDecision,
-    full_decision: &RouteDecision,
-    should_retry: bool,
-    explicit_manifest: bool,
-) -> bool {
-    if explicit_manifest {
-        return full_decision.score > hot_decision.score
-            || (full_decision.score == hot_decision.score
-                && full_decision.selected_skill != hot_decision.selected_skill)
-            || (full_decision.selected_skill == hot_decision.selected_skill
-                && full_decision.overlay_skill.is_some()
-                && hot_decision.overlay_skill.is_none());
-    }
-
-    if full_decision.selected_skill == hot_decision.selected_skill
-        && full_decision.overlay_skill.is_some()
-        && hot_decision.overlay_skill.is_none()
-    {
-        return true;
-    }
-
-    if !should_retry
-        || !(route_decision_is_no_hit(hot_decision)
-            || hot_decision.score < 25.0
-            || (hot_decision.score < 35.0
-                && matches!(
-                    hot_decision.selected_skill.as_str(),
-                    "agent-swarm-orchestration" | "doc" | "design-md" | "pdf" | "sentry"
-                ))
-            || hot_decision.selected_skill == "systematic-debugging")
-    {
-        if full_decision.score >= hot_decision.score + 8.0
-            && has_non_generic_manifest_signal(full_decision)
-        {
-            return true;
-        }
-        return false;
-    }
-
-    let low_score_review_fallback = full_decision.score >= 20.0
-        && matches!(
-            full_decision.selected_skill.as_str(),
-            "architect-review" | "code-review"
-        );
-
-    if full_decision.score <= 10.0
-        && !matches!(
-            full_decision.selected_skill.as_str(),
-            "architect-review" | "code-review"
-        )
-    {
-        return false;
-    }
-
-    if !low_score_review_fallback && !has_non_generic_manifest_signal(full_decision) {
-        return false;
-    }
-
-    (full_decision.score > hot_decision.score
-        || (full_decision.score == hot_decision.score
-            && full_decision.selected_skill != hot_decision.selected_skill))
-        || low_score_review_fallback
 }
 
 fn repo_root_from_cargo_manifest_dir() -> PathBuf {
@@ -3029,11 +2910,18 @@ fn build_sandbox_control_response(
 }
 
 fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
+    let native_runtime = payload.selected_skill == "none";
     let mut lines = vec![
         "Help with the user's request directly. The route is already chosen, so stay on it."
             .to_string(),
-        format!("Primary focus: {}", payload.selected_skill),
     ];
+    if native_runtime {
+        lines.push(
+            "Primary focus: native runtime instructions; no skill body was selected.".to_string(),
+        );
+    } else {
+        lines.push(format!("Primary focus: {}", payload.selected_skill));
+    }
     if let Some(overlay) = payload
         .overlay_skill
         .as_ref()
@@ -3063,11 +2951,14 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
             lines.push(format!("- {reason}"));
         }
     }
-    if payload.selected_skill == "idea-to-plan" {
-        lines.push("Planning output: converge the strategy into outline.md, decision_log.md, assumptions.md, open_questions.md, plan_rubric.md, and code_list.md.".to_string());
-        lines.push("Switch to plan-to-code only after the direction is fixed and the remaining work is execution breakdown.".to_string());
+    if native_runtime {
+        lines.push(
+            "No skill body is required; solve the user's actual task with the native runtime instructions already in context."
+                .to_string(),
+        );
+    } else {
+        lines.push("Use the selected skill to solve the user's actual task.".to_string());
     }
-    lines.push("Use the selected skill to solve the user's actual task.".to_string());
     lines.join("\n")
 }
 
@@ -6090,8 +5981,8 @@ mod tests {
             task: "帮我继续推进 Rust kernel".to_string(),
             session_id: "execute-session".to_string(),
             user_id: "tester".to_string(),
-            selected_skill: "plan-to-code".to_string(),
-            overlay_skill: Some("rust-pro".to_string()),
+            selected_skill: "autopilot".to_string(),
+            overlay_skill: None,
             layer: "L2".to_string(),
             route_engine: Some("rust".to_string()),
             diagnostic_route_mode: Some("none".to_string()),
@@ -6177,7 +6068,7 @@ mod tests {
     #[test]
     fn stdio_request_dispatches_hook_policy_payload() {
         let response = handle_stdio_json_line(
-            r#"{"id":1,"op":"hook_policy","payload":{"operation":"validation-categories","command":"python3 -m json.tool .claude/settings.json"}}"#,
+            r#"{"id":1,"op":"hook_policy","payload":{"operation":"validation-categories","command":"python3 -m json.tool .codex/config.toml"}}"#,
         );
         assert!(response.ok, "{}", response.error.unwrap_or_default());
         let payload = response.payload.expect("payload");
@@ -6256,7 +6147,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code","skill-framework-developer"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["autopilot","skill-framework-developer"]}"#,
         )
         .expect("write trace metadata");
         fs::create_dir_all(repo_root.join("artifacts").join("current"))
@@ -6410,7 +6301,7 @@ mod tests {
         );
         write_text_fixture(
             &task_root.join("TRACE_METADATA.json"),
-            &json!({"matched_skills": ["plan-to-code", "skill-framework-developer"]}).to_string(),
+            &json!({"matched_skills": ["autopilot", "skill-framework-developer"]}).to_string(),
         );
         write_text_fixture(
             &repo_root
@@ -6463,7 +6354,7 @@ mod tests {
         assert!(statusline.contains("task=Validate status line"));
         assert!(statusline.contains("next=/refresh"));
         assert!(statusline.contains("integration/in_progress"));
-        assert!(statusline.contains("route=plan-to-code+1"));
+        assert!(statusline.contains("route=autopilot+1"));
         assert!(statusline.contains("others=0"));
         assert!(statusline.contains("resumable=0"));
         assert!(statusline.contains("git=nogit"));
@@ -6510,7 +6401,7 @@ mod tests {
             "summary": "Make Rust continuity recoverable without manual mirror repair.",
             "focus": true,
             "next_actions": ["Run targeted tests"],
-            "matched_skills": ["plan-to-code", "rust-pro"],
+            "matched_skills": ["autopilot"],
             "execution_contract": {
                 "goal": "Improve continuity artifacts",
                 "acceptance_criteria": ["writer emits all recovery anchors"]
@@ -6555,7 +6446,7 @@ mod tests {
         );
         assert_eq!(
             supervisor["trace_metadata"]["matched_skills"],
-            json!(["plan-to-code", "rust-pro"])
+            json!(["autopilot"])
         );
         assert_eq!(
             supervisor["artifact_refs"]["task_root"],
@@ -6789,7 +6680,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["autopilot"]}"#,
         )
         .expect("write trace metadata");
         fs::write(
@@ -6854,7 +6745,7 @@ mod tests {
         );
         assert_eq!(
             alias["entry_contract"]["route_rules"][0],
-            json!("模糊需求 -> `idea-to-plan`")
+            json!("模糊需求 -> `deepinterview`")
         );
 
         let _ = fs::remove_dir_all(&repo_root);
@@ -6890,7 +6781,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["code-review"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["deepinterview"]}"#,
         )
         .expect("write trace metadata");
         fs::write(
@@ -6937,14 +6828,14 @@ mod tests {
         assert_eq!(alias["name"], json!("deepinterview"));
         assert_eq!(alias["host_entrypoint"], json!("/deepinterview"));
         assert_eq!(alias["compact"], json!(false));
-        assert_eq!(alias["canonical_owner"], json!("code-review"));
+        assert_eq!(alias["canonical_owner"], json!("deepinterview"));
         assert_eq!(
             alias["state_machine"]["handoff"]["rules"][1]["target"],
             json!("autopilot")
         );
         assert_eq!(
             alias["entry_contract"]["route_rules"][0],
-            json!("主 owner -> `code-review`")
+            json!("主 owner -> `deepinterview`")
         );
         assert!(prompt.contains("进入 deepinterview"));
         assert!(prompt.contains("每轮只问一个问题"));
@@ -6983,7 +6874,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["team"]}"#,
         )
         .expect("write trace metadata");
         fs::write(
@@ -7030,14 +6921,14 @@ mod tests {
         assert_eq!(alias["name"], json!("team"));
         assert_eq!(alias["host_entrypoint"], json!("/team"));
         assert_eq!(alias["compact"], json!(false));
-        assert_eq!(alias["canonical_owner"], json!("plan-to-code"));
+        assert_eq!(alias["canonical_owner"], json!("team"));
         assert_eq!(
             alias["state_machine"]["handoff"]["rules"][1]["target"],
             json!("agent-swarm-orchestration")
         );
         assert_eq!(
             alias["entry_contract"]["route_rules"][0],
-            json!("主 owner -> `plan-to-code`")
+            json!("主 owner -> `team`")
         );
         assert!(prompt.contains("进入 team"));
         assert!(prompt.contains("bounded subagent lane -> `agent-swarm-orchestration`"));
@@ -7076,7 +6967,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["plan-to-code"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["team"]}"#,
         )
         .expect("write trace metadata");
         fs::write(
@@ -7171,7 +7062,7 @@ mod tests {
         .expect("write repo evidence index");
         fs::write(
             repo_task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"repo default task","matched_skills":["plan-to-code"]}"#,
+            r#"{"task":"repo default task","matched_skills":["autopilot"]}"#,
         )
         .expect("write repo trace metadata");
         fs::write(
@@ -7191,7 +7082,7 @@ mod tests {
         .expect("write isolated evidence index");
         fs::write(
             isolated_task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"isolated active task","matched_skills":["plan-to-code"]}"#,
+            r#"{"task":"isolated active task","matched_skills":["autopilot"]}"#,
         )
         .expect("write isolated trace metadata");
         fs::write(
@@ -7282,7 +7173,7 @@ mod tests {
     #[test]
     fn stdio_route_supports_inline_skill_catalog_and_token_budget_bias() {
         let response = handle_stdio_json_line(
-            r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要 team orchestration","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"agent-swarm-orchestration","description":"Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"team","description":"Supervisor-led worker lifecycle with integration qa cleanup and resume phases.","routing_layer":"L0","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["team orchestration","supervisor","worker lifecycle","integration","qa","cleanup"]},{"name":"code-review","description":"Review code with structured findings.","routing_layer":"L1","routing_owner":"overlay","routing_gate":"none","routing_priority":"P1"}]}}"#,
+            r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要 team orchestration","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"agent-swarm-orchestration","description":"Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"team","description":"Supervisor-led worker lifecycle with integration qa cleanup and resume phases.","routing_layer":"L0","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["team orchestration","supervisor","worker lifecycle","integration","qa","cleanup"]},{"name":"deepinterview","description":"Evidence-first clarification and convergence review.","routing_layer":"L1","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["deepinterview","review"]}]}}"#,
         );
         assert!(response.ok, "{:?}", response.error);
         let payload = response.payload.expect("payload");
@@ -7670,7 +7561,7 @@ mod tests {
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
 
         assert_eq!(report.schema_version, "routing-eval-v1");
-        assert_eq!(report.metrics.case_count, 14);
+        assert_eq!(report.metrics.case_count, 17);
         assert_eq!(report.metrics.overtrigger, 0);
         assert_routing_eval_cases_match("manifest", |task, session_id, first_turn| {
             route_task(&records, task, session_id, true, first_turn)
@@ -7743,14 +7634,7 @@ mod tests {
             "agent-swarm-orchestration"
         );
 
-        for (query, forbidden) in [
-            ("autopilot", "autopilot"),
-            ("team", "team"),
-            ("fix this bug", "systematic-debugging"),
-            ("make a plan", "idea-to-plan"),
-            ("write a small helper function", "plan-to-code"),
-            ("ordinary skill question", "skill-framework-developer"),
-        ] {
+        for (query, forbidden) in [("autopilot", "autopilot"), ("team", "team")] {
             let decision = route_task_with_manifest_fallback(
                 &records,
                 Some(&runtime_path),
@@ -7766,6 +7650,46 @@ mod tests {
                 "generic query {query:?} should not select {forbidden}"
             );
         }
+
+        for query in ["make a plan", "write a small helper function"] {
+            let decision = route_task_with_manifest_fallback(
+                &records,
+                Some(&runtime_path),
+                None,
+                query,
+                &format!("native-runtime-{query}"),
+                true,
+                true,
+            )
+            .unwrap_or_else(|err| panic!("route native runtime case {query}: {err}"));
+            assert_eq!(decision.selected_skill, "none");
+            assert_eq!(decision.overlay_skill, None);
+        }
+    }
+
+    #[test]
+    fn explicit_manifest_preserves_native_runtime_for_low_confidence_hits() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let manifest_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
+        let records = load_records(Some(&runtime_path), Some(&manifest_path))
+            .expect("load hot runtime records with manifest metadata");
+
+        let decision = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            Some(&manifest_path),
+            "帮我写一个 Python 脚本，并补 pytest 回归测试",
+            "explicit-manifest-native-runtime",
+            true,
+            true,
+        )
+        .expect("route explicit manifest native runtime case");
+
+        assert_eq!(decision.selected_skill, "none");
+        assert_eq!(decision.overlay_skill, None);
+        assert_eq!(decision.layer, "runtime");
     }
 
     #[test]
@@ -7776,10 +7700,7 @@ mod tests {
 
         let rows = search_skills(&records, "DESIGN.md 设计规范 token", 5);
 
-        assert_eq!(
-            rows.first().map(|row| row.slug.as_str()),
-            Some("design-md")
-        );
+        assert_eq!(rows.first().map(|row| row.slug.as_str()), Some("design-md"));
         assert!(!rows.iter().any(|row| row.slug == "css-pro"));
     }
 
@@ -7805,8 +7726,8 @@ mod tests {
     fn route_diff_report_matches_shadow_compare_contract() {
         let rust_snapshot = build_route_snapshot(
             "rust",
-            "plan-to-code",
-            Some("code-review"),
+            "autopilot",
+            Some("deepinterview"),
             "L2",
             39.0,
             &["Trigger phrase matched: 直接做代码.".to_string()],
@@ -8959,8 +8880,8 @@ mod tests {
             authority: ROUTE_AUTHORITY.to_string(),
             route_snapshot: build_route_snapshot(
                 "rust",
-                "plan-to-code",
-                Some("code-review"),
+                "autopilot",
+                Some("deepinterview"),
                 "L2",
                 39.4,
                 &[
@@ -8976,10 +8897,10 @@ mod tests {
         );
         assert_eq!(snapshot.authority, ROUTE_AUTHORITY);
         assert_eq!(snapshot.route_snapshot.engine, "rust");
-        assert_eq!(snapshot.route_snapshot.selected_skill, "plan-to-code");
+        assert_eq!(snapshot.route_snapshot.selected_skill, "autopilot");
         assert_eq!(
             snapshot.route_snapshot.overlay_skill.as_deref(),
-            Some("code-review")
+            Some("deepinterview")
         );
         assert_eq!(snapshot.route_snapshot.score_bucket, "30-39");
         assert_eq!(
@@ -8995,8 +8916,8 @@ mod tests {
         assert_eq!(response.execution_schema_version, EXECUTION_SCHEMA_VERSION);
         assert_eq!(response.authority, EXECUTION_AUTHORITY);
         assert!(!response.live_run);
-        assert_eq!(response.skill, "plan-to-code");
-        assert_eq!(response.overlay.as_deref(), Some("rust-pro"));
+        assert_eq!(response.skill, "autopilot");
+        assert_eq!(response.overlay, None);
         assert_eq!(response.usage.mode, "estimated");
         assert_eq!(response.model_id, None);
         assert_eq!(response.metadata["execution_kernel"], EXECUTION_KERNEL_KIND);
@@ -9031,8 +8952,8 @@ mod tests {
         let prompt = build_live_execute_prompt(&payload);
 
         assert!(prompt.contains("Help with the user's request directly."));
-        assert!(prompt.contains("Primary focus: plan-to-code"));
-        assert!(prompt.contains("Extra guidance: rust-pro"));
+        assert!(prompt.contains("Primary focus: autopilot"));
+        assert!(!prompt.contains("Extra guidance:"));
         assert!(prompt.contains("How to reply:"));
         assert!(prompt.contains("Lead with the answer or result."));
         assert!(prompt.contains(
@@ -9040,6 +8961,26 @@ mod tests {
         ));
         assert!(prompt.contains("Keep the default reply short; only use a list when the content is naturally list-shaped."));
         assert!(prompt.contains("Trigger phrase matched: 直接做代码."));
+    }
+
+    #[test]
+    fn live_execute_prompt_builder_treats_none_as_native_runtime() {
+        let mut payload = sample_execute_request();
+        payload.dry_run = false;
+        payload.prompt_preview = None;
+        payload.selected_skill = "none".to_string();
+        payload.overlay_skill = None;
+        payload.reasons = vec![
+            "No explicit skill hit; native runtime should proceed without loading a skill."
+                .to_string(),
+        ];
+
+        let prompt = build_live_execute_prompt(&payload);
+
+        assert!(prompt.contains("Primary focus: native runtime instructions"));
+        assert!(prompt.contains("No skill body is required"));
+        assert!(!prompt.contains("Primary focus: none"));
+        assert!(!prompt.contains("Use the selected skill"));
     }
 
     #[test]
@@ -9067,22 +9008,19 @@ mod tests {
     }
 
     #[test]
-    fn live_execute_prompt_builder_adds_idea_to_plan_contract() {
+    fn live_execute_prompt_builder_does_not_add_removed_planning_contract() {
         let mut payload = sample_execute_request();
         payload.dry_run = false;
         payload.prompt_preview = None;
-        payload.selected_skill = "idea-to-plan".to_string();
-        payload.overlay_skill = Some("code-review".to_string());
+        payload.selected_skill = "deepinterview".to_string();
+        payload.overlay_skill = None;
         payload.layer = "L-1".to_string();
         payload.reasons = vec!["Trigger hint matched: 先探索现状再提方案.".to_string()];
 
         let prompt = build_live_execute_prompt(&payload);
 
-        assert!(prompt.contains("Planning output:"));
-        assert!(prompt.contains("outline.md"));
-        assert!(prompt.contains("decision_log.md"));
-        assert!(prompt.contains("code_list.md"));
-        assert!(prompt.contains("plan-to-code"));
+        assert!(!prompt.contains("Planning output:"));
+        assert!(prompt.contains("Primary focus: deepinterview"));
         assert!(!prompt.contains("READ-ONLY planning route"));
         assert!(!prompt.contains("<proposed_plan>"));
     }
@@ -10334,8 +10272,8 @@ mod tests {
             mirror_paths: vec![mirror_path.display().to_string()],
             write_outputs: true,
             task: "trace metadata rustification".to_string(),
-            matched_skills: vec!["plan-to-code".to_string()],
-            owner: "plan-to-code".to_string(),
+            matched_skills: vec!["autopilot".to_string()],
+            owner: "autopilot".to_string(),
             gate: "none".to_string(),
             overlay: None,
             reroute_count: Some(0),
@@ -10393,7 +10331,7 @@ mod tests {
     fn stdio_request_dispatches_write_trace_metadata_payload() {
         let output_path = temp_json_path("trace-metadata-write-stdio");
         let response = handle_stdio_json_line(&format!(
-            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"plan-to-code\"],\"owner\":\"plan-to-code\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
+            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"autopilot\"],\"owner\":\"autopilot\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
             output_path.display()
         ));
         assert!(response.ok);
@@ -10417,7 +10355,7 @@ mod tests {
             write_outputs: true,
             task: "trace metadata missing source".to_string(),
             matched_skills: Vec::new(),
-            owner: "plan-to-code".to_string(),
+            owner: "autopilot".to_string(),
             gate: "none".to_string(),
             overlay: None,
             reroute_count: Some(0),

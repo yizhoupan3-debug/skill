@@ -17,7 +17,7 @@ pub(crate) const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2"
 pub(crate) const ROUTE_RESOLUTION_SCHEMA_VERSION: &str = "router-rs-route-resolution-v1";
 pub(crate) const ROUTE_AUTHORITY: &str = "rust-route-core";
 pub(crate) const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
-const OVERLAY_ONLY_SKILLS: [&str; 1] = ["i18n-l10n"];
+const NO_SKILL_SELECTED: &str = "none";
 const ARTIFACT_GATE_PHRASES: [&str; 16] = [
     "pdf",
     "docx",
@@ -345,6 +345,10 @@ impl SkillRecord {
             tags.join(" ")
         ))
         .into_iter()
+        .filter(|token| {
+            !common_route_stop_tokens().contains(&token.as_str())
+                && (token.chars().count() > 1 || token.chars().any(|ch| !ch.is_ascii()))
+        })
         .collect::<HashSet<_>>();
 
         Self {
@@ -955,6 +959,19 @@ fn common_route_stop_tokens() -> &'static [&'static str] {
         "然后",
         "输出",
         "问题",
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "for",
+        "in",
+        "is",
+        "of",
+        "or",
+        "the",
+        "to",
+        "with",
         "skill",
         "路由",
     ]
@@ -1056,54 +1073,6 @@ fn has_skill_installer_context(query_text: &str, query_token_list: &[String]) ->
         ]
         .iter()
         .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
-}
-
-fn has_planning_only_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "先给我方案",
-        "先做方案",
-        "先出方案",
-        "给我方案",
-        "技术方案",
-        "路线比较",
-        "先别写代码",
-        "不要写代码",
-        "先探索",
-        "assumptions",
-        "open questions",
-        "decision log",
-    ]
-    .iter()
-    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
-}
-
-fn has_repo_planning_artifact_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "outline.md",
-        "code_list.md",
-        "assumptions",
-        "open questions",
-        "decision log",
-        "decision_log.md",
-        "plan_rubric.md",
-        "critical files",
-    ]
-    .iter()
-    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
-}
-
-fn has_spec_to_code_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "按方案实现",
-        "根据方案实现",
-        "按文档开发",
-        "prd 落地",
-        "spec-driven execution",
-        "repo-local spec-to-code",
-        "plan-to-code",
-    ]
-    .iter()
-    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
 
 fn has_skill_framework_maintenance_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -1237,7 +1206,7 @@ fn split_phrases(text: &str) -> Vec<String> {
 }
 
 fn is_overlay_record(record: &SkillRecord) -> bool {
-    record.owner_lower == "overlay" || OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug)
+    record.owner_lower == "overlay"
 }
 
 fn can_be_primary_owner(record: &SkillRecord) -> bool {
@@ -1252,12 +1221,6 @@ fn can_be_fallback_owner(record: &SkillRecord) -> bool {
             record.slug.as_str(),
             "coding-standards"
                 | "error-handling-patterns"
-                | "tdd-workflow"
-                | "code-review"
-                | "i18n-l10n"
-                | "security-audit"
-                | "idea-to-plan"
-                | "plan-to-code"
                 | "skill-framework-developer"
                 | "plugin-creator"
                 | "skill-creator"
@@ -1479,9 +1442,9 @@ pub(crate) fn route_task(
     };
 
     if viable.is_empty() {
-        let fallback = fallback_owner(records, &route_context)?;
         let fallback_reasons = compact_route_reasons(&[
-            "No explicit keyword hit; fell back to highest-priority layer owner.".to_string(),
+            "No explicit skill hit; native runtime should proceed without loading a skill."
+                .to_string(),
         ]);
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
@@ -1489,17 +1452,17 @@ pub(crate) fn route_task(
             compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
             task: query.to_string(),
             session_id: session_id.to_string(),
-            selected_skill: fallback.slug.clone(),
+            selected_skill: NO_SKILL_SELECTED.to_string(),
             overlay_skill: None,
             route_context,
-            layer: fallback.layer.clone(),
+            layer: "runtime".to_string(),
             score: 0.0,
             reasons: fallback_reasons.clone(),
             route_snapshot: build_route_snapshot(
                 "rust",
-                &fallback.slug,
+                NO_SKILL_SELECTED,
                 None,
-                &fallback.layer,
+                "runtime",
                 0.0,
                 &fallback_reasons,
             ),
@@ -1509,33 +1472,28 @@ pub(crate) fn route_task(
         .iter()
         .all(|candidate| is_overlay_record(candidate.record))
     {
-        let fallback = fallback_owner(records, &route_context)?;
         let fallback_reasons = compact_route_reasons(&[
-            "Only overlay signals matched; fell back to the generic implementation owner so overlays cannot become primary owners."
+            "Only overlay signals matched; native runtime should proceed without loading a primary skill."
                 .to_string(),
         ]);
-        let overlay = if allow_overlay {
-            pick_overlay(records, &normalized_query, &query_token_list, fallback)
-        } else {
-            None
-        };
+        let _ = allow_overlay;
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
             authority: ROUTE_AUTHORITY.to_string(),
             compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
             task: query.to_string(),
             session_id: session_id.to_string(),
-            selected_skill: fallback.slug.clone(),
-            overlay_skill: overlay.clone(),
+            selected_skill: NO_SKILL_SELECTED.to_string(),
+            overlay_skill: None,
             route_context,
-            layer: fallback.layer.clone(),
+            layer: "runtime".to_string(),
             score: 0.0,
             reasons: fallback_reasons.clone(),
             route_snapshot: build_route_snapshot(
                 "rust",
-                &fallback.slug,
-                overlay.as_deref(),
-                &fallback.layer,
+                NO_SKILL_SELECTED,
+                None,
+                "runtime",
                 0.0,
                 &fallback_reasons,
             ),
@@ -1688,6 +1646,123 @@ fn default_route_context_payload() -> RouteContextPayload {
     }
 }
 
+pub(crate) fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
+    decision.score < 35.0
+        || (decision.selected_skill == "systematic-debugging" && decision.score < 35.0)
+        || decision
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("fell back to highest-priority layer owner"))
+        || decision.reasons.iter().any(|reason| {
+            reason.contains("Fallback owner selected")
+                || reason.contains("No explicit keyword hit")
+                || reason.contains("No explicit skill hit")
+        })
+}
+
+fn route_decision_is_no_hit(decision: &RouteDecision) -> bool {
+    decision.score <= 0.0
+        || decision.reasons.iter().any(|reason| {
+            reason.contains("No explicit keyword hit")
+                || reason.contains("No explicit skill hit")
+                || reason.contains("fell back to highest-priority layer owner")
+                || reason.contains("Only overlay signals matched")
+        })
+}
+
+fn route_reason_terms(decision: &RouteDecision) -> Vec<String> {
+    decision
+        .reasons
+        .iter()
+        .filter_map(|reason| reason.split_once(':').map(|(_, terms)| terms))
+        .flat_map(|terms| terms.trim_end_matches('.').split(','))
+        .map(|term| term.trim().to_ascii_lowercase())
+        .filter(|term| !term.is_empty())
+        .collect()
+}
+
+fn has_non_generic_manifest_signal(decision: &RouteDecision) -> bool {
+    const GENERIC_FULL_MANIFEST_TERMS: [&str; 5] =
+        ["runtime", "debug", "backend", "review", "plan"];
+
+    if decision.reasons.iter().any(|reason| {
+        reason.contains("Exact skill name matched")
+            || reason.contains("Framework alias entrypoint matched explicitly")
+    }) {
+        return true;
+    }
+
+    let terms = route_reason_terms(decision);
+    if terms.iter().any(|term| term.contains("架构")) {
+        return true;
+    }
+    !terms.is_empty()
+        && terms.iter().any(|term| {
+            !GENERIC_FULL_MANIFEST_TERMS
+                .iter()
+                .any(|generic| term == generic)
+        })
+}
+
+pub(crate) fn should_accept_manifest_fallback(
+    hot_decision: &RouteDecision,
+    full_decision: &RouteDecision,
+    should_retry: bool,
+    explicit_manifest: bool,
+) -> bool {
+    if explicit_manifest && !route_decision_is_no_hit(hot_decision) {
+        return full_decision.score > hot_decision.score
+            || (full_decision.score == hot_decision.score
+                && full_decision.selected_skill != hot_decision.selected_skill)
+            || (full_decision.selected_skill == hot_decision.selected_skill
+                && full_decision.overlay_skill.is_some()
+                && hot_decision.overlay_skill.is_none());
+    }
+
+    if full_decision.selected_skill == hot_decision.selected_skill
+        && full_decision.overlay_skill.is_some()
+        && hot_decision.overlay_skill.is_none()
+    {
+        return true;
+    }
+
+    if !should_retry
+        || !(route_decision_is_no_hit(hot_decision)
+            || hot_decision.score < 25.0
+            || (hot_decision.score < 35.0
+                && matches!(
+                    hot_decision.selected_skill.as_str(),
+                    "agent-swarm-orchestration" | "doc" | "design-md" | "pdf" | "sentry"
+                ))
+            || hot_decision.selected_skill == "systematic-debugging")
+    {
+        if full_decision.score >= hot_decision.score + 8.0
+            && has_non_generic_manifest_signal(full_decision)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    let low_score_review_fallback = full_decision.score >= 20.0
+        && matches!(full_decision.selected_skill.as_str(), "deepinterview");
+
+    if full_decision.score <= 10.0
+        && !matches!(full_decision.selected_skill.as_str(), "deepinterview")
+    {
+        return false;
+    }
+
+    if !low_score_review_fallback && !has_non_generic_manifest_signal(full_decision) {
+        return false;
+    }
+
+    (full_decision.score > hot_decision.score
+        || (full_decision.score == hot_decision.score
+            && full_decision.selected_skill != hot_decision.selected_skill))
+        || low_score_review_fallback
+}
+
 fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteContextPayload {
     let completion_requested = completion_execution_markers().iter().any(|marker| {
         query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
@@ -1697,7 +1772,8 @@ fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteCo
     });
     let delegation_candidate = has_bounded_subagent_context(query_text, query_token_list)
         || has_team_orchestration_context(query_text, query_token_list)
-        || has_parallel_review_candidate_context(query_text, query_token_list);
+        || has_parallel_review_candidate_context(query_text, query_token_list)
+        || has_parallel_execution_context(query_text, query_token_list);
     let audit_requested = [
         "核查",
         "审查",
@@ -2233,6 +2309,75 @@ fn has_team_orchestration_context(query_text: &str, query_token_list: &[String])
     })
 }
 
+fn has_parallel_execution_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let explicit_parallel = [
+        "并行",
+        "同时",
+        "分头",
+        "分路",
+        "分三路",
+        "多路",
+        "多线",
+        "多方向",
+        "多个方向",
+        "独立方向",
+        "独立维度",
+        "parallel",
+        "concurrent",
+        "in parallel",
+        "split lanes",
+        "split work",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    });
+    if !explicit_parallel {
+        return false;
+    }
+
+    let split_shape = [
+        "三个方向",
+        "三方向",
+        "三个模块",
+        "三模块",
+        "多个模块",
+        "多个假设",
+        "多个独立",
+        "前端",
+        "后端",
+        "测试",
+        "api",
+        "数据库",
+        "ui",
+        "安全",
+        "性能",
+        "架构",
+        "实现",
+        "策略",
+        "验证",
+        "frontend",
+        "backend",
+        "testing",
+        "tests",
+        "database",
+        "security",
+        "performance",
+        "architecture",
+        "implementation",
+        "verification",
+    ]
+    .iter()
+    .filter(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+    .count();
+
+    split_shape >= 2
+}
+
 fn has_parallel_review_candidate_context(query_text: &str, query_token_list: &[String]) -> bool {
     let review_requested = [
         "review",
@@ -2549,41 +2694,6 @@ fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[St
     })
 }
 
-fn has_literature_corpus_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if has_paper_workbench_frontdoor_context(query_text, query_token_list)
-        || has_paper_review_judgment_context(query_text, query_token_list)
-        || has_paper_review_revision_intent(query_text, query_token_list)
-    {
-        return false;
-    }
-    [
-        "下载ref",
-        "下载 ref",
-        "目标期刊",
-        "相近文章",
-        "找20篇",
-        "20篇",
-        "ref",
-        "reference corpus",
-        "target journal references",
-        "comparable papers",
-        "对比表",
-        "写作套路",
-        "搜 arxiv",
-        "semantic scholar",
-        "文献",
-        "论文",
-        "literature review",
-        "related work",
-        "novelty check",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
 fn has_design_reference_context(query_text: &str, query_token_list: &[String]) -> bool {
     [
         "参考源",
@@ -2596,73 +2706,6 @@ fn has_design_reference_context(query_text: &str, query_token_list: &[String]) -
         "liquid glass motion",
         "产品风格映射",
         "borrowable cues",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
-fn has_research_workbench_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "科研项目",
-        "科研方向",
-        "课题",
-        "研究路线",
-        "research project",
-        "research direction",
-        "research workflow",
-        "下一步怎么做",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
-fn has_external_retrieval_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "调研",
-        "深度调研",
-        "最新生态",
-        "技术选型",
-        "取舍",
-        "对比",
-        "compare",
-        "benchmarking",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
-fn has_general_information_retrieval_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    has_external_retrieval_context(query_text, query_token_list)
-        && !has_paper_context(query_text, query_token_list)
-        && !has_research_workbench_context(query_text, query_token_list)
-        && !has_literature_corpus_context(query_text, query_token_list)
-        && !has_skill_framework_maintenance_context(query_text, query_token_list)
-}
-
-fn has_autoresearch_loop_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "autonomous research loop",
-        "autonomous research",
-        "multi-hypothesis",
-        "多假设",
-        "experiment loop",
-        "实验循环",
-        "记录反思",
-        "综合结论",
-        "two-loop",
-        "two loop",
     ]
     .iter()
     .any(|marker| {
@@ -2945,12 +2988,17 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    if record.slug == "architect-review" && is_meta_routing_task(query_text) {
+    if record.slug == "agent-swarm-orchestration"
+        && is_meta_routing_task(query_text)
+        && !has_parallel_execution_context(query_text, query_token_list)
+        && !has_team_orchestration_context(query_text, query_token_list)
+        && !has_bounded_subagent_context(query_text, query_token_list)
+    {
         return RouteCandidate {
             record,
             score: 0.0,
             reasons: vec![
-                "Suppressed: skill-system subtraction or behavior-protocol reviews are framework routing tasks, not generic architecture reviews."
+                "Suppressed: skill-system routing reviews stay on skill-framework-developer unless explicit parallel lanes are requested."
                     .to_string(),
             ],
         };
@@ -2990,36 +3038,6 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
-    if record.slug == "idea-to-plan"
-        && has_repo_planning_artifact_context(query_text, query_token_list)
-    {
-        score += 70.0;
-        reasons.push(
-            "Idea-to-plan boost applied: repo-local planning work-product artifacts detected."
-                .to_string(),
-        );
-    } else if record.slug == "idea-to-plan"
-        && has_planning_only_context(query_text, query_token_list)
-    {
-        score += 44.0;
-        reasons.push(
-            "Idea-to-plan boost applied: user asks for planning before implementation.".to_string(),
-        );
-    }
-    if record.slug == "plan-to-code" && has_spec_to_code_context(query_text, query_token_list) {
-        score += 70.0;
-        reasons.push(
-            "Plan-to-code boost applied: concrete spec-to-code wording or explicit retained work-product contract detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "plan-to-code" && has_planning_only_context(query_text, query_token_list) {
-        score *= 0.25;
-        reasons.push(
-            "Plan-to-code suppression applied: planning-only wording should not execute code."
-                .to_string(),
-        );
-    }
     if record.slug == "documentation-engineering"
         && has_humanizer_context(query_text, query_token_list)
         && !has_paper_context(query_text, query_token_list)
@@ -3054,16 +3072,25 @@ fn score_route_candidate<'a>(
     }
     let explicit_framework_alias = framework_alias_requires_explicit_call(&record.slug)
         && has_explicit_framework_alias_call(query_text, query_token_list, &record.slug);
+    let parallel_execution_context = has_parallel_execution_context(query_text, query_token_list);
     if record.slug == "agent-swarm-orchestration"
         && (bounded_subagent_context
             || has_team_orchestration_context(query_text, query_token_list)
-            || has_parallel_review_candidate_context(query_text, query_token_list))
+            || has_parallel_review_candidate_context(query_text, query_token_list)
+            || parallel_execution_context)
     {
         score += 60.0;
         reasons.push(
             "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
                 .to_string(),
         );
+        if parallel_execution_context {
+            score += 12.0;
+            reasons.push(
+                "Parallel-execution boost applied: independent lanes can run as bounded sidecars."
+                    .to_string(),
+            );
+        }
         if has_parallel_review_candidate_context(query_text, query_token_list) {
             score += 10.0;
             reasons.push(
@@ -3114,52 +3141,6 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    if record.slug == "research-workbench" && has_paper_context(query_text, query_token_list) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: manuscript or paper context should route through paper-workbench before research-project orchestration."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "literature-synthesis"
-        && has_paper_ref_first_workflow_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: ref-first manuscript workflow should start at paper-workbench, which will call literature-synthesis internally."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "information-retrieval"
-        && has_literature_corpus_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: academic paper search or target-journal corpus work belongs to literature-synthesis."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "information-retrieval"
-        && has_design_reference_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: named-product design reference grounding belongs to design-md."
-                    .to_string(),
-            ],
-        };
-    }
     if record.slug == "design-md"
         && has_humanizer_context(query_text, query_token_list)
         && !has_design_contract_context(query_text, query_token_list)
@@ -3181,18 +3162,6 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: UX marketing or microcopy wording belongs to copywriting, not native-app debugging."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "research-workbench"
-        && has_autoresearch_loop_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: explicit autonomous loop wording should route directly to autoresearch."
                     .to_string(),
             ],
         };
@@ -3225,74 +3194,6 @@ fn score_route_candidate<'a>(
                 "Suppressed: reusable design contract must precede slide authoring.".to_string(),
             ],
         };
-    }
-    if record.slug == "architect-review"
-        && has_external_retrieval_context(query_text, query_token_list)
-        && !query_text.contains("架构")
-        && !query_text.contains("architecture")
-        && !query_text.contains("系统设计")
-    {
-        score *= 0.35;
-        reasons.push(
-            "Generic retrieval preference applied: technology-selection research without architecture-review wording should not default to architect-review."
-                .to_string(),
-        );
-    }
-    if record.slug == "information-retrieval"
-        && has_autoresearch_loop_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: explicit autonomous loop wording should stay on autoresearch."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "information-retrieval"
-        && has_paper_review_judgment_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: external research inside paper-review judgment should stay on paper-workbench/paper-reviewer."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "architect-review"
-        && has_external_retrieval_context(query_text, query_token_list)
-        && !query_text.contains("架构")
-        && !query_text.contains("architecture")
-        && !query_text.contains("系统设计")
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: generic technology-selection research without architecture-review wording should route through information-retrieval."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "information-retrieval"
-        && has_general_information_retrieval_context(query_text, query_token_list)
-    {
-        score += 62.0;
-        reasons.push(
-            "Information-retrieval boost applied: external research, ecosystem comparison, or technology-selection wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "autoresearch" && has_autoresearch_loop_context(query_text, query_token_list)
-    {
-        score += 34.0;
-        reasons.push(
-            "Autoresearch loop boost applied: autonomous multi-hypothesis experiment loop detected."
-                .to_string(),
-        );
     }
     if record.slug == "paper-workbench"
         && has_paper_ref_first_workflow_context(query_text, query_token_list)
@@ -3373,36 +3274,6 @@ fn score_route_candidate<'a>(
             "Paper-writing boost applied: bounded manuscript prose polish or storyline wording detected."
                 .to_string(),
         );
-    }
-    if record.slug == "literature-synthesis"
-        && has_literature_corpus_context(query_text, query_token_list)
-        && !has_paper_ref_first_workflow_context(query_text, query_token_list)
-    {
-        score += 58.0;
-        reasons.push(
-            "Literature-synthesis boost applied: academic literature search or target-journal corpus requested."
-                .to_string(),
-        );
-    }
-    if record.slug == "information-retrieval"
-        && has_research_workbench_context(query_text, query_token_list)
-        && !has_paper_context(query_text, query_token_list)
-    {
-        score *= 0.45;
-        reasons.push(
-            "Research-workbench preference applied: academic project next-step wording should not default to generic retrieval."
-                .to_string(),
-        );
-    }
-    if record.slug == "idea-to-plan" && is_meta_routing_task(query_text) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: skill-system planning and subtraction questions should stay on skill-framework-developer."
-                    .to_string(),
-            ],
-        };
     }
     if record.slug == "skill-framework-developer" && is_meta_routing_task(query_text) {
         score += 60.0;
@@ -3595,18 +3466,6 @@ fn score_route_candidate<'a>(
         || text_matches_phrase(query_token_list, "改版")
         || text_matches_phrase(query_token_list, "redesign");
 
-    if record.slug == "frontend-design"
-        && first_turn
-        && visual_evidence_review_context
-        && !redesign_context
-    {
-        score *= 0.35;
-        reasons.push(
-            "Visual-evidence review preference applied: visible UI findings should hit visual-review before redesign."
-                .to_string(),
-        );
-    }
-
     if record.slug == "visual-review"
         && first_turn
         && visual_evidence_review_context
@@ -3713,48 +3572,6 @@ fn score_route_candidate<'a>(
         }
     }
 
-    if record.slug == "architect-review" {
-        let mentions_deepinterview = query_text.contains("deepinterview");
-        let review_markers = [
-            "review",
-            "全面review",
-            "严格review",
-            "全面 review",
-            "严格 review",
-            "审查",
-            "审核",
-        ];
-        if mentions_deepinterview
-            && review_markers
-                .iter()
-                .any(|marker| text_matches_phrase(query_token_list, marker))
-        {
-            score += 28.0;
-            reasons.push(
-                "Deepinterview review-lane boost applied: plain-text deepinterview review defaults to architect-review."
-                    .to_string(),
-            );
-        }
-
-        let architecture_review_markers = [
-            "架构风险",
-            "系统 review",
-            "设计 review",
-            "architecture review",
-            "系统设计 review",
-        ];
-        if architecture_review_markers
-            .iter()
-            .any(|marker| query_text.contains(marker))
-        {
-            score += 24.0;
-            reasons.push(
-                "Architecture review boost applied: explicit architecture-risk review markers detected."
-                    .to_string(),
-            );
-        }
-    }
-
     if record.slug == "paper-workbench"
         && has_paper_review_revision_intent(query_text, query_token_list)
     {
@@ -3777,52 +3594,6 @@ fn score_route_candidate<'a>(
         score,
         reasons,
     }
-}
-
-fn fallback_owner<'a>(
-    records: &'a [SkillRecord],
-    _route_context: &RouteContextPayload,
-) -> Result<&'a SkillRecord, String> {
-    if let Some(record) = records.iter().find(|record| can_be_fallback_owner(record)) {
-        return Ok(record);
-    }
-    let primary_owners = records
-        .iter()
-        .filter(|record| can_be_fallback_owner(record))
-        .collect::<Vec<_>>();
-    let pool = if primary_owners.is_empty() {
-        if let Some(record) = records
-            .iter()
-            .find(|record| record.slug == "skill-framework-developer")
-        {
-            return Ok(record);
-        }
-        let primary_pool = records
-            .iter()
-            .filter(|record| {
-                can_be_primary_owner(record)
-                    && !framework_alias_requires_explicit_call(&record.slug)
-            })
-            .collect::<Vec<_>>();
-        if primary_pool.is_empty() {
-            records
-                .iter()
-                .filter(|record| !framework_alias_requires_explicit_call(&record.slug))
-                .collect::<Vec<_>>()
-        } else {
-            primary_pool
-        }
-    } else {
-        primary_owners
-    };
-    pool.into_iter()
-        .min_by(|left, right| {
-            layer_rank(&left.layer)
-                .cmp(&layer_rank(&right.layer))
-                .then_with(|| priority_rank(&left.priority).cmp(&priority_rank(&right.priority)))
-                .then_with(|| left.slug.cmp(&right.slug))
-        })
-        .ok_or_else(|| "No skill records available for fallback owner.".to_string())
 }
 
 fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
@@ -3946,7 +3717,7 @@ fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) ->
 
 fn pick_overlay(
     records: &[SkillRecord],
-    query_text: &str,
+    _query_text: &str,
     query_tokens: &[String],
     selected_skill: &SkillRecord,
 ) -> Option<String> {
@@ -3972,38 +3743,6 @@ fn pick_overlay(
             .any(|phrase| phrase.chars().count() > 3 && text_matches_phrase(query_tokens, phrase));
         if explicit_name_match || explicit_trigger_match {
             return Some(record.slug.clone());
-        }
-    }
-
-    if selected_skill.slug == "skill-framework-developer"
-        && ["边界重叠"]
-            .iter()
-            .any(|marker| query_text.contains(marker) || text_matches_phrase(query_tokens, marker))
-    {
-        if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
-            return Some(skill.slug.clone());
-        }
-    }
-
-    if selected_skill.slug == "architect-review"
-        && [
-            "代码 review",
-            "code review",
-            "代码审核",
-            "回归风险",
-            "findings",
-            "严重程度",
-            "实现质量",
-            "找 bug",
-            "correctness",
-            "pr review",
-            "pull request",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_tokens, marker))
-    {
-        if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
-            return Some(skill.slug.clone());
         }
     }
 

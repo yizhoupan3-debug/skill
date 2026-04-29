@@ -31,6 +31,13 @@ REVIEW_PATTERNS = [
     re.compile(r"(代码审查|安全审查|架构审查|审查这个\s*PR|审查这段代码)", re.I),
 ]
 
+PARALLEL_DELEGATION_PATTERNS = [
+    re.compile(r"(并行|同时|分头|分路|分三路|多路|多线).*(前端|后端|测试|API|数据库|UI|安全|性能|架构|实现|策略|验证|模块|方向)", re.I),
+    re.compile(r"(前端|后端|测试|API|数据库|UI|安全|性能|架构|实现|策略|验证).*(并行|同时|分头|分路|分三路|多路|多线)", re.I),
+    re.compile(r"(多个|多条|多路|多维|多方向|独立).*(假设|模块|方向|维度|lane|lanes)", re.I),
+    re.compile(r"\b(parallel|concurrent|in parallel|split lanes|split work)\b.*\b(frontend|backend|test|testing|database|security|performance|architecture|implementation|verification)\b", re.I),
+]
+
 OVERRIDE_PATTERNS = [
     re.compile(r"do not use (a )?subagent", re.I),
     re.compile(r"without (a )?subagent", re.I),
@@ -106,6 +113,10 @@ def is_review_prompt(text: str) -> bool:
     return any(pattern.search(text or "") for pattern in REVIEW_PATTERNS)
 
 
+def is_parallel_delegation_prompt(text: str) -> bool:
+    return any(pattern.search(text or "") for pattern in PARALLEL_DELEGATION_PATTERNS)
+
+
 def has_override(text: str) -> bool:
     return any(pattern.search(text or "") for pattern in OVERRIDE_PATTERNS)
 
@@ -139,8 +150,12 @@ def handle_prompt(event: dict[str, Any]) -> int:
     if is_review_prompt(text):
         state["review_required"] = True
         state["prompt"] = text[:500]
+    if is_parallel_delegation_prompt(text):
+        state["delegation_required"] = True
+        state["prompt"] = text[:500]
     if has_override(text):
         state["review_override"] = True
+        state["delegation_override"] = True
     save_state(event, state)
     if state.get("review_required") and not state.get("review_override"):
         print_json(
@@ -151,6 +166,18 @@ def handle_prompt(event: dict[str, Any]) -> int:
                         "Broad/deep review detected. Before finalizing, run independent reviewer "
                         "subagent lanes when the scope can be split; if spawning is not appropriate, "
                         "state the explicit reject reason."
+                    ),
+                }
+            }
+        )
+    elif state.get("delegation_required") and not state.get("delegation_override"):
+        print_json(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": (
+                        "Independent parallel lanes detected. Prefer spawning bounded subagent "
+                        "sidecars immediately; keep the supervisor on integration and verification."
                     ),
                 }
             }
@@ -178,6 +205,17 @@ def handle_stop(event: dict[str, Any]) -> int:
                 "reason": (
                     "Broad/deep review was requested, but no independent subagent review was observed. "
                     "Spawn suitable reviewer sidecars now, or explicitly record why spawning is rejected."
+                ),
+            }
+        )
+        return 0
+    if state.get("delegation_required") and not state.get("delegation_override") and not state.get("review_subagent_seen"):
+        print_json(
+            {
+                "decision": "block",
+                "reason": (
+                    "Independent parallel lanes were requested, but no bounded subagent sidecar was observed. "
+                    "Spawn suitable sidecars before finalizing, or rerun with an explicit no-subagent override."
                 ),
             }
         )

@@ -82,9 +82,40 @@ def test_plain_review_sentence_does_not_block() -> None:
     assert_true(parsed_stdout(allowed).get("decision") != "block", "generic review sentence does not block")
 
 
+def test_parallel_lanes_require_subagent_until_seen() -> None:
+    cleanup_state()
+    session_id = f"codex-delegation-{uuid.uuid4()}"
+    prompt = run_hook(
+        {
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": session_id,
+            "cwd": str(ROOT),
+            "prompt": "并行检查 API、数据库和 UI 三个模块的回归风险",
+        }
+    )
+    assert_true(prompt.returncode == 0, "prompt hook exits cleanly")
+    assert_true("additionalContext" in prompt.stdout, "prompt hook adds delegation guidance")
+
+    blocked = run_hook({"hook_event_name": "Stop", "session_id": session_id, "cwd": str(ROOT)})
+    assert_true(parsed_stdout(blocked).get("decision") == "block", "stop blocks before sidecar")
+
+    run_hook(
+        {
+            "hook_event_name": "PostToolUse",
+            "session_id": session_id,
+            "cwd": str(ROOT),
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"agent_type": "explorer", "message": "Review API regression lane."},
+        }
+    )
+    allowed = run_hook({"hook_event_name": "Stop", "session_id": session_id, "cwd": str(ROOT)})
+    assert_true(parsed_stdout(allowed).get("decision") != "block", "stop passes after sidecar")
+
+
 def main() -> int:
     test_broad_review_requires_subagent_until_seen()
     test_plain_review_sentence_does_not_block()
+    test_parallel_lanes_require_subagent_until_seen()
     cleanup_state()
     print("codex hook tests passed")
     return 0

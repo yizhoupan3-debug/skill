@@ -67,25 +67,24 @@ const INDEX_GATE_SHORTCUTS: [(&str, &str); 7] = [
     ("截图 / 页面 / 图表可视核查", "visual-review"),
 ];
 
-const INDEX_COMMON_LANES: [(&str, &str); 12] = [
-    ("已有方案，直接落代码", "plan-to-code"),
-    ("重构但不想改行为", "refactoring"),
-    ("测试设计 / flaky / 补测试", "test-engineering"),
-    ("后端运行时问题", "backend-runtime-debugging"),
-    ("前端运行时问题", "frontend-debugging"),
+const INDEX_COMMON_LANES: &[(&str, &str)] = &[
+    ("已有方案，直接落代码", "autopilot"),
+    ("需要先澄清或收敛判断", "deepinterview"),
+    (
+        "多 agent / 并行 lane / worker 边界",
+        "agent-swarm-orchestration",
+    ),
+    ("截图 / 页面 / 图表可视核查", "visual-review"),
     ("README / ADR / 项目文档", "documentation-engineering"),
-    ("构建 / 打包 / 工具链", "build-tooling"),
     ("Git 流程 / 分支合并 / 推送", "gitx"),
-    ("多轮调研 / 对比 / 检索", "information-retrieval"),
-    ("科研项目 / 课题下一步", "research-workbench"),
-    ("文献梳理 / 搜论文 / novelty check", "literature-synthesis"),
+    ("PPT / slides / deck", "slides"),
+    ("PDF / DOCX / 表格产物", "pdf"),
+    ("设计规范 / DESIGN.md / token", "design-md"),
+    ("OpenAI API / 模型 / 官方当前文档", "openai-docs"),
     ("skill 库 / 路由框架自身", "skill-framework-developer"),
 ];
 
-const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 2] = [
-    ("需要审查问题清单", "code-review"),
-    ("需要统一编码规范", "coding-standards"),
-];
+const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 0] = [];
 
 const HOT_FIRST_TURN_OWNER_SLUGS: [&str; 0] = [];
 const RUNTIME_EXECUTION_CODE_SLUGS: &[&str] = &[
@@ -152,6 +151,14 @@ const RUNTIME_PLATFORM_INTEGRATION_SLUGS: &[&str] = &[
     "prompt-engineer",
     "web-scraping",
 ];
+const RUNTIME_RESEARCH_WORKFLOW_SLUGS: &[&str] = &[
+    "ai-research",
+    "autoresearch",
+    "information-retrieval",
+    "literature-synthesis",
+    "research-engineer",
+    "research-workbench",
+];
 const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str], &str); 3] = [
     (
         "autopilot",
@@ -178,43 +185,17 @@ const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str], &str); 3] = [
 
 const DEFAULT_SURFACE_OWNERS: &[&str] = &[];
 const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
-    "research-workbench",
-    "literature-synthesis",
     "citation-management",
     "paper-workbench",
     "paper-reviewer",
     "paper-reviser",
     "paper-writing",
-    "ai-research",
-    "autoresearch",
     "experiment-reproducibility",
-    "research-engineer",
     "statistical-analysis",
     "scientific-figure-plotting",
 ];
-const IMPLEMENTATION_LOADOUT_OWNERS: &[&str] = &[
-    "plan-to-code",
-    "systematic-debugging",
-    "test-engineering",
-    "tdd-workflow",
-    "refactoring",
-    "build-tooling",
-    "dependency-migration",
-    "typescript-pro",
-    "javascript-pro",
-    "python-pro",
-    "rust-pro",
-    "go-pro",
-    "react",
-    "nextjs",
-    "node-backend",
-];
+const IMPLEMENTATION_LOADOUT_OWNERS: &[&str] = &["systematic-debugging"];
 const AUDIT_LOADOUT_OWNERS: &[&str] = &[
-    "code-review",
-    "architect-review",
-    "security-audit",
-    "security-threat-model",
-    "accessibility-auditor",
     "visual-review",
     "gh-address-comments",
     "gh-fix-ci",
@@ -225,28 +206,13 @@ const FRAMEWORK_LOADOUT_OWNERS: &[&str] = &[
     "skill-creator",
     "skill-installer",
     "plugin-creator",
-    "agent-memory",
     "agent-swarm-orchestration",
 ];
-const OPS_LOADOUT_OWNERS: &[&str] = &[
-    "gitx",
-    "release-engineering",
-    "github-actions-authoring",
-    "cloudflare-deploy",
-    "docker",
-    "linux-server-ops",
-    "observability",
-    "env-config-management",
-    "shell-cli",
-];
+const OPS_LOADOUT_OWNERS: &[&str] = &["gitx"];
 const DEFAULT_OVERLAYS: &[&str] = &[];
-const IMPLEMENTATION_OVERLAYS: &[&str] = &[
-    "coding-standards",
-    "error-handling-patterns",
-    "tdd-workflow",
-];
-const AUDIT_OVERLAYS: &[&str] = &["code-review", "security-audit", "i18n-l10n"];
-const FRAMEWORK_OVERLAYS: &[&str] = &["code-review"];
+const IMPLEMENTATION_OVERLAYS: &[&str] = &[];
+const AUDIT_OVERLAYS: &[&str] = &[];
+const FRAMEWORK_OVERLAYS: &[&str] = &[];
 
 fn main() -> Result<(), String> {
     let args = Cli::parse();
@@ -878,6 +844,7 @@ fn is_runtime_owned_skill(slug: &str) -> bool {
     RUNTIME_EXECUTION_CODE_SLUGS.contains(&slug)
         || RUNTIME_LANGUAGE_FRAMEWORK_SLUGS.contains(&slug)
         || RUNTIME_PLATFORM_INTEGRATION_SLUGS.contains(&slug)
+        || RUNTIME_RESEARCH_WORKFLOW_SLUGS.contains(&slug)
 }
 
 fn select_manifest_docs<'a>(
@@ -915,7 +882,12 @@ fn select_manifest_docs<'a>(
 }
 
 fn build_index(manifest: &Value) -> String {
-    let selected = select_runtime_skills(manifest);
+    let mut selected = select_runtime_skills(manifest);
+    selected.extend(
+        framework_command_runtime_rows()
+            .into_iter()
+            .filter_map(|row| row.as_array().cloned()),
+    );
     let lookup: HashMap<String, Vec<Value>> = selected
         .iter()
         .map(|skill| (string_at(skill, 0), skill.clone()))
@@ -954,7 +926,7 @@ fn build_index(manifest: &Value) -> String {
         "| Common need | Route to | Why |".to_string(),
         "|---|---|---|".to_string(),
     ]);
-    for (label, slug) in INDEX_COMMON_LANES {
+    for &(label, slug) in INDEX_COMMON_LANES {
         let Some(skill) = lookup.get(slug) else {
             continue;
         };
@@ -1107,7 +1079,7 @@ fn build_loadouts(surface_policy: &Value, manifest: &Value) -> Value {
                 "activation": "explicit",
                 "surface_class": "specialist",
                 "owners": filter_existing_slugs(&slugs, RESEARCH_LOADOUT_OWNERS),
-                "overlays": filter_existing_slugs(&slugs, &["code-review"]),
+                "overlays": [],
                 "exclude": [],
                 "purpose": "Research-project front door plus bounded research, repo investigation, and evidence gathering."
             },
@@ -1139,7 +1111,7 @@ fn build_loadouts(surface_policy: &Value, manifest: &Value) -> Value {
                 "activation": "explicit",
                 "surface_class": "specialist",
                 "owners": filter_existing_slugs(&slugs, OPS_LOADOUT_OWNERS),
-                "overlays": filter_existing_slugs(&slugs, &["code-review"]),
+                "overlays": [],
                 "exclude": [],
                 "purpose": "Operational changes, deployment support, and production diagnostics."
             }

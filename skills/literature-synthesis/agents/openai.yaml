@@ -1,4 +1,0 @@
-interface:
-  display_name: "Literature Synthesis"
-  short_description: "Build ref corpora, review topics, check novelty, and draft related work"
-  default_prompt: "Use $literature-synthesis to build a target-journal reference corpus, search and normalize papers, synthesize literature, check idea novelty, draft related work, and produce research-gap summaries. For manuscript preparation, default to about 20 close references from the target journal, nearest competitors, and canonical anchors, then extract story patterns for $paper-writing."

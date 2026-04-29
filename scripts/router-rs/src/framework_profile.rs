@@ -40,19 +40,6 @@ const CODEX_HOST_CAPABILITIES: [&str; 13] = [
     "host_tmux_worker_management",
     "framework_alias_entrypoints",
 ];
-const CLAUDE_CODE_HOST_CAPABILITIES: [&str; 11] = [
-    "artifact_contract",
-    "memory_mounts",
-    "workspace_bootstrap",
-    "non_interactive_entrypoint",
-    "external_session_supervisor",
-    "rate_limit_auto_resume",
-    "host_resume_entrypoint",
-    "host_tmux_worker_management",
-    "framework_alias_entrypoints",
-    "project_commands",
-    "slash_commands",
-];
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "checkpointing_supported",
     "config_root_env_var",
@@ -154,8 +141,6 @@ pub struct ProfileBundle {
     pub metadata: Map<String, Value>,
     pub codex_profile: Value,
     pub full_codex_profile: Value,
-    pub claude_code_profile: Value,
-    pub full_claude_code_profile: Value,
     pub host_payloads: Map<String, Value>,
 }
 
@@ -187,16 +172,10 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         &workspace_bootstrap,
     );
     let codex_host_payload = complete_host_payload("codex", build_codex_host_payload());
-    let claude_code_host_payload =
-        complete_host_payload("claude-code", build_claude_code_host_payload());
     let mut host_payloads = Map::new();
     host_payloads.insert(
         "codex-cli".to_string(),
         Value::Object(codex_host_payload.clone()),
-    );
-    host_payloads.insert(
-        "claude-code-cli".to_string(),
-        Value::Object(claude_code_host_payload.clone()),
     );
     let codex_profile = build_host_profile(
         profile,
@@ -216,26 +195,6 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         &shared_contract,
         &codex_host_payload,
         HostProfileKind::Codex,
-        true,
-    );
-    let claude_code_profile = build_host_profile(
-        profile,
-        &normalized_memory_mounts,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-        &shared_contract,
-        &claude_code_host_payload,
-        HostProfileKind::ClaudeCode,
-        false,
-    );
-    let full_claude_code_profile = build_host_profile(
-        profile,
-        &normalized_memory_mounts,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-        &shared_contract,
-        &claude_code_host_payload,
-        HostProfileKind::ClaudeCode,
         true,
     );
     Ok(ProfileBundle {
@@ -264,8 +223,6 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         metadata: profile.metadata.clone(),
         codex_profile: Value::Object(codex_profile),
         full_codex_profile: Value::Object(full_codex_profile),
-        claude_code_profile: Value::Object(claude_code_profile),
-        full_claude_code_profile: Value::Object(full_claude_code_profile),
         host_payloads,
     })
 }
@@ -792,80 +749,37 @@ fn build_codex_host_payload() -> Map<String, Value> {
     payload
 }
 
-fn build_claude_code_host_payload() -> Map<String, Value> {
-    let mut payload = Map::new();
-    payload.insert(
-        "context_files".to_string(),
-        Value::Array(vec![Value::String("CLAUDE.md".to_string())]),
-    );
-    payload.insert(
-        "settings_paths".to_string(),
-        json!([
-            {"scope": "user", "host_root": "claude", "relative": "settings.json"},
-            {"scope": "project", "relative": ".claude/settings.json"},
-            {"scope": "local_project", "relative": ".claude/settings.local.json"}
-        ]),
-    );
-    payload.insert("mcp_config_paths".to_string(), Value::Array(vec![]));
-    payload.insert(
-        "session_supervisor_driver".to_string(),
-        Value::String("claude_code_driver".to_string()),
-    );
-    payload.insert(
-        "resume_command_examples".to_string(),
-        json!(["claude --continue", "claude --resume <session_id>"]),
-    );
-    payload.insert(
-        "framework_alias_entrypoints".to_string(),
-        build_host_alias_entrypoints("claude-code-cli"),
-    );
-    payload.insert(
-        "project_command_surface".to_string(),
-        json!({
-            "command_dir": ".claude/commands",
-            "skill_dir": ".claude/skills",
-            "host_private": true
-        }),
-    );
-    payload
-}
-
 #[derive(Clone, Copy)]
 enum HostProfileKind {
     Codex,
-    ClaudeCode,
 }
 
 impl HostProfileKind {
     fn host_key(self) -> &'static str {
         match self {
             HostProfileKind::Codex => "codex-cli",
-            HostProfileKind::ClaudeCode => "claude-code-cli",
         }
     }
 
     fn host_cli(self) -> &'static str {
         match self {
             HostProfileKind::Codex => "codex",
-            HostProfileKind::ClaudeCode => "claude-code",
         }
     }
 
     fn entrypoint_kind(self) -> &'static str {
         match self {
             HostProfileKind::Codex => "codex",
-            HostProfileKind::ClaudeCode => "claude-code",
         }
     }
 
     fn controller_is_cli(self) -> bool {
-        matches!(self, HostProfileKind::ClaudeCode)
+        false
     }
 
     fn capabilities(self) -> Value {
         match self {
             HostProfileKind::Codex => string_array(&CODEX_HOST_CAPABILITIES),
-            HostProfileKind::ClaudeCode => string_array(&CLAUDE_CODE_HOST_CAPABILITIES),
         }
     }
 }
@@ -1696,10 +1610,7 @@ mod tests {
         );
         assert!(serialized.get("codex_profile").is_some());
         assert!(serialized.get("full_codex_profile").is_some());
-        assert!(serialized.get("claude_code_profile").is_some());
-        assert!(serialized.get("full_claude_code_profile").is_some());
         assert!(serialized["host_payloads"].get("codex-cli").is_some());
-        assert!(serialized["host_payloads"].get("claude-code-cli").is_some());
         assert!(serialized.get("host_entrypoint_outputs").is_none());
     }
 

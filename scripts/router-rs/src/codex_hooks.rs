@@ -13,57 +13,13 @@ const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_m
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
 const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
-const CLAUDE_AGENT_POLICY_PATH: &str = "CLAUDE.md";
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
-const PROTECTED_GENERATED_PATHS: [&str; 3] = [
-    CODEX_AGENT_POLICY_PATH,
-    CLAUDE_AGENT_POLICY_PATH,
-    HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-];
+const PROTECTED_GENERATED_PATHS: [&str; 2] =
+    [CODEX_AGENT_POLICY_PATH, HOST_ENTRYPOINT_SYNC_MANIFEST_PATH];
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 pub fn build_codex_hook_manifest() -> Value {
     json!({
-        "hooks": {
-            "UserPromptSubmit": [
-                {
-                    "matcher": "*",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
-                            "timeout": 10,
-                            "statusMessage": "Checking review delegation"
-                        }
-                    ]
-                }
-            ],
-            "PostToolUse": [
-                {
-                    "matcher": ".*",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
-                            "timeout": 10,
-                            "statusMessage": "Recording review subagent evidence"
-                        }
-                    ]
-                }
-            ],
-            "Stop": [
-                {
-                    "matcher": "*",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
-                            "timeout": 10,
-                            "statusMessage": "Checking review closeout"
-                        }
-                    ]
-                }
-            ]
-        }
+        "hooks": {}
     })
 }
 
@@ -148,9 +104,10 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
 
 fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut files = BTreeMap::new();
-    let shared_policy = build_shared_agent_policy().into_bytes();
-    files.insert(CODEX_AGENT_POLICY_PATH.to_string(), shared_policy.clone());
-    files.insert(CLAUDE_AGENT_POLICY_PATH.to_string(), shared_policy);
+    files.insert(
+        CODEX_AGENT_POLICY_PATH.to_string(),
+        build_codex_agent_policy().into_bytes(),
+    );
     files.insert(
         HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
         serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files))?,
@@ -163,12 +120,11 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
     json!({
         "schema_version": "host-entrypoints-sync-manifest-v1",
         "shared_system": {
-            "policy": "shared-agent-policy-v1",
+            "policy": "host-specific-agent-policy-v1",
             "source_of_truth": "skills/",
-            "supported_hosts": ["codex-cli", "claude-code-cli"],
+            "supported_hosts": ["codex-cli"],
             "host_entrypoints": {
                 "codex-cli": CODEX_AGENT_POLICY_PATH,
-                "claude-code-cli": CLAUDE_AGENT_POLICY_PATH,
             },
         },
         "full_sync": {
@@ -369,7 +325,7 @@ pub fn build_codex_hook_projection() -> Value {
     json!({
         "schema_version": "router-rs-codex-hook-projection-v1",
         "authority": CODEX_HOOK_AUTHORITY,
-        "codex_agent_policy": build_shared_agent_policy(),
+        "codex_agent_policy": build_codex_agent_policy(),
         "codex_hooks_readme": build_codex_hooks_readme(),
         "codex_hooks": build_codex_hook_manifest(),
         "codex_audit_commands": {
@@ -379,15 +335,15 @@ pub fn build_codex_hook_projection() -> Value {
     })
 }
 
-fn build_shared_agent_policy() -> String {
+fn build_codex_agent_policy() -> String {
     include_str!("../../../AGENTS.md").to_string()
 }
 
 fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
-Codex hooks are enabled for this repo.\n\n\
-Project-local hooks live in `.codex/hooks.json` and `.codex/hooks/`.\n\n\
-The active review gate requires broad/deep review requests to either spawn independent reviewer subagents or record a clear reject reason before finalizing.\n\n\
+Codex hooks are disabled for this repo.\n\n\
+Project-local `.codex/hooks.json` intentionally contains no active hooks.\n\n\
+The inactive hook scripts under `.codex/hooks/` remain available only as test fixtures or explicit audit helpers.\n\n\
 The Rust hook command remains available for explicit one-off audits.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\

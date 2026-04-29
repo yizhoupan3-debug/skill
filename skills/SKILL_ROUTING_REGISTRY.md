@@ -6,10 +6,8 @@
 | `skill-creator` | Active | P1 | L0 | owner | none | system | ✓ 94.0 | Design or revise one Codex skill package |
 | `skill-installer` | Active | P1 | L0 | owner | none | system | ✓ 94.0 | Install curated or remote Codex skills |
 | `agent-swarm-orchestration` | Active | P1 | L0 | gate | delegation | project | ✓ 94.0 | Decide whether work should stay local, use bounded sidecars, or escalate to team |
-| `ai-research` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | AI/ML research engineering for model training, experiment pipelines, evaluation, |
 | `algo-trading` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Design, analyze, and implement algorithmic trading strategies, backtests, execut |
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Check whether a homework or course-project submission satisfies the stated requi |
-| `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `citation-management` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Verify and format academic citations and bibliographies. |
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Repo-native deepinterview workflow for evidence-first clarification and converge |
@@ -25,10 +23,8 @@
 | `gitx` | Active | P1 | L2 | owner | none | project | ✓ 94.0 | Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end. |
 | `image-generated` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
 | `infographic` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
-| `information-retrieval` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Run multi-round research before acting or recommending |
 | `jupyter-notebook` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `latex-compile-acceleration` | Active | P1 | L4 | owner | none | project | ✓ 94.0 | Speed up LaTeX compile and preview workflows |
-| `literature-synthesis` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Screen, cluster, compare, and synthesize academic literature into a topic review |
 | `mac-memory-management` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stab |
 | `math-derivation` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Execute rigorous mathematical derivations and proofs |
 | `openai-docs` | Active | P1 | L1 | gate | source | project | ✓ 94.0 | Use official OpenAI docs first for current OpenAI guidance |
@@ -41,8 +37,6 @@
 | `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Build source-first editable `.pptx` decks from `deck.plan.json` through the Rust |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 94.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `refresh` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | 使用 Rust refresh 命令生成并复制下一轮执行提示 |
-| `research-engineer` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Provide rigorous technical critique, algorithm analysis, formal reasoning, compl |
-| `research-workbench` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Coordinate non-manuscript research project workflows. |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Create, refactor, and review code-generated scientific figures for papers using  |
 | `screenshot` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Capture desktop or system screenshots including full screen, a specific app wind |
 | `sentry` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Inspect Sentry production errors and issue evidence read-only. |

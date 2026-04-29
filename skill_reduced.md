@@ -9,7 +9,7 @@
 - [x] 保留 owner：`plan-to-code`、`agent-swarm-orchestration`、`primary-runtime/spreadsheets`、`skill-framework-developer`。
 - [x] 迁移 references：新增 `skills/plan-to-code/references/autopilot-mode.md` 与 `skills/agent-swarm-orchestration/references/team-mode.md`；复用 `skills/primary-runtime/spreadsheets/references/xlsx-rust-workflow.md`。
 - [x] 更新 routing 文件：skill compiler 重新生成 manifest/runtime/tiers/loadouts/approval/shadow/registry，host integration 重新生成 Codex skill surface alias stub。
-- [x] 更新 tests：覆盖 generated-only framework command alias、Codex/Claude host projection、normalized protected generated paths。
+- [x] 更新 tests：覆盖 generated-only framework command alias、Codex host projection、normalized protected generated paths。
 - [x] 验证命令：`cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml`、`cargo test --manifest-path scripts/router-rs/Cargo.toml`、`cargo test`、routing smoke、generated-artifacts drift gate。
 - [x] 剩余风险：后续 paper/design/research/security/frontend 的深度内容瘦身仍应按簇继续做，不要一次性全库重写。
 - [x] 下一轮入口：优先处理 paper/design/research 的 retained references 与 routing doc 精简。
@@ -20,7 +20,7 @@
 - [ ] 优先删除历史兼容壳、重复入口、低价值专科 skill，而不是继续增加边界说明。
 - [x] 当前 runtime 基线已是 `109` 个 manifest skill、`16` 个 hot routing entry、`11` 个 default/core gate；不要再按旧 `145/26` 基线回退。
 - [ ] 下一步只按重叠簇继续收敛到约 `90-100` 个有效入口；默认可见面以 `FRAMEWORK_SURFACE_POLICY.json` 的 `default=11` 为准，不再用 hot index 当 default surface。
-- [x] 保留 Rust-owned shared core + 显式 `codex-cli` / `claude-code-cli` host projections 的运行时方向，不恢复旧宿主、generic adapter、Python bridge 或 Node runtime 兼容面。
+- [x] 保留 Rust-owned shared core + 显式 `codex-cli` host projection 的运行时方向，不恢复旧宿主、generic adapter、Python bridge 或 Node runtime 兼容面。
 - [ ] 保留“一个 front door + 少量内部 mode/reference”的结构，避免多个同类 skill 争抢首轮路由。
 
 ## 总原则
@@ -63,13 +63,13 @@
 
 ### 目标
 
-- [ ] 确保仓库只保留 Rust-owned shared framework core 与显式 Codex/Claude Code host projection 面。
+- [ ] 确保仓库只保留 Rust-owned shared framework core 与显式 Codex host projection 面。
 - [ ] 删除旧宿主兼容壳，减少误读和维护分叉。
 
 ### 删除候选
 
 - [x] 旧宿主入口文件、旧宿主配置目录和旧 bridge 目录已不作为当前清单逐项保留。
-- [x] `AGENTS.md` / `CLAUDE.md` 是当前 host projection 入口；Codex CLI 与 Claude Code 由 Rust sync 生成共享策略。
+- [x] `AGENTS.md` 是当前 host projection 入口；Codex CLI 由 Rust sync 生成共享策略。
 - [x] 删除 `scripts/router-rs/src/framework_mcp.rs`。
 - [x] 删除 `plugins/skill-framework-native/.mcp.json`。
 
@@ -79,7 +79,7 @@
 - [x] 允许历史说明出现，但不得作为当前运行路径、同步路径、入口路径。
 - [x] `configs/framework/RUNTIME_REGISTRY.json` 不再引用已删除旧宿主入口。
 - [x] `scripts/router-rs` 编译通过。
-- [x] routing 文档只描述 Rust-owned shared core 与显式 `codex-cli` / `claude-code-cli` projection surfaces。
+- [x] routing 文档只描述 Rust-owned shared core 与显式 `codex-cli` projection surface。
 
 ## P0：旧重复 skill 删除
 
@@ -200,7 +200,7 @@
 - [x] 保留 `agent-swarm-orchestration` 作为是否拆 sidecar / team 的 gate。
 - [x] 将 `autopilot` 降成 `plan-to-code` 的 alias mode。
 - [x] 将 `team` 降成 `agent-swarm-orchestration` 或 `plan-to-code` 的 alias mode。
-- [x] 保留 Codex CLI/Claude Code 可直接读取的 `$autopilot` / `$team` 极短 stub；只删除普通 skill owner 竞争，不删除 `$` 入口。
+- [x] 保留 Codex CLI 可直接读取的 `$autopilot` / `$team` 极短 stub；只删除普通 skill owner 竞争，不删除 `$` 入口。
 
 ### 合并内容
 
@@ -211,8 +211,8 @@
 
 ### 验收
 
-- [x] 用户说 `$autopilot` 时能从 Codex CLI/Claude Code skill surface 直接读取 alias stub，随后进入 `plan-to-code`。
-- [x] 用户说 `$team` 时能从 Codex CLI/Claude Code skill surface 直接读取 alias stub，随后由 `agent-swarm-orchestration` 判断是否真的需要 team orchestration。
+- [x] 用户说 `$autopilot` 时能从 Codex CLI skill surface 直接读取 alias stub，随后进入 `plan-to-code`。
+- [x] 用户说 `$team` 时能从 Codex CLI skill surface 直接读取 alias stub，随后由 `agent-swarm-orchestration` 判断是否真的需要 team orchestration。
 - [x] `SKILL_TIERS.json` 不再把 `autopilot`、`team` 当 optional skill。
 - [x] `RUNTIME_REGISTRY.json` 保留 alias 状态机，`artifacts/codex-skill-surface/skills/{autopilot,team}/SKILL.md` 保留生成 stub。
 - [x] `autopilot` / `team` 只允许 `$...` 或 `/...` 精确入口；普通 planning/debugging/coding 请求不得选择这些 alias stub，`team` command policy 为 `implicit_route_policy: never`。

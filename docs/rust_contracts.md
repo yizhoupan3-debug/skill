@@ -20,7 +20,7 @@ It is the contract source of truth for:
 Rust owns the default runtime and contract path.
 
 - `router-rs route <query>` owns route decisions; route diagnostics use the Rust stdio route policy/report operations.
-- `router-rs profile emit` and `router-rs profile artifacts` own the shared framework profile plus explicit Codex and Claude Code projection artifacts.
+- `router-rs profile emit` and `router-rs profile artifacts` own the shared framework profile plus explicit Codex projection artifacts.
 - Rust stdio `execute` operation owns the live/dry-run execution response contract.
 - `router-rs framework snapshot`, `contract-summary`, `memory-recall`, `session-artifact-write`, `memory-policy`, and `prompt-compression` own framework runtime read/write/policy surfaces.
 - `router-rs codex sync` owns repo host-entrypoint materialization.
@@ -36,7 +36,7 @@ Rust owns the default runtime and contract path.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, `memory`, and `background`.
 - Framework snapshot, contract summary, memory recall, session artifact writing, and prompt/memory policy use direct `router-rs` surfaces.
 - Memory policy extraction reports source/fact counts and can persist to both `memory.sqlite3` and the stable `decisions.md` journal without introducing an alternate writer.
-- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the supported host projections are `codex-cli` and `claude-code-cli`.
+- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the supported host projection is `codex-cli`.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.
 - SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains the safe default storage.
@@ -62,19 +62,16 @@ Rust owns the default runtime and contract path.
 
 - Contract changes must be explicit and versioned.
 - Rust may replace implementations, not silently redefine semantics.
-- Host-private fields stay under explicit host projection payloads such as `codex_profile.codex_host_payload` or `claude_code_profile.claude_code_host_payload`; they must not enter framework core truth.
+- Host-private fields stay under explicit host projection payloads such as `codex_profile.codex_host_payload`; they must not enter framework core truth.
 - Active contracts must describe current owners and outputs, not migration inventory.
 - Any alternate runtime, routing, artifact, hook, or host-integration implementation is a regression unless explicitly approved as a host-private edge script.
 
 ## Host Projection Invariants
 
 - The shared framework core is the profile authority; host projections are closed-set and explicit.
-- Supported host projections are exactly `codex-cli` and `claude-code-cli`.
+- Supported host projection is exactly `codex-cli`.
 - `codex_profile` is the Codex projection artifact and may carry Codex-private payload fields.
-- `claude_code_profile` is the Claude Code projection artifact and may carry Claude-private payload fields.
 - Generated host projections are disposable install targets and must remain thin bootstrap pointers to the Rust core.
-- Default Claude Code projection installs one project-local `/framework` command and does not modify settings, hooks, statusLine, permissions, environment variables, or `CLAUDE.md` unless an opt-in capability is explicitly enabled.
-- When Claude settings, hooks, or statusLine are explicitly enabled, Rust merge-patches only framework-owned keys and records those key paths in the projection manifest for exact cleanup.
 - `framework host-integration remove` removes only framework-owned projection files and manifest-recorded settings keys; user-authored files and unrelated settings are preserved.
 - `framework host-integration compatibility-aliases` is the machine-readable inventory for retained aliases such as `install-skills`, `codex host-integration`, and `--repo-root`; each entry must include owner, reason, primary command, kept policy, removal condition, and `independent_behavior: false`.
 - `configs/framework/GENERATED_ARTIFACTS.json` declares checked-in generated artifacts with schema `framework-generated-artifacts-manifest-v1`; `framework host-integration generated-artifacts-status` is a manifest-backed byte-for-byte drift gate that regenerates declared artifacts in an isolated temporary root, compares manifest-declared outputs, reports undeclared generated framework artifacts across reverse-reference surfaces, and rejects expanded host-private paths in shared artifacts.

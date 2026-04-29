@@ -1,7 +1,7 @@
 mod common;
 
 use common::{
-    host_integration_json, json_from_output, output_text, project_root, read_json, read_text,
+    host_integration_json, json_from_output, output_text, project_root, read_text,
     router_rs_command, router_rs_json, run, write_json, write_text,
 };
 use serde_json::json;
@@ -281,100 +281,7 @@ fn memory_automation_materializes_sqlite_and_continuity_control_plane() {
 }
 
 #[test]
-fn install_skills_alias_projects_codex_and_claude_code_root_entrypoints() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
-        r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
-    );
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/deepinterview/SKILL.md"),
-        "---\nname: deepinterview\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/systematic-debugging/SKILL.md"),
-        "---\nname: systematic-debugging\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/skill-framework-developer/SKILL.md"),
-        "---\nname: skill-framework-developer\n---\n",
-    );
-    write_text(
-        &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"autopilot":{},"team":{}}}"#,
-    );
-    write_text(
-        &repo_root.join("skills/optional-heavy/SKILL.md"),
-        "---\nname: optional-heavy\n---\n",
-    );
-    let first = host_integration_json(&[
-        "install-skills",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--bootstrap-output-dir",
-        tmp.path().join("bootstrap").to_str().unwrap(),
-        "--to",
-        "all",
-    ]);
-    let second = host_integration_json(&[
-        "install-skills",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--bootstrap-output-dir",
-        tmp.path().join("bootstrap").to_str().unwrap(),
-        "status",
-    ]);
-    assert_eq!(first["success"], true);
-    assert_eq!(first["results"]["codex"]["status"], "installed");
-    assert_eq!(first["results"]["claude-code"]["status"], "installed");
-    assert_eq!(
-        first["results"]["codex"]["prompt_entrypoints"]["changed"],
-        false
-    );
-    assert_eq!(first["invocation"]["deprecated_alias"], true);
-    assert!(first["results"].get("agents").is_none());
-    let codex_entrypoint = repo_root.join(".codex/prompts/framework.md");
-    let claude_entrypoint = repo_root.join(".claude/commands/framework.md");
-    assert!(codex_entrypoint.is_file());
-    assert!(claude_entrypoint.is_file());
-    assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
-    assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
-    assert!(!home.join(".codex/skills").exists());
-    assert!(!home.join(".claude/skills").exists());
-    assert!(read_text(&codex_entrypoint).contains("host_projection: codex-cli"));
-    assert!(read_text(&claude_entrypoint).contains("host_projection: claude-code-cli"));
-    assert_eq!(
-        second["results"]["codex"]["prompts"]["framework"]["project"]["managed"],
-        true
-    );
-    assert_eq!(
-        second["results"]["claude-code"]["commands"]["framework"]["project"]["managed"],
-        true
-    );
-    assert_eq!(
-        second["results"]["claude-code"]["settings"]["managed"],
-        false
-    );
-}
-
-#[test]
-fn install_skills_codex_target_does_not_install_claude_code() {
+fn install_skills_codex_target_installs_only_codex() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     let home = tmp.path().join("home");
@@ -400,155 +307,10 @@ fn install_skills_codex_target_does_not_install_claude_code() {
 
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["codex"]["status"], "installed");
-    assert!(result["results"].get("claude-code").is_none());
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
     assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
-    assert!(!repo_root.join(".claude/commands/framework.md").exists());
     assert!(!home.join(".codex/skills").exists());
-    assert!(!home.join(".claude/skills").exists());
-}
-
-#[test]
-fn framework_host_integration_installs_project_local_claude_root_entrypoint() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    std::fs::create_dir_all(&project_root).unwrap();
-
-    let first = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-        "--scope",
-        "project",
-    ]);
-    let second = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-    ]);
-
-    let command_path = project_root.join(".claude/commands/framework.md");
-    let content = read_text(&command_path);
-    assert_eq!(first["success"], true);
-    assert_eq!(
-        first["invocation"]["primary_command"],
-        "framework host-integration"
-    );
-    assert_eq!(first["results"]["claude-code"]["status"], "installed");
-    assert_eq!(
-        first["results"]["claude-code"]["settings"]["managed"],
-        false
-    );
-    assert!(content.contains("managed_by: skill-framework"));
-    assert!(content.contains("host_projection: claude-code-cli"));
-    assert!(!content.contains("allowed-tools"));
-    assert!(!project_root.join(".codex").exists());
-    assert!(artifact_root
-        .join("claude-code-surface/entrypoints/framework.md")
-        .is_file());
-    assert_eq!(
-        second["results"]["claude-code"]["commands"]["framework"]["project"]["managed"],
-        true
-    );
-}
-
-#[test]
-fn framework_host_integration_remove_skips_user_owned_files() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    let user_owned = project_root.join(".claude/commands/framework.md");
-    write_text(&user_owned, "# user command\n");
-
-    let result = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "remove",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-        "--scope",
-        "project",
-    ]);
-
-    assert_eq!(result["results"]["claude-code"]["changed"], false);
-    assert_eq!(read_text(&user_owned), "# user command\n");
-}
-
-#[test]
-fn framework_host_integration_remove_preserves_marker_copy_without_manifest_ownership() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let installed_project = tmp.path().join("installed");
-    let copied_project = tmp.path().join("copied");
-    let artifact_root = tmp.path().join("artifacts");
-    std::fs::create_dir_all(&installed_project).unwrap();
-    std::fs::create_dir_all(copied_project.join(".claude/commands")).unwrap();
-    router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        installed_project.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-        "--scope",
-        "project",
-    ]);
-    let copied_command = copied_project.join(".claude/commands/framework.md");
-    let copied_content = read_text(&installed_project.join(".claude/commands/framework.md"));
-    write_text(&copied_command, &copied_content);
-
-    let result = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "remove",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        copied_project.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-        "--scope",
-        "project",
-    ]);
-
-    assert_eq!(result["results"]["claude-code"]["changed"], false);
-    assert!(copied_command.is_file());
-    assert_eq!(read_text(&copied_command), copied_content);
-    assert_eq!(
-        result["results"]["claude-code"]["skipped_user_owned_paths"],
-        json!([copied_command.to_string_lossy()])
-    );
 }
 
 #[test]
@@ -611,239 +373,6 @@ fn framework_host_integration_remove_preserves_files_not_recorded_in_manifest() 
         result["results"]["codex"]["skipped_user_owned_paths"],
         json!([command_path.to_string_lossy()])
     );
-}
-
-#[test]
-fn claude_settings_opt_in_merge_and_cleanup_are_manifest_owned() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    let settings_path = project_root.join(".claude/settings.json");
-    write_json(
-        &settings_path,
-        &json!({
-            "theme": "keep-me",
-            "disableAllHooks": true,
-            "env": {"USER_KEY": "keep"}
-        }),
-    );
-
-    let install = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-        "--scope",
-        "project",
-        "--enable-claude-settings",
-        "--enable-claude-hooks",
-        "--enable-claude-statusline",
-    ]);
-    assert_eq!(
-        install["results"]["claude-code"]["settings"]["managed"],
-        true
-    );
-    assert_eq!(install["results"]["claude-code"]["hooks"]["managed"], true);
-    assert_eq!(
-        install["results"]["claude-code"]["statusLine"]["managed"],
-        true
-    );
-
-    let settings = read_json(&settings_path);
-    assert_eq!(settings["theme"], "keep-me");
-    assert_eq!(settings["env"]["USER_KEY"], "keep");
-    assert_eq!(
-        settings["env"]["SKILL_FRAMEWORK_ROOT"],
-        framework_root.to_str().unwrap()
-    );
-    assert!(
-        settings["hooks"]["PreToolUse"].as_array().unwrap()[0]["framework_owned"]
-            .as_bool()
-            .unwrap()
-    );
-    assert_eq!(settings["statusLine"]["type"], "command");
-    let statusline_command = settings["statusLine"]["command"].as_str().unwrap();
-    assert!(statusline_command.contains(&format!(
-        "'{}'",
-        framework_root
-            .join("scripts/router-rs/run_router_rs.sh")
-            .to_string_lossy()
-    )));
-    assert!(statusline_command.contains(&format!(
-        "'{}'",
-        framework_root
-            .join("scripts/router-rs/Cargo.toml")
-            .to_string_lossy()
-    )));
-    assert!(statusline_command.contains(&format!(
-        "--repo-root '{}'",
-        framework_root.to_string_lossy()
-    )));
-    let hook_command = settings["hooks"]["PreToolUse"].as_array().unwrap()[0]["hooks"]
-        .as_array()
-        .unwrap()[0]["command"]
-        .as_str()
-        .unwrap();
-    assert!(hook_command.contains("framework host-integration claude-pre-tool-check"));
-    assert!(!hook_command.contains("framework host-integration status"));
-    assert!(hook_command.contains(&format!(
-        "--framework-root '{}'",
-        framework_root.to_string_lossy()
-    )));
-    assert!(hook_command.contains("--project-root \"$CLAUDE_PROJECT_DIR\""));
-    let status = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-    ]);
-    assert_eq!(
-        status["results"]["claude-code"]["settings"]["hooks_disabled_by_disableAllHooks"],
-        true
-    );
-    assert_eq!(
-        status["results"]["claude-code"]["settings"]["statusLine_effective"],
-        "not-derived-from-disableAllHooks-without-native-verification"
-    );
-    assert_eq!(
-        status["results"]["claude-code"]["hooks"]["manifest_managed"],
-        true
-    );
-    assert_eq!(status["results"]["claude-code"]["hooks"]["managed"], false);
-    assert_eq!(
-        status["results"]["claude-code"]["hooks"]["verification"],
-        "disabled"
-    );
-    assert_eq!(
-        status["results"]["claude-code"]["hooks"]["reason"],
-        "disabled-by-disableAllHooks"
-    );
-    assert_eq!(
-        status["results"]["claude-code"]["hooks"]["schema"]["verified"],
-        true
-    );
-    assert_eq!(
-        status["results"]["claude-code"]["statusLine"]["managed"],
-        true
-    );
-    assert_eq!(
-        status["results"]["claude-code"]["statusLine"]["schema"]["verified"],
-        true
-    );
-    let hook_check = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "claude-pre-tool-check",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-    ]);
-    assert_eq!(hook_check["command"], "claude-pre-tool-check");
-    assert_eq!(hook_check["status"], "not-verified");
-    assert_eq!(hook_check["hook"]["manifest_managed"], true);
-    assert_eq!(hook_check["hook"]["managed"], false);
-    assert_eq!(hook_check["hook"]["verification"], "disabled");
-    assert_eq!(hook_check["hook"]["reason"], "disabled-by-disableAllHooks");
-    assert_eq!(hook_check["hook"]["schema"]["verified"], true);
-    assert!(project_root
-        .join(".claude/.framework-projection.json")
-        .is_file());
-
-    let remove = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "remove",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-        "--scope",
-        "project",
-    ]);
-    assert_eq!(remove["results"]["claude-code"]["changed"], true);
-    let cleaned = read_json(&settings_path);
-    assert_eq!(cleaned["theme"], "keep-me");
-    assert_eq!(cleaned["disableAllHooks"], true);
-    assert_eq!(cleaned["env"]["USER_KEY"], "keep");
-    assert!(cleaned["env"].get("SKILL_FRAMEWORK_ROOT").is_none());
-    assert!(cleaned.get("hooks").is_none());
-    assert!(cleaned.get("statusLine").is_none());
-}
-
-#[test]
-fn claude_settings_cleanup_ignores_unmanaged_manifest() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    let settings_path = project_root.join(".claude/settings.json");
-    write_json(
-        &settings_path,
-        &json!({
-            "env": {"SKILL_FRAMEWORK_ROOT": "must-stay", "USER_KEY": "keep"},
-            "hooks": {"PreToolUse": [{"framework_owned": true}]},
-            "statusLine": {"type": "command", "command": "framework statusline"}
-        }),
-    );
-    write_json(
-        &project_root.join(".claude/.framework-projection.json"),
-        &json!({
-            "schema_version": "framework-host-projection-v1",
-            "managed_by": "someone-else",
-            "host_projection": "claude-code-cli",
-            "scope": "project",
-            "settings": {
-                "path": settings_path.to_string_lossy(),
-                "managed_key_paths": ["env.SKILL_FRAMEWORK_ROOT", "hooks.PreToolUse", "statusLine"]
-            }
-        }),
-    );
-
-    let remove = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "remove",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-        "--scope",
-        "project",
-    ]);
-
-    assert_eq!(
-        remove["results"]["claude-code"]["settings_keys_removed"],
-        false
-    );
-    let settings = read_json(&settings_path);
-    assert_eq!(settings["env"]["SKILL_FRAMEWORK_ROOT"], "must-stay");
-    assert_eq!(settings["env"]["USER_KEY"], "keep");
-    assert!(settings["hooks"]["PreToolUse"].is_array());
-    assert_eq!(settings["statusLine"]["type"], "command");
 }
 
 #[test]
@@ -922,7 +451,6 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         "skills/SKILL_LOADOUTS.json",
         "skills/SKILL_TIERS.json",
         "AGENTS.md",
-        "CLAUDE.md",
         ".codex/host_entrypoints_sync_manifest.json",
     ] {
         assert!(
@@ -1134,7 +662,7 @@ fn generated_artifacts_status_reports_manifest_backed_drift() {
     );
     write_text(
         &framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"),
-        r#"{"status":"stale","marker":"generated-by-test","bad":"/Users/joe/.claude /Users/joe/.codex /Users/joe/Documents/skill"}
+        r#"{"status":"stale","marker":"generated-by-test","bad":"/Users/joe/.codex /Users/joe/Documents/skill"}
 "#,
     );
     write_text(
@@ -1174,11 +702,7 @@ printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framew
     );
     assert_eq!(
         status["generated_artifacts"][0]["forbidden_markers"],
-        json!([
-            "expanded-claude-home",
-            "expanded-codex-home",
-            "expanded-consuming-project-root"
-        ])
+        json!(["expanded-codex-home", "expanded-consuming-project-root"])
     );
     assert_eq!(
         status["manifest_status"]["undeclared_generated_artifacts"]
@@ -1187,92 +711,6 @@ printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framew
             .len(),
         0
     );
-}
-
-#[test]
-fn external_consuming_repo_matrix_keeps_framework_project_artifact_and_homes_separate() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_a = tmp.path().join("project-a");
-    let project_b = tmp.path().join("project-b");
-    let artifact_root = tmp.path().join("artifact-root");
-    let home = tmp.path().join("home");
-    let outside = tmp.path().join("outside");
-    std::fs::create_dir_all(&project_a).unwrap();
-    std::fs::create_dir_all(&project_b).unwrap();
-    std::fs::create_dir_all(&outside).unwrap();
-
-    let claude = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_a.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--claude-home",
-        home.join(".claude").to_str().unwrap(),
-        "--codex-home",
-        home.join(".codex").to_str().unwrap(),
-        "--to",
-        "claude-code",
-    ]);
-    let codex = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_b.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--claude-home",
-        home.join(".claude").to_str().unwrap(),
-        "--codex-home",
-        home.join(".codex").to_str().unwrap(),
-        "--to",
-        "codex",
-    ]);
-    let mut status_cmd = router_rs_command([
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_a.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--claude-home",
-        home.join(".claude").to_str().unwrap(),
-        "--codex-home",
-        home.join(".codex").to_str().unwrap(),
-    ]);
-    status_cmd.current_dir(&outside);
-    let status = json_from_output(&run(status_cmd));
-
-    assert_eq!(claude["results"]["claude-code"]["status"], "installed");
-    assert_eq!(codex["results"]["codex"]["status"], "installed");
-    assert!(project_a.join(".claude/commands/framework.md").is_file());
-    assert!(!project_a.join(".codex").exists());
-    assert!(project_b.join(".codex/prompts/framework.md").is_file());
-    assert!(!project_b.join(".claude").exists());
-    assert!(artifact_root
-        .join("claude-code-surface/entrypoints/framework.md")
-        .is_file());
-    assert_eq!(
-        status["resolved_roots"]["framework_root"],
-        framework_root.to_str().unwrap()
-    );
-    assert_eq!(
-        status["resolved_roots"]["project_root"],
-        project_a.to_str().unwrap()
-    );
-    assert!(read_text(&project_a.join(".claude/commands/framework.md"))
-        .contains(framework_root.to_str().unwrap()));
 }
 
 #[test]
@@ -1331,9 +769,7 @@ fn projection_root_resolution_honors_env_fallbacks_and_cli_home_overrides() {
     let framework_root = project_root();
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
-    let env_claude_home = tmp.path().join("env/.claude");
     let env_codex_home = tmp.path().join("env/.codex");
-    let flag_claude_home = tmp.path().join("flag/.claude");
     let flag_codex_home = tmp.path().join("flag/.codex");
     std::fs::create_dir_all(&project_root).unwrap();
 
@@ -1342,7 +778,6 @@ fn projection_root_resolution_honors_env_fallbacks_and_cli_home_overrides() {
         .env("SKILL_FRAMEWORK_ROOT", &framework_root)
         .env("SKILL_PROJECT_ROOT", &project_root)
         .env("SKILL_ARTIFACT_ROOT", &artifact_root)
-        .env("CLAUDE_HOME", &env_claude_home)
         .env("CODEX_HOME", &env_codex_home);
     let env_payload = json_from_output(&run(env_status));
     assert_eq!(
@@ -1358,8 +793,8 @@ fn projection_root_resolution_honors_env_fallbacks_and_cli_home_overrides() {
         artifact_root.to_str().unwrap()
     );
     assert_eq!(
-        env_payload["resolved_roots"]["host_home_roots"]["claude-code-cli"],
-        env_claude_home.to_str().unwrap()
+        env_payload["resolved_roots"]["host_home_roots"]["codex-cli"],
+        env_codex_home.to_str().unwrap()
     );
 
     let mut flag_status = router_rs_command([
@@ -1370,19 +805,11 @@ fn projection_root_resolution_honors_env_fallbacks_and_cli_home_overrides() {
         framework_root.to_str().unwrap(),
         "--project-root",
         project_root.to_str().unwrap(),
-        "--claude-home",
-        flag_claude_home.to_str().unwrap(),
         "--codex-home",
         flag_codex_home.to_str().unwrap(),
     ]);
-    flag_status
-        .env("CLAUDE_HOME", &env_claude_home)
-        .env("CODEX_HOME", &env_codex_home);
+    flag_status.env("CODEX_HOME", &env_codex_home);
     let flag_payload = json_from_output(&run(flag_status));
-    assert_eq!(
-        flag_payload["resolved_roots"]["host_home_roots"]["claude-code-cli"],
-        flag_claude_home.to_str().unwrap()
-    );
     assert_eq!(
         flag_payload["resolved_roots"]["host_home_roots"]["codex-cli"],
         flag_codex_home.to_str().unwrap()
@@ -1394,7 +821,6 @@ fn project_discovery_ignores_host_private_projection_directories() {
     let tmp = tempdir().unwrap();
     let framework_root = project_root();
     let host_private_only = tmp.path().join("host-private-only");
-    std::fs::create_dir_all(host_private_only.join(".claude/commands")).unwrap();
     std::fs::create_dir_all(host_private_only.join(".codex/prompts")).unwrap();
 
     let mut command = Command::new("cargo");
@@ -1453,363 +879,6 @@ fn project_discovery_rejects_ambiguous_framework_like_candidate() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("ambiguous project_root discovery"));
     assert!(stderr.contains("Pass both --framework-root and --project-root explicitly"));
-}
-
-#[test]
-fn claude_command_status_reports_frontmatter_allowlist_and_stale_project_metadata() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_a = tmp.path().join("project-a");
-    let project_b = tmp.path().join("project-b");
-    let artifact_root = tmp.path().join("artifact-root");
-    std::fs::create_dir_all(&project_a).unwrap();
-    std::fs::create_dir_all(&project_b.join(".claude/commands")).unwrap();
-    router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_a.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-    ]);
-    let copied = read_text(&project_a.join(".claude/commands/framework.md"))
-        .replace("argument-hint:", "allowed-tools: Bash\nargument-hint:");
-    write_text(&project_b.join(".claude/commands/framework.md"), &copied);
-
-    let status = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_b.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-    ]);
-    let command_status = &status["results"]["claude-code"]["commands"]["framework"]["project"];
-    assert_eq!(command_status["managed"], false);
-    assert_eq!(command_status["verification"], "unknown");
-    assert_eq!(command_status["marker_managed"], true);
-    assert_eq!(command_status["stale_project_metadata"], true);
-    assert_eq!(command_status["frontmatter"]["allowed"], false);
-    assert!(command_status["frontmatter"]["unknown_keys"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!("allowed-tools")));
-    assert_eq!(command_status["command_file"]["valid"], true);
-    assert_eq!(command_status["copied_skill_bodies"]["detected"], true);
-}
-
-#[test]
-fn claude_command_status_verifies_generated_command_shape_without_skill_body_copy() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    std::fs::create_dir_all(&project_root).unwrap();
-    router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-    ]);
-
-    let status = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-    ]);
-    let command_status = &status["results"]["claude-code"]["commands"]["framework"]["project"];
-    assert_eq!(command_status["managed"], true);
-    assert_eq!(command_status["verification"], "verified");
-    assert_eq!(command_status["frontmatter"]["allowed"], true);
-    assert_eq!(
-        command_status["frontmatter"]["allowed_keys"],
-        json!(["argument-hint", "description", "name"])
-    );
-    assert_eq!(command_status["command_file"]["valid"], true);
-    assert_eq!(command_status["command_file"]["has_arguments"], true);
-    assert_eq!(command_status["copied_skill_bodies"]["detected"], false);
-}
-
-#[test]
-fn claude_command_status_marks_marker_only_unverified_shape_as_unknown() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    let command_path = project_root.join(".claude/commands/framework.md");
-    write_text(
-        &command_path,
-        "<!-- managed_by: skill-framework -->\n<!-- framework_schema_version: framework-host-projection-v1 -->\n",
-    );
-
-    let status = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-    ]);
-    let command_status = &status["results"]["claude-code"]["commands"]["framework"]["project"];
-    assert_eq!(command_status["managed"], false);
-    assert_eq!(command_status["verification"], "unknown");
-    assert_eq!(command_status["marker_managed"], true);
-    assert_eq!(command_status["frontmatter"]["present"], false);
-    assert_eq!(command_status["command_file"]["valid"], false);
-}
-
-#[test]
-fn claude_settings_status_marks_manifest_only_invalid_schema_as_unknown() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    let settings_path = project_root.join(".claude/settings.json");
-    write_json(
-        &settings_path,
-        &json!({
-            "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "echo unmanaged"}]}]},
-            "statusLine": {"type": "command", "command": "echo unmanaged"}
-        }),
-    );
-    write_json(
-        &project_root.join(".claude/.framework-projection.json"),
-        &json!({
-            "schema_version": "framework-host-projection-v1",
-            "managed_by": "skill-framework",
-            "host_projection": "claude-code-cli",
-            "scope": "project",
-            "files": [project_root.join(".claude/commands/framework.md").to_string_lossy()],
-            "settings": {
-                "path": settings_path.to_string_lossy(),
-                "managed_key_paths": ["hooks.PreToolUse", "statusLine"]
-            }
-        }),
-    );
-
-    let status = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-    ]);
-    let claude = &status["results"]["claude-code"];
-    assert_eq!(claude["hooks"]["managed"], false);
-    assert_eq!(claude["hooks"]["manifest_managed"], true);
-    assert_eq!(claude["hooks"]["verification"], "unknown");
-    assert_eq!(claude["statusLine"]["managed"], false);
-    assert_eq!(claude["statusLine"]["manifest_managed"], true);
-    assert_eq!(claude["statusLine"]["verification"], "unknown");
-}
-
-#[test]
-fn cleanup_supports_dry_run_idempotency_and_manifest_owned_removal() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    let claude_home = tmp.path().join("home/.claude");
-    std::fs::create_dir_all(&project_root).unwrap();
-    router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "all",
-    ]);
-
-    let dry_run = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "cleanup",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "all",
-        "--dry-run",
-    ]);
-    assert_eq!(dry_run["command"], "cleanup");
-    assert_eq!(dry_run["scope"], "project");
-    assert_eq!(dry_run["results"]["codex"]["status"], "would-remove");
-    assert!(project_root.join(".codex/prompts/framework.md").is_file());
-    assert!(project_root.join(".claude/commands/framework.md").is_file());
-
-    let missing_home = run(router_rs_command([
-        "framework",
-        "host-integration",
-        "cleanup",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--scope",
-        "user",
-        "--to",
-        "claude-code",
-    ]));
-    assert!(!missing_home.status.success());
-    assert!(String::from_utf8_lossy(&missing_home.stderr)
-        .contains("user-scope cleanup for claude-code requires explicit host-home resolution"));
-
-    let cleanup = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "cleanup",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "all",
-    ]);
-    assert_eq!(cleanup["results"]["codex"]["status"], "removed");
-    assert_eq!(cleanup["results"]["claude-code"]["status"], "removed");
-    assert!(!project_root.join(".codex/prompts/framework.md").exists());
-    assert!(!project_root.join(".claude/commands/framework.md").exists());
-    assert!(!project_root
-        .join(".codex/.framework-projection.json")
-        .exists());
-    assert!(!project_root
-        .join(".claude/.framework-projection.json")
-        .exists());
-
-    let idempotent = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "cleanup",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "all",
-    ]);
-    assert_eq!(
-        idempotent["results"]["codex"]["status"],
-        "not-installed-or-user-owned"
-    );
-    assert_eq!(
-        idempotent["results"]["claude-code"]["status"],
-        "not-installed-or-user-owned"
-    );
-
-    let explicit_user_cleanup = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "cleanup",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--scope",
-        "user",
-        "--claude-home",
-        claude_home.to_str().unwrap(),
-        "--to",
-        "claude-code",
-    ]);
-    assert_eq!(explicit_user_cleanup["scope"], "user");
-}
-
-#[test]
-fn remove_one_host_projection_preserves_the_other_host() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    std::fs::create_dir_all(&project_root).unwrap();
-    router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "all",
-    ]);
-
-    let removed_codex = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "remove",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "codex",
-    ]);
-    assert_eq!(removed_codex["results"]["codex"]["status"], "removed");
-    assert!(!project_root.join(".codex/prompts/framework.md").exists());
-    assert!(project_root.join(".claude/commands/framework.md").is_file());
-
-    let removed_claude = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "remove",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--to",
-        "claude-code",
-    ]);
-    assert_eq!(
-        removed_claude["results"]["claude-code"]["status"],
-        "removed"
-    );
-    assert!(!project_root.join(".claude/commands/framework.md").exists());
 }
 
 #[test]
@@ -1887,7 +956,7 @@ fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
 fn seed_framework_markers(root: &Path) {
     write_text(
         &root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_projections":{"codex-cli":{"profile_id":"codex_profile"},"claude-code-cli":{"profile_id":"claude_code_profile"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_projections":{"codex-cli":{"profile_id":"codex_profile"}}}"#,
     );
     write_text(
         &root.join("scripts/router-rs/Cargo.toml"),
@@ -1906,7 +975,7 @@ fn assert_framework_alias_skill(surface_root: &Path, slug: &str) {
     let content = read_text(&surface_root.join(slug).join("SKILL.md"));
     let dollar_entrypoint = format!("${slug}");
     assert!(content.contains(&format!("name: {slug}")));
-    assert!(content.contains("generated lightweight Codex CLI/Claude Code alias"));
+    assert!(content.contains("generated lightweight Codex CLI alias"));
     assert!(content.contains(&format!("`{dollar_entrypoint}`")));
     assert!(content.contains(&format!("`/{slug}`")));
     assert!(content.contains("skills/skill-framework-developer/SKILL.md"));
@@ -2003,7 +1072,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
 fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let payload = runtime_registry(&project_root());
     let aliases = &payload["framework_commands"];
-    assert_eq!(aliases["autopilot"]["canonical_owner"], "plan-to-code");
+    assert_eq!(aliases["autopilot"]["canonical_owner"], "autopilot");
     assert_eq!(
         aliases["autopilot"]["host_entrypoints"]["codex-cli"],
         "/autopilot"
@@ -2016,27 +1085,12 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         aliases["deepinterview"]["host_entrypoints"]["codex-cli"],
         "/deepinterview"
     );
-    assert_eq!(
-        aliases["autopilot"]["host_entrypoints"]["claude-code-cli"],
-        "/autopilot"
-    );
-    assert_eq!(
-        aliases["deepinterview"]["host_entrypoints"]["claude-code-cli"],
-        "/deepinterview"
-    );
     assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "/team");
-    assert_eq!(
-        aliases["team"]["host_entrypoints"]["claude-code-cli"],
-        "/team"
-    );
     assert_eq!(
         payload["host_targets"]["policy"],
         "shared-rust-core-explicit-host-projections"
     );
-    assert_eq!(
-        payload["host_targets"]["supported"],
-        json!(["codex-cli", "claude-code-cli"])
-    );
+    assert_eq!(payload["host_targets"]["supported"], json!(["codex-cli"]));
     assert!(payload.get("mcp_clients").is_none());
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");
     let autopilot = &aliases["autopilot"];
@@ -2062,20 +1116,6 @@ fn runtime_registry_host_projections_expose_supervisor_capabilities() {
         assert!(codex_capabilities.contains(&json!(capability)));
     }
     assert_eq!(codex["session_supervisor_driver"], "codex_driver");
-
-    let claude = &payload["host_projections"]["claude-code-cli"];
-    assert_eq!(claude["profile_id"], "claude_code_profile");
-    let claude_capabilities = claude["capabilities"].as_array().unwrap();
-    for capability in [
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
-        "host_resume_entrypoint",
-        "host_tmux_worker_management",
-        "slash_commands",
-    ] {
-        assert!(claude_capabilities.contains(&json!(capability)));
-    }
-    assert_eq!(claude["session_supervisor_driver"], "claude_code_driver");
 }
 
 fn runtime_registry(repo_root: &std::path::Path) -> serde_json::Value {

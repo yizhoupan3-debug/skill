@@ -1,4 +1,0 @@
-interface:
-  display_name: "Research Workbench"
-  short_description: "One front door for non-manuscript research projects"
-  default_prompt: "Use $research-workbench for 科研项目, 课题推进, research direction, next-step, literature-vs-experiment, and cross-phase research workflow asks. First decide whether the active blocker is idea, literature, novelty, experiment, reproducibility, statistics, figure, or technical critique; route manuscript-level work to $paper-workbench and generic web research to $information-retrieval."

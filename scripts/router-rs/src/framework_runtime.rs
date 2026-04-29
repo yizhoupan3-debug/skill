@@ -1013,8 +1013,8 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
 fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
     match alias_name {
         "autopilot" => Some(json!({
-            "canonical_owner": "plan-to-code",
-            "reroute_when_ambiguous": "idea-to-plan",
+            "canonical_owner": "autopilot",
+            "reroute_when_ambiguous": "deepinterview",
             "reroute_when_root_cause_unknown": "systematic-debugging",
             "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
             "lineage": {
@@ -1036,9 +1036,9 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "use deepinterview as the first-class clarification gate for vague requests"
             ],
             "execution_owners": [
-                "plan-to-code",
-                "test-engineering",
-                "code-review"
+                "autopilot",
+                "systematic-debugging",
+                "deepinterview"
             ],
             "decision_contract": {
                 "execute_when": [
@@ -1070,8 +1070,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 ]
             },
             "host_entrypoints": {
-                "codex-cli": "/autopilot",
-                "claude-code-cli": "/autopilot"
+                "codex-cli": "/autopilot"
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
@@ -1080,7 +1079,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             }
         })),
         "deepinterview" => Some(json!({
-            "canonical_owner": "code-review",
+            "canonical_owner": "deepinterview",
             "skill_path": "skills/deepinterview/SKILL.md",
             "lineage": {
                 "source": "repo-native",
@@ -1106,14 +1105,14 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "handoff into local autopilot and rust-session-supervisor after clarity is sufficient"
             ],
             "review_lanes": [
-                "architect-review",
-                "security-audit",
-                "test-engineering",
-                "code-review"
+                "deepinterview",
+                "visual-review",
+                "gh-address-comments",
+                "gh-fix-ci",
+                "sentry"
             ],
             "host_entrypoints": {
-                "codex-cli": "/deepinterview",
-                "claude-code-cli": "/deepinterview"
+                "codex-cli": "/deepinterview"
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
@@ -1122,7 +1121,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             }
         })),
         "team" => Some(json!({
-            "canonical_owner": "plan-to-code",
+            "canonical_owner": "team",
             "delegation_gate": "agent-swarm-orchestration",
             "auto_route_allowed": false,
             "route_mode": "team-orchestration",
@@ -1191,9 +1190,9 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
             ],
             "execution_owners": [
-                "plan-to-code",
+                "team",
                 "agent-swarm-orchestration",
-                "code-review"
+                "deepinterview"
             ],
             "supervisor_contract": {
                 "shared_continuity_owner": "supervisor",
@@ -1252,8 +1251,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "verification_evidence_required_before_cleanup": true
             },
             "host_entrypoints": {
-                "codex-cli": "/team",
-                "claude-code-cli": "/team"
+                "codex-cli": "/team"
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
@@ -1792,7 +1790,7 @@ fn build_framework_alias_state_machine(
             "rules": [
                 {
                     "when": "task is still a single-lane change",
-                    "target": "plan-to-code",
+                    "target": "main-thread",
                     "action": "keep_local_ownership",
                 },
                 {
@@ -1807,7 +1805,7 @@ fn build_framework_alias_state_machine(
                 },
                 {
                     "when": "worker outputs are ready to merge",
-                    "target": "code-review",
+                    "target": "supervisor-verification",
                     "action": "verify_and_close_loop",
                 }
             ]

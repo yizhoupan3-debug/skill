@@ -1,7 +1,8 @@
 use crate::framework_runtime::resolve_repo_root_arg;
 use crate::route::{
     build_search_results_payload, load_records, load_records_from_manifest, route_task,
-    search_skills, RouteDecision, SkillRecord,
+    search_skills, should_accept_manifest_fallback, should_retry_with_manifest, RouteDecision,
+    SkillRecord,
 };
 use crate::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
@@ -657,8 +658,14 @@ impl BrowserRuntime {
             first_turn,
         )
         .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
-        let selected_path = skill_body_path(&self.repo_root, &decision.selected_skill)
-            .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?;
+        let selected_path = if decision.selected_skill == "none" {
+            None
+        } else {
+            Some(
+                skill_body_path(&self.repo_root, &decision.selected_skill)
+                    .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?,
+            )
+        };
         let overlay_path = decision
             .overlay_skill
             .as_ref()
@@ -672,9 +679,15 @@ impl BrowserRuntime {
             "runtime_path": runtime_path.to_string_lossy(),
             "manifest_path": manifest_path.to_string_lossy(),
             "decision": decision,
-            "selected_skill_path": selected_path.to_string_lossy(),
+            "selected_skill_path": selected_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
             "overlay_skill_path": overlay_path.map(|path| path.to_string_lossy().to_string()),
-            "next_step": "Read selected_skill_path from the canonical skills/ source before doing task work.",
+            "next_step": if selected_path.is_some() {
+                "Read selected_skill_path from the canonical skills/ source before doing task work."
+            } else {
+                "No skill body is required; proceed with the native runtime instructions already in context."
+            },
         }))
     }
 
@@ -3643,18 +3656,13 @@ fn route_with_full_manifest_fallback(
     if !manifest_path.is_file() {
         return Ok(hot_decision);
     }
+    let should_retry = should_retry_with_manifest(&hot_decision);
     let full_records = load_records_from_manifest(manifest_path)?;
     if full_records.len() <= runtime_records.len() {
         return Ok(hot_decision);
     }
     let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
-    if full_decision.score > hot_decision.score
-        || (full_decision.score == hot_decision.score
-            && full_decision.selected_skill != hot_decision.selected_skill)
-        || (full_decision.selected_skill == hot_decision.selected_skill
-            && full_decision.overlay_skill.is_some()
-            && hot_decision.overlay_skill.is_none())
-    {
+    if should_accept_manifest_fallback(&hot_decision, &full_decision, should_retry, false) {
         Ok(full_decision)
     } else {
         Ok(hot_decision)

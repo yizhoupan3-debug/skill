@@ -50,38 +50,22 @@
 L0  runtime execution controller, skill-framework-developer,
     gh-address-comments, gh-fix-ci, sentry, agent-swarm-orchestration,
     runtime delegation gate, systematic-debugging
-L1  runtime checklist planning, tdd-workflow, test-engineering, refactoring,
-    documentation-engineering, error-handling-patterns, frontend-debugging,
-    backend-runtime-debugging,
-    citation-management, coding-standards, prompt-engineer,
-    information-retrieval, runtime quality guard
-L2  build-tooling, plan-to-code, api-integration-debugging,
-    datastore-cache-queue, observability, web-platform-basics, gitx,
-    css-pro, shell-cli, data-wrangling, dependency-migration,
-    runtime checklist execution, env-config-management, code-review,
-    architect-review, sustech-mailer, paper-workbench, research-workbench
-L3  accessibility-auditor, api-design, api-load-tester,
-    research-workbench, cloudflare-deploy, doc, docker,
-    design-md, experiment-reproducibility, frontend-design,
-    github-actions-authoring, diagramming, i18n-l10n, image-generated,
-    infographic, jupyter-notebook, linux-server-ops, mcp-builder,
-    diagramming, monorepo-tooling, native-app-debugging, npm-package-authoring, pdf,
-    performance-expert, release-engineering, screenshot,
-    security-threat-model,
-    spreadsheets, sustech-mailer, visual-review
-L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
+L1  citation-management, deepinterview, documentation-engineering,
+    image-generated, openai-docs
+L2  gitx, paper-reviewer, paper-reviser, paper-workbench,
+    paper-writing
+L3  design-md, diagramming, doc, experiment-reproducibility,
+    infographic, jupyter-notebook, pdf, refresh, screenshot,
+    slides, spreadsheets, tao-ci, visual-review
+L4  algo-trading, assignment-compliance,
+    copywriting, email-template, financial-data-fetching,
+    latex-compile-acceleration,
+    mac-memory-management, math-derivation,
     ppt-beamer, ppt-pptx, source-slide-formats,
-    paper-reviewer, paper-reviser, paper-writing, assignment-compliance,
-    latex-compile-acceleration, security-audit,
-    mac-memory-management, ai-research, autoresearch, algo-trading,
-    financial-data-fetching, agent-memory,
-    literature-synthesis, statistical-analysis, chrome-extension-dev,
-    scientific-figure-plotting, css-pro,
-    typescript-pro, python-pro, javascript-pro, rust-pro, go-pro, sql-pro,
-    seo-web, email-template, web-scraping,
-    youtube-summarizer, copywriting, research-engineer, math-derivation
-Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
-          runtime verification gate, security-audit, i18n-l10n, runtime quality guard
+    scientific-figure-plotting,
+    statistical-analysis, youtube-summarizer
+Runtime lanes  planning, execution/code, language/framework, platform/integration,
+               verification/review, memory and prompt policy, research workflow
 ```
 
 > System skills（`.system/`）: `skill-creator`, `skill-installer`, `openai-docs`
@@ -101,21 +85,15 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 - `skill-framework-developer` vs `skill-creator` → 框架治理 / miss repair / wording modes vs 实际改一个 skill 包
 - `skill-creator` vs `skill-installer` → 本地 authoring vs 新 skill intake / relink
 - `systematic-debugging` vs 领域 owner → 根因未知 vs 根因已知
-- `design-md` vs `frontend-design` → 先定参考源 / verified tokens / borrow-adapt map vs 直接做视觉改版
-- `design-md` vs `frontend-design` → DESIGN.md / prompt / 验收流程 vs 直接改 UI
-- `design-md` vs `frontend-design` → 先拆品牌与动效来源 vs 直接做动效实现
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
 - `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
 - `slides` vs `ppt-pptx` → 通用 PPT / 现有 deck artifact gate vs 显式 `deck.plan.json` / Rust PPTX 源码工作流
 - `slides` vs `source-slide-formats` → 通用演示文稿入口 vs 显式 Markdown / Slidev / Marp / HTML source slides
-- `build-tooling` vs `typescript-pro` / `python-pro` / `javascript-pro` → 构建链 vs 语言语义
 - `latex-compile-acceleration` vs `ppt-beamer` → 编译优化 vs Beamer 内容/版式
-- `information-retrieval` GitHub mode vs `gh-address-comments` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总
-- `information-retrieval` vs `skill-framework-developer` external scout mode → 通用调研 vs 为本地 skill 库做吸收式对标
+- research retrieval runtime vs `gh-address-comments` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总
+- research retrieval runtime vs `skill-framework-developer` external scout mode → 通用调研 vs 为本地 skill 库做吸收式对标
 - `runtime checklist planning` vs `runtime checklist execution` → 生成/整理 execution-ready checklist vs 按 checklist 执行
-- `plan-to-code` vs `runtime checklist planning` → spec/plan 直接落代码 vs 先把 checklist shape 稳定下来
 - `paper-workbench` vs `paper-reviewer` / `paper-reviser` / `paper-writing` → manuscript front door vs 明确只审 / 按 findings 改 / 局部文字
-- `security-audit` webhook reference vs `auth-implementation` → webhook 漏洞审计 vs webhook callback/auth flow 实现
 
 ## 重路由信号
 

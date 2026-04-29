@@ -6,14 +6,14 @@ Goal: keep skills only when they provide domain knowledge, non-obvious tool/sour
 
 - [x] Enforce generated-artifact drift through the manifest-backed path in CI: update `.github/workflows/skill-ci.yml` to use `framework host-integration generated-artifacts-status` instead of only a hard-coded `git diff --quiet` file list.
 - [x] Add `cargo test --test host_integration` to the configured CI test set so host projection, generated-artifact, and compatibility-surface assertions in `tests/host_integration.rs` fail CI.
-- [x] Broaden undeclared generated-artifact detection beyond `configs/framework/*.json` with `generated-by-` markers; include generated manifests, host entrypoints, CI, docs, tests, `.codex/**`, `AGENTS.md`, `CLAUDE.md`, and `skills/SKILL_*` surfaces required by the reverse-reference gate.
+- [x] Broaden undeclared generated-artifact detection beyond `configs/framework/*.json` with `generated-by-` markers; include generated manifests, host entrypoints, CI, docs, tests, `.codex/**`, `AGENTS.md`, and `skills/SKILL_*` surfaces required by the reverse-reference gate.
 - [x] Validate `configs/framework/GENERATED_ARTIFACTS.json` schema version when loading the generated-artifacts manifest; reject missing or unsupported `schema_version` instead of accepting any object with `generated_artifacts`.
 - [x] Finish hot-path cleanup for generic control skills: remove or downgrade `systematic-debugging`, `idea-to-plan`, `plan-to-code`, and `skill-framework-developer` from `skills/SKILL_ROUTING_RUNTIME.json` unless the trigger is exact, explicit, or a precise retained domain/artifact/source gate.
 - [x] Decide and document whether `autopilot` and `team` generated alias stubs may remain in the hot runtime index for exact invocation discovery; if yes, add negative routing tests proving ordinary coding/planning/debugging requests do not select them.
 - [x] Resolve `team` command routing policy: either make it explicit-only or justify `implicit_route_policy: strong-orchestration-only` with negative routing tests and a clear framework-command rationale.
 - [x] Remove broad bare alias triggers from canonical owner skills when they cause implicit routing competition, especially bare `autopilot` / `team`; keep only `$...` / `/...` exact-entrypoint wording when documenting explicit aliases.
 - [x] Add deletion inventory rows for deleted or retired plugin/generated/legacy surfaces, including `plugins/skill-framework-native/**`: file class, canonical owner/input, consumers checked, successor or retirement rationale, deletion safety status, tests run, and restore plan.
-- [x] Track and commit or intentionally exclude the new generated/reference artifacts needed by this reduction round, especially `CLAUDE.md`, `configs/framework/GENERATED_ARTIFACTS.json`, `skills/plan-to-code/references/autopilot-mode.md`, and `skills/agent-swarm-orchestration/references/team-mode.md`. `CLAUDE.md`, `configs/framework/GENERATED_ARTIFACTS.json`, and both reference files are intentionally retained; `.codex/host_entrypoints_sync_manifest.json` is explicitly unignored so it can be tracked; generated alias stubs under `artifacts/codex-skill-surface/` remain ignored disposable host projections.
+- [x] Track and commit or intentionally exclude the new generated/reference artifacts needed by this reduction round, especially `configs/framework/GENERATED_ARTIFACTS.json`, `skills/plan-to-code/references/autopilot-mode.md`, and `skills/agent-swarm-orchestration/references/team-mode.md`. `configs/framework/GENERATED_ARTIFACTS.json` and both reference files are intentionally retained; `.codex/host_entrypoints_sync_manifest.json` is explicitly unignored so it can be tracked; generated alias stubs under `artifacts/codex-skill-surface/` remain ignored disposable host projections.
 
 ## Core principle
 
@@ -21,7 +21,7 @@ Runtime owns control flow. Skills own narrow deltas. Canonical contracts own inv
 
 A skill should remain only if it satisfies at least one of:
 
-- It contains domain knowledge that Claude Code should not infer from generic runtime behavior.
+- It contains domain knowledge that Codex should not infer from generic runtime behavior.
 - It owns non-obvious tool invocation constraints, artifact semantics, external-source access rules, or safety constraints that runtime cannot reliably infer.
 - It defines correctness constraints specific to a domain, platform, source, artifact, evidence class, failure mode, investigation standard, or work product.
 - Removing it would make routing or execution materially worse for that specific domain/tool/source/artifact/evidence/work-product boundary.
@@ -49,7 +49,7 @@ Do not move long procedures, examples, rubrics, domain-specific cases, source-sp
 ## Glossary
 
 - **Runtime policy**: always-on behavior for planning, routing, clarification, delegation, generic verification selection/reporting, context management, and default coding discipline.
-- **Skill**: a loaded domain/tool/source/artifact/evidence/work-product instruction bundle. It should not be required for generic Claude Code behavior.
+- **Skill**: a loaded domain/tool/source/artifact/evidence/work-product instruction bundle. It should not be required for generic Codex behavior.
 - **Hot path**: the small first-turn routing surface loaded or checked before normal work, especially entries emitted into `skills/SKILL_ROUTING_RUNTIME.json`.
 - **Explicit-only**: a skill remains available only when the user explicitly invokes it or the request has a precise domain/tool/source/artifact trigger. It is not eligible for generic hot-path routing.
 - **Fallback**: discoverable through fallback manifest/search after hot routing has no confident hit; not part of the first-turn hot set.
@@ -159,7 +159,7 @@ Use this order for each skill or related file/doc/contract:
    - Mark sections about planning, clarification, routing, delegation, generic verification selection/reporting, context compression, or generic quality discipline as runtime candidates.
    - Mark domain/tool/artifact/source/evidence/failure/work-product-specific sections as retained-delta candidates.
 8. **Run a pre-delete reverse-reference gate**
-   - Before deleting/merging any skill/file/doc/contract, search and record references across `skills/SKILL_ROUTING_RUNTIME.json`, `skills/SKILL_MANIFEST.json`, `configs/framework/RUNTIME_REGISTRY.json`, `configs/framework/GENERATED_ARTIFACTS.json`, `configs/framework/*.json`, `scripts/router-rs/src`, `scripts/skill-compiler-rs/src`, `tests`, `docs`, host adapter docs, generated artifact manifests, CI scripts, README/entrypoint docs, and `CLAUDE.md`/`AGENT.md` entrypoints.
+   - Before deleting/merging any skill/file/doc/contract, search and record references across `skills/SKILL_ROUTING_RUNTIME.json`, `skills/SKILL_MANIFEST.json`, `configs/framework/RUNTIME_REGISTRY.json`, `configs/framework/GENERATED_ARTIFACTS.json`, `configs/framework/*.json`, `scripts/router-rs/src`, `scripts/skill-compiler-rs/src`, `tests`, `docs`, host adapter docs, generated artifact manifests, CI scripts, README/entrypoint docs, and `AGENTS.md` entrypoints.
    - Check exact paths and semantic references: filenames, titles, contract names, registry keys, schema fields, skill names, command aliases, old paths, fixture names, generated artifact names, host paths, and MUST/SHOULD normative claims.
    - Deletion is blocked until every route, fixture, test, generated artifact declaration, host alias path, and normative claim is updated or explicitly retired.
 9. **Check routing overlap and front-door collision**
@@ -428,7 +428,7 @@ Delete only if it means "think before coding" or generic route comparison and no
 
 Default action: sink generic spec-to-implementation behavior into runtime.
 
-Claude Code should implement concrete specs by default. Keep no separate skill unless there is a repo-specific spec-to-code artifact/work-product contract.
+Codex should implement concrete specs by default. Keep no separate skill unless there is a repo-specific spec-to-code artifact/work-product contract.
 
 ### `systematic-debugging`
 
@@ -493,7 +493,7 @@ Default action: split.
 
 Default action: `NARROW` or `EXPLICIT_ONLY`.
 
-Keep only for designing or debugging multi-agent systems as a product. Do not use it to control the current Claude Code session.
+Keep only for designing or debugging multi-agent systems as a product. Do not use it to control the current Codex session.
 
 ### `information-retrieval`
 

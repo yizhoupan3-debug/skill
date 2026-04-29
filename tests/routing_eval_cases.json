@@ -5,8 +5,8 @@
       "id": "skill-framework-developer-generic-review-case",
       "category": "gate-vs-owner-conflict",
       "task": "深度review现在的路由系统和 skill 边界。",
-      "focus_skill": "agent-swarm-orchestration",
-      "expected_owner": "agent-swarm-orchestration",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "first_turn": true
     },
@@ -14,12 +14,10 @@
       "id": "skill-framework-subtraction-behavior-review",
       "category": "gate-vs-owner-conflict",
       "task": "减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象",
-      "focus_skill": "agent-swarm-orchestration",
-      "expected_owner": "agent-swarm-orchestration",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
-      "forbidden_owners": [
-        "architect-review"
-      ],
+      "forbidden_owners": [],
       "first_turn": true
     },
     {
@@ -32,13 +30,13 @@
       "first_turn": true
     },
     {
-      "id": "idea-to-plan-should-not-trigger",
+      "id": "native-runtime-planning-does-not-force-skill",
       "category": "should-not-trigger",
       "task": "根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。",
-      "focus_skill": "idea-to-plan",
-      "forbidden_owners": [
-        "idea-to-plan"
-      ],
+      "focus_skill": null,
+      "expected_owner": "none",
+      "expected_overlay": null,
+      "forbidden_owners": [],
       "first_turn": true
     },
     {
@@ -52,19 +50,75 @@
       "first_turn": true
     },
     {
+      "id": "natural-language-parallel-research-delegation-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "同时调研前端、后端、测试三个方向，然后汇总方案",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [],
+      "first_turn": true,
+      "route_context": {
+        "execution_protocol": "four_step",
+        "verification_required": true,
+        "evidence_required": true,
+        "supervisor_required": false,
+        "delegation_candidate": true,
+        "continue_safe_local_steps": false,
+        "route_reason": "delegation_gate_candidate"
+      }
+    },
+    {
+      "id": "natural-language-parallel-regression-risk-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "并行检查 API、数据库和 UI 三个模块的回归风险",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "openai-docs"
+      ],
+      "first_turn": true,
+      "route_context": {
+        "execution_protocol": "four_step",
+        "verification_required": true,
+        "evidence_required": true,
+        "supervisor_required": false,
+        "delegation_candidate": true,
+        "continue_safe_local_steps": false,
+        "route_reason": "delegation_gate_candidate"
+      }
+    },
+    {
+      "id": "natural-language-split-lanes-delegation-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "请分三路并行研究这个问题：策略、实现、测试",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "first_turn": true,
+      "route_context": {
+        "execution_protocol": "implementation",
+        "verification_required": true,
+        "evidence_required": false,
+        "supervisor_required": false,
+        "delegation_candidate": true,
+        "continue_safe_local_steps": false,
+        "route_reason": "delegation_gate_candidate"
+      }
+    },
+    {
       "id": "disjoint-worker-write-scope-delegation-gate-case",
       "category": "gate-vs-owner-conflict",
       "task": "use parallel workers to implement disjoint files with lane-local write scopes",
       "focus_skill": "agent-swarm-orchestration",
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
-      "forbidden_owners": [
-        "idea-to-plan"
-      ],
+      "forbidden_owners": [],
       "first_turn": true
     },
     {
-      "id": "architect-review-generic-review-architecture-case",
+      "id": "broad-architecture-review-delegation-gate-case",
       "category": "gate-vs-owner-conflict",
       "task": "全面 review 这套架构，先给我结构层面的判断。",
       "focus_skill": "agent-swarm-orchestration",
@@ -84,7 +138,6 @@
       "expected_owner": "design-md",
       "expected_overlay": null,
       "forbidden_owners": [
-        "frontend-design",
         "visual-review"
       ],
       "first_turn": true
@@ -96,22 +149,17 @@
       "focus_skill": "design-md",
       "expected_owner": "design-md",
       "expected_overlay": null,
-      "forbidden_owners": [
-        "frontend-design",
-        "css-pro"
-      ],
+      "forbidden_owners": [],
       "first_turn": true
     },
     {
-      "id": "frontend-design-screenshot-review-reroute-case",
+      "id": "screenshot-review-reroute-case",
       "category": "gate-vs-owner-conflict",
       "task": "基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。",
       "focus_skill": "visual-review",
       "expected_owner": "visual-review",
       "expected_overlay": null,
-      "forbidden_owners": [
-        "frontend-design"
-      ],
+      "forbidden_owners": [],
       "first_turn": true
     },
     {
@@ -122,8 +170,6 @@
       "expected_owner": "design-md",
       "expected_overlay": null,
       "forbidden_owners": [
-        "frontend-design",
-        "css-pro",
         "visual-review"
       ],
       "first_turn": true

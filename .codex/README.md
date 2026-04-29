@@ -1,10 +1,10 @@
 # Codex Hooks Projection
 
-Codex hooks are enabled for this repo.
+Codex hooks are disabled for this repo.
 
-Project-local hooks live in `.codex/hooks.json` and `.codex/hooks/`.
+Project-local `.codex/hooks.json` intentionally contains no active hooks.
 
-The active review gate requires broad/deep review requests to either spawn independent reviewer subagents or record a clear reject reason before finalizing.
+The inactive hook scripts under `.codex/hooks/` remain available only as test fixtures or explicit audit helpers.
 
 The Rust hook command remains available for explicit one-off audits.
 

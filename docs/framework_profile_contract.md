@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`framework_profile` 是 shared Rust core 的真源。它只定义 runtime、memory、artifact、orchestration、approval、tool、loadout 和 workspace bootstrap 语义；Codex CLI 与 Claude Code CLI 只能通过显式 host projection 消费，不能反向改写核心含义。
+`framework_profile` 是 shared Rust core 的真源。它只定义 runtime、memory、artifact、orchestration、approval、tool、loadout 和 workspace bootstrap 语义；Codex CLI 只能通过显式 host projection 消费，不能反向改写核心含义。
 
 ## Canonical Fields
 
@@ -34,12 +34,11 @@
 
 ## Hard Rules
 
-1. `core_capabilities` 必须覆盖 `runtime / memory / artifact / orchestration`，且 framework core 只允许 closed-set host projections：`codex-cli` 与 `claude-code-cli`。
+1. `core_capabilities` 必须覆盖 `runtime / memory / artifact / orchestration`，且 framework core 只允许 closed-set host projection：`codex-cli`。
 2. `router-rs` 是 profile、shared contract、codex profile、workspace bootstrap、memory policy 和 session normalization 的编译真源；不要新增第二套 helper、emitter 或默认值。
-3. `codex_profile` 与 `claude_code_profile` 只能投影 `framework_profile`：`transport`、`context_files`、`mcp_config_paths`、`settings_paths` 等宿主私有字段只能留在各自 host projection payload 中。
+3. `codex_profile` 只能投影 `framework_profile`：`transport`、`context_files`、`mcp_config_paths`、`settings_paths` 等宿主私有字段只能留在 host projection payload 中。
 4. `workspace_bootstrap.resources` 是唯一默认来源；不要平行维护第二份 skills/memory 投影表。
 5. continuity 真源是 task-scoped artifacts、`artifacts/current/active_task.json` 和 `.supervisor_state.json`；`artifacts/current/*` root 只能放 pointer、registry 或极薄兼容索引，不再复制整组恢复工件。
-6. Claude Code project-local command、settings、hooks、statusLine、`CLAUDE.md` 和 `${CLAUDE_HOME}` 只允许作为 disposable install/projection targets；默认安装只生成 `.claude/commands/framework.md`。
 
 ## Surface Policy
 

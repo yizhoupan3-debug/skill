@@ -1,781 +1,333 @@
 {
   "critical_outliers": [],
   "skills": {
-    "accessibility-auditor": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "agent-memory": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
     "agent-swarm-orchestration": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "ai-research": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "algo-trading": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "api-design": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "api-integration-debugging": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "api-load-tester": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "architect-review": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "assignment-compliance": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "auth-implementation": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "autoresearch": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "backend-runtime-debugging": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "build-tooling": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "chatgpt-apps": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "chrome-extension-dev": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "codex-hook-builder": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "citation-management": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "cloudflare-deploy": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "code-acceleration": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "code-review": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "coding-standards": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "copywriting": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "css-pro": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "data-wrangling": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "datastore-cache-queue": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "deepinterview": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "dependency-migration": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "design-md": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "diagramming": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "doc": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "docker": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "documentation-engineering": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "email-template": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "env-config-management": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "error-handling-patterns": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "experiment-reproducibility": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "financial-data-fetching": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "frontend-debugging": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "frontend-design": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "gh-address-comments": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "gh-fix-ci": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "github-actions-authoring": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "gitx": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "go-pro": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "i18n-l10n": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "idea-to-plan": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "image-generated": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "infographic": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "information-retrieval": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "javascript-pro": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "jupyter-notebook": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "latex-compile-acceleration": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "linux-server-ops": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "literature-synthesis": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "mac-memory-management": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "math-derivation": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "mcp-builder": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "monorepo-tooling": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "native-app-debugging": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "nextjs": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "node-backend": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "npm-package-authoring": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "observability": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "openai-docs": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "paper-reviewer": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "paper-reviser": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "paper-workbench": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "paper-writing": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "pdf": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "performance-expert": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "plan-to-code": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "plugin-creator": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "ppt-beamer": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "ppt-pptx": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "prompt-engineer": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "python-pro": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "react": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "refactoring": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "refresh": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "release-engineering": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "research-engineer": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "research-workbench": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "rust-pro": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "scientific-figure-plotting": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "screenshot": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "security-audit": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "security-threat-model": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "sentry": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "seo-web": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "shell-cli": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "skill-creator": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "skill-framework-developer": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "skill-installer": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "slides": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "source-slide-formats": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "spreadsheets": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "sql-pro": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "statistical-analysis": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "svelte": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "systematic-debugging": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "tao-ci": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "tdd-workflow": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "test-engineering": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "typescript-pro": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "visual-review": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "vue": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "web-platform-basics": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
-      "usage_30d": 0
-    },
-    "web-scraping": {
-      "dynamic_score": 94.0,
-      "health_status": "Healthy",
-      "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     },
     "youtube-summarizer": {
-      "dynamic_score": 94.0,
+      "dynamic_score": 94,
       "health_status": "Healthy",
       "reroutes_30d": 0,
-      "static_score": 85.0,
+      "static_score": 85,
       "usage_30d": 0
     }
   },
   "summary": {
-    "avg_health": 94.0,
+    "avg_health": 94,
     "critical_skills": 0,
-    "total_skills": 110
+    "total_skills": 46
   },
   "ts": "2026-04-28T17:46:06.806673+00:00"
 }
