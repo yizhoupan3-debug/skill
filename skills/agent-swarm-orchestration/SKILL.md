@@ -52,7 +52,7 @@ metadata:
 - 人类监督边界
 
 核心原则：
-**默认不 spawn；只有并行收益清晰且边界可验证时才引入多 agent。**
+**默认先做 spawn admission；当任务存在清晰、独立、可验证的并行 lane 时，优先启动 bounded sidecars。只有边界、验证或关键路径不清晰时才拒绝。**
 
 ## When to use
 
@@ -93,9 +93,9 @@ metadata:
 
 ## Primary operating principle
 
-This gate is about **admitting delegation only when it beats local execution**, not automatically turning the current session into a team.
+This gate is about **admitting delegation when bounded parallelism beats local execution**, not automatically turning the current session into a full team.
 
-1. deny by default when scope, ownership, or verification is fuzzy
+1. spawn bounded sidecars by default when read-heavy, review, verification, or independent implementation lanes are clear
 2. prefer read-only sidecars before write-capable workers
 3. allow write delegation only for disjoint, lane-local scopes
 4. for broad reviews, split independent reviewer lanes when the lane boundaries are clear
@@ -103,12 +103,14 @@ This gate is about **admitting delegation only when it beats local execution**, 
 
 ## Spawn Admission
 
-Allow bounded sidecars only when at least one condition is true:
+Allow bounded sidecars when at least one condition is true:
 
 - read-heavy exploration can run independently
 - independent hypotheses or domains can be investigated in parallel
 - review or verification can run without blocking the supervisor
 - write scopes are fully disjoint and lane-local
+
+For these allowed cases, the supervisor should spawn sidecars promptly and keep local ownership of integration and final verification.
 
 Reject spawning with an explicit reason:
 
@@ -118,6 +120,23 @@ Reject spawning with an explicit reason:
 - `next_step_blocked`
 - `verification_missing`
 - `token_overhead_dominates`
+
+## Codex sidecar prompt contract
+
+Codex sidecars should feel like precise lane workers, not vague assistants.
+
+Use `fork_context=false` by default and pass only:
+
+- repo path and relevant files / diff / command target
+- lane goal and why it can run independently
+- exact bounded scope and forbidden scope
+- expected output shape
+- verification or evidence requirement
+- reminder that the sidecar is not alone in the codebase and must not revert unrelated edits
+
+Prefer spawning multiple independent read-only explorers in the same round when the task has parallel research, audit, risk, or verification lanes. For write-capable workers, assign disjoint ownership up front and require a final answer with changed files, evidence, verification, risk, and next action.
+
+Do not hand a sidecar the immediate blocker. The supervisor should continue useful non-overlapping work locally while sidecars run, then integrate rather than redoing their work.
 
 Worker summaries should stay compressed to:
 

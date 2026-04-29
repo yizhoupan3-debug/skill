@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::tempdir;
 
-const RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
+const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "api-design",
     "api-integration-debugging",
     "api-load-tester",
@@ -62,21 +62,29 @@ const RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "vue",
     "web-platform-basics",
     "agent-memory",
+    "ai-research",
+    "autoresearch",
     "chatgpt-apps",
     "cloudflare-deploy",
     "data-wrangling",
+    "information-retrieval",
+    "literature-synthesis",
     "mcp-builder",
     "performance-expert",
     "prompt-engineer",
+    "research-engineer",
+    "research-workbench",
     "web-scraping",
 ];
 
-fn runtime_owned_skill_slugs() -> HashSet<&'static str> {
-    RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
+const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "team"];
+
+fn retired_runtime_owned_skill_slugs() -> HashSet<&'static str> {
+    RETIRED_RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
 }
 
-fn manifest_or_runtime_owned_contains(manifest_slugs: &HashSet<&str>, slug: &str) -> bool {
-    manifest_slugs.contains(slug) || RUNTIME_OWNED_SKILL_SLUGS.contains(&slug)
+fn manifest_or_runtime_lane_contains(manifest_slugs: &HashSet<&str>, slug: &str) -> bool {
+    manifest_slugs.contains(slug) || FRAMEWORK_COMMAND_IDS.contains(&slug)
 }
 
 #[test]
@@ -137,6 +145,16 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
 }
 
 #[test]
+fn retired_runtime_owned_skill_directories_stay_removed() {
+    let existing = retired_runtime_owned_skill_slugs()
+        .into_iter()
+        .map(|slug| project_root().join("skills").join(slug))
+        .filter(|path| path.exists())
+        .collect::<Vec<_>>();
+    assert_eq!(existing, Vec::<PathBuf>::new());
+}
+
+#[test]
 fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!project_root().join(".codex/skills").exists());
     assert!(!project_root().join("AGENT.md").exists());
@@ -153,16 +171,19 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
-        serde_json::json!(["codex-cli", "claude-code-cli"])
+        serde_json::json!(["codex-cli"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
         "AGENTS.md"
     );
     assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["claude-code-cli"],
-        "CLAUDE.md"
+        manifest["shared_system"]["policy"],
+        "host-specific-agent-policy-v1"
     );
+    let codex_policy = read_text(&repo_root.join("AGENTS.md"));
+    assert!(codex_policy.contains("bounded sidecar admission"));
+    assert!(codex_policy.contains("同一轮并发启动"));
     assert!(manifest["full_sync"]["text_files"]
         .as_array()
         .unwrap()
@@ -658,7 +679,7 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
         for key in ["focus_skill", "expected_owner", "expected_overlay"] {
             if let Some(slug) = case.get(key).and_then(|value| value.as_str()) {
                 assert!(
-                    manifest_or_runtime_owned_contains(&manifest_slugs, slug),
+                    manifest_or_runtime_lane_contains(&manifest_slugs, slug),
                     "case {id} {key} references missing slug {slug}"
                 );
             }
@@ -671,7 +692,7 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
             .filter_map(|value| value.as_str())
         {
             assert!(
-                manifest_or_runtime_owned_contains(&manifest_slugs, slug),
+                manifest_or_runtime_lane_contains(&manifest_slugs, slug),
                 "case {id} forbidden_owners references missing slug {slug}"
             );
         }
@@ -705,7 +726,10 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
         .difference(&manifest_slugs)
         .copied()
         .collect::<HashSet<_>>();
-    assert_eq!(health_only_slugs, runtime_owned_skill_slugs());
+    assert!(
+        health_only_slugs.is_empty(),
+        "health manifest should not keep retired runtime-owned skills: {health_only_slugs:?}"
+    );
 
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     for (alias, record) in registry["framework_commands"]
@@ -717,7 +741,7 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
             .and_then(|value| value.as_str())
         {
             assert!(
-                manifest_or_runtime_owned_contains(&manifest_slugs, owner),
+                manifest_or_runtime_lane_contains(&manifest_slugs, owner),
                 "framework alias {alias} canonical_owner references missing slug {owner}"
             );
         }
@@ -729,7 +753,7 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
             .filter_map(|value| value.as_str())
         {
             assert!(
-                manifest_or_runtime_owned_contains(&manifest_slugs, slug),
+                manifest_or_runtime_lane_contains(&manifest_slugs, slug),
                 "framework alias {alias} execution_owners references missing slug {slug}"
             );
         }
@@ -811,31 +835,24 @@ fn framework_runtime_python_package_stays_removed() {
 }
 
 #[test]
-fn autoresearch_uses_rust_only_controller() {
-    let skill_dir = project_root().join("skills/autoresearch");
-    let skill_doc = read_text(&skill_dir.join("SKILL.md"));
+fn autoresearch_runtime_controller_stays_without_legacy_skill_entrypoint() {
     assert!(project_root()
         .join("scripts/autoresearch-rs/src/main.rs")
         .exists());
-    assert!(!skill_dir.join("scripts").exists());
-    assert!(skill_doc.contains("scripts/autoresearch-rs"));
-    assert!(!skill_doc.contains("research_ctl.py"));
-    assert!(!skill_doc.contains("init_research.py"));
+    assert!(!project_root().join("skills/autoresearch").exists());
 }
 
 #[test]
-fn installed_project_hooks_stay_enabled_for_review_subagents() {
+fn installed_project_hooks_stay_disabled() {
     assert!(project_root().join(".codex/hooks.json").exists());
     assert!(project_root()
         .join(".codex/hooks/review_subagent_gate.py")
         .exists());
     let config = read_text(&project_root().join(".codex/config.toml"));
-    assert!(config.contains("codex_hooks = true"));
-    assert!(!config.contains("codex_hooks = false"));
+    assert!(config.contains("codex_hooks = false"));
+    assert!(!config.contains("codex_hooks = true"));
     let hooks = read_json(&project_root().join(".codex/hooks.json"));
-    assert!(hooks
-        .to_string()
-        .contains(".codex/hooks/review_subagent_gate.py"));
+    assert_eq!(hooks["hooks"].as_object().unwrap().len(), 0);
     let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
     assert!(!manifest.to_string().contains(".codex/hooks.json"));
 }
@@ -1409,7 +1426,6 @@ fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
                 directory_name,
                 Some(
                     ".git"
-                        | ".claude"
                         | "target"
                         | "node_modules"
                         | ".venv"

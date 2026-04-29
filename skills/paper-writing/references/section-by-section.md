@@ -146,7 +146,7 @@ Our contributions are:
 - Do not weaken competitors unfairly (straw-man descriptions)
 - Include negative results, failures, and scope limits in the literature when relevant
 - If a citation is missing, write `[VERIFY: citation for ...]`; never fabricate references
-- Route detailed literature building to `$literature-synthesis`
+- Route detailed literature building to the research synthesis runtime lane.
 - Use "diff" language precisely: same problem/different method, same method/different setting, or same goal/different assumption
 
 ## Method

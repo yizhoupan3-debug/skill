@@ -8,13 +8,11 @@
   "host_targets": {
     "policy": "shared-rust-core-explicit-host-projections",
     "supported": [
-      "codex-cli",
-      "claude-code-cli"
+      "codex-cli"
     ],
     "shared_system_source": "skills",
     "entrypoint_files": {
-      "codex-cli": "AGENTS.md",
-      "claude-code-cli": "CLAUDE.md"
+      "codex-cli": "AGENTS.md"
     }
   },
   "workspace_bootstrap_defaults": {
@@ -30,9 +28,9 @@
   },
   "framework_commands": {
     "autopilot": {
-      "canonical_owner": "plan-to-code",
+      "canonical_owner": "autopilot",
       "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
-      "reroute_when_ambiguous": "idea-to-plan",
+      "reroute_when_ambiguous": "deepinterview",
       "reroute_when_root_cause_unknown": "systematic-debugging",
       "official_workflow": {
         "phases": [
@@ -56,9 +54,9 @@
         "use deepinterview as the first-class clarification gate for vague requests"
       ],
       "execution_owners": [
-        "plan-to-code",
-        "test-engineering",
-        "code-review"
+        "autopilot",
+        "systematic-debugging",
+        "deepinterview"
       ],
       "decision_contract": {
         "execute_when": [
@@ -90,8 +88,7 @@
         ]
       },
       "host_entrypoints": {
-        "codex-cli": "/autopilot",
-        "claude-code-cli": "/autopilot"
+        "codex-cli": "/autopilot"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -107,7 +104,7 @@
       }
     },
     "deepinterview": {
-      "canonical_owner": "code-review",
+      "canonical_owner": "deepinterview",
       "official_workflow": {
         "loop_rules": [
           "one-question-at-a-time",
@@ -128,14 +125,14 @@
         "handoff into local autopilot and rust-session-supervisor after clarity is sufficient"
       ],
       "review_lanes": [
-        "architect-review",
-        "security-audit",
-        "test-engineering",
-        "code-review"
+        "deepinterview",
+        "visual-review",
+        "gh-address-comments",
+        "gh-fix-ci",
+        "sentry"
       ],
       "host_entrypoints": {
-        "codex-cli": "/deepinterview",
-        "claude-code-cli": "/deepinterview"
+        "codex-cli": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -151,7 +148,7 @@
       }
     },
     "team": {
-      "canonical_owner": "plan-to-code",
+      "canonical_owner": "team",
       "delegation_gate": "agent-swarm-orchestration",
       "auto_route_allowed": false,
       "route_mode": "team-orchestration",
@@ -169,7 +166,7 @@
         ]
       },
       "spawn_admission_policy": {
-        "default": "deny",
+        "default": "admit_bounded_sidecars_when_lanes_are_clear",
         "allow_when": [
           "read-heavy exploration can run independently",
           "independent hypotheses or domains can be investigated in parallel",
@@ -226,9 +223,9 @@
         "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
       ],
       "execution_owners": [
-        "plan-to-code",
+        "team",
         "agent-swarm-orchestration",
-        "code-review"
+        "deepinterview"
       ],
       "supervisor_contract": {
         "shared_continuity_owner": "supervisor",
@@ -302,8 +299,7 @@
         "verification_evidence_required_before_cleanup": true
       },
       "host_entrypoints": {
-        "codex-cli": "/team",
-        "claude-code-cli": "/team"
+        "codex-cli": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -363,48 +359,6 @@
         "host_resume_entrypoint",
         "host_tmux_worker_management",
         "framework_alias_entrypoints"
-      ]
-    },
-    "claude-code-cli": {
-      "profile_id": "claude_code_profile",
-      "host_id": "claude-code",
-      "transport": "native-claude-code",
-      "context_files": [
-        "CLAUDE.md"
-      ],
-      "settings_paths": [
-        {
-          "scope": "user",
-          "host_root": "claude",
-          "relative": "settings.json"
-        },
-        {
-          "scope": "project",
-          "relative": ".claude/settings.json"
-        },
-        {
-          "scope": "local_project",
-          "relative": ".claude/settings.local.json"
-        }
-      ],
-      "mcp_config_paths": [],
-      "session_supervisor_driver": "claude_code_driver",
-      "resume_command_examples": [
-        "claude --continue",
-        "claude --resume <session_id>"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "memory_mounts",
-        "workspace_bootstrap",
-        "non_interactive_entrypoint",
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
-        "host_resume_entrypoint",
-        "host_tmux_worker_management",
-        "framework_alias_entrypoints",
-        "project_commands",
-        "slash_commands"
       ]
     }
   }

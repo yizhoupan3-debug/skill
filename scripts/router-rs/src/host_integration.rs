@@ -21,17 +21,14 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-remaining",
     "git-branch",
 ];
-const INSTALL_SKILLS_TOOLS: [&str; 2] = ["codex", "claude-code"];
+const INSTALL_SKILLS_TOOLS: [&str; 1] = ["codex"];
 const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
 const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
-const CLAUDE_CODE_ENTRYPOINT_SURFACE_REL: &str = "claude-code-surface/entrypoints";
-const CLAUDE_CODE_ENTRYPOINT_MANIFEST_NAME: &str = ".claude-code-entrypoint-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
 const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
     "framework-generated-artifacts-manifest-v1";
 const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(120);
-const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 11] = [
-    ".claude",
+const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
     ".codex",
     ".git",
     ".mypy_cache",
@@ -45,9 +42,8 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 11] = [
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
-const CLAUDE_GENERATED_FRONTMATTER_ALLOWLIST: [&str; 3] = ["argument-hint", "description", "name"];
 const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 4] = ["autopilot", "deepinterview", "gitx", "team"];
-const REQUIRED_GENERATED_ARTIFACTS: [&str; 12] = [
+const REQUIRED_GENERATED_ARTIFACTS: [&str; 11] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
     "skills/SKILL_ROUTING_INDEX.md",
@@ -58,7 +54,6 @@ const REQUIRED_GENERATED_ARTIFACTS: [&str; 12] = [
     "skills/SKILL_LOADOUTS.json",
     "skills/SKILL_TIERS.json",
     "AGENTS.md",
-    "CLAUDE.md",
     ".codex/host_entrypoints_sync_manifest.json",
 ];
 const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
@@ -211,8 +206,6 @@ enum Commands {
         #[arg(long)]
         home: Option<PathBuf>,
         #[arg(long)]
-        claude_home: Option<PathBuf>,
-        #[arg(long)]
         codex_home: Option<PathBuf>,
         #[arg(long)]
         to: Vec<String>,
@@ -231,7 +224,6 @@ enum Commands {
     Status(ProjectionStatusCommand),
     Remove(ProjectionCommand),
     Cleanup(ProjectionCommand),
-    ClaudePreToolCheck(ProjectionStatusCommand),
     CompatibilityAliases,
     GeneratedArtifactsStatus {
         #[arg(long, alias = "repo-root")]
@@ -250,8 +242,6 @@ struct ProjectionCommand {
     #[arg(long)]
     artifact_root: Option<PathBuf>,
     #[arg(long)]
-    claude_home: Option<PathBuf>,
-    #[arg(long)]
     codex_home: Option<PathBuf>,
     #[arg(long)]
     home: Option<PathBuf>,
@@ -259,12 +249,6 @@ struct ProjectionCommand {
     scope: String,
     #[arg(long)]
     to: Vec<String>,
-    #[arg(long)]
-    enable_claude_settings: bool,
-    #[arg(long)]
-    enable_claude_hooks: bool,
-    #[arg(long)]
-    enable_claude_statusline: bool,
     #[arg(long)]
     dry_run: bool,
 }
@@ -278,8 +262,6 @@ struct ProjectionStatusCommand {
     #[arg(long)]
     artifact_root: Option<PathBuf>,
     #[arg(long)]
-    claude_home: Option<PathBuf>,
-    #[arg(long)]
     codex_home: Option<PathBuf>,
     #[arg(long)]
     home: Option<PathBuf>,
@@ -290,7 +272,6 @@ struct ResolvedProjectionRoots {
     framework_root: PathBuf,
     project_root: PathBuf,
     artifact_root: PathBuf,
-    claude_home_root: PathBuf,
     codex_home_root: PathBuf,
 }
 
@@ -398,7 +379,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             project_root,
             artifact_root,
             home,
-            claude_home,
             codex_home,
             to,
             scope,
@@ -413,14 +393,10 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 framework_root: repo_root,
                 project_root,
                 artifact_root,
-                claude_home,
                 codex_home,
                 home,
                 scope,
                 to: selected,
-                enable_claude_settings: false,
-                enable_claude_hooks: false,
-                enable_claude_statusline: false,
                 dry_run: false,
             };
             let normalized_command = canonical_install_skills_command(&command);
@@ -431,7 +407,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         framework_root: projection_command.framework_root.clone(),
                         project_root: projection_command.project_root.clone(),
                         artifact_root: projection_command.artifact_root.clone(),
-                        claude_home: projection_command.claude_home.clone(),
                         codex_home: projection_command.codex_home.clone(),
                         home: projection_command.home.clone(),
                     })?
@@ -444,7 +419,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
         Commands::Status(command) => projection_status_command(command)?,
         Commands::Remove(command) => projection_remove_command(command, false)?,
         Commands::Cleanup(command) => projection_cleanup_command(command)?,
-        Commands::ClaudePreToolCheck(command) => claude_pre_tool_check_command(command)?,
         Commands::CompatibilityAliases => compatibility_alias_inventory(),
         Commands::GeneratedArtifactsStatus {
             framework_root,
@@ -505,7 +479,7 @@ fn resolve_project_root(explicit: Option<&Path>, framework_root: &Path) -> Resul
     if let Some(git_root) = nearest_marker_root(&cwd, ".git") {
         return normalize_discovered_project_root(&git_root, framework_root);
     }
-    for marker in ["CLAUDE.md", "AGENTS.md"] {
+    for marker in ["AGENTS.md"] {
         if let Some(root) = nearest_marker_root(&cwd, marker) {
             return normalize_discovered_project_root(&root, framework_root);
         }
@@ -567,20 +541,17 @@ fn resolve_projection_roots(
     framework_root: Option<&Path>,
     project_root: Option<&Path>,
     artifact_root: Option<&Path>,
-    claude_home: Option<&Path>,
     codex_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
     let project_root = resolve_project_root(project_root, &framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
-    let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
     let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
         artifact_root,
-        claude_home_root,
         codex_home_root,
     })
 }
@@ -987,7 +958,6 @@ fn rewrite_generated_artifact_generator(
 fn generated_artifact_forbidden_markers(path: &str, content: &str) -> Vec<&'static str> {
     let mut markers = Vec::new();
     for (name, needle) in [
-        ("expanded-claude-home", "/Users/joe/.claude"),
         ("expanded-codex-home", "/Users/joe/.codex"),
         (
             "expanded-consuming-project-root",
@@ -1051,7 +1021,7 @@ fn generated_artifact_reverse_reference_candidates(
             &mut candidates,
         )?;
     }
-    for rel in ["AGENTS.md", "CLAUDE.md"] {
+    for rel in ["AGENTS.md"] {
         collect_generated_artifact_marker_files(
             framework_root,
             &framework_root.join(rel),
@@ -1131,7 +1101,7 @@ fn collect_generated_artifact_marker_files(
 fn is_generated_artifact_scan_file(path: &Path) -> bool {
     if matches!(
         path.file_name().and_then(|name| name.to_str()),
-        Some("AGENTS.md" | "CLAUDE.md")
+        Some("AGENTS.md")
     ) {
         return true;
     }
@@ -1263,7 +1233,6 @@ fn projection_install_command(
         command.framework_root.as_deref(),
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
-        command.claude_home.as_deref(),
         command.codex_home.as_deref(),
         command.home.as_deref(),
     )?;
@@ -1273,7 +1242,7 @@ fn projection_install_command(
     for tool in selected_tools {
         results.insert(
             tool.to_string(),
-            install_projection_tool(&roots, tool, scope, &command)?,
+            install_projection_tool(&roots, tool, scope)?,
         );
     }
     Ok(projection_envelope(
@@ -1290,7 +1259,6 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.framework_root.as_deref(),
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
-        command.claude_home.as_deref(),
         command.codex_home.as_deref(),
         command.home.as_deref(),
     )?;
@@ -1299,30 +1267,6 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         results.insert(tool.to_string(), projection_tool_status(&roots, tool)?);
     }
     Ok(projection_envelope("status", false, &roots, None, results))
-}
-
-fn claude_pre_tool_check_command(command: ProjectionStatusCommand) -> Result<Value, String> {
-    let roots = resolve_projection_roots(
-        command.framework_root.as_deref(),
-        command.project_root.as_deref(),
-        command.artifact_root.as_deref(),
-        command.claude_home.as_deref(),
-        command.codex_home.as_deref(),
-        command.home.as_deref(),
-    )?;
-    let settings = load_claude_project_settings_snapshot(&roots)?;
-    let hook_status =
-        claude_settings_runtime_status_from_snapshot(settings.as_ref(), "hooks.PreToolUse");
-    let verified = hook_status
-        .get("managed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    Ok(json!({
-        "success": true,
-        "command": "claude-pre-tool-check",
-        "status": if verified { "verified" } else { "not-verified" },
-        "hook": hook_status,
-    }))
 }
 
 fn projection_remove_command(
@@ -1345,7 +1289,6 @@ fn projection_remove_or_cleanup_command(
         command.framework_root.as_deref(),
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
-        command.claude_home.as_deref(),
         command.codex_home.as_deref(),
         command.home.as_deref(),
     )?;
@@ -1379,15 +1322,12 @@ fn validate_cleanup_scope(
     }
     for tool in tools {
         let explicit_home = match *tool {
-            "claude-code" => {
-                command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some()
-            }
             "codex" => command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some(),
             _ => true,
         };
         if !explicit_home && command.home.is_none() {
             return Err(format!(
-                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --claude-home/--codex-home, --home, or the matching host HOME environment variable"
+                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home, --home, or the matching host HOME environment variable"
             ));
         }
     }
@@ -1403,7 +1343,6 @@ fn projection_envelope(
 ) -> Value {
     let host_targets = json!({
         "codex-cli": results.get("codex").cloned().unwrap_or(Value::Null),
-        "claude-code-cli": results.get("claude-code").cloned().unwrap_or(Value::Null),
     });
     json!({
         "success": true,
@@ -1426,7 +1365,6 @@ fn resolved_roots_payload(roots: &ResolvedProjectionRoots) -> Value {
         "project_root": roots.project_root.to_string_lossy(),
         "artifact_root": roots.artifact_root.to_string_lossy(),
         "host_home_roots": {
-            "claude-code-cli": roots.claude_home_root.to_string_lossy(),
             "codex-cli": roots.codex_home_root.to_string_lossy(),
         },
     })
@@ -1455,9 +1393,7 @@ fn selected_projection_tools(
         }
     }
     if selected.is_empty() {
-        return Err(
-            "projection command requires --to codex, --to claude-code, or --to all".to_string(),
-        );
+        return Err("projection command requires --to codex or --to all".to_string());
     }
     Ok(selected)
 }
@@ -1476,11 +1412,9 @@ fn install_projection_tool(
     roots: &ResolvedProjectionRoots,
     tool: &str,
     scope: &str,
-    command: &ProjectionCommand,
 ) -> Result<Value, String> {
     match tool {
         "codex" => install_codex_projection(roots, scope),
-        "claude-code" => install_claude_code_projection(roots, scope, command),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1488,7 +1422,6 @@ fn install_projection_tool(
 fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
     match tool {
         "codex" => codex_projection_status(roots),
-        "claude-code" => claude_code_projection_status(roots),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1501,69 +1434,8 @@ fn remove_projection_tool(
 ) -> Result<Value, String> {
     match tool {
         "codex" => remove_codex_projection(roots, scope, dry_run),
-        "claude-code" => remove_claude_code_projection(roots, scope, dry_run),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
-}
-
-fn install_claude_code_projection(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    command: &ProjectionCommand,
-) -> Result<Value, String> {
-    let artifact_path = roots
-        .artifact_root
-        .join(CLAUDE_CODE_ENTRYPOINT_SURFACE_REL)
-        .join("framework.md");
-    let artifact_changed = write_text_if_changed(
-        &artifact_path,
-        &render_claude_code_entrypoint(roots, scope, false),
-    )?;
-    let artifact_manifest_changed = write_json_if_changed(
-        &roots
-            .artifact_root
-            .join(CLAUDE_CODE_ENTRYPOINT_SURFACE_REL)
-            .join(CLAUDE_CODE_ENTRYPOINT_MANIFEST_NAME),
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "host_projection": "claude-code-cli",
-            "logical_entrypoint": "framework",
-            "artifact": artifact_path.to_string_lossy(),
-            "policy": "single-root-entrypoint-default",
-        }),
-    )?;
-    let target = claude_code_entrypoint_target(roots, scope);
-    let target_changed = write_text_if_changed(
-        &target,
-        &render_claude_code_entrypoint(roots, scope, scope == "user"),
-    )?;
-    let settings = ensure_claude_code_settings_projection_if_enabled(roots, scope, command)?;
-    let projection_manifest_changed =
-        write_claude_code_projection_manifest(roots, scope, &target, &settings)?;
-    let settings_changed = settings
-        .get("changed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    Ok(json!({
-        "status": "installed",
-        "changed": artifact_changed || artifact_manifest_changed || projection_manifest_changed || target_changed || settings_changed,
-        "scope": scope,
-        "commands": {
-            "framework": {
-                "scope": scope,
-                "path": target.to_string_lossy(),
-                "logical_entrypoint": "/framework",
-                "native_representation": "command-file",
-            }
-        },
-        "artifacts": {
-            "entrypoint_surface": artifact_path.to_string_lossy(),
-        },
-        "settings": settings,
-        "hooks": claude_settings_feature_status(&settings, "hooks"),
-        "statusLine": claude_settings_feature_status(&settings, "statusLine"),
-        "aliases": {"managed": false, "reason": "not-enabled-by-framework-policy"},
-    }))
 }
 
 fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
@@ -1594,59 +1466,6 @@ fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Res
     }))
 }
 
-struct ClaudeSettingsSnapshot {
-    manifest: Value,
-    settings_path: PathBuf,
-    settings_payload: Value,
-}
-
-fn load_claude_project_settings_snapshot(
-    roots: &ResolvedProjectionRoots,
-) -> Result<Option<ClaudeSettingsSnapshot>, String> {
-    let project_manifest_path = projection_manifest_path(roots, "claude-code-cli", "project");
-    let Some(manifest) = read_json_if_exists(&project_manifest_path)? else {
-        return Ok(None);
-    };
-    let settings = manifest.get("settings").cloned().unwrap_or(Value::Null);
-    let settings_path = settings
-        .get("path")
-        .and_then(Value::as_str)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| claude_code_settings_path(roots, "project"));
-    let settings_payload = read_json_if_exists(&settings_path)?.unwrap_or(Value::Null);
-    Ok(Some(ClaudeSettingsSnapshot {
-        manifest,
-        settings_path,
-        settings_payload,
-    }))
-}
-
-fn claude_code_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_target = claude_code_entrypoint_target(roots, "project");
-    let user_target = claude_code_entrypoint_target(roots, "user");
-    let project_manifest_path = projection_manifest_path(roots, "claude-code-cli", "project");
-    let user_manifest_path = projection_manifest_path(roots, "claude-code-cli", "user");
-    let settings = load_claude_project_settings_snapshot(roots)?;
-    let user_manifest = read_json_if_exists(&user_manifest_path)?;
-    Ok(json!({
-        "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
-        "status": "projection-status",
-        "commands": {
-            "framework": {
-                "project": claude_projection_file_status(&project_target, Some(&roots.project_root))?,
-                "user": projection_file_status(&user_target)?,
-            }
-        },
-        "manifest": {
-            "project": projection_manifest_status_from_payload(&project_manifest_path, settings.as_ref().map(|item| &item.manifest)),
-            "user": projection_manifest_status_from_payload(&user_manifest_path, user_manifest.as_ref()),
-        },
-        "settings": claude_settings_status_from_snapshot(settings.as_ref()),
-        "hooks": claude_settings_runtime_status_from_snapshot(settings.as_ref(), "hooks.PreToolUse"),
-        "statusLine": claude_settings_runtime_status_from_snapshot(settings.as_ref(), "statusLine"),
-    }))
-}
-
 fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let project_target = codex_entrypoint_target(roots, "project");
     let user_target = codex_entrypoint_target(roots, "user");
@@ -1664,43 +1483,6 @@ fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, Str
             "user": projection_manifest_status(&projection_manifest_path(roots, "codex-cli", "user"))?,
         },
         "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
-    }))
-}
-
-fn remove_claude_code_projection(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    dry_run: bool,
-) -> Result<Value, String> {
-    let target = claude_code_entrypoint_target(roots, scope);
-    let manifest_path = projection_manifest_path(roots, "claude-code-cli", scope);
-    let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "claude-code-cli", scope, &target)?;
-    let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
-    let changed = if !dry_run && would_remove_projection {
-        fs::remove_file(&target).map_err(|err| err.to_string())?;
-        true
-    } else {
-        false
-    };
-    let settings_removed = remove_claude_settings_from_manifest(roots, scope, dry_run)?;
-    let would_remove_manifest = manifest_ownership.managed;
-    let manifest_removed = if !dry_run && would_remove_manifest {
-        fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
-        true
-    } else {
-        false
-    };
-    let any_changed = changed || settings_removed || manifest_removed;
-    Ok(json!({
-        "status": if dry_run && (would_remove_projection || settings_removed || would_remove_manifest) { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
-        "changed": any_changed,
-        "dry_run": dry_run,
-        "scope": scope,
-        "removed_paths": removed_projection_paths(changed, &target, manifest_removed, &manifest_path),
-        "would_remove_paths": removed_projection_paths(would_remove_projection, &target, would_remove_manifest, &manifest_path),
-        "settings_keys_removed": settings_removed,
-        "skipped_user_owned_paths": if would_remove_projection || !target.exists() { json!([]) } else { json!([target.to_string_lossy()]) },
     }))
 }
 
@@ -1836,181 +1618,6 @@ fn projection_manifest_files_include(path: &Path, projection_path: &Path) -> Res
         .unwrap_or(false))
 }
 
-fn claude_settings_status_from_snapshot(settings: Option<&ClaudeSettingsSnapshot>) -> Value {
-    let Some(snapshot) = settings else {
-        return json!({"managed": false, "reason": "not-installed-or-not-enabled"});
-    };
-    let settings = snapshot
-        .manifest
-        .get("settings")
-        .cloned()
-        .unwrap_or(Value::Null);
-    let disable_all_hooks = snapshot
-        .settings_payload
-        .get("disableAllHooks")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    json!({
-        "managed": settings
-            .get("managed_key_paths")
-            .and_then(Value::as_array)
-            .map(|items| !items.is_empty())
-            .unwrap_or(false),
-        "path": snapshot.settings_path.to_string_lossy(),
-        "managed_key_paths": settings
-            .get("managed_key_paths")
-            .cloned()
-            .unwrap_or_else(|| Value::Array(vec![])),
-        "hooks_disabled_by_disableAllHooks": disable_all_hooks,
-        "statusLine_effective": "not-derived-from-disableAllHooks-without-native-verification",
-    })
-}
-
-fn claude_settings_runtime_status_from_snapshot(
-    snapshot: Option<&ClaudeSettingsSnapshot>,
-    key_path: &str,
-) -> Value {
-    let settings = claude_settings_status_from_snapshot(snapshot);
-    let manifest_managed = settings
-        .get("managed_key_paths")
-        .and_then(Value::as_array)
-        .map(|items| items.iter().any(|item| item.as_str() == Some(key_path)))
-        .unwrap_or(false);
-    if !manifest_managed {
-        return json!({"managed": false, "reason": "not-enabled-by-framework-policy"});
-    }
-    let settings_payload = snapshot
-        .map(|snapshot| &snapshot.settings_payload)
-        .unwrap_or(&Value::Null);
-    if key_path == "hooks.PreToolUse"
-        && settings_payload
-            .get("disableAllHooks")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    {
-        return json!({
-            "managed": false,
-            "manifest_managed": manifest_managed,
-            "verification": "disabled",
-            "reason": "disabled-by-disableAllHooks",
-            "schema": claude_hooks_schema_status(settings_payload),
-        });
-    }
-    let schema = match key_path {
-        "hooks.PreToolUse" => claude_hooks_schema_status(settings_payload),
-        "statusLine" => claude_statusline_schema_status(settings_payload),
-        _ => json!({"verified": false, "reason": "unknown-key-path"}),
-    };
-    let verified = schema
-        .get("verified")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    json!({
-        "managed": verified,
-        "manifest_managed": manifest_managed,
-        "verification": if verified { "verified" } else { "unknown" },
-        "schema": schema,
-    })
-}
-
-fn claude_hooks_schema_status(settings: &Value) -> Value {
-    let Some(entries) = settings
-        .get("hooks")
-        .and_then(|hooks| hooks.get("PreToolUse"))
-        .and_then(Value::as_array)
-    else {
-        return json!({"verified": false, "reason": "missing-hooks-pretooluse"});
-    };
-    let verified = entries.iter().any(|entry| {
-        entry.get("framework_owned").and_then(Value::as_bool) == Some(true)
-            && entry.get("managed_by").and_then(Value::as_str) == Some("skill-framework")
-            && entry
-                .get("hooks")
-                .and_then(Value::as_array)
-                .map(|hooks| {
-                    hooks.iter().any(|hook| {
-                        hook.get("type").and_then(Value::as_str) == Some("command")
-                            && hook
-                                .get("command")
-                                .and_then(Value::as_str)
-                                .map(|command| {
-                                    command.contains(
-                                        "framework host-integration claude-pre-tool-check",
-                                    ) || command.contains("framework host-integration status")
-                                })
-                                .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false)
-    });
-    json!({
-        "verified": verified,
-        "event": "PreToolUse",
-        "entry_count": entries.len(),
-    })
-}
-
-fn claude_statusline_schema_status(settings: &Value) -> Value {
-    let Some(statusline) = settings.get("statusLine") else {
-        return json!({"verified": false, "reason": "missing-statusLine"});
-    };
-    let verified = statusline.get("type").and_then(Value::as_str) == Some("command")
-        && statusline
-            .get("command")
-            .and_then(Value::as_str)
-            .map(|command| {
-                command.contains("framework statusline") && command.contains("--repo-root")
-            })
-            .unwrap_or(false);
-    json!({
-        "verified": verified,
-        "type": statusline.get("type").cloned().unwrap_or(Value::Null),
-    })
-}
-
-fn remove_claude_settings_from_manifest(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    dry_run: bool,
-) -> Result<bool, String> {
-    let manifest_path = projection_manifest_path(roots, "claude-code-cli", scope);
-    let Some(manifest) = read_json_if_exists(&manifest_path)? else {
-        return Ok(false);
-    };
-    if !projection_manifest_payload_is_managed(
-        Some(&manifest),
-        Some("claude-code-cli"),
-        Some(scope),
-    ) {
-        return Ok(false);
-    }
-    let settings_path = manifest
-        .get("settings")
-        .and_then(|settings| settings.get("path"))
-        .and_then(Value::as_str)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| claude_code_settings_path(roots, scope));
-    let key_paths = manifest
-        .get("settings")
-        .and_then(|settings| settings.get("managed_key_paths"))
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if key_paths.is_empty() || !settings_path.is_file() {
-        return Ok(false);
-    }
-    let mut settings = read_json_object_if_exists(&settings_path)?;
-    let mut changed = false;
-    for key_path in key_paths.iter().filter_map(Value::as_str) {
-        let parts = key_path.split('.').collect::<Vec<_>>();
-        changed |= remove_json_path(&mut settings, &parts);
-    }
-    if changed && !dry_run {
-        write_json_if_changed(&settings_path, &Value::Object(settings))?;
-    }
-    Ok(changed)
-}
-
 fn removed_projection_paths(
     projection_removed: bool,
     projection_path: &Path,
@@ -2027,18 +1634,6 @@ fn removed_projection_paths(
         paths.push(Value::String(manifest_path.to_string_lossy().into_owned()));
     }
     Value::Array(paths)
-}
-
-fn claude_code_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.claude_home_root.join("commands").join("framework.md")
-    } else {
-        roots
-            .project_root
-            .join(".claude")
-            .join("commands")
-            .join("framework.md")
-    }
 }
 
 fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
@@ -2061,27 +1656,12 @@ fn codex_prompt_entrypoints_root(roots: &ResolvedProjectionRoots, scope: &str) -
     }
 }
 
-fn claude_code_settings_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.claude_home_root.join("settings.json")
-    } else {
-        roots.project_root.join(".claude").join("settings.json")
-    }
-}
-
 fn projection_manifest_path(
     roots: &ResolvedProjectionRoots,
     host_projection: &str,
     scope: &str,
 ) -> PathBuf {
     match (host_projection, scope) {
-        ("claude-code-cli", "user") => roots
-            .claude_home_root
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("claude-code-cli", _) => roots
-            .project_root
-            .join(".claude")
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
         ("codex-cli", "user") => roots
             .codex_home_root
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
@@ -2091,166 +1671,6 @@ fn projection_manifest_path(
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
         _ => roots.project_root.join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
     }
-}
-
-fn ensure_claude_code_settings_projection_if_enabled(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    command: &ProjectionCommand,
-) -> Result<Value, String> {
-    if !(command.enable_claude_settings
-        || command.enable_claude_hooks
-        || command.enable_claude_statusline)
-    {
-        return Ok(json!({"managed": false, "reason": "not-enabled-by-framework-policy"}));
-    }
-
-    let settings_path = claude_code_settings_path(roots, scope);
-    let mut settings = read_json_object_if_exists(&settings_path)?;
-    let mut changed_keys = Vec::new();
-
-    if command.enable_claude_settings {
-        let env = settings
-            .entry("env".to_string())
-            .or_insert_with(|| Value::Object(Map::new()));
-        let env_object = env
-            .as_object_mut()
-            .ok_or_else(|| format!("{} env must be an object", settings_path.display()))?;
-        if env_object
-            .get("SKILL_FRAMEWORK_ROOT")
-            .and_then(Value::as_str)
-            != Some(roots.framework_root.to_string_lossy().as_ref())
-        {
-            env_object.insert(
-                "SKILL_FRAMEWORK_ROOT".to_string(),
-                Value::String(roots.framework_root.to_string_lossy().into_owned()),
-            );
-            changed_keys.push("env.SKILL_FRAMEWORK_ROOT");
-        }
-    }
-
-    if command.enable_claude_hooks {
-        let hook_value = framework_claude_pre_tool_hook(roots);
-        set_json_path_if_changed(
-            &mut settings,
-            &["hooks", "PreToolUse"],
-            Value::Array(vec![hook_value]),
-            &mut changed_keys,
-            "hooks.PreToolUse",
-        )?;
-    }
-
-    if command.enable_claude_statusline {
-        set_json_path_if_changed(
-            &mut settings,
-            &["statusLine"],
-            json!({
-                "type": "command",
-                "command": format!(
-                    "{} {} framework statusline --repo-root {}",
-                    shell_quote_path(&roots.framework_root.join("scripts/router-rs/run_router_rs.sh")),
-                    shell_quote_path(&roots.framework_root.join("scripts/router-rs/Cargo.toml")),
-                    shell_quote_path(&roots.framework_root),
-                ),
-            }),
-            &mut changed_keys,
-            "statusLine",
-        )?;
-    }
-
-    let changed = write_json_if_changed(&settings_path, &Value::Object(settings))?;
-    Ok(json!({
-        "managed": true,
-        "changed": changed,
-        "scope": scope,
-        "path": settings_path.to_string_lossy(),
-        "changed_keys": changed_keys,
-        "managed_key_paths": claude_managed_key_paths(command),
-        "hooks": {
-            "managed": command.enable_claude_hooks,
-            "event": if command.enable_claude_hooks { Value::String("PreToolUse".to_string()) } else { Value::Null },
-            "blocking": if command.enable_claude_hooks { Value::Bool(true) } else { Value::Bool(false) },
-        },
-        "statusLine": {
-            "managed": command.enable_claude_statusline,
-        },
-    }))
-}
-
-fn claude_settings_feature_status(settings: &Value, feature: &str) -> Value {
-    if settings.get("managed").and_then(Value::as_bool) != Some(true) {
-        return json!({"managed": false, "reason": "not-enabled-by-framework-policy"});
-    }
-    settings
-        .get(feature)
-        .cloned()
-        .unwrap_or_else(|| json!({"managed": false, "reason": "not-enabled-by-framework-policy"}))
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
-fn shell_quote_path(path: &Path) -> String {
-    shell_quote(&path.to_string_lossy())
-}
-
-fn framework_claude_pre_tool_hook(roots: &ResolvedProjectionRoots) -> Value {
-    json!({
-        "matcher": "*",
-        "hooks": [{
-            "type": "command",
-            "command": format!(
-                "{} {} framework host-integration claude-pre-tool-check --framework-root {} --project-root \"$CLAUDE_PROJECT_DIR\"",
-                shell_quote_path(&roots.framework_root.join("scripts/router-rs/run_router_rs.sh")),
-                shell_quote_path(&roots.framework_root.join("scripts/router-rs/Cargo.toml")),
-                shell_quote_path(&roots.framework_root),
-            )
-        }],
-        "framework_owned": true,
-        "managed_by": "skill-framework",
-    })
-}
-
-fn claude_managed_key_paths(command: &ProjectionCommand) -> Vec<&'static str> {
-    let mut paths = Vec::new();
-    if command.enable_claude_settings {
-        paths.push("env.SKILL_FRAMEWORK_ROOT");
-    }
-    if command.enable_claude_hooks {
-        paths.push("hooks.PreToolUse");
-    }
-    if command.enable_claude_statusline {
-        paths.push("statusLine");
-    }
-    paths
-}
-
-fn write_claude_code_projection_manifest(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    command_path: &Path,
-    settings: &Value,
-) -> Result<bool, String> {
-    let settings_paths = settings
-        .get("managed_key_paths")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    write_json_if_changed(
-        &projection_manifest_path(roots, "claude-code-cli", scope),
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "managed_by": "skill-framework",
-            "host_projection": "claude-code-cli",
-            "scope": scope,
-            "files": [command_path.to_string_lossy()],
-            "settings": {
-                "path": claude_code_settings_path(roots, scope).to_string_lossy(),
-                "managed_key_paths": settings_paths,
-            }
-        }),
-    )
 }
 
 fn write_codex_projection_manifest(
@@ -2273,27 +1693,6 @@ fn write_codex_projection_manifest(
     )
 }
 
-fn render_claude_code_entrypoint(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    user_scope: bool,
-) -> String {
-    let project_line = if user_scope {
-        "Resolve project_root from Claude invocation cwd or SKILL_PROJECT_ROOT; do not use framework_root as the project root."
-            .to_string()
-    } else {
-        format!(
-            "Installed project_root: `{}`. If this command is copied to another repo, reinstall it for that project.",
-            roots.project_root.to_string_lossy()
-        )
-    };
-    format!(
-        "---\nname: framework\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse the shared Rust framework core for this request.\n\nFramework root: `{}`.\n{}\n\nInvoke the Rust launcher with `framework host-integration status` or route the request through `/framework` semantics. Do not copy skill bodies, routing tables, memory policy, or registry payloads into this file.\n\n$ARGUMENTS\n",
-        roots.framework_root.to_string_lossy(),
-        project_line,
-    )
-}
-
 fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
     format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\nFramework root: `{}`.\nProject root: `{}`.\n\n$ARGUMENTS\n",
@@ -2307,31 +1706,6 @@ fn managed_projection_file_exists(path: &Path) -> Result<bool, String> {
         return Ok(false);
     };
     Ok(is_managed_projection_content(&content))
-}
-
-fn projection_file_status(path: &Path) -> Result<Value, String> {
-    let content = read_text_if_exists(path)?;
-    let marker_managed = content
-        .as_deref()
-        .map(is_managed_projection_content)
-        .unwrap_or(false);
-    let frontmatter = generated_frontmatter_contract_status(content.as_deref());
-    let command_file = generated_command_file_contract_status(content.as_deref());
-    let copied_skill_bodies = copied_skill_body_status(content.as_deref());
-    let verified = marker_managed
-        && frontmatter.get("allowed").and_then(Value::as_bool) == Some(true)
-        && command_file.get("valid").and_then(Value::as_bool) == Some(true)
-        && copied_skill_bodies.get("detected").and_then(Value::as_bool) == Some(false);
-    Ok(json!({
-        "path": path.to_string_lossy(),
-        "exists": path.exists(),
-        "managed": verified,
-        "verification": if verified { "verified" } else if marker_managed { "unknown" } else { "unmanaged" },
-        "marker_managed": marker_managed,
-        "frontmatter": frontmatter,
-        "command_file": command_file,
-        "copied_skill_bodies": copied_skill_bodies,
-    }))
 }
 
 fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
@@ -2354,137 +1728,11 @@ fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
-fn claude_projection_file_status(
-    path: &Path,
-    expected_project_root: Option<&Path>,
-) -> Result<Value, String> {
-    let mut status = projection_file_status(path)?;
-    let stale = expected_project_root
-        .map(|expected| project_scope_metadata_is_stale(path, expected))
-        .transpose()?
-        .unwrap_or(false);
-    if let Some(object) = status.as_object_mut() {
-        object.insert("stale_project_metadata".to_string(), Value::Bool(stale));
-        if stale {
-            object.insert(
-                "repair_guidance".to_string(),
-                Value::String(
-                    "reinstall the Claude Code projection for this project_root".to_string(),
-                ),
-            );
-        }
-    }
-    Ok(status)
-}
-
 fn is_managed_projection_content(content: &str) -> bool {
     content.contains("managed_by: skill-framework")
         && content.contains(&format!(
             "framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION}"
         ))
-}
-
-fn generated_frontmatter_contract_status(content: Option<&str>) -> Value {
-    let Some(content) = content else {
-        return json!({"present": false, "allowed": false});
-    };
-    let Some(frontmatter) = parse_frontmatter(content) else {
-        return json!({"present": false, "allowed": false});
-    };
-    let keys = frontmatter
-        .lines()
-        .filter_map(|line| line.split_once(':').map(|(key, _)| key.trim().to_string()))
-        .filter(|key| !key.is_empty())
-        .collect::<Vec<_>>();
-    let unknown = keys
-        .iter()
-        .filter(|key| !CLAUDE_GENERATED_FRONTMATTER_ALLOWLIST.contains(&key.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
-    json!({
-        "present": true,
-        "allowed_keys": CLAUDE_GENERATED_FRONTMATTER_ALLOWLIST,
-        "keys": keys,
-        "unknown_keys": unknown,
-        "allowed": unknown.is_empty(),
-    })
-}
-
-fn generated_command_file_contract_status(content: Option<&str>) -> Value {
-    let Some(content) = content else {
-        return json!({"valid": false, "reason": "missing"});
-    };
-    let has_frontmatter = parse_frontmatter(content).is_some();
-    let has_arguments = content.contains("$ARGUMENTS");
-    let has_projection_marker = content.contains("projection_id: framework-root-entrypoint");
-    let has_logical_entrypoint = content.contains("logical_entrypoint: framework");
-    let has_host_projection = content.contains("host_projection: claude-code-cli");
-    let valid = has_frontmatter
-        && has_arguments
-        && has_projection_marker
-        && has_logical_entrypoint
-        && has_host_projection;
-    json!({
-        "valid": valid,
-        "has_frontmatter": has_frontmatter,
-        "has_arguments": has_arguments,
-        "has_projection_marker": has_projection_marker,
-        "has_logical_entrypoint": has_logical_entrypoint,
-        "has_host_projection": has_host_projection,
-    })
-}
-
-fn copied_skill_body_status(content: Option<&str>) -> Value {
-    let markers = content
-        .map(|content| {
-            [
-                ("skill-frontmatter-routing", "routing_layer:"),
-                ("skill-frontmatter-session", "session_start:"),
-                ("skill-routing-contract", "## Routing"),
-                ("legacy-skill-tools", "allowed-tools:"),
-            ]
-            .into_iter()
-            .filter_map(|(name, needle)| content.contains(needle).then_some(name))
-            .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    json!({
-        "detected": !markers.is_empty(),
-        "markers": markers,
-    })
-}
-
-fn parse_frontmatter(content: &str) -> Option<&str> {
-    let rest = content.strip_prefix("---\n")?;
-    let end = rest.find("\n---\n")?;
-    Some(&rest[..end])
-}
-
-fn project_scope_metadata_is_stale(
-    path: &Path,
-    expected_project_root: &Path,
-) -> Result<bool, String> {
-    let Some(content) = read_text_if_exists(path)? else {
-        return Ok(false);
-    };
-    if !is_managed_projection_content(&content) {
-        return Ok(false);
-    }
-    let Some(installed) = extract_installed_project_root(&content) else {
-        return Ok(false);
-    };
-    let expected = normalize_path(expected_project_root)?;
-    let installed_path = PathBuf::from(installed);
-    let installed = normalize_path(&installed_path).unwrap_or(installed_path);
-    Ok(installed != expected)
-}
-
-fn extract_installed_project_root(content: &str) -> Option<String> {
-    let marker = "Installed project_root: `";
-    let start = content.find(marker)? + marker.len();
-    let tail = &content[start..];
-    let end = tail.find('`')?;
-    Some(tail[..end].to_string())
 }
 
 fn canonical_install_skills_command(command: &str) -> String {
@@ -2512,7 +1760,6 @@ fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String
 fn canonical_tool_name(raw: &str) -> Result<&'static str, String> {
     match raw.trim().to_lowercase().as_str() {
         "codex" => Ok("codex"),
-        "claude" | "claude-code" | "claude_code" => Ok("claude-code"),
         other => Err(format!(
             "Unknown tool: {other}. Supported tools: {}",
             INSTALL_SKILLS_TOOLS.join(" ")
@@ -2779,7 +2026,7 @@ fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Result<String
         .and_then(Value::as_str)
         .unwrap_or("Generated lightweight framework command alias.");
     Ok(format!(
-        "---\nname: {slug}\ndescription: {description} Use when the user invokes {explicit_entrypoint_summary}.\nrouting_layer: L0\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P1\nsession_start: n/a\nsource: generated-codex-skill-surface\n---\n# {slug}\n\nThis is a generated lightweight Codex CLI/Claude Code alias for `{host_entrypoint}`.\n\nSupported host entrypoints: {host_entrypoint_summary}.\n\nUse it only when the user explicitly invokes {explicit_entrypoint_summary}. Resolve the live workflow through `router-rs framework alias {slug}` and keep the full framework policy in `skills/skill-framework-developer/SKILL.md`.\n\nCanonical owner: `{owner}`.\n"
+        "---\nname: {slug}\ndescription: {description} Use when the user invokes {explicit_entrypoint_summary}.\nrouting_layer: L0\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P1\nsession_start: n/a\nsource: generated-codex-skill-surface\n---\n# {slug}\n\nThis is a generated lightweight Codex CLI alias for `{host_entrypoint}`.\n\nSupported host entrypoints: {host_entrypoint_summary}.\n\nUse it only when the user explicitly invokes {explicit_entrypoint_summary}. Resolve the live workflow through `router-rs framework alias {slug}` and keep the full framework policy in `skills/skill-framework-developer/SKILL.md`.\n\nCanonical owner: `{owner}`.\n"
     ))
 }
 
@@ -4488,18 +3735,6 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
     write_text_if_changed(path, &formatted)
 }
 
-fn read_json_object_if_exists(path: &Path) -> Result<Map<String, Value>, String> {
-    let Some(content) = read_text_if_exists(path)? else {
-        return Ok(Map::new());
-    };
-    let value = serde_json::from_str::<Value>(&content)
-        .map_err(|err| format!("failed parsing {}: {err}", path.display()))?;
-    value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| format!("{} must contain a JSON object", path.display()))
-}
-
 fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
     let Some(content) = read_text_if_exists(path)? else {
         return Ok(None);
@@ -4507,52 +3742,6 @@ fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
     serde_json::from_str::<Value>(&content)
         .map(Some)
         .map_err(|err| format!("failed parsing {}: {err}", path.display()))
-}
-
-fn set_json_path_if_changed(
-    object: &mut Map<String, Value>,
-    path: &[&str],
-    value: Value,
-    changed_keys: &mut Vec<&'static str>,
-    changed_key: &'static str,
-) -> Result<(), String> {
-    match path {
-        [key] => {
-            if object.get(*key) != Some(&value) {
-                object.insert((*key).to_string(), value);
-                changed_keys.push(changed_key);
-            }
-            Ok(())
-        }
-        [head, tail @ ..] => {
-            let child = object
-                .entry((*head).to_string())
-                .or_insert_with(|| Value::Object(Map::new()));
-            let child_object = child
-                .as_object_mut()
-                .ok_or_else(|| format!("settings path {head} must be an object"))?;
-            set_json_path_if_changed(child_object, tail, value, changed_keys, changed_key)
-        }
-        [] => Err("empty JSON path".to_string()),
-    }
-}
-
-fn remove_json_path(object: &mut Map<String, Value>, path: &[&str]) -> bool {
-    match path {
-        [key] => object.remove(*key).is_some(),
-        [head, tail @ ..] => {
-            let Some(child) = object.get_mut(*head).and_then(Value::as_object_mut) else {
-                return false;
-            };
-            let removed = remove_json_path(child, tail);
-            let empty = child.is_empty();
-            if empty {
-                object.remove(*head);
-            }
-            removed
-        }
-        [] => false,
-    }
 }
 
 fn remove_path(path: &Path) -> io::Result<()> {
@@ -4594,7 +3783,6 @@ mod tests {
         let destination = root.join("destination");
         write_test_file(&source.join("Cargo.toml"), "[package]\n");
         for skipped in [
-            ".claude/session.json",
             ".codex/memory/cache.json",
             ".git/config",
             ".mypy_cache/state",
@@ -4615,7 +3803,6 @@ mod tests {
 
         assert!(destination.join("Cargo.toml").is_file());
         for skipped in [
-            ".claude",
             ".codex",
             ".git",
             ".mypy_cache",

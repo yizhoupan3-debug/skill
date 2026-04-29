@@ -40,7 +40,6 @@ jobs:
           git config --local user.name "GitHub Action"
           git add \
             AGENTS.md \
-            CLAUDE.md \
             .codex/host_entrypoints_sync_manifest.json \
             configs/framework/FRAMEWORK_SURFACE_POLICY.json \
             skills/SKILL_HEALTH_MANIFEST.json \

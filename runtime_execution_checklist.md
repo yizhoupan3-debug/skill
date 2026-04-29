@@ -13,7 +13,7 @@
 - [ ] 确认当前设计选择：是否允许嵌套技能作为正式 runtime 技能。
 - [ ] 如果不允许嵌套技能：将 `skills/primary-runtime/spreadsheets/SKILL.md` 移动或重构为 `skills/spreadsheets/SKILL.md`。
 - [ ] 如果允许嵌套技能：修改 manifest/runtime schema，加入实际技能路径字段，例如 `skill_path` 或 `source_path`。
-- [ ] 同步更新 root `CLAUDE.md` 和 `.claude/CLAUDE.md` 中的加载规则，不再假设所有技能都在 `skills/<name>/SKILL.md`。
+- [ ] 同步更新 root `AGENTS.md` 中的加载规则，不再假设所有技能都在 `skills/<name>/SKILL.md`。
 - [ ] 更新 router/host 加载逻辑，使其按 manifest/runtime 中声明的路径读取技能。
 - [ ] 增加测试：runtime 和 manifest 中每个 slug 都必须能解析到一个实际存在的 `SKILL.md`。
 
@@ -38,9 +38,9 @@
 
 ### 3. 更新陈旧的 `policy_contracts.rs`
 
-- [ ] 删除或改写“根目录 `CLAUDE.md` 不应存在”的旧断言。
-- [ ] 将 supported hosts 期望更新为当前设计：`codex-cli`、`codex-app`、`claude-code-cli`、`claude-desktop`。
-- [ ] 更新与 `.claude/CLAUDE.md`、`CLAUDE.md`、`.codex/host_entrypoints_sync_manifest.json` 相关的断言。
+- [ ] 删除或改写旧 host-entrypoint 断言。
+- [ ] 将 supported hosts 期望更新为当前设计：`codex-cli`、`codex-app`。
+- [ ] 更新与 `.codex/host_entrypoints_sync_manifest.json` 相关的断言。
 - [ ] 重新确认 hot runtime 必须包含哪些技能。
 - [ ] 如果 `subagent-delegation`、`skill-creator`、`skill-installer` 已不属于 hot runtime，删除对应断言。
 - [ ] 如果这些技能应属于 hot runtime，修复 compiler selection 逻辑，而不是只改测试。
@@ -147,20 +147,19 @@
 ### 11. 把 host entrypoint 文本从 Rust hardcode 迁移到模板
 
 - [ ] 新建或确认 host entrypoint template 目录。
-- [ ] 将 root `CLAUDE.md` 内容迁移为模板源。
-- [ ] 将 `.claude/CLAUDE.md` 内容迁移为模板源。
+- [ ] 将 root `AGENTS.md` 内容迁移为模板源。
 - [ ] 将 `AGENTS.md` 也纳入同一模板机制。
 - [ ] 修改 `codex_hooks.rs`，从模板读取并渲染，而不是硬编码长 policy 字符串。
 - [ ] 增加测试：生成文件与模板渲染结果一致。
 
 验收标准：修改 host policy 不需要编辑 Rust 源码字符串。
 
-涉及区域：`scripts/router-rs/src/codex_hooks.rs`、`CLAUDE.md`、`.claude/CLAUDE.md`、`AGENTS.md`、configs/templates。
+涉及区域：`scripts/router-rs/src/codex_hooks.rs`、`AGENTS.md`、configs/templates。
 
 ### 12. 建立统一 generated artifact manifest
 
 - [ ] 定义一个机器可读 manifest，列出所有 generated/protected 文件。
-- [ ] 纳入 `AGENTS.md`、`CLAUDE.md`、`.claude/CLAUDE.md`、`.codex/host_entrypoints_sync_manifest.json`、`.claude/settings.json`。
+- [ ] 纳入 `AGENTS.md`、`.codex/host_entrypoints_sync_manifest.json`。
 - [ ] 纳入所有 `skills/SKILL_*.json` 和 `skills/SKILL_ROUTING_*.md`。
 - [ ] 修改 CI drift check，从该 manifest 读取文件列表，而不是在 workflow 里手写。
 - [ ] 修改 hooks/protection 逻辑，也引用同一 manifest。
@@ -240,7 +239,7 @@
 
 - [ ] 审查 `.github/workflows/skill-ci.yml` 中 drift check 的文件列表。
 - [ ] 移除已废弃或不再 relevant 的条目。
-- [ ] 加入 Claude 相关 generated files。
+- [ ] 不再加入非 Codex host 相关 generated files。
 - [ ] 改为从统一 generated artifact manifest 读取列表。
 - [ ] 确保 drift check 覆盖所有 host surfaces。
 

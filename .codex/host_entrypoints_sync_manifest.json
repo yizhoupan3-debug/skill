@@ -4,28 +4,24 @@
       ".codex/host_entrypoints_sync_manifest.json"
     ],
     "text_files": [
-      "AGENTS.md",
-      "CLAUDE.md"
+      "AGENTS.md"
     ]
   },
   "partial_sync": {
     "json_files": [],
     "text_files": [
-      "AGENTS.md",
-      "CLAUDE.md"
+      "AGENTS.md"
     ]
   },
   "schema_version": "host-entrypoints-sync-manifest-v1",
   "shared_system": {
     "host_entrypoints": {
-      "claude-code-cli": "CLAUDE.md",
       "codex-cli": "AGENTS.md"
     },
-    "policy": "shared-agent-policy-v1",
+    "policy": "host-specific-agent-policy-v1",
     "source_of_truth": "skills/",
     "supported_hosts": [
-      "codex-cli",
-      "claude-code-cli"
+      "codex-cli"
     ]
   }
 }

@@ -1,45 +1,29 @@
-# Shared Host Projection Contract
+# Codex Host Projection Contract
 
 ## Goal
 
-Codex CLI and Claude Code CLI consume one Rust-owned framework core. Host
-integration is a projection/install layer only; routing ownership, memory
-policy, continuity state, and artifact contracts remain framework-root-native
-and Rust-generated.
+Codex CLI consumes one Rust-owned framework core. Host integration is a
+projection/install layer only; routing ownership, memory policy, continuity
+state, and artifact contracts remain framework-root-native and Rust-generated.
 
 - `codex-cli` reads `AGENTS.md`.
-- `claude-code-cli` reads `CLAUDE.md` and project-local `.claude/commands/*.md`
-  projections when installed.
 
 ## Default Artifact
 
 - `framework_core`: shared Rust-owned framework contract.
 - `host_projections.codex-cli`: Codex projection metadata.
-- `host_projections.claude-code-cli`: Claude Code projection metadata.
 - `codex_profile`: native Codex projection output for Codex config paths,
   context files, MCP config, resume hints, and framework alias entrypoints.
-- `claude_code_profile`: native Claude Code projection output for Claude
-  command/settings/status surfaces.
 
 ## Default Surface Boundary
 
-- The default artifact surface is the shared core plus the two explicit host
-  projections.
+- The default artifact surface is the shared core plus the explicit Codex host
+  projection.
 - Host-facing entrypoints are generated projections for discovery and policy
   bootstrap only; `skills/` remains the only live skill source.
 - Generated entrypoints and settings are not hand-authored truth. Regenerate
   them through the Rust host-entrypoint sync or `framework host-integration`
   paths.
-- Default Claude Code install writes exactly one project-local root command,
-  `.claude/commands/framework.md`, and leaves settings, hooks, statusLine,
-  permissions, environment variables, `CLAUDE.md`, and user-scope files
-  unmanaged unless explicitly enabled.
-- Opt-in Claude settings writes are JSON merge/patch operations. They preserve
-  unrelated keys and record framework-owned key paths in
-  `.claude/.framework-projection.json`.
-- Claude status reports `disableAllHooks` conflicts for hooks, but does not
-  claim any statusLine interaction with `disableAllHooks` without native
-  verification.
 - Removal and cleanup may delete only files with framework ownership metadata
   or settings keys recorded in the projection manifest. User-authored command
   files and unrelated settings keys must be skipped.
@@ -64,7 +48,7 @@ and Rust-generated.
    host-neutral command path; `codex host-integration` is a compatibility alias
    only.
 4. New default artifacts must stay within the shared core plus explicit
-   `codex-cli` and `claude-code-cli` projection boundary.
+   `codex-cli` projection boundary.
 5. Non-explicit host projections, generic adapters, CLI-common adapters, parity
    snapshots, Python runtime fallbacks, Node runtime fallbacks, and plugin
    runtime truth are regressions.

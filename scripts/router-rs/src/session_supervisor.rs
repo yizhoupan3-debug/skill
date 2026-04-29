@@ -279,10 +279,18 @@ fn launch_worker(
         .get("retry_policy")
         .cloned()
         .unwrap_or_else(|| json!({"kind": "rate_limit_auto_resume", "default_backoff_seconds": DEFAULT_BACKOFF_SECONDS}));
-    let metadata = payload
+    let mut metadata = payload
         .get("metadata")
         .cloned()
         .unwrap_or_else(|| Value::Object(Map::new()));
+    metadata = ensure_lane_contract_metadata(
+        metadata,
+        &worker_id,
+        &host,
+        &cwd,
+        prompt.as_deref(),
+        payload.get("lane_contract").cloned(),
+    );
 
     let mut worker = WorkerSessionRecord {
         worker_id,
@@ -576,6 +584,42 @@ fn driver_id_for_host(host: &str) -> &'static str {
         "codex" | "codex-cli" => "codex_driver",
         _ => "unknown_driver",
     }
+}
+
+fn ensure_lane_contract_metadata(
+    metadata: Value,
+    worker_id: &str,
+    host: &str,
+    cwd: &str,
+    prompt: Option<&str>,
+    lane_contract: Option<Value>,
+) -> Value {
+    let mut object = metadata.as_object().cloned().unwrap_or_default();
+    if !object.contains_key("lane_contract") {
+        object.insert(
+            "lane_contract".to_string(),
+            lane_contract.unwrap_or_else(|| {
+                json!({
+                    "lane_id": worker_id,
+                    "lane_owner": host,
+                    "goal": prompt.unwrap_or("bounded worker lane"),
+                    "bounded_scope": cwd,
+                    "forbidden_scope": "outside assigned lane-local scope",
+                    "expected_output": {
+                        "changed_files": [],
+                        "evidence": [],
+                        "verification": [],
+                        "risk": null,
+                        "next_action": null
+                    },
+                    "integration_status": "planned",
+                    "verification_status": "not-started",
+                    "recovery_anchor": worker_id
+                })
+            }),
+        );
+    }
+    Value::Object(object)
 }
 
 fn default_resume_mode(_host: &str) -> &'static str {
@@ -901,6 +945,14 @@ mod tests {
             .expect("worker_id")
             .to_string();
         assert_eq!(launch["worker"]["status"], json!("queued"));
+        assert_eq!(
+            launch["worker"]["metadata"]["lane_contract"]["goal"],
+            json!("继续处理 backlog")
+        );
+        assert_eq!(
+            launch["worker"]["metadata"]["lane_contract"]["expected_output"]["changed_files"],
+            json!([])
+        );
 
         let marked = handle_session_supervisor_operation(json!({
             "operation": "mark_blocked",

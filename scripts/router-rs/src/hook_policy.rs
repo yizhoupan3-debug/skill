@@ -6,12 +6,9 @@ use std::path::{Path, PathBuf};
 pub const HOOK_POLICY_SCHEMA_VERSION: &str = "router-rs-hook-policy-v1";
 pub const HOOK_POLICY_AUTHORITY: &str = "rust-hook-policy";
 
-const CLAUDE_PROTECTED_GLOBS: [&str; 1] = ["plugins/skill-framework-native/**"];
-const CODEX_PROTECTED_GENERATED_PATHS: [&str; 3] = [
-    "AGENTS.md",
-    "CLAUDE.md",
-    ".codex/host_entrypoints_sync_manifest.json",
-];
+const RETIRED_PROTECTED_GLOBS: [&str; 1] = ["plugins/skill-framework-native/**"];
+const CODEX_PROTECTED_GENERATED_PATHS: [&str; 2] =
+    ["AGENTS.md", ".codex/host_entrypoints_sync_manifest.json"];
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HookPolicyEvaluateRequest {
@@ -109,10 +106,6 @@ pub fn dangerous_bash_reason(command: &str) -> Option<String> {
         (
             r"(^|[;&|]\s*)(command\s+)?(env\s+[^;&|]*\s+)?git(\s+-C\s+\S+)?\s+worktree\s+(add|remove|prune)\b",
             "Worktree commands are disabled for this repo.",
-        ),
-        (
-            r"(^|[;&|]\s*)claude\b[^;&|]*(--worktree|\s-w\b)",
-            "Claude worktree mode is disabled for this repo.",
         ),
         (
             r"(^|[;&|]\s*)chmod\s+-R\s+777\s+(?:/|\.)($|\s|[;&|])",
@@ -217,7 +210,7 @@ pub fn classify_protected_path<'a>(
         return Some("generated_host_entrypoint");
     }
     if source_repo
-        && CLAUDE_PROTECTED_GLOBS
+        && RETIRED_PROTECTED_GLOBS
             .iter()
             .any(|pattern| glob_match(pattern, &relative))
     {
@@ -428,7 +421,7 @@ mod tests {
     fn validation_categories_match_python_guard_cases() {
         assert_eq!(classify_validation("cargo check"), vec!["rust"]);
         assert_eq!(
-            classify_validation("python3 -m json.tool .claude/settings.json"),
+            classify_validation("python3 -m json.tool .codex/config.toml"),
             vec!["config", "json"]
         );
         assert_eq!(classify_validation("pnpm run typecheck"), vec!["js_ts"]);
@@ -444,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn protected_paths_cover_claude_and_codex_surfaces() {
+    fn protected_paths_cover_retired_and_codex_surfaces() {
         assert_eq!(
             normalize_repo_relative_path(".codex/../.codex/host_entrypoints_sync_manifest.json"),
             ".codex/host_entrypoints_sync_manifest.json"
