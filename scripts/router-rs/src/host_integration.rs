@@ -8,7 +8,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
@@ -27,6 +29,20 @@ const CLAUDE_CODE_ENTRYPOINT_MANIFEST_NAME: &str = ".claude-code-entrypoint-surf
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
 const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
     "framework-generated-artifacts-manifest-v1";
+const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(120);
+const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 11] = [
+    ".claude",
+    ".codex",
+    ".git",
+    ".mypy_cache",
+    ".opencode",
+    ".ruff_cache",
+    ".serena",
+    "artifacts",
+    "node_modules",
+    "output",
+    "target",
+];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
 const CLAUDE_GENERATED_FRONTMATTER_ALLOWLIST: [&str; 3] = ["argument-hint", "description", "name"];
@@ -702,7 +718,8 @@ fn generated_artifacts_status(
             GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION
         ));
     }
-    let temp_root = prepare_generated_artifact_temp_root(&framework_root, &artifact_root)?;
+    let temp_root_guard = prepare_generated_artifact_temp_root(&framework_root, &artifact_root)?;
+    let temp_root = temp_root_guard.path();
     let mut results = Vec::new();
     let mut ok = true;
     let mut declared_paths = BTreeSet::new();
@@ -812,10 +829,29 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
     path == ".codex/host_entrypoints_sync_manifest.json"
 }
 
+struct GeneratedArtifactTempRoot {
+    path: PathBuf,
+}
+
+impl GeneratedArtifactTempRoot {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for GeneratedArtifactTempRoot {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+        if let Some(parent) = self.path.parent() {
+            let _ = fs::remove_dir(parent);
+        }
+    }
+}
+
 fn prepare_generated_artifact_temp_root(
     framework_root: &Path,
     artifact_root: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<GeneratedArtifactTempRoot, String> {
     let temp_root = artifact_root
         .join("generated-artifacts-drift-check")
         .join(format!(
@@ -823,31 +859,61 @@ fn prepare_generated_artifact_temp_root(
             Local::now().timestamp_nanos_opt().unwrap_or_default()
         ));
     copy_framework_tree_for_generation(framework_root, &temp_root)?;
-    Ok(temp_root)
+    Ok(GeneratedArtifactTempRoot { path: temp_root })
 }
 
 fn copy_framework_tree_for_generation(source: &Path, destination: &Path) -> Result<(), String> {
-    fs::create_dir_all(destination).map_err(|err| err.to_string())?;
-    for entry in fs::read_dir(source).map_err(|err| err.to_string())? {
-        let entry = entry.map_err(|err| err.to_string())?;
+    fs::create_dir_all(destination)
+        .map_err(|err| format!("failed to create {}: {err}", destination.display()))?;
+    for entry in fs::read_dir(source)
+        .map_err(|err| format!("failed to read directory {}: {err}", source.display()))?
+    {
+        let entry = entry.map_err(|err| {
+            format!(
+                "failed to read directory entry under {}: {err}",
+                source.display()
+            )
+        })?;
         let path = entry.path();
         let name = entry.file_name();
         let name_text = name.to_string_lossy();
-        if matches!(name_text.as_ref(), ".git" | "target" | "artifacts") {
+        let target = destination.join(&name);
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|err| format!("failed to inspect {}: {err}", path.display()))?;
+        if metadata.file_type().is_symlink() {
             continue;
         }
-        let target = destination.join(&name);
-        let metadata = entry.metadata().map_err(|err| err.to_string())?;
         if metadata.is_dir() {
+            if should_skip_generated_artifact_copy_dir(&name_text) {
+                continue;
+            }
             copy_framework_tree_for_generation(&path, &target)?;
         } else if metadata.is_file() {
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+            if should_skip_generated_artifact_copy_file(&name_text) {
+                continue;
             }
-            fs::copy(&path, &target).map_err(|err| err.to_string())?;
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
+            }
+            fs::copy(&path, &target).map_err(|err| {
+                format!(
+                    "failed to copy {} to {}: {err}",
+                    path.display(),
+                    target.display()
+                )
+            })?;
         }
     }
     Ok(())
+}
+
+fn should_skip_generated_artifact_copy_dir(name: &str) -> bool {
+    GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES.contains(&name)
+}
+
+fn should_skip_generated_artifact_copy_file(name: &str) -> bool {
+    name == ".DS_Store" || name.ends_with(".marker")
 }
 
 fn run_generated_artifact_generator(
@@ -855,7 +921,7 @@ fn run_generated_artifact_generator(
     framework_root: &Path,
     temp_root: &Path,
 ) -> Result<(), String> {
-    let output = Command::new("sh")
+    let mut child = Command::new("sh")
         .arg("-c")
         .arg(rewrite_generated_artifact_generator(
             generator,
@@ -865,8 +931,29 @@ fn run_generated_artifact_generator(
         .current_dir(temp_root)
         .env("SKILL_FRAMEWORK_ROOT", temp_root)
         .env("SKILL_ARTIFACT_ROOT", temp_root.join("artifacts"))
-        .output()
+        .env("ROUTER_RS_NO_REBUILD", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|err| err.to_string())?;
+    let start = Instant::now();
+    loop {
+        if child.try_wait().map_err(|err| err.to_string())?.is_some() {
+            break;
+        }
+        if start.elapsed() >= GENERATED_ARTIFACT_GENERATOR_TIMEOUT {
+            let _ = child.kill();
+            let output = child.wait_with_output().map_err(|err| err.to_string())?;
+            return Err(format!(
+                "generated artifact generator timed out after {}s: {generator}\nstdout:\n{}\nstderr:\n{}",
+                GENERATED_ARTIFACT_GENERATOR_TIMEOUT.as_secs(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    let output = child.wait_with_output().map_err(|err| err.to_string())?;
     if output.status.success() {
         return Ok(());
     }
@@ -4481,4 +4568,95 @@ fn symlink_exists(path: &Path) -> bool {
     fs::symlink_metadata(path)
         .map(|metadata| metadata.file_type().is_symlink())
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unique_test_root(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "router-rs-{name}-{}-{}",
+            std::process::id(),
+            Local::now().timestamp_nanos_opt().unwrap_or_default()
+        ))
+    }
+
+    fn write_test_file(path: &Path, content: &str) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
+
+    #[test]
+    fn generated_artifact_copy_skips_local_state_and_dependency_dirs() {
+        let root = unique_test_root("copy-skip");
+        let source = root.join("source");
+        let destination = root.join("destination");
+        write_test_file(&source.join("Cargo.toml"), "[package]\n");
+        for skipped in [
+            ".claude/session.json",
+            ".codex/memory/cache.json",
+            ".git/config",
+            ".mypy_cache/state",
+            ".opencode/state",
+            ".ruff_cache/cache",
+            ".serena/state",
+            "artifacts/current/state.json",
+            "scripts/router-rs/target/debug/router-rs",
+            "target/debug/root",
+            "tools/browser-mcp/node_modules/package/index.js",
+            "output/image.png",
+            "skills/.system/.codex-system-skills.marker",
+        ] {
+            write_test_file(&source.join(skipped), "local state");
+        }
+
+        copy_framework_tree_for_generation(&source, &destination).unwrap();
+
+        assert!(destination.join("Cargo.toml").is_file());
+        for skipped in [
+            ".claude",
+            ".codex",
+            ".git",
+            ".mypy_cache",
+            ".opencode",
+            ".ruff_cache",
+            ".serena",
+            "artifacts",
+            "scripts/router-rs/target",
+            "target",
+            "tools/browser-mcp/node_modules",
+            "output",
+            "skills/.system/.codex-system-skills.marker",
+        ] {
+            assert!(
+                !destination.join(skipped).exists(),
+                "copied skipped generated-artifact dir: {skipped}"
+            );
+        }
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generated_artifact_temp_root_is_removed_on_drop() {
+        let root = unique_test_root("temp-drop");
+        let framework_root = root.join("framework");
+        let artifact_root = root.join("artifacts");
+        write_test_file(&framework_root.join("Cargo.toml"), "[package]\n");
+
+        let temp_path = {
+            let guard =
+                prepare_generated_artifact_temp_root(&framework_root, &artifact_root).unwrap();
+            let temp_path = guard.path().to_path_buf();
+            assert!(temp_path.exists());
+            temp_path
+        };
+
+        assert!(
+            !temp_path.exists(),
+            "generated artifact temp root was not cleaned"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
 }

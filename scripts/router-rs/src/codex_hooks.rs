@@ -23,7 +23,47 @@ const PROTECTED_GENERATED_PATHS: [&str; 3] = [
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 pub fn build_codex_hook_manifest() -> Value {
     json!({
-        "hooks": {}
+        "hooks": {
+            "UserPromptSubmit": [
+                {
+                    "matcher": "*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
+                            "timeout": 10,
+                            "statusMessage": "Checking review delegation"
+                        }
+                    ]
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
+                            "timeout": 10,
+                            "statusMessage": "Recording review subagent evidence"
+                        }
+                    ]
+                }
+            ],
+            "Stop": [
+                {
+                    "matcher": "*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
+                            "timeout": 10,
+                            "statusMessage": "Checking review closeout"
+                        }
+                    ]
+                }
+            ]
+        }
     })
 }
 
@@ -345,9 +385,10 @@ fn build_shared_agent_policy() -> String {
 
 fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
-Codex hooks are intentionally disabled for this repo.\n\n\
-Host-entrypoint sync does not generate `.codex/hooks.json`, and native install keeps `codex_hooks = false`.\n\n\
-The Rust hook command remains available only for explicit one-off audits; it is not installed as an active Codex hook.\n\n\
+Codex hooks are enabled for this repo.\n\n\
+Project-local hooks live in `.codex/hooks.json` and `.codex/hooks/`.\n\n\
+The active review gate requires broad/deep review requests to either spawn independent reviewer subagents or record a clear reject reason before finalizing.\n\n\
+The Rust hook command remains available for explicit one-off audits.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\

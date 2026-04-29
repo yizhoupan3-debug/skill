@@ -65,7 +65,14 @@ main-*.js
 my_ccs.css
 opencode.jsonc
 .codex/*
+!.codex/README.md
+!.codex/config.toml
 !.codex/host_entrypoints_sync_manifest.json
+!.codex/hooks.json
+!.codex/hooks/
+!.codex/hooks/*.py
+!.codex/hook-tests/
+!.codex/hook-tests/*.py
 !.codex/prompts/
 !.codex/prompts/*.md
 

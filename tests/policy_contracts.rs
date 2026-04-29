@@ -746,11 +746,18 @@ fn autoresearch_uses_rust_only_controller() {
 }
 
 #[test]
-fn installed_project_hooks_stay_disabled() {
-    assert!(!project_root().join(".codex/hooks.json").exists());
+fn installed_project_hooks_stay_enabled_for_review_subagents() {
+    assert!(project_root().join(".codex/hooks.json").exists());
+    assert!(project_root()
+        .join(".codex/hooks/review_subagent_gate.py")
+        .exists());
     let config = read_text(&project_root().join(".codex/config.toml"));
-    assert!(config.contains("codex_hooks = false"));
-    assert!(!config.contains("codex_hooks = true"));
+    assert!(config.contains("codex_hooks = true"));
+    assert!(!config.contains("codex_hooks = false"));
+    let hooks = read_json(&project_root().join(".codex/hooks.json"));
+    assert!(hooks
+        .to_string()
+        .contains(".codex/hooks/review_subagent_gate.py"));
     let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
     assert!(!manifest.to_string().contains(".codex/hooks.json"));
 }
@@ -1260,18 +1267,19 @@ fn direct_ppt_cli_build_qa_help_lists_quality_mode() {
 }
 
 #[test]
-fn repo_stays_free_of_python_source_and_pytest_entrypoints() {
+fn repo_stays_free_of_legacy_python_source_and_pytest_entrypoints() {
     let root = project_root();
     let mut violations = Vec::new();
     collect_files(&root, &mut |path| {
         let extension = path.extension().and_then(|ext| ext.to_str());
         let file_name = path.file_name().and_then(|name| name.to_str());
         if matches!(extension, Some("py" | "pyc")) || file_name == Some("pytest.ini") {
+            let rel = path.strip_prefix(&root).unwrap_or(path);
+            if allowed_python_control_plane_path(rel) {
+                return;
+            }
             violations.push(
-                path.strip_prefix(&root)
-                    .unwrap_or(path)
-                    .display()
-                    .to_string(),
+                rel.display().to_string(),
             );
         }
     });
@@ -1281,6 +1289,14 @@ fn repo_stays_free_of_python_source_and_pytest_entrypoints() {
         "Python source/cache/test entrypoints must stay removed:\n{}",
         violations.join("\n")
     );
+}
+
+fn allowed_python_control_plane_path(path: &Path) -> bool {
+    let text = path.to_string_lossy();
+    text == ".codex/hook-tests/test_codex_hooks.py"
+        || text == ".codex/hooks/review_subagent_gate.py"
+        || text.starts_with("skills/codex-hook-builder/assets/templates/")
+        || text.starts_with("skills/codex-hook-builder/scripts/")
 }
 
 fn collect_files_with_extension(root: &Path, extension: &str) -> Vec<PathBuf> {

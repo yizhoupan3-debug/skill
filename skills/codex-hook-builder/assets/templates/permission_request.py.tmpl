@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Auto-decide low-risk permission requests and deny obvious hazards."""
+
+from __future__ import annotations
+
+import json
+import re
+import shlex
+import sys
+
+
+ALLOW_PATTERNS = [
+    re.compile(r"^pwd$"),
+    re.compile(r"^ls(\s+(-[A-Za-z0-9]+|\.)+)?$"),
+    re.compile(r"^find\s+\.\s+-maxdepth\s+[0-9]+(\s+-type\s+[fd])?$"),
+    re.compile(r"^rg\s+--files(\s+\.)?$"),
+    re.compile(r"^git\s+(status|diff|log|show|branch|rev-parse)\b"),
+    re.compile(r"^(node|python3?|npm|pnpm|yarn|cargo|go|rustc)\s+--version$"),
+]
+
+DENY_PATTERNS = [
+    (re.compile(r"\bgit\s+reset\s+--hard\b"), "Denied destructive git reset."),
+    (re.compile(r"\bgit\s+clean\s+-[^;\n]*[fdx]"), "Denied destructive git clean."),
+    (re.compile(r"\brm\s+-[^;\n]*[rf]"), "Denied recursive deletion request."),
+    (re.compile(r"\bcurl\b[^|;\n]*\|\s*(sh|bash)\b"), "Denied curl-to-shell request."),
+    (
+        re.compile(r"(^|[/\s])(\.env([.\w-]*)?|\.ssh|id_(rsa|dsa|ecdsa|ed25519)|\.aws|credentials|secrets?)([/\s]|$)", re.I),
+        "Denied request that references likely secrets or credentials.",
+    ),
+]
+
+
+def command_from(event: dict) -> str:
+    tool_input = event.get("tool_input")
+    if isinstance(tool_input, dict):
+        command = tool_input.get("command") or tool_input.get("cmd")
+        if isinstance(command, str):
+            return command
+    return event.get("command") or ""
+
+
+def decision(behavior: str, message: str | None = None) -> dict:
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {"behavior": behavior},
+        }
+    }
+    if message:
+        output["hookSpecificOutput"]["decision"]["message"] = message
+    return output
+
+
+def main() -> int:
+    event = json.load(sys.stdin)
+    command = command_from(event)
+    try:
+        normalized = " ".join(shlex.split(command)) if command else ""
+    except ValueError:
+        return 0
+
+    for pattern, message in DENY_PATTERNS:
+        if pattern.search(command) or pattern.search(normalized):
+            print(json.dumps(decision("deny", message)))
+            return 0
+
+    if any(pattern.search(normalized) for pattern in ALLOW_PATTERNS):
+        print(json.dumps(decision("allow")))
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

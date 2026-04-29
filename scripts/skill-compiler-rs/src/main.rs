@@ -768,33 +768,35 @@ fn build_registry_and_manifest(
             "❌"
         };
 
+        let skill_row = vec![
+            json!(slug),
+            json!(layer),
+            json!(owner),
+            json!(gate),
+            json!(priority),
+            json!(long_summary),
+            json!(session_start),
+            json!(trigger_hints),
+            json!(round_one_decimal(health_score)),
+            json!(source_entry.source),
+            json!(source_entry.source_position),
+            json!(format!("{}/SKILL.md", source_entry.path)),
+        ];
+
         rows.push(format!(
             "| `{}` | {} | {} | {} | {} | {} | {} | {} {:.1} | {} |",
-            slug,
+            string_at(&skill_row, 0),
             status,
-            priority,
-            layer,
-            owner,
-            gate,
+            string_at(&skill_row, 4),
+            string_at(&skill_row, 1),
+            string_at(&skill_row, 2),
+            string_at(&skill_row, 3),
             source_entry.source,
             indicator,
             health_score,
             summary
         ));
-        skills.push(json!([
-            slug,
-            layer,
-            owner,
-            gate,
-            priority,
-            long_summary,
-            session_start,
-            trigger_hints,
-            round_one_decimal(health_score),
-            source_entry.source,
-            source_entry.source_position,
-            format!("{}/SKILL.md", source_entry.path),
-        ]));
+        skills.push(Value::Array(skill_row));
     }
 
     let registry = format!(

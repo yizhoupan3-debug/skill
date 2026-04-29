@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Run a hook script against a realistic Codex hook input fixture."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+
+def fixture(event: str) -> dict[str, Any]:
+    base = {
+        "hook_event_name": event,
+        "cwd": str(Path.cwd()),
+        "model": "gpt-5.4",
+        "permission_mode": "default",
+        "session_id": "fixture-session",
+        "transcript_path": None,
+    }
+    if event == "SessionStart":
+        return {**base, "source": "resume"}
+    if event == "UserPromptSubmit":
+        return {
+            **base,
+            "prompt": "Please inspect the project and run tests.",
+            "turn_id": "fixture-turn",
+        }
+    if event == "PreToolUse":
+        return {
+            **base,
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"},
+            "tool_use_id": "fixture-tool-use",
+            "turn_id": "fixture-turn",
+        }
+    if event == "PermissionRequest":
+        return {
+            **base,
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status --short"},
+            "turn_id": "fixture-turn",
+        }
+    if event == "PostToolUse":
+        return {
+            **base,
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"},
+            "tool_response": {"exit_code": 1, "stdout": "", "stderr": "1 failing test"},
+            "tool_use_id": "fixture-tool-use",
+            "turn_id": "fixture-turn",
+        }
+    if event == "Stop":
+        return {
+            **base,
+            "last_assistant_message": "I did not run tests.",
+            "stop_hook_active": False,
+            "turn_id": "fixture-turn",
+        }
+    raise ValueError(f"Unsupported fixture event: {event}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("script", help="Hook command or script to execute")
+    parser.add_argument(
+        "--event",
+        default="PreToolUse",
+        choices=[
+            "SessionStart",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PermissionRequest",
+            "PostToolUse",
+            "Stop",
+        ],
+    )
+    parser.add_argument("--input-json", help="Optional fixture JSON file")
+    parser.add_argument("--timeout", type=float, default=10.0)
+    args = parser.parse_args()
+
+    payload = (
+        json.loads(Path(args.input_json).read_text(encoding="utf-8"))
+        if args.input_json
+        else fixture(args.event)
+    )
+    proc = subprocess.run(
+        args.script,
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        shell=True,
+        timeout=args.timeout,
+    )
+
+    print(f"exit_code={proc.returncode}")
+    if proc.stdout:
+        print("--- stdout ---")
+        print(proc.stdout.rstrip())
+        try:
+            parsed = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            print("--- parsed_stdout ---")
+            print(json.dumps(parsed, indent=2, sort_keys=True))
+    if proc.stderr:
+        print("--- stderr ---")
+        print(proc.stderr.rstrip(), file=sys.stderr)
+    return 0 if proc.returncode in (0, 2) else proc.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

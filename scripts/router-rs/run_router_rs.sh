@@ -11,7 +11,7 @@ shift
 
 CRATE_ROOT=$(cd -- "$(dirname -- "$MANIFEST_PATH")" && pwd)
 REPO_ROOT=$(cd -- "$CRATE_ROOT/../.." && pwd)
-SHARED_TARGET_DIR=${CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/skill-cargo-target}
+SHARED_TARGET_DIR=${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}
 BUILD_LOCK_DIR="$SHARED_TARGET_DIR/.router-rs-build.lock"
 
 router_bin_compatible() {
@@ -104,7 +104,7 @@ release_build_lock() {
 
 ROUTER_BIN=$(pick_router_bin)
 
-if [ -z "$ROUTER_BIN" ] || router_source_newer_than "$ROUTER_BIN"; then
+if [ "${ROUTER_RS_NO_REBUILD:-}" != "1" ] && { [ -z "$ROUTER_BIN" ] || router_source_newer_than "$ROUTER_BIN"; }; then
   acquire_build_lock
   trap release_build_lock EXIT
   ROUTER_BIN=$(pick_router_bin)

@@ -61,6 +61,7 @@ metadata:
 - 任务是 read-heavy exploration，且多个方向可以独立并行
 - 任务有多个独立假设、独立模块或独立验证维度
 - review / verification 可以和主线程实现并行，且不会阻塞下一步
+- 深度 / 全面 / 全仓 / 跨模块 review 明显包含多个独立审查维度时，先进入 subagent admission；适合则开启 reviewer sidecars
 - 写入范围完全 disjoint，worker 只产出 lane-local delta
 - 用户要构建 multi-agent system、agent team、swarm、orchestration layer
 - 用户要做 planner / coder / reviewer / tester 这类协作链
@@ -97,7 +98,8 @@ This gate is about **admitting delegation only when it beats local execution**, 
 1. deny by default when scope, ownership, or verification is fuzzy
 2. prefer read-only sidecars before write-capable workers
 3. allow write delegation only for disjoint, lane-local scopes
-4. fall back to local-supervisor queue when spawning is blocked or not worth it
+4. for broad reviews, split independent reviewer lanes when the lane boundaries are clear
+5. fall back to local-supervisor queue when spawning is blocked or not worth it
 
 ## Spawn Admission
 

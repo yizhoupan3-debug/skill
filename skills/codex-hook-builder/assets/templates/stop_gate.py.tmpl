@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Nudge Codex to close the loop when the final answer says work is unverified."""
+
+from __future__ import annotations
+
+import json
+import sys
+
+
+UNVERIFIED_PHRASES = [
+    "did not run tests",
+    "didn't run tests",
+    "not run tests",
+    "unable to test",
+    "not tested",
+]
+
+
+def main() -> int:
+    event = json.load(sys.stdin)
+    if event.get("stop_hook_active"):
+        return 0
+
+    message = (event.get("last_assistant_message") or "").lower()
+    if any(phrase in message for phrase in UNVERIFIED_PHRASES):
+        print(json.dumps({
+            "decision": "block",
+            "reason": (
+                "Before finalizing, either run the relevant validation now or give the user "
+                "a concise, explicit reason why validation could not be run."
+            ),
+        }))
+    else:
+        print(json.dumps({"continue": True}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

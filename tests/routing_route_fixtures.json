@@ -658,7 +658,7 @@
       "name": "skill-framework-subtraction-behavior-review",
       "query": "减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象",
       "expected": {
-        "selected_skill": "skill-framework-developer",
+        "selected_skill": "agent-swarm-orchestration",
         "overlay_skill": null,
         "layer": "L0"
       }
@@ -676,9 +676,9 @@
       "name": "overlay-code-review-does-not-own",
       "query": "全面 review 这个仓库，做 code review",
       "expected": {
-        "selected_skill": "repo-review-owner",
+        "selected_skill": "agent-swarm-orchestration",
         "overlay_skill": "code-review",
-        "layer": "L2"
+        "layer": "L0"
       }
     },
     {

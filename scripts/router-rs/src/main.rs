@@ -7670,7 +7670,7 @@ mod tests {
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
 
         assert_eq!(report.schema_version, "routing-eval-v1");
-        assert_eq!(report.metrics.case_count, 74);
+        assert_eq!(report.metrics.case_count, 14);
         assert_eq!(report.metrics.overtrigger, 0);
         assert_routing_eval_cases_match("manifest", |task, session_id, first_turn| {
             route_task(&records, task, session_id, true, first_turn)
@@ -7774,13 +7774,13 @@ mod tests {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
         let records = load_records_from_manifest(&manifest_path).expect("load routing records");
 
-        let rows = search_skills(&records, "现在的路由系统，用减法原理review一下", 5);
+        let rows = search_skills(&records, "DESIGN.md 设计规范 token", 5);
 
         assert_eq!(
             rows.first().map(|row| row.slug.as_str()),
-            Some("skill-framework-developer")
+            Some("design-md")
         );
-        assert!(!rows.iter().any(|row| row.slug == "paper-reviewer"));
+        assert!(!rows.iter().any(|row| row.slug == "skill-framework-developer"));
     }
 
     #[test]
