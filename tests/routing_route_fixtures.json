@@ -173,7 +173,7 @@
     ],
     [
       "skill-framework-developer",
-      "L1",
+      "L0",
       "owner",
       "none",
       "Write execution-ready checklists before implementation or review.",
@@ -188,7 +188,7 @@
     ],
     [
       "skill-framework-developer",
-      "L2",
+      "L0",
       "owner",
       "none",
       "Rewrite messy checklists with explicit serial and parallel boundaries.",
@@ -569,7 +569,7 @@
       "expected": {
         "selected_skill": "idea-to-plan",
         "overlay_skill": null,
-        "layer": "L0"
+        "layer": "L1"
       }
     },
     {
@@ -604,9 +604,10 @@
       "query": "review checklist 看这轮是否结束",
       "expected": {
         "selected_skill": "skill-framework-developer",
-        "overlay_skill": "code-review",
-        "layer": "L1"
-      }
+        "overlay_skill": null,
+        "layer": "L0"
+      },
+      "allow_overlay": false
     },
     {
       "name": "checklist-normalizer-routing",
@@ -614,7 +615,7 @@
       "expected": {
         "selected_skill": "skill-framework-developer",
         "overlay_skill": null,
-        "layer": "L2"
+        "layer": "L0"
       }
     },
     {
@@ -667,7 +668,7 @@
       "query": "全面 review 这个仓库，做 code review",
       "expected": {
         "selected_skill": "repo-review-owner",
-        "overlay_skill": null,
+        "overlay_skill": "code-review",
         "layer": "L2"
       }
     },
@@ -735,10 +736,10 @@
       }
     },
     {
-      "name": "visual-review-drift-routing",
+      "name": "design-md-drift-routing",
       "query": "按 DESIGN.md 审计这版 UI 有没有风格漂移、AI 味和反模式回流，给我一个验收结论",
       "expected": {
-        "selected_skill": "visual-review",
+        "selected_skill": "design-md",
         "overlay_skill": null,
         "layer": "L3"
       }

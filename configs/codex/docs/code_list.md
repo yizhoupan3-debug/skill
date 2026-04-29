@@ -433,7 +433,7 @@ codex-aggregator/
 
 ## 3. 终极执行顺序流 (Anti-Fragile Pipeline)
 
-> **[Anti-Laziness 核查完毕]** 交由 `$execution-controller-coding` 落地
+> **[执行约束核查完毕]** 交由 `plan-to-code` 按当前 execution protocol 落地
 
 1. **[基础设施层]** 安装 Sing-box → 配置 6 节点 → 验证 IP 隔离 + TLS 指纹
 2. **[代理实例层]** 创建 6 个 CPA 实例 → 登录 Plus 账号 → 验证隔离

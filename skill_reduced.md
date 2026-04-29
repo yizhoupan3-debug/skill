@@ -98,30 +98,27 @@
 - [ ] `skills/SKILL_SHADOW_MAP.json` 不包含已删除 slug。
 - [ ] 搜索旧 slug 不再出现在路由表、loadout、tier、approval policy 中。
 
-## P1：skill 维护簇合并
+## P1：skill 维护簇合并（当前已收口）
 
 ### 当前问题
 
-- [ ] `skill-framework-developer`、`skill-writer`、`skill-routing-repair`、`writing-skills`、`skill-scout` 都在争抢 skill 维护语义。
-- [ ] 用户说“skill 系统精简/合并/删除/优化”时，应该只进 `skill-framework-developer`。
-- [ ] 单个 skill 文件的实际编辑可以由 `.system/skill-creator` 承接，不需要 `skill-writer` 独立 owner。
+- [x] skill 维护语义已收口到 `skill-framework-developer` 的 maintenance modes，不再保留旧独立 owner 叙事。
+- [x] 用户说“skill 系统精简/合并/删除/优化”时，应该只进 `skill-framework-developer`。
+- [x] 单个 skill package 创建/更新由 `.system/skill-creator` 承接；单 skill wording 先由 `skill-framework-developer` 判定边界。
 
 ### 目标结构
 
 - [ ] 保留 `skill-framework-developer`：唯一框架治理 owner。
 - [ ] 保留 `.system/skill-creator`：唯一具体 skill package 创建/更新执行入口。
 - [ ] 保留 `.system/skill-installer`：远程/curated skill 安装入口，默认不参与本地治理。
-- [ ] 删除或降级 `skill-writer`。
-- [ ] 删除或降级 `writing-skills`。
-- [ ] 删除或降级 `skill-routing-repair`。
-- [ ] 删除或降级 `skill-scout`。
+- [x] 旧 wording、批量规范、miss repair、external scout 入口不再作为当前独立 owner 记录。
 
 ### 合并方式
 
-- [ ] 将 `skill-writer` 的“单 skill wording / token budget / boundary”合入 `skill-framework-developer` 的一个 mode：`single-skill wording pass`。
-- [ ] 将 `writing-skills` 的“批量模板统一”合入 `skill-framework-developer` 的一个 mode：`batch wording normalization`。
-- [ ] 将 `skill-routing-repair` 的“post-task miss repair”合入 `skill-framework-developer` 的一个 mode：`miss repair`。
-- [ ] 将 `skill-scout` 的“外部 skill 生态对标”合入 `skill-framework-developer` 的一个 mode：`external scout`。
+- [x] 单 skill wording / token budget / boundary 合入 `skill-framework-developer` mode：`single-skill wording pass`。
+- [x] 批量模板统一合入 `skill-framework-developer` mode：`batch wording normalization`。
+- [x] post-task miss repair 合入 `skill-framework-developer` mode：`miss repair`。
+- [x] 外部 skill 生态对标合入 `skill-framework-developer` mode：`external scout`。
 - [ ] 将长说明移入 `skills/skill-framework-developer/references/`。
 - [ ] 在 `skill-framework-developer/SKILL.md` 只保留模式选择表和最小流程。
 
@@ -139,19 +136,18 @@
 - [ ] `skills/SKILL_LOADOUTS.json` 的 `framework_loadout` 不再列出旧维护 skill。
 - [ ] `skill-framework-developer` 顶层不超过约 `120` 行。
 
-## P1：checklist 簇合并
+## P1：checklist 簇合并（当前不保留独立 checklist owner）
 
 ### 当前问题
 
-- [ ] `checklist-writting` 拼写错误形成永久债务。
-- [ ] `checklist-writting` 和 `checklist-normalizer` 都是“计划到执行清单”的形状工作。
-- [ ] `checklist-fixer` 是执行队列，语义不同，可以保留。
+- [x] 旧 checklist skill 名称不再作为当前路由入口维护。
+- [x] checklist 生成/整理属于规划或框架维护语义，不再拆成独立 owner。
+- [x] checklist 执行属于 `plan-to-code` 的具体落地语义，不再保留单独执行队列 owner。
 
 ### 目标结构
 
-- [ ] 新建或重命名为 `checklist-planner`。
-- [ ] `checklist-planner` 覆盖从目标生成 checklist 与整理已有 checklist。
-- [ ] `checklist-fixer` 保留为“按 checklist 执行”的 owner。
+- [x] 不新建 checklist 专用 skill；用 `idea-to-plan` 处理通用计划清单，用 `skill-framework-developer` 处理框架 checklist / routing checklist。
+- [x] “按 checklist 执行”进入 `plan-to-code`，除非对象本身是框架治理。
 - [ ] 删除 `checklist-writting`。
 - [ ] 删除或合并 `checklist-normalizer`。
 
@@ -160,21 +156,21 @@
 - [ ] 从 `checklist-writting` 保留：版本化文件输出规则、agent 数量建议、先 plan 后执行边界。
 - [ ] 从 `checklist-normalizer` 保留：串行写在一点、并行拆开、验收/约束/停止条件、更新规则。
 - [ ] 从两个 skill 删除重复的 subagent / local-supervisor 大段说明，只保留一句转交 `agent-swarm-orchestration`。
-- [ ] 将详细 checklist 模板放入 `checklist-planner/references/checklist-template.md`。
+- [x] 详细 checklist 模板不作为独立 skill reference 维护；必要时下沉到所属 owner 的 `references/`。
 
 ### 路由规则
 
-- [ ] 用户只有目标、还没有清单：`checklist-planner`。
-- [ ] 用户已有混乱清单、要整理：`checklist-planner`。
-- [ ] 用户说“按 checklist 执行”“先做 1-3”“从 P0 开始”：`checklist-fixer`。
+- [x] 用户只有目标、还没有清单：`idea-to-plan`；若目标是 skill/framework 治理则 `skill-framework-developer`。
+- [x] 用户已有混乱清单、要整理：`idea-to-plan`；若清单对象是 routing/skill framework 则 `skill-framework-developer`。
+- [x] 用户说“按 checklist 执行”“先做 1-3”“从 P0 开始”：`plan-to-code`。
 - [ ] 用户只是直接实现 spec：`plan-to-code`。
 
 ### 验收
 
 - [ ] 搜索 `checklist-writting` 只在迁移说明或历史记录中出现。
 - [ ] `SKILL_ROUTING_RUNTIME.json` 不再有 `checklist-writting`。
-- [ ] `SKILL_ROUTING_LAYERS.md` 的易混淆边界改成 `checklist-planner` vs `checklist-fixer`。
-- [ ] checklist 相关入口从 `3` 个降到 `2` 个。
+- [x] `SKILL_ROUTING_LAYERS.md` 不再把 checklist 专用 skill 当当前目标结构。
+- [x] checklist 相关独立入口降为 `0`；由当前 owner 语义承接。
 
 ## P1：execution alias 收口
 
@@ -464,7 +460,7 @@
 - [ ] 保留 `code-review`：代码审查 findings overlay。
 - [ ] 保留 `security-audit`：安全审计 overlay。
 - [ ] 保留 `coding-standards`：跨栈代码规范 overlay。
-- [ ] 保留 `anti-laziness`，但只作为行为约束，不抢 owner。
+- [x] `anti-laziness` 已内化为执行约束，不再作为 skill/overlay 入口。
 - [ ] 删除或合并 `iterative-optimizer`。
 - [ ] 删除或合并 `frontend-code-quality`。
 - [ ] 删除或合并 `vercel-react-best-practices`。
@@ -625,10 +621,10 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 
 ### checklist 路由
 
-- [ ] “先给我一个 checklist” -> `checklist-planner`。
-- [ ] “把这个 checklist 串行写一点，并行拆开” -> `checklist-planner`。
-- [ ] “按 checklist 执行 1-3” -> `checklist-fixer`。
-- [ ] “好，就按这个做” 且上一轮是 checklist -> `checklist-fixer`。
+- [x] “先给我一个 checklist” -> `idea-to-plan`，框架治理语境 -> `skill-framework-developer`。
+- [x] “把这个 checklist 串行写一点，并行拆开” -> `idea-to-plan`，框架治理语境 -> `skill-framework-developer`。
+- [x] “按 checklist 执行 1-3” -> `plan-to-code`。
+- [x] “好，就按这个做” 且上一轮是 checklist -> `plan-to-code`。
 
 ### execution alias
 
@@ -716,7 +712,7 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 - [ ] `shell-cli`。
 - [ ] `plan-to-code` 仅在明确复杂执行时，不常驻普通任务。
 - [ ] `python-pro` / `typescript-pro` 视使用习惯保留或移出 default。
-- [ ] default overlays 建议只保留 `anti-laziness`，或连它也改成行为规则而非 overlay。
+- [ ] default overlays 不保留 `anti-laziness`；该约束已内化为执行规则而非 overlay。
 
 ## 成功标准
 

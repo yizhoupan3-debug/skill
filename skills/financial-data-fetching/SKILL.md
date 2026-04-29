@@ -114,7 +114,7 @@ This skill does **not** own:
 ## Rust runtime
 
 - Rust owns active local execution: crypto / U.S. OHLCV fetch, U.S. and China capital snapshots, retries, timeouts, concurrent probes, and backtest export.
-- Statements, detailed fundamentals, holders, CSI constituents, and CSI weights are retired until Rust-owned equivalents exist.
+- Statements, detailed fundamentals, holders, CSI constituents, and CSI weights are outside active local execution until Rust-owned equivalents exist.
 
 ## Verified no-token source map
 

@@ -14,14 +14,14 @@
 - Skill routing truth：`skills/SKILL_ROUTING_RUNTIME.json` + `skills/SKILL_ROUTING_INDEX.md`
 - Continuity truth：root continuity artifacts + `artifacts/current/*` mirror
 
-## Retired Narratives
+## Removed Runtime Narratives
 
 - `rust_execute_fallback_to_python` is no longer a kept runtime request surface.
-- `framework_runtime/` Python package is retired.
-- Python artifact emitter, Python host materializer, Python route shim, Python hook bridge, and Python session artifact writer are retired.
+- `framework_runtime/` Python package is no longer part of the live repo surface.
+- Python artifact emitter, Python host materializer, Python route shim, Python hook bridge, and Python session artifact writer are no longer live repo surfaces.
 - Non-Codex host adapters are removed from the live runtime surface.
 - External host compatibility runtimes are removed from the repo contract.
 
 ## Guardrail
 
-Future doc updates must not describe removed Python paths as current work items. If a document needs to mention them, it must label them as historical, retired, or compatibility-inventory only.
+Future doc updates must not describe removed Python paths as current work items. If a document needs to mention them, keep the note under `docs/history/` as historical compatibility inventory.

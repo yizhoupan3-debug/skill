@@ -40,7 +40,7 @@
 - [x] `framework_runtime.rs` 的 legacy memory archive 仍保留：`MEMORY_AUTO.md` 与 `sessions/` 迁移。
 - [x] `framework_runtime.rs` 的 supervisor fallback route 仍保留：trace 不匹配时回落到 supervisor controller 字段。
 - [x] `framework_profile.rs` 的 `compatibility_rules.python_may_continue_to_author = true` 与当前“Rust 真源，不恢复 Python”目标冲突。
-- [x] `codex_hooks.rs` 不再维护非 Codex retired entrypoint 清理面。
+- [x] `codex_hooks.rs` 不再维护非 Codex 旧 entrypoint 清理面。
 - [x] `.codex/hooks.json` 不再由 host-entrypoint sync 生成，`.codex/config.toml` 保持 `codex_hooks = false`，默认不安装/启用 hook。
 - [x] `tools/browser-mcp/scripts/start_browser_mcp.sh` 是 shell wrapper，实际只是转发到 router-rs 的 `--browser-mcp-stdio`。
 - [x] `tools/browser-mcp/src/index.ts` 仍支持 HTTP transport；如果只在 Codex MCP stdio 下使用，可降为开发调试路径或删除。
@@ -57,7 +57,7 @@
 
 ## 5. 建议删除或降级为历史文档
 
-- [x] 删除默认路径中的 non-Codex retired path 清理逻辑，只保留一次性迁移脚本或历史说明。
+- [x] 删除默认路径中的 non-Codex 旧路径清理逻辑，只保留一次性迁移脚本或历史说明。
 - [x] 删除 `python_may_continue_to_author` 兼容声明，改成 `rust_only_authority = true`。
 - [x] 删除 sqlite legacy absolute-key fallback，若仍担心旧数据，先提供一次性 migration command。
 - [x] 删除 memory `MEMORY_AUTO.md`/`sessions` 自动 archive 主路径，改成显式 `router migrate legacy-memory`。
@@ -71,7 +71,7 @@
 - [x] 保留 `skills/SKILL_ROUTING_RUNTIME.json` 作为首轮路由索引，符合 AGENTS 策略且便宜。
 - [x] 保留 `scripts/skill-compiler-rs`，因为它负责生成 runtime registry 和 health manifest。
 - [x] 保留 `router-rs` 的核心路由 scorer，但应拆出 CLI 控制面。
-- [x] 保留 Codex hook 投影能力，但默认只生成一个清晰入口，不再同时维护多 host retired inventory。
+- [x] 保留 Codex hook 投影能力，但默认只生成一个清晰入口，不再同时维护多 host 历史 inventory。
 - [x] 保留 artifacts/current 的 active/focus/task registry，但减少镜像和历史迁移自动逻辑。
 - [x] 保留 browser MCP 的真实浏览器能力，但把 TypeScript 侧 router-rs 进程池视为可疑重复层。
 
@@ -89,7 +89,7 @@
 ## 8. 验收标准
 
 - [x] 默认入口数量减少：普通使用只需要 `route/search`、`framework recall/write`、`codex sync/install` 三类。
-- [x] 默认 steady-state 不再执行 legacy migration、retired host cleanup、Python compatibility 或 multi-host adapter projection。
+- [x] 默认 steady-state 不再执行 legacy migration、旧 host cleanup、Python compatibility 或 multi-host adapter projection。
 - [x] `router-rs --help` 不再展示几十个平级 JSON flags。
 - [x] `codex_adapter` 兼容 key 不再作为内部结构名传播。
 - [x] `autopilot/team/deepinterview` 只有一个权威入口来源。
@@ -99,7 +99,7 @@
 ## 9. 执行记录
 
 - [x] 已把 `router-rs` 平级 JSON flag 主入口收敛到 `route/search/framework/codex/trace/storage/browser/profile/migrate` 子命令；`--help` 默认只展示一级命令。
-- [x] 已从默认 steady-state 移除 legacy memory 自动 archive、legacy artifact root 自动迁移、retired host path 默认清理、sqlite legacy absolute-key fallback、delegate kind legacy coercion。
+- [x] 已从默认 steady-state 移除 legacy memory 自动 archive、legacy artifact root 自动迁移、旧 host path 默认清理、sqlite legacy absolute-key fallback、delegate kind legacy coercion。
 - [x] 已把 `codex_adapter` / `host_adapter_payload` 内部命名收敛为 `codex_profile` / `codex_host_payload`，并把 `python_may_continue_to_author` 改为 Rust-only authority 规则。
 - [x] 已把 browser MCP wrapper 改为 `router-rs browser mcp-stdio` dev shim，并移除 TypeScript HTTP transport 入口。
 - [x] 已修正 `.codex/config.toml` 与 `.codex/hooks.json` 的 hook 启用状态不一致：默认关闭 hook，sync manifest 不再管理 `.codex/hooks.json`。

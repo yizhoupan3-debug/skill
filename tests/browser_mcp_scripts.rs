@@ -319,7 +319,7 @@ fn launcher_prefers_explicit_attach_descriptor_env_over_auto_discovery() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
     write_json(
-        &repo_root.join("framework_runtime/artifacts/scratch/older/TRACE_RESUME_MANIFEST.json"),
+        &repo_root.join("artifacts/scratch/older/TRACE_RESUME_MANIFEST.json"),
         &json!({
             "schema_version": "runtime-resume-manifest-v1",
             "event_transport_path": "/auto/discovered/runtime_event_transports/older.json",
@@ -356,9 +356,7 @@ fn launcher_leaves_sqlite_attach_discovery_to_rust_runtime() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
     seed_sqlite_payload(
-        &repo_root.join(
-            "framework_runtime/artifacts/scratch/sqlite-run/runtime_checkpoint_store.sqlite3",
-        ),
+        &repo_root.join("artifacts/scratch/sqlite-run/runtime_checkpoint_store.sqlite3"),
         "runtime-data/TRACE_RESUME_MANIFEST.json",
         &json!({
             "schema_version": "runtime-resume-manifest-v1",
@@ -405,7 +403,7 @@ fn browser_mcp_stdio_exposes_repository_skill_router_tools() {
             "method": "tools/call",
             "params": {
                 "name": "skill_read",
-                "arguments": {"skill": "skill-framework-developer", "maxChars": 2000}
+                "arguments": {"skill": "skill-framework-developer", "maxChars": 4000}
             }
         }))
         .unwrap(),
@@ -457,8 +455,7 @@ fn browser_mcp_stdio_exposes_repository_skill_router_tools() {
 fn launcher_leaves_filesystem_attach_discovery_to_rust_runtime() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
-    let manifest_path =
-        repo_root.join("framework_runtime/artifacts/scratch/run-a/TRACE_RESUME_MANIFEST.json");
+    let manifest_path = repo_root.join("artifacts/scratch/run-a/TRACE_RESUME_MANIFEST.json");
     write_json(
         &manifest_path,
         &json!({
@@ -779,7 +776,25 @@ chmod +x "$CARGO_TARGET_DIR/release/router-rs"
         ),
     );
     make_executable(&fake_cargo);
+    install_fake_file_command(fake_cargo.parent().unwrap());
     fake_cargo
+}
+
+fn install_fake_file_command(bin_dir: &Path) {
+    let fake_file = bin_dir.join("file");
+    write_text(
+        &fake_file,
+        r#"#!/bin/sh
+case "$(uname -s 2>/dev/null):$(uname -m 2>/dev/null)" in
+  Linux:x86_64) echo "$1: ELF 64-bit LSB executable, x86-64" ;;
+  Linux:aarch64|Linux:arm64) echo "$1: ELF 64-bit LSB executable, ARM aarch64" ;;
+  Darwin:arm64) echo "$1: Mach-O 64-bit executable arm64" ;;
+  Darwin:x86_64) echo "$1: Mach-O 64-bit executable x86_64" ;;
+  *) echo "$1: executable" ;;
+esac
+"#,
+    );
+    make_executable(&fake_file);
 }
 
 fn seed_sqlite_payload(db_path: &std::path::Path, payload_key: &str, payload: &serde_json::Value) {

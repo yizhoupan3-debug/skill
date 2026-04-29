@@ -1,11 +1,14 @@
 mod common;
 
 use common::{
-    host_integration_json, json_from_output, read_json, router_rs_command, write_json, write_text,
+    cargo_manifest_command, host_integration_json, json_from_output, read_json, router_rs_command,
+    write_json, write_text,
 };
 use rusqlite::Connection;
 use serde_json::json;
 use std::fs;
+use std::io::Write;
+use std::process::Stdio;
 use tempfile::tempdir;
 
 #[test]
@@ -488,6 +491,80 @@ fn rust_prompt_compression_policy_owns_prompt_wording() {
     assert_eq!(compression["artifact_offload_decision"], false);
 }
 
+#[test]
+fn contract_summary_emits_stable_digest_and_hook_prompt_lines() {
+    let tmp = tempdir().unwrap();
+    seed_contract_runtime(tmp.path(), "active bootstrap repair");
+
+    let output = common::run(router_rs_debug_command(&[
+        "framework",
+        "contract-summary",
+        "--repo-root",
+        tmp.path().to_str().unwrap(),
+    ]));
+    let result = json_from_output(&output);
+    let summary = &result["contract_summary"];
+
+    assert_eq!(result["authority"], "rust-framework-runtime-read-model");
+    assert_eq!(summary["contract_digest"].as_str().unwrap().len(), 64);
+    assert_eq!(summary["contract_guard"]["contract_active"], true);
+    assert!(summary["contract_guard"]["drift_classes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item == "owner_drift"));
+    assert!(summary["prompt_lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item
+            .as_str()
+            .unwrap()
+            .starts_with("contract_digest: sha256:")));
+    assert!(summary["prompt_lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item == "task: active bootstrap repair"));
+}
+
+#[test]
+fn codex_contract_guard_blocks_digest_drift_without_update_intent() {
+    let tmp = tempdir().unwrap();
+    seed_contract_runtime(tmp.path(), "active bootstrap repair");
+
+    let result = run_contract_guard(
+        tmp.path(),
+        &json!({
+            "expected_contract_digest": "sha256:not-the-live-digest",
+            "proposed_primary_owner": "plan-to-code"
+        }),
+    );
+
+    assert_eq!(result["decision"], "block");
+    assert!(result["contract_guard"]["drift_flags"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item == "contract_digest_drift"));
+    assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
+}
+
+#[test]
+fn codex_hook_projection_exposes_explicit_contract_guard_command() {
+    let output = common::run(router_rs_debug_command(&["codex", "hook-projection"]));
+    let result = json_from_output(&output);
+
+    assert!(result["codex_audit_commands"]["contract_guard"]
+        .as_str()
+        .unwrap()
+        .contains("codex hook contract-guard"));
+    assert!(result["codex_hooks_readme"]
+        .as_str()
+        .unwrap()
+        .contains("contract-guard"));
+}
+
 fn render_context(
     repo_root: &std::path::Path,
     topic: &str,
@@ -507,6 +584,33 @@ fn render_context(
         repo_root.to_str().unwrap(),
     ]));
     json_from_output(&output)["memory_recall"]["prompt_payload"]["retrieval"].clone()
+}
+
+fn run_contract_guard(
+    repo_root: &std::path::Path,
+    payload: &serde_json::Value,
+) -> serde_json::Value {
+    let mut command = router_rs_debug_command(&[
+        "codex",
+        "hook",
+        "contract-guard",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    command.stdin(Stdio::piped()).stdout(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        stdin.write_all(payload.to_string().as_bytes()).unwrap();
+    }
+    drop(child.stdin.take());
+    let output = child.wait_with_output().unwrap();
+    json_from_output(&output)
+}
+
+fn router_rs_debug_command(args: &[&str]) -> std::process::Command {
+    let manifest = common::project_root().join("scripts/router-rs/Cargo.toml");
+    cargo_manifest_command(&manifest, args)
 }
 
 fn seed_runtime(repo_root: &std::path::Path, task: &str) {
@@ -541,6 +645,29 @@ fn seed_runtime(repo_root: &std::path::Path, task: &str) {
         }),
     );
     write_json(
+        &repo_root.join("artifacts/current/focus_task.json"),
+        &json!({
+            "task_id": task_id,
+            "task": task,
+            "updated_at": "2026-04-18T22:49:57+08:00"
+        }),
+    );
+    write_json(
+        &repo_root.join("artifacts/current/task_registry.json"),
+        &json!({
+            "schema_version": "task-registry-v1",
+            "focus_task_id": task_id,
+            "tasks": [{
+                "task_id": task_id,
+                "task": task,
+                "phase": "implementation",
+                "status": "in_progress",
+                "resume_allowed": true,
+                "updated_at": "2026-04-18T22:49:57+08:00"
+            }]
+        }),
+    );
+    write_json(
         &repo_root.join(".supervisor_state.json"),
         &json!({
             "task_id": task_id,
@@ -555,6 +682,10 @@ fn seed_runtime(repo_root: &std::path::Path, task: &str) {
             "blockers": {"open_blockers": ["Need regression coverage"]}
         }),
     );
+}
+
+fn seed_contract_runtime(repo_root: &std::path::Path, task: &str) {
+    seed_runtime(repo_root, task);
 }
 
 fn seed_stable_memory(repo_root: &std::path::Path) {

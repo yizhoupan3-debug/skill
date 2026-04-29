@@ -1,6 +1,6 @@
 # dist/
 
-Optional packaged skill archives (`.skill` files). The old root-level packaging script is retired.
+Optional packaged skill archives (`.skill` files). The old root-level packaging script is no longer part of the active packaging surface.
 
 ## Usage
 
