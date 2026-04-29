@@ -20,6 +20,7 @@ const RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "build-tooling",
     "code-acceleration",
     "code-review",
+    "codex-hook-builder",
     "coding-standards",
     "datastore-cache-queue",
     "dependency-migration",
