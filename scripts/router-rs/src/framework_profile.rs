@@ -9,7 +9,7 @@ const RUNTIME_SURFACE_FIELDS: [&str; 4] = [
     "routing",
     "memory_mounts",
     "continuity_contract",
-    "codex_host_payload",
+    "host_projection",
 ];
 const CAPABILITY_SURFACE_FIELDS: [&str; 12] = [
     "artifact_contract",
@@ -40,6 +40,19 @@ const CODEX_HOST_CAPABILITIES: [&str; 13] = [
     "host_tmux_worker_management",
     "framework_alias_entrypoints",
 ];
+const CLAUDE_CODE_HOST_CAPABILITIES: [&str; 11] = [
+    "artifact_contract",
+    "memory_mounts",
+    "workspace_bootstrap",
+    "non_interactive_entrypoint",
+    "external_session_supervisor",
+    "rate_limit_auto_resume",
+    "host_resume_entrypoint",
+    "host_tmux_worker_management",
+    "framework_alias_entrypoints",
+    "project_commands",
+    "slash_commands",
+];
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "checkpointing_supported",
     "config_root_env_var",
@@ -67,7 +80,7 @@ const EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID: &str = "execution_protocol_contra
 const DELEGATION_CONTRACT_ARTIFACT_ID: &str = "delegation_contract";
 const SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID: &str = "supervisor_state_contract";
 
-struct CodexProfileBuildContext<'a> {
+struct HostProfileBuildContext<'a> {
     normalized_memory_mounts: &'a [Value],
     normalized_mcp_servers: &'a [Value],
     workspace_bootstrap: &'a Map<String, Value>,
@@ -141,6 +154,9 @@ pub struct ProfileBundle {
     pub metadata: Map<String, Value>,
     pub codex_profile: Value,
     pub full_codex_profile: Value,
+    pub claude_code_profile: Value,
+    pub full_claude_code_profile: Value,
+    pub host_payloads: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -164,29 +180,62 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
     let normalized_memory_mounts = normalize_mounts(&profile.memory_mounts);
     let normalized_mcp_servers = normalize_mcp_servers(&profile.mcp_servers);
     let workspace_bootstrap = compile_workspace_bootstrap(profile, &normalized_memory_mounts);
-    let shared_contract = build_codex_shared_contract(
+    let shared_contract = build_shared_contract(
         profile,
         &normalized_memory_mounts,
         &normalized_mcp_servers,
         &workspace_bootstrap,
     );
-    let codex_host_payload = complete_codex_host_payload(build_codex_host_payload());
-    let codex_profile = build_codex_profile(
+    let codex_host_payload = complete_host_payload("codex", build_codex_host_payload());
+    let claude_code_host_payload =
+        complete_host_payload("claude-code", build_claude_code_host_payload());
+    let mut host_payloads = Map::new();
+    host_payloads.insert(
+        "codex-cli".to_string(),
+        Value::Object(codex_host_payload.clone()),
+    );
+    host_payloads.insert(
+        "claude-code-cli".to_string(),
+        Value::Object(claude_code_host_payload.clone()),
+    );
+    let codex_profile = build_host_profile(
         profile,
         &normalized_memory_mounts,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
         &codex_host_payload,
+        HostProfileKind::Codex,
         false,
     );
-    let full_codex_profile = build_codex_profile(
+    let full_codex_profile = build_host_profile(
         profile,
         &normalized_memory_mounts,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
         &codex_host_payload,
+        HostProfileKind::Codex,
+        true,
+    );
+    let claude_code_profile = build_host_profile(
+        profile,
+        &normalized_memory_mounts,
+        &normalized_mcp_servers,
+        &workspace_bootstrap,
+        &shared_contract,
+        &claude_code_host_payload,
+        HostProfileKind::ClaudeCode,
+        false,
+    );
+    let full_claude_code_profile = build_host_profile(
+        profile,
+        &normalized_memory_mounts,
+        &normalized_mcp_servers,
+        &workspace_bootstrap,
+        &shared_contract,
+        &claude_code_host_payload,
+        HostProfileKind::ClaudeCode,
         true,
     );
     Ok(ProfileBundle {
@@ -215,6 +264,9 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         metadata: profile.metadata.clone(),
         codex_profile: Value::Object(codex_profile),
         full_codex_profile: Value::Object(full_codex_profile),
+        claude_code_profile: Value::Object(claude_code_profile),
+        full_claude_code_profile: Value::Object(full_claude_code_profile),
+        host_payloads,
     })
 }
 
@@ -245,8 +297,8 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
     if profile.framework_profile_version.trim().is_empty() {
         return Err("framework profile missing framework_profile_version".to_string());
     }
-    if profile.host_family.trim() != "codex" {
-        return Err("framework core must be pinned to Codex".to_string());
+    if profile.host_family.trim() != "shared-rust-core" {
+        return Err("framework core must be pinned to shared-rust-core".to_string());
     }
 
     let capability_set = profile
@@ -273,7 +325,7 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
         .collect::<Vec<_>>();
     if !host_specific_metadata.is_empty() {
         return Err(format!(
-            "framework profile metadata must stay Codex-core-only; move Codex host-private keys into codex_profile.codex_host_payload: {}",
+            "framework profile metadata must stay shared-core-only; move host-private keys into explicit host payloads: {}",
             host_specific_metadata.join(", ")
         ));
     }
@@ -344,7 +396,10 @@ fn compile_workspace_bootstrap(
         let skills = bootstrap.get("skills").cloned().unwrap_or_else(|| {
             value_object([
                 ("project_dir", Value::String("skills".to_string())),
-                ("user_dir", Value::String("~/.codex/skills".to_string())),
+                (
+                    "user_dir",
+                    Value::String("${CODEX_HOME}/skills".to_string()),
+                ),
                 ("source_dir", Value::String("skills".to_string())),
             ])
         });
@@ -411,7 +466,7 @@ fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
     ])
 }
 
-fn build_codex_shared_contract(
+fn build_shared_contract(
     profile: &FrameworkProfileContract,
     normalized_memory_mounts: &[Value],
     normalized_mcp_servers: &[Value],
@@ -502,11 +557,12 @@ fn build_codex_shared_contract(
     shared_contract
 }
 
-fn build_codex_profile_output_base(
+fn build_host_profile_output_base(
     profile: &FrameworkProfileContract,
-    context: &CodexProfileBuildContext<'_>,
+    context: &HostProfileBuildContext<'_>,
 ) -> Map<String, Value> {
-    let resolved_host_capability_requirements = resolve_codex_capability_requirements(profile);
+    let resolved_host_capability_requirements =
+        resolve_host_capability_requirements(profile, "codex");
     let mut capabilities = Map::new();
     capabilities.insert(
         "core".to_string(),
@@ -636,9 +692,9 @@ fn build_capability_surface(shared_contract: &Map<String, Value>) -> Map<String,
     capability_surface
 }
 
-fn complete_codex_host_payload(codex_host_fields: Map<String, Value>) -> Map<String, Value> {
+fn complete_host_payload(host_cli: &str, host_fields: Map<String, Value>) -> Map<String, Value> {
     let mut completed = Map::new();
-    completed.insert("host_cli".to_string(), Value::String("codex".to_string()));
+    completed.insert("host_cli".to_string(), Value::String(host_cli.to_string()));
     completed.insert("context_files".to_string(), Value::Array(vec![]));
     completed.insert("settings_paths".to_string(), Value::Array(vec![]));
     completed.insert("mcp_config_paths".to_string(), Value::Array(vec![]));
@@ -656,7 +712,7 @@ fn complete_codex_host_payload(codex_host_fields: Map<String, Value>) -> Map<Str
         "framework_alias_entrypoints".to_string(),
         Value::Object(Map::new()),
     );
-    for (key, value) in codex_host_fields {
+    for (key, value) in host_fields {
         completed.insert(key, value);
     }
     completed
@@ -699,14 +755,14 @@ fn build_codex_host_payload() -> Map<String, Value> {
     );
     payload.insert(
         "settings_paths".to_string(),
-        Value::Array(vec![
-            Value::String("~/.codex/config.toml".to_string()),
-            Value::String(".codex/config.toml".to_string()),
+        json!([
+            {"scope": "user", "host_root": "codex", "relative": "config.toml"},
+            {"scope": "project", "relative": ".codex/config.toml"}
         ]),
     );
     payload.insert(
         "mcp_config_paths".to_string(),
-        Value::Array(vec![Value::String(".codex/config.toml".to_string())]),
+        json!([{"scope": "project", "relative": ".codex/config.toml"}]),
     );
     payload.insert(
         "session_supervisor_driver".to_string(),
@@ -736,27 +792,116 @@ fn build_codex_host_payload() -> Map<String, Value> {
     payload
 }
 
-fn build_codex_profile(
+fn build_claude_code_host_payload() -> Map<String, Value> {
+    let mut payload = Map::new();
+    payload.insert(
+        "context_files".to_string(),
+        Value::Array(vec![Value::String("CLAUDE.md".to_string())]),
+    );
+    payload.insert(
+        "settings_paths".to_string(),
+        json!([
+            {"scope": "user", "host_root": "claude", "relative": "settings.json"},
+            {"scope": "project", "relative": ".claude/settings.json"},
+            {"scope": "local_project", "relative": ".claude/settings.local.json"}
+        ]),
+    );
+    payload.insert("mcp_config_paths".to_string(), Value::Array(vec![]));
+    payload.insert(
+        "session_supervisor_driver".to_string(),
+        Value::String("claude_code_driver".to_string()),
+    );
+    payload.insert(
+        "resume_command_examples".to_string(),
+        json!(["claude --continue", "claude --resume <session_id>"]),
+    );
+    payload.insert(
+        "framework_alias_entrypoints".to_string(),
+        build_host_alias_entrypoints("claude-code-cli"),
+    );
+    payload.insert(
+        "project_command_surface".to_string(),
+        json!({
+            "command_dir": ".claude/commands",
+            "skill_dir": ".claude/skills",
+            "host_private": true
+        }),
+    );
+    payload
+}
+
+#[derive(Clone, Copy)]
+enum HostProfileKind {
+    Codex,
+    ClaudeCode,
+}
+
+impl HostProfileKind {
+    fn host_key(self) -> &'static str {
+        match self {
+            HostProfileKind::Codex => "codex-cli",
+            HostProfileKind::ClaudeCode => "claude-code-cli",
+        }
+    }
+
+    fn host_cli(self) -> &'static str {
+        match self {
+            HostProfileKind::Codex => "codex",
+            HostProfileKind::ClaudeCode => "claude-code",
+        }
+    }
+
+    fn entrypoint_kind(self) -> &'static str {
+        match self {
+            HostProfileKind::Codex => "codex",
+            HostProfileKind::ClaudeCode => "claude-code",
+        }
+    }
+
+    fn controller_is_cli(self) -> bool {
+        matches!(self, HostProfileKind::ClaudeCode)
+    }
+
+    fn capabilities(self) -> Value {
+        match self {
+            HostProfileKind::Codex => string_array(&CODEX_HOST_CAPABILITIES),
+            HostProfileKind::ClaudeCode => string_array(&CLAUDE_CODE_HOST_CAPABILITIES),
+        }
+    }
+}
+
+fn build_host_profile(
     profile: &FrameworkProfileContract,
     normalized_memory_mounts: &[Value],
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
     shared_contract: &Map<String, Value>,
-    codex_host_payload: &Map<String, Value>,
+    host_payload: &Map<String, Value>,
+    host_kind: HostProfileKind,
     include_full_contract: bool,
 ) -> Map<String, Value> {
-    let mut payload = build_codex_profile_output_base(
+    let mut payload = build_host_profile_output_base(
         profile,
-        &CodexProfileBuildContext {
+        &HostProfileBuildContext {
             normalized_memory_mounts,
             normalized_mcp_servers,
             workspace_bootstrap,
         },
     );
+    payload["capabilities"]["host"] = host_kind.capabilities();
+    payload["metadata"]["host_id"] = Value::String(host_kind.host_cli().to_string());
+    payload["metadata"]["transport"] = Value::String(format!("native-{}", host_kind.host_cli()));
+    payload["host_capability_requirements"] = Value::Object(resolve_host_capability_requirements(
+        profile,
+        host_kind.host_cli(),
+    ));
     let mut runtime_surface = build_runtime_surface(shared_contract);
     runtime_surface.insert(
-        "codex_host_payload".to_string(),
-        Value::Object(codex_host_payload.clone()),
+        "host_projection".to_string(),
+        value_object([
+            ("host", Value::String(host_kind.host_key().to_string())),
+            ("payload", Value::Object(host_payload.clone())),
+        ]),
     );
     payload.insert(
         "runtime_surface".to_string(),
@@ -775,7 +920,10 @@ fn build_codex_profile(
     payload.insert(
         "execution_surface".to_string(),
         value_object([
-            ("entrypoint_kind", Value::String("codex".to_string())),
+            (
+                "entrypoint_kind",
+                Value::String(host_kind.entrypoint_kind().to_string()),
+            ),
             ("non_interactive", Value::Bool(true)),
             ("supports_batch", Value::Bool(true)),
             ("supports_cron", Value::Bool(true)),
@@ -784,20 +932,36 @@ fn build_codex_profile(
                 "framework_truth",
                 Value::String("framework_core".to_string()),
             ),
-            ("controller_is_cli", Value::Bool(false)),
-            ("host_cli", Value::String("codex".to_string())),
+            (
+                "controller_is_cli",
+                Value::Bool(host_kind.controller_is_cli()),
+            ),
+            ("host_cli", Value::String(host_kind.host_cli().to_string())),
         ]),
     );
     payload.insert(
-        "codex_host_payload".to_string(),
-        Value::Object(codex_host_payload.clone()),
+        "host_projection".to_string(),
+        value_object([
+            ("host", Value::String(host_kind.host_key().to_string())),
+            ("payload", Value::Object(host_payload.clone())),
+        ]),
     );
+    if matches!(host_kind, HostProfileKind::Codex) {
+        payload.insert(
+            "codex_host_payload".to_string(),
+            Value::Object(host_payload.clone()),
+        );
+    }
     payload
 }
 
-fn resolve_codex_capability_requirements(profile: &FrameworkProfileContract) -> Map<String, Value> {
+fn resolve_host_capability_requirements(
+    profile: &FrameworkProfileContract,
+    host_cli: &str,
+) -> Map<String, Value> {
     let mut merged = Map::new();
-    for key in ["default", "codex", "codex_profile"] {
+    let profile_key = format!("{}_profile", host_cli.replace('-', "_"));
+    for key in ["default", host_cli, profile_key.as_str()] {
         if let Some(Value::Object(requirements)) = profile.host_capability_requirements.get(key) {
             merge_json_maps(&mut merged, requirements);
         }
@@ -834,7 +998,10 @@ fn merge_json_maps(target: &mut Map<String, Value>, override_map: &Map<String, V
 
 fn build_execution_protocol_contract() -> Map<String, Value> {
     let mut boundaries = Map::new();
-    boundaries.insert("codex_profile_is_canonical".to_string(), Value::Bool(true));
+    boundaries.insert(
+        "shared_framework_core_is_canonical".to_string(),
+        Value::Bool(true),
+    );
     boundaries.insert(
         "runtime_branching_changes_required".to_string(),
         Value::Bool(false),
@@ -1347,7 +1514,7 @@ fn default_runtime_family() -> String {
 }
 
 fn default_host_family() -> String {
-    "codex".to_string()
+    "shared-rust-core".to_string()
 }
 
 fn default_core_capabilities() -> Vec<String> {
@@ -1376,7 +1543,7 @@ mod tests {
             "display_name": "Fusion Default",
             "framework_profile_version": "0.1.0",
             "runtime_family": "portable",
-            "host_family": "codex",
+            "host_family": "shared-rust-core",
             "core_capabilities": ["runtime", "memory", "artifact", "orchestration"],
             "rules_bundle": {"rules": [{"id": "outer-owned"}]},
             "skill_bundle": {"skills": ["router", "memory-bridge"]},
@@ -1385,7 +1552,7 @@ mod tests {
             "approval_policy": {"mode": "manual"},
             "loadout_policy": {"default": "portable"},
             "framework_surface_policy": {
-                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "codex_host_payload"]},
+                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
                 "default_surface": {"default_loadouts": ["default_surface_loadout"]}
             },
             "artifact_contract": {"layout": "stable-v1"},
@@ -1401,7 +1568,7 @@ mod tests {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         assert_eq!(bundle.profile_id, "fusion-default");
         assert_eq!(bundle.capabilities.core.len(), 4);
-        assert_eq!(bundle.host_family, "codex");
+        assert_eq!(bundle.host_family, "shared-rust-core");
         assert!(bundle.codex_profile["metadata"].get("adapter_id").is_none());
         assert_eq!(
             bundle.codex_profile["execution_surface"]["entrypoint_kind"],
@@ -1475,7 +1642,7 @@ mod tests {
             None
         );
         assert_eq!(
-            bundle.codex_profile["runtime_surface"]["codex_host_payload"]["host_cli"],
+            bundle.codex_profile["runtime_surface"]["host_projection"]["payload"]["host_cli"],
             json!("codex")
         );
         assert!(bundle.codex_profile.get("bridge_contract").is_none());
@@ -1525,10 +1692,14 @@ mod tests {
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
         assert_eq!(
             serialized["host_family"],
-            Value::String("codex".to_string())
+            Value::String("shared-rust-core".to_string())
         );
         assert!(serialized.get("codex_profile").is_some());
         assert!(serialized.get("full_codex_profile").is_some());
+        assert!(serialized.get("claude_code_profile").is_some());
+        assert!(serialized.get("full_claude_code_profile").is_some());
+        assert!(serialized["host_payloads"].get("codex-cli").is_some());
+        assert!(serialized["host_payloads"].get("claude-code-cli").is_some());
         assert!(serialized.get("host_entrypoint_outputs").is_none());
     }
 
@@ -1621,11 +1792,11 @@ mod tests {
     }
 
     #[test]
-    fn validation_rejects_non_codex_host_family() {
+    fn validation_rejects_non_shared_core_host_family() {
         let mut profile = sample_profile();
         profile.host_family = "unsupported-host".to_string();
         let error = build_profile_bundle(&profile).expect_err("should reject pinned host family");
-        assert!(error.contains("must be pinned to Codex"));
+        assert!(error.contains("must be pinned to shared-rust-core"));
     }
 
     #[test]
@@ -1636,7 +1807,7 @@ mod tests {
             .insert("settings_paths".to_string(), json!([".codex/config.toml"]));
         let error = build_profile_bundle(&profile)
             .expect_err("should reject host-specific metadata in framework truth");
-        assert!(error.contains("Codex-core-only"));
+        assert!(error.contains("shared-core-only"));
         assert!(error.contains("settings_paths"));
     }
 }

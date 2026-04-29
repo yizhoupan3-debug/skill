@@ -21,6 +21,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 写 workflow
   - 搭 CI
@@ -32,6 +34,7 @@ trigger_hints:
   - build
   - release workflows
   - ci
+
 ---
 
 # github-actions-authoring

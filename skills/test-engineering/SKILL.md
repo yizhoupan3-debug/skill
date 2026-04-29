@@ -18,6 +18,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 补测试
   - 写 pytest
@@ -36,6 +38,7 @@ allowed_tools:
   - node
 approval_required_tools:
   - git push
+
 ---
 
 - **Dual-Dimension Audit (Pre: Test-Case/Logic, Post: Coverage-Metric/Mutation-Score Results)** → runtime verification gate

@@ -13,10 +13,47 @@ const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_m
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
 const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
-const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 1] = [CODEX_AGENT_POLICY_PATH];
+const CLAUDE_AGENT_POLICY_PATH: &str = "CLAUDE.md";
+const CODEX_PROMPT_ENTRYPOINTS: [(&str, &str, &str); 4] = [
+    (
+        "autopilot",
+        "Run the local autopilot workflow without typing a dollar-prefixed skill.",
+        "[task...]",
+    ),
+    (
+        "deepinterview",
+        "Run the local deepinterview workflow without typing a dollar-prefixed skill.",
+        "[task...]",
+    ),
+    (
+        "gitx",
+        "Run the local gitx Git closeout workflow without typing a dollar-prefixed skill.",
+        "[git task...]",
+    ),
+    (
+        "team",
+        "Run the local team workflow without typing a dollar-prefixed skill.",
+        "[task...]",
+    ),
+];
+const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 6] = [
+    CODEX_AGENT_POLICY_PATH,
+    CLAUDE_AGENT_POLICY_PATH,
+    ".codex/prompts/autopilot.md",
+    ".codex/prompts/deepinterview.md",
+    ".codex/prompts/gitx.md",
+    ".codex/prompts/team.md",
+];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
-const PROTECTED_GENERATED_PATHS: [&str; 2] =
-    [CODEX_AGENT_POLICY_PATH, HOST_ENTRYPOINT_SYNC_MANIFEST_PATH];
+const PROTECTED_GENERATED_PATHS: [&str; 7] = [
+    CODEX_AGENT_POLICY_PATH,
+    CLAUDE_AGENT_POLICY_PATH,
+    HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
+    ".codex/prompts/autopilot.md",
+    ".codex/prompts/deepinterview.md",
+    ".codex/prompts/gitx.md",
+    ".codex/prompts/team.md",
+];
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 pub fn build_codex_hook_manifest() -> Value {
     json!({
@@ -111,15 +148,26 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
 
 fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut files = BTreeMap::new();
-    files.insert(
-        CODEX_AGENT_POLICY_PATH.to_string(),
-        build_shared_agent_policy().into_bytes(),
-    );
+    let shared_policy = build_shared_agent_policy().into_bytes();
+    files.insert(CODEX_AGENT_POLICY_PATH.to_string(), shared_policy.clone());
+    files.insert(CLAUDE_AGENT_POLICY_PATH.to_string(), shared_policy);
+    for (slug, description, argument_hint) in CODEX_PROMPT_ENTRYPOINTS {
+        files.insert(
+            format!(".codex/prompts/{slug}.md"),
+            render_codex_prompt_entrypoint(slug, description, argument_hint).into_bytes(),
+        );
+    }
     files.insert(
         HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
         serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files))?,
     );
     Ok(files)
+}
+
+fn render_codex_prompt_entrypoint(slug: &str, description: &str, argument_hint: &str) -> String {
+    format!(
+        "---\ndescription: {description}\nargument-hint: \"{argument_hint}\"\n---\n\nUse $${slug} for this task.\n\n$ARGUMENTS\n"
+    )
 }
 
 fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>) -> Value {
@@ -134,10 +182,10 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
         "shared_system": {
             "policy": "shared-agent-policy-v1",
             "source_of_truth": "skills/",
-            "supported_hosts": ["codex-cli", "codex-app"],
+            "supported_hosts": ["codex-cli", "claude-code-cli"],
             "host_entrypoints": {
                 "codex-cli": CODEX_AGENT_POLICY_PATH,
-                "codex-app": CODEX_AGENT_POLICY_PATH,
+                "claude-code-cli": CLAUDE_AGENT_POLICY_PATH,
             },
         },
         "full_sync": {
@@ -659,19 +707,43 @@ fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
                     .unwrap_or_else(|_| repo_root.to_path_buf()),
             )
         {
-            return rel.to_string_lossy().replace('\\', "/");
+            return normalize_repo_relative_path(&rel.to_string_lossy());
         }
     }
-    path.replace('\\', "/")
+    normalize_repo_relative_path(path)
+}
+
+fn normalize_repo_relative_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    let mut parts = Vec::new();
+    for part in normalized.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.last().is_some_and(|last| *last != "..") {
+                    parts.pop();
+                } else {
+                    parts.push(part);
+                }
+            }
+            _ => parts.push(part),
+        }
+    }
+    if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
+    }
 }
 
 fn classify_protected_generated_path(path: &str) -> Option<&'static str> {
-    if protected_generated_paths().contains(&path) {
+    let normalized = normalize_repo_relative_path(path);
+    if protected_generated_paths().contains(&normalized.as_str()) {
         return Some("generated_file");
     }
     if PROTECTED_GENERATED_PREFIXES
         .iter()
-        .any(|prefix| path.starts_with(prefix))
+        .any(|prefix| normalized.starts_with(prefix))
     {
         return Some("generated_file");
     }
@@ -700,10 +772,9 @@ fn bash_generated_write_target(payload: &Value) -> Option<String> {
     for segment in split_bash_segments(command) {
         let looks_mutating = bash_command_looks_mutating(&segment);
         for hint in protected_generated_paths() {
-            if !segment.contains(hint) {
-                continue;
-            }
-            if looks_mutating || bash_segment_redirects_to_hint(&segment, hint) {
+            if bash_segment_mentions_generated_path(&segment, hint)
+                && (looks_mutating || bash_segment_redirects_to_hint(&segment, hint))
+            {
                 return Some(hint.to_string());
             }
         }
@@ -748,12 +819,19 @@ fn bash_command_looks_mutating(command: &str) -> bool {
     })
 }
 
+fn bash_segment_mentions_generated_path(segment: &str, hint: &str) -> bool {
+    segment
+        .split(|ch: char| ch.is_whitespace() || matches!(ch, '\'' | '"' | ';' | '&' | '|'))
+        .map(|token| token.trim_start_matches('>').trim_start_matches("of="))
+        .any(|token| normalize_repo_relative_path(token) == hint)
+}
+
 fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
     let escaped = regex::escape(hint);
     [
-        format!(r#"(>>?|>\|)\s*['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
-        format!(r#"\btee\b(?:\s+-a)?\s+['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
-        format!(r#"\bdd\b[^\n;&|]*\bof=['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
+        format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#),
+        format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#),
+        format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#),
     ]
     .iter()
     .any(|pattern| {
@@ -761,5 +839,68 @@ fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
             .ok()
             .map(|regex| regex.is_match(segment))
             .unwrap_or(false)
-    })
+    }) || bash_segment_mentions_generated_path(segment, hint)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::path::Path;
+
+    #[test]
+    fn protected_generated_paths_match_lexical_variants() {
+        assert_eq!(normalize_repo_relative_path("./AGENTS.md"), "AGENTS.md");
+        assert_eq!(
+            normalize_repo_relative_path(".codex/../.codex/host_entrypoints_sync_manifest.json"),
+            ".codex/host_entrypoints_sync_manifest.json"
+        );
+        assert!(classify_protected_generated_path("./AGENTS.md").is_some());
+        assert!(classify_protected_generated_path(
+            ".codex/../.codex/host_entrypoints_sync_manifest.json"
+        )
+        .is_some());
+        assert!(classify_protected_generated_path("./.codex/prompts/gitx.md").is_some());
+    }
+
+    #[test]
+    fn pre_tool_use_blocks_normalized_direct_paths() {
+        let payload = json!({"tool_input": {"file_path": "./AGENTS.md"}});
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_some());
+        let payload = json!({"tool_input": {"file_path": ".codex/../.codex/host_entrypoints_sync_manifest.json"}});
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_some());
+        let payload = json!({"tool_input": {"file_path": ".codex/../.codex/prompts/autopilot.md"}});
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
+    fn pre_tool_use_blocks_normalized_bash_write_targets() {
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf x > ./AGENTS.md"}
+        });
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_some());
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf x | tee .codex/../.codex/host_entrypoints_sync_manifest.json"}
+        });
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_some());
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf x | tee .codex/prompts/gitx.md"}
+        });
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_some());
+    }
 }

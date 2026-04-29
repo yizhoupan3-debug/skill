@@ -9,6 +9,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 文献梳理
   - 主题综述
@@ -34,6 +36,7 @@ metadata:
   tags: [literature-review, novelty-check, related-work, synthesis, comparison]
 risk: low
 source: local
+
 ---
 
 # literature-synthesis

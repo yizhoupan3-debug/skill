@@ -30,6 +30,8 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P3
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 allowed_tools:
   - shell
   - browser
@@ -44,6 +46,7 @@ artifact_outputs:
   - runtime_evidence.md
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
+
 ---
 
 # native-app-debugging

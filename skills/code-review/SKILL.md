@@ -32,6 +32,8 @@ routing_layer: L2
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - code review
   - 代码 review
@@ -54,6 +56,7 @@ allowed_tools:
   - git
   - python
 approval_required_tools: []
+
 ---
 
 # code-review

@@ -11,6 +11,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - Beamer slides
   - LaTeX 幻灯片
@@ -36,6 +38,7 @@ metadata:
     - presentation
     - slides
     - academic
+
 ---
 
 # PPT Beamer

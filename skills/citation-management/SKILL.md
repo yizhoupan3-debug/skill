@@ -1,10 +1,6 @@
 ---
 name: citation-management
-description: |
-  Verify, normalize, de-duplicate, complete, and format academic citations and
-  references with a truth-first workflow. Use for 参考文献核查, BibTeX/DOI/PMID
-  cleanup, Zotero-style normalization, in-text/reference consistency, or APA /
-  IEEE / ACM / GB/T 7714 formatting. Check early when the artifact is a bibliography or `.bib`.
+description: Verify and format academic citations and bibliographies.
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
@@ -27,6 +23,7 @@ metadata:
   tags: [citation, bibliography, bibtex, reference, doi, academic]
 risk: low
 source: local
+
 ---
 
 # citation-management

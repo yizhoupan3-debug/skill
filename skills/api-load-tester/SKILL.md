@@ -13,6 +13,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 压测 API
   - load test
@@ -31,6 +33,7 @@ metadata:
     - api
     - load
     - tester
+
 ---
 
 - **Dual-Dimension Audit (Pre: Load-Profile/Logic, Post: Latency-P99/Throughput Results)** → runtime verification gate

@@ -7,6 +7,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - AI research
   - ML engineering
@@ -31,6 +33,7 @@ metadata:
     - memory
 risk: medium
 source: community-adapted
+
 ---
 
 - **Dual-Dimension Audit (Pre: Arch/Logic, Post: Eval/Metric Results)** → runtime verification gate

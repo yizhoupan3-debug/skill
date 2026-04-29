@@ -32,6 +32,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 架构评审
   - 系统设计
@@ -47,6 +49,7 @@ trigger_hints:
   - system design
   - clean architecture
   - ddd
+
 ---
 
 # architect-review

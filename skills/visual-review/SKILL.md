@@ -1,14 +1,6 @@
 ---
 name: visual-review
-description: |
-  Review screenshots, rendered pages, charts, and UI artifacts with
-  image-grounded findings.
-  Use when the task is “看图”, screenshot review, rendered UI/layout/rendering/accessibility checks,
-  before/after comparisons, chart review, or visible defects such as
-  truncation, overlap, hierarchy, and readability. As an evidence gate, check
-  this skill early at conversation start whenever an actual screenshot,
-  rendered page, image, chart, or visual artifact should anchor the answer. Do
-  not use for abstract UI redesign requests with no visual evidence attached.
+description: Review screenshots and rendered visual artifacts.
 routing_layer: L3
 routing_owner: gate
 routing_gate: evidence
@@ -48,6 +40,7 @@ network_access: conditional
 artifact_outputs:
   - visual_review.md
   - EVIDENCE_INDEX.json
+
 ---
 
 # Visual Review

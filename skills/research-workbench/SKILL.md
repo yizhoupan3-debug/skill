@@ -1,16 +1,6 @@
 ---
 name: research-workbench
-description: |
-  Unified front door for non-manuscript research-project work. Use when the user
-  has a 科研项目 / 课题 / research direction task and should not have to choose first
-  between brainstorming, literature search, novelty checking, experiment
-  planning, reproducibility, statistics, figures, technical critique, or AI/ML
-  research engineering. Good for asks like
-  "帮我推进这个科研方向", "这条研究线下一步怎么做", "从想法到实验一起编排", "整体推进这个 research project",
-  "科研相关 skill 不好用，持续优化", "科研允许外部调研校准", or
-  "这个课题现在该先搜文献还是先做实验". This skill picks the right research lane,
-  performs lightweight external calibration when it changes the decision, and
-  keeps the workflow continuous without making the user switch skills.
+description: Coordinate non-manuscript research project workflows.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -54,6 +44,7 @@ framework_contracts:
   emits_verification_results: true
 risk: medium
 source: local
+
 ---
 
 # Research Workbench

@@ -11,6 +11,7 @@ on:
       - 'AGENTS.md'
       - '.codex/**'
       - 'configs/codex/**'
+      - 'configs/framework/**'
   pull_request:
     paths:
       - 'skills/**'
@@ -20,6 +21,7 @@ on:
       - 'AGENTS.md'
       - '.codex/**'
       - 'configs/codex/**'
+      - 'configs/framework/**'
   workflow_dispatch:
 
 jobs:
@@ -41,6 +43,9 @@ jobs:
       - name: Run Rust policy tests
         run: cargo test --test policy_contracts
 
+      - name: Run host integration tests
+        run: cargo test --test host_integration
+
       - name: Run router-rs crate tests
         run: cargo test --manifest-path scripts/router-rs/Cargo.toml
 
@@ -51,7 +56,23 @@ jobs:
             --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
             --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
             --apply
-          if ! git diff --quiet -- skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_INDEX.md skills/SKILL_ROUTING_RUNTIME.json skills/SKILL_SOURCE_MANIFEST.json skills/SKILL_SHADOW_MAP.json skills/SKILL_LOADOUTS.json skills/SKILL_APPROVAL_POLICY.json skills/SKILL_HEALTH_MANIFEST.json AGENTS.md .codex/host_entrypoints_sync_manifest.json configs/framework/FRAMEWORK_SURFACE_POLICY.json; then
-            echo "::error::Generated skill artifacts or shared CLI entrypoints are out of date. Run scripts/skill-compiler-rs with --apply locally."
+          ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml \
+            framework host-integration generated-artifacts-status \
+            --framework-root "$PWD" > generated-artifacts-status.json
+          python - <<'PY'
+          import json
+          import sys
+
+          with open("generated-artifacts-status.json", "r", encoding="utf-8") as handle:
+              status = json.load(handle)
+          if not status.get("ok"):
+              print(json.dumps(status.get("manifest_status", {}), ensure_ascii=False, indent=2))
+              for artifact in status.get("generated_artifacts", []):
+                  if not artifact.get("clean"):
+                      print(json.dumps(artifact, ensure_ascii=False, indent=2))
+              sys.exit(1)
+          PY
+          if ! git diff --quiet -- configs/framework/FRAMEWORK_SURFACE_POLICY.json skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_ROUTING_INDEX.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_RUNTIME.json skills/SKILL_SHADOW_MAP.json skills/SKILL_APPROVAL_POLICY.json skills/SKILL_LOADOUTS.json skills/SKILL_TIERS.json AGENTS.md CLAUDE.md .codex/host_entrypoints_sync_manifest.json; then
+            echo "::error::Generated skill artifacts or shared CLI entrypoints are out of date after regeneration."
             exit 1
           fi

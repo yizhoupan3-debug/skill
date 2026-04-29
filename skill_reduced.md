@@ -1,12 +1,26 @@
 # Skill 系统减法精简 Checklist
 
+## 本轮完成记录
+
+- [x] 本轮处理簇：P0 历史兼容残留、P0 旧重复 skill、P1 execution alias、P1 spreadsheet/xlsx。
+- [x] 删除 slug：移除未跟踪普通 `skills/autopilot`；确认 `xlsx`、`team`、旧重复 skill、旧 checklist skill、旧 paper/design/research/security/frontend overlap skill 均不在 manifest/runtime/tier 中。
+- [x] 合并 slug：`autopilot` -> `plan-to-code` alias mode；`team` -> `agent-swarm-orchestration` team mode；`xlsx` -> `primary-runtime/spreadsheets` reference。
+- [x] 降级 slug：`autopilot`、`team` 只保留为 generated host alias stub，不再作为 fallback manifest/tier 普通 skill。
+- [x] 保留 owner：`plan-to-code`、`agent-swarm-orchestration`、`primary-runtime/spreadsheets`、`skill-framework-developer`。
+- [x] 迁移 references：新增 `skills/plan-to-code/references/autopilot-mode.md` 与 `skills/agent-swarm-orchestration/references/team-mode.md`；复用 `skills/primary-runtime/spreadsheets/references/xlsx-rust-workflow.md`。
+- [x] 更新 routing 文件：skill compiler 重新生成 manifest/runtime/tiers/loadouts/approval/shadow/registry，host integration 重新生成 Codex skill surface alias stub。
+- [x] 更新 tests：覆盖 generated-only framework command alias、Codex/Claude host projection、normalized protected generated paths。
+- [x] 验证命令：`cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml`、`cargo test --manifest-path scripts/router-rs/Cargo.toml`、`cargo test`、routing smoke、generated-artifacts drift gate。
+- [x] 剩余风险：后续 paper/design/research/security/frontend 的深度内容瘦身仍应按簇继续做，不要一次性全库重写。
+- [x] 下一轮入口：优先处理 paper/design/research 的 retained references 与 routing doc 精简。
+
 ## 目标
 
 - [ ] 将当前 skill 系统从“大而全的技能库”收敛为“少入口、窄 owner、强 gate、可解释”的运行系统。
 - [ ] 优先删除历史兼容壳、重复入口、低价值专科 skill，而不是继续增加边界说明。
-- [ ] 当前 runtime 基线已是 `109` 个 manifest skill、`21` 个 hot routing entry、`11` 个 default/core gate；不要再按旧 `145/26` 基线回退。
+- [x] 当前 runtime 基线已是 `109` 个 manifest skill、`16` 个 hot routing entry、`11` 个 default/core gate；不要再按旧 `145/26` 基线回退。
 - [ ] 下一步只按重叠簇继续收敛到约 `90-100` 个有效入口；默认可见面以 `FRAMEWORK_SURFACE_POLICY.json` 的 `default=11` 为准，不再用 hot index 当 default surface。
-- [ ] 保留 Rust-owned / Codex-only 的运行时方向，不恢复非 Codex 旧宿主或 Python bridge 兼容面。
+- [x] 保留 Rust-owned shared core + 显式 `codex-cli` / `claude-code-cli` host projections 的运行时方向，不恢复旧宿主、generic adapter、Python bridge 或 Node runtime 兼容面。
 - [ ] 保留“一个 front door + 少量内部 mode/reference”的结构，避免多个同类 skill 争抢首轮路由。
 
 ## 总原则
@@ -23,15 +37,15 @@
 
 ## 当前基线
 
-- [ ] 记录当前 skill 数量：`skills/SKILL_MANIFEST.json` 为 `109`；`SKILL_HEALTH_MANIFEST.json` 只能作为健康输入快照，不能作为入口数量真源。
-- [ ] 记录当前 tier：`core=11`、`optional=98`、`experimental=0`、`deprecated=0`。
-- [ ] 记录当前 default activation：`11`；hot routing entry 为 `21`，两者不可混用。
+- [x] 记录当前 skill 数量：`skills/SKILL_MANIFEST.json` 为 `109`；`SKILL_HEALTH_MANIFEST.json` 只能作为健康输入快照，不能作为入口数量真源。
+- [x] 记录当前 tier：`core=11`、`optional=98`、`experimental=0`、`deprecated=0`。
+- [x] 记录当前 default activation：`11`；hot routing entry 为 `16`，两者不可混用。
 - [ ] 记录当前明显异常：`iterative-optimizer` 使用高但 reroute 高。
 - [ ] 记录当前明显异常：`github-investigator` 动态分低且已有 reroute。
 - [ ] 记录当前结构问题：skill 维护簇入口过多。
 - [ ] 记录当前结构问题：paper/design/research 采用 front door 后仍保留过多同级专家入口。
-- [ ] 记录当前结构问题：artifact gate 存在 `spreadsheets` / `xlsx` 双入口。
-- [ ] 记录当前结构问题：`autopilot` / `team` 已声明 canonical owner，但仍作为 skill 入口存在。
+- [x] 记录当前结构问题：artifact gate 存在 `spreadsheets` / `xlsx` 双入口。
+- [x] 记录当前结构问题：`autopilot` / `team` 已声明 canonical owner，但仍作为 skill 入口存在。
 
 ## 不动范围
 
@@ -49,23 +63,23 @@
 
 ### 目标
 
-- [ ] 确保仓库只保留 Codex-native / Rust-owned skill framework 面。
+- [ ] 确保仓库只保留 Rust-owned shared framework core 与显式 Codex/Claude Code host projection 面。
 - [ ] 删除旧宿主兼容壳，减少误读和维护分叉。
 
 ### 删除候选
 
 - [x] 旧宿主入口文件、旧宿主配置目录和旧 bridge 目录已不作为当前清单逐项保留。
-- [x] `AGENTS.md` 是唯一 repo policy 入口；Codex CLI/App 共享它。
-- [ ] 删除 `scripts/router-rs/src/framework_mcp.rs`。
-- [ ] 删除 `plugins/skill-framework-native/.mcp.json`。
+- [x] `AGENTS.md` / `CLAUDE.md` 是当前 host projection 入口；Codex CLI 与 Claude Code 由 Rust sync 生成共享策略。
+- [x] 删除 `scripts/router-rs/src/framework_mcp.rs`。
+- [x] 删除 `plugins/skill-framework-native/.mcp.json`。
 
 ### 验收
 
-- [ ] targeted grep 不再出现非 Codex 旧宿主运行时入口要求。
-- [ ] 允许历史说明出现，但不得作为当前运行路径、同步路径、入口路径。
-- [ ] `configs/framework/RUNTIME_REGISTRY.json` 不再引用已删除旧宿主入口。
-- [ ] `scripts/router-rs` 编译通过。
-- [ ] routing 文档只描述 Codex-native / Rust-owned surfaces。
+- [x] targeted grep 不再出现旧宿主、generic adapter、Python/Node runtime 或 plugin runtime truth 的当前运行入口要求。
+- [x] 允许历史说明出现，但不得作为当前运行路径、同步路径、入口路径。
+- [x] `configs/framework/RUNTIME_REGISTRY.json` 不再引用已删除旧宿主入口。
+- [x] `scripts/router-rs` 编译通过。
+- [x] routing 文档只描述 Rust-owned shared core 与显式 `codex-cli` / `claude-code-cli` projection surfaces。
 
 ## P0：旧重复 skill 删除
 
@@ -76,27 +90,27 @@
 
 ### 删除候选
 
-- [ ] 删除 `skills/.system/imagegen/`。
-- [ ] 删除 `skills/imagegen/`。
-- [ ] 保留 `skills/image-generated/` 作为唯一生图入口。
-- [ ] 删除 `skills/.system/openai-docs/`。
-- [ ] 保留 `skills/openai-docs/` 作为唯一 OpenAI 官方文档 gate。
-- [ ] 删除 `skills/ppt-html-export/`。
-- [ ] 删除 `skills/ppt-markdown/`。
-- [ ] 删除 `skills/slides-source-first/`。
-- [ ] 保留 `skills/source-slide-formats/` 作为 Markdown / Slidev / Marp / HTML slide source 入口。
-- [ ] 删除 `skills/skill-developer/`。
-- [ ] 删除 `skills/skill-installer-antigravity/`。
-- [ ] 删除 `skills/skill-library-maintenance/`。
+- [x] 删除 `skills/.system/imagegen/`。
+- [x] 删除 `skills/imagegen/`。
+- [x] 保留 `skills/image-generated/` 作为唯一生图入口。
+- [x] 删除 `skills/.system/openai-docs/`。
+- [x] 保留 `skills/openai-docs/` 作为唯一 OpenAI 官方文档 gate。
+- [x] 删除 `skills/ppt-html-export/`。
+- [x] 删除 `skills/ppt-markdown/`。
+- [x] 删除 `skills/slides-source-first/`。
+- [x] 保留 `skills/source-slide-formats/` 作为 Markdown / Slidev / Marp / HTML slide source 入口。
+- [x] 删除 `skills/skill-developer/`。
+- [x] 删除 `skills/skill-installer-antigravity/`。
+- [x] 删除 `skills/skill-library-maintenance/`。
 
 ### 验收
 
-- [ ] `find skills -mindepth 1 -maxdepth 2 -name SKILL.md | wc -l` 明显下降。
-- [ ] `skills/SKILL_MANIFEST.json` 不包含已删除 slug。
-- [ ] `skills/SKILL_ROUTING_RUNTIME.json` 不包含已删除 slug。
-- [ ] `skills/SKILL_HEALTH_MANIFEST.json` 不包含已删除 slug。
-- [ ] `skills/SKILL_SHADOW_MAP.json` 不包含已删除 slug。
-- [ ] 搜索旧 slug 不再出现在路由表、loadout、tier、approval policy 中。
+- [x] `find skills -mindepth 1 -maxdepth 2 -name SKILL.md | wc -l` 明显下降。
+- [x] `skills/SKILL_MANIFEST.json` 不包含已删除 slug。
+- [x] `skills/SKILL_ROUTING_RUNTIME.json` 不包含已删除 slug。
+- [x] `skills/SKILL_HEALTH_MANIFEST.json` 不包含已删除 slug。
+- [x] `skills/SKILL_SHADOW_MAP.json` 不包含已删除 slug。
+- [x] 搜索旧 slug 不再出现在路由表、loadout、tier、approval policy 中。
 
 ## P1：skill 维护簇合并（当前已收口）
 
@@ -176,52 +190,53 @@
 
 ### 当前问题
 
-- [ ] `autopilot` 和 `team` 自己声明 canonical owner 是 `plan-to-code`。
-- [ ] 它们实际更像用户显式命令 alias，而不是独立 skill。
-- [ ] `agent-swarm-orchestration` 已经承担 local / subagent / team 的运行时判断。
+- [x] `autopilot` 和 `team` 自己声明 canonical owner 是 `plan-to-code`。
+- [x] 它们实际更像用户显式命令 alias，而不是独立 skill。
+- [x] `agent-swarm-orchestration` 已经承担 local / subagent / team 的运行时判断。
 
 ### 目标结构
 
-- [ ] 保留 `plan-to-code` 作为复杂执行唯一主 owner。
-- [ ] 保留 `agent-swarm-orchestration` 作为是否拆 sidecar / team 的 gate。
-- [ ] 将 `autopilot` 降成 `plan-to-code` 的 alias mode。
-- [ ] 将 `team` 降成 `agent-swarm-orchestration` 或 `plan-to-code` 的 alias mode。
-- [ ] 保留 Codex CLI/App 可直接读取的 `$autopilot` / `$team` 极短 stub；只删除普通 skill owner 竞争，不删除 `$` 入口。
+- [x] 保留 `plan-to-code` 作为复杂执行唯一主 owner。
+- [x] 保留 `agent-swarm-orchestration` 作为是否拆 sidecar / team 的 gate。
+- [x] 将 `autopilot` 降成 `plan-to-code` 的 alias mode。
+- [x] 将 `team` 降成 `agent-swarm-orchestration` 或 `plan-to-code` 的 alias mode。
+- [x] 保留 Codex CLI/Claude Code 可直接读取的 `$autopilot` / `$team` 极短 stub；只删除普通 skill owner 竞争，不删除 `$` 入口。
 
 ### 合并内容
 
-- [ ] `autopilot` 的 Expansion -> Planning -> Execution -> QA -> Validation -> Cleanup 变成 `plan-to-code/references/autopilot-mode.md`。
-- [ ] `team` 的 scoping -> delegation -> execution -> integration -> qa -> cleanup 变成 `agent-swarm-orchestration/references/team-mode.md`。
-- [ ] `plan-to-code/SKILL.md` 增加显式入口：`$autopilot` / “一路执行到底”。
-- [ ] `agent-swarm-orchestration/SKILL.md` 增加显式入口：`$team` / “多 agent 执行”。
+- [x] `autopilot` 的 Expansion -> Planning -> Execution -> QA -> Validation -> Cleanup 变成 `plan-to-code/references/autopilot-mode.md`。
+- [x] `team` 的 scoping -> delegation -> execution -> integration -> qa -> cleanup 变成 `agent-swarm-orchestration/references/team-mode.md`。
+- [x] `plan-to-code/SKILL.md` 增加显式入口：`$autopilot` / “一路执行到底”。
+- [x] `agent-swarm-orchestration/SKILL.md` 增加显式入口：`$team` / “多 agent 执行”。
 
 ### 验收
 
-- [ ] 用户说 `$autopilot` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后进入 `plan-to-code`。
-- [ ] 用户说 `$team` 时能从 Codex CLI/App skill surface 直接读取 alias stub，随后由 `agent-swarm-orchestration` 判断是否真的需要 team orchestration。
-- [ ] `SKILL_TIERS.json` 不再把 `autopilot`、`team` 当 optional skill。
-- [ ] `RUNTIME_REGISTRY.json` 保留 alias 状态机，`artifacts/codex-skill-surface/skills/{autopilot,team}/SKILL.md` 保留生成 stub。
+- [x] 用户说 `$autopilot` 时能从 Codex CLI/Claude Code skill surface 直接读取 alias stub，随后进入 `plan-to-code`。
+- [x] 用户说 `$team` 时能从 Codex CLI/Claude Code skill surface 直接读取 alias stub，随后由 `agent-swarm-orchestration` 判断是否真的需要 team orchestration。
+- [x] `SKILL_TIERS.json` 不再把 `autopilot`、`team` 当 optional skill。
+- [x] `RUNTIME_REGISTRY.json` 保留 alias 状态机，`artifacts/codex-skill-surface/skills/{autopilot,team}/SKILL.md` 保留生成 stub。
+- [x] `autopilot` / `team` 只允许 `$...` 或 `/...` 精确入口；普通 planning/debugging/coding 请求不得选择这些 alias stub，`team` command policy 为 `implicit_route_policy: never`。
 
 ## P1：spreadsheet / xlsx 合并
 
 ### 当前问题
 
-- [ ] `spreadsheets` 和 `xlsx` 都是 L3 artifact gate。
-- [ ] 两者都 required，会扩大首轮 gate 判断面。
-- [ ] `spreadsheets` 是通用入口，`xlsx` 是实现路径，应该下沉。
+- [x] `spreadsheets` 和 `xlsx` 都是 L3 artifact gate。
+- [x] 两者都 required，会扩大首轮 gate 判断面。
+- [x] `spreadsheets` 是通用入口，`xlsx` 是实现路径，应该下沉。
 
 ### 目标结构
 
 - [ ] 保留 `primary-runtime/spreadsheets` 作为唯一 spreadsheet artifact gate。
-- [ ] 删除或降级 `xlsx` 为 `spreadsheets/references/xlsx-rust-workflow.md`。
-- [ ] 将 Rust OOXML、LibreOffice render、formula/style audit 路径移动到 references。
-- [ ] 保留触发语 `xlsx`、`Excel`、`workbook structure audit`，但命中 `spreadsheets`。
+- [x] 删除或降级 `xlsx` 为 `spreadsheets/references/xlsx-rust-workflow.md`。
+- [x] 将 Rust OOXML、LibreOffice render、formula/style audit 路径移动到 references。
+- [x] 保留触发语 `xlsx`、`Excel`、`workbook structure audit`，但命中 `spreadsheets`。
 
 ### 验收
 
-- [ ] artifact gate 中 spreadsheet 只有一个 required gate。
-- [ ] 用户说 `.xlsx`、Excel、公式、格式、打印布局，命中 `spreadsheets`。
-- [ ] `xlsx` 不再作为独立 slug 出现在 runtime。
+- [x] artifact gate 中 spreadsheet 只有一个 required gate。
+- [x] 用户说 `.xlsx`、Excel、公式、格式、打印布局，命中 `spreadsheets`。
+- [x] `xlsx` 不再作为独立 slug 出现在 runtime。
 - [ ] `spreadsheets` 顶层文档不超过约 `120` 行，细节在 references。
 
 ## P1：paper 簇降级
@@ -585,7 +600,7 @@
 
 ## 生成/同步命令 Checklist
 
-- [ ] 运行 skill compiler apply：
+- [x] 运行 skill compiler apply：
 
 ```bash
 cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
@@ -595,7 +610,7 @@ cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --apply
 ```
 
-- [ ] 运行 router-rs runtime snapshot：
+- [x] 运行 router-rs runtime snapshot：
 
 ```bash
 scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
@@ -603,11 +618,11 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
   --repo-root /Users/joe/Documents/skill
 ```
 
-- [ ] 运行 routing eval tests。
-- [ ] 运行 policy contract tests。
-- [ ] 运行 host integration tests。
-- [ ] 运行 rust CLI tools tests。
-- [ ] 如果生成物漂移，先查生成源，不手改 generated surface。
+- [x] 运行 routing eval tests。
+- [x] 运行 policy contract tests。
+- [x] 运行 host integration tests。
+- [x] 运行 rust CLI tools tests。
+- [x] 如果生成物漂移，先查生成源，不手改 generated surface。
 
 ## 测试用例更新 Checklist
 
@@ -628,14 +643,14 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 
 ### execution alias
 
-- [ ] “$autopilot 一路执行到底” -> `plan-to-code`。
-- [ ] “$team 多 agent 执行” -> `agent-swarm-orchestration` gate 后进入 controller。
+- [x] “$autopilot 一路执行到底” -> alias stub，canonical owner 为 `plan-to-code`。
+- [x] “$team 多 agent 执行” -> `agent-swarm-orchestration` gate 后进入 controller。
 - [ ] “需要并行 sidecar” -> `agent-swarm-orchestration`。
 - [ ] “普通单文件修复” -> 不进 controller。
 
 ### artifact
 
-- [ ] “帮我改这个 xlsx 公式和格式” -> `spreadsheets`。
+- [x] “帮我改这个 xlsx 公式和格式” -> `spreadsheets`。
 - [ ] “做个 PPT” -> `slides`。
 - [ ] “用 Markdown 做 slides” -> `source-slide-formats`。
 - [ ] “做 Beamer slides” -> `ppt-beamer`。
@@ -676,7 +691,7 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 - [ ] 删除前确认该目录没有唯一脚本或资产；如果有，迁移到保留 owner 的 `references/`、`scripts/`、`assets/`。
 - [ ] 删除前确认 tests fixture 已更新。
 - [ ] 删除后运行生成/同步。
-- [ ] 删除后运行最小 routing eval。
+- [x] 删除后运行最小 routing eval。
 - [ ] 删除后检查 `git status --short`，确认没有意外删除用户无关文件。
 
 ## 合并执行安全 Checklist
@@ -729,21 +744,21 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml \
 - [ ] `iterative-optimizer` 不再独立抢路由。
 - [ ] `github-investigator` 不再独立抢路由。
 - [ ] 所有旧 slug 无 runtime 引用。
-- [ ] routing eval 无新增失败。
-- [ ] sync / compiler 无生成物漂移。
+- [x] routing eval 无新增失败。
+- [x] sync / compiler 无生成物漂移。
 
 ## 建议执行顺序
 
 - [ ] 第 1 轮：清理历史兼容残留和旧重复 skill。
 - [ ] 第 2 轮：合并 skill 维护簇。
 - [ ] 第 3 轮：合并 checklist 簇。
-- [ ] 第 4 轮：收口 `autopilot` / `team` alias。
-- [ ] 第 5 轮：合并 `spreadsheets` / `xlsx`。
+- [x] 第 4 轮：收口 `autopilot` / `team` alias。
+- [x] 第 5 轮：合并 `spreadsheets` / `xlsx`。
 - [ ] 第 6 轮：降级 paper 专科。
 - [ ] 第 7 轮：降级 design 专科。
 - [ ] 第 8 轮：research/security/frontend overlay 降噪。
 - [ ] 第 9 轮：收缩 default loadout。
-- [ ] 第 10 轮：跑全量 routing eval / contract tests / sync audit。
+- [x] 第 10 轮：跑全量 routing eval / contract tests / sync audit。
 
 ## 每轮完成模板
 

@@ -20,6 +20,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 抓取网页数据
   - 爬虫
@@ -31,6 +33,7 @@ trigger_hints:
   - build a spider
   - says "抓取网页数据
   - web scraping
+
 ---
 
 # web-scraping

@@ -14,6 +14,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 威胁建模
   - 攻击面分析
@@ -32,6 +34,7 @@ metadata:
     - security
     - threat
     - model
+
 ---
 
 # security-threat-model

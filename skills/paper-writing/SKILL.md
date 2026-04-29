@@ -9,6 +9,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 论文写作
   - 写论文
@@ -45,6 +47,7 @@ framework_contracts:
   emits_verification_results: true
 risk: low
 source: local
+
 ---
 
 # paper-writing

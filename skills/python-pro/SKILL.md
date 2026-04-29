@@ -18,6 +18,8 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - python
   - fastapi
@@ -25,6 +27,7 @@ trigger_hints:
   - typing
   - uv
   - ruff
+
 ---
 
 # python-pro

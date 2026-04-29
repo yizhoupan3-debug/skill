@@ -11,6 +11,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 管理环境变量
   - 排查 .env 问题
@@ -36,6 +38,7 @@ metadata:
     - multi-environment
 risk: low
 source: local
+
 ---
 
 # env-config-management

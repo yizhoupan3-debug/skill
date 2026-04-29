@@ -9,6 +9,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - a11y reviews
   - WCAG compliance
@@ -36,6 +38,7 @@ framework_contracts:
   emits_execution_items: false
   consumes_execution_items: false
   emits_verification_results: false
+
 ---
 
 - **Dual-Dimension Audit (Pre: A11y-Plan/ARIA-Logic, Post: Lighthouse-Score/Screen-Reader Results)** → runtime verification gate

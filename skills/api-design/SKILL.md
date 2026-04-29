@@ -20,6 +20,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - API 设计
   - 接口规范
@@ -31,6 +33,7 @@ trigger_hints:
   - rest
   - graphql
   - grpc
+
 ---
 
 # api-design

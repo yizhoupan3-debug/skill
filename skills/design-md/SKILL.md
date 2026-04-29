@@ -1,15 +1,6 @@
 ---
 name: design-md
-description: |
-  Gate for DESIGN.md-style design-system source of truth. Use at conversation
-  start when the user asks to create, update, lint, diff, read, or apply
-  `DESIGN.md`, capture reusable visual identity from UI/code/screenshots,
-  extract design tokens, or audit UI output against a persistent design
-  contract. Inspired by google-labs-code/design.md: YAML tokens are normative;
-  markdown explains rationale. Not for direct UI redesign, named-product
-  reference scouting, CSS mechanics, Tailwind implementation, or
-  screenshot-only review. For high-bar UI or PPT work, use this gate when a
-  reusable visual contract is needed before execution.
+description: Manage DESIGN.md design-system contracts and visual tokens.
 routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
@@ -57,6 +48,7 @@ artifact_outputs:
   - DESIGN.md
   - design_acceptance.md
   - EVIDENCE_INDEX.json
+
 ---
 
 # design-md

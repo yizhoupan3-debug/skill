@@ -15,6 +15,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 帮我审这篇 paper
   - 帮我审这篇论文
@@ -82,6 +84,7 @@ framework_contracts:
   emits_verification_results: true
 risk: medium
 source: local
+
 ---
 
 # Paper Workbench

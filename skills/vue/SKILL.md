@@ -22,6 +22,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - Vue 项目
   - 组合式 API
@@ -33,6 +35,7 @@ trigger_hints:
   - state management
   - vue
   - composition api
+
 ---
 
 # vue

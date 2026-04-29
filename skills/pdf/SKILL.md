@@ -1,12 +1,6 @@
 ---
 name: pdf
-description: |
-  Read, create, edit, repair, and review PDFs when rendering and page layout
-  matter.
-  Use when the user needs PDF inspection, generation, layout-aware extraction, or rendered-page
-  verification with tools such as `pdftoppm`, `pdfplumber`, `pypdf`, and
-  `reportlab`. As an artifact gate, check this skill early at 每轮对话开始 / first-turn / conversation start
-  whenever the main object is a PDF.
+description: Handle layout-aware PDF reading, editing, repair, and review.
 routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
@@ -52,6 +46,7 @@ network_access: conditional
 artifact_outputs:
   - pdf_review.md
   - EVIDENCE_INDEX.json
+
 ---
 
 # pdf

@@ -20,6 +20,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - pnpm workspace
   - Turborepo 结构
@@ -31,6 +33,7 @@ trigger_hints:
   - debug cross-package imports
   - monorepo
   - workspace
+
 ---
 
 - **Dual-Dimension Audit (Pre: Workspace-Topo/Boundary, Post: DAG-Execution/Cache-Hits Results)** → runtime verification gate

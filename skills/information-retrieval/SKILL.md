@@ -9,6 +9,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 short_description: Run multi-round research before acting or recommending
 trigger_hints:
   - information retrieval
@@ -30,6 +32,7 @@ metadata:
     - benchmarking
     - option-comparison
     - investigation
+
 ---
 
 # Information Retrieval

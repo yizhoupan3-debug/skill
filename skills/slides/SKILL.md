@@ -1,9 +1,6 @@
 ---
 name: slides
-description: |
-  Root-level entry proxy for the presentation-artifact gate. Use this at
-  conversation start when `skills/SKILL_ROUTING_RUNTIME.json` routes a PPT,
-  PPTX, PowerPoint, slide deck, or generic presentation task to `slides`.
+description: Route presentation, PPT, PPTX, and slide deck tasks.
 routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
@@ -42,6 +39,7 @@ artifact_outputs:
   - rendered/*.png
   - montage.png
   - EVIDENCE_INDEX.json
+
 ---
 
 # slides

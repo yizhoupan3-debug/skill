@@ -21,6 +21,8 @@ routing_layer: L3
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - i18n
   - l10n
@@ -28,6 +30,7 @@ trigger_hints:
   - localization
   - translation
   - multi language
+
 ---
 
 # i18n-l10n

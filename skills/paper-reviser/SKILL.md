@@ -10,6 +10,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - $paper-reviser
   - paper-reviser
@@ -38,6 +40,7 @@ framework_contracts:
   emits_verification_results: true
 risk: medium
 source: local
+
 ---
 
 # Paper Reviser

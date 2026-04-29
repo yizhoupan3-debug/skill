@@ -10,6 +10,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - mcp
   - builder
@@ -22,6 +24,7 @@ metadata:
   tags:
     - mcp
     - builder
+
 ---
 
 - **Dual-Dimension Audit (Pre: Schema/Contract, Post: Tool-Discoverability/Execution Results)** → runtime verification gate

@@ -12,6 +12,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 怎么保证可复现
   - 环境管理
@@ -35,6 +37,7 @@ metadata:
     - mlops
 risk: low
 source: local
+
 ---
 
 # Experiment Reproducibility

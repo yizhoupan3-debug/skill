@@ -11,6 +11,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 补 API 文档
   - 写 ADR
@@ -43,6 +45,7 @@ metadata:
     - doc-generation
 risk: low
 source: local
+
 ---
 
 - **Dual-Dimension Audit (Pre: Doc-Structure/Logic, Post: Links-Freshness/Completeness Results)** → runtime verification gate

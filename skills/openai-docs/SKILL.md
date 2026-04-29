@@ -1,10 +1,6 @@
 ---
 name: openai-docs
-description: |
-  Query current official OpenAI developer docs and API guidance with the
-  OpenAI Developer Docs MCP server. Use for OpenAI API, models, Responses API,
-  Apps SDK, Codex docs, upgrade guidance, and current documentation lookups
-  that must stay aligned with developers.openai.com.
+description: Query current official OpenAI developer documentation.
 routing_layer: L1
 routing_owner: gate
 routing_gate: source
@@ -36,6 +32,7 @@ filesystem_scope:
 network_access: conditional
 artifact_outputs:
   - EVIDENCE_INDEX.json
+
 ---
 
 # OpenAI Docs

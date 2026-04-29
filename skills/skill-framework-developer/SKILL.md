@@ -10,7 +10,9 @@ routing_layer: L0
 routing_owner: owner
 routing_gate: none
 routing_priority: P1
-session_start: preferred
+session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 short_description: Design and tune Codex skill routing/framework behavior
 trigger_hints:
   - skill-framework-developer
@@ -87,6 +89,7 @@ artifact_outputs:
   - TRACE_METADATA.json
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
+
 ---
 - **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results)** → runtime verification gate
 

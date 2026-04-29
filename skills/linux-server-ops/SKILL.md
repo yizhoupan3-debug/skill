@@ -22,6 +22,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 配 systemd
   - 看服务器日志
@@ -33,6 +35,7 @@ trigger_hints:
   - bad gateway
   - port conflicts
   - linux
+
 ---
 
 # linux-server-ops

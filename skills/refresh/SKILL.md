@@ -5,11 +5,14 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - $refresh
   - refresh
   - 下一轮执行提示
   - 复制到剪贴板
+
 ---
 
 # Refresh

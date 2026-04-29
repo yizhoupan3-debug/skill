@@ -22,6 +22,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - algorithm analysis
   - formal reasoning
@@ -29,6 +31,7 @@ trigger_hints:
   - experiment rigor audit
   - 方法站不站得住
   - 算法复杂度和正确性
+
 ---
 
 # Research Engineer

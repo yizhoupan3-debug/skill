@@ -1071,7 +1071,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             },
             "host_entrypoints": {
                 "codex-cli": "$autopilot",
-                "codex-app": "$autopilot"
+                "claude-code-cli": "/autopilot"
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
@@ -1113,7 +1113,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             ],
             "host_entrypoints": {
                 "codex-cli": "$deepinterview",
-                "codex-app": "$deepinterview"
+                "claude-code-cli": "/deepinterview"
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
@@ -1124,7 +1124,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
         "team" => Some(json!({
             "canonical_owner": "plan-to-code",
             "delegation_gate": "agent-swarm-orchestration",
-            "auto_route_allowed": true,
+            "auto_route_allowed": false,
             "route_mode": "team-orchestration",
             "selection_signals": {
                 "prefer_when": [
@@ -1233,18 +1233,12 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             },
             "host_entrypoints": {
                 "codex-cli": "$team",
-                "codex-app": "$team"
+                "claude-code-cli": "/team"
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/team", "$team"],
-                "implicit_route_policy": "strong-orchestration-only",
-                "implicit_route_signals": [
-                    "team orchestration",
-                    "worker lifecycle",
-                    "integration+qa+cleanup",
-                    "resume/recovery supervisor"
-                ]
+                "implicit_route_policy": "never"
             }
         })),
         _ => None,
@@ -3325,7 +3319,7 @@ fn default_runbooks() -> String {
         "",
         "## 标准操作",
         "",
-        "- 统一维护入口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>",
+        "- 统一维护入口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>",
         "- 需要迁移旧 artifact 布局时显式执行：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml migrate current-artifact-clutter <active_task_id> --repo-root <repo_root>",
         "- 生成下一轮提示：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework refresh --repo-root <repo_root> --max-lines 4",
         "- 召回上下文：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework memory-recall <关键词> --repo-root <repo_root> --mode stable|active|history|debug --limit <N>",
