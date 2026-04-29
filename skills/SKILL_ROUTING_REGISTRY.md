@@ -14,7 +14,6 @@
 | `chatgpt-apps` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Build, scaffold, refactor, and troubleshoot ChatGPT Apps SDK applications that c |
 | `citation-management` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Verify and format academic citations and bibliographies. |
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Deploy, publish, migrate, and operate apps on Cloudflare Workers, Pages, Wrangle |
-| `codex-hook-builder` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Build, port, inspect, and validate OpenAI Codex hooks. Use when the user asks fo |
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `data-wrangling` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Clean, transform, validate, and pipeline structured or semi-structured data acro |
 | `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Repo-native deepinterview workflow for evidence-first clarification and converge |
