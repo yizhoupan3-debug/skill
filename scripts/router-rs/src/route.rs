@@ -1077,11 +1077,41 @@ fn has_planning_only_context(query_text: &str, query_token_list: &[String]) -> b
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
 
+fn has_repo_planning_artifact_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "outline.md",
+        "code_list.md",
+        "assumptions",
+        "open questions",
+        "decision log",
+        "decision_log.md",
+        "plan_rubric.md",
+        "critical files",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_spec_to_code_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "按方案实现",
+        "根据方案实现",
+        "按文档开发",
+        "prd 落地",
+        "spec-driven execution",
+        "repo-local spec-to-code",
+        "plan-to-code",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
 fn has_skill_framework_maintenance_context(query_text: &str, query_token_list: &[String]) -> bool {
     (query_text.contains("skill")
         || query_text.contains("skill.md")
         || query_text.contains("runtime")
-        || query_text.contains("框架"))
+        || query_text.contains("框架")
+        || query_text.contains(".supervisor_state"))
         && [
             "不好用",
             "持续优化",
@@ -1101,6 +1131,7 @@ fn has_skill_framework_maintenance_context(query_text: &str, query_token_list: &
             "不损害功能",
             "加重负担",
             "没有用",
+            "治理任务",
         ]
         .iter()
         .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
@@ -1210,7 +1241,9 @@ fn is_overlay_record(record: &SkillRecord) -> bool {
 }
 
 fn can_be_primary_owner(record: &SkillRecord) -> bool {
-    record.gate_lower == "none" && !matches!(record.owner_lower.as_str(), "gate" | "overlay")
+    record.gate_lower == "none"
+        && !framework_alias_requires_explicit_call(&record.slug)
+        && !matches!(record.owner_lower.as_str(), "gate" | "overlay")
 }
 
 fn can_be_fallback_owner(record: &SkillRecord) -> bool {
@@ -1223,6 +1256,12 @@ fn can_be_fallback_owner(record: &SkillRecord) -> bool {
                 | "code-review"
                 | "i18n-l10n"
                 | "security-audit"
+                | "idea-to-plan"
+                | "plan-to-code"
+                | "skill-framework-developer"
+                | "plugin-creator"
+                | "skill-creator"
+                | "skill-installer"
         )
 }
 
@@ -1543,6 +1582,77 @@ pub(crate) fn route_task(
             &compact_reasons,
         ),
         reasons: compact_reasons,
+    })
+}
+
+pub(crate) fn literal_framework_alias_decision(
+    records: &[SkillRecord],
+    query: &str,
+    session_id: &str,
+) -> Option<RouteDecision> {
+    let normalized_query = normalize_text(query);
+    let query_token_list = tokenize_route_text(query);
+    let route_context = build_route_context(&normalized_query, &query_token_list);
+    let requested_slug = literal_framework_alias_slug(&normalized_query)?;
+    let record = records
+        .iter()
+        .find(|record| record.slug == requested_slug)?;
+    let reasons =
+        compact_route_reasons(&["Framework alias entrypoint matched explicitly.".to_string()]);
+    Some(RouteDecision {
+        decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
+        compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+        task: query.to_string(),
+        session_id: session_id.to_string(),
+        selected_skill: record.slug.clone(),
+        overlay_skill: None,
+        route_context,
+        layer: record.layer.clone(),
+        score: 100.0,
+        route_snapshot: build_route_snapshot(
+            "rust",
+            &record.slug,
+            None,
+            &record.layer,
+            100.0,
+            &reasons,
+        ),
+        reasons,
+    })
+}
+
+fn literal_framework_alias_slug(query_text: &str) -> Option<&'static str> {
+    query_text.split_whitespace().find_map(|part| {
+        let term = part.trim_matches(|ch: char| {
+            matches!(
+                ch,
+                '(' | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '<'
+                    | '>'
+                    | ','
+                    | '.'
+                    | '!'
+                    | '?'
+                    | '，'
+                    | '。'
+                    | '：'
+                    | '；'
+                    | '"'
+                    | '\''
+                    | '`'
+            )
+        });
+        match term {
+            "$autopilot" | "/autopilot" => Some("autopilot"),
+            "$deepinterview" | "/deepinterview" => Some("deepinterview"),
+            "$team" | "/team" => Some("team"),
+            _ => None,
+        }
     })
 }
 
@@ -2786,10 +2896,27 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
-    if record.slug == "idea-to-plan" && has_planning_only_context(query_text, query_token_list) {
+    if record.slug == "idea-to-plan"
+        && has_repo_planning_artifact_context(query_text, query_token_list)
+    {
+        score += 70.0;
+        reasons.push(
+            "Idea-to-plan boost applied: repo-local planning work-product artifacts detected."
+                .to_string(),
+        );
+    } else if record.slug == "idea-to-plan"
+        && has_planning_only_context(query_text, query_token_list)
+    {
         score += 44.0;
         reasons.push(
             "Idea-to-plan boost applied: user asks for planning before implementation.".to_string(),
+        );
+    }
+    if record.slug == "plan-to-code" && has_spec_to_code_context(query_text, query_token_list) {
+        score += 70.0;
+        reasons.push(
+            "Plan-to-code boost applied: concrete spec-to-code wording or explicit retained work-product contract detected."
+                .to_string(),
         );
     }
     if record.slug == "plan-to-code" && has_planning_only_context(query_text, query_token_list) {
@@ -3552,27 +3679,8 @@ fn score_route_candidate<'a>(
 
 fn fallback_owner<'a>(
     records: &'a [SkillRecord],
-    route_context: &RouteContextPayload,
+    _route_context: &RouteContextPayload,
 ) -> Result<&'a SkillRecord, String> {
-    if route_context.evidence_required || route_context.verification_required {
-        if let Some(record) = records
-            .iter()
-            .find(|record| record.slug == "skill-framework-developer")
-        {
-            return Ok(record);
-        }
-        if let Some(record) = records
-            .iter()
-            .find(|record| record.slug == "systematic-debugging")
-        {
-            return Ok(record);
-        }
-    }
-    if route_context.execution_protocol == "implementation" {
-        if let Some(record) = records.iter().find(|record| record.slug == "plan-to-code") {
-            return Ok(record);
-        }
-    }
     if let Some(record) = records.iter().find(|record| can_be_fallback_owner(record)) {
         return Ok(record);
     }
@@ -3581,7 +3689,10 @@ fn fallback_owner<'a>(
         .filter(|record| can_be_fallback_owner(record))
         .collect::<Vec<_>>();
     let pool = if primary_owners.is_empty() {
-        records.iter().collect::<Vec<_>>()
+        records
+            .iter()
+            .filter(|record| !framework_alias_requires_explicit_call(&record.slug))
+            .collect::<Vec<_>>()
     } else {
         primary_owners
     };

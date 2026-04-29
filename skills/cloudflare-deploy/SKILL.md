@@ -9,6 +9,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - Cloudflare Workers
   - Cloudflare Pages
@@ -26,6 +28,7 @@ metadata:
   tags: [cloudflare, deploy, workers, pages, wrangler, edge]
 risk: medium
 source: local
+
 ---
 
 # cloudflare-deploy

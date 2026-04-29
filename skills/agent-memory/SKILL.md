@@ -16,6 +16,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -39,6 +41,7 @@ artifact_outputs:
   - .supervisor_state.json
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
+
 ---
 - **Dual-Dimension Audit (Pre: Memory-Schema/Logic, Post: Recall-Accuracy/Context-Injection Results)** → runtime verification gate
 # agent-memory

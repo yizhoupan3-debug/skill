@@ -22,6 +22,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 原生 JS
   - HTML
@@ -33,6 +35,7 @@ trigger_hints:
   - overflow
   - Web APIs
   - Service Worker
+
 ---
 
 # web-platform-basics

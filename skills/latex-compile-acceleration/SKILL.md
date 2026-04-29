@@ -11,6 +11,8 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 short_description: Speed up LaTeX compile and preview workflows
 trigger_hints:
   - LaTeX 编译太慢
@@ -60,6 +62,7 @@ framework_contracts:
   emits_verification_results: true
 risk: low
 source: local
+
 ---
 
 # latex-compile-acceleration

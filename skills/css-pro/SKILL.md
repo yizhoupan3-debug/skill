@@ -22,6 +22,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - CSS 布局策略
   - 响应式方案
@@ -33,6 +35,7 @@ trigger_hints:
   - aesthetic layouts
   - animation optimization
   - layout architecture
+
 ---
 
 # css-pro

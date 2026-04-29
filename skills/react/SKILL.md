@@ -23,6 +23,8 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - React 组件
   - 状态管理
@@ -34,6 +36,7 @@ trigger_hints:
   - hook patterns
   - react
   - hooks
+
 ---
 
 # react

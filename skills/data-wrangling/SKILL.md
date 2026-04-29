@@ -11,6 +11,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 数据清洗
   - 转换数据格式
@@ -37,6 +39,7 @@ metadata:
     - format-conversion
 risk: low
 source: local
+
 ---
 
 # data-wrangling

@@ -9,6 +9,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - scientific figures
   - plotting
@@ -31,6 +33,7 @@ metadata:
   tags: [scientific-figures, plotting, matplotlib, seaborn, publication, charts]
 risk: medium
 source: local
+
 ---
 
 # scientific-figure-plotting

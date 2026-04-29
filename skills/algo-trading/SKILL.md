@@ -21,6 +21,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - quant strategy design
   - 回测
@@ -32,6 +34,7 @@ trigger_hints:
   - execution
   - risk rules
   - algo trading
+
 ---
 
 # Algo Trading

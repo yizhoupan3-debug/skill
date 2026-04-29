@@ -10,6 +10,8 @@ routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 设计错误处理体系
   - 统一错误码
@@ -37,6 +39,7 @@ metadata:
     - result-type
 risk: low
 source: local
+
 ---
 
 # error-handling-patterns

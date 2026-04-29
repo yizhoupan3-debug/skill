@@ -18,6 +18,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 写后端接口
   - Node 服务
@@ -29,6 +31,7 @@ trigger_hints:
   - backend route design
   - middleware chains
   - JWT
+
 ---
 
 # node-backend

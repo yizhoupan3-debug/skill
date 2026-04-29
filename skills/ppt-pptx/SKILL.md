@@ -9,6 +9,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - ppt CLI
   - deck.plan.json
@@ -31,6 +33,7 @@ metadata:
   tags: [ppt, pptx, slides, source-first, rust]
 risk: medium
 source: local
+
 ---
 
 # ppt-pptx

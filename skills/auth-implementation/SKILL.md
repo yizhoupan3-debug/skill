@@ -18,6 +18,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - auth
   - 登录
@@ -30,6 +32,7 @@ trigger_hints:
   - 加权限控制
   - route guard
   - webhook callback
+
 ---
 
 # auth-implementation

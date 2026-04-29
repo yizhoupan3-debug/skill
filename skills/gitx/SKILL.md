@@ -9,9 +9,12 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 short_description: Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.
 trigger_hints:
   - $gitx
+  - /gitx
   - gitx
   - git 一条龙
   - review 修复 整理 提交 推送
@@ -40,6 +43,7 @@ filesystem_scope:
   - repo
 network_access: conditional
 bridge_behavior: mobile_complete_once
+
 ---
 
 # gitx

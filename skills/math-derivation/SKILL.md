@@ -11,6 +11,8 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P2
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 short_description: Execute rigorous mathematical derivations and proofs
 trigger_hints:
   - 数学推导
@@ -39,6 +41,7 @@ metadata:
     - convergence
 risk: low
 source: local
+
 ---
 
 # Math Derivation

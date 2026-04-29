@@ -1,17 +1,17 @@
 ---
 name: systematic-debugging
 description: |
-  Gate: investigate bugs and failures at 每轮对话开始 / first-turn / conversation start when root
-  cause is still unknown. Use for reproduction, evidence gathering, and root-cause isolation before
-  fixing. Triggers: 为什么不工作、报错了、崩了、不对、失败了、帮我修（无 stack trace）、程序挂了、
-  flaky test、build failure、prod issue. Do not use when root cause is already proven.
+  Explicit diagnostic lane for root-cause investigations that need reusable reproduction,
+  evidence capture, flake isolation, incident triage, or failure-mode playbooks. Runtime owns
+  the generic "unknown cause -> gather evidence before fixing" rule; load this skill only for
+  explicit diagnostic work or precise failure-mode requests.
 short_description: Investigate unknown failures before fixing
 trigger_hints:
-  - 为什么不工作
-  - 帮我修
-  - root cause
-  - flaky test
-  - prod issue
+  - systematic-debugging
+  - root-cause analysis
+  - flake isolation
+  - incident triage
+  - diagnostic playbook
 metadata:
   version: "2.5.0"
   platforms: [codex]
@@ -37,7 +37,9 @@ routing_layer: L0
 routing_owner: gate
 routing_gate: evidence
 routing_priority: P1
-session_start: required
+session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 allowed_tools:
   - shell
   - browser
@@ -52,6 +54,7 @@ artifact_outputs:
   - runtime_evidence.md
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
+
 ---
 
 # Systematic Debugging

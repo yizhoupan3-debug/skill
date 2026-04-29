@@ -3,35 +3,27 @@ name: idea-to-plan
 description: |
   Repo-local strategic planning lane for fuzzy intent that needs route comparison,
   decision logs, assumptions, open questions, and handoff artifacts such as
-  `outline.md` and `code_list.md`. Use only when the user explicitly wants
-  planning before implementation or the task is not mature enough to execute.
+  `outline.md` and `code_list.md`. Use only when planning artifacts are the
+  requested deliverable or direct execution would materially change the target.
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
 routing_priority: P2
-session_start: preferred
+session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 short_description: Turn ambiguous ideas into evidence-backed plans with branch routing and compressed context
 trigger_hints:
   - idea-to-plan
-  - 战略编排
   - 意图到计划
-  - 先调研再给计划
-  - 先别写代码
   - outline.md
+  - decision_log.md
+  - assumptions.md
+  - open_questions.md
   - code_list.md
-  - 先探索现状再提方案
-  - 先探索代码库再出方案
-  - 先做方案
-  - 技术方案
-  - 路线比较
-  - 风险评估
   - critical files
   - explore-plan
-  - 科研自动化
-  - 试点验证
-  - Pilot
-  - Duo-Doc
-  - 蓝图设计
+  - repo-local planning artifacts
 framework_roles:
   - strategic-orchestrator
   - planner
@@ -83,6 +75,7 @@ artifact_outputs:
   - NEXT_ACTIONS.json
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
+
 ---
 
 # idea-to-plan

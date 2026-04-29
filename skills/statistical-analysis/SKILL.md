@@ -7,6 +7,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 用什么检验
   - 显著性怎么算
@@ -30,6 +32,7 @@ metadata:
     - research
 risk: low
 source: local
+
 ---
 
 - **Dual-Dimension Audit (Pre: Test-Selection, Post: P-value/Effect-size Results)** → runtime verification gate

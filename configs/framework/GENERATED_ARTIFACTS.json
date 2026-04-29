@@ -1,0 +1,85 @@
+{
+  "schema_version": "framework-generated-artifacts-manifest-v1",
+  "generated_artifacts": [
+    {
+      "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_REGISTRY.md",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_INDEX.md",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_MANIFEST.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_RUNTIME.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_SHADOW_MAP.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_APPROVAL_POLICY.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_LOADOUTS.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_TIERS.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "AGENTS.md",
+      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "CLAUDE.md",
+      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": ".codex/host_entrypoints_sync_manifest.json",
+      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": ".codex/prompts/autopilot.md",
+      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": ".codex/prompts/deepinterview.md",
+      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": ".codex/prompts/gitx.md",
+      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": ".codex/prompts/team.md",
+      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "compare": "byte-for-byte"
+    }
+  ]
+}

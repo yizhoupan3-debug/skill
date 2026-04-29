@@ -21,6 +21,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 这是 JS 项目
   - 不要上 TS
@@ -32,6 +34,7 @@ trigger_hints:
   - CJS migration
   - javascript
   - nodejs
+
 ---
 
 # javascript-pro

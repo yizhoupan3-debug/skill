@@ -1,10 +1,6 @@
 ---
 name: sentry
-description: |
-  Inspect Sentry issues, events, releases, environments, and recent production exceptions in read-only mode.
-  Use when the task needs Sentry-grounded triage, recurring prod-error clustering, stack-trace correlation,
-  or a summary of recent online errors. Requires `SENTRY_AUTH_TOKEN`. Check this source gate early at
-  conversation start whenever the user explicitly wants Sentry evidence.
+description: Inspect Sentry production errors and issue evidence read-only.
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -41,6 +37,7 @@ artifact_outputs:
   - sentry_triage.md
   - EVIDENCE_INDEX.json
   - TRACE_METADATA.json
+
 ---
 
 # sentry

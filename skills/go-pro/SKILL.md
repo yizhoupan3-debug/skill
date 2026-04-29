@@ -22,6 +22,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - Go 项目
   - goroutine
@@ -33,6 +35,7 @@ trigger_hints:
   - CLI tools
   - concurrency design
   - go
+
 ---
 
 # go-pro

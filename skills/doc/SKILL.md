@@ -1,12 +1,6 @@
 ---
 name: doc
-description: |
-  Read, create, edit, repair, and review `.docx` Word documents when layout and
-  Word-native structure matter.
-  Use when the user wants structured Word edits, 模板化文档生成, 表格或版式修复,
-  or render-aware `.docx` verification with the Rust OOXML CLI and LibreOffice.
-  As an artifact gate, check this skill early at conversation start / first
-  turn when the primary artifact is a `.docx`.
+description: Handle layout-aware Word .docx creation, edits, and review.
 routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
@@ -60,6 +54,7 @@ network_access: conditional
 artifact_outputs:
   - docx_review.md
   - EVIDENCE_INDEX.json
+
 ---
 
 # doc

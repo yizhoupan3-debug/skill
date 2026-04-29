@@ -19,6 +19,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 邮件模板
   - HTML 邮件
@@ -30,6 +32,7 @@ trigger_hints:
   - newsletter markup
   - email
   - html email
+
 ---
 
 # email-template

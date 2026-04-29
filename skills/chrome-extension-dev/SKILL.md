@@ -20,6 +20,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - Chrome 插件
   - 浏览器扩展
@@ -31,6 +33,7 @@ trigger_hints:
   - manifest v3
   - browser extension
   - service worker
+
 ---
 
 # chrome-extension-dev

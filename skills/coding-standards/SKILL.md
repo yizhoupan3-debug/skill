@@ -26,6 +26,8 @@ routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - coding standards
   - 代码规范
@@ -38,6 +40,7 @@ allowed_tools:
   - shell
   - python
 approval_required_tools: []
+
 ---
 
 # coding-standards

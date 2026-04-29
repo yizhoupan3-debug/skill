@@ -6,6 +6,8 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 short_description: Speed up code with measured rewrites, batching, caching, and parallel execution
 trigger_hints:
   - acceleration
@@ -42,6 +44,7 @@ metadata:
     - memory
 risk: medium
 source: local
+
 ---
 
 # code-acceleration

@@ -87,26 +87,32 @@ const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 2] = [
     ("需要统一编码规范", "coding-standards"),
 ];
 
-const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str]); 2] = [
+const HOT_FIRST_TURN_OWNER_SLUGS: [&str; 0] = [];
+const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str], &str); 3] = [
     (
         "autopilot",
         "Run the local framework autopilot supervisor entrypoint.",
         "owner",
         &["$autopilot", "/autopilot"],
+        "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
+    ),
+    (
+        "gitx",
+        "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.",
+        "owner",
+        &["$gitx", "/gitx", "gitx"],
+        "skills/gitx/SKILL.md",
     ),
     (
         "team",
         "Run the local framework team orchestration entrypoint.",
         "owner",
         &["$team", "/team"],
+        "artifacts/codex-skill-surface/skills/team/SKILL.md",
     ),
 ];
 
-const HOT_FIRST_TURN_OWNER_SLUGS: [&str; 3] =
-    ["skill-framework-developer", "idea-to-plan", "plan-to-code"];
-
-const DEFAULT_SURFACE_OWNERS: &[&str] =
-    &["skill-framework-developer", "idea-to-plan", "plan-to-code"];
+const DEFAULT_SURFACE_OWNERS: &[&str] = &[];
 const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
     "research-workbench",
     "literature-synthesis",
@@ -169,7 +175,7 @@ const OPS_LOADOUT_OWNERS: &[&str] = &[
     "env-config-management",
     "shell-cli",
 ];
-const DEFAULT_OVERLAYS: &[&str] = &["coding-standards"];
+const DEFAULT_OVERLAYS: &[&str] = &[];
 const IMPLEMENTATION_OVERLAYS: &[&str] = &[
     "coding-standards",
     "error-handling-patterns",
@@ -266,7 +272,7 @@ fn validate_runtime_contract(skills_root: &Path, bundle: &SkillBundle) -> Result
         let skill_path = string_at(row, runtime_path_idx);
         let is_framework_command = FRAMEWORK_COMMAND_RUNTIME_ROWS
             .iter()
-            .any(|(framework_slug, _, _, _)| *framework_slug == slug);
+            .any(|(framework_slug, _, _, _, _)| *framework_slug == slug);
         if !manifest_slugs.contains(&slug) && !is_framework_command {
             return Err(format!("runtime skill `{slug}` is not in manifest"));
         }
@@ -952,21 +958,18 @@ fn build_runtime_index(manifest: &Value) -> Value {
 fn framework_command_runtime_rows() -> Vec<Value> {
     FRAMEWORK_COMMAND_RUNTIME_ROWS
         .iter()
-        .map(|(slug, description, _owner, triggers)| {
+        .map(|(slug, summary, owner, trigger_hints, skill_path)| {
             json!([
-                *slug,
+                slug,
                 "L0",
-                "owner",
+                owner,
                 "none",
                 "n/a",
-                *description,
-                triggers
-                    .iter()
-                    .map(|value| json!(value))
-                    .collect::<Vec<_>>(),
+                summary,
+                trigger_hints,
                 100.0,
                 "P1",
-                format!("artifacts/codex-skill-surface/skills/{}/SKILL.md", *slug),
+                skill_path
             ])
         })
         .collect()
@@ -1107,8 +1110,8 @@ fn build_framework_surface_policy(tiers: &Value) -> Value {
         "derived_reports": ["skills/SKILL_TIERS.json"],
         "deprecated_or_foldable_reports": ["skills/SKILL_LOADOUTS.json"],
         "kernel": {
-            "canonical_axes": ["routing", "memory", "continuity", "codex_host_payload"],
-            "policy": "Keep only routing, memory, continuity, and Codex host payload on the mainline; everything else is an opt-in capability."
+            "canonical_axes": ["routing", "memory", "continuity", "host_projection"],
+            "policy": "Keep only routing, memory, continuity, and explicit host projections on the mainline; everything else is an opt-in capability."
         },
         "migration_guardrails": {
             "preserve_rust_runtime_authority": true,
@@ -1356,7 +1359,7 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         "report_status": "generated_debug_report",
         "tier_order": ["core", "optional", "experimental", "deprecated"],
         "generation_policy": {
-            "core": "session-start required source/artifact/evidence/delegation gate skills only; preferred first-turn owners are hot-runtime entries, not default loadout members",
+            "core": "session-start required source/artifact/evidence/delegation gate skills only; generic control owners are explicit or fallback-only, not hot-runtime entries",
             "optional": "all non-core skills; route can still select them from the manifest fallback",
             "experimental": "reserved for unstable or low-health routing signals",
             "deprecated": "reserved for very-low-health and unused skills with reroute pressure"
@@ -1393,6 +1396,9 @@ fn build_tier_catalog(manifest: &Value) -> Value {
 }
 
 fn is_core_surface_skill(skill: &[Value]) -> bool {
+    if string_at(skill, 0) == "systematic-debugging" {
+        return false;
+    }
     string_at(skill, 2) == "gate"
         && string_at(skill, 6) == "required"
         && matches!(
@@ -1654,7 +1660,6 @@ fn push_trigger_phrase(phrase: &str, seen: &mut HashSet<String>, phrases: &mut V
                 | '”'
                 | '‘'
                 | '’'
-                | '/'
         )
     }));
     if cleaned.chars().count() < 2 {
@@ -1832,8 +1837,8 @@ mod tests {
     fn iter_skill_dirs_discovers_nested_system_skills() {
         let skills_root = temp_skills_root("nested-system");
         write_skill(
-            &skills_root.join(".system").join("openai-docs"),
-            "openai-docs",
+            &skills_root.join(".system").join("skill-installer"),
+            "skill-installer",
         );
 
         let discovered = iter_skill_dirs(&skills_root).expect("discover skills");
@@ -1847,7 +1852,10 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        assert_eq!(discovered_paths, vec![".system/openai-docs".to_string()]);
+        assert_eq!(
+            discovered_paths,
+            vec![".system/skill-installer".to_string()]
+        );
     }
 
     #[test]
@@ -1978,8 +1986,13 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|row| row.get(0) == Some(&json!("team"))));
+            .any(|row| row.get(0) == Some(&json!("gitx"))));
         assert!(bundle.runtime_index["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("team"))));
+        assert!(!bundle.runtime_index["skills"]
             .as_array()
             .unwrap()
             .iter()
@@ -1989,21 +2002,6 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("preferred-owner"))));
-        let alias_rows = bundle.runtime_index["skills"].as_array().unwrap();
-        assert_eq!(
-            alias_rows
-                .iter()
-                .find(|row| row.get(0) == Some(&json!("autopilot")))
-                .and_then(|row| row.get(6)),
-            Some(&json!(["$autopilot", "/autopilot"]))
-        );
-        assert_eq!(
-            alias_rows
-                .iter()
-                .find(|row| row.get(0) == Some(&json!("team")))
-                .and_then(|row| row.get(6)),
-            Some(&json!(["$team", "/team"]))
-        );
         assert_eq!(bundle.runtime_index["scope"]["kind"], json!("hot"));
         assert_eq!(bundle.tiers["summary"]["tier_counts"]["core"], json!(2));
         assert_eq!(
@@ -2028,7 +2026,7 @@ mod tests {
         );
         assert_eq!(
             bundle.loadouts["loadouts"]["default_surface_loadout"]["owners"],
-            json!(["plan-to-code"])
+            json!([])
         );
         assert_eq!(bundle.loadouts["source_of_truth"], json!(false));
         assert_eq!(

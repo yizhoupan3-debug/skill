@@ -23,6 +23,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - prompt engineering
   - 提示词优化
@@ -34,6 +36,7 @@ trigger_hints:
   - prompt rewrite
   - ai prompts
   - structured prompting
+
 ---
 
 # Prompt Engineer

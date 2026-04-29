@@ -22,6 +22,7 @@ mod codex_hooks;
 mod execution_contract;
 mod framework_profile;
 mod framework_runtime;
+mod hook_policy;
 mod host_integration;
 mod route;
 mod runtime_storage;
@@ -55,13 +56,18 @@ use framework_runtime::{
     build_framework_runtime_snapshot_envelope, build_framework_statusline, resolve_repo_root_arg,
     write_framework_session_artifacts, FrameworkAliasBuildOptions,
 };
+use hook_policy::{
+    evaluate_hook_policy, evaluate_hook_policy_value, hook_policy_contract,
+    HookPolicyEvaluateRequest,
+};
 use host_integration::run_host_integration_from_args;
 use route::{
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
-    build_search_results_payload, load_inline_records, load_records, load_records_cached_for_stdio,
-    load_records_from_manifest, route_task, search_skills, MatchRow, RouteDecision,
-    RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload,
-    SearchResultsPayload, SkillRecord, ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
+    build_search_results_payload, literal_framework_alias_decision, load_inline_records,
+    load_records, load_records_cached_for_stdio, load_records_from_manifest, route_task,
+    search_skills, MatchRow, RouteDecision, RouteDecisionSnapshotPayload,
+    RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SearchResultsPayload, SkillRecord,
+    ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
 };
 use runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
@@ -173,6 +179,10 @@ enum RouterCommand {
         #[command(subcommand)]
         command: MigrateCommand,
     },
+    HookPolicy {
+        #[command(subcommand)]
+        command: HookPolicyCommand,
+    },
 }
 
 #[derive(Args, Debug, Clone)]
@@ -214,6 +224,7 @@ enum FrameworkCommand {
     Statusline(RepoRootCommand),
     SessionArtifactWrite(JsonInputCommand),
     Alias(FrameworkAliasCommand),
+    HostIntegration(ForwardedArgsCommand),
     Contracts,
 }
 
@@ -260,6 +271,12 @@ enum ProfileCommand {
 enum MigrateCommand {
     ArchivedMemory(MigrateArchivedMemoryCommand),
     CurrentArtifactClutter(CurrentArtifactClutterCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum HookPolicyCommand {
+    Evaluate(JsonInputCommand),
+    Contract,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -890,6 +907,9 @@ fn route_task_with_manifest_fallback(
     allow_overlay: bool,
     first_turn: bool,
 ) -> Result<RouteDecision, String> {
+    if let Some(decision) = literal_framework_alias_decision(runtime_records, query, session_id) {
+        return Ok(decision);
+    }
     let hot_decision = route_task(
         runtime_records,
         query,
@@ -955,6 +975,7 @@ fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         RouterCommand::Browser { command } => dispatch_browser_command(command),
         RouterCommand::Profile { command } => dispatch_profile_command(command),
         RouterCommand::Migrate { command } => dispatch_migrate_command(command),
+        RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
     }
 }
 
@@ -1039,6 +1060,10 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
                     host_id: command.host_id.as_deref(),
                 },
             )?)
+        }
+        FrameworkCommand::HostIntegration(command) => {
+            let payload = run_host_integration_from_args(&command.args)?;
+            print_json_value(&payload)
         }
         FrameworkCommand::Contracts => {
             print_json_value(&build_control_plane_contract_descriptors())
@@ -1204,6 +1229,19 @@ fn dispatch_migrate_command(command: MigrateCommand) -> Result<(), String> {
             ])?;
             print_json_value(&payload)
         }
+    }
+}
+
+fn dispatch_hook_policy_command(command: HookPolicyCommand) -> Result<(), String> {
+    match command {
+        HookPolicyCommand::Evaluate(command) => {
+            let payload = parse_json_input::<HookPolicyEvaluateRequest>(
+                &command.input_json,
+                "hook policy evaluate",
+            )?;
+            print_json_value(&evaluate_hook_policy(payload)?)
+        }
+        HookPolicyCommand::Contract => print_json_value(&hook_policy_contract()),
     }
 }
 
@@ -1513,6 +1551,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
     match op {
         "route" => dispatch_stdio_route(payload),
         "search_skills" => dispatch_stdio_search_skills(payload),
+        "hook_policy" => evaluate_hook_policy_value(payload),
         "concurrency_defaults" => serde_json::to_value(runtime_concurrency_defaults_payload())
             .map_err(|err| format!("serialize concurrency defaults output failed: {err}")),
         "execute" => {
@@ -6136,6 +6175,16 @@ mod tests {
     }
 
     #[test]
+    fn stdio_request_dispatches_hook_policy_payload() {
+        let response = handle_stdio_json_line(
+            r#"{"id":1,"op":"hook_policy","payload":{"operation":"validation-categories","command":"python3 -m json.tool .claude/settings.json"}}"#,
+        );
+        assert!(response.ok, "{}", response.error.unwrap_or_default());
+        let payload = response.payload.expect("payload");
+        assert_eq!(payload["categories"], json!(["config", "json"]));
+    }
+
+    #[test]
     fn stdio_request_dispatches_concurrency_defaults_payload() {
         let response =
             handle_stdio_json_line(r#"{"id":1,"op":"concurrency_defaults","payload":{}}"#);
@@ -7652,6 +7701,8 @@ mod tests {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+        assert!(records.iter().any(|record| record.slug == "autopilot"));
+        assert!(records.iter().any(|record| record.slug == "team"));
 
         let autopilot = route_task_with_manifest_fallback(
             &records,
@@ -7691,6 +7742,30 @@ mod tests {
             natural_language_team.selected_skill,
             "agent-swarm-orchestration"
         );
+
+        for (query, forbidden) in [
+            ("autopilot", "autopilot"),
+            ("team", "team"),
+            ("fix this bug", "systematic-debugging"),
+            ("make a plan", "idea-to-plan"),
+            ("write a small helper function", "plan-to-code"),
+            ("ordinary skill question", "skill-framework-developer"),
+        ] {
+            let decision = route_task_with_manifest_fallback(
+                &records,
+                Some(&runtime_path),
+                None,
+                query,
+                &format!("negative-{forbidden}"),
+                true,
+                true,
+            )
+            .unwrap_or_else(|err| panic!("route negative case {query}: {err}"));
+            assert_ne!(
+                decision.selected_skill, forbidden,
+                "generic query {query:?} should not select {forbidden}"
+            );
+        }
     }
 
     #[test]

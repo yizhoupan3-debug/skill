@@ -7,6 +7,8 @@ routing_layer: L4
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 检查鉴权
   - 授权漏洞
@@ -44,6 +46,7 @@ framework_contracts:
   emits_verification_results: false
 risk: medium
 source: local
+
 ---
 
 - **Dual-Dimension Audit (Pre: Vuln-Surface/Logic, Post: Penetration-Scan/OWASP-Compliance Results)** → runtime verification gate

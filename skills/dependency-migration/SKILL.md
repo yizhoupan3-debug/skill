@@ -11,6 +11,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - dependency
   - npm audit
@@ -37,6 +39,7 @@ metadata:
     - schema-migration
 risk: medium
 source: local
+
 ---
 
 # dependency-migration

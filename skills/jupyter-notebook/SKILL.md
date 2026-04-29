@@ -10,6 +10,8 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - Jupyter notebook
   - ipynb
@@ -30,6 +32,7 @@ metadata:
     - experiment
     - analysis
     - tutorial
+
 ---
 
 - **Dual-Dimension Audit (Pre: Cell-Flow, Post: Run-Success/Reproducibility Results)** → runtime verification gate

@@ -8,6 +8,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 作业合规检查
   - rubric 对照
@@ -25,6 +27,7 @@ metadata:
   tags: [assignment, homework, project, rubric, compliance, checklist, grading, requirements, submission]
 risk: safe
 source: local
+
 ---
 
 # Assignment Compliance Checker

@@ -22,6 +22,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 写个 shell 脚本
   - 一行命令处理
@@ -33,6 +35,7 @@ trigger_hints:
   - batch file processing
   - CLI automation
   - shell
+
 ---
 
 # shell-cli

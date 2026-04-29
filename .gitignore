@@ -34,6 +34,7 @@ artifacts/codex-skill-surface/
 artifacts/ops/
 artifacts/evidence/
 artifacts/scratch/
+artifacts/generated-artifacts-drift-check/
 artifacts/memory_automation/current/
 artifacts/tmp-*/
 uploads/
@@ -64,6 +65,9 @@ main-*.js
 my_ccs.css
 opencode.jsonc
 .codex/*
+!.codex/host_entrypoints_sync_manifest.json
+!.codex/prompts/
+!.codex/prompts/*.md
 
 # Private local aggregator; do not publish
 codex-aggregator/

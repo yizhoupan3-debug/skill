@@ -23,6 +23,8 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 构建工具
   - bundler
@@ -39,6 +41,7 @@ allowed_tools:
   - node
 approval_required_tools:
   - git push
+
 ---
 
 - **Dual-Dimension Audit (Pre: Config/Lockfile, Post: Bundle-Success/Dep-Graph Results)** → runtime verification gate

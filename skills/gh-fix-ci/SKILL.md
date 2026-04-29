@@ -1,13 +1,6 @@
 ---
 name: gh-fix-ci
-description: |
-  Triage failing GitHub Actions PR checks with `gh` and the bundled
-  Rust `gh-source-gate inspect-pr-checks` CLI.
-  Use when the task starts from broken PR checks: inspect logs, summarize
-  failures, identify likely root causes, and draft or implement a fix plan
-  after approval. Treat non-GitHub-Actions CI as external evidence only. As a
-  source gate, check this skill early at conversation start whenever the user
-  mentions failing PR checks or CI failures.
+description: Triage and fix failing GitHub Actions PR checks with gh-source-gate.
 metadata:
   version: "2.0.0"
   platforms: [codex]
@@ -47,6 +40,7 @@ artifact_outputs:
   - ci_failure_digest.md
   - EVIDENCE_INDEX.json
   - TRACE_METADATA.json
+
 ---
 
 # gh-fix-ci

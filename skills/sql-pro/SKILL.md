@@ -21,6 +21,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 复杂 SQL
   - 慢查询优化
@@ -32,6 +34,7 @@ trigger_hints:
   - mysql
   - indexing
   - query optimization
+
 ---
 
 # sql-pro

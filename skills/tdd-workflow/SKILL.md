@@ -37,6 +37,8 @@ routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 先写测试
   - 补回归保护
@@ -47,6 +49,7 @@ trigger_hints:
   - testing
   - regression
   - red green refactor
+
 ---
 
 # TDD Workflow

@@ -1,28 +1,34 @@
 mod common;
 
 use common::{
-    cargo_manifest_command, json_from_output, project_root, read_json, read_text, router_rs_json,
-    run,
+    assert_success, cargo_manifest_command, json_from_output, project_root, read_json, read_text,
+    router_rs_json, run,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use tempfile::tempdir;
 
 #[test]
-fn plugin_manifest_exposes_skills_without_mcp_bundle() {
-    let plugin_root = project_root().join("plugins/skill-framework-native");
-    let manifest = read_json(&plugin_root.join(".codex-plugin/plugin.json"));
-    assert_eq!(manifest["name"], "skill-framework-native");
-    assert_eq!(manifest["skills"], "./skills/");
-    assert!(manifest.get("mcpServers").is_none());
-    assert_eq!(
-        manifest["interface"]["displayName"],
-        "Skill Framework Native"
-    );
+fn router_rs_main_binary_compiles() {
+    let mut command = Command::new("cargo");
+    command
+        .args([
+            "check",
+            "--manifest-path",
+            "scripts/router-rs/Cargo.toml",
+            "--bin",
+            "router-rs",
+        ])
+        .current_dir(project_root());
+    assert_success(&run(command));
 }
 
 #[test]
-fn plugin_mcp_bundle_is_removed() {
+fn repo_local_plugin_wrapper_stays_removed() {
+    assert!(!project_root()
+        .join("plugins/skill-framework-native")
+        .exists());
     assert!(!project_root()
         .join("plugins/skill-framework-native/.mcp.json")
         .exists());
@@ -61,7 +67,7 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
 }
 
 #[test]
-fn project_codex_skill_projection_is_generated_outside_host_entrypoints() {
+fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!project_root().join(".codex/skills").exists());
     assert!(!project_root().join("AGENT.md").exists());
     let tmp = tempdir().unwrap();
@@ -72,17 +78,27 @@ fn project_codex_skill_projection_is_generated_outside_host_entrypoints() {
     let manifest_text = manifest.to_string();
     assert!(!manifest_text.contains(".codex/skills/gitx"));
     assert!(!manifest_text.contains(".codex/skills/autopilot"));
+    assert!(manifest["full_sync"]["text_files"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!(".codex/prompts/autopilot.md")));
+    assert!(manifest["full_sync"]["text_files"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!(".codex/prompts/gitx.md")));
+    assert!(repo_root.join(".codex/prompts/autopilot.md").is_file());
+    assert!(repo_root.join(".codex/prompts/gitx.md").is_file());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
-        serde_json::json!(["codex-cli", "codex-app"])
+        serde_json::json!(["codex-cli", "claude-code-cli"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
         "AGENTS.md"
     );
     assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["codex-app"],
-        "AGENTS.md"
+        manifest["shared_system"]["host_entrypoints"]["claude-code-cli"],
+        "CLAUDE.md"
     );
     assert!(manifest["full_sync"]["text_files"]
         .as_array()
@@ -384,6 +400,10 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
         surface["deprecated_or_foldable_reports"],
         serde_json::json!(["skills/SKILL_LOADOUTS.json"])
     );
+    assert_eq!(
+        surface["kernel"]["canonical_axes"],
+        serde_json::json!(["routing", "memory", "continuity", "host_projection"])
+    );
     assert_eq!(tiers["source_of_truth"], false);
     assert_eq!(
         tiers["derived_from"],
@@ -402,10 +422,17 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
     );
     for (name, loadout) in loadouts["loadouts"].as_object().expect("loadout catalog") {
         let owners = loadout["owners"].as_array().expect("loadout owners");
-        assert!(
-            !owners.is_empty(),
-            "loadout {name} must carry real owner memberships"
-        );
+        if name == "default_surface_loadout" {
+            assert!(
+                owners.is_empty(),
+                "default surface must not carry generic control owners"
+            );
+        } else {
+            assert!(
+                !owners.is_empty(),
+                "loadout {name} must carry real owner memberships"
+            );
+        }
     }
 }
 
@@ -473,13 +500,23 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         runtime["scope"]["fallback_manifest"],
         "skills/SKILL_MANIFEST.json"
     );
-    for expected in ["idea-to-plan", "plan-to-code", "skill-framework-developer"] {
+    for expected in [
+        "gh-address-comments",
+        "gh-fix-ci",
+        "openai-docs",
+        "pdf",
+        "visual-review",
+    ] {
         assert!(
             slugs.contains(&expected),
             "missing hot runtime slug: {expected}"
         );
     }
     for excluded in [
+        "systematic-debugging",
+        "idea-to-plan",
+        "plan-to-code",
+        "skill-framework-developer",
         "plugin-creator",
         "skill-creator",
         "skill-installer",
@@ -1285,7 +1322,16 @@ fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
             let directory_name = path.file_name().and_then(|name| name.to_str());
             if matches!(
                 directory_name,
-                Some(".git" | "target" | "node_modules" | ".venv" | "venv" | "codex-skill-surface")
+                Some(
+                    ".git"
+                        | ".claude"
+                        | "target"
+                        | "node_modules"
+                        | ".venv"
+                        | "venv"
+                        | "codex-skill-surface"
+                        | "generated-artifacts-drift-check"
+                )
             ) {
                 continue;
             }

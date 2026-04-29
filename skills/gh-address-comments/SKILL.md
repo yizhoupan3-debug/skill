@@ -1,13 +1,6 @@
 ---
 name: gh-address-comments
-description: |
-  Triage and address GitHub PR review comments and review threads for the
-  current branch using `gh` and the bundled Rust
-  `gh-source-gate fetch-comments` CLI.
-  Use when the task starts from PR feedback: fetch threads, summarize comments, collect PR metadata when needed,
-  decide fixes, apply changes, and prepare a follow-up without hunting through
-  the PR UI. As a source gate, check this skill early at conversation start
-  whenever the user references PR review comments or review threads.
+description: Address GitHub PR review comments with gh-source-gate.
 metadata:
   version: "2.0.0"
   platforms: [codex]
@@ -49,6 +42,7 @@ artifact_outputs:
   - comment_digest.md
   - EVIDENCE_INDEX.json
   - TRACE_METADATA.json
+
 ---
 
 # gh-address-comments

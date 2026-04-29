@@ -9,6 +9,8 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - 多 agent 协作
   - agent 编排
@@ -19,6 +21,9 @@ trigger_hints:
   - shared agent memory
   - agent supervisor
   - multi-agent workflow
+  - $team
+  - /team
+  - 多 agent 执行
 metadata:
   version: "1.1.0"
   platforms: [codex]
@@ -26,6 +31,7 @@ metadata:
     - agent
     - swarm
     - orchestration
+
 ---
 
 - **Dual-Dimension Audit (Pre: Swarm-Graph/Handoff-Logic, Post: Consensus/Task-Completion Results)** → runtime verification gate
@@ -54,6 +60,7 @@ metadata:
 - 用户要做任务路由、agent handoff、shared memory、consensus、quality gate
 - 用户要做 research swarm、support router、自动审查流水线
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
+- 用户显式调用 `$team` / `/team`，或明确要求 full team orchestration 而不是普通 bounded sidecars
 
 常见表达：
 - “做一个多 agent 协作框架”
@@ -69,6 +76,7 @@ metadata:
 - 普通单 agent 编码任务
 - 用户只是想让你更认真一点，不是真的要多 agent
 - 用户只是要求并行查资料，但没有系统设计需求
+- 用户只是要求当前会话开一两个 bounded sidecar，而不需要 supervisor-owned team lifecycle
 - 只是需要一个简单队列 worker 系统，不涉及 agent 协作
 - 只是让当前会话直接开 sub-agent 干活，而不是实现一套编排系统
 
@@ -108,3 +116,5 @@ If the discussion touches current-session execution:
 ## Reference
 
 For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).
+
+For explicit `$team` / `/team` alias handling, see [references/team-mode.md](./references/team-mode.md).

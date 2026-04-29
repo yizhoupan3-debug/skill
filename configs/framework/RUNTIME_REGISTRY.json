@@ -1,57 +1,27 @@
 {
   "schema_version": "framework-runtime-registry-v1",
-  "codex_host": {
-    "profile_id": "codex_profile",
-    "host_id": "codex",
-    "transport": "native-codex",
-    "context_files": [
-      "AGENTS.md"
-    ],
-    "settings_paths": [
-      "~/.codex/config.toml",
-      ".codex/config.toml"
-    ],
-    "mcp_config_paths": [
-      ".codex/config.toml"
-    ],
-    "session_supervisor_driver": "codex_driver",
-    "resume_command_examples": [
-      "codex resume --last",
-      "codex resume <session_id>"
-    ],
-    "capabilities": [
-      "artifact_contract",
-      "memory_mounts",
-      "mcp_servers",
-      "workspace_bootstrap",
-      "batch_execution",
-      "cron_execution",
-      "ci_runner",
-      "non_interactive_entrypoint",
-      "external_session_supervisor",
-      "rate_limit_auto_resume",
-      "host_resume_entrypoint",
-      "host_tmux_worker_management",
-      "framework_alias_entrypoints"
-    ]
+  "framework_core": {
+    "authority": "rust",
+    "source": "framework-root-native",
+    "host_policy": "closed-set-explicit-projections"
   },
   "host_targets": {
-    "policy": "codex-only-shared-system",
+    "policy": "shared-rust-core-explicit-host-projections",
     "supported": [
       "codex-cli",
-      "codex-app"
+      "claude-code-cli"
     ],
     "shared_system_source": "skills",
     "entrypoint_files": {
       "codex-cli": "AGENTS.md",
-      "codex-app": "AGENTS.md"
+      "claude-code-cli": "CLAUDE.md"
     }
   },
   "workspace_bootstrap_defaults": {
     "skills": {
       "source_rel": "skills",
       "project_dir": "skills",
-      "user_dir": "~/.codex/skills",
+      "user_dir": "${CODEX_HOME}/skills",
       "source_dir": "skills"
     },
     "memory": {
@@ -61,6 +31,7 @@
   "framework_commands": {
     "autopilot": {
       "canonical_owner": "plan-to-code",
+      "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
       "reroute_when_ambiguous": "idea-to-plan",
       "reroute_when_root_cause_unknown": "systematic-debugging",
       "official_workflow": {
@@ -120,7 +91,7 @@
       },
       "host_entrypoints": {
         "codex-cli": "$autopilot",
-        "codex-app": "$autopilot"
+        "claude-code-cli": "/autopilot"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -164,7 +135,7 @@
       ],
       "host_entrypoints": {
         "codex-cli": "$deepinterview",
-        "codex-app": "$deepinterview"
+        "claude-code-cli": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -182,7 +153,7 @@
     "team": {
       "canonical_owner": "plan-to-code",
       "delegation_gate": "agent-swarm-orchestration",
-      "auto_route_allowed": true,
+      "auto_route_allowed": false,
       "route_mode": "team-orchestration",
       "selection_signals": {
         "prefer_when": [
@@ -312,7 +283,7 @@
       },
       "host_entrypoints": {
         "codex-cli": "$team",
-        "codex-app": "$team"
+        "claude-code-cli": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -320,18 +291,101 @@
           "/team",
           "$team"
         ],
-        "implicit_route_policy": "strong-orchestration-only",
-        "implicit_route_signals": [
-          "team orchestration",
-          "worker lifecycle",
-          "integration+qa+cleanup",
-          "resume/recovery supervisor"
-        ]
+        "implicit_route_policy": "never"
       },
       "lineage": {
         "source": "repo-native",
         "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
       }
+    }
+  },
+  "host_projections": {
+    "codex-cli": {
+      "profile_id": "codex_profile",
+      "host_id": "codex",
+      "transport": "native-codex",
+      "context_files": [
+        "AGENTS.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "user",
+          "host_root": "codex",
+          "relative": "config.toml"
+        },
+        {
+          "scope": "project",
+          "relative": ".codex/config.toml"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "project",
+          "relative": ".codex/config.toml"
+        }
+      ],
+      "session_supervisor_driver": "codex_driver",
+      "resume_command_examples": [
+        "codex resume --last",
+        "codex resume <session_id>"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "memory_mounts",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "batch_execution",
+        "cron_execution",
+        "ci_runner",
+        "non_interactive_entrypoint",
+        "external_session_supervisor",
+        "rate_limit_auto_resume",
+        "host_resume_entrypoint",
+        "host_tmux_worker_management",
+        "framework_alias_entrypoints"
+      ]
+    },
+    "claude-code-cli": {
+      "profile_id": "claude_code_profile",
+      "host_id": "claude-code",
+      "transport": "native-claude-code",
+      "context_files": [
+        "CLAUDE.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "user",
+          "host_root": "claude",
+          "relative": "settings.json"
+        },
+        {
+          "scope": "project",
+          "relative": ".claude/settings.json"
+        },
+        {
+          "scope": "local_project",
+          "relative": ".claude/settings.local.json"
+        }
+      ],
+      "mcp_config_paths": [],
+      "session_supervisor_driver": "claude_code_driver",
+      "resume_command_examples": [
+        "claude --continue",
+        "claude --resume <session_id>"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "memory_mounts",
+        "workspace_bootstrap",
+        "non_interactive_entrypoint",
+        "external_session_supervisor",
+        "rate_limit_auto_resume",
+        "host_resume_entrypoint",
+        "host_tmux_worker_management",
+        "framework_alias_entrypoints",
+        "project_commands",
+        "slash_commands"
+      ]
     }
   }
 }
