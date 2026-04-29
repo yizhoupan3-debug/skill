@@ -4,10 +4,71 @@ use common::{
     assert_success, cargo_manifest_command, json_from_output, project_root, read_json, read_text,
     router_rs_json, run,
 };
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::tempdir;
+
+const RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
+    "api-design",
+    "api-integration-debugging",
+    "api-load-tester",
+    "architect-review",
+    "auth-implementation",
+    "backend-runtime-debugging",
+    "build-tooling",
+    "code-acceleration",
+    "code-review",
+    "coding-standards",
+    "datastore-cache-queue",
+    "dependency-migration",
+    "docker",
+    "env-config-management",
+    "error-handling-patterns",
+    "github-actions-authoring",
+    "idea-to-plan",
+    "linux-server-ops",
+    "monorepo-tooling",
+    "observability",
+    "plan-to-code",
+    "refactoring",
+    "release-engineering",
+    "security-audit",
+    "security-threat-model",
+    "shell-cli",
+    "tdd-workflow",
+    "test-engineering",
+    "accessibility-auditor",
+    "chrome-extension-dev",
+    "css-pro",
+    "frontend-debugging",
+    "frontend-design",
+    "go-pro",
+    "i18n-l10n",
+    "javascript-pro",
+    "native-app-debugging",
+    "nextjs",
+    "node-backend",
+    "npm-package-authoring",
+    "python-pro",
+    "react",
+    "rust-pro",
+    "seo-web",
+    "sql-pro",
+    "svelte",
+    "typescript-pro",
+    "vue",
+    "web-platform-basics",
+];
+
+fn runtime_owned_skill_slugs() -> HashSet<&'static str> {
+    RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
+}
+
+fn manifest_or_runtime_owned_contains(manifest_slugs: &HashSet<&str>, slug: &str) -> bool {
+    manifest_slugs.contains(slug) || RUNTIME_OWNED_SKILL_SLUGS.contains(&slug)
+}
 
 #[test]
 fn router_rs_main_binary_compiles() {
@@ -588,7 +649,7 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
         for key in ["focus_skill", "expected_owner", "expected_overlay"] {
             if let Some(slug) = case.get(key).and_then(|value| value.as_str()) {
                 assert!(
-                    manifest_slugs.contains(slug),
+                    manifest_or_runtime_owned_contains(&manifest_slugs, slug),
                     "case {id} {key} references missing slug {slug}"
                 );
             }
@@ -601,7 +662,7 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
             .filter_map(|value| value.as_str())
         {
             assert!(
-                manifest_slugs.contains(slug),
+                manifest_or_runtime_owned_contains(&manifest_slugs, slug),
                 "case {id} forbidden_owners references missing slug {slug}"
             );
         }
@@ -627,7 +688,15 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
         .keys()
         .map(String::as_str)
         .collect::<std::collections::HashSet<_>>();
-    assert_eq!(health_slugs, manifest_slugs);
+    assert!(
+        manifest_slugs.is_subset(&health_slugs),
+        "health manifest must include every fallback manifest skill"
+    );
+    let health_only_slugs = health_slugs
+        .difference(&manifest_slugs)
+        .copied()
+        .collect::<HashSet<_>>();
+    assert_eq!(health_only_slugs, runtime_owned_skill_slugs());
 
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     for (alias, record) in registry["framework_commands"]
@@ -639,7 +708,7 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
             .and_then(|value| value.as_str())
         {
             assert!(
-                manifest_slugs.contains(owner),
+                manifest_or_runtime_owned_contains(&manifest_slugs, owner),
                 "framework alias {alias} canonical_owner references missing slug {owner}"
             );
         }
@@ -651,7 +720,7 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
             .filter_map(|value| value.as_str())
         {
             assert!(
-                manifest_slugs.contains(slug),
+                manifest_or_runtime_owned_contains(&manifest_slugs, slug),
                 "framework alias {alias} execution_owners references missing slug {slug}"
             );
         }
@@ -1278,9 +1347,7 @@ fn repo_stays_free_of_legacy_python_source_and_pytest_entrypoints() {
             if allowed_python_control_plane_path(rel) {
                 return;
             }
-            violations.push(
-                rel.display().to_string(),
-            );
+            violations.push(rel.display().to_string());
         }
     });
     violations.sort();

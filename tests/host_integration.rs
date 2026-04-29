@@ -984,7 +984,9 @@ printf '%s\n' '{"status":"fresh"}' > configs/framework/FRAMEWORK_SURFACE_POLICY.
     assert!(missing.contains(&json!("skills/SKILL_ROUTING_RUNTIME.json")));
     assert!(missing.contains(&json!("skills/SKILL_TIERS.json")));
     assert!(
-        !artifact_root.join("generated-artifacts-drift-check").exists(),
+        !artifact_root
+            .join("generated-artifacts-drift-check")
+            .exists(),
         "generated-artifacts-status should clean temporary drift-check copies"
     );
 }

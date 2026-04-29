@@ -88,6 +88,59 @@ const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 2] = [
 ];
 
 const HOT_FIRST_TURN_OWNER_SLUGS: [&str; 0] = [];
+const RUNTIME_EXECUTION_CODE_SLUGS: &[&str] = &[
+    "api-design",
+    "api-integration-debugging",
+    "api-load-tester",
+    "architect-review",
+    "auth-implementation",
+    "backend-runtime-debugging",
+    "build-tooling",
+    "code-acceleration",
+    "code-review",
+    "coding-standards",
+    "datastore-cache-queue",
+    "dependency-migration",
+    "docker",
+    "env-config-management",
+    "error-handling-patterns",
+    "github-actions-authoring",
+    "idea-to-plan",
+    "linux-server-ops",
+    "monorepo-tooling",
+    "observability",
+    "plan-to-code",
+    "refactoring",
+    "release-engineering",
+    "security-audit",
+    "security-threat-model",
+    "shell-cli",
+    "tdd-workflow",
+    "test-engineering",
+];
+const RUNTIME_LANGUAGE_FRAMEWORK_SLUGS: &[&str] = &[
+    "accessibility-auditor",
+    "chrome-extension-dev",
+    "css-pro",
+    "frontend-debugging",
+    "frontend-design",
+    "go-pro",
+    "i18n-l10n",
+    "javascript-pro",
+    "native-app-debugging",
+    "nextjs",
+    "node-backend",
+    "npm-package-authoring",
+    "python-pro",
+    "react",
+    "rust-pro",
+    "seo-web",
+    "sql-pro",
+    "svelte",
+    "typescript-pro",
+    "vue",
+    "web-platform-basics",
+];
 const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str], &str); 3] = [
     (
         "autopilot",
@@ -783,6 +836,10 @@ fn build_registry_and_manifest(
             json!(format!("{}/SKILL.md", source_entry.path)),
         ];
 
+        if is_runtime_owned_skill(&string_at(&skill_row, 0)) {
+            continue;
+        }
+
         rows.push(format!(
             "| `{}` | {} | {} | {} | {} | {} | {} | {} {:.1} | {} |",
             string_at(&skill_row, 0),
@@ -804,6 +861,11 @@ fn build_registry_and_manifest(
         rows.join("\n")
     );
     Ok((registry, json!({"keys": keys, "skills": skills})))
+}
+
+fn is_runtime_owned_skill(slug: &str) -> bool {
+    RUNTIME_EXECUTION_CODE_SLUGS.contains(&slug)
+        || RUNTIME_LANGUAGE_FRAMEWORK_SLUGS.contains(&slug)
 }
 
 fn select_manifest_docs<'a>(
@@ -947,7 +1009,7 @@ fn build_runtime_index(manifest: &Value) -> Value {
         "checklist": index_checklist(),
         "scope": {
             "kind": "hot",
-            "policy": "session-start required gates plus the curated first-turn owner allowlist; route/search loads fallback manifest when the hot index has no confident hit.",
+            "policy": "session-start required gates plus explicit framework command aliases; route/search may load the fallback manifest after runtime-owned skills have been excluded.",
             "fallback_manifest": full_manifest_path,
             "full_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
             "hot_skill_count": skills.len(),
@@ -1362,7 +1424,7 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         "tier_order": ["core", "optional", "experimental", "deprecated"],
         "generation_policy": {
             "core": "session-start required source/artifact/evidence/delegation gate skills only; generic control owners are explicit or fallback-only, not hot-runtime entries",
-            "optional": "all non-core skills; route can still select them from the manifest fallback",
+            "optional": "non-core skills that have not been folded into runtime-owned execution, code, language, or framework capabilities",
             "experimental": "reserved for unstable or low-health routing signals",
             "deprecated": "reserved for very-low-health and unused skills with reroute pressure"
         },
@@ -1974,7 +2036,12 @@ mod tests {
         let bundle =
             compile_bundle(&docs, &entries, &source_manifest, &HashMap::new()).expect("compile");
 
-        assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(5));
+        assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(4));
+        assert!(!bundle.manifest["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("plan-to-code"))));
         assert_eq!(
             bundle.runtime_index["skills"].as_array().map(Vec::len),
             Some(5)
@@ -2018,6 +2085,7 @@ mod tests {
             bundle.tiers["skills"]["preferred-owner"]["surface"]["activation_mode"],
             json!("explicit_opt_in")
         );
+        assert!(bundle.tiers["skills"].get("plan-to-code").is_none());
         assert_eq!(
             bundle.loadouts["source"],
             json!("generated-by-skill-compiler-rs")
