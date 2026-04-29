@@ -25,6 +25,7 @@
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Deploy, publish, migrate, and operate apps on Cloudflare Workers, Pages, Wrangle |
 | `code-acceleration` | Active | P1 | L3 | owner | none | project | ✓ 94.0 | Speed up code with measured rewrites, batching, caching, and parallel execution |
 | `code-review` | Active | P2 | L2 | overlay | none | project | ✓ 94.0 | Review code with structured findings and optional quality scoring. Use when the  |
+| `codex-hook-builder` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Build, port, inspect, and validate OpenAI Codex hooks. Use when the user asks fo |
 | `coding-standards` | Active | P2 | L1 | overlay | none | project | ✓ 94.0 | Enforce cross-stack coding standards: naming, readability, error handling, immut |
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |

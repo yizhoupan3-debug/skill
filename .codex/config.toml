@@ -1,0 +1,13 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+# Repo-local Codex overlay for this repository.
+# Keep only repository-scoped settings here.
+# Machine-wide defaults belong in ~/.codex/config.toml.
+
+[features]
+codex_hooks = true
+memories = false
+
+[memories]
+use_memories = false
+generate_memories = false

@@ -3959,24 +3959,24 @@ mod tests {
         assert!(names.contains(&"skill_read"));
 
         let route_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "skill_route", "arguments": {"query": "路由系统触发稳定吗"}}}),
+            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "skill_route", "arguments": {"query": "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar"}}}),
             &mut runtime,
         )
         .expect("route response");
         assert_eq!(route_response["result"]["isError"], false);
         assert_eq!(
             route_response["result"]["structuredContent"]["decision"]["selected_skill"],
-            "skill-framework-developer"
+            "agent-swarm-orchestration"
         );
         assert!(
             route_response["result"]["structuredContent"]["selected_skill_path"]
                 .as_str()
                 .unwrap()
-                .ends_with("skills/skill-framework-developer/SKILL.md")
+                .ends_with("skills/agent-swarm-orchestration/SKILL.md")
         );
 
         let search_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "路由系统", "limit": 5}}}),
+            &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "DESIGN.md 设计规范 token", "limit": 5}}}),
             &mut runtime,
         )
         .expect("search response");
@@ -3985,10 +3985,10 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|item| item["record"]["name"] == "skill-framework-developer"));
+            .any(|item| item["record"]["name"] == "design-md"));
 
         let read_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "skill_read", "arguments": {"skill": "skill-framework-developer"}}}),
+            &json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "skill_read", "arguments": {"skill": "agent-swarm-orchestration"}}}),
             &mut runtime,
         )
         .expect("read response");
@@ -3996,7 +3996,7 @@ mod tests {
         assert!(read_response["result"]["structuredContent"]["content"]
             .as_str()
             .unwrap()
-            .contains("# skill-framework-developer"));
+            .contains("# agent-swarm-orchestration"));
     }
 
     #[test]

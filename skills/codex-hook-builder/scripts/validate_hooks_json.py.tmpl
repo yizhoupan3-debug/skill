@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Validate a Codex hooks.json file with useful local checks."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+
+KNOWN_EVENTS = {
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PermissionRequest",
+    "PostToolUse",
+    "Stop",
+}
+
+
+def fail(errors: list[str], path: str, message: str) -> None:
+    errors.append(f"{path}: {message}")
+
+
+def validate(path: Path, allow_unknown_events: bool = False) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [f"{path}: file does not exist"], warnings
+    except json.JSONDecodeError as exc:
+        return [f"{path}: {exc.msg} at line {exc.lineno}, column {exc.colno}"], warnings
+
+    if not isinstance(data, dict):
+        return ["$: hooks file must be a JSON object"], warnings
+
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        fail(errors, "$.hooks", "must be an object keyed by hook event")
+        return errors, warnings
+
+    for event, groups in hooks.items():
+        event_path = f"$.hooks.{event}"
+        if event not in KNOWN_EVENTS:
+            message = f"unknown event for current Codex hooks docs"
+            if allow_unknown_events:
+                warnings.append(f"{event_path}: {message}")
+            else:
+                fail(errors, event_path, message)
+        if not isinstance(groups, list):
+            fail(errors, event_path, "must be a list of matcher groups")
+            continue
+
+        for group_index, group in enumerate(groups):
+            group_path = f"{event_path}[{group_index}]"
+            if not isinstance(group, dict):
+                fail(errors, group_path, "must be an object")
+                continue
+
+            matcher = group.get("matcher")
+            if matcher is not None and not isinstance(matcher, str):
+                fail(errors, f"{group_path}.matcher", "must be a string when present")
+            if isinstance(matcher, str) and matcher not in ("", "*"):
+                try:
+                    re.compile(matcher)
+                except re.error as exc:
+                    fail(errors, f"{group_path}.matcher", f"invalid regex: {exc}")
+
+            handlers = group.get("hooks")
+            if not isinstance(handlers, list) or not handlers:
+                fail(errors, f"{group_path}.hooks", "must be a non-empty list")
+                continue
+
+            for handler_index, handler in enumerate(handlers):
+                handler_path = f"{group_path}.hooks[{handler_index}]"
+                if not isinstance(handler, dict):
+                    fail(errors, handler_path, "must be an object")
+                    continue
+
+                hook_type = handler.get("type", "command")
+                if hook_type != "command":
+                    warnings.append(
+                        f"{handler_path}.type: Codex command hooks are the reliable path today; "
+                        f"verify support before using {hook_type!r}"
+                    )
+
+                command = handler.get("command")
+                if not isinstance(command, str) or not command.strip():
+                    fail(errors, f"{handler_path}.command", "must be a non-empty string")
+
+                timeout = handler.get("timeout")
+                if timeout is not None:
+                    if not isinstance(timeout, (int, float)) or timeout <= 0:
+                        fail(errors, f"{handler_path}.timeout", "must be a positive number")
+                    elif timeout > 120:
+                        warnings.append(
+                            f"{handler_path}.timeout: long hook timeouts can make Codex feel stuck"
+                        )
+
+                status = handler.get("statusMessage")
+                if status is not None and not isinstance(status, str):
+                    fail(errors, f"{handler_path}.statusMessage", "must be a string")
+
+    return errors, warnings
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("hooks_json", help="Path to hooks.json")
+    parser.add_argument(
+        "--allow-unknown-events",
+        action="store_true",
+        help="Warn instead of failing when hooks.json contains events outside current Codex docs.",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit JSON result")
+    args = parser.parse_args()
+
+    errors, warnings = validate(
+        Path(args.hooks_json).expanduser(),
+        allow_unknown_events=args.allow_unknown_events,
+    )
+    result = {"ok": not errors, "errors": errors, "warnings": warnings}
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        for warning in warnings:
+            print(f"WARN {warning}")
+        for error in errors:
+            print(f"ERROR {error}")
+        print("OK" if not errors else "INVALID")
+    return 0 if not errors else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

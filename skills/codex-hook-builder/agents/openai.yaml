@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Hook Builder"
+  short_description: "Build and validate useful Codex hooks"
+  default_prompt: "Use $codex-hook-builder to design, install, and test a useful Codex hook for this project."

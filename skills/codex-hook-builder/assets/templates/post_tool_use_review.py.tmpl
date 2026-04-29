@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Feed important failed tool output back into Codex as context."""
+
+from __future__ import annotations
+
+import json
+import sys
+
+
+def response_text(event: dict) -> tuple[int | None, str]:
+    tool_response = event.get("tool_response")
+    if tool_response is None:
+        tool_response = event.get("tool_output")
+    if isinstance(tool_response, dict):
+        exit_code = tool_response.get("exit_code")
+        chunks = [
+            str(tool_response.get("stdout") or ""),
+            str(tool_response.get("stderr") or ""),
+            str(tool_response.get("output") or ""),
+        ]
+        return exit_code if isinstance(exit_code, int) else None, "\n".join(chunks)
+    if isinstance(tool_response, str):
+        return None, tool_response
+    return None, ""
+
+
+def main() -> int:
+    event = json.load(sys.stdin)
+    exit_code, text = response_text(event)
+    lowered = text.lower()
+    signal = None
+    if exit_code not in (None, 0):
+        signal = f"The previous tool exited with code {exit_code}. Inspect the failure before continuing."
+    elif any(word in lowered for word in ("traceback", "failed", "error:", "panic", "exception")):
+        signal = "The previous tool output contains failure signals. Inspect it before continuing."
+
+    if signal:
+        print(json.dumps({
+            "decision": "block",
+            "reason": signal,
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": signal,
+            },
+        }))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

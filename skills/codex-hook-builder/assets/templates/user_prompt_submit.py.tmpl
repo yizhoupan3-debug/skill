@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Block prompts that appear to include secrets or ask for unsafe exfiltration."""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+
+
+SECRET_PATTERNS = [
+    re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"ghp_[A-Za-z0-9_]{20,}"),
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
+]
+
+RISKY_REQUESTS = [
+    "send my .env",
+    "upload my .env",
+    "exfiltrate",
+    "paste all secrets",
+]
+
+
+def main() -> int:
+    event = json.load(sys.stdin)
+    prompt = event.get("prompt") or ""
+    lower = prompt.lower()
+
+    if any(pattern.search(prompt) for pattern in SECRET_PATTERNS):
+        print(json.dumps({
+            "decision": "block",
+            "reason": "The prompt appears to contain a secret. Remove credentials and retry.",
+        }))
+        return 0
+
+    if any(phrase in lower for phrase in RISKY_REQUESTS):
+        print(json.dumps({
+            "decision": "block",
+            "reason": "The prompt asks to expose sensitive files or secrets.",
+        }))
+        return 0
+
+    if any(word in lower for word in ("production", "deploy", "database migration")):
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    "This request may touch high-risk systems. Confirm scope, backup, "
+                    "rollback, and validation before changing anything irreversible."
+                ),
+            }
+        }))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

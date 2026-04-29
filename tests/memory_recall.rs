@@ -563,6 +563,9 @@ fn codex_hook_projection_exposes_explicit_contract_guard_command() {
         .as_str()
         .unwrap()
         .contains("contract-guard"));
+    assert!(result["codex_hooks"]
+        .to_string()
+        .contains("review_subagent_gate.py"));
 }
 
 fn render_context(

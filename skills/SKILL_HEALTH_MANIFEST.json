@@ -113,6 +113,13 @@
       "static_score": 85.0,
       "usage_30d": 0
     },
+    "codex-hook-builder": {
+      "dynamic_score": 94.0,
+      "health_status": "Healthy",
+      "reroutes_30d": 0,
+      "static_score": 85.0,
+      "usage_30d": 0
+    },
     "citation-management": {
       "dynamic_score": 94.0,
       "health_status": "Healthy",
@@ -768,7 +775,7 @@
   "summary": {
     "avg_health": 94.0,
     "critical_skills": 0,
-    "total_skills": 109
+    "total_skills": 110
   },
   "ts": "2026-04-28T17:46:06.806673+00:00"
 }

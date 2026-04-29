@@ -88,7 +88,13 @@ prioritized review comments, and optional scoring.
 ## Core workflow
 
 1. Confirm scope and intent.
-2. Review for:
+2. Start one independent-context reviewer subagent by default for review requests in this repo:
+   - Use `fork_context=false`.
+   - Pass only the repository path, target files/diff/PR scope, review criteria, and this repo's AGENTS/routing constraints.
+   - Ask for read-only review unless the user explicitly asked to fix findings.
+   - Skip this only when the user explicitly says no subagent / no delegation / local review only.
+3. In the main thread, do non-overlapping lightweight checks while the reviewer runs.
+4. Review for:
    - correctness
    - robustness / edge cases
    - readability
@@ -96,9 +102,10 @@ prioritized review comments, and optional scoring.
    - performance
    - security surface
    - documentation impact
-3. Classify findings as must-fix / should-fix / nit.
-4. Add score only if requested or materially useful.
-5. Cite concrete file/line evidence.
+5. Merge reviewer findings with local evidence, de-duplicate, and order by severity.
+6. Classify findings as must-fix / should-fix / nit.
+7. Add score only if requested or materially useful.
+8. Cite concrete file/line evidence.
 
 ## Hard constraints
 

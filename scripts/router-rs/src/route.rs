@@ -1696,11 +1696,14 @@ fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteCo
         query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
     });
     let delegation_candidate = has_bounded_subagent_context(query_text, query_token_list)
-        || has_team_orchestration_context(query_text, query_token_list);
+        || has_team_orchestration_context(query_text, query_token_list)
+        || has_parallel_review_candidate_context(query_text, query_token_list);
     let audit_requested = [
         "核查",
         "审查",
+        "审核",
         "审计",
+        "评审",
         "诊断",
         "有什么问题",
         "哪里错了",
@@ -2054,6 +2057,7 @@ fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
     match slug {
         "autopilot" => &["/autopilot", "$autopilot"],
         "deepinterview" => &["/deepinterview", "$deepinterview"],
+        "gitx" => &["/gitx", "$gitx", "gitx"],
         "team" => &["/team", "$team"],
         _ => &[],
     }
@@ -2221,6 +2225,80 @@ fn has_team_orchestration_context(query_text: &str, query_token_list: &[String])
         "worker 生命周期",
         "supervisor-led",
         "supervisor led",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_parallel_review_candidate_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let review_requested = [
+        "review",
+        "code review",
+        "审查",
+        "审核",
+        "审计",
+        "评审",
+        "代码 review",
+        "代码审查",
+        "架构审查",
+        "安全审查",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    });
+    if !review_requested {
+        return false;
+    }
+
+    let broad_or_independent = [
+        "深度",
+        "全面",
+        "全量",
+        "全仓",
+        "仓库级",
+        "整个仓库",
+        "这个仓库",
+        "repo-wide",
+        "codebase-wide",
+        "跨模块",
+        "多模块",
+        "多维",
+        "多方向",
+        "多假设",
+        "第一性原理",
+        "多余入口",
+        "不必要抽象",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    });
+    if !broad_or_independent {
+        return false;
+    }
+
+    [
+        "仓库",
+        "repo",
+        "codebase",
+        "代码库",
+        "架构",
+        "architecture",
+        "系统",
+        "路由",
+        "skill",
+        "模块",
+        "边界",
+        "实现质量",
+        "bug",
+        "风险",
+        "findings",
     ]
     .iter()
     .any(|marker| {
@@ -2978,13 +3056,21 @@ fn score_route_candidate<'a>(
         && has_explicit_framework_alias_call(query_text, query_token_list, &record.slug);
     if record.slug == "agent-swarm-orchestration"
         && (bounded_subagent_context
-            || has_team_orchestration_context(query_text, query_token_list))
+            || has_team_orchestration_context(query_text, query_token_list)
+            || has_parallel_review_candidate_context(query_text, query_token_list))
     {
         score += 60.0;
         reasons.push(
             "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
                 .to_string(),
         );
+        if has_parallel_review_candidate_context(query_text, query_token_list) {
+            score += 10.0;
+            reasons.push(
+                "Parallel-review boost applied: broad review scope should run subagent admission before a single-lane review."
+                    .to_string(),
+            );
+        }
         if bounded_subagent_context && token_budget_pressure {
             score += 8.0;
             reasons.push(
@@ -3705,10 +3791,27 @@ fn fallback_owner<'a>(
         .filter(|record| can_be_fallback_owner(record))
         .collect::<Vec<_>>();
     let pool = if primary_owners.is_empty() {
-        records
+        if let Some(record) = records
             .iter()
-            .filter(|record| !framework_alias_requires_explicit_call(&record.slug))
-            .collect::<Vec<_>>()
+            .find(|record| record.slug == "skill-framework-developer")
+        {
+            return Ok(record);
+        }
+        let primary_pool = records
+            .iter()
+            .filter(|record| {
+                can_be_primary_owner(record)
+                    && !framework_alias_requires_explicit_call(&record.slug)
+            })
+            .collect::<Vec<_>>();
+        if primary_pool.is_empty() {
+            records
+                .iter()
+                .filter(|record| !framework_alias_requires_explicit_call(&record.slug))
+                .collect::<Vec<_>>()
+        } else {
+            primary_pool
+        }
     } else {
         primary_owners
     };
@@ -3729,11 +3832,6 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
         .cloned()
         .collect::<Vec<_>>();
     owner_candidates.sort_unstable_by(route_candidate_cmp);
-    if let Some(top_owner) = owner_candidates.first() {
-        if top_owner.score >= 60.0 {
-            return top_owner.clone();
-        }
-    }
     let top_owner_score = owner_candidates
         .first()
         .map(|candidate| candidate.score)
@@ -3745,6 +3843,24 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
         })
         .min_by(|left, right| route_candidate_cmp(left, right))
         .cloned();
+    if let Some(mut top_gate) = top_gate
+        .as_ref()
+        .filter(|candidate| {
+            candidate.record.slug == "agent-swarm-orchestration" && candidate.score >= 60.0
+        })
+        .cloned()
+    {
+        top_gate.reasons.push(
+            "Prioritized delegation gate before strong owner for broad parallel-review admission."
+                .to_string(),
+        );
+        return top_gate;
+    }
+    if let Some(top_owner) = owner_candidates.first() {
+        if top_owner.score >= 60.0 {
+            return top_owner.clone();
+        }
+    }
     if let Some(mut top_gate) =
         top_gate.filter(|candidate| candidate.score >= 30.0 && candidate.score >= top_owner_score)
     {
