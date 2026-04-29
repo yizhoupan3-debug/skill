@@ -48,8 +48,8 @@
 
 ```text
 L0  runtime execution controller, skill-framework-developer,
-    gh-address-comments, gh-fix-ci, sentry, runtime delegation gate,
-    systematic-debugging
+    gh-address-comments, gh-fix-ci, sentry, agent-swarm-orchestration,
+    runtime delegation gate, systematic-debugging
 L1  runtime checklist planning, tdd-workflow, test-engineering, refactoring,
     documentation-engineering, error-handling-patterns, frontend-debugging,
     backend-runtime-debugging,
@@ -74,7 +74,7 @@ L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
     paper-reviewer, paper-reviser, paper-writing, assignment-compliance,
     latex-compile-acceleration, security-audit,
     mac-memory-management, ai-research, autoresearch, algo-trading,
-    financial-data-fetching, agent-memory, agent-swarm-orchestration,
+    financial-data-fetching, agent-memory,
     literature-synthesis, statistical-analysis, chrome-extension-dev,
     scientific-figure-plotting, css-pro,
     typescript-pro, python-pro, javascript-pro, rust-pro, go-pro, sql-pro,

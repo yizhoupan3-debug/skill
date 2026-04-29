@@ -31,7 +31,7 @@ const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
 const CLAUDE_GENERATED_FRONTMATTER_ALLOWLIST: [&str; 3] = ["argument-hint", "description", "name"];
 const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 4] = ["autopilot", "deepinterview", "gitx", "team"];
-const REQUIRED_GENERATED_ARTIFACTS: [&str; 16] = [
+const REQUIRED_GENERATED_ARTIFACTS: [&str; 12] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
     "skills/SKILL_ROUTING_INDEX.md",
@@ -44,32 +44,6 @@ const REQUIRED_GENERATED_ARTIFACTS: [&str; 16] = [
     "AGENTS.md",
     "CLAUDE.md",
     ".codex/host_entrypoints_sync_manifest.json",
-    ".codex/prompts/autopilot.md",
-    ".codex/prompts/deepinterview.md",
-    ".codex/prompts/gitx.md",
-    ".codex/prompts/team.md",
-];
-const CODEX_PROMPT_ENTRYPOINTS: [(&str, &str, &str); 4] = [
-    (
-        "autopilot",
-        "Run the local autopilot workflow without typing a dollar-prefixed skill.",
-        "[task...]",
-    ),
-    (
-        "deepinterview",
-        "Run the local deepinterview workflow without typing a dollar-prefixed skill.",
-        "[task...]",
-    ),
-    (
-        "gitx",
-        "Run the local gitx Git closeout workflow without typing a dollar-prefixed skill.",
-        "[git task...]",
-    ),
-    (
-        "team",
-        "Run the local team workflow without typing a dollar-prefixed skill.",
-        "[task...]",
-    ),
 ];
 const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
     "imagegen",
@@ -836,9 +810,6 @@ fn validate_generated_artifact_entry(
 
 fn allowed_dot_generated_artifact(path: &str) -> bool {
     path == ".codex/host_entrypoints_sync_manifest.json"
-        || CODEX_PROMPT_ENTRYPOINTS
-            .iter()
-            .any(|(slug, _, _)| path == format!(".codex/prompts/{slug}.md"))
 }
 
 fn prepare_generated_artifact_temp_root(
@@ -1162,7 +1133,7 @@ fn install_native_integration(
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_home_dir().join(".codex"));
-    let prompt_entrypoints = ensure_codex_prompt_entrypoints(&home_codex_dir)?;
+    let prompt_entrypoints = codex_prompt_entrypoints_disabled(&home_codex_dir);
     let surface = if install_home_codex_skills_link {
         Some(ensure_codex_skill_surface(&repo_root)?)
     } else {
@@ -1512,7 +1483,7 @@ fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Res
     let target = codex_entrypoint_target(roots, scope);
     let changed = write_text_if_changed(&target, &render_codex_framework_entrypoint(roots, scope))?;
     let prompt_entrypoints =
-        ensure_codex_prompt_entrypoints(&codex_prompt_entrypoints_root(roots, scope))?;
+        codex_prompt_entrypoints_disabled(&codex_prompt_entrypoints_root(roots, scope));
     let manifest_changed = write_codex_projection_manifest(roots, scope, &target)?;
     let prompt_entrypoints_changed = prompt_entrypoints
         .get("changed")
@@ -2462,35 +2433,15 @@ fn canonical_tool_name(raw: &str) -> Result<&'static str, String> {
     }
 }
 
-fn ensure_codex_prompt_entrypoints(codex_dir: &Path) -> Result<Value, String> {
+fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
     let prompt_dir = codex_dir.join("prompts");
-    let mut changed = false;
-    let mut written = Vec::new();
-    let mut unchanged = Vec::new();
-
-    for (slug, description, argument_hint) in CODEX_PROMPT_ENTRYPOINTS {
-        let path = prompt_dir.join(format!("{slug}.md"));
-        let content = render_codex_prompt_entrypoint(slug, description, argument_hint);
-        if write_text_if_changed(&path, &content)? {
-            changed = true;
-            written.push(path.to_string_lossy().into_owned());
-        } else {
-            unchanged.push(path.to_string_lossy().into_owned());
-        }
-    }
-
-    Ok(json!({
-        "changed": changed,
+    json!({
+        "changed": false,
+        "enabled": false,
         "prompt_dir": prompt_dir.to_string_lossy(),
-        "written": written,
-        "unchanged": unchanged,
-    }))
-}
-
-fn render_codex_prompt_entrypoint(slug: &str, description: &str, argument_hint: &str) -> String {
-    format!(
-        "---\ndescription: {description}\nargument-hint: \"{argument_hint}\"\n---\n\nUse $${slug} for this task.\n\n$ARGUMENTS\n"
-    )
+        "written": [],
+        "unchanged": [],
+    })
 }
 
 fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {

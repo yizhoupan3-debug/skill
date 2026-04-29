@@ -90,18 +90,19 @@ fn install_native_integration_is_idempotent() {
     ));
     assert_framework_alias_skill(&surface_root, "autopilot");
     assert_framework_alias_skill(&surface_root, "team");
-    assert_codex_prompt_entrypoint(
-        &tmp.path().join("home/.codex/prompts/autopilot.md"),
-        "autopilot",
-    );
-    assert_codex_prompt_entrypoint(&tmp.path().join("home/.codex/prompts/gitx.md"), "gitx");
+    assert!(!tmp.path().join("home/.codex/prompts/autopilot.md").exists());
+    assert!(!tmp.path().join("home/.codex/prompts/gitx.md").exists());
+    assert!(!tmp
+        .path()
+        .join("home/.codex/prompts/systematic-debugging.md")
+        .exists());
     assert!(!surface_root.join("optional-heavy").exists());
     assert_eq!(first["default_bootstrap"]["status"], "materialized");
     assert!(["already-present", "repaired-stale"]
         .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
     assert_eq!(first["home_codex_skills_changed"], true);
     assert_eq!(second["home_codex_skills_changed"], false);
-    assert_eq!(first["codex_prompt_entrypoints"]["changed"], true);
+    assert_eq!(first["codex_prompt_entrypoints"]["changed"], false);
     assert_eq!(second["codex_prompt_entrypoints"]["changed"], false);
 }
 
@@ -344,7 +345,7 @@ fn install_skills_alias_projects_codex_and_claude_code_root_entrypoints() {
     assert_eq!(first["results"]["claude-code"]["status"], "installed");
     assert_eq!(
         first["results"]["codex"]["prompt_entrypoints"]["changed"],
-        true
+        false
     );
     assert_eq!(first["invocation"]["deprecated_alias"], true);
     assert!(first["results"].get("agents").is_none());
@@ -352,8 +353,8 @@ fn install_skills_alias_projects_codex_and_claude_code_root_entrypoints() {
     let claude_entrypoint = repo_root.join(".claude/commands/framework.md");
     assert!(codex_entrypoint.is_file());
     assert!(claude_entrypoint.is_file());
-    assert_codex_prompt_entrypoint(&repo_root.join(".codex/prompts/autopilot.md"), "autopilot");
-    assert_codex_prompt_entrypoint(&repo_root.join(".codex/prompts/gitx.md"), "gitx");
+    assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
+    assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert!(!home.join(".codex/skills").exists());
     assert!(!home.join(".claude/skills").exists());
     assert!(read_text(&codex_entrypoint).contains("host_projection: codex-cli"));
@@ -401,8 +402,8 @@ fn install_skills_codex_target_does_not_install_claude_code() {
     assert_eq!(result["results"]["codex"]["status"], "installed");
     assert!(result["results"].get("claude-code").is_none());
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
-    assert_codex_prompt_entrypoint(&repo_root.join(".codex/prompts/autopilot.md"), "autopilot");
-    assert_codex_prompt_entrypoint(&repo_root.join(".codex/prompts/gitx.md"), "gitx");
+    assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
+    assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert!(!repo_root.join(".claude/commands/framework.md").exists());
     assert!(!home.join(".codex/skills").exists());
     assert!(!home.join(".claude/skills").exists());
@@ -923,10 +924,6 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         "AGENTS.md",
         "CLAUDE.md",
         ".codex/host_entrypoints_sync_manifest.json",
-        ".codex/prompts/autopilot.md",
-        ".codex/prompts/deepinterview.md",
-        ".codex/prompts/gitx.md",
-        ".codex/prompts/team.md",
     ] {
         assert!(
             status["generated_artifacts"]
@@ -1909,13 +1906,6 @@ fn assert_framework_alias_skill(surface_root: &Path, slug: &str) {
     assert!(content.contains("skills/skill-framework-developer/SKILL.md"));
 }
 
-fn assert_codex_prompt_entrypoint(path: &Path, slug: &str) {
-    let content = read_text(path);
-    assert!(content.contains("argument-hint:"));
-    assert!(content.contains(&format!("Use $${slug} for this task.")));
-    assert!(content.contains("$ARGUMENTS"));
-}
-
 #[test]
 fn validation_subcommands_cover_install_skills_contract() {
     let tmp = tempdir().unwrap();
@@ -2010,7 +2000,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert_eq!(aliases["autopilot"]["canonical_owner"], "plan-to-code");
     assert_eq!(
         aliases["autopilot"]["host_entrypoints"]["codex-cli"],
-        "$autopilot"
+        "/autopilot"
     );
     assert_eq!(
         aliases["autopilot"]["interaction_invariants"]["implicit_route_policy"],
@@ -2018,7 +2008,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         aliases["deepinterview"]["host_entrypoints"]["codex-cli"],
-        "$deepinterview"
+        "/deepinterview"
     );
     assert_eq!(
         aliases["autopilot"]["host_entrypoints"]["claude-code-cli"],
@@ -2028,7 +2018,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         aliases["deepinterview"]["host_entrypoints"]["claude-code-cli"],
         "/deepinterview"
     );
-    assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "$team");
+    assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "/team");
     assert_eq!(
         aliases["team"]["host_entrypoints"]["claude-code-cli"],
         "/team"

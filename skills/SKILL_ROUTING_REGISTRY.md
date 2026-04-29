@@ -7,7 +7,7 @@
 | `skill-installer` | Active | P1 | L0 | owner | none | system | ✓ 94.0 | Install curated or remote Codex skills |
 | `accessibility-auditor` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Find and fix user-blocking accessibility issues with concrete WCAG 2.1/2.2-groun |
 | `agent-memory` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Design persistent agent memory across sessions |
-| `agent-swarm-orchestration` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Design and debug multi-agent systems with planners, routers, workers, reviewers, |
+| `agent-swarm-orchestration` | Active | P1 | L0 | gate | delegation | project | ✓ 94.0 | Decide whether work should stay local, use bounded sidecars, or escalate to team |
 | `ai-research` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | AI/ML research engineering for model training, experiment pipelines, evaluation, |
 | `algo-trading` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Design, analyze, and implement algorithmic trading strategies, backtests, execut |
 | `api-design` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Design, review, and refactor API interfaces covering REST, GraphQL, gRPC, versio |

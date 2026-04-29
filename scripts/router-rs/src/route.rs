@@ -1695,7 +1695,8 @@ fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteCo
     let supervisor_required = supervisor_execution_markers().iter().any(|marker| {
         query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
     });
-    let delegation_candidate = has_bounded_subagent_context(query_text, query_token_list);
+    let delegation_candidate = has_bounded_subagent_context(query_text, query_token_list)
+        || has_team_orchestration_context(query_text, query_token_list);
     let audit_requested = [
         "核查",
         "审查",
@@ -2199,6 +2200,21 @@ fn has_team_orchestration_context(query_text: &str, query_token_list: &[String])
         "worker orchestration",
         "multi-worker",
         "multi worker",
+        "parallel worker",
+        "parallel workers",
+        "disjoint files",
+        "disjoint file",
+        "disjoint write",
+        "disjoint writes",
+        "disjoint scope",
+        "disjoint scopes",
+        "disjoint write scope",
+        "disjoint write scopes",
+        "lane-local",
+        "lane local",
+        "lane-local delta",
+        "worker write scope",
+        "worker write scopes",
         "team 协作",
         "团队编排",
         "多 worker",

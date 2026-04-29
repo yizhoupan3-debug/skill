@@ -14,45 +14,11 @@ const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
 const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
 const CLAUDE_AGENT_POLICY_PATH: &str = "CLAUDE.md";
-const CODEX_PROMPT_ENTRYPOINTS: [(&str, &str, &str); 4] = [
-    (
-        "autopilot",
-        "Run the local autopilot workflow without typing a dollar-prefixed skill.",
-        "[task...]",
-    ),
-    (
-        "deepinterview",
-        "Run the local deepinterview workflow without typing a dollar-prefixed skill.",
-        "[task...]",
-    ),
-    (
-        "gitx",
-        "Run the local gitx Git closeout workflow without typing a dollar-prefixed skill.",
-        "[git task...]",
-    ),
-    (
-        "team",
-        "Run the local team workflow without typing a dollar-prefixed skill.",
-        "[task...]",
-    ),
-];
-const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 6] = [
-    CODEX_AGENT_POLICY_PATH,
-    CLAUDE_AGENT_POLICY_PATH,
-    ".codex/prompts/autopilot.md",
-    ".codex/prompts/deepinterview.md",
-    ".codex/prompts/gitx.md",
-    ".codex/prompts/team.md",
-];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
-const PROTECTED_GENERATED_PATHS: [&str; 7] = [
+const PROTECTED_GENERATED_PATHS: [&str; 3] = [
     CODEX_AGENT_POLICY_PATH,
     CLAUDE_AGENT_POLICY_PATH,
     HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-    ".codex/prompts/autopilot.md",
-    ".codex/prompts/deepinterview.md",
-    ".codex/prompts/gitx.md",
-    ".codex/prompts/team.md",
 ];
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 pub fn build_codex_hook_manifest() -> Value {
@@ -66,12 +32,11 @@ struct HostEntrypointSyncSection {
     json_files: Vec<String>,
 }
 
-fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
+fn host_entrypoint_partial_sync_section(
+    desired_files: &BTreeMap<String, Vec<u8>>,
+) -> HostEntrypointSyncSection {
     HostEntrypointSyncSection {
-        text_files: HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES
-            .iter()
-            .map(|path| (*path).to_string())
-            .collect(),
+        text_files: desired_host_entrypoint_text_files(desired_files),
         json_files: HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
             .iter()
             .map(|path| (*path).to_string())
@@ -89,7 +54,7 @@ struct SingleSyncReport {
 pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Value, String> {
     let root = normalize_repo_root(repo_root)?;
     let desired_files = build_host_entrypoint_files(&root)?;
-    let partial_section = host_entrypoint_partial_sync_section();
+    let partial_section = host_entrypoint_partial_sync_section(&desired_files);
     let (matched_worktrees, skipped_worktrees) = discover_matching_worktrees(&root);
     let mut report = json!({
         "written": [],
@@ -98,12 +63,7 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
         "synced_worktrees": [],
         "skipped_worktrees": skipped_worktrees,
     });
-    let full_text_files = desired_files
-        .keys()
-        .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
-        .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
+    let full_text_files = desired_host_entrypoint_text_files(&desired_files);
     let full_json_files = vec![HOST_ENTRYPOINT_SYNC_MANIFEST_PATH];
     let full_section = HostEntrypointSyncSection {
         text_files: full_text_files
@@ -151,12 +111,6 @@ fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec
     let shared_policy = build_shared_agent_policy().into_bytes();
     files.insert(CODEX_AGENT_POLICY_PATH.to_string(), shared_policy.clone());
     files.insert(CLAUDE_AGENT_POLICY_PATH.to_string(), shared_policy);
-    for (slug, description, argument_hint) in CODEX_PROMPT_ENTRYPOINTS {
-        files.insert(
-            format!(".codex/prompts/{slug}.md"),
-            render_codex_prompt_entrypoint(slug, description, argument_hint).into_bytes(),
-        );
-    }
     files.insert(
         HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
         serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files))?,
@@ -164,19 +118,8 @@ fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec
     Ok(files)
 }
 
-fn render_codex_prompt_entrypoint(slug: &str, description: &str, argument_hint: &str) -> String {
-    format!(
-        "---\ndescription: {description}\nargument-hint: \"{argument_hint}\"\n---\n\nUse $${slug} for this task.\n\n$ARGUMENTS\n"
-    )
-}
-
 fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>) -> Value {
-    let full_text_files = desired_files
-        .keys()
-        .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
-        .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
+    let full_text_files = desired_host_entrypoint_text_files(desired_files);
     json!({
         "schema_version": "host-entrypoints-sync-manifest-v1",
         "shared_system": {
@@ -195,10 +138,19 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
             ],
         },
         "partial_sync": {
-            "text_files": HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES,
+            "text_files": full_text_files,
             "json_files": HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
         },
     })
+}
+
+fn desired_host_entrypoint_text_files(desired_files: &BTreeMap<String, Vec<u8>>) -> Vec<String> {
+    desired_files
+        .keys()
+        .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
+        .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
+        .cloned()
+        .collect()
 }
 
 fn serialize_pretty_json_bytes(payload: &Value) -> Result<Vec<u8>, String> {
@@ -860,7 +812,7 @@ mod tests {
             ".codex/../.codex/host_entrypoints_sync_manifest.json"
         )
         .is_some());
-        assert!(classify_protected_generated_path("./.codex/prompts/gitx.md").is_some());
+        assert!(classify_protected_generated_path("./.codex/prompts/gitx.md").is_none());
     }
 
     #[test]
@@ -876,7 +828,7 @@ mod tests {
         let payload = json!({"tool_input": {"file_path": ".codex/../.codex/prompts/autopilot.md"}});
         assert!(run_pre_tool_use(Path::new("."), &payload)
             .unwrap()
-            .is_some());
+            .is_none());
     }
 
     #[test]
@@ -901,6 +853,6 @@ mod tests {
         });
         assert!(run_pre_tool_use(Path::new("."), &payload)
             .unwrap()
-            .is_some());
+            .is_none());
     }
 }

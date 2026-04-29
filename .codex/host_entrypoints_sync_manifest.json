@@ -4,10 +4,6 @@
       ".codex/host_entrypoints_sync_manifest.json"
     ],
     "text_files": [
-      ".codex/prompts/autopilot.md",
-      ".codex/prompts/deepinterview.md",
-      ".codex/prompts/gitx.md",
-      ".codex/prompts/team.md",
       "AGENTS.md",
       "CLAUDE.md"
     ]
@@ -16,11 +12,7 @@
     "json_files": [],
     "text_files": [
       "AGENTS.md",
-      "CLAUDE.md",
-      ".codex/prompts/autopilot.md",
-      ".codex/prompts/deepinterview.md",
-      ".codex/prompts/gitx.md",
-      ".codex/prompts/team.md"
+      "CLAUDE.md"
     ]
   },
   "schema_version": "host-entrypoints-sync-manifest-v1",
