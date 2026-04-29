@@ -2814,12 +2814,12 @@ fn collect_stable_memory_sections(
     if query.trim().is_empty() {
         return stable_documents
             .iter()
-            .find(|(name, _)| name == "MEMORY.md")
-            .and_then(|(name, text)| {
-                let compact = compact_memory_document_without_query(text, 4);
-                (!compact.is_empty()).then(|| vec![(name.clone(), compact)])
+            .filter_map(|(name, text)| {
+                let compact = compact_memory_document_without_query(text, 2);
+                (!compact.is_empty()).then(|| (name.clone(), compact))
             })
-            .unwrap_or_default();
+            .take(max_items.max(1))
+            .collect();
     }
     let mut ranked = Vec::new();
     for (name, text) in stable_documents {

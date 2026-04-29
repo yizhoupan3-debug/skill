@@ -79,7 +79,7 @@
       "task": "这个 skill 框架 owner gate overlay 边界重叠了，顺手把路由策略修一下并减少 token 消耗。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
-      "expected_overlay": null,
+      "expected_overlay": "code-review",
       "forbidden_owners": [
         "idea-to-plan"
       ],
@@ -91,7 +91,7 @@
       "task": "深度review现在的路由系统和 skill 边界。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
-      "expected_overlay": "code-review",
+      "expected_overlay": null,
       "first_turn": true
     },
     {

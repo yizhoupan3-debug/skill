@@ -992,32 +992,6 @@ fn is_meta_routing_task(query_text: &str) -> bool {
         .any(|marker| query_text.contains(marker))
 }
 
-fn has_skill_subtraction_behavior_context(query_text: &str) -> bool {
-    (query_text.contains("skill")
-        || query_text.contains("skill.md")
-        || query_text.contains("runtime")
-        || query_text.contains("框架"))
-        && [
-            "行为驱动",
-            "讨论-规划-执行-验证",
-            "多余入口",
-            "不必要抽象",
-            "减法",
-            "第一性原理",
-            "抽象",
-            "轻量化",
-            "兼容层",
-            "胶水层",
-            "减少入口",
-            "减入口",
-            "不损害功能",
-            "加重负担",
-            "没有用",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker))
-}
-
 fn has_checklist_execution_context(query_text: &str) -> bool {
     query_text.contains("checklist")
         && ![
@@ -3748,14 +3722,6 @@ fn pick_overlay(
         if !is_overlay_record(record) {
             continue;
         }
-        if selected_skill.slug == "skill-framework-developer"
-            && record.slug == "code-review"
-            && text_matches_phrase(query_tokens, "checklist")
-            && !query_text.contains("code review")
-            && !query_text.contains("代码 review")
-        {
-            continue;
-        }
         let explicit_name_match = text_matches_phrase(query_tokens, &record.slug_lower);
         let explicit_trigger_match = record
             .trigger_hints
@@ -3763,6 +3729,16 @@ fn pick_overlay(
             .any(|phrase| phrase.chars().count() > 3 && text_matches_phrase(query_tokens, phrase));
         if explicit_name_match || explicit_trigger_match {
             return Some(record.slug.clone());
+        }
+    }
+
+    if selected_skill.slug == "skill-framework-developer"
+        && ["边界重叠"]
+            .iter()
+            .any(|marker| query_text.contains(marker) || text_matches_phrase(query_tokens, marker))
+    {
+        if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
+            return Some(skill.slug.clone());
         }
     }
 

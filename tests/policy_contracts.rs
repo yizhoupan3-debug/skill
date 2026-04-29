@@ -280,19 +280,22 @@ fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
     ] {
         assert!(stdout.contains(command), "missing command: {command}");
     }
-    for retired in [
+    for removed_flag in [
         "route-json",
         "framework-runtime-snapshot-json",
         "host-integration",
         "browser-mcp-stdio",
         "profile-json",
     ] {
-        assert!(!stdout.contains(retired), "retired flag leaked: {retired}");
+        assert!(
+            !stdout.contains(removed_flag),
+            "removed flag leaked: {removed_flag}"
+        );
     }
 }
 
 #[test]
-fn github_source_gate_python_helpers_are_retired() {
+fn github_source_gate_python_helpers_stay_removed() {
     for skill in ["skills/gh-fix-ci", "skills/gh-address-comments"] {
         let skill_path = project_root().join(skill);
         assert!(!skill_path.join("scripts").exists());
@@ -320,7 +323,7 @@ fn github_source_gate_docs_point_to_rust_cli_only() {
 }
 
 #[test]
-fn generated_routing_surfaces_do_not_reference_retired_python_helpers() {
+fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
     let generated = [
         "skills/SKILL_MANIFEST.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
@@ -338,7 +341,7 @@ fn generated_routing_surfaces_do_not_reference_retired_python_helpers() {
 }
 
 #[test]
-fn retired_router_flags_are_absent_from_user_docs() {
+fn removed_router_flags_are_absent_from_user_docs() {
     let docs = [
         "skills/refresh/SKILL.md",
         "RTK.md",
@@ -349,13 +352,16 @@ fn retired_router_flags_are_absent_from_user_docs() {
     .collect::<Vec<_>>()
     .join("\n");
 
-    for retired in [
+    for removed_flag in [
         "--framework-refresh-json",
         "--framework-refresh-verbose",
         "--sync-host-entrypoints-json",
         "router-rs --execute-json",
     ] {
-        assert!(!docs.contains(retired), "retired flag leaked: {retired}");
+        assert!(
+            !docs.contains(removed_flag),
+            "removed flag leaked: {removed_flag}"
+        );
     }
     assert!(docs.contains("framework refresh --repo-root"));
     assert!(docs.contains("codex sync --repo-root"));
@@ -394,10 +400,7 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
         surface["skill_system"]["activation_counts"],
         tiers["summary"]["activation_counts"]
     );
-    for (name, loadout) in loadouts["loadouts"]
-        .as_object()
-        .expect("loadout catalog")
-    {
+    for (name, loadout) in loadouts["loadouts"].as_object().expect("loadout catalog") {
         let owners = loadout["owners"].as_array().expect("loadout owners");
         assert!(
             !owners.is_empty(),
@@ -410,7 +413,10 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
 fn generated_approval_policy_is_sparse() {
     let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
     let approval = read_json(&project_root().join("skills/SKILL_APPROVAL_POLICY.json"));
-    let manifest_count = manifest["skills"].as_array().expect("manifest skills").len();
+    let manifest_count = manifest["skills"]
+        .as_array()
+        .expect("manifest skills")
+        .len();
     let override_count = approval["skills"]
         .as_object()
         .expect("approval overrides")
@@ -467,11 +473,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         runtime["scope"]["fallback_manifest"],
         "skills/SKILL_MANIFEST.json"
     );
-    for expected in [
-        "idea-to-plan",
-        "plan-to-code",
-        "skill-framework-developer",
-    ] {
+    for expected in ["idea-to-plan", "plan-to-code", "skill-framework-developer"] {
         assert!(
             slugs.contains(&expected),
             "missing hot runtime slug: {expected}"
@@ -498,9 +500,9 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
 }
 
 #[test]
-fn deprecated_routing_root_is_only_a_pointer() {
+fn compatibility_routing_root_is_only_a_pointer() {
     let root = read_text(&project_root().join("skills/SKILL_ROUTING_ROOT.md"));
-    assert!(root.contains("Deprecated Routing Root"));
+    assert!(root.contains("Compatibility Routing Pointer"));
     assert!(root.contains("SKILL_ROUTING_RUNTIME.json"));
     for stale in [
         "skill-evolution-guardian",
@@ -515,7 +517,10 @@ fn deprecated_routing_root_is_only_a_pointer() {
 
 #[test]
 fn manifest_and_runtime_skill_paths_are_loadable() {
-    for relative in ["skills/SKILL_MANIFEST.json", "skills/SKILL_ROUTING_RUNTIME.json"] {
+    for relative in [
+        "skills/SKILL_MANIFEST.json",
+        "skills/SKILL_ROUTING_RUNTIME.json",
+    ] {
         let payload = read_json(&project_root().join(relative));
         let keys = payload["keys"].as_array().expect("keys");
         let slug_idx = key_index(keys, "slug");
@@ -552,7 +557,10 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
         let id = case["id"].as_str().unwrap_or("<missing id>");
         for key in ["focus_skill", "expected_owner", "expected_overlay"] {
             if let Some(slug) = case.get(key).and_then(|value| value.as_str()) {
-                assert!(manifest_slugs.contains(slug), "case {id} {key} references missing slug {slug}");
+                assert!(
+                    manifest_slugs.contains(slug),
+                    "case {id} {key} references missing slug {slug}"
+                );
             }
         }
         for slug in case
@@ -562,7 +570,10 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
             .flatten()
             .filter_map(|value| value.as_str())
         {
-            assert!(manifest_slugs.contains(slug), "case {id} forbidden_owners references missing slug {slug}");
+            assert!(
+                manifest_slugs.contains(slug),
+                "case {id} forbidden_owners references missing slug {slug}"
+            );
         }
     }
 }
@@ -593,7 +604,10 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
         .as_object()
         .expect("framework commands")
     {
-        if let Some(owner) = record.get("canonical_owner").and_then(|value| value.as_str()) {
+        if let Some(owner) = record
+            .get("canonical_owner")
+            .and_then(|value| value.as_str())
+        {
             assert!(
                 manifest_slugs.contains(owner),
                 "framework alias {alias} canonical_owner references missing slug {owner}"
@@ -658,7 +672,7 @@ fn github_source_gate_help_lists_commands() {
 }
 
 #[test]
-fn retired_python_adapter_bridges_stay_removed() {
+fn removed_python_adapter_bridges_stay_removed() {
     let removed_legacy_files = [
         "scripts/route.py",
         "scripts/router_rs_runner.py",
@@ -1107,7 +1121,8 @@ fn ppt_skill_references_source_first_and_editable_rules() {
     assert!(method.contains("change `deck.plan.json`, then rebuild"));
     assert!(rust_cli.contains("Rust `ppt office ...` owns inspection"));
     assert!(rust_cli.contains("not a package wrapper or\na second runtime"));
-    assert!(rust_cli.contains("built-in Rust copy naturalization plus `$copywriting` / `$paper-writing"));
+    assert!(rust_cli
+        .contains("built-in Rust copy naturalization plus `$copywriting` / `$paper-writing"));
     assert!(visualization.contains("Prefer editable primitives"));
     assert!(install.contains("There is no skill-local package install step"));
     assert!(install.contains("text and design intentional"));
@@ -1270,7 +1285,7 @@ fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
             let directory_name = path.file_name().and_then(|name| name.to_str());
             if matches!(
                 directory_name,
-                Some(".git" | "target" | "node_modules" | ".venv" | "venv")
+                Some(".git" | "target" | "node_modules" | ".venv" | "venv" | "codex-skill-surface")
             ) {
                 continue;
             }

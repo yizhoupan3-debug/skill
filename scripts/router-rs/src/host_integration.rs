@@ -653,7 +653,7 @@ fn install_native_integration_changed(payload: &Value) -> bool {
 fn remove_skill_tool(_repo_root: &Path, home: &Path, tool: &str) -> Result<Value, String> {
     if tool == "codex" {
         let target = home.join(".codex").join("skills");
-        let changed = retire_codex_skills_directory(&target)?;
+        let changed = remove_codex_skills_directory(&target)?;
         return Ok(json!({
             "status": if changed { "removed-codex-skills" } else { "native-surfaces-left-in-place" },
             "changed": changed,
@@ -2635,7 +2635,7 @@ fn format_status_line() -> String {
     format!("status_line = [{items}]")
 }
 
-fn retire_codex_skills_directory(target_path: &Path) -> Result<bool, String> {
+fn remove_codex_skills_directory(target_path: &Path) -> Result<bool, String> {
     match fs::symlink_metadata(target_path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),

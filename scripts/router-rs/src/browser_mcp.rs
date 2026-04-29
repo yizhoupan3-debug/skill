@@ -3265,10 +3265,6 @@ fn collect_attach_artifact_candidates(root: &Path, candidates: &mut Vec<AttachAr
 
 fn default_attach_discovery_roots(repo_root: &Path) -> Vec<PathBuf> {
     vec![
-        repo_root
-            .join("framework_runtime")
-            .join("artifacts")
-            .join("scratch"),
         repo_root.join("artifacts").join("scratch"),
         repo_root.join("artifacts").join("current"),
         repo_root.to_path_buf(),

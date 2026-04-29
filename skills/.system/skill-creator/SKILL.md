@@ -397,7 +397,7 @@ Once development of the skill is complete, validate the skill folder to catch ba
 cargo test --test policy_contracts
 ```
 
-The Rust policy tests check repository contracts and catch retired-runtime regressions. If validation fails, fix the reported issues and run the command again.
+The Rust policy tests check repository contracts and catch removed-runtime regressions. If validation fails, fix the reported issues and run the command again.
 
 ### Step 6: Iterate
 

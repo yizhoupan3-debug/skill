@@ -267,7 +267,7 @@ fn find_git_root(start: &Path) -> Result<PathBuf> {
 fn build_doctor_report(start: &Path) -> DoctorReport {
     let repo_root = find_git_root(start).unwrap_or_else(|_| start.to_path_buf());
     let checks = vec![
-        check_skill_scripts_retired(&repo_root),
+        check_removed_python_helper_files(&repo_root),
         check_docs_are_rust_only(&repo_root),
         check_routing_surfaces_are_rust_only(&repo_root),
         check_workspace_member(&repo_root),
@@ -281,7 +281,7 @@ fn build_doctor_report(start: &Path) -> DoctorReport {
     DoctorReport { status, checks }
 }
 
-fn check_skill_scripts_retired(repo_root: &Path) -> DoctorCheck {
+fn check_removed_python_helper_files(repo_root: &Path) -> DoctorCheck {
     let offenders = [
         repo_root.join("skills/gh-fix-ci"),
         repo_root.join("skills/gh-address-comments"),
@@ -300,7 +300,7 @@ fn check_skill_scripts_retired(repo_root: &Path) -> DoctorCheck {
     .collect::<Vec<_>>();
 
     DoctorCheck {
-        name: "retired-python-helper-files",
+        name: "removed-python-helper-files",
         ok: offenders.is_empty(),
         detail: if offenders.is_empty() {
             "no Python helper files or scripts directories under gh source-gate skills".to_string()
@@ -331,7 +331,7 @@ fn check_docs_are_rust_only(repo_root: &Path) -> DoctorCheck {
     }
     for marker in forbidden {
         if docs.contains(marker) {
-            issues.push(format!("retired marker present {marker}"));
+            issues.push(format!("removed helper marker present {marker}"));
         }
     }
     if docs.to_ascii_lowercase().contains("python") {
@@ -365,7 +365,7 @@ fn check_routing_surfaces_are_rust_only(repo_root: &Path) -> DoctorCheck {
     let mut issues = Vec::new();
     for marker in ["inspect_pr_checks.py", "fetch_comments.py"] {
         if joined.contains(marker) {
-            issues.push(format!("retired marker present {marker}"));
+            issues.push(format!("removed helper marker present {marker}"));
         }
     }
     if !joined.contains("gh-source-gate") {
@@ -376,7 +376,7 @@ fn check_routing_surfaces_are_rust_only(repo_root: &Path) -> DoctorCheck {
         name: "generated-routing-rust-only",
         ok: issues.is_empty(),
         detail: if issues.is_empty() {
-            "generated routing surfaces reference Rust CLI and not retired helpers".to_string()
+            "generated routing surfaces reference Rust CLI and not removed helpers".to_string()
         } else {
             issues.join(", ")
         },
@@ -1560,7 +1560,7 @@ const SUMMARY_MARKER: &str = "summary";
     }
 
     #[test]
-    fn doctor_rejects_retired_python_helpers() {
+    fn doctor_rejects_removed_python_helpers() {
         let temp = tempfile::tempdir().expect("tempdir");
         let root = temp.path();
         write_file(
@@ -1572,7 +1572,7 @@ const SUMMARY_MARKER: &str = "summary";
         assert!(report
             .checks
             .iter()
-            .any(|check| check.name == "retired-python-helper-files" && !check.ok));
+            .any(|check| check.name == "removed-python-helper-files" && !check.ok));
     }
 
     fn write_file(path: &Path, content: &str) {

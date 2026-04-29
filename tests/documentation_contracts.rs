@@ -224,7 +224,7 @@ fn rust_contracts_doc_records_current_minimal_implementation_truth() {
 }
 
 #[test]
-fn top_level_docs_do_not_revive_retired_python_work_as_active() {
+fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
     let root = project_root();
     let scoped_docs = [
         "audit_report.md",

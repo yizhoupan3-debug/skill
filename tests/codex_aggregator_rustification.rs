@@ -4,7 +4,7 @@ use common::{project_root, read_text, run_ok};
 use std::process::Command;
 
 #[test]
-fn codex_aggregator_retired_python_and_shell_entrypoints() {
+fn codex_aggregator_removed_legacy_python_and_shell_entrypoints() {
     let root = project_root().join("codex-aggregator");
     assert!(!root.join("health_monitor.py").exists());
     assert!(!root.join("extract_tokens.sh").exists());

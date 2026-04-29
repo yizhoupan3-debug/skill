@@ -30,7 +30,7 @@ This skill owns **data acquisition, validation, normalization, and export only**
 - U.S. `Stooq`: optional Rust daily OHLCV fallback when public CSV access works
 - China: Rust Eastmoney path for capital snapshots
 
-Statements, detailed fundamentals, holders, CSI constituents, and CSI weights are retired from active local execution until Rust-owned equivalents exist.
+Statements, detailed fundamentals, holders, CSI constituents, and CSI weights are outside active local execution until Rust-owned equivalents exist.
 
 ---
 
