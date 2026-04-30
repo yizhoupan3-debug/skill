@@ -105,6 +105,7 @@
     },
     "deepinterview": {
       "canonical_owner": "deepinterview",
+      "skill_path": "skills/deepinterview/SKILL.md",
       "official_workflow": {
         "loop_rules": [
           "one-question-at-a-time",
@@ -145,6 +146,26 @@
       "lineage": {
         "source": "repo-native",
         "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review."
+      }
+    },
+    "gitx": {
+      "canonical_owner": "gitx",
+      "skill_path": "skills/gitx/SKILL.md",
+      "host_entrypoints": {
+        "codex-cli": "/gitx"
+      },
+      "interaction_invariants": {
+        "requires_explicit_entrypoint": true,
+        "explicit_entrypoints": [
+          "/gitx",
+          "$gitx",
+          "gitx"
+        ],
+        "implicit_route_policy": "never"
+      },
+      "lineage": {
+        "source": "repo-native",
+        "description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."
       }
     },
     "team": {

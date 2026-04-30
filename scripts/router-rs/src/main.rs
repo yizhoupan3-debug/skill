@@ -7593,6 +7593,8 @@ mod tests {
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
         assert!(records.iter().any(|record| record.slug == "autopilot"));
+        assert!(records.iter().any(|record| record.slug == "deepinterview"));
+        assert!(records.iter().any(|record| record.slug == "gitx"));
         assert!(records.iter().any(|record| record.slug == "team"));
 
         let autopilot = route_task_with_manifest_fallback(
@@ -7618,6 +7620,30 @@ mod tests {
         )
         .expect("route explicit team alias");
         assert_eq!(team.selected_skill, "team");
+
+        let deepinterview = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "$deepinterview",
+            "alias-deepinterview",
+            true,
+            true,
+        )
+        .expect("route explicit deepinterview alias");
+        assert_eq!(deepinterview.selected_skill, "deepinterview");
+
+        let gitx = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "gitx",
+            "alias-gitx",
+            true,
+            true,
+        )
+        .expect("route explicit gitx alias");
+        assert_eq!(gitx.selected_skill, "gitx");
 
         let natural_language_team = route_task_with_manifest_fallback(
             &records,
@@ -7665,6 +7691,42 @@ mod tests {
             assert_eq!(decision.selected_skill, "none");
             assert_eq!(decision.overlay_skill, None);
         }
+    }
+
+    #[test]
+    fn manifest_fallback_preserves_runtime_visual_review_gate() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+
+        for query in [
+            "review this screenshot UI",
+            "audit this rendered chart screenshot",
+        ] {
+            let decision = route_task_with_manifest_fallback(
+                &records,
+                Some(&runtime_path),
+                None,
+                query,
+                &format!("visual-review-{query}"),
+                true,
+                true,
+            )
+            .unwrap_or_else(|err| panic!("route visual review case {query}: {err}"));
+            assert_eq!(decision.selected_skill, "visual-review");
+        }
+
+        let capture = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "take a screenshot",
+            "screenshot-capture",
+            true,
+            true,
+        )
+        .expect("route screenshot capture case");
+        assert_eq!(capture.selected_skill, "screenshot");
     }
 
     #[test]

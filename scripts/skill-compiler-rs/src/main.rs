@@ -159,29 +159,7 @@ const RUNTIME_RESEARCH_WORKFLOW_SLUGS: &[&str] = &[
     "research-engineer",
     "research-workbench",
 ];
-const FRAMEWORK_COMMAND_RUNTIME_ROWS: [(&str, &str, &str, &[&str], &str); 3] = [
-    (
-        "autopilot",
-        "Run the local framework autopilot supervisor entrypoint.",
-        "owner",
-        &["$autopilot", "/autopilot"],
-        "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
-    ),
-    (
-        "gitx",
-        "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.",
-        "owner",
-        &["$gitx", "/gitx", "gitx"],
-        "skills/gitx/SKILL.md",
-    ),
-    (
-        "team",
-        "Run the local framework team orchestration entrypoint.",
-        "owner",
-        &["$team", "/team"],
-        "artifacts/codex-skill-surface/skills/team/SKILL.md",
-    ),
-];
+const FALLBACK_FRAMEWORK_COMMANDS: &[&str] = &["autopilot", "deepinterview", "gitx", "team"];
 
 const DEFAULT_SURFACE_OWNERS: &[&str] = &[];
 const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
@@ -220,7 +198,13 @@ fn main() -> Result<(), String> {
     let health_data = load_health_data(&args.health_manifest)?;
     let docs = load_skill_documents(&args.skills_root)?;
     let skill_entries = collect_skill_entries(&args.skills_root, &docs, &source_manifest)?;
-    let bundle = compile_bundle(&docs, &skill_entries, &source_manifest, &health_data)?;
+    let bundle = compile_bundle(
+        &args.skills_root,
+        &docs,
+        &skill_entries,
+        &source_manifest,
+        &health_data,
+    )?;
     validate_runtime_contract(&args.skills_root, &bundle)?;
 
     if args.apply {
@@ -297,12 +281,15 @@ fn validate_runtime_contract(skills_root: &Path, bundle: &SkillBundle) -> Result
     let runtime_path_idx = *runtime_key_index
         .get("skill_path")
         .ok_or_else(|| "runtime missing skill_path key".to_string())?;
+    let framework_command_slugs = framework_command_runtime_rows(skills_root)?
+        .into_iter()
+        .filter_map(|row| row.as_array().and_then(|items| items.first()).cloned())
+        .filter_map(|value| value.as_str().map(str::to_string))
+        .collect::<HashSet<_>>();
     for row in runtime_skills.iter().filter_map(Value::as_array) {
         let slug = string_at(row, runtime_slug_idx);
         let skill_path = string_at(row, runtime_path_idx);
-        let is_framework_command = FRAMEWORK_COMMAND_RUNTIME_ROWS
-            .iter()
-            .any(|(framework_slug, _, _, _, _)| *framework_slug == slug);
+        let is_framework_command = framework_command_slugs.contains(&slug);
         if !manifest_slugs.contains(&slug) && !is_framework_command {
             return Err(format!("runtime skill `{slug}` is not in manifest"));
         }
@@ -406,14 +393,16 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<(), String> {
 }
 
 fn compile_bundle(
+    skills_root: &Path,
     docs: &[SkillDoc],
     skill_entries: &[SkillEntry],
     source_manifest: &Value,
     health_data: &HashMap<String, Value>,
 ) -> Result<SkillBundle, String> {
     let (registry, manifest) = build_registry_and_manifest(docs, skill_entries, health_data)?;
-    let index = build_index(&manifest);
-    let runtime_index = build_runtime_index(&manifest);
+    let framework_rows = framework_command_runtime_rows(skills_root)?;
+    let index = build_index(&manifest, &framework_rows);
+    let runtime_index = build_runtime_index(&manifest, &framework_rows);
     let shadow_map = build_shadow_map(skill_entries, source_manifest);
     let approval_policy = build_approval_policy(docs);
     let tiers = build_tier_catalog(&manifest);
@@ -881,11 +870,11 @@ fn select_manifest_docs<'a>(
     selected
 }
 
-fn build_index(manifest: &Value) -> String {
+fn build_index(manifest: &Value, framework_rows: &[Value]) -> String {
     let mut selected = select_runtime_skills(manifest);
     selected.extend(
-        framework_command_runtime_rows()
-            .into_iter()
+        framework_rows
+            .iter()
             .filter_map(|row| row.as_array().cloned()),
     );
     let lookup: HashMap<String, Vec<Value>> = selected
@@ -965,7 +954,7 @@ fn build_index(manifest: &Value) -> String {
     lines.join("\n")
 }
 
-fn build_runtime_index(manifest: &Value) -> Value {
+fn build_runtime_index(manifest: &Value, framework_rows: &[Value]) -> Value {
     let selected = select_runtime_skills(manifest);
     let full_manifest_path = "skills/SKILL_MANIFEST.json";
     let mut skills = selected
@@ -985,8 +974,8 @@ fn build_runtime_index(manifest: &Value) -> Value {
             ])
         })
         .collect::<Vec<_>>();
-    for row in framework_command_runtime_rows() {
-        skills.push(row);
+    for row in framework_rows {
+        skills.push(row.clone());
     }
     json!({
         "version": 2,
@@ -1003,24 +992,102 @@ fn build_runtime_index(manifest: &Value) -> Value {
     })
 }
 
-fn framework_command_runtime_rows() -> Vec<Value> {
-    FRAMEWORK_COMMAND_RUNTIME_ROWS
+fn framework_command_runtime_rows(skills_root: &Path) -> Result<Vec<Value>, String> {
+    let repo_root = skills_root.parent().unwrap_or(skills_root);
+    let registry_path = repo_root
+        .join("configs")
+        .join("framework")
+        .join("RUNTIME_REGISTRY.json");
+    if registry_path.is_file() {
+        let registry = read_json(&registry_path)?;
+        return framework_command_runtime_rows_from_registry(&registry);
+    }
+    Ok(FALLBACK_FRAMEWORK_COMMANDS
         .iter()
-        .map(|(slug, summary, owner, trigger_hints, skill_path)| {
-            json!([
-                slug,
-                "L0",
-                owner,
-                "none",
-                "n/a",
-                summary,
-                trigger_hints,
-                100.0,
-                "P1",
-                skill_path
-            ])
+        .map(|slug| fallback_framework_command_runtime_row(slug))
+        .collect())
+}
+
+fn framework_command_runtime_rows_from_registry(registry: &Value) -> Result<Vec<Value>, String> {
+    let commands = registry
+        .get("framework_commands")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "runtime registry missing framework_commands".to_string())?;
+    let mut rows = Vec::new();
+    let mut slugs = commands.keys().cloned().collect::<Vec<_>>();
+    slugs.sort();
+    for slug in slugs {
+        let command = commands
+            .get(&slug)
+            .ok_or_else(|| format!("runtime registry missing command `{slug}`"))?;
+        rows.push(framework_command_runtime_row(&slug, command));
+    }
+    Ok(rows)
+}
+
+fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
+    let summary = command
+        .get("lineage")
+        .and_then(|lineage| lineage.get("description"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("Run the local framework {slug} entrypoint."));
+    let trigger_hints = command
+        .get("interaction_invariants")
+        .and_then(|invariants| invariants.get("explicit_entrypoints"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
         })
-        .collect()
+        .unwrap_or_else(|| vec![format!("${slug}"), format!("/{slug}")]);
+    let skill_path = command
+        .get("skill_path")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("artifacts/codex-skill-surface/skills/{slug}/SKILL.md"));
+    json!([
+        slug,
+        "L0",
+        "owner",
+        "none",
+        "n/a",
+        summary,
+        trigger_hints,
+        100.0,
+        "P1",
+        skill_path
+    ])
+}
+
+fn fallback_framework_command_runtime_row(slug: &str) -> Value {
+    let command = match slug {
+        "autopilot" => json!({
+            "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
+            "interaction_invariants": {"explicit_entrypoints": ["/autopilot", "$autopilot"]},
+            "lineage": {"description": "Run the local framework autopilot supervisor entrypoint."}
+        }),
+        "deepinterview" => json!({
+            "skill_path": "skills/deepinterview/SKILL.md",
+            "interaction_invariants": {"explicit_entrypoints": ["/deepinterview", "$deepinterview"]},
+            "lineage": {"description": "Run the local framework deepinterview entrypoint."}
+        }),
+        "gitx" => json!({
+            "skill_path": "skills/gitx/SKILL.md",
+            "interaction_invariants": {"explicit_entrypoints": ["/gitx", "$gitx", "gitx"]},
+            "lineage": {"description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."}
+        }),
+        "team" => json!({
+            "skill_path": "artifacts/codex-skill-surface/skills/team/SKILL.md",
+            "interaction_invariants": {"explicit_entrypoints": ["/team", "$team"]},
+            "lineage": {"description": "Run the local framework team orchestration entrypoint."}
+        }),
+        _ => json!({}),
+    };
+    framework_command_runtime_row(slug, &command)
 }
 
 fn string_list_at(value: &Value, path: &[&str]) -> Vec<String> {
@@ -1932,7 +1999,8 @@ mod tests {
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
         let (_, manifest) =
             build_registry_and_manifest(&docs, &entries, &HashMap::new()).expect("manifest");
-        let runtime = build_runtime_index(&manifest);
+        let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
+        let runtime = build_runtime_index(&manifest, &framework_rows);
         let shadow_map = build_shadow_map(&entries, &source_manifest);
 
         assert_eq!(
@@ -2023,8 +2091,14 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let bundle =
-            compile_bundle(&docs, &entries, &source_manifest, &HashMap::new()).expect("compile");
+        let bundle = compile_bundle(
+            &skills_root,
+            &docs,
+            &entries,
+            &source_manifest,
+            &HashMap::new(),
+        )
+        .expect("compile");
 
         assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(4));
         assert!(!bundle.manifest["skills"]
@@ -2034,13 +2108,18 @@ mod tests {
             .any(|row| row.get(0) == Some(&json!("plan-to-code"))));
         assert_eq!(
             bundle.runtime_index["skills"].as_array().map(Vec::len),
-            Some(5)
+            Some(6)
         );
         assert!(bundle.runtime_index["skills"]
             .as_array()
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("autopilot"))));
+        assert!(bundle.runtime_index["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("deepinterview"))));
         assert!(bundle.runtime_index["skills"]
             .as_array()
             .unwrap()

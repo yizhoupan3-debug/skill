@@ -77,14 +77,14 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "web-scraping",
 ];
 
-const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "team"];
+const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "team"];
 
 fn retired_runtime_owned_skill_slugs() -> HashSet<&'static str> {
     RETIRED_RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
 }
 
 fn manifest_or_runtime_lane_contains(manifest_slugs: &HashSet<&str>, slug: &str) -> bool {
-    manifest_slugs.contains(slug) || FRAMEWORK_COMMAND_IDS.contains(&slug)
+    slug == "none" || manifest_slugs.contains(slug) || FRAMEWORK_COMMAND_IDS.contains(&slug)
 }
 
 #[test]
