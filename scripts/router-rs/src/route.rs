@@ -59,6 +59,7 @@ pub(crate) struct SkillRecord {
     pub(crate) keyword_tokens: HashSet<String>,
     pub(crate) alias_tokens: HashSet<String>,
     pub(crate) do_not_use_tokens: HashSet<String>,
+    pub(crate) framework_alias_entrypoints: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -329,6 +330,8 @@ impl SkillRecord {
             .iter()
             .flat_map(|tag| tokenize_query(tag))
             .collect::<HashSet<_>>();
+        let framework_alias_entrypoints =
+            framework_alias_entrypoints_from_hints(&slug_lower, &layer, &trigger_hints);
         let do_not_use_tokens = tokenize_query(&do_not_use)
             .into_iter()
             .filter(|token| {
@@ -369,6 +372,7 @@ impl SkillRecord {
             keyword_tokens,
             alias_tokens,
             do_not_use_tokens,
+            framework_alias_entrypoints,
         }
     }
 }
@@ -1211,7 +1215,7 @@ fn is_overlay_record(record: &SkillRecord) -> bool {
 
 fn can_be_primary_owner(record: &SkillRecord) -> bool {
     record.gate_lower == "none"
-        && !framework_alias_requires_explicit_call(&record.slug)
+        && !framework_alias_requires_explicit_call(record)
         && !matches!(record.owner_lower.as_str(), "gate" | "overlay")
 }
 
@@ -1391,7 +1395,7 @@ pub(crate) fn route_task(
 
     if let Some(record) = records
         .iter()
-        .find(|record| has_literal_framework_alias_call(&normalized_query, &record.slug))
+        .find(|record| has_literal_framework_alias_call(&normalized_query, record))
     {
         let reasons =
             compact_route_reasons(&["Framework alias entrypoint matched explicitly.".to_string()]);
@@ -1501,6 +1505,33 @@ pub(crate) fn route_task(
     }
 
     let selected = pick_owner(viable);
+    if selected.score < layer_threshold(&selected.record.layer) {
+        let fallback_reasons = compact_route_reasons(&[
+            "No explicit skill hit; native runtime should proceed without loading a skill."
+                .to_string(),
+        ]);
+        return Ok(RouteDecision {
+            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+            authority: ROUTE_AUTHORITY.to_string(),
+            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+            task: query.to_string(),
+            session_id: session_id.to_string(),
+            selected_skill: NO_SKILL_SELECTED.to_string(),
+            overlay_skill: None,
+            route_context,
+            layer: "runtime".to_string(),
+            score: 0.0,
+            reasons: fallback_reasons.clone(),
+            route_snapshot: build_route_snapshot(
+                "rust",
+                NO_SKILL_SELECTED,
+                None,
+                "runtime",
+                0.0,
+                &fallback_reasons,
+            ),
+        });
+    }
     let overlay = if allow_overlay {
         pick_overlay(
             records,
@@ -1551,10 +1582,9 @@ pub(crate) fn literal_framework_alias_decision(
     let normalized_query = normalize_text(query);
     let query_token_list = tokenize_route_text(query);
     let route_context = build_route_context(&normalized_query, &query_token_list);
-    let requested_slug = literal_framework_alias_slug(&normalized_query)?;
     let record = records
         .iter()
-        .find(|record| record.slug == requested_slug)?;
+        .find(|record| has_literal_framework_alias_call(&normalized_query, record))?;
     let reasons =
         compact_route_reasons(&["Framework alias entrypoint matched explicitly.".to_string()]);
     Some(RouteDecision {
@@ -1577,40 +1607,6 @@ pub(crate) fn literal_framework_alias_decision(
             &reasons,
         ),
         reasons,
-    })
-}
-
-fn literal_framework_alias_slug(query_text: &str) -> Option<&'static str> {
-    query_text.split_whitespace().find_map(|part| {
-        let term = part.trim_matches(|ch: char| {
-            matches!(
-                ch,
-                '(' | ')'
-                    | '['
-                    | ']'
-                    | '{'
-                    | '}'
-                    | '<'
-                    | '>'
-                    | ','
-                    | '.'
-                    | '!'
-                    | '?'
-                    | '，'
-                    | '。'
-                    | '：'
-                    | '；'
-                    | '"'
-                    | '\''
-                    | '`'
-            )
-        });
-        match term {
-            "$autopilot" | "/autopilot" => Some("autopilot"),
-            "$deepinterview" | "/deepinterview" => Some("deepinterview"),
-            "$team" | "/team" => Some("team"),
-            _ => None,
-        }
     })
 }
 
@@ -1710,6 +1706,10 @@ pub(crate) fn should_accept_manifest_fallback(
     should_retry: bool,
     explicit_manifest: bool,
 ) -> bool {
+    if runtime_gate_blocks_manifest_owner(hot_decision, full_decision) {
+        return false;
+    }
+
     if explicit_manifest && !route_decision_is_no_hit(hot_decision) {
         return full_decision.score > hot_decision.score
             || (full_decision.score == hot_decision.score
@@ -1761,6 +1761,47 @@ pub(crate) fn should_accept_manifest_fallback(
         || (full_decision.score == hot_decision.score
             && full_decision.selected_skill != hot_decision.selected_skill))
         || low_score_review_fallback
+}
+
+fn runtime_gate_blocks_manifest_owner(
+    hot_decision: &RouteDecision,
+    full_decision: &RouteDecision,
+) -> bool {
+    if route_decision_is_no_hit(hot_decision)
+        || hot_decision.selected_skill == full_decision.selected_skill
+        || full_decision
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("Framework alias entrypoint matched explicitly"))
+    {
+        return false;
+    }
+
+    if hot_decision.selected_skill == "visual-review"
+        && full_decision.selected_skill == "screenshot"
+        && hot_decision.route_context.execution_protocol != "audit"
+    {
+        return false;
+    }
+
+    is_runtime_required_gate(&hot_decision.selected_skill)
+}
+
+fn is_runtime_required_gate(slug: &str) -> bool {
+    matches!(
+        slug,
+        "agent-swarm-orchestration"
+            | "gh-address-comments"
+            | "gh-fix-ci"
+            | "sentry"
+            | "openai-docs"
+            | "design-md"
+            | "doc"
+            | "pdf"
+            | "slides"
+            | "spreadsheets"
+            | "visual-review"
+    )
 }
 
 fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteContextPayload {
@@ -2129,28 +2170,39 @@ fn supervisor_execution_markers() -> [&'static str; 9] {
     ]
 }
 
-fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
-    match slug {
-        "autopilot" => &["/autopilot", "$autopilot"],
-        "deepinterview" => &["/deepinterview", "$deepinterview"],
-        "gitx" => &["/gitx", "$gitx", "gitx"],
-        "team" => &["/team", "$team"],
-        _ => &[],
-    }
-}
-
-fn framework_alias_requires_explicit_call(slug: &str) -> bool {
-    !framework_alias_explicit_entrypoints(slug).is_empty()
-}
-
-fn framework_alias_literal_entrypoints(slug: &str) -> &'static [&'static str] {
-    framework_alias_explicit_entrypoints(slug)
-}
-
-fn has_literal_framework_alias_call(query_text: &str, slug: &str) -> bool {
-    framework_alias_literal_entrypoints(slug)
+fn framework_alias_entrypoints_from_hints(
+    slug_lower: &str,
+    layer: &str,
+    trigger_hints: &[String],
+) -> Vec<String> {
+    let mut entrypoints = trigger_hints
         .iter()
-        .any(|entrypoint| has_explicit_entrypoint_term(query_text, &normalize_text(entrypoint)))
+        .map(|hint| normalize_text(hint))
+        .filter(|hint| hint == &format!("${slug_lower}") || hint == &format!("/{slug_lower}"))
+        .collect::<Vec<_>>();
+    if layer == "L0"
+        && !entrypoints.is_empty()
+        && trigger_hints
+            .iter()
+            .map(|hint| normalize_text(hint))
+            .any(|hint| hint == slug_lower)
+    {
+        entrypoints.push(slug_lower.to_string());
+    }
+    entrypoints.sort();
+    entrypoints.dedup();
+    entrypoints
+}
+
+fn framework_alias_requires_explicit_call(record: &SkillRecord) -> bool {
+    !record.framework_alias_entrypoints.is_empty()
+}
+
+fn has_literal_framework_alias_call(query_text: &str, record: &SkillRecord) -> bool {
+    record
+        .framework_alias_entrypoints
+        .iter()
+        .any(|entrypoint| has_explicit_entrypoint_term(query_text, entrypoint))
 }
 
 fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool {
@@ -2184,14 +2236,12 @@ fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool {
 fn has_explicit_framework_alias_call(
     query_text: &str,
     query_token_list: &[String],
-    slug: &str,
+    record: &SkillRecord,
 ) -> bool {
-    framework_alias_explicit_entrypoints(slug)
-        .iter()
-        .any(|entrypoint| {
-            has_explicit_entrypoint_term(query_text, &normalize_text(entrypoint))
-                || query_token_list.iter().any(|token| token == entrypoint)
-        })
+    record.framework_alias_entrypoints.iter().any(|entrypoint| {
+        has_explicit_entrypoint_term(query_text, entrypoint)
+            || query_token_list.iter().any(|token| token == entrypoint)
+    })
 }
 
 fn has_bounded_subagent_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -3055,8 +3105,8 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
-    let literal_framework_alias = framework_alias_requires_explicit_call(&record.slug)
-        && has_literal_framework_alias_call(query_text, &record.slug);
+    let literal_framework_alias = framework_alias_requires_explicit_call(record)
+        && has_literal_framework_alias_call(query_text, record);
     let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
     let team_negation_context = has_team_negation_context(query_text, query_token_list);
     let token_budget_pressure = has_token_budget_pressure(query_text, query_token_list);
@@ -3070,8 +3120,8 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    let explicit_framework_alias = framework_alias_requires_explicit_call(&record.slug)
-        && has_explicit_framework_alias_call(query_text, query_token_list, &record.slug);
+    let explicit_framework_alias = framework_alias_requires_explicit_call(record)
+        && has_explicit_framework_alias_call(query_text, query_token_list, record);
     let parallel_execution_context = has_parallel_execution_context(query_text, query_token_list);
     if record.slug == "agent-swarm-orchestration"
         && (bounded_subagent_context
@@ -3106,7 +3156,7 @@ fn score_route_candidate<'a>(
             );
         }
     }
-    if framework_alias_requires_explicit_call(&record.slug) && !explicit_framework_alias {
+    if framework_alias_requires_explicit_call(record) && !explicit_framework_alias {
         return RouteCandidate {
             record,
             score: 0.0,
