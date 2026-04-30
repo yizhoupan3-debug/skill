@@ -98,8 +98,8 @@ outline / notes / old deck structure
 -> ppt qa / build-qa sign-off
 ```
 
-Use `$design-md` for extracting a deck design system, `$frontend-design` for a
-new premium direction, and `$visual-review` plus `$design-md` for repeatable
+Use `$design-md` for extracting a deck design system or defining a new premium
+direction, and `$visual-review` plus `$design-md` for repeatable
 multi-round artifact tracking plus final drift / AI-slop / anti-pattern checks.
 
 ## Text Skill Loop

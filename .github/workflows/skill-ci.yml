@@ -72,7 +72,8 @@ jobs:
                       print(json.dumps(artifact, ensure_ascii=False, indent=2))
               sys.exit(1)
           PY
-          if ! git diff --quiet -- configs/framework/FRAMEWORK_SURFACE_POLICY.json skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_ROUTING_INDEX.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_RUNTIME.json skills/SKILL_SHADOW_MAP.json skills/SKILL_APPROVAL_POLICY.json skills/SKILL_LOADOUTS.json skills/SKILL_TIERS.json AGENTS.md .codex/host_entrypoints_sync_manifest.json; then
+          mapfile -t generated_paths < <(jq -r '.generated_artifacts[].path' configs/framework/GENERATED_ARTIFACTS.json)
+          if ! git diff --quiet -- "${generated_paths[@]}"; then
             echo "::error::Generated skill artifacts or shared CLI entrypoints are out of date after regeneration."
             exit 1
           fi

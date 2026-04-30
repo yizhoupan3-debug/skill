@@ -615,6 +615,15 @@ fn apply_manifest_route_meta(
 }
 
 fn default_runtime_path() -> Option<PathBuf> {
+    if let Ok(current_dir) = std::env::current_dir() {
+        let runtime_path = current_dir
+            .join("skills")
+            .join("SKILL_ROUTING_RUNTIME.json");
+        if runtime_path.is_file() {
+            return Some(runtime_path);
+        }
+    }
+
     Some(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -1644,6 +1653,8 @@ fn default_route_context_payload() -> RouteContextPayload {
 
 pub(crate) fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
     decision.score < 35.0
+        || (decision.selected_skill == "visual-review"
+            && decision.route_context.execution_protocol != "audit")
         || (decision.selected_skill == "systematic-debugging" && decision.score < 35.0)
         || decision
             .reasons
@@ -1780,6 +1791,13 @@ fn runtime_gate_blocks_manifest_owner(
     if hot_decision.selected_skill == "visual-review"
         && full_decision.selected_skill == "screenshot"
         && hot_decision.route_context.execution_protocol != "audit"
+    {
+        return false;
+    }
+
+    if full_decision.selected_skill == "skill-framework-developer"
+        && full_decision.score > hot_decision.score
+        && has_non_generic_manifest_signal(full_decision)
     {
         return false;
     }
@@ -2538,6 +2556,66 @@ fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool 
     })
 }
 
+fn has_pr_triage_summary_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "quick PR 状态梳理",
+        "pr 状态梳理",
+        "pr review summary",
+        "pull request summary",
+        "reviewer feedback digest",
+        "changed-file digest",
+        "changed files summary",
+        "pr triage",
+        "pr-level follow-up",
+        "pr follow-up",
+        "changed-file surface",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_sentry_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "sentry",
+        "production error",
+        "production errors",
+        "线上异常",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let phrase_match = [
+        "github actions",
+        "actions failure",
+        "failing check",
+        "failing checks",
+        "failed check",
+        "failed checks",
+        "check failure",
+        "checks failure",
+        "build failure",
+        "workflow failure",
+        "failing workflow",
+        "ci failure",
+        "ci failing",
+        "fix ci",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    });
+    phrase_match || query_token_list.iter().any(|token| token == "ci")
+}
+
 fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
@@ -3191,6 +3269,19 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if record.slug == "sentry"
+        && has_pr_triage_summary_context(query_text, query_token_list)
+        && !has_sentry_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: PR triage summaries should not route to production-error triage."
+                    .to_string(),
+            ],
+        };
+    }
     if record.slug == "design-md"
         && has_humanizer_context(query_text, query_token_list)
         && !has_design_contract_context(query_text, query_token_list)
@@ -3251,6 +3342,26 @@ fn score_route_candidate<'a>(
         score += 42.0;
         reasons.push(
             "Paper-workbench boost applied: target-journal ref-first manuscript workflow detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "gh-address-comments"
+        && has_pr_triage_summary_context(query_text, query_token_list)
+        && !has_ci_failure_context(query_text, query_token_list)
+    {
+        score += 54.0;
+        reasons.push(
+            "GitHub source-gate boost applied: lightweight PR triage or digest wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "gh-fix-ci"
+        && has_github_pr_context(query_text, query_token_list)
+        && has_ci_failure_context(query_text, query_token_list)
+    {
+        score += 48.0;
+        reasons.push(
+            "GitHub CI gate boost applied: PR context includes failing checks or CI workflow wording."
                 .to_string(),
         );
     }

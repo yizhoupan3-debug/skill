@@ -73,7 +73,7 @@ PowerPoint editing.
 2. If visual quality, brand consistency, or a reusable deck theme matters, run
    `$design-md` before `deck.plan.json` so theme colors, type hierarchy, chart
    palette, callout styles, and slide component rules are explicit.
-3. Run the Text And Design Polishing Chain when content or visual quality matters: built-in Rust copy naturalization plus `$copywriting` or `$paper-writing` for text; `$frontend-design`, `$visual-review`, and `$design-md` for the visual loop.
+3. Run the Text And Design Polishing Chain when content or visual quality matters: built-in Rust copy naturalization plus `$copywriting` or `$paper-writing` for text; `$design-md` and `$visual-review` for the visual loop.
 4. Build or update `deck.plan.json` as the source of truth.
 5. Generate `.pptx` through the Rust `ppt` CLI.
 6. Inspect and render the deck when layout matters.

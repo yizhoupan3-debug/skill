@@ -14,7 +14,7 @@ QA, inspection, or rebuild work.
 - The skill directory does not carry alternate script templates, helper modules, package manifests, or lockfiles.
 - Text and design polishing are skill-orchestrated before Rust build:
   built-in Rust copy naturalization plus `$copywriting` / `$paper-writing` for
-  copy, then `$design-md` or `$frontend-design` for visual direction, followed
+  copy, then `$design-md` for visual direction, followed
   by `$visual-review` and `$design-md` verdicts on rendered evidence.
 
 ## Authoring Commands

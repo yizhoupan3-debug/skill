@@ -1,5 +1,9 @@
 # 减法系统与第一性原理 Review Checklist
 
+> Historical note (2026-04-30): this completed review is archived to avoid
+> treating old command spellings and completed subtraction tasks as active
+> runtime instructions.
+
 状态：已完成静态系统 review
 范围：Codex-only 前提下，审查路由、runtime、host 集成、memory、artifact、browser MCP、skill surface 与入口形态
 原则：只保留当前 Codex 真正需要的路径；兼容、桥接、fallback、历史迁移与多入口只在有现役调用证据时保留

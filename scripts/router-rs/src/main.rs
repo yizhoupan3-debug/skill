@@ -802,7 +802,11 @@ fn route_task_with_manifest_fallback(
     let Some(fallback_path) = manifest_fallback_path(runtime_path, manifest_path)? else {
         return Ok(hot_decision);
     };
-    let full_records = load_records_from_manifest(&fallback_path)?;
+    let full_records = match load_records_from_manifest(&fallback_path) {
+        Ok(records) => records,
+        Err(_) if !should_retry && manifest_path.is_none() => return Ok(hot_decision),
+        Err(err) => return Err(err),
+    };
     if full_records.len() <= runtime_records.len() {
         return Ok(hot_decision);
     }
@@ -7144,6 +7148,273 @@ mod tests {
     }
 
     #[test]
+    fn framework_memory_recall_stays_read_only_when_memory_missing() {
+        let repo_root = temp_dir_path("memory-recall-read-only");
+        fs::create_dir_all(&repo_root).expect("create repo root");
+        let memory_root = repo_root.join("missing-memory");
+
+        let payload = build_framework_memory_recall_envelope(
+            &repo_root,
+            "stable recall",
+            4,
+            "stable",
+            Some(&memory_root),
+            None,
+            None,
+        )
+        .expect("build memory recall");
+        let memory_recall = payload
+            .get("memory_recall")
+            .and_then(Value::as_object)
+            .expect("memory recall payload");
+
+        assert!(
+            !memory_root.exists(),
+            "memory recall should not seed or create missing memory roots"
+        );
+        assert_eq!(memory_recall["changed_files"], json!([]));
+        assert!(memory_recall["consolidation_note"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("read-only"));
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_memory_recall_debug_stays_read_only_for_continuity_state() {
+        let repo_root = temp_dir_path("memory-recall-debug-read-only");
+        let artifacts_root = repo_root.join("artifacts");
+        let current_root = artifacts_root.join("current");
+        let task_root = current_root.join("active-task");
+        fs::create_dir_all(&task_root).expect("create task root");
+        write_text_fixture(
+            &task_root.join("SESSION_SUMMARY.md"),
+            "- task: active task\n- phase: implementation\n- status: active\n",
+        );
+        write_text_fixture(
+            &task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Continue active task"]}"#,
+        );
+        write_text_fixture(
+            &task_root.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[]}"#,
+        );
+        write_text_fixture(
+            &task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"active task"}"#,
+        );
+        write_text_fixture(
+            &current_root.join("active_task.json"),
+            r#"{"task_id":"active-task"}"#,
+        );
+        write_text_fixture(
+            &current_root.join("focus_task.json"),
+            r#"{"task_id":"active-task"}"#,
+        );
+        write_text_fixture(
+            &current_root.join("task_registry.json"),
+            r#"{"schema_version":"task-registry-v1","tasks":[{"task_id":"active-task"}]}"#,
+        );
+        write_text_fixture(
+            &repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"active-task",
+                "task_summary":"active task",
+                "active_phase":"implementation",
+                "verification":{"verification_status":"in_progress"},
+                "continuity":{"story_state":"active","resume_allowed":true}
+            }"#,
+        );
+        let memory_root = repo_root.join("memory");
+        write_text_fixture(&memory_root.join("MEMORY.md"), "# memory\n");
+
+        let payload = build_framework_memory_recall_envelope(
+            &repo_root,
+            "active task",
+            4,
+            "debug",
+            Some(&memory_root),
+            Some(&artifacts_root),
+            None,
+        )
+        .expect("build debug memory recall");
+
+        let rendered_continuity_state = payload["memory_recall"]["prompt_payload"]["retrieval"]
+            ["items"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .any(|item| item["path"] == json!("runtime/CONTINUITY_STATE.json"))
+            })
+            .unwrap_or(false);
+        assert!(
+            rendered_continuity_state,
+            "debug recall should still render continuity state context"
+        );
+        assert!(
+            !current_root.join("CONTINUITY_STATE.json").exists(),
+            "debug memory recall must not write continuity cache files"
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_memory_recall_hides_ignored_active_task_from_prompt_payload() {
+        let repo_root = temp_dir_path("memory-recall-query-mismatch");
+        let artifacts_root = repo_root.join("artifacts");
+        let current_root = artifacts_root.join("current");
+        let task_root = current_root.join("active-task");
+        fs::create_dir_all(&task_root).expect("create task root");
+        write_text_fixture(
+            &task_root.join("SESSION_SUMMARY.md"),
+            "- task: active task\n- phase: implementation\n- status: in_progress\n",
+        );
+        write_text_fixture(
+            &task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Continue active task"]}"#,
+        );
+        write_text_fixture(
+            &task_root.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[]}"#,
+        );
+        write_text_fixture(
+            &task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"active task","matched_skills":["autopilot"]}"#,
+        );
+        write_text_fixture(
+            &current_root.join("active_task.json"),
+            r#"{"task_id":"active-task"}"#,
+        );
+        write_text_fixture(
+            &current_root.join("focus_task.json"),
+            r#"{"task_id":"active-task"}"#,
+        );
+        write_text_fixture(
+            &current_root.join("task_registry.json"),
+            r#"{"schema_version":"task-registry-v1","focus_task_id":"active-task","tasks":[{"task_id":"active-task"}]}"#,
+        );
+        write_text_fixture(
+            &repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"active-task",
+                "task_summary":"active task",
+                "active_phase":"implementation",
+                "verification":{"verification_status":"in_progress"},
+                "continuity":{"story_state":"active","resume_allowed":true}
+            }"#,
+        );
+        let memory_root = repo_root.join("memory");
+        write_text_fixture(&memory_root.join("MEMORY.md"), "# memory\n");
+
+        let payload = build_framework_memory_recall_envelope(
+            &repo_root,
+            "different investigation",
+            4,
+            "active",
+            Some(&memory_root),
+            Some(&artifacts_root),
+            None,
+        )
+        .expect("build memory recall");
+        let prompt_payload = &payload["memory_recall"]["prompt_payload"];
+
+        assert_eq!(
+            prompt_payload["continuity"]["state"],
+            json!("query-mismatch")
+        );
+        assert_eq!(prompt_payload["active_task"], Value::Null);
+        assert_eq!(
+            prompt_payload["retrieval"]["active_task_id"],
+            Value::Null,
+            "prompt retrieval should not expose the ignored active task id"
+        );
+        assert_eq!(
+            prompt_payload["continuity_decision"]["active_task_id"],
+            Value::Null,
+            "prompt continuity decision should not expose the ignored active task id"
+        );
+        assert_eq!(
+            prompt_payload["continuity_decision"]["ignored_root_continuity"],
+            json!(true)
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_snapshot_reconciles_stale_supervisor_against_current_pointers() {
+        let repo_root = temp_dir_path("runtime-anchor-reconcile");
+        let artifacts_root = repo_root.join("artifacts");
+        let current_root = artifacts_root.join("current");
+        let fresh_root = current_root.join("fresh-task");
+        let stale_root = current_root.join("stale-task");
+        fs::create_dir_all(&fresh_root).expect("create fresh task root");
+        fs::create_dir_all(&stale_root).expect("create stale task root");
+        write_text_fixture(
+            &fresh_root.join("SESSION_SUMMARY.md"),
+            "- task: fresh task\n- phase: implementation\n- status: in_progress\n",
+        );
+        write_text_fixture(
+            &fresh_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Continue fresh task"]}"#,
+        );
+        write_text_fixture(
+            &fresh_root.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[]}"#,
+        );
+        write_text_fixture(
+            &fresh_root.join("TRACE_METADATA.json"),
+            r#"{"task":"fresh task","matched_skills":["autopilot"]}"#,
+        );
+        write_text_fixture(
+            &stale_root.join("SESSION_SUMMARY.md"),
+            "- task: stale task\n- phase: implementation\n- status: in_progress\n",
+        );
+        write_text_fixture(
+            &current_root.join("active_task.json"),
+            r#"{"task_id":"fresh-task"}"#,
+        );
+        write_text_fixture(
+            &current_root.join("focus_task.json"),
+            r#"{"task_id":"fresh-task"}"#,
+        );
+        write_text_fixture(
+            &current_root.join("task_registry.json"),
+            r#"{"schema_version":"task-registry-v1","focus_task_id":"fresh-task","tasks":[{"task_id":"fresh-task"}]}"#,
+        );
+        write_text_fixture(
+            &repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"stale-task",
+                "task_summary":"stale task",
+                "active_phase":"implementation",
+                "verification":{"verification_status":"in_progress"},
+                "continuity":{"story_state":"active","resume_allowed":true}
+            }"#,
+        );
+
+        let payload = build_framework_runtime_snapshot_envelope(&repo_root, None, None)
+            .expect("build snapshot");
+        let snapshot = &payload["runtime_snapshot"];
+        assert_eq!(snapshot["active_task_id"], json!("fresh-task"));
+        assert_eq!(snapshot["continuity"]["state"], json!("inconsistent"));
+        let reasons = snapshot["continuity"]["inconsistency_reasons"]
+            .as_array()
+            .expect("inconsistency reasons")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>();
+        assert!(reasons
+            .iter()
+            .any(|reason| reason.contains("supervisor task_id 'stale-task' disagrees")));
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
     fn stdio_request_rejects_unknown_operations() {
         let response =
             handle_stdio_json_line(r#"{"id":"req-1","op":"not-supported","payload":{}}"#);
@@ -7585,6 +7856,120 @@ mod tests {
                 first_turn,
             )
         });
+    }
+
+    #[test]
+    fn runtime_fallback_prefers_framework_manifest_owner_over_low_score_hot_gate() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+
+        let decision = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "review framework snapshot route memory recall integration risk",
+            "framework-low-hot-gate",
+            true,
+            true,
+        )
+        .expect("route framework review query");
+
+        assert_eq!(decision.selected_skill, "skill-framework-developer");
+    }
+
+    #[test]
+    fn confident_hot_route_does_not_parse_implicit_malformed_manifest() {
+        let repo_root = temp_dir_path("malformed-implicit-manifest");
+        let skills_root = repo_root.join("skills");
+        fs::create_dir_all(&skills_root).expect("create skills root");
+        let runtime_path = skills_root.join("SKILL_ROUTING_RUNTIME.json");
+        fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../skills/SKILL_ROUTING_RUNTIME.json"),
+            &runtime_path,
+        )
+        .expect("copy hot runtime");
+        write_text_fixture(
+            &skills_root.join("SKILL_MANIFEST.json"),
+            "{ not valid json\n",
+        );
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+
+        let decision = route_task_with_manifest_fallback(
+            &records,
+            Some(&runtime_path),
+            None,
+            "inspect sentry production errors",
+            "confident-hot-route",
+            true,
+            true,
+        )
+        .expect("confident hot route should not parse implicit malformed manifest");
+
+        assert_eq!(decision.selected_skill, "sentry");
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn pr_triage_summary_routes_to_github_source_gate() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+
+        for query in [
+            "pull request summary",
+            "reviewer feedback digest",
+            "changed-file digest",
+            "PR triage changed file digest",
+        ] {
+            let decision = route_task_with_manifest_fallback(
+                &records,
+                Some(&runtime_path),
+                None,
+                query,
+                &format!("pr-triage::{query}"),
+                true,
+                true,
+            )
+            .unwrap_or_else(|err| panic!("route PR triage query {query}: {err}"));
+
+            assert_eq!(
+                decision.selected_skill, "gh-address-comments",
+                "PR triage query should stay on GitHub source gate: {query}; reasons: {:?}",
+                decision.reasons
+            );
+        }
+    }
+
+    #[test]
+    fn pr_summary_ci_context_routes_to_ci_gate() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+
+        for query in [
+            "pull request summary CI failure",
+            "github actions pull request summary failing checks",
+        ] {
+            let decision = route_task_with_manifest_fallback(
+                &records,
+                Some(&runtime_path),
+                None,
+                query,
+                &format!("pr-summary-ci::{query}"),
+                true,
+                true,
+            )
+            .unwrap_or_else(|err| panic!("route PR summary CI query {query}: {err}"));
+
+            assert_eq!(
+                decision.selected_skill, "gh-fix-ci",
+                "PR summary mixed with CI failure should use CI gate: {query}; reasons: {:?}",
+                decision.reasons
+            );
+        }
     }
 
     #[test]

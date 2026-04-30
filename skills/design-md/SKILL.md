@@ -69,16 +69,16 @@ identity persistent across coding sessions by turning design intent into a
 
 ## Do not use
 
-- Named-product reference grounding ("像 Linear/Stripe/Apple") without a persistent design contract -> use `$frontend-design`
-- Direct UI redesign or implementation without a spec artifact -> use `$frontend-design`
-- CSS layout mechanics, Tailwind config, or framework-specific theming -> use `$css-pro` or `$css-pro`
+- Named-product reference grounding ("像 Linear/Stripe/Apple") without a persistent design contract -> create a compact `DESIGN.md` contract here, then hand off to the implementation owner if code changes are needed
+- Direct UI redesign or implementation without a spec artifact -> create or request a visual contract first when reuse matters; otherwise route directly to the implementation owner
+- CSS layout mechanics, Tailwind config, or framework-specific theming -> use the relevant implementation owner after this contract is explicit
 - Screenshot-only visible evidence -> use `$visual-review` first
-- Motion implementation -> use `$frontend-design`
+- Motion implementation -> use the relevant implementation owner after this contract is explicit
 
 ## Priority routing rule
 
 If the task mentions `DESIGN.md`, design-system capture, design tokens, or
-style-contract acceptance, check this gate before `frontend-design`. After the
+style-contract acceptance, check this gate before implementation. After the
 contract is clear, hand off to the narrowest downstream owner.
 
 ## Core workflow
@@ -96,11 +96,10 @@ contract is clear, hand off to the narrowest downstream owner.
 6. Validate structural quality and contrast where possible; if using Google's
    CLI is acceptable in the environment, run `npx @google/design.md lint DESIGN.md`.
 7. Hand off:
-   - `$frontend-design` for visual direction or implementation
-   - `$css-pro` / `$css-pro` for token wiring
+   - the relevant implementation owner for visual direction, CSS, or component changes
    - `$slides`, `$ppt-pptx`, `$source-slide-formats`, or `$ppt-beamer` for deck authoring
    - `$visual-review` for rendered UI/deck proof
-   - `$design-workflow` for prompt shaping or final acceptance summary
+   - this gate for prompt shaping or final acceptance summary when the contract is the artifact
 
 ## Output contract
 
@@ -127,7 +126,7 @@ For `apply-to-implementation`, return a compact mapping before handoff:
 
 - `source tokens`: exact `DESIGN.md` token names and values used
 - `target surfaces`: CSS variables, Tailwind theme keys, component props, or deck theme fields
-- `owner`: `$css-pro`, `$css-pro`, `$frontend-design`, or a slide/deck artifact owner
+- `owner`: the relevant implementation owner, or a slide/deck artifact owner
 - `verification`: lint, rendered screenshot review, or route-specific test
 
 ## UI and PPT trigger scenarios
@@ -141,7 +140,7 @@ Use this gate before doing UI or PPT work when any of these are true:
 - The implementation owner needs exact tokens before editing Tailwind/CSS, HTML slides, Beamer theme macros, or `deck.plan.json`.
 
 Do not block quick one-off UI/PPT tasks just to create a spec. If the user only
-needs immediate visual execution, route directly to `$frontend-design` or the
+needs immediate visual execution, route directly to the implementation or
 presentation artifact owner and optionally backfill `DESIGN.md` later.
 
 ## Rules

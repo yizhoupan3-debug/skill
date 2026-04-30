@@ -1,5 +1,9 @@
 # Runtime 系统修复执行清单
 
+> Historical note (2026-04-30): this checklist is archived because the live
+> runtime contract has moved to Rust-owned generated artifacts and current
+> policy tests. Do not use this file as active execution truth.
+
 ## 目标
 
 把当前 runtime 系统从“多处漂移、测试失真、健康状态虚高”的状态，收敛为一个可验证、可维护、跨 host 行为一致的运行时系统。

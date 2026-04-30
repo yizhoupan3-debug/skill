@@ -57,13 +57,15 @@ struct SkillBundle {
     framework_surface_policy: Value,
 }
 
-const INDEX_GATE_SHORTCUTS: [(&str, &str); 7] = [
+const INDEX_GATE_SHORTCUTS: [(&str, &str); 9] = [
     ("OpenAI API / 模型 / 官方当前文档", "openai-docs"),
     ("PR 评论 / review comment", "gh-address-comments"),
     ("CI 失败 / GitHub Actions 报红", "gh-fix-ci"),
     ("Sentry 告警 / 线上异常", "sentry"),
     ("根因未知的 bug / 失败 / 报错", "systematic-debugging"),
-    ("PDF / DOCX / 表格产物", "pdf"),
+    ("PDF 文件", "pdf"),
+    ("DOCX / Word 文件", "doc"),
+    ("Excel / CSV / 表格产物", "spreadsheets"),
     ("截图 / 页面 / 图表可视核查", "visual-review"),
 ];
 
@@ -78,7 +80,9 @@ const INDEX_COMMON_LANES: &[(&str, &str)] = &[
     ("README / ADR / 项目文档", "documentation-engineering"),
     ("Git 流程 / 分支合并 / 推送", "gitx"),
     ("PPT / slides / deck", "slides"),
-    ("PDF / DOCX / 表格产物", "pdf"),
+    ("PDF 文件", "pdf"),
+    ("DOCX / Word 文件", "doc"),
+    ("Excel / CSV / 表格产物", "spreadsheets"),
     ("设计规范 / DESIGN.md / token", "design-md"),
     ("OpenAI API / 模型 / 官方当前文档", "openai-docs"),
     ("skill 库 / 路由框架自身", "skill-framework-developer"),

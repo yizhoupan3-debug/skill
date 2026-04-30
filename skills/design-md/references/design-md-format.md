@@ -105,4 +105,4 @@ When applying `DESIGN.md` to code, map before editing:
 - `components.*` -> specific component variants and states.
 
 After mapping, implementation belongs to the narrowest owner such as
-`css-pro`, `css-pro`, `frontend-design`, or a document/deck artifact skill.
+the relevant implementation owner, or a document/deck artifact skill.

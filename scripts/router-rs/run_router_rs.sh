@@ -121,5 +121,19 @@ if [ -z "$ROUTER_BIN" ]; then
   exit 1
 fi
 
+if [ "$#" -gt 0 ] && { [ "$1" = "route" ] || [ "$1" = "search" ]; }; then
+  HAS_ROUTE_SOURCE=0
+  for arg in "$@"; do
+    case "$arg" in
+      --runtime|--runtime=*|--manifest|--manifest=*) HAS_ROUTE_SOURCE=1 ;;
+    esac
+  done
+  if [ "$HAS_ROUTE_SOURCE" = "0" ] && [ -f "$REPO_ROOT/skills/SKILL_ROUTING_RUNTIME.json" ]; then
+    ROUTER_SUBCOMMAND=$1
+    shift
+    set -- "$ROUTER_SUBCOMMAND" --runtime "$REPO_ROOT/skills/SKILL_ROUTING_RUNTIME.json" "$@"
+  fi
+fi
+
 cd "$REPO_ROOT"
 exec "$ROUTER_BIN" "$@"

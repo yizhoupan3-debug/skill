@@ -1,4 +1,0 @@
-interface:
-  display_name: "Subagent Delegation"
-  short_description: "Route complex work into bounded sidecars or local-supervisor queues"
-  default_prompt: "Use $subagent-delegation to decide whether this task should split across bounded sidecars, what must stay local, and how to preserve the same orchestration structure if runtime policy does not permit spawning subagents."

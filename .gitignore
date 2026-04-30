@@ -11,6 +11,13 @@ SESSION_SUMMARY.md
 NEXT_ACTIONS.json
 EVIDENCE_INDEX.json
 TRACE_METADATA.json
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+coverage.xml
+htmlcov/
+lcov.info
 *.bak_codex_*
 configs/codex/sub_accounts.state.json
 .pytest_cache/
