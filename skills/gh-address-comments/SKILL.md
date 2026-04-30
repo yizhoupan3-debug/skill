@@ -1,6 +1,6 @@
 ---
 name: gh-address-comments
-description: Address GitHub PR review comments with gh-source-gate.
+description: Address GitHub PR review comments and lightweight PR triage summaries with gh-source-gate.
 metadata:
   version: "2.0.0"
   platforms: [codex]
@@ -25,6 +25,12 @@ session_start: required
 trigger_hints:
   - github
   - pull request
+  - pull request summary
+  - PR review summary
+  - PR triage
+  - reviewer feedback digest
+  - changed-file digest
+  - changed files summary
   - review comments
   - gh cli
   - code review
@@ -50,8 +56,9 @@ artifact_outputs:
 At conversation start or first turn, check this source gate before ordinary domain owners when the request is driven by external evidence such as Sentry data, PR comments, or failing checks.
 
 
-This skill owns the workflow for turning GitHub PR feedback into an actionable,
-numbered fix list and then applying the selected fixes cleanly.
+This skill owns the workflow for turning GitHub PR feedback and lightweight PR
+triage evidence into an actionable, numbered fix list and then applying the
+selected fixes cleanly.
 
 Default helper:
 
@@ -65,9 +72,10 @@ non-outdated review threads.
 
 ## Priority routing rule
 
-If the task is triggered by GitHub PR review comments, review threads, or PR
-conversation comments on the current branch, check this skill before generic
-git workflow or implementation skills.
+If the task is triggered by GitHub PR review comments, review threads, PR
+conversation comments, reviewer digests, changed-file digests, or PR-level
+summary requests on the current branch, check this skill before generic git
+workflow or implementation skills.
 
 In that case:
 
@@ -77,6 +85,7 @@ In that case:
 ## When to use
 
 - The user wants to fetch or summarize comments, reviewer state, or PR metadata on the open PR for the current branch
+- The user wants a lightweight PR summary, reviewer feedback digest, changed-file digest, or next-action triage without CI debugging
 - The user wants to address review comments or unresolved review threads
 - The user asks which GitHub comments should be fixed first
 - The user wants a clean follow-up after code review feedback

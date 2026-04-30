@@ -18,7 +18,7 @@
 | `email-template` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Produce cross-client HTML emails that render correctly in Outlook, Gmail, and Ap |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 94.0 | Ensure and manage research experiment reproducibility: environment capture, rand |
 | `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 94.0 | Fetch, validate, normalize, and export real financial market data: OHLCV, OHLCV, |
-| `gh-address-comments` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Address GitHub PR review comments with gh-source-gate. |
+| `gh-address-comments` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Address GitHub PR review comments and lightweight PR triage summaries with gh-so |
 | `gh-fix-ci` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Triage and fix failing GitHub Actions PR checks with gh-source-gate. |
 | `gitx` | Active | P1 | L2 | owner | none | project | ✓ 94.0 | Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end. |
 | `image-generated` | Active | P2 | L1 | owner | none | project | ✓ 94.0 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |

@@ -68,7 +68,7 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
                verification/review, memory and prompt policy, research workflow
 ```
 
-> System skills（`.system/`）: `skill-creator`, `skill-installer`, `openai-docs`
+> System skills（`.system/`）: `plugin-creator`, `skill-creator`, `skill-installer`
 
 ## 各层何时做主 owner
 

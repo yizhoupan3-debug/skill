@@ -19,9 +19,9 @@ the shared design skills and include:
 - `Anti-Patterns`
 
 Use `$design-md` to extract these fields from old decks, screenshots, or brand
-assets. Use `$frontend-design` when no source style exists but the deck still
-needs a fresh premium visual direction. After rendering, use `$visual-review`
-for image-grounded findings and `$design-md` for the final drift
+assets, or to define a fresh premium visual direction when no source style
+exists. After rendering, use `$visual-review` for image-grounded findings and
+`$design-md` for the final drift
 verdict against this contract.
 
 Map those fields into `deck.plan.json`: palette roles, typography scale, panel/card

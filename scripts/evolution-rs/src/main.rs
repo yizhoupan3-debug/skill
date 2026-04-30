@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -151,7 +151,11 @@ fn stem(word: &str) -> String {
 }
 
 fn load_entries_parallel(path: &PathBuf) -> anyhow::Result<Vec<JournalEntry>> {
-    let file = File::open(path)?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(err.into()),
+    };
     let mmap = unsafe { Mmap::map(&file)? };
 
     // R21/R24: Split by newlines and process in parallel
@@ -190,6 +194,24 @@ fn load_entries_parallel(path: &PathBuf) -> anyhow::Result<Vec<JournalEntry>> {
         .collect();
 
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_journal_loads_as_empty_entries() {
+        let missing = std::env::temp_dir().join(format!(
+            "evolution-rs-missing-journal-{}-{}.jsonl",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+
+        let entries = load_entries_parallel(&missing).expect("missing journal should be empty");
+
+        assert!(entries.is_empty());
+    }
 }
 
 fn entry_is_recent(entry: &JournalEntry, cutoff: DateTime<Utc>) -> bool {

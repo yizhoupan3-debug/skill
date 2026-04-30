@@ -61,7 +61,7 @@ ppt outline outline.yaml --output deck.plan.json --bootstrap --build
 Before the final build, run the built-in Rust copy naturalization pass and use
 `$copywriting` or `$paper-writing` when the deck needs persuasive or academic
 voice. Then lock the deck's visual contract with `$design-md` or
-`$frontend-design`. The Rust CLI builds and checks the deck; these companion skills make the text and design intentional.
+`$visual-review`. The Rust CLI builds and checks the deck; these companion skills make the text and design intentional.
 
 The expected workspace outputs are:
 

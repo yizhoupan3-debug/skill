@@ -1,4 +1,0 @@
-interface:
-  display_name: "Brainstorm Research"
-  short_description: "Expand early research ideas into structured, file-backed direction spaces"
-  default_prompt: "Use $brainstorm-research to expand this early research idea into distinct questions, methods, and experiment directions, and when helpful create a local file-backed brainstorm workspace with a direction map and decision log."

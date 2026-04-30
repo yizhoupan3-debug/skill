@@ -1142,7 +1142,6 @@ fn ppt_skill_documents_design_and_aigc_gates() {
 
     for token in [
         "$design-md",
-        "$frontend-design",
         "$visual-review",
         "built-in Rust copy naturalization",
         "$copywriting",
@@ -1184,7 +1183,7 @@ qa/build-qa sign-off"
         "Layout Principles",
         "Generation Guardrails",
         "Anti-Patterns",
-        "$frontend-design",
+        "fresh premium visual direction",
         "deck.plan.json",
         "match",
         "minor drift",

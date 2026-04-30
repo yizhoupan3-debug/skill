@@ -69,8 +69,8 @@ not assumptions about code or off-screen state.
 
 After this gate establishes visible evidence, route to a narrower owner when the real question is not just "what is visible" but:
 
-- design-system fidelity / style drift / AI-slop acceptance -> `$design-md` or `$design-workflow`
-- redesign direction -> `$frontend-design`
+- design-system fidelity / style drift / AI-slop acceptance -> `$design-md`
+- redesign direction -> `$design-md` when a reusable visual contract is needed, otherwise the relevant implementation owner
 - implementation debugging -> the relevant runtime owner
 
 ## Priority Routing Rule

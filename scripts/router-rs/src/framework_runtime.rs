@@ -196,6 +196,7 @@ struct FrameworkRuntimeView {
     task_registry_present: bool,
     active_task_id: Option<String>,
     focus_task_id: Option<String>,
+    control_plane_inconsistency_reasons: Vec<String>,
     known_task_ids: Vec<String>,
     recoverable_task_ids: Vec<String>,
     registered_tasks: Value,
@@ -268,6 +269,7 @@ pub fn build_framework_runtime_snapshot_envelope(
                 && snapshot.task_registry_present
                 && !snapshot.supervisor_state.is_empty(),
             "control_plane_missing": missing_control_plane_anchors(&snapshot),
+            "control_plane_inconsistency_reasons": snapshot.control_plane_inconsistency_reasons,
             "active_task_id": snapshot.active_task_id,
             "focus_task_id": snapshot.focus_task_id,
             "known_task_ids": snapshot.known_task_ids,
@@ -564,8 +566,7 @@ pub fn build_framework_memory_recall_envelope(
     }
     let snapshot = load_framework_runtime_view(repo_root, artifact_root_override, task_id_override);
     let memory_root = resolve_framework_memory_root(repo_root, memory_root_override);
-    let (changed_files, consolidation_note) =
-        ensure_framework_memory_seeded(repo_root, &snapshot, &memory_root, artifact_root_override)?;
+    let (changed_files, consolidation_note) = inspect_framework_memory_seed_state(&memory_root)?;
     let continuity = classify_runtime_continuity(&snapshot);
     let task = value_text(continuity.get("task"));
     let active_task = json!({
@@ -609,11 +610,23 @@ pub fn build_framework_memory_recall_envelope(
             query
         })
     };
+    let query_mismatch =
+        effective_continuity.get("state").and_then(Value::as_str) == Some("query-mismatch");
+    let prompt_active_task = if query_mismatch {
+        Value::Null
+    } else {
+        active_task.clone()
+    };
+    let prompt_active_task_id = if query_mismatch {
+        Value::Null
+    } else {
+        Value::String(snapshot.active_task_id.clone().unwrap_or_default())
+    };
     let prompt_payload = json!({
         "workspace": workspace_name,
-        "retrieval": compact_memory_retrieval_for_prompt(&retrieval),
+        "retrieval": compact_memory_retrieval_for_prompt(&retrieval, !query_mismatch),
         "continuity": compact_continuity_for_prompt(&effective_continuity),
-        "active_task": active_task.clone(),
+        "active_task": prompt_active_task,
         "registered_tasks": registered_tasks.clone(),
         "continuity_decision": {
             "query": query,
@@ -622,7 +635,7 @@ pub fn build_framework_memory_recall_envelope(
             "task_id": bootstrap_task_id,
             "source_task": if query_matches_active_task && !task.is_empty() { Value::String(task) } else { Value::Null },
             "mode": mode,
-            "active_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
+            "active_task_id": prompt_active_task_id,
         },
     });
     let diagnostics = json!({
@@ -1970,6 +1983,7 @@ fn load_framework_runtime_view(
     let focus_pointer = read_json_if_exists(&focus_task_pointer_path);
     let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
         normalized_task_registry(&read_json_if_exists(&task_registry_path));
+    let registry_task_ids_before_selection = known_task_ids.clone();
     let focus_task_id = {
         let direct = safe_slug(&value_text(focus_pointer.get("task_id")));
         if direct.is_empty().not() {
@@ -1978,26 +1992,71 @@ fn load_framework_runtime_view(
             None
         }
     };
+    let supervisor_task_id = safe_slug(&value_text(supervisor_state.get("task_id")));
+    let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
+    let mut control_plane_inconsistency_reasons = stable_line_items(vec![
+        if !supervisor_task_id.is_empty()
+            && focus_task_id
+                .as_ref()
+                .is_some_and(|task_id| task_id != &supervisor_task_id)
+        {
+            format!(
+                "supervisor task_id '{supervisor_task_id}' disagrees with focus task pointer '{}'",
+                focus_task_id.clone().unwrap_or_default()
+            )
+        } else {
+            String::new()
+        },
+        if !supervisor_task_id.is_empty()
+            && !pointer_task_id.is_empty()
+            && supervisor_task_id != pointer_task_id
+        {
+            format!(
+                "supervisor task_id '{supervisor_task_id}' disagrees with active task pointer '{pointer_task_id}'"
+            )
+        } else {
+            String::new()
+        },
+        if focus_task_id
+            .as_ref()
+            .is_some_and(|task_id| !pointer_task_id.is_empty() && task_id != &pointer_task_id)
+        {
+            format!(
+                "focus task pointer '{}' disagrees with active task pointer '{pointer_task_id}'",
+                focus_task_id.clone().unwrap_or_default()
+            )
+        } else {
+            String::new()
+        },
+    ]);
     let active_task_id = {
         let direct = safe_slug(task_id_override.unwrap_or(""));
         if direct.is_empty().not() {
             Some(direct)
+        } else if let Some(focus_task_id) = focus_task_id.clone() {
+            Some(focus_task_id)
+        } else if pointer_task_id.is_empty().not() {
+            Some(pointer_task_id.clone())
         } else {
-            let direct = safe_slug(&value_text(supervisor_state.get("task_id")));
-            if direct.is_empty().not() {
-                Some(direct)
-            } else if let Some(focus_task_id) = focus_task_id.clone() {
-                Some(focus_task_id)
-            } else {
-                let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
-                if pointer_task_id.is_empty() {
-                    None
-                } else {
-                    Some(pointer_task_id)
-                }
-            }
+            supervisor_task_id
+                .is_empty()
+                .not()
+                .then_some(supervisor_task_id.clone())
         }
     };
+    if task_id_override.is_none() {
+        if let Some(task_id) = active_task_id.as_ref() {
+            if task_registry_present
+                && !registry_task_ids_before_selection
+                    .iter()
+                    .any(|existing| existing == task_id)
+            {
+                control_plane_inconsistency_reasons.push(format!(
+                    "selected task_id '{task_id}' is missing from task_registry.json"
+                ));
+            }
+        }
+    }
     if let Some(task_id) = active_task_id.clone() {
         if !known_task_ids.iter().any(|existing| existing == &task_id) {
             known_task_ids.push(task_id.clone());
@@ -2022,7 +2081,6 @@ fn load_framework_runtime_view(
     let task_root = active_task_id
         .as_ref()
         .map_or_else(|| mirror_root.clone(), |task_id| mirror_root.join(task_id));
-    let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
     let mirror_matches_selected = active_task_id
         .as_ref()
         .is_some_and(|task_id| task_id == &pointer_task_id);
@@ -2062,6 +2120,7 @@ fn load_framework_runtime_view(
         task_registry_present,
         active_task_id,
         focus_task_id,
+        control_plane_inconsistency_reasons,
         known_task_ids,
         recoverable_task_ids,
         registered_tasks,
@@ -2219,6 +2278,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         } else {
             String::new()
         },
+        join_lines(&snapshot.control_plane_inconsistency_reasons),
     ]);
     let stale_reasons = stale_continuity_reasons(
         StaleContinuityInputs {
@@ -2751,8 +2811,6 @@ fn render_framework_memory_context(
     max_items: usize,
     mode: &str,
 ) -> Result<Value, String> {
-    fs::create_dir_all(memory_root)
-        .map_err(|err| format!("create framework memory root failed: {err}"))?;
     let stable_documents = read_stable_memory_documents_from_root(memory_root);
     let mut sections = collect_stable_memory_sections(&stable_documents, query, max_items);
     let mut freshness = json!({
@@ -2782,7 +2840,7 @@ fn render_framework_memory_context(
                 max_items,
             ));
         }
-        let state = refresh_continuity_debug_cache(snapshot)?;
+        let state = build_continuity_debug_state(snapshot);
         if !state.is_null() && state != Value::Object(Map::new()) {
             if let Ok(text) = serde_json::to_string_pretty(&state) {
                 sections.push(("runtime/CONTINUITY_STATE.json".to_string(), text));
@@ -3157,7 +3215,7 @@ fn list_sqlite_rows(
     rows.filter_map(Result::ok).collect()
 }
 
-fn refresh_continuity_debug_cache(snapshot: &FrameworkRuntimeView) -> Result<Value, String> {
+fn build_continuity_debug_state(snapshot: &FrameworkRuntimeView) -> Value {
     let continuity = classify_runtime_continuity(snapshot);
     let state_path = snapshot.current_root.join(CONTINUITY_STATE_FILENAME);
     let state = read_json_if_exists(&state_path);
@@ -3165,17 +3223,10 @@ fn refresh_continuity_debug_cache(snapshot: &FrameworkRuntimeView) -> Result<Val
         .get("state")
         .and_then(Value::as_str)
         .unwrap_or("");
-    if !matches!(continuity_state, "active" | "completed") {
-        return Ok(state);
+    if matches!(continuity_state, "active" | "completed") {
+        return build_continuity_state(snapshot);
     }
-    let payload = build_continuity_state(snapshot);
-    if state != payload {
-        let text = serde_json::to_string_pretty(&payload)
-            .map_err(|err| format!("serialize continuity state failed: {err}"))?;
-        write_text_if_changed(&state_path, &(text + "\n"))?;
-        return Ok(payload);
-    }
-    Ok(state)
+    state
 }
 
 fn build_continuity_state(snapshot: &FrameworkRuntimeView) -> Value {
@@ -3312,80 +3363,24 @@ pub(crate) fn archive_pre_cutover_memory_surfaces(memory_root: &Path) -> Result<
     }))
 }
 
-fn default_memory_md(repo_root: &Path) -> String {
-    [
-        "# 项目长期记忆",
-        "",
-        "长期层只放索引和稳定摘要；活任务状态看 `artifacts/current/<task_id>/`、`artifacts/current/active_task.json` 和 `.supervisor_state.json`。",
-        "",
-        "## 索引",
-        "",
-        &format!("- 仓库：`{}`。", repo_root.display()),
-        "- 偏好：`preferences.md`。",
-        "- 稳定决策：`decisions.md`。",
-        "- 操作入口：`runbooks.md`。",
-        "- 经验教训：`lessons.md`。",
-        "",
-    ]
-    .join("\n")
-        + "\n"
-}
-
-fn default_runbooks() -> String {
-    [
-        "# runbooks",
-        "",
-        "## 标准操作",
-        "",
-        "- 统一维护入口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>",
-        "- 需要迁移旧 artifact 布局时显式执行：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml migrate current-artifact-clutter <active_task_id> --repo-root <repo_root>",
-        "- 生成下一轮提示：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework refresh --repo-root <repo_root> --max-lines 4",
-        "- 召回上下文：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework memory-recall <关键词> --repo-root <repo_root> --mode stable|active|history|debug --limit <N>",
-        "- 生命周期收口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml framework refresh --repo-root <repo_root> --max-lines 4",
-        "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
-        "",
-    ]
-    .join("\n")
-        + "\n"
-}
-
-fn ensure_framework_memory_seeded(
-    repo_root: &Path,
-    _snapshot: &FrameworkRuntimeView,
+fn inspect_framework_memory_seed_state(
     memory_root: &Path,
-    artifact_root_override: Option<&Path>,
 ) -> Result<(Vec<String>, String), String> {
-    fs::create_dir_all(memory_root)
-        .map_err(|err| format!("create framework memory root failed: {err}"))?;
+    if !memory_root.exists() {
+        return Ok((
+            Vec::new(),
+            "memory workspace is missing; recall stayed read-only and did not seed defaults"
+                .to_string(),
+        ));
+    }
     let memory_md_path = memory_root.join("MEMORY.md");
-    if memory_md_path.is_file() || artifact_root_override.is_some() {
+    if memory_md_path.is_file() {
         return Ok((Vec::new(), String::new()));
     }
-    let mut changed_files = Vec::new();
-    let defaults = [
-        ("MEMORY.md", default_memory_md(repo_root)),
-        ("preferences.md", "# preferences\n".to_string()),
-        ("decisions.md", "# decisions\n".to_string()),
-        ("lessons.md", "# lessons\n".to_string()),
-        ("runbooks.md", default_runbooks()),
-    ];
-    for (file_name, fallback_text) in defaults {
-        let path = memory_root.join(file_name);
-        let text = {
-            let existing = read_text_if_exists(&path);
-            if existing.trim().is_empty() {
-                fallback_text
-            } else {
-                existing
-            }
-        };
-        if write_text_if_changed(&path, &text)? {
-            changed_files.push(path.display().to_string());
-        }
-    }
     Ok((
-        changed_files,
-        "memory_workspace was empty; ran one-shot consolidation".to_string(),
+        Vec::new(),
+        "memory workspace has no MEMORY.md; recall stayed read-only and did not seed defaults"
+            .to_string(),
     ))
 }
 
@@ -3455,14 +3450,14 @@ fn build_query_mismatch_continuity(continuity: &Value, active_task: &Value) -> V
     })
 }
 
-fn compact_memory_retrieval_for_prompt(retrieval: &Value) -> Value {
+fn compact_memory_retrieval_for_prompt(retrieval: &Value, include_active_task_id: bool) -> Value {
     json!({
         "mode": retrieval.get("mode").cloned().unwrap_or(Value::Null),
         "memory_root": retrieval.get("memory_root").cloned().unwrap_or(Value::Null),
         "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or(Value::Bool(false)),
         "freshness": retrieval.get("freshness").cloned().unwrap_or_else(|| json!({})),
         "continuity_state": retrieval.get("continuity_state").cloned().unwrap_or(Value::Null),
-        "active_task_id": retrieval.get("active_task_id").cloned().unwrap_or(Value::Null),
+        "active_task_id": if include_active_task_id { retrieval.get("active_task_id").cloned().unwrap_or(Value::Null) } else { Value::Null },
         "items": retrieval
             .get("items")
             .and_then(Value::as_array)

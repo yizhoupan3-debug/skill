@@ -15,10 +15,12 @@
 | If the task starts with... | Route first | Why |
 |---|---|---|
 | OpenAI API / 模型 / 官方当前文档 | `openai-docs` | Use official OpenAI docs first for current OpenAI guidan |
-| PR 评论 / review comment | `gh-address-comments` | Address GitHub PR review comments with gh-source-gate. |
+| PR 评论 / review comment | `gh-address-comments` | Address GitHub PR review comments and lightweight PR tri |
 | CI 失败 / GitHub Actions 报红 | `gh-fix-ci` | Triage and fix failing GitHub Actions PR checks with gh- |
 | Sentry 告警 / 线上异常 | `sentry` | Inspect Sentry production errors and issue evidence read |
-| PDF / DOCX / 表格产物 | `pdf` | Handle layout-aware PDF reading, editing, repair, and re |
+| PDF 文件 | `pdf` | Handle layout-aware PDF reading, editing, repair, and re |
+| DOCX / Word 文件 | `doc` | Handle layout-aware Word .docx creation, edits, and revi |
+| Excel / CSV / 表格产物 | `spreadsheets` | Route workbook-native spreadsheet artifact work before c |
 | 截图 / 页面 / 图表可视核查 | `visual-review` | Review screenshots and rendered visual artifacts. |
 
 ## Common lanes
@@ -30,7 +32,9 @@
 | 截图 / 页面 / 图表可视核查 | `visual-review` | Review screenshots and rendered visual artifacts. |
 | Git 流程 / 分支合并 / 推送 | `gitx` | Run the safe Git review-fix-tidy-commit-branch-merge-pus |
 | PPT / slides / deck | `slides` | Route presentation, PPT, PPTX, and slide deck tasks. |
-| PDF / DOCX / 表格产物 | `pdf` | Handle layout-aware PDF reading, editing, repair, and re |
+| PDF 文件 | `pdf` | Handle layout-aware PDF reading, editing, repair, and re |
+| DOCX / Word 文件 | `doc` | Handle layout-aware Word .docx creation, edits, and revi |
+| Excel / CSV / 表格产物 | `spreadsheets` | Route workbook-native spreadsheet artifact work before c |
 | 设计规范 / DESIGN.md / token | `design-md` | Manage DESIGN.md design-system contracts and visual toke |
 | OpenAI API / 模型 / 官方当前文档 | `openai-docs` | Use official OpenAI docs first for current OpenAI guidan |
 
