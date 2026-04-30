@@ -97,9 +97,10 @@ serial full-build path for sign-off**.
   `$visual-review`.
 - Build is failing and the root cause is unknown: use `$systematic-debugging`
   first, then return here for speed/stability.
-- Task is generic JS/TS/Python/Rust build tooling: use `$build-tooling`.
-- User asks to rewrite TeX compilation itself in Rust: route to `$rust-pro` only
-  after confirming this is a new tool project, not normal LaTeX acceleration.
+- Task is generic JS/TS/Python/Rust build tooling: answer in the current
+  implementation context instead of routing through this LaTeX-specific owner.
+- User asks to rewrite TeX compilation itself in Rust: treat it as a new tool
+  project, not normal LaTeX acceleration.
 
 ## Execution Contract
 

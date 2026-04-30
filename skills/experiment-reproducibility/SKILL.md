@@ -55,18 +55,17 @@ This skill owns **experiment reproducibility management** for research.
 
 ## Do not use
 
-- The user wants one front door for a research-project task rather than reproducibility only -> use `$research-workbench`
-- The task is about training models → use `$ai-research`
-- The task is about CI/CD pipeline → use `$github-actions-authoring`
-- The task is about general Docker setup → use `$docker`
+- The user wants one front door for a research-project task rather than reproducibility only -> keep the current project owner and use this skill only for reproducibility constraints
+- The task is about training models -> answer in the current implementation context, or use `$mac-memory-management` when Apple Silicon memory/MPS behavior dominates
+- The task is about CI/CD pipeline -> answer in the current implementation context, or use `$gh-fix-ci` only for failing GitHub Actions checks
+- The task is about general Docker setup -> answer in the current implementation context
 - The task is about paper writing → use `$paper-writing`
 
 ## Cross-references
 
-- `$research-workbench` uses this skill as the rigor / reproducibility lane
-- `$autoresearch` inner-loop reproducibility requirements should route to this skill
-- `$ai-research` routes deep reproducibility management (beyond its built-in checklist) to this skill
-- Works with `$code-acceleration` when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs
+- Project and experiment owners may use this skill as the rigor / reproducibility lane
+- Inner-loop research automation should route deep reproducibility requirements here
+- Works with performance work when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs
 - Works with `$mac-memory-management` when reproducibility must account for Mac memory constraints and fallback behavior
 
 ## Reproducibility Layers
@@ -160,7 +159,7 @@ Every experiment should log: experiment info, environment (Python/CUDA/GPU/OS/li
 - Do not use floating seeds (random seeds that change per run) in final results
 - Always commit code before running experiments (protocol locking)
 - Record negative results with the same rigor as positive results
-- If the user only asks "下一步做什么", do not turn that into a reproducibility-only task; route back to `$research-workbench`
+- If the user only asks "下一步做什么", do not turn that into a reproducibility-only task; return to the current project owner with only the reproducibility blocker noted
 
 ## Trigger examples
 

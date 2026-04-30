@@ -73,7 +73,7 @@ After extracting Sentry evidence, if the root cause is still not confirmed:
 - Pass along the extracted stack trace and Sentry event metadata as the evidence block.
 - Do not jump directly to a "fix" without root-cause isolation when the Sentry trace is ambiguous.
 
-If the stack trace clearly points to a specific line/module and the cause is self-evident, you may proceed directly to the domain owner (e.g., `$frontend-debugging`, `$node-backend`).
+If the stack trace clearly points to a specific line/module and the cause is self-evident, you may proceed directly to the relevant implementation owner.
 
 ## Output defaults
 

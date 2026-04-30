@@ -1,9 +1,9 @@
-use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
+use chrono::{DateTime, FixedOffset, Local, NaiveDate, SecondsFormat};
 use regex::Regex;
 use rusqlite::{params, Connection};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::ops::Not;
@@ -2830,7 +2830,7 @@ fn render_framework_memory_context(
     if matches!(mode, "history" | "debug") {
         sections.extend(collect_archive_sections(memory_root, query, max_items));
     }
-    if mode == "debug" {
+    if matches!(mode, "stable" | "active" | "debug") {
         let workspace_name = workspace_name_from_root(repo_root);
         if let Some(sqlite_path) = resolve_memory_sqlite_path(memory_root) {
             sections.extend(collect_sqlite_sections(
@@ -2840,6 +2840,8 @@ fn render_framework_memory_context(
                 max_items,
             ));
         }
+    }
+    if mode == "debug" {
         let state = build_continuity_debug_state(snapshot);
         if !state.is_null() && state != Value::Object(Map::new()) {
             if let Ok(text) = serde_json::to_string_pretty(&state) {
@@ -3132,26 +3134,45 @@ fn list_sqlite_memory_items(
     workspace: &str,
     query: &str,
     max_items: usize,
-) -> Vec<std::collections::BTreeMap<String, String>> {
-    let rows = list_sqlite_rows(
-        conn,
-        "SELECT summary, source, category, status, notes, metadata_json FROM memory_items WHERE workspace = ? AND status = 'active' ORDER BY updated_at DESC LIMIT ?",
-        workspace,
-        500,
+) -> Vec<BTreeMap<String, String>> {
+    let columns = sqlite_table_columns(conn, "memory_items");
+    let expires_expr = if columns.contains("expires_at") {
+        "expires_at"
+    } else {
+        "'' AS expires_at"
+    };
+    let retired_expr = if columns.contains("retired_at") {
+        "retired_at"
+    } else {
+        "'' AS retired_at"
+    };
+    let base_sql = format!(
+        "SELECT summary, source, category, status, notes, metadata_json, keywords_json, {expires_expr}, {retired_expr} FROM memory_items WHERE workspace = ? AND status = 'active' ORDER BY updated_at DESC"
     );
     if query.trim().is_empty() {
-        return rows.into_iter().take(max_items).collect();
+        let limit = max_items.max(1).saturating_mul(4);
+        return list_sqlite_rows(conn, &format!("{base_sql} LIMIT ?"), workspace, Some(limit))
+            .into_iter()
+            .filter(|row| !memory_item_is_expired(row))
+            .take(max_items)
+            .collect();
     }
+    let rows = list_sqlite_rows(conn, &base_sql, workspace, None)
+        .into_iter()
+        .filter(|row| !memory_item_is_expired(row))
+        .collect::<Vec<_>>();
     let mut ranked = rows
         .into_iter()
         .filter_map(|row| {
             let searchable = format!(
-                "{} {} {} {} {}",
+                "{} {} {} {} {} {} {}",
                 row.get("summary").cloned().unwrap_or_default(),
                 row.get("source").cloned().unwrap_or_default(),
                 row.get("category").cloned().unwrap_or_default(),
                 row.get("status").cloned().unwrap_or_default(),
-                row.get("notes").cloned().unwrap_or_default()
+                row.get("notes").cloned().unwrap_or_default(),
+                row.get("keywords_json").cloned().unwrap_or_default(),
+                row.get("metadata_json").cloned().unwrap_or_default()
             )
             .to_lowercase();
             if !topic_strong_match(query, &searchable) {
@@ -3177,23 +3198,32 @@ fn list_sqlite_memory_items(
         .collect()
 }
 
+fn sqlite_table_columns(conn: &Connection, table: &str) -> HashSet<String> {
+    let Ok(mut stmt) = conn.prepare(&format!("PRAGMA table_info({table})")) else {
+        return HashSet::new();
+    };
+    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) else {
+        return HashSet::new();
+    };
+    rows.filter_map(Result::ok).collect()
+}
+
 fn list_sqlite_rows(
     conn: &Connection,
     sql: &str,
     workspace: &str,
-    limit: usize,
-) -> Vec<std::collections::BTreeMap<String, String>> {
+    limit: Option<usize>,
+) -> Vec<BTreeMap<String, String>> {
     let Ok(mut stmt) = conn.prepare(sql) else {
         return Vec::new();
     };
-    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
     let column_names = stmt
         .column_names()
         .into_iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    let Ok(rows) = stmt.query_map(params![workspace, limit], |row| {
-        let mut payload = std::collections::BTreeMap::new();
+    let build_payload = |row: &rusqlite::Row<'_>| {
+        let mut payload = BTreeMap::new();
         for (index, column_name) in column_names.iter().enumerate() {
             let value = match row.get_ref(index) {
                 Ok(rusqlite::types::ValueRef::Integer(value)) => value.to_string(),
@@ -3209,10 +3239,53 @@ fn list_sqlite_rows(
             payload.insert(column_name.clone(), value);
         }
         Ok(payload)
-    }) else {
+    };
+    if let Some(limit) = limit {
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let Ok(rows) = stmt.query_map(params![workspace, limit], build_payload) else {
+            return Vec::new();
+        };
+        return rows.filter_map(Result::ok).collect();
+    }
+    let Ok(rows) = stmt.query_map(params![workspace], build_payload) else {
         return Vec::new();
     };
     rows.filter_map(Result::ok).collect()
+}
+
+fn memory_item_is_expired(row: &BTreeMap<String, String>) -> bool {
+    let expires_at = row
+        .get("expires_at")
+        .cloned()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| memory_metadata_string(row.get("metadata_json"), "expires_at"))
+        .or_else(|| memory_metadata_string(row.get("metadata_json"), "expires_on"));
+    expires_at
+        .as_deref()
+        .is_some_and(|value| memory_expiry_has_passed(value, Local::now().fixed_offset()))
+}
+
+fn memory_metadata_string(metadata_json: Option<&String>, key: &str) -> Option<String> {
+    let metadata = serde_json::from_str::<Value>(metadata_json?.trim()).ok()?;
+    metadata
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn memory_expiry_has_passed(value: &str, now: DateTime<FixedOffset>) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if let Ok(expires_at) = DateTime::parse_from_rfc3339(trimmed) {
+        return expires_at <= now;
+    }
+    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+        .map(|date| date < now.date_naive())
+        .unwrap_or(false)
 }
 
 fn build_continuity_debug_state(snapshot: &FrameworkRuntimeView) -> Value {
@@ -3749,6 +3822,14 @@ fn persist_memory_policy_items_if_requested(
         .or_else(|| payload.get("write_stable_journal"))
         .and_then(Value::as_bool)
         .unwrap_or(true);
+    let expires_at = payload
+        .get("expires_at")
+        .or_else(|| payload.get("expires_on"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_default();
     let sqlite_path = memory_root.join("memory.sqlite3");
     let conn = Connection::open(&sqlite_path)
         .map_err(|err| format!("open memory policy sqlite failed: {err}"))?;
@@ -3770,6 +3851,7 @@ fn persist_memory_policy_items_if_requested(
             "schema_version": FRAMEWORK_MEMORY_POLICY_SCHEMA_VERSION,
             "authority": FRAMEWORK_MEMORY_POLICY_AUTHORITY,
             "source_pattern": item.source_pattern,
+            "expires_at": expires_at,
         }))
         .map_err(|err| format!("serialize memory metadata failed: {err}"))?;
         let keywords_json = serde_json::to_string(&query_tokens(&item.fact))
@@ -3778,11 +3860,11 @@ fn persist_memory_policy_items_if_requested(
             .execute(
                 "INSERT OR REPLACE INTO memory_items (
                     item_id, workspace, category, source, confidence, status, summary, notes,
-                    evidence_json, metadata_json, keywords_json, created_at, updated_at
+                    evidence_json, metadata_json, keywords_json, expires_at, retired_at, created_at, updated_at
                 ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, 'active', ?6, '', ?7, ?8, ?9,
-                    COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?10),
-                    ?10
+                    ?10, '', COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?11),
+                    ?11
                 )",
                 params![
                     item_id,
@@ -3794,30 +3876,68 @@ fn persist_memory_policy_items_if_requested(
                     evidence_json,
                     metadata_json,
                     keywords_json,
+                    expires_at,
                     now,
                 ],
             )
             .map_err(|err| format!("persist memory policy item failed: {err}"))?;
         item_ids.push(item_id);
-        journal_lines.push(format!(
-            "- [{}] {}",
+        if matches!(
             memory_category_for_pattern(&item.source_pattern),
-            item.fact
-        ));
+            "decision" | "preference"
+        ) {
+            journal_lines.push(format!(
+                "- [{}] {}",
+                memory_category_for_pattern(&item.source_pattern),
+                item.fact
+            ));
+        }
     }
-    let journal_path = if stable_journal && !items.is_empty() {
-        let path = memory_root.join("decisions.md");
-        append_memory_policy_journal(&path, &now, &journal_lines)?;
-        Value::String(path.display().to_string())
+    let journal_paths = if stable_journal && !journal_lines.is_empty() {
+        let mut paths = Vec::new();
+        let decisions = journal_lines
+            .iter()
+            .filter(|line| line.starts_with("- [decision]"))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !decisions.is_empty() {
+            let path = memory_root.join("decisions.md");
+            append_memory_policy_journal(
+                &path,
+                "# decisions\n",
+                "## Rust memory policy decisions",
+                &now,
+                &decisions,
+            )?;
+            paths.push(Value::String(path.display().to_string()));
+        }
+        let preferences = journal_lines
+            .iter()
+            .filter(|line| line.starts_with("- [preference]"))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !preferences.is_empty() {
+            let path = memory_root.join("preferences.md");
+            append_memory_policy_journal(
+                &path,
+                "# preferences\n",
+                "## Rust memory policy preferences",
+                &now,
+                &preferences,
+            )?;
+            paths.push(Value::String(path.display().to_string()));
+        }
+        Value::Array(paths)
     } else {
-        Value::Null
+        Value::Array(Vec::new())
     };
     Ok(json!({
         "requested": true,
         "persisted": true,
         "memory_root": memory_root.display().to_string(),
         "sqlite_path": sqlite_path.display().to_string(),
-        "stable_journal_path": journal_path,
+        "stable_journal_path": journal_paths.as_array().and_then(|paths| paths.first()).cloned().unwrap_or(Value::Null),
+        "stable_journal_paths": journal_paths,
         "item_count": items.len(),
         "changed_count": changed_count,
         "item_ids": item_ids,
@@ -3826,6 +3946,8 @@ fn persist_memory_policy_items_if_requested(
 
 fn append_memory_policy_journal(
     path: &Path,
+    default_header: &str,
+    section_header: &str,
     timestamp: &str,
     lines: &[String],
 ) -> Result<(), String> {
@@ -3834,7 +3956,7 @@ fn append_memory_policy_journal(
     }
     let mut existing = read_text_if_exists(path);
     if existing.trim().is_empty() {
-        existing = "# decisions\n".to_string();
+        existing = default_header.to_string();
     }
     let existing_keys = existing
         .lines()
@@ -3855,8 +3977,10 @@ fn append_memory_policy_journal(
         return Ok(());
     }
     let mut output = existing.trim_end().to_string();
-    if !output.contains("## Rust memory policy facts") {
-        output.push_str("\n\n## Rust memory policy facts\n");
+    if !output.contains(section_header) {
+        output.push_str("\n\n");
+        output.push_str(section_header);
+        output.push('\n');
     }
     output.push_str("\n### ");
     output.push_str(timestamp);
@@ -3881,12 +4005,32 @@ fn ensure_memory_items_table(conn: &Connection) -> Result<(), String> {
             evidence_json TEXT NOT NULL DEFAULT '[]',
             metadata_json TEXT NOT NULL DEFAULT '{}',
             keywords_json TEXT NOT NULL DEFAULT '[]',
+            expires_at TEXT NOT NULL DEFAULT '',
+            retired_at TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )",
         [],
     )
     .map_err(|err| format!("create memory_items table failed: {err}"))?;
+    ensure_memory_items_column(conn, "expires_at", "TEXT NOT NULL DEFAULT ''")?;
+    ensure_memory_items_column(conn, "retired_at", "TEXT NOT NULL DEFAULT ''")?;
+    Ok(())
+}
+
+fn ensure_memory_items_column(
+    conn: &Connection,
+    name: &str,
+    definition: &str,
+) -> Result<(), String> {
+    if sqlite_table_columns(conn, "memory_items").contains(name) {
+        return Ok(());
+    }
+    conn.execute(
+        &format!("ALTER TABLE memory_items ADD COLUMN {name} {definition}"),
+        [],
+    )
+    .map_err(|err| format!("add memory_items.{name} column failed: {err}"))?;
     Ok(())
 }
 

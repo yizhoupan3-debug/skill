@@ -108,10 +108,10 @@ dimension mode.
 
 ## Do not use
 
-- The user wants to advance a non-manuscript research project, topic, or experiment plan -> use `$research-workbench`
+- The user wants to advance a non-manuscript research project, topic, or experiment plan -> use the current research/project owner; this front door is manuscript-only
 - The user explicitly wants only one narrow lane and names it clearly:
   - local text polish only -> use `$paper-writing`
-  - literature corpus / related work only -> use `$literature-synthesis`
+  - literature corpus / related work only -> keep the work here as source-backed paper context until it narrows to writing or citation hygiene
   - notation consistency only -> use `notation sweep` under `$paper-reviewer`
 
 ## Default front-door behavior
@@ -153,10 +153,9 @@ separate "known blocker" from "uncertainty that needs lookup".
 
 - strict submission judgment -> `$paper-reviewer`
 - claim / novelty / evidence pressure test -> `logic mode` under `$paper-reviewer` or `$paper-reviser`
-- target-journal ref corpus and story-norm extraction -> `$literature-synthesis`, then `$paper-writing`
+- target-journal ref corpus and story-norm extraction -> source-backed paper context here, then `$paper-writing`
 - external calibration during review -> keep the main owner here or in
-  `$paper-reviewer`; use `$literature-synthesis` only when the lookup becomes a
-  full corpus / novelty sweep
+  `$paper-reviewer`; keep full corpus / novelty sweeps inside this paper front door
 - findings-driven manuscript changes -> `$paper-reviser`
 - local prose rewrite after scope is frozen -> `$paper-writing`
 - figures / tables / captions / rendered presentation -> `figure-table mode`
@@ -198,7 +197,7 @@ Behind the scenes, this skill may switch lanes. The user should not need to.
 
 When the user wants to learn target-journal references before writing:
 
-1. Route to `$literature-synthesis` to build the 20-paper target-journal corpus and ref-learning brief.
+1. Build the 20-paper target-journal corpus and ref-learning brief as source-backed paper context under this front door.
 2. Route to `$paper-reviewer` logic mode only if the corpus exposes a claim/evidence or novelty mismatch.
 3. Route to `$paper-writing` for story spine, section plan, and bounded prose rewrite.
 4. Keep `$citation-management` for final citation truth and `.bib` hygiene, not for the initial story-learning pass.

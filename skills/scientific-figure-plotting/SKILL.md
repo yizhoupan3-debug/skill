@@ -50,7 +50,7 @@ produce reproducible scripts, not one-off screenshots.
 
 ## Do Not Use
 
-- General data cleaning before plotting -> use `$data-wrangling`.
+- General data cleaning before plotting -> answer in the current data/implementation context.
 - Statistical test choice without figure work -> use `$statistical-analysis`.
 - Visual review of an already-rendered figure only -> use `$visual-review`.
 - Infographics or marketing visuals -> use `$infographic` or design skills.

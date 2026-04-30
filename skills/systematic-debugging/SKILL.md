@@ -82,8 +82,8 @@ unknown, do not jump straight to implementation.
 
 - Root cause is already proven and the user only wants the fix
 - The task is pure feature work (no failure involved)
-- The task is project-wide error-handling design → use `$error-handling-patterns`
-- The problem is clearly frontend-runtime-specific and already belongs to `$frontend-debugging`
+- The task is project-wide error-handling design -> use the current architecture or implementation context
+- The problem is clearly frontend-runtime-specific and already belongs to a selected frontend implementation owner
 - Covered by the **豁免条件** above
 
 ## Primary operating principle

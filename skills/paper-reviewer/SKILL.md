@@ -193,8 +193,8 @@ disk:
 - For explicit dimension review, inspect only that slice and do not silently expand scope
 - For whole-paper review, parallelize only bounded audit lanes under the current active gate
 - Use `logic mode` for claim, novelty, evidence, and experiment-depth subanalysis
-- Use `$literature-synthesis` only for a heavier external corpus or novelty
-  sweep; do not force the user to switch skills for a normal reviewer lookup
+- Keep heavier external corpus or novelty sweeps inside the current paper
+  workflow; do not force the user to switch skills for a normal reviewer lookup
 - When a review reveals story/positioning weakness but the user wants target-journal imitation before rewriting, hand back to `$paper-workbench` ref-first workflow rather than doing prose edits here
 - Use `$citation-management` for citation truth and venue calibration
 - Use `figure-table mode`, `$visual-review`, and `$pdf` for final-scale figure, table, and layout checks

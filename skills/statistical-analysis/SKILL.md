@@ -53,16 +53,16 @@ This skill owns **statistical method selection, execution, and interpretation** 
 
 ## Do not use
 
-- The user wants one front door for a research-project task rather than statistics only -> use `$research-workbench`
-- The task is ML model training or evaluation → use `$ai-research` or `$mac-memory-management` when Mac memory/runtime constraints dominate
-- The task is data wrangling or cleaning → use `$data-wrangling`
+- The user wants one front door for a research-project task rather than statistics only -> keep the current research/project owner and use this skill only for statistical questions
+- The task is ML model training or evaluation -> use `$mac-memory-management` when Apple Silicon memory/runtime constraints dominate; otherwise answer in the current implementation context
+- The task is data wrangling or cleaning -> answer in the current data/implementation context
 - The task is plotting without statistical analysis → use `$scientific-figure-plotting`
 - The task is paper writing → use `$paper-writing` (but may co-invoke for results sections)
 - The task is about paper-level scientific logic or claims-vs-evidence alignment → use `$paper-reviewer` logic mode (which may route statistical questions here)
 
 ## Cross-references
 
-- `$research-workbench` uses this skill as the statistics / uncertainty lane
+- Current research/project owners may use this skill as the statistics / uncertainty lane
 - `$paper-reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
 - `$paper-reviewer` Tier-1 statistical rigor checks may route here for detailed analysis
 
@@ -139,8 +139,8 @@ Use `统计分析报告`:
 - limitations and assumptions
 
 For research-project orchestration, return the statistical blocker and hand the
-workflow back to `$research-workbench` after the test choice, assumption check,
-or interpretation is settled.
+workflow back to the current research/project owner after the test choice,
+assumption check, or interpretation is settled.
 
 ## Hard Constraints
 

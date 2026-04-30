@@ -54,11 +54,11 @@ This skill owns Mac-specific runtime optimization for ML workloads when unified 
 
 ## Do not use
 
-- The task is general model architecture, training strategy, or research engineering -> use `$ai-research`
-- The task is generic code acceleration such as pandas -> polars, faster serializers, or hot-path rewrites with no Mac runtime constraint -> use `$code-acceleration`
+- The task is general model architecture, training strategy, or research engineering -> answer in the current research/implementation context
+- The task is generic code acceleration such as pandas -> polars, faster serializers, or hot-path rewrites with no Mac runtime constraint -> answer in the current implementation context
 - The task is experiment tracking, seeds, or reproducibility management -> use `$experiment-reproducibility`
-- The task is non-Mac hardware or CUDA-first stack tuning -> use `$ai-research`
-- The task is broad training setup guidance that is not memory-specific -> use `$ai-research`
+- The task is non-Mac hardware or CUDA-first stack tuning -> answer in the current research/implementation context
+- The task is broad training setup guidance that is not memory-specific -> answer in the current research/implementation context
 
 ## Task ownership and boundaries
 
@@ -83,9 +83,9 @@ This skill does not own:
 
 ## Companion routing policy
 
-- [`$ai-research`](../ai-research/SKILL.md) and [`$autoresearch`](../autoresearch/SKILL.md) should proactively check this skill first before expensive runs on Apple Silicon, MPS, or tight unified-memory paths, not only after an OOM.
-- Pair this skill with [`$code-acceleration`](../code-acceleration/SKILL.md) when a Mac runtime bottleneck survives device-path, batching, worker, caching, and retention fixes and still needs generic hot-path rewrites.
-- Keep this skill focused on Mac runtime control; generic memory-efficient rewrites and non-Mac accelerations remain in `code-acceleration`.
+- Current research or implementation owners should proactively check this skill before expensive runs on Apple Silicon, MPS, or tight unified-memory paths, not only after an OOM.
+- If a Mac runtime bottleneck survives device-path, batching, worker, caching, and retention fixes, hand generic hot-path rewrites back to the current implementation owner.
+- Keep this skill focused on Mac runtime control; generic memory-efficient rewrites and non-Mac accelerations stay outside this owner.
 
 ## Optimization order
 

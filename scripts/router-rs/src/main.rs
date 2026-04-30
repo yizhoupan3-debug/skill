@@ -7345,6 +7345,218 @@ mod tests {
     }
 
     #[test]
+    fn framework_memory_recall_stable_includes_sqlite_memory_items() {
+        let repo_root = temp_dir_path("memory-recall-sqlite-stable");
+        let memory_root = repo_root.join("memory");
+        write_text_fixture(&memory_root.join("MEMORY.md"), "# memory\n");
+        let workspace = repo_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .expect("workspace name");
+
+        let policy = framework_runtime::build_framework_memory_policy_envelope(json!({
+            "messages": [
+                {"role": "user", "content": "remember: sqlite recall keeps durable facts visible"}
+            ],
+            "persist": true,
+            "stable_journal": false,
+            "workspace": workspace,
+            "memory_root": memory_root.display().to_string()
+        }))
+        .expect("persist sqlite memory item");
+        assert_eq!(
+            policy["memory_policy"]["persistence"]["persisted"],
+            json!(true)
+        );
+
+        let payload = build_framework_memory_recall_envelope(
+            &repo_root,
+            "durable facts",
+            4,
+            "stable",
+            Some(&memory_root),
+            None,
+            None,
+        )
+        .expect("build stable memory recall");
+        let items = payload["memory_recall"]["prompt_payload"]["retrieval"]["items"]
+            .as_array()
+            .expect("retrieval items");
+        assert!(
+            items.iter().any(|item| {
+                item["path"] == json!("sqlite/memory_items.md")
+                    && item["content"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .contains("sqlite recall keeps durable facts visible")
+            }),
+            "stable recall should include relevant sqlite memory items"
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_memory_recall_filters_expired_sqlite_items() {
+        let repo_root = temp_dir_path("memory-recall-expired-sqlite");
+        let memory_root = repo_root.join("memory");
+        write_text_fixture(&memory_root.join("MEMORY.md"), "# memory\n");
+        let workspace = repo_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .expect("workspace name");
+
+        framework_runtime::build_framework_memory_policy_envelope(json!({
+            "messages": [
+                {"role": "user", "content": "remember: expired sqlite fact should not surface"}
+            ],
+            "persist": true,
+            "stable_journal": false,
+            "workspace": workspace,
+            "memory_root": memory_root.display().to_string(),
+            "expires_at": "2000-01-01"
+        }))
+        .expect("persist expired sqlite memory item");
+
+        let payload = build_framework_memory_recall_envelope(
+            &repo_root,
+            "expired sqlite fact",
+            4,
+            "stable",
+            Some(&memory_root),
+            None,
+            None,
+        )
+        .expect("build stable memory recall");
+        let items = payload["memory_recall"]["prompt_payload"]["retrieval"]["items"]
+            .as_array()
+            .expect("retrieval items");
+        assert!(
+            !items.iter().any(|item| item["content"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("expired sqlite fact should not surface")),
+            "expired sqlite memory should be filtered from recall"
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_memory_policy_routes_stable_journals_by_category() {
+        let repo_root = temp_dir_path("memory-policy-journal-routing");
+        let memory_root = repo_root.join("memory");
+        let workspace = repo_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .expect("workspace name");
+
+        framework_runtime::build_framework_memory_policy_envelope(json!({
+            "messages": [
+                {"role": "user", "content": "I prefer short memory reports"},
+                {"role": "user", "content": "decision: Rust remains the memory policy authority"},
+                {"role": "user", "content": "remember: transient implementation note"}
+            ],
+            "persist": true,
+            "workspace": workspace,
+            "memory_root": memory_root.display().to_string()
+        }))
+        .expect("persist categorized memory items");
+
+        let preferences = fs::read_to_string(memory_root.join("preferences.md"))
+            .expect("read preferences journal");
+        let decisions =
+            fs::read_to_string(memory_root.join("decisions.md")).expect("read decisions journal");
+        assert!(preferences.contains("short memory reports"));
+        assert!(decisions.contains("Rust remains the memory policy authority"));
+        assert!(
+            !decisions.contains("transient implementation note"),
+            "generic facts should stay sqlite-only until promoted"
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_memory_recall_scores_beyond_recent_sqlite_window() {
+        let repo_root = temp_dir_path("memory-recall-old-sqlite-relevant");
+        let memory_root = repo_root.join("memory");
+        write_text_fixture(&memory_root.join("MEMORY.md"), "# memory\n");
+        let workspace = repo_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .expect("workspace name");
+        let db_path = memory_root.join("memory.sqlite3");
+        let conn = rusqlite::Connection::open(&db_path).expect("open memory db");
+        conn.execute(
+            "CREATE TABLE memory_items (
+                item_id TEXT PRIMARY KEY,
+                workspace TEXT NOT NULL,
+                category TEXT NOT NULL,
+                source TEXT NOT NULL,
+                confidence REAL NOT NULL DEFAULT 0.5,
+                status TEXT NOT NULL DEFAULT 'active',
+                summary TEXT NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                evidence_json TEXT NOT NULL DEFAULT '[]',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                keywords_json TEXT NOT NULL DEFAULT '[]',
+                expires_at TEXT NOT NULL DEFAULT '',
+                retired_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )
+        .expect("create memory table");
+        conn.execute(
+            "INSERT INTO memory_items VALUES (?1, ?2, 'decision', 'test', 0.9, 'active', ?3, '', '[]', '{}', ?4, '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            rusqlite::params![
+                "old-relevant",
+                workspace,
+                "ancient but crucial routing invariant for memory recall",
+                "[\"routing\",\"invariant\",\"memory\"]"
+            ],
+        )
+        .expect("insert old relevant memory");
+        for index in 0..600 {
+            conn.execute(
+                "INSERT INTO memory_items VALUES (?1, ?2, 'fact', 'test', 0.5, 'active', ?3, '', '[]', '{}', '[]', '', '', '2026-02-01T00:00:00Z', ?4)",
+                rusqlite::params![
+                    format!("new-irrelevant-{index}"),
+                    workspace,
+                    format!("new irrelevant note {index}"),
+                    format!("2026-03-01T00:{:02}:00Z", index % 60)
+                ],
+            )
+            .expect("insert irrelevant memory");
+        }
+
+        let payload = build_framework_memory_recall_envelope(
+            &repo_root,
+            "routing invariant",
+            4,
+            "stable",
+            Some(&memory_root),
+            None,
+            None,
+        )
+        .expect("build stable memory recall");
+        let items = payload["memory_recall"]["prompt_payload"]["retrieval"]["items"]
+            .as_array()
+            .expect("retrieval items");
+        assert!(
+            items.iter().any(|item| item["content"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("ancient but crucial routing invariant for memory recall")),
+            "relevant older sqlite memory should not be lost behind a recent-row window"
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
     fn framework_snapshot_reconciles_stale_supervisor_against_current_pointers() {
         let repo_root = temp_dir_path("runtime-anchor-reconcile");
         let artifacts_root = repo_root.join("artifacts");

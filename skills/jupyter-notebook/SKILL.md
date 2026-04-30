@@ -131,9 +131,9 @@ No required environment variables.
 
 ## Do not use
 
-- The task is pure Python scripting without notebook format → use `$python-pro`
-- The task is ML model training optimization → use `$ai-research` or `$mac-memory-management`
-- The task is data cleaning/ETL without notebook requirement → use `$data-wrangling`
+- The task is pure Python scripting without notebook format -> answer in the current implementation context
+- The task is ML model training optimization -> use `$mac-memory-management` when the concern is Apple Silicon memory/MPS behavior; otherwise answer in the current implementation context
+- The task is data cleaning/ETL without notebook requirement -> use the current artifact/source owner when one is selected; do not force a notebook
 - The task is scientific figure plotting without notebook context → use `$scientific-figure-plotting`
 - "强制进行 Notebook 深度审计 / 检查单元格执行顺序与运行结果一致性。"
 - "Use the runtime verification gate to audit this notebook for run-success idealism."
