@@ -67,7 +67,7 @@ science, citations, results, or reviewer-facing promises.
 ## Do Not Use
 
 - Whole-paper judgment, novelty, or experimental validity review -> use `$paper-reviewer` logic mode.
-- Literature search/synthesis before writing -> use `$literature-synthesis`.
+- Literature search/synthesis before writing -> keep the task in `$paper-workbench` until the source-backed story context is fixed.
 - Citation formatting or verification -> use `$citation-management`.
 - Generic non-academic prose -> use the owning domain skill, or `$documentation-engineering` for project docs.
 

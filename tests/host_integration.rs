@@ -257,7 +257,7 @@ fn memory_automation_materializes_sqlite_and_continuity_control_plane() {
         repo_root.join("artifacts/current/focus_task.json"),
         repo_root.join("artifacts/current/task_registry.json"),
         repo_root.join(".supervisor_state.json"),
-        repo_root.join(".codex/memory/memory.sqlite3"),
+        repo_root.join("memory/memory.sqlite3"),
         task_root.join("SESSION_SUMMARY.md"),
         task_root.join("NEXT_ACTIONS.json"),
         task_root.join("EVIDENCE_INDEX.json"),

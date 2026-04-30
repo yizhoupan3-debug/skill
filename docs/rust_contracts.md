@@ -25,7 +25,7 @@ Rust owns the default runtime and contract path.
 - `router-rs framework snapshot`, `contract-summary`, `memory-recall`, `session-artifact-write`, `memory-policy`, and `prompt-compression` own framework runtime read/write/policy surfaces.
 - `router-rs codex sync` owns repo host-entrypoint materialization.
 - `router-rs framework host-integration ...` owns native install/status/remove, bootstrap, projection, memory automation, and related host integration flows. `router-rs codex host-integration ...` is a thin compatibility alias only.
-- Rust memory policy persistence writes SQLite rows and, by default, appends deduped stable facts to `decisions.md`; `stable_journal: false` is the explicit opt-out.
+- Rust memory policy persistence writes SQLite rows by default. Stable journals are reserved for promoted `decision` and `preference` items: decisions go to `decisions.md`, preferences go to `preferences.md`, and generic facts stay SQLite-only until promoted.
 
 ## Current Status Ledger
 
@@ -35,7 +35,7 @@ Rust owns the default runtime and contract path.
 - Live execution and dry-run preview use Rust stdio.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, `memory`, and `background`.
 - Framework snapshot, contract summary, memory recall, session artifact writing, and prompt/memory policy use direct `router-rs` surfaces.
-- Memory policy extraction reports source/fact counts and can persist to both `memory.sqlite3` and the stable `decisions.md` journal without introducing an alternate writer.
+- Memory policy extraction reports source/fact counts, persists active rows to `memory.sqlite3`, filters expired rows from recall, and only mirrors promoted decisions/preferences into stable journals without introducing an alternate writer.
 - Host entrypoint sync and native integration are Rust-owned through `router-rs`; the supported host projection is `codex-cli`.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.

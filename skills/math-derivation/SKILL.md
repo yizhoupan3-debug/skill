@@ -77,19 +77,19 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 
 ## Do not use
 
-- The task is choosing/running a statistical test → use `$statistical-analysis`
-- The task is research-grade technical critique of a method/algorithm → use `$research-engineer`
+- The task is choosing/running a statistical test -> use `$statistical-analysis`
+- The task is research-grade technical critique of a method/algorithm -> use `$paper-reviewer` when it is paper-level; otherwise answer in the current task context without invoking a retired research owner
 - The task is auditing notation consistency in a paper -> use `$paper-reviewer` notation sweep
-- The task is numerical computation or coding → use `$python-pro` or `$scientific-figure-plotting`
+- The task is numerical computation or coding -> answer in the current implementation context, or use `$scientific-figure-plotting` when the deliverable is a publication figure
 - The task is explaining math intuitively without formal proof → answer directly
-- The task is ML model math with coding focus (loss function implementation, gradient code) → use `$ai-research`
+- The task is ML model math with coding focus (loss function implementation, gradient code) -> answer in the current implementation context; do not route to a retired AI/research skill
 - The task is reviewing paper-level scientific logic -> use `$paper-reviewer` logic mode
 - The task is LaTeX compilation or rendering → use `$latex-compile-acceleration`
 
 ## Cross-references
 
 - `$paper-reviewer` logic mode may route here when a paper's core claim requires formal proof verification
-- `$research-engineer` may co-invoke this skill for proof-oriented analysis of algorithms
+- Current implementation owners may use this skill for proof-oriented analysis of algorithms when the request is primarily formal math
 - `$statistical-analysis` handles statistical tests; this skill handles the underlying math (e.g., proving a test statistic's distribution)
 - `$paper-reviewer` notation sweep audits symbol consistency; this skill proves content correctness
 

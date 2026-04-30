@@ -1,10 +1,10 @@
-use crate::framework_runtime::{resolve_framework_memory_root, write_framework_session_artifacts};
-use chrono::Local;
+use crate::framework_runtime::write_framework_session_artifacts;
+use chrono::{DateTime, FixedOffset, Local, NaiveDate};
 use clap::{Parser, Subcommand};
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -2317,14 +2317,19 @@ fn run_memory_automation(
     let resolved_memory_root = memory_root
         .map(normalize_path)
         .transpose()?
-        .unwrap_or_else(|| resolve_framework_memory_root(&repo_root, None));
+        .unwrap_or_else(|| repo_root.join("memory"));
     let resolved_artifact_source_dir = artifact_source_dir.map(normalize_path).transpose()?;
     let workspace = workspace_override
         .map(str::to_owned)
         .unwrap_or_else(|| workspace_name_from_root(&repo_root));
 
-    let continuity_seed =
-        ensure_memory_automation_continuity(&repo_root, &workspace, query, artifact_source_dir)?;
+    let continuity_seed = ensure_memory_automation_continuity(
+        &repo_root,
+        &resolved_memory_root,
+        &workspace,
+        query,
+        artifact_source_dir,
+    )?;
 
     let mut runtime_args = vec!["framework".to_string(), "snapshot".to_string()];
     if let Some(path) = resolved_artifact_source_dir.as_ref() {
@@ -2574,6 +2579,7 @@ fn build_memory_automation_continuity_audit(runtime_payload: &Value) -> Value {
 
 fn ensure_memory_automation_continuity(
     repo_root: &Path,
+    memory_root: &Path,
     workspace: &str,
     query: &str,
     artifact_source_dir: Option<&Path>,
@@ -2591,6 +2597,17 @@ fn ensure_memory_automation_continuity(
         query.trim().to_string()
     };
     let task_id = safe_slug(&format!("{workspace}-{task}"));
+    let memory_root_label = memory_root.strip_prefix(repo_root).map_or_else(
+        |_| memory_root.display().to_string(),
+        |path| path.display().to_string(),
+    );
+    let sqlite_label = memory_root
+        .join("memory.sqlite3")
+        .strip_prefix(repo_root)
+        .map_or_else(
+            |_| memory_root.join("memory.sqlite3").display().to_string(),
+            |path| path.display().to_string(),
+        );
     let payload = json!({
         "repo_root": repo_root,
         "output_dir": repo_root.join("artifacts").join("current"),
@@ -2609,7 +2626,7 @@ fn ensure_memory_automation_continuity(
         "execution_contract": {
             "goal": "Keep memory automation usable as a restartable repo-local control loop.",
             "acceptance_criteria": [
-                "repo-local .codex/memory exists",
+                format!("repo-local memory root exists: {memory_root_label}"),
                 "memory.sqlite3 has a queryable memory_items table",
                 "artifacts/current pointers and task-scoped continuity artifacts exist",
                 ".supervisor_state.json points to the same active task"
@@ -2618,7 +2635,7 @@ fn ensure_memory_automation_continuity(
                 "artifacts/ops/memory_automation/current/run_summary.json",
                 "artifacts/bootstrap/framework_default_bootstrap.json",
                 "artifacts/current/active_task.json",
-                ".codex/memory/memory.sqlite3"
+                sqlite_label
             ]
         },
         "evidence": [
@@ -2829,6 +2846,7 @@ fn ensure_memory_automation_sqlite(
     })?;
     ensure_host_memory_items_table(&conn)?;
     let now = current_local_timestamp();
+    let retired_expired_count = retire_expired_host_memory_items(&conn, &now)?;
     let summary = format!(
         "Rust memory automation is active for workspace {workspace}; query '{}'; continuity task {}.",
         if query.trim().is_empty() {
@@ -2859,10 +2877,10 @@ fn ensure_memory_automation_sqlite(
         .execute(
             "INSERT OR REPLACE INTO memory_items (
                 item_id, workspace, category, source, confidence, status, summary, notes,
-                evidence_json, metadata_json, keywords_json, created_at, updated_at
+                evidence_json, metadata_json, keywords_json, expires_at, retired_at, created_at, updated_at
             ) VALUES (
                 ?1, ?2, 'fact', 'run_memory_automation', 0.9, 'active', ?3, ?4,
-                ?5, ?6, ?7, COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?8), ?8
+                ?5, ?6, ?7, '', '', COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?8), ?8
             )",
             rusqlite::params![
                 "memory-automation-control-loop",
@@ -2880,6 +2898,7 @@ fn ensure_memory_automation_sqlite(
         "db_path": db_path.display().to_string(),
         "item_id": "memory-automation-control-loop",
         "changed": changed > 0,
+        "retired_expired_count": retired_expired_count,
     }))
 }
 
@@ -2897,13 +2916,108 @@ fn ensure_host_memory_items_table(conn: &Connection) -> Result<(), String> {
             evidence_json TEXT NOT NULL DEFAULT '[]',
             metadata_json TEXT NOT NULL DEFAULT '{}',
             keywords_json TEXT NOT NULL DEFAULT '[]',
+            expires_at TEXT NOT NULL DEFAULT '',
+            retired_at TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )",
         [],
     )
     .map_err(|err| format!("create memory_items table failed: {err}"))?;
+    ensure_host_memory_items_column(conn, "expires_at", "TEXT NOT NULL DEFAULT ''")?;
+    ensure_host_memory_items_column(conn, "retired_at", "TEXT NOT NULL DEFAULT ''")?;
     Ok(())
+}
+
+fn ensure_host_memory_items_column(
+    conn: &Connection,
+    name: &str,
+    definition: &str,
+) -> Result<(), String> {
+    if host_memory_table_columns(conn).contains(name) {
+        return Ok(());
+    }
+    conn.execute(
+        &format!("ALTER TABLE memory_items ADD COLUMN {name} {definition}"),
+        [],
+    )
+    .map_err(|err| format!("add memory_items.{name} column failed: {err}"))?;
+    Ok(())
+}
+
+fn host_memory_table_columns(conn: &Connection) -> HashSet<String> {
+    let Ok(mut stmt) = conn.prepare("PRAGMA table_info(memory_items)") else {
+        return HashSet::new();
+    };
+    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) else {
+        return HashSet::new();
+    };
+    rows.filter_map(Result::ok).collect()
+}
+
+fn retire_expired_host_memory_items(conn: &Connection, now: &str) -> Result<usize, String> {
+    let columns = host_memory_table_columns(conn);
+    if !columns.contains("expires_at") || !columns.contains("retired_at") {
+        return Ok(0);
+    }
+    let mut stmt = conn
+        .prepare(
+            "SELECT item_id, expires_at, metadata_json FROM memory_items WHERE status = 'active'",
+        )
+        .map_err(|err| format!("select memory expiration candidates failed: {err}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|err| format!("read memory expiration candidates failed: {err}"))?;
+    let now_dt = DateTime::parse_from_rfc3339(now).unwrap_or_else(|_| Local::now().fixed_offset());
+    let mut retired = 0usize;
+    for row in rows.filter_map(Result::ok) {
+        let expires_at = if row.1.trim().is_empty() {
+            host_memory_metadata_string(&row.2, "expires_at")
+                .or_else(|| host_memory_metadata_string(&row.2, "expires_on"))
+                .unwrap_or_default()
+        } else {
+            row.1
+        };
+        if !host_memory_expiry_has_passed(&expires_at, now_dt) {
+            continue;
+        }
+        retired += conn
+            .execute(
+                "UPDATE memory_items SET status = 'retired', retired_at = ?1, updated_at = ?1 WHERE item_id = ?2",
+                rusqlite::params![now, row.0],
+            )
+            .map_err(|err| format!("retire expired memory item failed: {err}"))?;
+    }
+    Ok(retired)
+}
+
+fn host_memory_metadata_string(metadata_json: &str, key: &str) -> Option<String> {
+    let metadata = serde_json::from_str::<Value>(metadata_json.trim()).ok()?;
+    metadata
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn host_memory_expiry_has_passed(value: &str, now: DateTime<FixedOffset>) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if let Ok(expires_at) = DateTime::parse_from_rfc3339(trimmed) {
+        return expires_at <= now;
+    }
+    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+        .map(|date| date < now.date_naive())
+        .unwrap_or(false)
 }
 
 fn default_memory_summary() -> String {
@@ -3774,6 +3888,39 @@ mod tests {
     fn write_test_file(path: &Path, content: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
+    }
+
+    #[test]
+    fn retire_expired_host_memory_items_marks_items_retired() {
+        let root = unique_test_root("retire-expired-memory");
+        fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("memory.sqlite3");
+        let conn = Connection::open(&db_path).unwrap();
+        ensure_host_memory_items_table(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO memory_items (
+                item_id, workspace, category, source, confidence, status, summary, notes,
+                evidence_json, metadata_json, keywords_json, expires_at, retired_at, created_at, updated_at
+            ) VALUES (
+                'expired', 'skill', 'fact', 'test', 0.9, 'active', 'stale fact', '',
+                '[]', '{}', '[]', '2000-01-01', '', '2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z'
+            )",
+            [],
+        )
+        .unwrap();
+
+        let retired = retire_expired_host_memory_items(&conn, "2026-04-30T00:00:00+00:00").unwrap();
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM memory_items WHERE item_id = 'expired'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(retired, 1);
+        assert_eq!(status, "retired");
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

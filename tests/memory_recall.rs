@@ -91,7 +91,7 @@ fn render_context_active_mode_does_not_require_continuity_cache() {
 }
 
 #[test]
-fn debug_mode_writes_continuity_cache_for_inspection_only() {
+fn debug_mode_renders_continuity_state_without_writing_cache() {
     let tmp = tempdir().unwrap();
     seed_runtime(tmp.path(), "active bootstrap repair");
     seed_stable_memory(tmp.path());
@@ -99,10 +99,10 @@ fn debug_mode_writes_continuity_cache_for_inspection_only() {
     assert!(items(&result)
         .iter()
         .any(|item| item["path"] == "runtime/CONTINUITY_STATE.json"));
-    assert!(tmp
+    assert!(!tmp
         .path()
         .join("artifacts/current/active-bootstrap-repair-20260418210000/CONTINUITY_STATE.json")
-        .is_file());
+        .exists());
 }
 
 #[test]
@@ -122,17 +122,21 @@ fn render_context_history_mode_can_read_archive() {
 }
 
 #[test]
-fn default_modes_do_not_include_sqlite_sections() {
+fn stable_and_active_modes_include_sqlite_sections_but_history_does_not() {
     let tmp = tempdir().unwrap();
     seed_runtime(tmp.path(), "active bootstrap repair");
     seed_stable_memory(tmp.path());
     seed_sqlite_memory(tmp.path());
-    for mode in ["stable", "active", "history"] {
+    for mode in ["stable", "active"] {
         let result = render_context(tmp.path(), "sqlite", mode, 8);
         assert!(items(&result)
             .iter()
-            .all(|item| !item["path"].as_str().unwrap().starts_with("sqlite/")));
+            .any(|item| item["path"].as_str().unwrap().starts_with("sqlite/")));
     }
+    let result = render_context(tmp.path(), "sqlite", "history", 8);
+    assert!(items(&result)
+        .iter()
+        .all(|item| !item["path"].as_str().unwrap().starts_with("sqlite/")));
 }
 
 #[test]
@@ -405,10 +409,8 @@ fn rust_memory_policy_can_persist_to_sqlite_store() {
     let persistence = &result["memory_policy"]["persistence"];
     assert_eq!(persistence["persisted"], true);
     assert_eq!(persistence["item_count"], 1);
-    assert_eq!(
-        persistence["stable_journal_path"],
-        json!(memory_root.join("decisions.md").display().to_string())
-    );
+    assert_eq!(persistence["stable_journal_path"], json!(null));
+    assert_eq!(persistence["stable_journal_paths"], json!([]));
 
     let conn = Connection::open(tmp.path().join(".codex/memory/memory.sqlite3")).unwrap();
     let mut stmt = conn
@@ -430,10 +432,47 @@ fn rust_memory_policy_can_persist_to_sqlite_store() {
     assert_eq!(row.2, "framework_memory_policy");
     assert_eq!(row.3, "persisted Rust memory policy row");
     assert_eq!(row.4, "active");
+    assert!(!memory_root.join("decisions.md").exists());
+}
 
-    let journal = fs::read_to_string(memory_root.join("decisions.md")).unwrap();
-    assert!(journal.contains("## Rust memory policy facts"));
-    assert!(journal.contains("- [fact] persisted Rust memory policy row"));
+#[test]
+fn rust_memory_policy_routes_decisions_and_preferences_to_stable_journals() {
+    let tmp = tempdir().unwrap();
+    let memory_root = tmp.path().join(".codex/memory");
+    let payload = json!({
+        "workspace": "skill",
+        "memory_root": memory_root,
+        "persist": true,
+        "messages": [
+            {"role": "user", "content": "decision: Rust remains the memory authority"},
+            {"role": "user", "content": "I prefer compact memory reports"}
+        ],
+        "limit": 8
+    });
+    let payload_text = payload.to_string();
+    let output = common::run(router_rs_command([
+        "framework",
+        "memory-policy",
+        "--input-json",
+        &payload_text,
+    ]));
+    let result = json_from_output(&output);
+    let persistence = &result["memory_policy"]["persistence"];
+    assert_eq!(persistence["persisted"], true);
+    assert_eq!(
+        persistence["stable_journal_paths"],
+        json!([
+            memory_root.join("decisions.md").display().to_string(),
+            memory_root.join("preferences.md").display().to_string()
+        ])
+    );
+
+    let decisions = fs::read_to_string(memory_root.join("decisions.md")).unwrap();
+    let preferences = fs::read_to_string(memory_root.join("preferences.md")).unwrap();
+    assert!(decisions.contains("## Rust memory policy decisions"));
+    assert!(decisions.contains("- [decision] Rust remains the memory authority"));
+    assert!(preferences.contains("## Rust memory policy preferences"));
+    assert!(preferences.contains("- [preference] compact memory reports"));
 }
 
 #[test]

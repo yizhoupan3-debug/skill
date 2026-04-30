@@ -50,9 +50,9 @@ Codex uses this skill entry and the same MCP-backed source.
 ## Do not use
 
 - The main question is about a non-OpenAI provider or non-Codex host
-  configuration -> use `$information-retrieval`
+  configuration -> answer in the current source-research context, not this OpenAI docs gate
 - The task is broad external research rather than OpenAI docs lookup
-  -> use `$information-retrieval`
+  -> answer in the current source-research context, not this OpenAI docs gate
 
 ## Required workflow
 

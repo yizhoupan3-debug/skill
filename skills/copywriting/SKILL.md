@@ -81,7 +81,7 @@ For detailed guidance, use:
 - The task is academic paper writing or polishing → use `$paper-writing`
 - The task is HTML email template development (rendering, compatibility) → use `$email-template`
 - The task is project documentation (README, API docs, ADR) → use `$documentation-engineering`
-- The task is SEO technical implementation (structured data, meta tags, sitemap) → use `$seo-web`
+- The task is SEO technical implementation (structured data, meta tags, sitemap) -> use the current web implementation context
 - The task is Word document formatting → use `$doc`
 - The task is general prose rewriting with no commercial goal → use the owning domain skill, or `$documentation-engineering` for project docs
 
@@ -100,11 +100,11 @@ This skill does not own:
 - style naturalization of existing drafts with no conversion goal
 - academic or scientific prose (→ `$paper-writing`)
 - HTML email rendering and client compatibility (→ `$email-template`)
-- SEO technical implementation (→ `$seo-web`)
+- SEO technical implementation (handled by the current web implementation context)
 - developer documentation (→ `$documentation-engineering`)
 
 If the task shifts to adjacent skill territory, route to:
-- `$seo-web` when the task shifts from content to technical SEO markup
+- the current web implementation context when the task shifts from content to technical SEO markup
 - `$email-template` when the focus becomes email rendering, not email content
 
 ## Handoff for generic prose

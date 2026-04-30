@@ -54,10 +54,10 @@ constraints that differ significantly from modern web browsers.
 
 ## Do not use
 
-- The task is regular web page development → use framework or `$web-platform-basics`
+- The task is regular web page development -> use the current frontend/web implementation context
 - The task is email delivery infrastructure (SMTP, SPF/DKIM/DMARC) → broader ops scope
 - The task is email content/copywriting without template concerns
-- The task is CSS engineering for web pages → use `$css-pro`
+- The task is CSS engineering for web pages -> use the current frontend/web implementation context
 
 ## Task ownership and boundaries
 
@@ -78,9 +78,9 @@ This skill does not own:
 - server-side email sending logic
 
 If the task shifts to adjacent skill territory, route to:
-- `$web-platform-basics` for general HTML/CSS questions
-- `$react` if using React Email and the issue is React-specific
-- `$node-backend` for server-side email sending implementation
+- the current frontend/web implementation context for general HTML/CSS questions
+- the current React implementation context if using React Email and the issue is React-specific
+- the current backend implementation context for server-side email sending implementation
 
 ## Core workflow
 

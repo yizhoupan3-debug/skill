@@ -77,7 +77,9 @@ approval_required_tools: []
 
 ## Canonical owner
 
-- 主 owner：[`$code-review`](/Users/joe/Documents/skill/skills/code-review/SKILL.md)
+- 主 owner：`deepinterview` 只负责澄清、收敛和 findings-first handoff。
+- 达到清晰阈值后，交给本仓原生执行入口 `autopilot` 或当前任务的最窄 skill owner。
+- 若需要多 review 面并行取证，先走 [`agent-swarm-orchestration`](../agent-swarm-orchestration/SKILL.md) 判断 bounded sidecar 边界。
 
 ## Workflow
 
@@ -89,10 +91,10 @@ approval_required_tools: []
 
 ## Review Lanes After Clarification
 
-- 架构面：[`$architect-review`](/Users/joe/Documents/skill/skills/architect-review/SKILL.md)
-- 安全面：[`$security-audit`](/Users/joe/Documents/skill/skills/security-audit/SKILL.md)
-- 测试面：[`$test-engineering`](/Users/joe/Documents/skill/skills/test-engineering/SKILL.md)
-- 收敛验收：[`runtime verification gate`](runtime policy)
+- 架构、测试、安全或实现风险：留在 native runtime 中做证据优先 review，必要时用 [`systematic-debugging`](../systematic-debugging/SKILL.md) 查未知失败。
+- 多面向 review：用 [`agent-swarm-orchestration`](../agent-swarm-orchestration/SKILL.md) 先决定是否拆 bounded sidecar；不要引用不存在的 reviewer lane。
+- 产物或界面 review：按 artifact/evidence gate 进入 [`visual-review`](../visual-review/SKILL.md)、[`pdf`](../pdf/SKILL.md)、[`doc`](../doc/SKILL.md)、[`slides`](../slides/SKILL.md) 或 [`spreadsheets`](../primary-runtime/spreadsheets/SKILL.md)。
+- 收敛验收：以本轮实际测试、diff、截图、生成产物或明确 blocker 为准。
 
 ## Local runtime
 

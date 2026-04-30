@@ -40,7 +40,7 @@ citations verifiable, complete, deduplicated, and aligned with the manuscript.
 
 ## Do Not Use
 
-- Searching and synthesizing a topic literature corpus -> use `$literature-synthesis`.
+- Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to the current paper/research owner.
 - Writing or polishing manuscript prose -> use `$paper-writing`.
 - Checking paper logic beyond citations -> use `$paper-reviewer` logic mode.
 - Formatting non-academic documents without citations.

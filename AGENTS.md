@@ -1,30 +1,48 @@
 # Codex Agent Policy
 
-## Scope
+## Root
 
-- 本文件所在目录就是 policy root。
-- 不要用 shell 当前目录推断 skill 根。
+- 本文件所在目录就是 `<policy-root>`。
+- 所有路径都从 `<policy-root>` 解析；不要用 shell 当前目录推断 skill 根。
 
-## Routing
+## Skill Routing
 
-- 先查 `<policy-root>/skills/SKILL_ROUTING_RUNTIME.json`。
+- 第一入口是 `<policy-root>/skills/SKILL_ROUTING_RUNTIME.json`。
 - 命中 skill 后，只读 runtime 记录里的 `skill_path` 对应文件。
-- `skill_path` 按 `<policy-root>/<skill_path>` 解析，不要用 slug 猜路径。
-- runtime 未命中且确需继续路由时，才查 fallback manifest。
+- 不要用 slug 猜路径；`skill_path` 按 `<policy-root>/<skill_path>` 解析。
+- runtime 未命中且确需继续路由时，才查 runtime 声明的 fallback manifest。
 - 不要预读整个 `skills/` skill 库。
 
-## Delegation
+## Task Intake
 
-- 默认主线程负责交付；subagent 是边车，不是默认执行模式。
-- Review、深度调研、全仓/跨模块排查、多方向方案、并行检查、多文件独立实现、多个独立假设验证，或用户说“同时 / 分头 / 分路 / 并行 / 多方向 / 多模块”时，先做 bounded sidecar admission。
-- 只有同时满足这些条件才 spawn：lane 独立、范围明确、可验证、不阻塞主线程下一步、上下文收益大于协调成本。
-- 适合 spawn 的典型 lane：高噪音搜索、日志/测试输出整理、独立模块调研、独立风险审查、互不重叠的文件级实现。
-- 不适合 spawn 的情况：小任务、强共享上下文、顺序依赖、同文件/同模块写入、验证方式不清、用户明确要求本地处理。
-- 符合条件时开启 1-3 个 subagent，并优先在同一轮并发启动；否则主线程直接做，并简短记录不 spawn 的原因。
-- Subagent 默认 `fork_context=false`，只传仓库路径、相关文件/diff、lane 目标、禁止范围、输出契约和验证要求。
-- 写入型 worker 只能负责明确 disjoint 的文件或模块，且不得修改共享连续性 artifact。
-- 主线程始终保留即时阻塞项、集成判断和最终验证。
-- 只有用户显式调用 `$team` / `/team`，或任务需要 worker 之间直接协作、共享任务列表、相互质询时，才升级到 team orchestration。
+- 先抽取对象、动作、约束、交付物和成功标准。
+- 先判断 source / artifact / evidence gate，再选择最窄 owner；最多叠加一个 overlay。
+- 优先做最小可验证 delta；不要因为赶进度扩大抽象或跳过路由。
+- 信息不足时先用本地证据补齐；只有关键选择有不可逆风险时才询问用户。
+
+## Knowledge Hygiene
+
+- `AGENTS.md` 是地图和执行协议，不是百科；稳定真源放 runtime、skill、docs、memory 或 artifacts。
+- 不把未读取、未验证或容易过期的内容写成事实；需要保留的长期结论写回合适真源。
+- 修改 policy 时先查路径是否仍由 runtime 决定，再查规则是否可执行、可验证、无重复真源。
+- 验证以 diff、契约测试、生成产物、缺失项或明确 blocker 为准，不追求固定过程。
+
+## Execution Ladder
+
+- 默认本地完成；主线程保留阻塞项、集成判断和最终验证。
+- 遇到 review、深度调研、全仓/跨模块、多方向、并行、多文件实现、多假设验证，或用户说“同时 / 分头 / 分路 / 并行 / 多方向 / 多模块”时，先做边车准入（bounded sidecar admission）。
+- 只有 lane 独立、边界清楚、可验证、不挡主线，且上下文收益大于协调成本时，才启动 subagent。
+- 适合 subagent 的 lane：高噪音搜索、日志/测试输出整理、独立模块调研、独立风险审查、互不重叠的文件级实现。
+- 不适合 subagent 的情况：小任务、共享上下文重、顺序依赖、写入范围重叠、验证缺失、用户要求本地处理。
+- 可启动时开 1-3 个 `fork_context=false` subagent，优先在同一轮并发启动；只传必要上下文、禁止范围、输出契约和验证要求。
+- 写入型 worker 只能改明确 disjoint 的文件或模块，且不得修改共享连续性 artifact。
+- 只有用户显式调用 `$team` / `/team`，或 worker 需要互相协作、共享任务列表、相互质询时，才升级到 team orchestration。
+
+## Closeout
+
+- 收口必须给出证据：测试、命令、diff、截图、生成产物，或明确说明 blocker。
+- 如果没有运行验证，说明原因和剩余风险，不把未验证状态说成完成。
+- 发现与当前任务无关的脏工作区改动时只报告，不回滚、不顺手整理。
 
 ## Git
 
