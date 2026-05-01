@@ -37,6 +37,7 @@
 | Excel / CSV / 表格产物 | `spreadsheets` | Route workbook-native spreadsheet artifact work before c |
 | 设计规范 / DESIGN.md / token | `design-md` | Manage DESIGN.md design-system contracts and visual toke |
 | OpenAI API / 模型 / 官方当前文档 | `openai-docs` | Use official OpenAI docs first for current OpenAI guidan |
+| skill 库 / 路由框架自身 | `skill-framework-developer` | Design and tune Codex skill routing/framework behavior |
 
 ## Optional overlays
 | Add when... | Overlay | Why |

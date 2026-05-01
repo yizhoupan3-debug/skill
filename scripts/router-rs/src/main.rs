@@ -8048,7 +8048,12 @@ mod tests {
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
 
         assert_eq!(report.schema_version, "routing-eval-v1");
-        assert_eq!(report.metrics.case_count, 24);
+        let expected_case_count = read_json(&routing_eval_case_path())
+            .expect("read routing eval cases")["cases"]
+            .as_array()
+            .expect("routing eval case array")
+            .len();
+        assert_eq!(report.metrics.case_count, expected_case_count);
         assert_eq!(report.metrics.overtrigger, 0);
         assert_routing_eval_cases_match("manifest", |task, session_id, first_turn| {
             route_task(&records, task, session_id, true, first_turn)

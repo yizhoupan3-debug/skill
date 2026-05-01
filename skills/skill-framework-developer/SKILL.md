@@ -10,7 +10,7 @@ routing_layer: L0
 routing_owner: owner
 routing_gate: none
 routing_priority: P1
-session_start: n/a
+session_start: preferred
 user-invocable: false
 disable-model-invocation: true
 short_description: Design and tune Codex skill routing/framework behavior
