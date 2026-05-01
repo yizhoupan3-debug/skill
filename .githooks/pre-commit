@@ -9,7 +9,7 @@ fi
 NEEDS_SKILL_COMPILE=0
 for path in $STAGED_FILES; do
     case "$path" in
-        skills/*/SKILL.md|skills/.system/*/SKILL.md|skills/SKILL_SOURCE_MANIFEST.json|skills/SKILL_HEALTH_MANIFEST.json|scripts/skill-compiler-rs/*|scripts/skill-compiler-rs/*/*)
+        skills/*/SKILL.md|skills/.system/*/SKILL.md|skills/SKILL_SOURCE_MANIFEST.json|scripts/skill-compiler-rs/*|scripts/skill-compiler-rs/*/*)
             NEEDS_SKILL_COMPILE=1
             ;;
     esac
@@ -25,10 +25,9 @@ trap 'rm -f "$LOG_FILE"' EXIT
 if ! cargo run --quiet --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --skills-root skills \
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-  --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
   --apply >"$LOG_FILE" 2>&1; then
     echo "[pre-commit] skill compiler failed; rerun this command for details:"
-    echo "  cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --health-manifest skills/SKILL_HEALTH_MANIFEST.json --apply"
+    echo "  cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply"
     tail -n 40 "$LOG_FILE"
     exit 1
 fi

@@ -209,7 +209,6 @@
       "expected_overlay": null,
       "forbidden_owners": [
         "slides",
-        "ppt-pptx",
         "visual-review"
       ],
       "first_turn": true
@@ -222,8 +221,7 @@
       "expected_owner": "design-md",
       "expected_overlay": null,
       "forbidden_owners": [
-        "slides",
-        "ppt-pptx"
+        "slides"
       ],
       "first_turn": true
     },
@@ -317,6 +315,56 @@
       "expected_overlay": null,
       "forbidden_owners": [
         "image-generated"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "skill-framework-audit-merge-slim-runtime",
+      "category": "should-trigger",
+      "task": "全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "systematic-debugging",
+        "agent-swarm-orchestration"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "diagramming-chinese-flowchart",
+      "category": "should-trigger",
+      "task": "帮我画一个技术路线图和研究流程图，用 Mermaid 表达",
+      "focus_skill": "diagramming",
+      "expected_owner": "diagramming",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides",
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "source-slide-formats-beats-generic-slides",
+      "category": "gate-vs-owner-conflict",
+      "task": "用 Markdown 做 slides，后续用 Slidev 预览和导出",
+      "focus_skill": "source-slide-formats",
+      "expected_owner": "source-slide-formats",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "ppt-beamer-beats-generic-slides",
+      "category": "gate-vs-owner-conflict",
+      "task": "LaTeX Beamer slides，帮我修 Beamer 编译和版式",
+      "focus_skill": "ppt-beamer",
+      "expected_owner": "ppt-beamer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "slides"
       ],
       "first_turn": true
     }

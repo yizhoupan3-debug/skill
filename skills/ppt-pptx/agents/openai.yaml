@@ -1,4 +1,0 @@
-interface:
-  display_name: "PPT PPTX"
-  short_description: "Build polished editable PowerPoint decks"
-  default_prompt: "Use $ppt-pptx to turn this outline into a polished editable `.pptx` deck with strong visual design, local assets, and rendered QA."

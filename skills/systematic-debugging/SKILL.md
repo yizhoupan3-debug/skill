@@ -96,7 +96,7 @@ This gate should behave like an **investigation controller**:
 4. if multiple independent evidence surfaces appear, preserve them as bounded investigation slices
 5. if runtime policy blocks spawning, keep the same investigation matrix in local-supervisor mode
 
-## Main-thread compression contract
+## Main-thread Compression
 
 The main thread should contain only:
 
@@ -105,17 +105,6 @@ The main thread should contain only:
 - current hypothesis
 - disconfirmed path if any
 - next experiment or reroute
-
-## Runtime-policy adaptation
-
-If multiple non-blocking evidence slices can run independently and runtime policy permits:
-
-- consult [`runtime delegation gate`](runtime policy) for bounded evidence collection
-
-If runtime policy does **not** permit spawning:
-
-- keep the same evidence slices in local-supervisor mode
-- run them sequentially without abandoning the investigation structure
 
 ## Core workflow
 
@@ -126,50 +115,10 @@ If runtime policy does **not** permit spawning:
 5. Test minimally: change one variable, compare before/after.
 6. Only after confirming root cause: fix inline or hand off to the right domain owner.
 
-## Tool Selection Matrix
-
-During investigation, choose the right evidence-gathering tool:
-
-| Failure Surface | Primary Tool | Key Action |
-|---|---|---|
-| Crash / traceback | `run_command` | `cat log`, `grep -r error .` |
-| Build failure | `run_command` | `npm run build 2>&1`, `cargo build 2>&1` |
-| Test failure | `run_command` | `pytest -x -v`, `npm test -- --verbose` |
-| Network / API | `mcp_browser-mcp_browser_get_network` | `sinceSeconds=30, resourceTypes=["fetch","xhr"]` |
-| Frontend symptom | `mcp_browser-mcp_browser_screenshot` + `browser_get_state` | Visual evidence first |
-| File state / config | `view_file`, `grep_search` | Inspect actual file contents |
-| Sentry event | `$sentry` gate | Structured event intake, then route here |
-
-**Evidence before hypothesis.** Do not propose a fix until one of the above tools has returned concrete output.
-
-## Output defaults
-
-```markdown
-## Debugging Summary
-- Symptom: ...
-- Reproduction: confirmed / partial / blocked
-
-## Evidence
-- Source: [logs / Sentry / DevTools / manual repro]
-- ...
-
-## Likely Root Cause
-- ...
-
-## Next Step
-- Route to: [domain skill] / [fix inline]
-```
-
-### Sentry evidence intake (when input comes from `$sentry`)
-
-```markdown
-## Evidence (from Sentry)
-- Event ID: ...
-- Exception type: ...
-- Stack frame at fault: [file:line]
-- Breadcrumbs (last 3): ...
-- Regression? [yes / no / unknown]
-```
+Evidence before hypothesis. Do not propose a fix until a real command, log,
+trace, screenshot, or source-gate result has returned concrete output. Detailed
+tool matrices and output templates live in
+[`references/hypothesis-checklist.md`](references/hypothesis-checklist.md).
 
 ## Hard constraints
 
@@ -182,26 +131,10 @@ During investigation, choose the right evidence-gathering tool:
 - If three fix attempts fail, step back and challenge the premise or architecture.
 - **Anti-laziness checkpoint**: before handing off to a domain owner, the debugging record must show: symptom + evidence source + observed (not inferred) root cause.
 
-## Anti-laziness integration
-
-This skill activates `runtime quality guard` enforcement when:
-- Two or more fix attempts used the same approach without variation (Spinning Wheels).
-- A "fix" is proposed based on theory before any tool output has been collected.
-- Output contains `...` or partial code snippets instead of full diagnostic output.
-- The user has already said: "不知道为什么"、"帮我找一下" and no grep/log tool has been called yet.
-
 ## Framework note
 
 Emit a finding-like debugging record before handing execution to a fixer,
 TDD workflow, or domain owner.
-
-## Trigger examples
-
-- "帮我修这个报错" (no root cause given)
-- "为什么这个功能不工作了"
-- "程序崩了/失败了，不知道为什么"
-- "这里出错了: [error message without identified cause]"
-- "Use $systematic-debugging to investigate this failure before patching."
 
 ## References
 

@@ -34,7 +34,6 @@
 | `paper-writing` | Active | P2 | L2 | owner | none | project | Write, restructure, or polish bounded academic-paper prose after the claim/evide |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | Handle layout-aware PDF reading, editing, repair, and review. |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
-| `ppt-pptx` | Active | P2 | L4 | owner | none | project | Build source-first editable `.pptx` decks from `deck.plan.json` through the Rust |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `refresh` | Active | P2 | L3 | owner | none | project | 使用 Rust refresh 命令生成并复制下一轮执行提示 |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | Create, refactor, and review code-generated scientific figures for papers using  |

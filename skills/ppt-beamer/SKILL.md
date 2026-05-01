@@ -59,7 +59,7 @@ boxes. Avoid startup-deck aesthetics unless the user explicitly asks for them.
 
 ## Do not use
 
-- Do not use when the user wants an editable PowerPoint deck; use `$ppt-pptx`
+- Do not use when the user wants an editable PowerPoint deck; use `$slides`
 - Do not use when the final output should be HTML slides plus browser-matched PDF; use `$source-slide-formats`
 - Do not use when the user wants a fast Markdown-to-slides workflow with Slidev or Marp; use `$source-slide-formats`
 - Do not use when the main task is generic LaTeX compile-speed optimization across papers / books / theses / Beamer; use `$latex-compile-acceleration`

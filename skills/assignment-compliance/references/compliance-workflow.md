@@ -141,5 +141,5 @@ When the user has fixed only part of the work:
 - image-based requirements → `$visual-review`
 - paper deliverables -> `$paper-reviewer`, `$paper-writing`, or figure-table mode
 - code deliverables → `$coding-standards`, `$test-engineering`
-- slides -> `$slides` first, then `$ppt-beamer` / `$ppt-pptx` / `$source-slide-formats` as needed
+- slides -> `$slides` first, then `$ppt-beamer` / `$source-slide-formats` only when the user explicitly wants those source formats
 - notation / symbols -> `$paper-reviewer` notation sweep

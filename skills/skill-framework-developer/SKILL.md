@@ -32,6 +32,13 @@ trigger_hints:
   - 减法视角
   - 第一性原理
   - runtime 轻量化
+  - skill 核查
+  - skill 合并
+  - skill 精简
+  - 沉到 runtime
+  - 历史文件清理
+  - 旧口径清理
+  - contract 清理
   - 兼容层
   - 胶水层
   - 减少入口

@@ -17,7 +17,6 @@ trigger_hints:
   - 全屏截图
   - 窗口截图
   - 区域截图
-  - visual review
   - bug reports
   - documentation
   - screenshot
