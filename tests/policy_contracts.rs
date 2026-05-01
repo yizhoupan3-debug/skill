@@ -572,6 +572,11 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
     let keys = runtime["keys"].as_array().expect("runtime keys");
     let slug_idx = key_index(keys, "slug");
+    assert_eq!(runtime["version"], 3);
+    assert!(
+        !keys.iter().any(|key| key == "health"),
+        "runtime schema v3 must not expose the retired health column"
+    );
     let slugs = runtime["skills"]
         .as_array()
         .expect("runtime skills")
@@ -700,7 +705,7 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
 }
 
 #[test]
-fn health_manifest_and_framework_aliases_reference_manifest_skills() {
+fn framework_aliases_reference_manifest_skills() {
     let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
     let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
     let manifest_slug_idx = key_index(manifest_keys, "slug");
@@ -710,26 +715,6 @@ fn health_manifest_and_framework_aliases_reference_manifest_skills() {
         .iter()
         .map(|row| row[manifest_slug_idx].as_str().expect("manifest slug"))
         .collect::<std::collections::HashSet<_>>();
-
-    let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
-    let health_slugs = health["skills"]
-        .as_object()
-        .expect("health skills")
-        .keys()
-        .map(String::as_str)
-        .collect::<std::collections::HashSet<_>>();
-    assert!(
-        manifest_slugs.is_subset(&health_slugs),
-        "health manifest must include every fallback manifest skill"
-    );
-    let health_only_slugs = health_slugs
-        .difference(&manifest_slugs)
-        .copied()
-        .collect::<HashSet<_>>();
-    assert!(
-        health_only_slugs.is_empty(),
-        "health manifest should not keep retired runtime-owned skills: {health_only_slugs:?}"
-    );
 
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     for (alias, record) in registry["framework_commands"]

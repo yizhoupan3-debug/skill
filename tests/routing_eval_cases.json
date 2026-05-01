@@ -212,6 +212,87 @@
         "design-md"
       ],
       "first_turn": true
+    },
+    {
+      "id": "systematic-debugging-root-cause-beats-generic-analysis",
+      "category": "wrong-owner-near-miss",
+      "task": "root-cause analysis this flaky failure",
+      "focus_skill": "systematic-debugging",
+      "expected_owner": "systematic-debugging",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "jupyter-notebook"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "systematic-debugging-bug-tdd-regression-case",
+      "category": "should-trigger",
+      "task": "修这个 bug，用 TDD workflow 补回归测试",
+      "focus_skill": "systematic-debugging",
+      "expected_owner": "systematic-debugging",
+      "expected_overlay": null,
+      "first_turn": true
+    },
+    {
+      "id": "systematic-debugging-generic-bug-fix-beats-github-ci",
+      "category": "wrong-owner-near-miss",
+      "task": "fix login bug",
+      "focus_skill": "systematic-debugging",
+      "expected_owner": "systematic-debugging",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "gh-fix-ci"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "gh-fix-ci-shorthand-ci-failure-beats-generic-debugging",
+      "category": "wrong-owner-near-miss",
+      "task": "CI 失败帮我修",
+      "focus_skill": "gh-fix-ci",
+      "expected_owner": "gh-fix-ci",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "systematic-debugging"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "scientific-figure-plotting-beats-hot-visual-chart",
+      "category": "wrong-owner-near-miss",
+      "task": "publication chart matplotlib",
+      "focus_skill": "scientific-figure-plotting",
+      "expected_owner": "scientific-figure-plotting",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "scientific-figure-plotting-export-png-stays-plotting",
+      "category": "wrong-owner-near-miss",
+      "task": "publication chart matplotlib export png",
+      "focus_skill": "scientific-figure-plotting",
+      "expected_owner": "scientific-figure-plotting",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "visual-review"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "scientific-figure-plotting-beats-raster-image-trigger",
+      "category": "wrong-owner-near-miss",
+      "task": "科研出图，matplotlib 改成期刊风格",
+      "focus_skill": "scientific-figure-plotting",
+      "expected_owner": "scientific-figure-plotting",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "image-generated"
+      ],
+      "first_turn": true
     }
   ]
 }

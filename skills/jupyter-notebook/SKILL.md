@@ -22,7 +22,6 @@ trigger_hints:
   - jupyter
   - notebook
   - experiment
-  - analysis
 metadata:
   version: "2.0.0"
   platforms: [codex]

@@ -6,7 +6,6 @@
     "gate",
     "description",
     "trigger_hints",
-    "health",
     "priority",
     "session_start"
   ],
@@ -24,7 +23,6 @@
         "delegation",
         "并行"
       ],
-      94,
       "P1",
       "required"
     ],
@@ -40,7 +38,6 @@
         "新建 skill",
         "写一个 skill"
       ],
-      96,
       "P1",
       "preferred"
     ],
@@ -56,7 +53,6 @@
         "导入 skill",
         "github skill"
       ],
-      97,
       "P1",
       "preferred"
     ],
@@ -76,7 +72,6 @@
         "多余入口",
         "不必要抽象"
       ],
-      97,
       "P1",
       "n/a"
     ],
@@ -93,7 +88,6 @@
         "root cause",
         "根因"
       ],
-      94,
       "P1",
       "required"
     ],
@@ -112,7 +106,6 @@
         "PowerPoint",
         "presentation"
       ],
-      94,
       "P1",
       "required"
     ],
@@ -126,7 +119,6 @@
         "word 文档",
         "docx"
       ],
-      94,
       "P1",
       "required"
     ],
@@ -143,7 +135,6 @@
         "verified tokens",
         "品牌 token"
       ],
-      94,
       "P1",
       "required"
     ],
@@ -159,7 +150,6 @@
         "UI audit",
         "视觉问题"
       ],
-      94,
       "P1",
       "required"
     ],
@@ -174,7 +164,6 @@
         "澄清",
         "收敛"
       ],
-      94,
       "P2",
       "n/a"
     ],
@@ -189,7 +178,6 @@
         "ADR",
         "项目文档"
       ],
-      94,
       "P2",
       "n/a"
     ],
@@ -202,7 +190,6 @@
       [
         "fixture overlay marker"
       ],
-      100,
       "P3",
       "n/a"
     ],
@@ -216,7 +203,6 @@
         "并发构建",
         "toolchain"
       ],
-      90,
       "P2",
       "n/a"
     ],
@@ -230,7 +216,6 @@
         "并发构建",
         "toolchain"
       ],
-      90,
       "P1",
       "n/a"
     ]

@@ -2557,14 +2557,20 @@ fn build_memory_automation_continuity_audit(runtime_payload: &Value) -> Value {
         .unwrap_or(0);
     let blocker_count = blockers.as_array().map(Vec::len).unwrap_or(0);
     let residual_blocker_count = missing_recovery_count + missing_control_count + blocker_count;
+    let can_resume_bool = can_resume.as_bool().unwrap_or(false);
+    let continuity_state_text = continuity_state.as_str().unwrap_or("");
+    let has_ready_anchors = residual_blocker_count == 0 && control_plane_present;
+    let status = if has_ready_anchors && can_resume_bool {
+        "ready_to_resume"
+    } else if has_ready_anchors && continuity_state_text == "completed" {
+        "closed_completed"
+    } else {
+        "blocked"
+    };
 
     json!({
-        "ok": residual_blocker_count == 0 && control_plane_present && can_resume == Value::Bool(true),
-        "status": if residual_blocker_count == 0 && control_plane_present {
-            "ready"
-        } else {
-            "blocked"
-        },
+        "ok": status == "ready_to_resume",
+        "status": status,
         "continuity_state": continuity_state,
         "can_resume": can_resume,
         "active_task_id": active_task_id,
@@ -3888,6 +3894,28 @@ mod tests {
     fn write_test_file(path: &Path, content: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
+    }
+
+    #[test]
+    fn continuity_audit_marks_completed_tasks_closed_not_ready() {
+        let audit = build_memory_automation_continuity_audit(&json!({
+            "runtime_snapshot": {
+                "control_plane_present": true,
+                "active_task_id": "completed-task",
+                "focus_task_id": "completed-task",
+                "continuity": {
+                    "state": "completed",
+                    "can_resume": false,
+                    "missing_recovery_anchors": [],
+                    "missing_control_plane_anchors": [],
+                    "blockers": []
+                }
+            }
+        }));
+
+        assert_eq!(audit["ok"], json!(false));
+        assert_eq!(audit["status"], json!("closed_completed"));
+        assert_eq!(audit["residual_blocker_count"], json!(0));
     }
 
     #[test]

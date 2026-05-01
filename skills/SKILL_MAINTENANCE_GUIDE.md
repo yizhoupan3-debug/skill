@@ -5,7 +5,7 @@
 - `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.codex/skills` 当成主路径前提。
 - system skill 放 `skills/.system/`。不要同时保留两份 live source。
 - `~/.codex/skills` 只是 Codex/App/CLI 共用的轻量安装面，指向 `artifacts/codex-skill-surface/skills`。这个投影由 Rust host integration 生成，只放热路由和显式命令入口；没有独立 `SKILL.md` 的框架命令（例如 `autopilot`、`team`）会投到 `skill-framework-developer`，不要在这里手写或修 skill。
-- `SKILL_HEALTH_MANIFEST.json` 只是健康输入快照，不是入口真源；删除、合并或新增 skill 后必须让它的 slug 集合与 `SKILL_MANIFEST.json` 对齐，不能让健康快照把已删除 skill 拉回路由 contract。
+- 不再维护 skill health 分。路由真源只保留 source manifest、skill frontmatter、generated manifest/runtime，以及真实回归用例；不要新增健康快照或把健康分写回 schema。
 
 ## 新增 Skill 最小清单
 
@@ -16,7 +16,6 @@
    cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
      --skills-root skills \
      --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-     --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
      --apply
    ```
    这一步会统一刷新 `SKILL_ROUTING_RUNTIME.json`、`SKILL_ROUTING_INDEX.md` 等生成路由产物；不要手改这些生成文件。

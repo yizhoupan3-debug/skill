@@ -600,6 +600,16 @@ pub fn build_framework_memory_recall_envelope(
         .map(|path| path.display().to_string())
         .unwrap_or_default();
     let registered_tasks = snapshot.registered_tasks.clone();
+    let registered_task_count = registered_tasks
+        .get("task_count")
+        .and_then(Value::as_u64)
+        .or_else(|| {
+            registered_tasks
+                .get("tasks")
+                .and_then(Value::as_array)
+                .map(|tasks| tasks.len() as u64)
+        })
+        .unwrap_or(0);
     let workspace_name = workspace_name_from_root(repo_root);
     let bootstrap_task_id = if query_matches_active_task {
         snapshot.active_task_id.clone().unwrap_or_default()
@@ -644,7 +654,7 @@ pub fn build_framework_memory_recall_envelope(
             "state": effective_continuity.get("state").cloned().unwrap_or(Value::Null),
             "can_resume": effective_continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
             "active_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
-            "registered_task_count": registered_tasks.as_array().map(Vec::len).unwrap_or(0),
+            "registered_task_count": registered_task_count,
         },
         "source_artifacts": describe_continuity_layout(repo_root, &snapshot.artifact_base),
     });

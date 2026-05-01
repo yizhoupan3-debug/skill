@@ -238,7 +238,7 @@ fn memory_automation_materializes_sqlite_and_continuity_control_plane() {
     assert_eq!(result["sqlite_result"]["exists"], true);
     assert_eq!(result["sqlite_result"]["memory_items"], 1);
     assert_eq!(result["continuity_seed"]["status"], "materialized");
-    assert_eq!(result["continuity_audit"]["status"], "ready");
+    assert_eq!(result["continuity_audit"]["status"], "ready_to_resume");
     assert_eq!(result["continuity_audit"]["control_plane_present"], true);
     assert_eq!(
         result["continuity_audit"]["missing_control_plane_anchors"],
@@ -273,10 +273,10 @@ fn memory_automation_materializes_sqlite_and_continuity_control_plane() {
 
     let run_summary = common::read_json(&output_dir.join("run_summary.json"));
     assert_eq!(run_summary["sqlite_result"]["memory_items"], 1);
-    assert_eq!(run_summary["continuity_audit"]["status"], "ready");
+    assert_eq!(run_summary["continuity_audit"]["status"], "ready_to_resume");
     let snapshot = read_text(&output_dir.join("snapshot.md"));
     assert!(snapshot.contains("- sqlite_exists: true"));
-    assert!(snapshot.contains("- continuity_status: ready"));
+    assert!(snapshot.contains("- continuity_status: ready_to_resume"));
     assert!(snapshot.contains("- continuity_residual_blockers: 0"));
 }
 

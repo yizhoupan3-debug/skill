@@ -210,8 +210,6 @@ struct InlineSkillRecordPayload {
     tags: Vec<String>,
     #[serde(default, alias = "trigger_phrases")]
     trigger_hints: Vec<String>,
-    #[serde(default = "default_skill_health")]
-    health: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,7 +318,6 @@ impl SkillRecord {
             do_not_use,
             tags,
             trigger_hints,
-            _health: _,
         } = raw;
         let slug_lower = normalize_text(&slug);
         let owner_lower = normalize_text(&owner);
@@ -390,7 +387,6 @@ struct RawSkillRecord {
     do_not_use: String,
     tags: Vec<String>,
     trigger_hints: Vec<String>,
-    _health: f64,
 }
 
 fn default_skill_layer() -> String {
@@ -416,10 +412,6 @@ fn default_skill_session_start() -> String {
 #[cfg(test)]
 fn default_true() -> bool {
     true
-}
-
-fn default_skill_health() -> f64 {
-    100.0
 }
 
 pub(crate) fn build_search_results_payload(
@@ -508,7 +500,6 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
         do_not_use: skill.do_not_use,
         tags: skill.tags,
         trigger_hints: skill.trigger_hints,
-        _health: skill.health,
     }))
 }
 
@@ -534,7 +525,6 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
         do_not_use: String::new(),
         tags: Vec::new(),
         trigger_hints: value_to_string_list(&row[indexes.trigger_hints]),
-        _health: value_to_f64(&row[indexes.health]).unwrap_or(100.0),
     })
 }
 
@@ -546,7 +536,6 @@ struct RecordRowIndexes {
     gate: usize,
     summary: usize,
     trigger_hints: usize,
-    health: usize,
     priority: Option<usize>,
     session_start: Option<usize>,
     required_max: usize,
@@ -554,11 +543,11 @@ struct RecordRowIndexes {
 
 impl RecordRowIndexes {
     fn from_required(
-        required: [usize; 7],
+        required: [usize; 6],
         priority: Option<usize>,
         session_start: Option<usize>,
     ) -> Self {
-        let [slug, layer, owner, gate, summary, trigger_hints, health] = required;
+        let [slug, layer, owner, gate, summary, trigger_hints] = required;
         let required_max = *required.iter().max().expect("required columns");
         Self {
             slug,
@@ -567,7 +556,6 @@ impl RecordRowIndexes {
             gate,
             summary,
             trigger_hints,
-            health,
             priority,
             session_start,
             required_max,
@@ -789,9 +777,6 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
                 path.display()
             )
         })?;
-    let idx_health = *index
-        .get("health")
-        .ok_or_else(|| format!("runtime index missing health key: {}", path.display()))?;
     let idx_priority = index.get("priority").copied();
     let idx_session_start = index.get("session_start").copied();
     let indexes = RecordRowIndexes::from_required(
@@ -802,7 +787,6 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
             idx_gate,
             idx_summary,
             idx_trigger_hints,
-            idx_health,
         ],
         idx_priority,
         idx_session_start,
@@ -848,9 +832,6 @@ pub(crate) fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>
         .get("trigger_hints")
         .or_else(|| key_index.get("triggers"))
         .ok_or_else(|| format!("manifest missing trigger_hints key: {}", path.display()))?;
-    let idx_health = *key_index
-        .get("health")
-        .ok_or_else(|| format!("manifest missing health key: {}", path.display()))?;
     let idx_priority = key_index.get("priority").copied();
     let idx_session_start = key_index.get("session_start").copied();
     let indexes = RecordRowIndexes::from_required(
@@ -861,7 +842,6 @@ pub(crate) fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>
             idx_gate,
             idx_desc,
             idx_trigger_hints,
-            idx_health,
         ],
         idx_priority,
         idx_session_start,
@@ -907,14 +887,6 @@ fn value_to_string_list(value: &Value) -> Vec<String> {
             .collect(),
         Value::Null => Vec::new(),
         _ => split_phrases(&value_to_string(value)),
-    }
-}
-
-fn value_to_f64(value: &Value) -> Option<f64> {
-    match value {
-        Value::Number(number) => number.as_f64(),
-        Value::String(text) => text.parse::<f64>().ok(),
-        _ => None,
     }
 }
 
@@ -1130,6 +1102,97 @@ fn has_runtime_lightweighting_context(query_text: &str, query_token_list: &[Stri
         "不损害功能",
         "加重负担",
         "没有用",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_systematic_debug_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "root-cause analysis",
+        "root cause analysis",
+        "root-cause",
+        "root cause",
+        "根因",
+        "找根因",
+        "bug",
+        "报错",
+        "失败",
+        "崩了",
+        "不工作",
+        "哪里错了",
+        "flaky",
+        "flake",
+        "traceback",
+        "error",
+        "tdd workflow",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_scientific_figure_plotting_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "scientific figures",
+        "scientific figure",
+        "publication chart",
+        "publication figure",
+        "journal style",
+        "科研出图",
+        "论文图",
+        "期刊风格",
+        "matplotlib",
+        "seaborn",
+        "plotnine",
+        "raincloud",
+        "ridge plot",
+        "statistical annotations",
+        "colorblind-safe",
+        "cjk font",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+}
+
+fn has_rendered_visual_evidence_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let direct_evidence = [
+        "截图",
+        "看图",
+        "这张图",
+        "这张界面图",
+        "screenshot",
+        "rendered",
+        "already-rendered",
+        "image file",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker));
+    direct_evidence || has_existing_image_file_context(query_text, query_token_list)
+}
+
+fn has_existing_image_file_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let has_image_extension = [".png", ".jpg", ".jpeg"]
+        .iter()
+        .any(|marker| query_text.contains(marker))
+        || ["png", "jpg", "jpeg"]
+            .iter()
+            .any(|marker| text_matches_phrase(query_token_list, marker));
+    if !has_image_extension {
+        return false;
+    }
+    [
+        "attached",
+        "uploaded",
+        "existing",
+        "already-rendered",
+        "image file",
+        "png file",
+        "jpg file",
+        "jpeg file",
+        "这张",
+        "附件",
+        "已渲染",
+        "已有",
     ]
     .iter()
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
@@ -2616,6 +2679,31 @@ fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> bool
     phrase_match || query_token_list.iter().any(|token| token == "ci")
 }
 
+fn has_non_github_ci_provider_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "gitlab",
+        "gitlab ci",
+        "circleci",
+        "circle ci",
+        "jenkins",
+        "azure pipelines",
+        "buildkite",
+        "travis",
+        "bitbucket pipelines",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn should_route_to_gh_fix_ci(query_text: &str, query_token_list: &[String]) -> bool {
+    has_ci_failure_context(query_text, query_token_list)
+        && (has_github_pr_context(query_text, query_token_list)
+            || !has_non_github_ci_provider_context(query_text, query_token_list))
+}
+
 fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
@@ -3116,6 +3204,16 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if record.slug == "gh-fix-ci" && !should_route_to_gh_fix_ci(query_text, query_token_list) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: gh-fix-ci requires CI/failing-check wording without a non-GitHub CI provider."
+                    .to_string(),
+            ],
+        };
+    }
     if record.slug == "agent-swarm-orchestration"
         && is_meta_routing_task(query_text)
         && !has_parallel_execution_context(query_text, query_token_list)
@@ -3131,6 +3229,19 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if matches!(record.slug.as_str(), "visual-review" | "image-generated")
+        && has_scientific_figure_plotting_context(query_text, query_token_list)
+        && !has_rendered_visual_evidence_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: code-generated scientific figure work should route to scientific-figure-plotting before visual or raster-image lanes."
+                    .to_string(),
+            ],
+        };
+    }
     if record.gate_lower == "artifact" && is_meta_routing_task(query_text) {
         return RouteCandidate {
             record,
@@ -3142,6 +3253,24 @@ fn score_route_candidate<'a>(
         };
     }
     let _checklist_execution_context = has_checklist_execution_context(query_text);
+    if record.slug == "systematic-debugging"
+        && has_systematic_debug_context(query_text, query_token_list)
+    {
+        score += 60.0;
+        reasons.push(
+            "Systematic-debugging boost applied: explicit bug, root-cause, failure, or regression-test diagnostic wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "scientific-figure-plotting"
+        && has_scientific_figure_plotting_context(query_text, query_token_list)
+    {
+        score += 70.0;
+        reasons.push(
+            "Scientific-figure boost applied: code-generated paper or publication figure wording detected."
+                .to_string(),
+        );
+    }
     if record.slug == "skill-creator" && has_skill_creator_context(query_text, query_token_list) {
         score += 70.0;
         reasons.push(
@@ -3355,13 +3484,10 @@ fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
-    if record.slug == "gh-fix-ci"
-        && has_github_pr_context(query_text, query_token_list)
-        && has_ci_failure_context(query_text, query_token_list)
-    {
+    if record.slug == "gh-fix-ci" && should_route_to_gh_fix_ci(query_text, query_token_list) {
         score += 48.0;
         reasons.push(
-            "GitHub CI gate boost applied: PR context includes failing checks or CI workflow wording."
+            "GitHub CI gate boost applied: CI or failing-check workflow wording detected."
                 .to_string(),
         );
     }

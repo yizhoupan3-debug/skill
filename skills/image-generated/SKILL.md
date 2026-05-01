@@ -10,7 +10,6 @@ disable-model-invocation: true
 trigger_hints:
   - 生成图片
   - 生图
-  - 出图
   - 编辑图片
   - 画一张图
   - 做封面图
@@ -94,6 +93,7 @@ CLI/runtime details live in:
 - Simple shapes or diagrams that are better produced directly in SVG, HTML/CSS, or canvas
 - Small edits to a source asset that already exists in a deterministic native format
 - Any request where the user clearly wants code-native output instead of generated raster output
+- Scientific or publication figure code such as `科研出图`, matplotlib, seaborn, plotnine, or journal-style charts -> use `$scientific-figure-plotting`
 
 ## Decision tree
 
