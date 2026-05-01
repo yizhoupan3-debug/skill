@@ -21,6 +21,32 @@
       "first_turn": true
     },
     {
+      "id": "skill-framework-current-system-optimization-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "继续核查现在的skill系统，给优化方向",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "skill-creator",
+        "skill-installer"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "skill-framework-route-miss-repair-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "skill-creator",
+        "skill-installer"
+      ],
+      "first_turn": true
+    },
+    {
       "id": "openai-docs-source-gate-case",
       "category": "should-trigger",
       "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",

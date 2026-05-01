@@ -594,6 +594,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "gh-fix-ci",
         "openai-docs",
         "pdf",
+        "skill-framework-developer",
         "visual-review",
     ] {
         assert!(
@@ -605,7 +606,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "systematic-debugging",
         "idea-to-plan",
         "plan-to-code",
-        "skill-framework-developer",
         "plugin-creator",
         "skill-creator",
         "skill-installer",

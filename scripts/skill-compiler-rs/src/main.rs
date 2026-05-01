@@ -88,7 +88,6 @@ const INDEX_COMMON_LANES: &[(&str, &str)] = &[
 
 const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 0] = [];
 
-const HOT_FIRST_TURN_OWNER_SLUGS: [&str; 0] = [];
 const RUNTIME_EXECUTION_CODE_SLUGS: &[&str] = &[
     "api-design",
     "api-integration-debugging",
@@ -199,12 +198,7 @@ fn main() -> Result<(), String> {
     let source_manifest = load_source_manifest(&args.source_manifest)?;
     let docs = load_skill_documents(&args.skills_root)?;
     let skill_entries = collect_skill_entries(&args.skills_root, &docs, &source_manifest)?;
-    let bundle = compile_bundle(
-        &args.skills_root,
-        &docs,
-        &skill_entries,
-        &source_manifest,
-    )?;
+    let bundle = compile_bundle(&args.skills_root, &docs, &skill_entries, &source_manifest)?;
     validate_runtime_contract(&args.skills_root, &bundle)?;
 
     if args.apply {
@@ -392,6 +386,18 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<(), String> {
     write_text_if_changed(path, &content)
 }
 
+fn read_framework_surface_policy(skills_root: &Path) -> Result<Option<Value>, String> {
+    let repo_root = skills_root.parent().unwrap_or(skills_root);
+    let path = repo_root
+        .join("configs")
+        .join("framework")
+        .join("FRAMEWORK_SURFACE_POLICY.json");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    read_json(&path).map(Some)
+}
+
 fn compile_bundle(
     skills_root: &Path,
     docs: &[SkillDoc],
@@ -400,12 +406,14 @@ fn compile_bundle(
 ) -> Result<SkillBundle, String> {
     let (registry, manifest) = build_registry_and_manifest(docs, skill_entries)?;
     let framework_rows = framework_command_runtime_rows(skills_root)?;
-    let index = build_index(&manifest, &framework_rows);
-    let runtime_index = build_runtime_index(&manifest, &framework_rows);
     let shadow_map = build_shadow_map(skill_entries, source_manifest);
     let approval_policy = build_approval_policy(docs);
     let tiers = build_tier_catalog(&manifest);
-    let framework_surface_policy = build_framework_surface_policy(&tiers);
+    let configured_surface_policy = read_framework_surface_policy(skills_root)?;
+    let framework_surface_policy =
+        build_framework_surface_policy(&tiers, configured_surface_policy.as_ref());
+    let index = build_index(&manifest, &framework_rows, &framework_surface_policy);
+    let runtime_index = build_runtime_index(&manifest, &framework_rows, &framework_surface_policy);
     let loadouts = build_loadouts(&framework_surface_policy, &manifest);
     Ok(SkillBundle {
         registry,
@@ -818,8 +826,8 @@ fn select_manifest_docs<'a>(
     selected
 }
 
-fn build_index(manifest: &Value, framework_rows: &[Value]) -> String {
-    let mut selected = select_runtime_skills(manifest);
+fn build_index(manifest: &Value, framework_rows: &[Value], surface_policy: &Value) -> String {
+    let mut selected = select_runtime_skills(manifest, surface_policy);
     selected.extend(
         framework_rows
             .iter()
@@ -902,8 +910,12 @@ fn build_index(manifest: &Value, framework_rows: &[Value]) -> String {
     lines.join("\n")
 }
 
-fn build_runtime_index(manifest: &Value, framework_rows: &[Value]) -> Value {
-    let selected = select_runtime_skills(manifest);
+fn build_runtime_index(
+    manifest: &Value,
+    framework_rows: &[Value],
+    surface_policy: &Value,
+) -> Value {
+    let selected = select_runtime_skills(manifest, surface_policy);
     let full_manifest_path = "skills/SKILL_MANIFEST.json";
     let mut skills = selected
         .iter()
@@ -929,7 +941,7 @@ fn build_runtime_index(manifest: &Value, framework_rows: &[Value]) -> Value {
         "checklist": index_checklist(),
         "scope": {
             "kind": "hot",
-            "policy": "session-start required gates plus explicit framework command aliases; route/search may load the fallback manifest after runtime-owned skills have been excluded.",
+            "policy": "session-start required gates plus allowlisted first-turn control owners plus explicit framework command aliases; route/search may load the fallback manifest after runtime-owned skills have been excluded.",
             "fallback_manifest": full_manifest_path,
             "full_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
             "hot_skill_count": skills.len(),
@@ -1152,7 +1164,7 @@ fn filter_existing_slugs(known_slugs: &HashSet<String>, slugs: &[&str]) -> Vec<S
         .collect()
 }
 
-fn build_framework_surface_policy(tiers: &Value) -> Value {
+fn build_framework_surface_policy(tiers: &Value, configured_policy: Option<&Value>) -> Value {
     let tier_counts = tiers
         .get("summary")
         .and_then(|summary| summary.get("tier_counts"))
@@ -1163,6 +1175,12 @@ fn build_framework_surface_policy(tiers: &Value) -> Value {
         .and_then(|summary| summary.get("activation_counts"))
         .cloned()
         .unwrap_or_else(|| json!({}));
+    let hot_first_turn_owners = configured_policy
+        .and_then(|policy| policy.get("default_surface"))
+        .and_then(|surface| surface.get("hot_first_turn_owners"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_else(|| vec![json!("skill-framework-developer")]);
     json!({
         "version": 1,
         "schema_version": "framework-surface-policy-v1",
@@ -1189,6 +1207,7 @@ fn build_framework_surface_policy(tiers: &Value) -> Value {
                 "ops_loadout"
             ],
             "default_entry_loadout": "default_surface_loadout",
+            "hot_first_turn_owners": hot_first_turn_owners,
             "lean_default_owners": [],
             "default_overlays": [],
             "tier_activation_defaults": {
@@ -1419,7 +1438,7 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         "report_status": "generated_debug_report",
         "tier_order": ["core", "optional", "experimental", "deprecated"],
         "generation_policy": {
-            "core": "session-start required source/artifact/evidence/delegation gate skills only; generic control owners are explicit or fallback-only, not hot-runtime entries",
+            "core": "session-start required source/artifact/evidence/delegation gate skills only; generic control owners stay explicit or fallback-only unless allowlisted as first-turn control owners",
             "optional": "non-core skills that have not been folded into runtime-owned execution, code, language, framework, platform, or integration capabilities",
             "experimental": "reserved for explicitly marked unstable routing signals",
             "deprecated": "reserved for explicitly retired skills"
@@ -1540,7 +1559,8 @@ fn skill_entry_to_value(entry: &SkillEntry) -> Value {
     })
 }
 
-fn select_hot_runtime_skills(manifest: &Value) -> Vec<Vec<Value>> {
+fn select_hot_runtime_skills(manifest: &Value, surface_policy: &Value) -> Vec<Vec<Value>> {
+    let hot_first_turn_owners = hot_first_turn_owner_slugs(surface_policy);
     let mut selected = Vec::new();
     let mut seen = HashSet::new();
     if let Some(skills) = manifest.get("skills").and_then(Value::as_array) {
@@ -1552,7 +1572,7 @@ fn select_hot_runtime_skills(manifest: &Value) -> Vec<Vec<Value>> {
                 continue;
             }
             let slug = string_at(row, 0);
-            if is_hot_runtime_skill(row) && seen.insert(slug) {
+            if is_hot_runtime_skill(row, &hot_first_turn_owners) && seen.insert(slug) {
                 selected.push(row.clone());
             }
         }
@@ -1566,8 +1586,8 @@ fn select_hot_runtime_skills(manifest: &Value) -> Vec<Vec<Value>> {
     selected
 }
 
-fn select_runtime_skills(manifest: &Value) -> Vec<Vec<Value>> {
-    let mut selected = select_hot_runtime_skills(manifest);
+fn select_runtime_skills(manifest: &Value, surface_policy: &Value) -> Vec<Vec<Value>> {
+    let mut selected = select_hot_runtime_skills(manifest, surface_policy);
     if selected.is_empty() {
         selected = select_all_runtime_skills(manifest);
     }
@@ -1600,10 +1620,22 @@ fn select_all_runtime_skills(manifest: &Value) -> Vec<Vec<Value>> {
     selected
 }
 
-fn is_hot_runtime_skill(skill: &[Value]) -> bool {
+fn hot_first_turn_owner_slugs(surface_policy: &Value) -> HashSet<String> {
+    surface_policy
+        .get("default_surface")
+        .and_then(|surface| surface.get("hot_first_turn_owners"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
+fn is_hot_runtime_skill(skill: &[Value], hot_first_turn_owners: &HashSet<String>) -> bool {
     is_core_surface_skill(skill)
         || is_required_delegation_gate(skill)
-        || is_first_turn_preferred_owner(skill)
+        || is_first_turn_preferred_owner(skill, hot_first_turn_owners)
 }
 
 fn runtime_rank(skill: &[Value]) -> (i32, i32, i32) {
@@ -1630,12 +1662,10 @@ fn is_required_delegation_gate(skill: &[Value]) -> bool {
         && string_at(skill, 3) == "delegation"
 }
 
-fn is_first_turn_preferred_owner(skill: &[Value]) -> bool {
+fn is_first_turn_preferred_owner(skill: &[Value], hot_first_turn_owners: &HashSet<String>) -> bool {
     string_at(skill, 2) == "owner"
         && matches!(string_at(skill, 6).as_str(), "required" | "preferred")
-        && HOT_FIRST_TURN_OWNER_SLUGS
-            .iter()
-            .any(|slug| *slug == string_at(skill, 0))
+        && hot_first_turn_owners.contains(&string_at(skill, 0))
 }
 
 fn extract_trigger_hints(
@@ -1918,7 +1948,9 @@ mod tests {
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
         let (_, manifest) = build_registry_and_manifest(&docs, &entries).expect("manifest");
         let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
-        let runtime = build_runtime_index(&manifest, &framework_rows);
+        let tiers = build_tier_catalog(&manifest);
+        let surface_policy = build_framework_surface_policy(&tiers, None);
+        let runtime = build_runtime_index(&manifest, &framework_rows, &surface_policy);
         let shadow_map = build_shadow_map(&entries, &source_manifest);
 
         assert_eq!(
@@ -2007,13 +2039,8 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let bundle = compile_bundle(
-            &skills_root,
-            &docs,
-            &entries,
-            &source_manifest,
-        )
-        .expect("compile");
+        let bundle =
+            compile_bundle(&skills_root, &docs, &entries, &source_manifest).expect("compile");
 
         assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(4));
         assert!(!bundle.manifest["skills"]
@@ -2055,6 +2082,24 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("preferred-owner"))));
+        let configured_surface_policy = build_framework_surface_policy(
+            &bundle.tiers,
+            Some(&json!({
+                "default_surface": {
+                    "hot_first_turn_owners": ["preferred-owner"]
+                }
+            })),
+        );
+        let configured_runtime = build_runtime_index(
+            &bundle.manifest,
+            &framework_command_runtime_rows(&skills_root).expect("framework rows"),
+            &configured_surface_policy,
+        );
+        assert!(configured_runtime["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("preferred-owner"))));
         assert_eq!(bundle.runtime_index["scope"]["kind"], json!("hot"));
         assert_eq!(bundle.tiers["summary"]["tier_counts"]["core"], json!(2));
         assert_eq!(
@@ -2086,6 +2131,10 @@ mod tests {
         assert_eq!(
             bundle.framework_surface_policy["source"],
             json!("generated-by-skill-compiler-rs")
+        );
+        assert_eq!(
+            bundle.framework_surface_policy["default_surface"]["hot_first_turn_owners"],
+            json!(["skill-framework-developer"])
         );
         assert_eq!(
             bundle.framework_surface_policy["source_of_truth"],
