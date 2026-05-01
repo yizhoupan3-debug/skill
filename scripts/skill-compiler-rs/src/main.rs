@@ -16,8 +16,6 @@ struct Cli {
     #[arg(long)]
     source_manifest: PathBuf,
     #[arg(long)]
-    health_manifest: PathBuf,
-    #[arg(long)]
     json: bool,
     #[arg(long)]
     apply: bool,
@@ -199,7 +197,6 @@ const FRAMEWORK_OVERLAYS: &[&str] = &[];
 fn main() -> Result<(), String> {
     let args = Cli::parse();
     let source_manifest = load_source_manifest(&args.source_manifest)?;
-    let health_data = load_health_data(&args.health_manifest)?;
     let docs = load_skill_documents(&args.skills_root)?;
     let skill_entries = collect_skill_entries(&args.skills_root, &docs, &source_manifest)?;
     let bundle = compile_bundle(
@@ -207,7 +204,6 @@ fn main() -> Result<(), String> {
         &docs,
         &skill_entries,
         &source_manifest,
-        &health_data,
     )?;
     validate_runtime_contract(&args.skills_root, &bundle)?;
 
@@ -401,9 +397,8 @@ fn compile_bundle(
     docs: &[SkillDoc],
     skill_entries: &[SkillEntry],
     source_manifest: &Value,
-    health_data: &HashMap<String, Value>,
 ) -> Result<SkillBundle, String> {
-    let (registry, manifest) = build_registry_and_manifest(docs, skill_entries, health_data)?;
+    let (registry, manifest) = build_registry_and_manifest(docs, skill_entries)?;
     let framework_rows = framework_command_runtime_rows(skills_root)?;
     let index = build_index(&manifest, &framework_rows);
     let runtime_index = build_runtime_index(&manifest, &framework_rows);
@@ -585,31 +580,6 @@ fn load_source_manifest(path: &Path) -> Result<Value, String> {
     read_json(path)
 }
 
-fn load_health_data(path: &Path) -> Result<HashMap<String, Value>, String> {
-    if !path.exists() {
-        return Ok(HashMap::new());
-    }
-    let payload = read_json(path)?;
-    let skills = payload.get("skills").cloned().unwrap_or(Value::Null);
-    let mut result = HashMap::new();
-    match skills {
-        Value::Object(map) => {
-            for (key, value) in map {
-                result.insert(key, value);
-            }
-        }
-        Value::Array(items) => {
-            for item in items {
-                if let Some(name) = item.get("name").and_then(Value::as_str) {
-                    result.insert(name.to_string(), item);
-                }
-            }
-        }
-        _ => {}
-    }
-    Ok(result)
-}
-
 fn read_json(path: &Path) -> Result<Value, String> {
     let text = fs::read_to_string(path)
         .map_err(|err| format!("failed reading {}: {err}", path.display()))?;
@@ -712,7 +682,6 @@ fn infer_skill_source(
 fn build_registry_and_manifest(
     docs: &[SkillDoc],
     skill_entries: &[SkillEntry],
-    health_data: &HashMap<String, Value>,
 ) -> Result<(String, Value), String> {
     let selected_docs = select_manifest_docs(docs, skill_entries);
     let source_entries = skill_entries
@@ -728,7 +697,6 @@ fn build_registry_and_manifest(
         "description",
         "session_start",
         "trigger_hints",
-        "health",
         "source",
         "source_position",
         "skill_path"
@@ -769,27 +737,6 @@ fn build_registry_and_manifest(
         let trigger_hints = extract_trigger_hints(&doc.metadata, &description, &doc.body);
         let summary = pick_runtime_summary(&doc.metadata, 80);
         let long_summary = pick_runtime_summary(&doc.metadata, 200);
-        let health_info = health_data.get(&slug);
-        let mut health_score = health_info
-            .and_then(|value| value.get("dynamic_score"))
-            .and_then(value_to_f64)
-            .unwrap_or(100.0);
-        if !doc.skill_dir.join("SKILL.md").is_file() {
-            health_score = health_score.min(0.0_f64);
-        }
-        if optional_string_field(&doc.metadata, "name").as_deref() != Some(slug.as_str()) {
-            health_score = health_score.min(70.0_f64);
-        }
-        if trigger_hints.is_empty() && matches!(session_start.as_str(), "required" | "preferred") {
-            health_score = health_score.min(75.0_f64);
-        }
-        let indicator = if health_score >= 85.0 {
-            "✓"
-        } else if health_score >= 60.0 {
-            "⚠"
-        } else {
-            "❌"
-        };
 
         let skill_row = vec![
             json!(slug),
@@ -800,7 +747,6 @@ fn build_registry_and_manifest(
             json!(long_summary),
             json!(session_start),
             json!(trigger_hints),
-            json!(round_one_decimal(health_score)),
             json!(source_entry.source),
             json!(source_entry.source_position),
             json!(format!("{}/SKILL.md", source_entry.path)),
@@ -811,7 +757,7 @@ fn build_registry_and_manifest(
         }
 
         rows.push(format!(
-            "| `{}` | {} | {} | {} | {} | {} | {} | {} {:.1} | {} |",
+            "| `{}` | {} | {} | {} | {} | {} | {} | {} |",
             string_at(&skill_row, 0),
             status,
             string_at(&skill_row, 4),
@@ -819,15 +765,13 @@ fn build_registry_and_manifest(
             string_at(&skill_row, 2),
             string_at(&skill_row, 3),
             source_entry.source,
-            indicator,
-            health_score,
             summary
         ));
         skills.push(Value::Array(skill_row));
     }
 
     let registry = format!(
-        "# Skill Routing Registry\n\n| Skill | Status | P | Layer | Owner | Gate | Source | Health | Description |\n|---|---|---|---|---|---|---|---|---|\n{}\n",
+        "# Skill Routing Registry\n\n| Skill | Status | P | Layer | Owner | Gate | Source | Description |\n|---|---|---|---|---|---|---|---|\n{}\n",
         rows.join("\n")
     );
     Ok((registry, json!({"keys": keys, "skills": skills})))
@@ -972,9 +916,8 @@ fn build_runtime_index(manifest: &Value, framework_rows: &[Value]) -> Value {
                 string_at(&skill, 6),
                 summarize_text(&string_at(&skill, 5), 96),
                 value_at(&skill, 7),
-                value_at(&skill, 8),
                 string_at(&skill, 4),
-                string_at(&skill, 11),
+                string_at(&skill, 10),
             ])
         })
         .collect::<Vec<_>>();
@@ -982,7 +925,7 @@ fn build_runtime_index(manifest: &Value, framework_rows: &[Value]) -> Value {
         skills.push(row.clone());
     }
     json!({
-        "version": 2,
+        "version": 3,
         "checklist": index_checklist(),
         "scope": {
             "kind": "hot",
@@ -991,7 +934,7 @@ fn build_runtime_index(manifest: &Value, framework_rows: &[Value]) -> Value {
             "full_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
             "hot_skill_count": skills.len(),
         },
-        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health", "priority", "skill_path"],
+        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
         "skills": skills,
     })
 }
@@ -1061,7 +1004,6 @@ fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
         "n/a",
         summary,
         trigger_hints,
-        100.0,
         "P1",
         skill_path
     ])
@@ -1433,8 +1375,8 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         .unwrap_or_default();
     let mut core = Vec::new();
     let mut optional = Vec::new();
-    let mut experimental = Vec::new();
-    let mut deprecated = Vec::new();
+    let mut experimental: Vec<String> = Vec::new();
+    let mut deprecated: Vec<String> = Vec::new();
     let mut skill_details = Map::new();
 
     for skill in skills.iter().filter_map(Value::as_array) {
@@ -1442,16 +1384,9 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         if slug.is_empty() {
             continue;
         }
-        let health = value_at(skill, 8).as_f64().unwrap_or(100.0);
         let tier = if is_core_surface_skill(skill) {
             core.push(slug.clone());
             "core"
-        } else if health < 60.0 {
-            deprecated.push(slug.clone());
-            "deprecated"
-        } else if health < 85.0 {
-            experimental.push(slug.clone());
-            "experimental"
         } else {
             optional.push(slug.clone());
             "optional"
@@ -1486,8 +1421,8 @@ fn build_tier_catalog(manifest: &Value) -> Value {
         "generation_policy": {
             "core": "session-start required source/artifact/evidence/delegation gate skills only; generic control owners are explicit or fallback-only, not hot-runtime entries",
             "optional": "non-core skills that have not been folded into runtime-owned execution, code, language, framework, platform, or integration capabilities",
-            "experimental": "reserved for unstable or low-health routing signals",
-            "deprecated": "reserved for very-low-health and unused skills with reroute pressure"
+            "experimental": "reserved for explicitly marked unstable routing signals",
+            "deprecated": "reserved for explicitly retired skills"
         },
         "surface_policy": {
             "default_loadouts": ["default_surface_loadout"],
@@ -1541,9 +1476,8 @@ fn build_tier_skill_detail(skill: &[Value], tier: &str) -> Value {
     let gate = string_at(skill, 3);
     let priority = string_at(skill, 4);
     let session_start = string_at(skill, 6);
-    let source = string_at(skill, 9);
-    let source_position = value_at(skill, 10);
-    let health = value_at(skill, 8);
+    let source = string_at(skill, 8);
+    let source_position = value_at(skill, 9);
     json!({
         "tier": tier,
         "reasons": if core {
@@ -1553,15 +1487,9 @@ fn build_tier_skill_detail(skill: &[Value], tier: &str) -> Value {
                 "session_start:required".to_string()
             ]
         } else if deprecated {
-            vec![
-                "health:very-low".to_string(),
-                "disabled-until-reroute-reviewed".to_string()
-            ]
+            vec!["explicitly-retired".to_string()]
         } else if tier == "experimental" {
-            vec![
-                "health:low".to_string(),
-                "explicit-opt-in-until-stabilized".to_string()
-            ]
+            vec!["explicit-opt-in-until-stabilized".to_string()]
         } else {
             vec!["specialist-opt-in".to_string()]
         },
@@ -1584,7 +1512,6 @@ fn build_tier_skill_detail(skill: &[Value], tier: &str) -> Value {
             "session_start": session_start,
             "source": source,
             "source_position": source_position,
-            "health": health,
             "loadouts": []
         },
         "slug": slug
@@ -1836,18 +1763,6 @@ fn string_field(metadata: &HashMap<String, Value>, key: &str) -> String {
     optional_string_field(metadata, key).unwrap_or_default()
 }
 
-fn round_one_decimal(value: f64) -> f64 {
-    (value * 10.0).round() / 10.0
-}
-
-fn value_to_f64(value: &Value) -> Option<f64> {
-    match value {
-        Value::Number(number) => number.as_f64(),
-        Value::String(text) => text.parse::<f64>().ok(),
-        _ => None,
-    }
-}
-
 fn value_to_string(value: &Value) -> String {
     match value {
         Value::String(text) => text.clone(),
@@ -2001,8 +1916,7 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let (_, manifest) =
-            build_registry_and_manifest(&docs, &entries, &HashMap::new()).expect("manifest");
+        let (_, manifest) = build_registry_and_manifest(&docs, &entries).expect("manifest");
         let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
         let runtime = build_runtime_index(&manifest, &framework_rows);
         let shadow_map = build_shadow_map(&entries, &source_manifest);
@@ -2018,18 +1932,17 @@ mod tests {
                 "description",
                 "session_start",
                 "trigger_hints",
-                "health",
                 "source",
                 "source_position",
                 "skill_path"
             ])
         );
         assert_eq!(runtime["keys"][6], json!("trigger_hints"));
-        assert_eq!(runtime["keys"][8], json!("priority"));
+        assert_eq!(runtime["keys"][7], json!("priority"));
         assert_eq!(shadow_map["winning_rule"], json!("highest-position-wins"));
         assert!(manifest["skills"][0][7].is_array());
         assert!(runtime["skills"][0][6].is_array());
-        assert_eq!(runtime["skills"][0][8], json!("P2"));
+        assert_eq!(runtime["skills"][0][7], json!("P2"));
     }
 
     #[test]
@@ -2049,13 +1962,12 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let (_, manifest) =
-            build_registry_and_manifest(&docs, &entries, &HashMap::new()).expect("manifest");
+        let (_, manifest) = build_registry_and_manifest(&docs, &entries).expect("manifest");
 
         assert_eq!(manifest["skills"].as_array().map(Vec::len), Some(1));
         assert_eq!(manifest["skills"][0][0], json!("skill-a"));
-        assert_eq!(manifest["skills"][0][9], json!("project"));
-        assert_eq!(manifest["skills"][0][10], json!(3));
+        assert_eq!(manifest["skills"][0][8], json!("project"));
+        assert_eq!(manifest["skills"][0][9], json!(3));
     }
 
     #[test]
@@ -2100,7 +2012,6 @@ mod tests {
             &docs,
             &entries,
             &source_manifest,
-            &HashMap::new(),
         )
         .expect("compile");
 

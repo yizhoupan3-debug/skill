@@ -196,7 +196,6 @@ cd /Users/joe/Documents/skill
 cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --skills-root skills \
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-  --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
   --apply
 ```
 

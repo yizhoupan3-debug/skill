@@ -6037,8 +6037,8 @@ mod tests {
         fs::write(
             path,
             json!({
-                "keys": ["slug", "layer", "owner", "gate", "summary", "trigger_hints", "health", "priority", "session_start"],
-                "skills": [[slug, "L2", "primary", "none", format!("{slug} summary"), ["trigger"], 100.0, "P1", "always"]]
+                "keys": ["slug", "layer", "owner", "gate", "summary", "trigger_hints", "priority", "session_start"],
+                "skills": [[slug, "L2", "primary", "none", format!("{slug} summary"), ["trigger"], "P1", "always"]]
             })
             .to_string(),
         )
@@ -6049,8 +6049,8 @@ mod tests {
         fs::write(
             path,
             json!({
-                "keys": ["slug", "description", "layer", "owner", "gate", "trigger_hints", "health", "priority", "session_start"],
-                "skills": [[slug, format!("{slug} manifest"), "L2", "primary", "none", ["trigger"], 100.0, priority, "always"]]
+                "keys": ["slug", "description", "layer", "owner", "gate", "trigger_hints", "priority", "session_start"],
+                "skills": [[slug, format!("{slug} manifest"), "L2", "primary", "none", ["trigger"], priority, "always"]]
             })
             .to_string(),
         )
@@ -7340,6 +7340,10 @@ mod tests {
             prompt_payload["continuity_decision"]["ignored_root_continuity"],
             json!(true)
         );
+        assert_eq!(
+            payload["memory_recall"]["diagnostics"]["continuity"]["registered_task_count"],
+            json!(1)
+        );
 
         let _ = fs::remove_dir_all(&repo_root);
     }
@@ -8044,7 +8048,7 @@ mod tests {
         let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
 
         assert_eq!(report.schema_version, "routing-eval-v1");
-        assert_eq!(report.metrics.case_count, 17);
+        assert_eq!(report.metrics.case_count, 24);
         assert_eq!(report.metrics.overtrigger, 0);
         assert_routing_eval_cases_match("manifest", |task, session_id, first_turn| {
             route_task(&records, task, session_id, true, first_turn)

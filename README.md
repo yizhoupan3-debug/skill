@@ -99,7 +99,6 @@ cd codex-skill-system
 cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- `
   --skills-root skills `
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json `
-  --health-manifest skills/SKILL_HEALTH_MANIFEST.json `
   --apply
 ```
 
@@ -144,7 +143,6 @@ codex
 cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --skills-root skills \
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-  --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
   --apply
 cargo test --test policy_contracts
 git status --short
@@ -161,7 +159,6 @@ git pull
 cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- `
   --skills-root skills `
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json `
-  --health-manifest skills/SKILL_HEALTH_MANIFEST.json `
   --apply
 ```
 
@@ -217,4 +214,3 @@ PowerShell 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` 续行。READ
 ### 可以只复制 `skills/` 吗？
 
 不推荐。`skills/` 是核心，但完整系统还包括 `AGENTS.md`、编译器、测试、CI 和维护约定。通过 GitHub 克隆整个仓库最稳。
-
