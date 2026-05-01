@@ -10,7 +10,10 @@ description: |
   Also use for feedback/repair asks like "paper review不好用，彻底优化",
   "论文写作不好用，持续优化", or "允许外部调研". This skill picks the right paper
   lane first, allows external literature / venue lookup when useful, and keeps
-  the workflow continuous without making the user switch skills.
+  the workflow continuous without making the user switch skills. Use top-tier
+  journal / top-conference standards when the user says 顶刊, 顶会, CCF-A,
+  Nature/Science/Cell, NeurIPS/ICML/ICLR, or wants the paper pushed toward a
+  genuinely selective venue rather than merely polished.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -25,6 +28,12 @@ trigger_hints:
   - 投稿前把关
   - 整篇严审
   - 整篇 review
+  - 科研优化
+  - 顶刊顶会标准
+  - 顶刊标准
+  - 顶会标准
+  - top-tier paper
+  - CCF-A 论文
   - 检查符号
   - 符号统一
   - notation sweep
@@ -63,14 +72,21 @@ trigger_hints:
   - 帮我处理这篇论文
   - 这篇稿子现在该怎么处理
   - 帮我把这篇 paper 弄到能投
+  - 科研 skill 优化
+  - 顶刊论文
+  - 顶会论文
+  - Nature/Science/Cell 标准
+  - NeurIPS/ICML/ICLR 标准
+  - top journal paper
+  - top conference paper
   - 该删就删
   - 藏到附录
   - paper workflow
   - paper workbench
 metadata:
-  version: "1.3.0"
+  version: "1.4.0"
   platforms: [codex]
-  tags: [paper, manuscript, review, revise, submission, orchestrator]
+  tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
   - orchestrator
   - planner
@@ -105,6 +121,8 @@ dimension mode.
 - The task may need claim narrowing, appendix routing, figure/table cleanup, or local prose polish after the main decision is clear
 - The user complains that paper review, revision, or writing skills are poor and wants the manuscript workflow tightened
 - External calibration can change the verdict, baseline expectations, novelty bar, or target-journal fit
+- The user wants 顶刊/顶会/CCF-A/top-tier readiness, or wants the workflow to
+  produce papers that can survive selective venues rather than local polish
 
 ## Do not use
 
@@ -127,6 +145,9 @@ Pick one external mode first, then keep the rest internal:
 Rules:
 
 - vague whole-paper asks default to `整篇判断`
+- top-tier / 顶刊顶会 asks default to `整篇判断` with the strict top-tier
+  acceptance bar, unless the user already provides accepted findings for direct
+  revision
 - review-driven revision asks default to `按意见改稿`
 - target-journal ref-first asks default to `先学ref再写`
 - explicit dimension asks use `单维度会诊`
@@ -148,6 +169,28 @@ separate "known blocker" from "uncertainty that needs lookup".
 - Do not let external research become a separate literature-review task unless the paper cannot be judged without a corpus.
 - Do not preserve every manuscript section by default; cut, narrow, move to appendix, or stop defending weak claims when that is the honest route.
 - Do not end at critique if the user asked to get the paper closer to submission; convert findings into ordered edits.
+- Do not present "top-tier" as a style problem. Treat it as a selective-venue
+  acceptance problem: novelty, evidence, comparison fairness, venue fit, and
+  reproducibility must survive before prose polish matters.
+
+## Top-tier submission bar
+
+For requests about 顶刊, 顶会, CCF-A, Nature/Science/Cell, NeurIPS/ICML/ICLR, or
+similar selective venues, apply
+[`references/top-tier-paper-standard.md`](references/top-tier-paper-standard.md)
+before choosing the final lane.
+
+The short rule is:
+
+```text
+top-tier readiness = target venue contract + defensible contribution +
+closest-work separation + decisive evidence + reviewer attack plan + clean
+manuscript surfaces
+```
+
+If any upstream scientific bar fails, the next honest move is new evidence,
+claim narrowing, target retargeting, or abandonment of an overclaim. Do not hide
+that failure behind better English.
 
 ## Internal lane map
 
@@ -189,6 +232,7 @@ verdict_or_blocker:
 active_lane:
 next_edit:
 external_calibration_needed:
+top_tier_bar:
 ```
 
 Behind the scenes, this skill may switch lanes. The user should not need to.

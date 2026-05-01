@@ -1080,7 +1080,7 @@ fn build_delegation_contract() -> Map<String, Value> {
     let mut gate = Map::new();
     gate.insert(
         "gate_skill".to_string(),
-        Value::String("subagent-delegation".to_string()),
+        Value::String("agent-swarm-orchestration".to_string()),
     );
     gate.insert(
         "gate_type".to_string(),

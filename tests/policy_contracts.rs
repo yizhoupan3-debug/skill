@@ -949,8 +949,8 @@ fn openai_proxy_config_does_not_commit_plaintext_api_keys() {
 }
 
 #[test]
-fn ppt_skill_has_no_node_package_runtime() {
-    let root = project_root().join("skills/ppt-pptx");
+fn slides_native_pptx_lane_has_no_node_package_runtime() {
+    let root = project_root().join("skills/slides");
     assert!(!root.join("package.json").exists());
     assert!(!root.join("package-lock.json").exists());
     assert!(!root.join("assets/package.template.json").exists());
@@ -960,12 +960,12 @@ fn ppt_skill_has_no_node_package_runtime() {
 }
 
 #[test]
-fn ppt_skill_scripts_are_not_runtime_contract() {
+fn slides_native_pptx_docs_are_not_runtime_contract() {
     assert!(
-        collect_files_with_extension(&project_root().join("skills/ppt-pptx/scripts"), "py")
+        collect_files_with_extension(&project_root().join("skills/slides/scripts"), "py")
             .is_empty()
     );
-    let skill = read_text(&project_root().join("skills/ppt-pptx/SKILL.md"));
+    let skill = read_text(&project_root().join("skills/slides/SKILL.md"));
     for forbidden in ["node", "npm", "PptxGenJS", "deck.js"] {
         assert!(
             !skill.contains(forbidden),
@@ -1118,12 +1118,16 @@ fn ppt_rust_cli_builds_editable_deck_without_node_assets() {
 }
 
 #[test]
-fn ppt_skill_documents_design_and_aigc_gates() {
-    let skill = read_text(&project_root().join("skills/ppt-pptx/SKILL.md"));
-    let workflow = read_text(&project_root().join("skills/ppt-pptx/references/workflow.md"));
+fn slides_native_pptx_documents_design_and_aigc_gates() {
+    let skill = read_text(&project_root().join("skills/slides/SKILL.md"));
+    let workflow = read_text(
+        &project_root().join("skills/slides/references/native-pptx/workflow.md"),
+    );
     let design_system =
-        read_text(&project_root().join("skills/ppt-pptx/references/design-system.md"));
-    let checklist = read_text(&project_root().join("skills/ppt-pptx/references/checklist.md"));
+        read_text(&project_root().join("skills/slides/references/native-pptx/design-system.md"));
+    let checklist =
+        read_text(&project_root().join("skills/slides/references/native-pptx/checklist.md"));
+    let native_docs = format!("{skill}\n{workflow}");
 
     for token in [
         "$design-md",
@@ -1131,14 +1135,14 @@ fn ppt_skill_documents_design_and_aigc_gates() {
         "built-in Rust copy naturalization",
         "$copywriting",
         "$paper-writing",
-        "Source Contract",
+        "Native PPTX References",
         "Text And Design Polishing Chain",
         "Rust inspection boost",
         "`deck.plan.json` stays the source of truth",
     ] {
-        assert!(skill.contains(token), "missing skill token: {token}");
+        assert!(native_docs.contains(token), "missing native PPTX token: {token}");
     }
-    assert!(skill.contains(
+    assert!(native_docs.contains(
         "outline -> text-owner polish -> DESIGN.md or visual contract -> deck.plan.json -> deck.pptx -> rendered\n\
 PNG -> visual-review evidence -> design-md verdict -> ppt\n\
 qa/build-qa sign-off"
@@ -1202,7 +1206,7 @@ qa/build-qa sign-off"
 
 #[test]
 fn ppt_docs_are_rust_runtime_first() {
-    let docs = markdown_text_under(&[project_root().join("skills/ppt-pptx")]);
+    let docs = markdown_text_under(&[project_root().join("skills/slides/references/native-pptx")]);
     for forbidden in [
         "node scripts/smoke_test.js",
         "npm install",
@@ -1224,12 +1228,16 @@ fn ppt_docs_are_rust_runtime_first() {
 
 #[test]
 fn ppt_skill_references_source_first_and_editable_rules() {
-    let layout = read_text(&project_root().join("skills/ppt-pptx/references/layout-patterns.md"));
-    let method = read_text(&project_root().join("skills/ppt-pptx/references/method.md"));
-    let rust_cli = read_text(&project_root().join("skills/ppt-pptx/references/rust-cli.md"));
+    let layout =
+        read_text(&project_root().join("skills/slides/references/native-pptx/layout-patterns.md"));
+    let method =
+        read_text(&project_root().join("skills/slides/references/native-pptx/method.md"));
+    let rust_cli =
+        read_text(&project_root().join("skills/slides/references/native-pptx/rust-cli.md"));
     let visualization =
-        read_text(&project_root().join("skills/ppt-pptx/references/visualization_patterns.md"));
-    let install = read_text(&project_root().join("skills/ppt-pptx/references/install.md"));
+        read_text(&project_root().join("skills/slides/references/native-pptx/visualization_patterns.md"));
+    let install =
+        read_text(&project_root().join("skills/slides/references/native-pptx/install.md"));
 
     assert!(layout.contains("Auto-Selection Rules"));
     assert!(layout.contains("choose the pattern that creates the clearest reading path"));

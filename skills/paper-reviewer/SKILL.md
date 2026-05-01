@@ -6,8 +6,10 @@ description: |
   as claim, novelty, evidence, math, references, figures, tables, language, or
   layout. Also use for "paper review", "审稿", "严审", "能不能投", "投稿前把关",
   or reviewer-style critique where external literature / venue research is
-  allowed to calibrate the bar. This skill reviews and decides; it does not
-  directly rewrite unless the user asks to switch into revision.
+  allowed to calibrate the bar. Also use when the requested review standard is
+  顶刊, 顶会, CCF-A, or top-tier selective-venue acceptance. This skill reviews
+  and decides; it does not directly rewrite unless the user asks to switch into
+  revision.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -27,6 +29,12 @@ trigger_hints:
   - 能不能投
   - 投稿前把关
   - 投稿前 review
+  - 顶刊审稿标准
+  - 顶会审稿标准
+  - 顶刊顶会 review
+  - top-tier review
+  - top conference review
+  - top journal review
   - 外部调研严审
   - 查文献后审
   - reviewer-style critique
@@ -45,7 +53,7 @@ trigger_hints:
   - 最严厉审稿
   - reject reviewer
 metadata:
-  version: "4.0.0"
+  version: "4.1.0"
   platforms: [codex]
   tags: [paper, manuscript, review, reviewer, submission, gate-chain, top-journal]
 framework_roles:
@@ -81,6 +89,8 @@ Default posture:
   uploading the whole draft to public third-party services
 - treat target venue and article type as the bar; if missing, proceed with a
   provisional bar and label it as provisional instead of blocking
+- when the user asks for top-tier readiness, apply the selective-venue bar from
+  `$paper-workbench` before allowing language or layout issues to dominate
 - review before rewriting; switch to `$paper-reviser` only after findings are
   accepted or the user explicitly asks for edits
 
@@ -92,6 +102,7 @@ Default posture:
 - The user explicitly wants only one review dimension judged
 - The user allows or requests external research for related work, novelty,
   target-journal norms, or baseline expectations
+- The user asks whether the paper reaches 顶刊/顶会/top-tier standards
 
 ## Do not use
 
@@ -122,6 +133,18 @@ Default output should be decision-first and short enough to act on:
 4. external calibration: closest prior work / venue norm / baseline expectation
    only when external research was used
 5. next honest move: fix, cut, narrow, move to appendix, or stop defending
+
+For 顶刊/顶会/top-tier asks, also include the compact card from
+[`../paper-workbench/references/top-tier-paper-standard.md`](../paper-workbench/references/top-tier-paper-standard.md):
+
+```text
+target_bar:
+top_contribution:
+closest_reject_case:
+missing_decisive_evidence:
+claim_ceiling:
+next_honest_move:
+```
 
 Use severity only as plain reviewer priority:
 
@@ -211,3 +234,5 @@ disk:
   protocol artifacts
 - If the strongest honest move is to cut, narrow, or move something to appendix, say so plainly
 - Do not blur whole-paper review and local text polish into one owner
+- Do not call a paper "top-tier ready" unless contribution, closest-work
+  separation, decisive evidence, and reviewer attack resistance all survive.

@@ -2,7 +2,7 @@
 
 ## When To Read This
 
-Read this file when you need the Rust command surface for `ppt-pptx` authoring,
+Read this file when you need the Rust command surface for `native PPTX lane` authoring,
 QA, inspection, or rebuild work.
 
 ## Runtime Contract

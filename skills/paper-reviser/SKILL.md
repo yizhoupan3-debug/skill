@@ -5,7 +5,8 @@ description: |
   already clearly "change the paper now" based on reviewer comments, known
   findings, or a fixed decision to narrow scope. This skill may repair, narrow,
   delete, de-emphasize, or move material to the appendix when that is the
-  honest fix.
+  honest fix. For 顶刊/顶会/top-tier revision, it turns acceptance blockers into
+  manuscript changes only after the scientific claim boundary is known.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -23,8 +24,14 @@ trigger_hints:
   - 只改摘要
   - 只改图表维度
   - 写 rebuttal
+  - 顶刊标准改稿
+  - 顶会标准改稿
+  - 顶刊顶会改稿
+  - top-tier revision
+  - revise for top conference
+  - revise for top journal
 metadata:
-  version: "3.1.0"
+  version: "3.2.0"
   platforms: [codex]
   tags: [paper, manuscript, revise, reviewer-comments, rebuttal, appendix-routing]
 framework_roles:
@@ -63,6 +70,8 @@ The execution model is:
 - The route is already clearly revise-only
 - The paper needs claim downgrade, appendix routing, de-emphasis, or deletion instead of forced repair
 - The user wants rebuttal or response-letter work tied to real manuscript edits
+- The user has a top-tier readiness finding and wants concrete manuscript
+  changes against that blocker
 
 ## Do not use
 
@@ -101,6 +110,11 @@ Default output should stay simple:
 2. whether the blocker is resolved, partially resolved, or still blocked
 3. whether the next step is more revision, re-review, or new evidence
 
+For 顶刊/顶会/top-tier revision, each edit batch should also name which selective
+venue risk it reduces: contribution clarity, closest-work separation, decisive
+evidence, claim ceiling, reproducibility, figure/table persuasiveness, or
+front-door story.
+
 If the user is running the protocol-backed workflow, follow
 [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md). Treat the protocol as
 internal state management, not as the main user interface.
@@ -120,6 +134,8 @@ disk:
 - Use `logic repair` mode when a revision depends on claim-vs-evidence repair
 - Use `$citation-management` for citation support changes
 - Use `$paper-writing` for local prose rewriting after the claim boundary is fixed
+- Use [`../paper-workbench/references/top-tier-paper-standard.md`](../paper-workbench/references/top-tier-paper-standard.md)
+  as the acceptance-risk checklist when the user wants top-tier revision
 
 For revision dimension modes, use
 [`references/revision-modes.md`](references/revision-modes.md).

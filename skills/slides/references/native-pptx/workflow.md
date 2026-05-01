@@ -2,24 +2,38 @@
 
 Use this reference when building a PowerPoint deck from scratch, refactoring an HTML-first habit into a `.pptx` workflow, or checking whether a deck is both editable and presentation-grade.
 
+## Text And Design Polishing Chain
+
+Use the built-in Rust copy naturalization pass first, then `$copywriting` or
+`$paper-writing` when deck text needs a real owner. Use `$design-md` for the
+visual contract and `$visual-review` for rendered evidence. Rust inspection boost:
+verify with the Rust `ppt` CLI before calling the deck done.
+`deck.plan.json` stays the source of truth for rebuilt native PPTX decks.
+
+```text
+outline -> text-owner polish -> DESIGN.md or visual contract -> deck.plan.json -> deck.pptx -> rendered
+PNG -> visual-review evidence -> design-md verdict -> ppt
+qa/build-qa sign-off
+```
+
 ## Lane Decision
 
 Use this quick split before touching files:
 
 - Generic PPT ask or existing deck artifact with workflow still unclear -> start at `slides`
-- New deck from outline / notes / YAML / structured content where `deck.plan.json` should be the source of truth -> use `ppt-pptx`
-- Existing deck needs substantial redesign, new visual system, or source-of-truth rebuild -> use `ppt-pptx`
+- New deck from outline / notes / YAML / structured content where `deck.plan.json` should be the source of truth -> use `native PPTX lane`
+- Existing deck needs substantial redesign, new visual system, or source-of-truth rebuild -> use `native PPTX lane`
 - Existing `.pptx` needs in-place text edits, table/chart tweaks, inspection, or batch patches while the file stays the source of truth -> use `slides`
 
 Practical rule:
 
-- If the desired source of truth is a Rust-authored `deck.plan.json`, stay in `ppt-pptx`
+- If the desired source of truth is a Rust-authored `deck.plan.json`, stay in `native PPTX lane`
 - If the desired source of truth remains the `.pptx` file itself, start with `slides`
 
 Fast examples:
 
-- "按这份提纲出一版董事会汇报" -> `ppt-pptx`
-- "把这份旧 deck 全部重做成统一视觉" -> `ppt-pptx`
+- "按这份提纲出一版董事会汇报" -> `native PPTX lane`
+- "把这份旧 deck 全部重做成统一视觉" -> `native PPTX lane`
 - "把第 3 页标题和图表数字改掉" -> `slides`
 - "检查这个现成 PPT 有没有溢出和布局问题" -> `slides`
 

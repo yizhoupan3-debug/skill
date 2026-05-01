@@ -4,7 +4,9 @@ description: |
   Write, restructure, or polish bounded academic-paper prose after the
   claim/evidence boundary is known. Use for 论文写作, 英文论文润色, SCI润色,
   abstract/introduction/related-work/caption/rebuttal/cover-letter drafting,
-  academic storytelling, paragraph flow, and "只改表达不改 claim".
+  academic storytelling, paragraph flow, and "只改表达不改 claim". For
+  顶刊/顶会/top-tier writing, use only after the contribution, evidence, and
+  claim ceiling are fixed.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -17,6 +19,12 @@ trigger_hints:
   - 论文润色
   - 英文论文润色
   - SCI润色
+  - 顶刊写作
+  - 顶会写作
+  - 顶刊顶会写作
+  - top-tier academic writing
+  - top conference writing
+  - top journal writing
   - 学术润色
   - manuscript editing
   - academic writing
@@ -32,7 +40,7 @@ trigger_hints:
   - 科研讲故事
   - 论文故事线
 metadata:
-  version: "2.8.0"
+  version: "2.9.0"
   platforms: [codex]
   tags: [paper, writing, rewrite, abstract, introduction, caption, rebuttal]
 framework_roles:
@@ -78,6 +86,19 @@ science, citations, results, or reviewer-facing promises.
 - Preserve methods, results, numbers, abbreviations, and citation intent.
 - If the requested prose needs missing evidence, ask or mark the gap.
 - Never fabricate references or reviewer commitments.
+
+## Top-tier Writing Rules
+
+Use [`../paper-workbench/references/top-tier-paper-standard.md`](../paper-workbench/references/top-tier-paper-standard.md)
+as a guardrail when the user wants 顶刊/顶会/top-tier writing.
+
+- Do not upgrade contribution language beyond the frozen claim ceiling.
+- Make the one defensible contribution unmistakable before adding secondary angles.
+- Shape abstract and introduction around the venue-calibrated gap, not generic importance.
+- Keep closest-work contrast precise; do not imply novelty that the citation set has not established.
+- Surface limitations where they protect the claim instead of weakening it.
+- If top-tier readiness depends on missing evidence, stop and route back to
+  `$paper-reviewer` or `$paper-reviser` rather than polishing around the gap.
 
 ## Workflow
 

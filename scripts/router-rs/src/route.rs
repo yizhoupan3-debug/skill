@@ -982,6 +982,16 @@ fn is_meta_routing_task(query_text: &str) -> bool {
             "轻量化",
             "兼容层",
             "胶水层",
+            "核查",
+            "合并",
+            "精简",
+            "清理",
+            "历史文件",
+            "旧文件",
+            "口径",
+            "contract",
+            "沉到 runtime",
+            "沉到runtime",
             "减少入口",
             "减入口",
             "不损害功能",
@@ -1080,6 +1090,16 @@ fn has_skill_framework_maintenance_context(query_text: &str, query_token_list: &
             "轻量化",
             "兼容层",
             "胶水层",
+            "核查",
+            "合并",
+            "精简",
+            "清理",
+            "历史文件",
+            "旧文件",
+            "口径",
+            "contract",
+            "沉到 runtime",
+            "沉到runtime",
             "减少入口",
             "减入口",
             "不损害功能",
@@ -1097,6 +1117,11 @@ fn has_runtime_lightweighting_context(query_text: &str, query_token_list: &[Stri
         "轻量化",
         "兼容层",
         "胶水层",
+        "沉到 runtime",
+        "沉到runtime",
+        "runtime 下沉",
+        "下沉 runtime",
+        "沉到运行时",
         "减少入口",
         "减入口",
         "不损害功能",
@@ -1198,7 +1223,7 @@ fn has_existing_image_file_context(query_text: &str, query_token_list: &[String]
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
 
-fn has_humanizer_context(query_text: &str, query_token_list: &[String]) -> bool {
+fn has_prose_naturalization_context(query_text: &str, query_token_list: &[String]) -> bool {
     [
         "润色",
         "润色得自然",
@@ -3105,6 +3130,14 @@ fn should_defer_to_artifact_gate(
     if query_text.contains(&explicit_entry) {
         return false;
     }
+    if record.slug == "ppt-beamer" && has_beamer_slide_context(query_text, query_token_list) {
+        return false;
+    }
+    if record.slug == "source-slide-formats"
+        && has_source_slide_format_context(query_text, query_token_list)
+    {
+        return false;
+    }
     record.session_start_lower == "n/a"
         && (record
             .name_tokens
@@ -3142,6 +3175,65 @@ fn should_prefer_design_contract_over_artifact(
     record.slug == "slides"
         && has_design_contract_context(query_text, query_token_list)
         && !has_design_contract_negation_context(query_text, query_token_list)
+}
+
+fn has_beamer_slide_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "beamer",
+        "beamer slides",
+        "latex beamer",
+        "latex 幻灯片",
+        "beamer 编译",
+        "学术 ppt",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_source_slide_format_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "markdown slides",
+        "slidev",
+        "marp",
+        "html slides",
+        "source slide formats",
+        "source-first slides",
+        "用 markdown 做 slides",
+        "根据大纲做 html slides",
+        "browser-matched pdf",
+        "presentation.html",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_diagramming_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "mermaid",
+        "graphviz",
+        "dot diagram",
+        "流程图",
+        "研究流程图",
+        "技术路线图",
+        "方法图",
+        "实验流程",
+        "pipeline 图",
+        "时序图",
+        "架构图",
+        "依赖图",
+        "状态机",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
 }
 
 pub(crate) fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
@@ -3252,6 +3344,19 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if record.slug == "slides"
+        && (has_beamer_slide_context(query_text, query_token_list)
+            || has_source_slide_format_context(query_text, query_token_list))
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: explicit Beamer/Markdown/Slidev/Marp/HTML slide source wording should route to the narrower slide-source owner."
+                    .to_string(),
+            ],
+        };
+    }
     let _checklist_execution_context = has_checklist_execution_context(query_text);
     if record.slug == "systematic-debugging"
         && has_systematic_debug_context(query_text, query_token_list)
@@ -3296,7 +3401,7 @@ fn score_route_candidate<'a>(
         );
     }
     if record.slug == "documentation-engineering"
-        && has_humanizer_context(query_text, query_token_list)
+        && has_prose_naturalization_context(query_text, query_token_list)
         && !has_paper_context(query_text, query_token_list)
     {
         score += 52.0;
@@ -3309,6 +3414,29 @@ fn score_route_candidate<'a>(
         score += 56.0;
         reasons.push(
             "Copywriting boost applied: conversion-oriented UX or marketing copy wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "diagramming" && has_diagramming_context(query_text, query_token_list) {
+        score += 72.0;
+        reasons.push(
+            "Diagramming boost applied: explicit Mermaid/Graphviz or text-diagram wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "ppt-beamer" && has_beamer_slide_context(query_text, query_token_list) {
+        score += 86.0;
+        reasons.push(
+            "Ppt-beamer boost applied: explicit LaTeX Beamer slide-source wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "source-slide-formats"
+        && has_source_slide_format_context(query_text, query_token_list)
+    {
+        score += 86.0;
+        reasons.push(
+            "Source-slide-formats boost applied: explicit Markdown/Slidev/Marp/HTML slide-source wording detected."
                 .to_string(),
         );
     }
@@ -3412,7 +3540,7 @@ fn score_route_candidate<'a>(
         };
     }
     if record.slug == "design-md"
-        && has_humanizer_context(query_text, query_token_list)
+        && has_prose_naturalization_context(query_text, query_token_list)
         && !has_design_contract_context(query_text, query_token_list)
     {
         return RouteCandidate {
@@ -3765,35 +3893,11 @@ fn score_route_candidate<'a>(
         );
     }
 
-    if record.slug == "subagent-delegation" && score > 0.0 {
-        if bounded_subagent_context {
-            score += 22.0;
-            reasons.push(
-                "Bounded-sidecar boost applied: query prefers multi-agent sidecars without full team orchestration."
-                    .to_string(),
-            );
-        }
-        if bounded_subagent_context && token_budget_pressure {
-            score += 8.0;
-            reasons.push(
-                "Token-budget boost applied: bounded sidecars fit prompt-budget pressure better than wider orchestration."
-                    .to_string(),
-            );
-        }
-        if team_negation_context {
-            score += 16.0;
-            reasons.push(
-                "Team-negation boost applied: query says bounded multi-agent routing should avoid team."
-                    .to_string(),
-            );
-        }
-    }
-
     if record.slug == "team" && score > 0.0 && bounded_subagent_context && !explicit_framework_alias
     {
         score *= 0.2;
         reasons.push(
-            "Team suppression applied: bounded sidecar wording prefers subagent-delegation over team."
+            "Team suppression applied: bounded sidecar wording prefers agent-swarm admission over team."
                 .to_string(),
         );
     }

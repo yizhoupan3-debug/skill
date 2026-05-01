@@ -4,7 +4,7 @@ Use this reference when setting up a fresh `.pptx` deck workspace or when the Ru
 
 ## Rust CLI
 
-The ppt-pptx runtime path is the Rust `ppt` binary from this repository:
+The native PPTX lane runtime path is the Rust `ppt` binary from this repository:
 
 ```bash
 cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
@@ -43,7 +43,7 @@ Quick check:
 ppt office probe --json
 ```
 
-What it adds to `ppt-pptx`:
+What it adds to `native PPTX lane`:
 
 - `view outline` for quick deck shape / text-box counts
 - `view issues` for overflow / missing-title / structure diagnostics
@@ -110,7 +110,7 @@ Cross-platform font default:
 
 - remove the package wrapper from that deck workspace
 - invoke `ppt ...` directly or through the Rust command manifest
-- do not add a package manifest back to `skills/ppt-pptx`
+- do not add a package manifest back under skill-owned reference folders
 
 Useful Rust inspector commands after generation:
 

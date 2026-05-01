@@ -61,7 +61,7 @@ L4  algo-trading, assignment-compliance,
     copywriting, email-template, financial-data-fetching,
     latex-compile-acceleration,
     mac-memory-management, math-derivation,
-    ppt-beamer, ppt-pptx, source-slide-formats,
+    ppt-beamer, source-slide-formats,
     scientific-figure-plotting,
     statistical-analysis, youtube-summarizer
 Runtime lanes  planning, execution/code, language/framework, platform/integration,
@@ -87,7 +87,7 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `systematic-debugging` vs 领域 owner → 根因未知 vs 根因已知
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
 - `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
-- `slides` vs `ppt-pptx` → 通用 PPT / 现有 deck artifact gate vs 显式 `deck.plan.json` / Rust PPTX 源码工作流
+- `slides` native PPTX lane → 通用 PPT / 现有 deck artifact gate / 显式 `deck.plan.json` / Rust PPTX 源码工作流
 - `slides` vs `source-slide-formats` → 通用演示文稿入口 vs 显式 Markdown / Slidev / Marp / HTML source slides
 - `latex-compile-acceleration` vs `ppt-beamer` → 编译优化 vs Beamer 内容/版式
 - research retrieval runtime vs `gh-address-comments` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总

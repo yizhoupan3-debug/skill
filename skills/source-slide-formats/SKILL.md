@@ -64,7 +64,7 @@ or browser-matched PDF export.
 ## Do not use
 
 - Generic presentation intake -> use `$slides`.
-- Source-first native `.pptx` with `deck.plan.json` -> use `$ppt-pptx`.
+- Source-first native `.pptx` with `deck.plan.json` -> use `$slides` native PPTX lane.
 - LaTeX Beamer source -> use `$ppt-beamer`.
 - Existing deck repair where PowerPoint fidelity matters -> use `$slides`.
 

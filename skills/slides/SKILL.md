@@ -67,7 +67,7 @@ questions that can be answered by reasonable assumptions.
 - The request is for a PDF/document rather than a presentation artifact.
 - The task is only about static screenshots or image collage output.
 
-## Core contract
+## Core Rules
 
 - Treat this as the canonical first check for generic PPT / presentation asks before any narrower owner claims the request.
 - Do not stop to ask for goal, audience, visual bar, or format when a safe default exists. Assume a broad professional audience, presentation-grade visual quality, editable `.pptx`, and the current/requested output directory; state those assumptions while proceeding.
@@ -80,13 +80,13 @@ questions that can be answered by reasonable assumptions.
 
 ## Required workflow
 
-1. Intake quickly: extract goal, audience, source material, requested output path, and format. If any item is missing but safely assumable, proceed with the defaults in Core contract instead of asking.
+1. Intake quickly: extract goal, audience, source material, requested output path, and format. If any item is missing but safely assumable, proceed with the defaults in Core Rules instead of asking.
 2. If the deck needs a reusable visual identity, brand consistency, high-design
    theme, or acceptance against a style contract, route through `$design-md`
    before authoring slides.
 3. If the user explicitly wants Markdown / HTML source, reroute through `source-slide-formats` only after router/fallback-manifest selection; if they want Beamer, do the same for `ppt-beamer`.
 4. Otherwise choose the native `.pptx` lane:
-   - New or rebuilt deck: use `ppt-pptx` and `deck.plan.json` as source of truth.
+   - New or rebuilt deck: use this skill's native PPTX lane and `deck.plan.json` as source of truth.
    - Existing deck with small in-place edits: keep the `.pptx` as source of truth, inspect first, then patch the smallest safe surface.
 5. Build slides quickly with editable objects first: text, shapes, tables, and native charts.
 6. Render previews and run the verification gates below.
@@ -146,6 +146,18 @@ Use `$design-md` before slide authoring when the user asks for:
 Do not route through `$design-md` for quick utility decks where speed matters
 more than a reusable visual contract.
 
+## Native PPTX References
+
+The old standalone native PPTX entry has been folded into this skill. Keep
+native PPTX implementation details in references so the user-facing route stays
+`$slides`:
+
+- [references/native-pptx/workflow.md](references/native-pptx/workflow.md)
+- [references/native-pptx/checklist.md](references/native-pptx/checklist.md)
+- [references/native-pptx/design-system.md](references/native-pptx/design-system.md)
+- [references/native-pptx/layout-patterns.md](references/native-pptx/layout-patterns.md)
+- [references/native-pptx/rust-cli.md](references/native-pptx/rust-cli.md)
+
 ## Existing PPTX Safety
 
 - Before modifying an existing `.pptx`, run `ppt intake` and `ppt office doctor`
@@ -198,7 +210,7 @@ compact:
 
 ## Hard constraints
 
-- Do not use `PptxGenJS`, `python-pptx`, ad hoc Node builders, or screenshot-only slide authoring as the default path here.
+- Do not use legacy JS/Python deck generators or screenshot-only slide authoring as the default path here.
 - Do not mention internal builder/package details in the final response unless the user asks.
 - Do not surface scratch previews, verification images, or support files unless requested.
 - Do not search or preload the rest of `skills/`.
