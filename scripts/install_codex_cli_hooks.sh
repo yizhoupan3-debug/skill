@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Installs Codex CLI hooks into ~/.codex/{config.toml,hooks.json}.
-# Hook command invokes the Rust router-rs review-subagent-gate via run_router_rs.sh
-# (replaces the legacy `.codex/hooks/review_subagent_gate.py` Python entrypoint).
+# Hook command invokes the Rust router-rs review-subagent-gate via run_router_rs.sh.
 set -euo pipefail
 
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"

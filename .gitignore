@@ -58,7 +58,6 @@ memory/.*.sqlite3
 memory/archive/
 memory/state.json
 skills/.evolution_journal.jsonl
-skills/SKILL_ROUTING_ROOT.md
 skills/dist/*.skill
 rust_tools/target/
 scripts/**/target/
@@ -69,6 +68,8 @@ tools/**/output/
 product-name-*.js
 tmp_index-*.js
 bootstrap.js
+app-session-*.js
+puppet-*.js
 main-*.js
 my_ccs.css
 opencode.jsonc
@@ -77,10 +78,6 @@ opencode.jsonc
 !.codex/config.toml
 !.codex/host_entrypoints_sync_manifest.json
 !.codex/hooks.json
-!.codex/hooks/
-!.codex/hooks/*.py
-!.codex/hook-tests/
-!.codex/hook-tests/*.py
 !.codex/prompts/
 !.codex/prompts/*.md
 
