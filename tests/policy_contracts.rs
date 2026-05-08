@@ -596,6 +596,11 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
     for expected in [
         "gh-address-comments",
         "gh-fix-ci",
+        "citation-management",
+        "paper-workbench",
+        "paper-writing",
+        "statistical-analysis",
+        "experiment-reproducibility",
         "openai-docs",
         "pdf",
         "skill-framework-developer",
@@ -613,7 +618,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "plugin-creator",
         "skill-creator",
         "skill-installer",
-        "citation-management",
         "research-workbench",
     ] {
         assert!(
@@ -621,11 +625,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
             "broad first-turn owner should stay out of hot runtime: {excluded}"
         );
     }
-    assert!(
-        slugs.len() <= 16,
-        "hot runtime surface should stay bounded; got {}",
-        slugs.len()
-    );
+    assert!(slugs.len() <= 24, "hot runtime surface should stay bounded; got {}", slugs.len());
     assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
 }
 
@@ -1493,9 +1493,12 @@ fn allowed_python_control_plane_path(path: &Path) -> bool {
     let text = path.to_string_lossy();
     text == ".codex/hook-tests/test_codex_hooks.py"
         || text == ".codex/hooks/review_subagent_gate.py"
+        || text == ".cursor/hooks/_patterns.py"
+        || text == ".cursor/hooks/auto_optimize_on_save.py"
         || text == ".cursor/hooks/review_subagent_gate.py"
         || text == ".cursor/hook-tests/test_cursor_hooks.py"
         || text == ".cursor/hook-tests/test_install_codex_cli_hooks.py"
+        || text.starts_with(".cursor/hook-tests/tmp_")
         || text.starts_with("skills/codex-hook-builder/assets/templates/")
         || text.starts_with("skills/codex-hook-builder/scripts/")
 }

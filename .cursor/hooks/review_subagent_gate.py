@@ -49,9 +49,10 @@ if str(_HERE) not in sys.path:
 from _patterns import (  # noqa: E402
     SUBAGENT_TYPES,
     SUBAGENT_TOOL_NAMES,
+    has_goal_blocker_signal,
     has_goal_contract_signal,
     has_goal_progress_signal,
-    has_goal_verify_or_block_signal,
+    has_goal_verify_signal,
     has_delegation_override,
     has_override,
     has_review_override,
@@ -65,6 +66,7 @@ from _patterns import (  # noqa: E402
 )
 
 STATE_VERSION = 2
+MAX_GOAL_NO_PROGRESS_LOOPS = 2
 
 # ---------- IO ----------
 
@@ -222,7 +224,9 @@ def empty_state() -> dict[str, Any]:
         "goal_required": False,
         "goal_contract_seen": False,
         "goal_progress_seen": False,
-        "goal_verify_or_block_seen": False,
+        "goal_verify_seen": False,
+        "goal_blocker_seen": False,
+        "goal_no_progress_count": 0,
     }
 
 
@@ -318,7 +322,7 @@ def goal_is_satisfied(state: dict[str, Any]) -> bool:
     return bool(
         state.get("goal_contract_seen")
         and state.get("goal_progress_seen")
-        and state.get("goal_verify_or_block_seen")
+        and (state.get("goal_verify_seen") or state.get("goal_blocker_seen"))
     )
 
 
@@ -357,8 +361,9 @@ def handle_before_submit(event: dict[str, Any]) -> int:
         state["goal_progress_seen"] = bool(state.get("goal_progress_seen")) or has_goal_progress_signal(
             text
         )
-        state["goal_verify_or_block_seen"] = bool(state.get("goal_verify_or_block_seen")) or (
-            has_goal_verify_or_block_signal(text) or rejected
+        state["goal_verify_seen"] = bool(state.get("goal_verify_seen")) or has_goal_verify_signal(text)
+        state["goal_blocker_seen"] = bool(state.get("goal_blocker_seen")) or (
+            has_goal_blocker_signal(text) or rejected
         )
         if review or delegation:
             state["last_prompt"] = text[:500]
@@ -503,18 +508,21 @@ def handle_after_agent_response(event: dict[str, Any]) -> int:
         text = agent_response_text(event)
         if armed and saw_reject_reason(text):
             state["reject_reason_seen"] = True
-            state["goal_verify_or_block_seen"] = True
+            state["goal_blocker_seen"] = True
         if armed and has_goal_contract_signal(text):
             state["goal_contract_seen"] = True
         if armed and has_goal_progress_signal(text):
             state["goal_progress_seen"] = True
-        if armed and has_goal_verify_or_block_signal(text):
-            state["goal_verify_or_block_seen"] = True
+        if armed and has_goal_verify_signal(text):
+            state["goal_verify_seen"] = True
+        if armed and has_goal_blocker_signal(text):
+            state["goal_blocker_seen"] = True
         if armed and (
             state.get("reject_reason_seen")
             or state.get("goal_contract_seen")
             or state.get("goal_progress_seen")
-            or state.get("goal_verify_or_block_seen")
+            or state.get("goal_verify_seen")
+            or state.get("goal_blocker_seen")
         ):
             save_state(event, state)
     finally:
@@ -532,13 +540,32 @@ def _goal_followup_message() -> str:
     )
 
 
+def _goal_has_advance_signal(state: dict[str, Any]) -> bool:
+    return bool(state.get("goal_verify_seen") or state.get("goal_blocker_seen"))
+
+
+def _goal_execution_template(state: dict[str, Any]) -> str:
+    missing = _goal_missing_parts(state)
+    next_line = (
+        "Next action template:\n"
+        "- Goal: <one objective>\n"
+        "- Done when: <measurable condition>\n"
+        "- Validation commands: <exact command list>\n"
+        "- Checkpoint progress: <what changed> / Next step: <immediate action>\n"
+        "- Verification: <passed output> OR blocker: <typed blocker>\n"
+    )
+    if missing:
+        return f"{next_line}- Fill missing now: {', '.join(missing)}"
+    return next_line
+
+
 def _goal_missing_parts(state: dict[str, Any]) -> list[str]:
     missing: list[str] = []
     if not state.get("goal_contract_seen"):
         missing.append("goal_contract")
     if not state.get("goal_progress_seen"):
         missing.append("checkpoint_progress")
-    if not state.get("goal_verify_or_block_seen"):
+    if not state.get("goal_verify_seen") and not state.get("goal_blocker_seen"):
         missing.append("verification_or_blocker")
     return missing
 
@@ -594,13 +621,17 @@ def handle_stop(event: dict[str, Any]) -> int:
             state["delegation_override"] = True
         if saw_reject_reason(text):
             state["reject_reason_seen"] = True
-            state["goal_verify_or_block_seen"] = True
+            state["goal_blocker_seen"] = True
         if has_goal_contract_signal(text):
             state["goal_contract_seen"] = True
         if has_goal_progress_signal(text):
             state["goal_progress_seen"] = True
-        if has_goal_verify_or_block_signal(text):
-            state["goal_verify_or_block_seen"] = True
+        if has_goal_verify_signal(text):
+            state["goal_verify_seen"] = True
+        if has_goal_blocker_signal(text):
+            state["goal_blocker_seen"] = True
+        if _goal_has_advance_signal(state):
+            state["goal_no_progress_count"] = 0
 
         if not is_satisfied(state):
             state["followup_count"] = int(state.get("followup_count") or 0) + 1
@@ -623,11 +654,25 @@ def handle_stop(event: dict[str, Any]) -> int:
 
         if not goal_is_satisfied(state):
             missing = ", ".join(_goal_missing_parts(state))
+            state["goal_no_progress_count"] = int(state.get("goal_no_progress_count") or 0) + 1
             state["followup_count"] = int(state.get("followup_count") or 0) + 1
             save_state(event, state)
+            no_progress = int(state.get("goal_no_progress_count") or 0)
+            escalation = (
+                " Autopilot appears stalled; stop summarizing and execute the next checkpoint now."
+                if no_progress >= MAX_GOAL_NO_PROGRESS_LOOPS
+                else ""
+            )
             print_json(
                 {
-                    "followup_message": f"{_goal_followup_message()} Missing: {missing}."
+                    "followup_message": (
+                        f"{_goal_followup_message()} Missing: {missing}. "
+                        f"No-progress loops: {no_progress}. "
+                        "If no blocker exists, continue execution now and report the next verified checkpoint."
+                        + escalation
+                        + "\n"
+                        + _goal_execution_template(state)
+                    ),
                 }
             )
             return 0

@@ -132,9 +132,14 @@ _GOAL_PROGRESS_RE = re.compile(
     r"(检查点|里程碑|进度|下一步)",
     re.I,
 )
-_GOAL_VERIFY_OR_BLOCK_RE = re.compile(
-    r"\b(verified|verification|test passed|blocker)\b|"
-    r"(已验证|验证通过|测试通过|阻塞)",
+_GOAL_VERIFY_RE = re.compile(
+    r"\b(verified|verification passed|test passed|tests passed|all checks passed)\b|"
+    r"(已验证|验证通过|测试通过|全部检查通过)",
+    re.I,
+)
+_GOAL_BLOCKER_RE = re.compile(
+    r"\b(blocker\s*:\s*[a-z0-9_.-]+|blocked\s+by\s+[a-z0-9_.-]+)\b|"
+    r"(阻塞[:：]\s*[\w\u4e00-\u9fff._-]+)",
     re.I,
 )
 
@@ -178,8 +183,12 @@ def has_goal_progress_signal(text: str) -> bool:
     return bool(_GOAL_PROGRESS_RE.search(text or ""))
 
 
-def has_goal_verify_or_block_signal(text: str) -> bool:
-    return bool(_GOAL_VERIFY_OR_BLOCK_RE.search(text or ""))
+def has_goal_verify_signal(text: str) -> bool:
+    return bool(_GOAL_VERIFY_RE.search(text or ""))
+
+
+def has_goal_blocker_signal(text: str) -> bool:
+    return bool(_GOAL_BLOCKER_RE.search(text or ""))
 
 
 def has_override(text: str) -> bool:

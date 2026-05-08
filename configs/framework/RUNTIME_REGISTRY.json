@@ -3,7 +3,9 @@
   "framework_core": {
     "authority": "rust",
     "source": "framework-root-native",
-    "host_policy": "closed-set-explicit-projections"
+    "host_policy": "closed-set-explicit-projections",
+    "authority_priority": "rust-primary",
+    "acceleration_policy": "prefer-rust-when-implemented"
   },
   "host_targets": {
     "policy": "shared-rust-core-explicit-host-projections",
@@ -33,7 +35,7 @@
       "canonical_owner": "autopilot",
       "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
       "reroute_when_ambiguous": "deepinterview",
-      "reroute_when_root_cause_unknown": "systematic-debugging",
+      "reroute_when_root_cause_unknown": "deepinterview",
       "official_workflow": {
         "phases": [
           "expansion",
@@ -55,9 +57,62 @@
         "store specs and plans in artifacts/current task-local bootstrap outputs",
         "use deepinterview as the first-class clarification gate for vague requests"
       ],
+      "autonomy_contract": {
+        "auto_agent_orchestration": {
+          "enabled": true,
+          "default_mode": "bounded-sidecar-first",
+          "spawn_policy": "admit-when-lanes-are-clear",
+          "max_parallel_lanes": 3,
+          "require_reject_reason_when_not_spawning": true,
+          "reject_reasons": [
+            "small_task",
+            "shared_context_heavy",
+            "write_scope_overlap",
+            "next_step_blocked",
+            "verification_missing",
+            "token_overhead_dominates"
+          ]
+        },
+        "goal_style_execution": {
+          "enabled": true,
+          "run_to_completion": "until-done-or-blocked",
+          "requires_done_definition": true,
+          "requires_non_goals_definition": true,
+          "loop": [
+            "plan",
+            "implement",
+            "verify",
+            "repair",
+            "closeout"
+          ],
+          "lifecycle_states": [
+            "goal_defined",
+            "running",
+            "paused",
+            "blocked",
+            "verification_pending",
+            "completed"
+          ],
+          "control_surface": [
+            "goal_start",
+            "goal_pause",
+            "goal_resume",
+            "goal_clear"
+          ],
+          "never_stop_at_plan_only": true,
+          "allow_network_research_for_unknowns": true,
+          "require_source_citation_for_external_claims": true,
+          "requires_checkpoint_log_each_loop": true,
+          "pause_requires_explicit_resume": true,
+          "checkpoint_artifacts": [
+            "SESSION_SUMMARY.md",
+            "NEXT_ACTIONS.json",
+            "EVIDENCE_INDEX.json"
+          ]
+        }
+      },
       "execution_owners": [
         "autopilot",
-        "systematic-debugging",
         "deepinterview"
       ],
       "decision_contract": {

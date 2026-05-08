@@ -115,6 +115,14 @@ venue risk it reduces: contribution clarity, closest-work separation, decisive
 evidence, claim ceiling, reproducibility, figure/table persuasiveness, or
 front-door story.
 
+For multi-round revision, each batch must also report:
+
+```text
+claim_ledger_delta:
+evidence_anchor_delta:
+drift_check_result:
+```
+
 If the user is running the protocol-backed workflow, follow
 [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md). Treat the protocol as
 internal state management, not as the main user interface.
@@ -149,3 +157,5 @@ For revision dimension modes, use
 - Do not parallelize multiple gate-closing decisions at once
 - Do not expand a one-slice edit request into a full-paper rewrite
 - If a blocker needs new experiments, say so instead of polishing around it
+- Do not edit prose that changes claim level unless the claim decision lane
+  explicitly approves and records the claim ledger delta

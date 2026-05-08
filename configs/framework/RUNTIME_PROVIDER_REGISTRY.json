@@ -7,18 +7,37 @@
     "path_rule": "All provider paths are repo-relative or logical provider ids.",
     "compatibility_rule": "Provider additions are additive; breaking provider shape changes require a schema version bump."
   },
+  "provider_priority_policy": {
+    "primary": [
+      "local_rust"
+    ],
+    "fallback": [
+      "host_tool"
+    ],
+    "planned": [
+      "remote_worker"
+    ],
+    "rust_acceleration": {
+      "preference": "prefer-rust-when-implemented",
+      "python_fallback": "only-when-rust-unimplemented-or-explicit-override",
+      "schema_note": "Reflects the current rustification priority; raise priority when migrating new control-plane paths to local_rust."
+    }
+  },
   "execution_providers": {
     "local_rust": {
       "status": "implemented",
       "delegate_family": "rust-cli",
       "result_envelope": "router-rs-execute-response-v1",
-      "capabilities": ["dry_run", "live_primary", "trace_output"]
+      "capabilities": ["dry_run", "live_primary", "trace_output"],
+      "priority": "primary",
+      "acceleration_role": "rust-fast-path"
     },
     "host_tool": {
       "status": "declared",
       "delegate_family": "host-tool",
       "result_envelope": "router-rs-execute-response-v1",
-      "capabilities": ["tool_call", "host_policy_gate"]
+      "capabilities": ["tool_call", "host_policy_gate"],
+      "priority": "fallback"
     },
     "remote_worker": {
       "status": "planned",

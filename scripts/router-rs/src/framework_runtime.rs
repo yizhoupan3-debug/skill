@@ -966,7 +966,7 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
     {
         return entrypoint.to_string();
     }
-    for fallback_host in ["codex-cli"] {
+    for fallback_host in ["codex-cli", "cursor"] {
         if let Some(entrypoint) = host_entrypoints
             .and_then(|entrypoints| entrypoints.get(fallback_host))
             .and_then(Value::as_str)
@@ -1038,7 +1038,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
         "autopilot" => Some(json!({
             "canonical_owner": "autopilot",
             "reroute_when_ambiguous": "deepinterview",
-            "reroute_when_root_cause_unknown": "systematic-debugging",
+            "reroute_when_root_cause_unknown": "deepinterview",
             "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
             "lineage": {
                 "source": "repo-native",
@@ -1058,9 +1058,62 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "store specs and plans in artifacts/current task-local bootstrap outputs",
                 "use deepinterview as the first-class clarification gate for vague requests"
             ],
+            "autonomy_contract": {
+                "auto_agent_orchestration": {
+                    "enabled": true,
+                    "default_mode": "bounded-sidecar-first",
+                    "spawn_policy": "admit-when-lanes-are-clear",
+                    "max_parallel_lanes": 3,
+                    "require_reject_reason_when_not_spawning": true,
+                    "reject_reasons": [
+                        "small_task",
+                        "shared_context_heavy",
+                        "write_scope_overlap",
+                        "next_step_blocked",
+                        "verification_missing",
+                        "token_overhead_dominates"
+                    ]
+                },
+                "goal_style_execution": {
+                    "enabled": true,
+                    "run_to_completion": "until-done-or-blocked",
+                    "requires_done_definition": true,
+                    "requires_non_goals_definition": true,
+                    "loop": [
+                        "plan",
+                        "implement",
+                        "verify",
+                        "repair",
+                        "closeout"
+                    ],
+                    "lifecycle_states": [
+                        "goal_defined",
+                        "running",
+                        "paused",
+                        "blocked",
+                        "verification_pending",
+                        "completed"
+                    ],
+                    "control_surface": [
+                        "goal_start",
+                        "goal_pause",
+                        "goal_resume",
+                        "goal_clear"
+                    ],
+                    "never_stop_at_plan_only": true,
+                    "allow_network_research_for_unknowns": true,
+                    "require_source_citation_for_external_claims": true,
+                    "requires_checkpoint_log_each_loop": true,
+                    "pause_requires_explicit_resume": true,
+                    "checkpoint_artifacts": [
+                        "SESSION_SUMMARY.md",
+                        "NEXT_ACTIONS.json",
+                        "EVIDENCE_INDEX.json"
+                    ]
+                }
+            },
             "execution_owners": [
                 "autopilot",
-                "systematic-debugging",
                 "deepinterview"
             ],
             "decision_contract": {
@@ -1093,7 +1146,8 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 ]
             },
             "host_entrypoints": {
-                "codex-cli": "/autopilot"
+                "codex-cli": "/autopilot",
+                "cursor": "/autopilot"
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,

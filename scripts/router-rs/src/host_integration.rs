@@ -909,6 +909,7 @@ fn run_generated_artifact_generator(
     framework_root: &Path,
     temp_root: &Path,
 ) -> Result<(), String> {
+    let timeout = generated_artifact_generator_timeout();
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(rewrite_generated_artifact_generator(
@@ -929,12 +930,12 @@ fn run_generated_artifact_generator(
         if child.try_wait().map_err(|err| err.to_string())?.is_some() {
             break;
         }
-        if start.elapsed() >= GENERATED_ARTIFACT_GENERATOR_TIMEOUT {
+        if start.elapsed() >= timeout {
             let _ = child.kill();
             let output = child.wait_with_output().map_err(|err| err.to_string())?;
             return Err(format!(
                 "generated artifact generator timed out after {}s: {generator}\nstdout:\n{}\nstderr:\n{}",
-                GENERATED_ARTIFACT_GENERATOR_TIMEOUT.as_secs(),
+                timeout.as_secs(),
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             ));
@@ -950,6 +951,16 @@ fn run_generated_artifact_generator(
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     ))
+}
+
+fn generated_artifact_generator_timeout() -> Duration {
+    match std::env::var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+    {
+        Some(0) | None => GENERATED_ARTIFACT_GENERATOR_TIMEOUT,
+        Some(seconds) => Duration::from_secs(seconds),
+    }
 }
 
 fn rewrite_generated_artifact_generator(
@@ -1542,11 +1553,34 @@ fn install_cursor_projection(
     scope: &str,
 ) -> Result<Value, String> {
     let target = cursor_entrypoint_target(roots, scope);
-    let changed = write_text_if_changed(
+    let mut managed_files = vec![target.to_string_lossy().to_string()];
+    let mut managed_key_paths: Vec<String> = Vec::new();
+    let mut changed = write_text_if_changed(
         &target,
         &render_cursor_framework_entrypoint(roots, scope),
     )?;
-    let manifest_changed = write_cursor_projection_manifest(roots, scope, &target)?;
+    let mut mcp = json!({
+        "managed": false,
+        "path": cursor_mcp_config_path(roots).to_string_lossy(),
+        "server": "browser-mcp",
+        "changed": false,
+        "reason": "user-scope-only",
+    });
+    if scope == "user" {
+        let mcp_path = cursor_mcp_config_path(roots);
+        let mcp_changed = install_cursor_mcp_server(roots, &mcp_path)?;
+        changed |= mcp_changed;
+        managed_files.push(mcp_path.to_string_lossy().to_string());
+        managed_key_paths.push(cursor_mcp_server_key_path().to_string());
+        mcp = json!({
+            "managed": true,
+            "path": mcp_path.to_string_lossy(),
+            "server": "browser-mcp",
+            "changed": mcp_changed,
+        });
+    }
+    let manifest_changed =
+        write_cursor_projection_manifest(roots, scope, &managed_files, &managed_key_paths)?;
     Ok(json!({
         "status": "installed",
         "changed": changed || manifest_changed,
@@ -1559,6 +1593,7 @@ fn install_cursor_projection(
                 "native_representation": "cursor-rule-mdc",
             }
         },
+        "mcp": mcp,
         "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
         "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
     }))
@@ -1641,15 +1676,53 @@ fn remove_cursor_projection(
     } else {
         false
     };
-    let any_changed = changed || manifest_removed;
+    let mcp_path = cursor_mcp_config_path(roots);
+    let mcp_matches_framework = cursor_mcp_server_matches_framework(roots, &mcp_path)?.unwrap_or(false);
+    let mcp_managed = scope == "user"
+        && (projection_manifest_manages_key_path(&manifest_path, cursor_mcp_server_key_path())?
+            || mcp_matches_framework);
+    let mcp_would_remove = mcp_managed && mcp_matches_framework;
+    let mcp_skipped_user_owned =
+        scope == "user" && !mcp_would_remove && cursor_mcp_server_exists(&mcp_path)?;
+    let mcp_changed = if !dry_run && mcp_would_remove {
+        remove_cursor_mcp_server(&mcp_path)?
+    } else {
+        false
+    };
+    let any_changed = changed || manifest_removed || mcp_changed;
+    let would_remove_any = would_remove_projection || would_remove_manifest || mcp_would_remove;
+    let mut skipped_user_owned_paths = Vec::new();
+    if !would_remove_projection && target.exists() {
+        skipped_user_owned_paths.push(Value::String(target.to_string_lossy().into_owned()));
+    }
+    if mcp_skipped_user_owned {
+        skipped_user_owned_paths.push(Value::String(mcp_path.to_string_lossy().into_owned()));
+    }
+    let mut removed_paths = removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
+    append_mcp_path(&mut removed_paths, mcp_changed, &mcp_path);
+    let mut would_remove_paths = removed_projection_paths(
+        would_remove_projection,
+        &target,
+        would_remove_manifest,
+        &manifest_path,
+    );
+    append_mcp_path(&mut would_remove_paths, mcp_would_remove, &mcp_path);
     Ok(json!({
-        "status": if dry_run && (would_remove_projection || would_remove_manifest) { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
+        "status": if dry_run && would_remove_any { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
         "changed": any_changed,
         "dry_run": dry_run,
         "scope": scope,
-        "removed_paths": removed_projection_paths(changed, &target, manifest_removed, &manifest_path),
-        "would_remove_paths": removed_projection_paths(would_remove_projection, &target, would_remove_manifest, &manifest_path),
-        "skipped_user_owned_paths": if would_remove_projection || !target.exists() { json!([]) } else { json!([target.to_string_lossy()]) },
+        "removed_paths": removed_paths,
+        "would_remove_paths": would_remove_paths,
+        "mcp": {
+            "managed": mcp_managed,
+            "path": mcp_path.to_string_lossy(),
+            "server": "browser-mcp",
+            "changed": mcp_changed,
+            "would_remove": dry_run && mcp_would_remove,
+            "skipped_user_owned": mcp_skipped_user_owned,
+        },
+        "skipped_user_owned_paths": Value::Array(skipped_user_owned_paths),
     }))
 }
 
@@ -1768,6 +1841,15 @@ fn removed_projection_paths(
     Value::Array(paths)
 }
 
+fn append_mcp_path(paths: &mut Value, include: bool, mcp_path: &Path) {
+    if !include {
+        return;
+    }
+    if let Some(array) = paths.as_array_mut() {
+        array.push(Value::String(mcp_path.to_string_lossy().into_owned()));
+    }
+}
+
 fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.codex_home_root.join("prompts").join("framework.md")
@@ -1855,7 +1937,8 @@ fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &st
 fn write_cursor_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-    command_path: &Path,
+    managed_files: &[String],
+    managed_key_paths: &[String],
 ) -> Result<bool, String> {
     write_json_if_changed(
         &projection_manifest_path(roots, "cursor", scope),
@@ -1864,12 +1947,137 @@ fn write_cursor_projection_manifest(
             "managed_by": "skill-framework",
             "host_projection": "cursor",
             "scope": scope,
-            "files": [command_path.to_string_lossy()],
+            "files": managed_files,
             "settings": {
-                "managed_key_paths": [],
+                "managed_key_paths": managed_key_paths,
             }
         }),
     )
+}
+
+fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> PathBuf {
+    roots.cursor_home_root.join("mcp.json")
+}
+
+fn cursor_mcp_server_key_path() -> &'static str {
+    "mcp_servers.browser-mcp"
+}
+
+fn install_cursor_mcp_server(roots: &ResolvedProjectionRoots, path: &Path) -> Result<bool, String> {
+    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    let root = payload
+        .as_object_mut()
+        .ok_or_else(|| "cursor mcp config payload must be an object".to_string())?;
+    let mcp_servers = root
+        .entry("mcp_servers".to_string())
+        .or_insert_with(|| json!({}));
+    if !mcp_servers.is_object() {
+        *mcp_servers = json!({});
+    }
+    let servers = mcp_servers
+        .as_object_mut()
+        .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
+    let server = cursor_mcp_server_payload(roots);
+    if matches!(servers.get("browser-mcp"), Some(existing) if existing != &server) {
+        return Ok(false);
+    }
+    let changed = servers.get("browser-mcp").is_none();
+    if changed {
+        servers.insert("browser-mcp".to_string(), server);
+    }
+    let file_changed = write_json_if_changed(path, &payload)?;
+    Ok(changed || file_changed)
+}
+
+fn remove_cursor_mcp_server(path: &Path) -> Result<bool, String> {
+    let Some(mut payload) = read_json_if_exists(path)? else {
+        return Ok(false);
+    };
+    let Some(root) = payload.as_object_mut() else {
+        return Ok(false);
+    };
+    let mut changed = false;
+    if let Some(mcp_servers) = root.get_mut("mcp_servers") {
+        if let Some(servers) = mcp_servers.as_object_mut() {
+            changed |= servers.remove("browser-mcp").is_some();
+            if servers.is_empty() {
+                root.remove("mcp_servers");
+            }
+        }
+    }
+    if changed {
+        write_json_if_changed(path, &payload)?;
+    }
+    Ok(changed)
+}
+
+fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+    json!({
+        "command": "bash",
+        "args": [
+            roots
+                .framework_root
+                .join("tools/browser-mcp/scripts/start_browser_mcp.sh")
+                .to_string_lossy()
+                .to_string()
+        ]
+    })
+}
+
+fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<bool, String> {
+    let Some(manifest) = read_json_if_exists(path)? else {
+        return Ok(false);
+    };
+    if !projection_manifest_payload_is_managed(Some(&manifest), None, None) {
+        return Ok(false);
+    }
+    Ok(manifest
+        .get("settings")
+        .and_then(|settings| settings.get("managed_key_paths"))
+        .and_then(Value::as_array)
+        .map(|paths| paths.iter().any(|entry| entry.as_str() == Some(key_path)))
+        .unwrap_or(false))
+}
+
+fn cursor_mcp_server_matches_framework(
+    _roots: &ResolvedProjectionRoots,
+    path: &Path,
+) -> Result<Option<bool>, String> {
+    let Some(payload) = read_json_if_exists(path)? else {
+        return Ok(None);
+    };
+    let actual = payload
+        .get("mcp_servers")
+        .and_then(Value::as_object)
+        .and_then(|servers| servers.get("browser-mcp"));
+    let Some(server) = actual else {
+        return Ok(None);
+    };
+    let is_framework_server = server
+        .get("command")
+        .and_then(Value::as_str)
+        == Some("bash")
+        && server
+            .get("args")
+            .and_then(Value::as_array)
+            .and_then(|args| args.first())
+            .and_then(Value::as_str)
+            .is_some_and(|arg| arg.ends_with("tools/browser-mcp/scripts/start_browser_mcp.sh"));
+    Ok(Some(is_framework_server))
+}
+
+fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
+    let Some(payload) = read_json_if_exists(path)? else {
+        return Ok(false);
+    };
+    Ok(payload
+        .get("mcp_servers")
+        .and_then(Value::as_object)
+        .and_then(|servers| servers.get("browser-mcp"))
+        .is_some())
 }
 
 fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
@@ -3878,24 +4086,13 @@ fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
 
 fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
-    let feature_line = "codex_hooks = false";
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
         let block = content[start..end].trim_end_matches('\n');
-        let mut codex_hooks_found = false;
-        let mut codex_hooks_needs_change = false;
-        for line in block.lines() {
-            if !is_named_setting(line, "codex_hooks") {
-                continue;
-            }
-            codex_hooks_found = true;
-            if line.trim() != feature_line {
-                codex_hooks_needs_change = true;
-            }
-        }
-        if !codex_hooks_found {
-            codex_hooks_needs_change = true;
-        }
-        if !codex_hooks_needs_change {
+        let codex_hook_lines = block
+            .lines()
+            .filter(|line| is_named_setting(line, "codex_hooks"))
+            .count();
+        if codex_hook_lines <= 1 {
             return Ok(false);
         }
         let mut replaced = false;
@@ -3903,30 +4100,18 @@ fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
         for line in block.lines() {
             if is_named_setting(line, "codex_hooks") {
                 if !replaced {
-                    updated_lines.push(feature_line.to_string());
+                    updated_lines.push(line.to_string());
                     replaced = true;
                 }
             } else {
                 updated_lines.push(line.to_string());
             }
         }
-        if !replaced {
-            updated_lines.push(feature_line.to_string());
-        }
         let new_block = format!("{}\n", updated_lines.join("\n"));
         let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
         return write_text_if_changed(config_path, &updated);
     }
-
-    let updated = if content.trim().is_empty() {
-        "[features]\ncodex_hooks = false\n".to_string()
-    } else {
-        format!(
-            "{}\n\n[features]\ncodex_hooks = false\n",
-            content.trim_end()
-        )
-    };
-    write_text_if_changed(config_path, &updated)
+    Ok(false)
 }
 
 fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {
@@ -4232,6 +4417,47 @@ mod tests {
             !temp_path.exists(),
             "generated artifact temp root was not cleaned"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generated_artifact_generator_success_and_failure_paths_are_reported() {
+        let root = unique_test_root("generator-success-failure");
+        fs::create_dir_all(&root).unwrap();
+
+        let ok = run_generated_artifact_generator("printf 'ok\\n'", &root, &root);
+        assert!(ok.is_ok(), "expected generator success");
+
+        let fail = run_generated_artifact_generator("printf 'boom\\n' 1>&2; exit 23", &root, &root);
+        assert!(fail.is_err(), "expected generator failure");
+        let fail_msg = fail.err().unwrap();
+        assert!(
+            fail_msg.contains("generated artifact generator failed"),
+            "failure message should include generator failed marker: {fail_msg}"
+        );
+        assert!(
+            fail_msg.contains("boom"),
+            "failure message should include stderr output: {fail_msg}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generated_artifact_generator_timeout_kills_process() {
+        let root = unique_test_root("generator-timeout");
+        fs::create_dir_all(&root).unwrap();
+        std::env::set_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS", "1");
+
+        let timeout = run_generated_artifact_generator("sleep 5", &root, &root);
+        assert!(timeout.is_err(), "expected timeout failure");
+        let timeout_msg = timeout.err().unwrap();
+        assert!(
+            timeout_msg.contains("timed out after 1s"),
+            "timeout message should include configured timeout: {timeout_msg}"
+        );
+
+        std::env::remove_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS");
         let _ = fs::remove_dir_all(root);
     }
 }

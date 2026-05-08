@@ -1,0 +1,5 @@
+{
+  "schema_version": "router-rs-session-supervisor-store-v1",
+  "version": 1,
+  "workers": []
+}
