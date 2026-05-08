@@ -19,7 +19,32 @@ const PROTECTED_GENERATED_PATHS: [&str; 2] =
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 pub fn build_codex_hook_manifest() -> Value {
     json!({
-        "hooks": {}
+        "hooks": {
+            "UserPromptSubmit": [{
+                "hooks": [{
+                    "type": "command",
+                    "command": "/usr/bin/env python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
+                    "timeout": 10,
+                    "statusMessage": "Checking review/subagent gate"
+                }]
+            }],
+            "PostToolUse": [{
+                "hooks": [{
+                    "type": "command",
+                    "command": "/usr/bin/env python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
+                    "timeout": 10,
+                    "statusMessage": "Updating review/subagent gate state"
+                }]
+            }],
+            "Stop": [{
+                "hooks": [{
+                    "type": "command",
+                    "command": "/usr/bin/env python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
+                    "timeout": 10,
+                    "statusMessage": "Enforcing review/subagent gate"
+                }]
+            }]
+        }
     })
 }
 
@@ -122,10 +147,9 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
         "shared_system": {
             "policy": "host-specific-agent-policy-v1",
             "source_of_truth": "skills/",
-            "supported_hosts": ["codex-cli", "cursor"],
+            "supported_hosts": ["codex-cli"],
             "host_entrypoints": {
                 "codex-cli": CODEX_AGENT_POLICY_PATH,
-                "cursor": CODEX_AGENT_POLICY_PATH,
             },
         },
         "full_sync": {
@@ -342,10 +366,10 @@ fn build_codex_agent_policy() -> String {
 
 fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
-Codex hooks are disabled for this repo.\n\n\
-Project-local `.codex/hooks.json` intentionally contains no active hooks.\n\n\
-The inactive hook scripts under `.codex/hooks/` remain available only as test fixtures or explicit audit helpers.\n\n\
-The Rust hook command remains available for explicit one-off audits.\n\n\
+Codex hooks are enabled for this repo.\n\n\
+Project-local `.codex/hooks.json` contains the active hook handlers for this repo.\n\n\
+Hook scripts live under `.codex/hooks/`.\n\n\
+The Rust hook commands remain available for explicit one-off audits.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\

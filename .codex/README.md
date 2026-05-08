@@ -1,12 +1,14 @@
 # Codex Hooks Projection
 
-Codex hooks are disabled for this repo.
+Codex hooks are enabled for this repo.
 
-Project-local `.codex/hooks.json` intentionally contains no active hooks.
+Project-local `.codex/hooks.json` contains the active hook handlers for this repo.
 
-The inactive hook scripts under `.codex/hooks/` remain available only as test fixtures or explicit audit helpers.
+Hook scripts live under `.codex/hooks/`.
 
-The Rust hook command remains available for explicit one-off audits.
+The Rust hook commands remain available for explicit one-off audits.
+
+Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.
 
 Regenerate with:
 
