@@ -96,11 +96,24 @@ def session_key(event: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
-def repo_root(event: dict[str, Any]) -> Path:
+def _candidate_paths(event: dict[str, Any]) -> list[Path]:
+    candidates: list[Path] = []
     cwd = event.get("cwd")
     if isinstance(cwd, str) and cwd.strip():
-        return Path(cwd)
-    return Path(os.getcwd())
+        candidates.append(Path(cwd).resolve())
+    candidates.append(Path(os.getcwd()).resolve())
+    candidates.append(Path(__file__).resolve().parents[2])
+    return candidates
+
+
+def repo_root(event: dict[str, Any]) -> Path:
+    for candidate in _candidate_paths(event):
+        for probe in [candidate, *candidate.parents]:
+            if (probe / ".git").exists() and (probe / ".cursor").is_dir():
+                return probe
+            if (probe / ".cursor" / "hooks" / "review_subagent_gate.py").exists():
+                return probe
+    return _candidate_paths(event)[0]
 
 
 def state_dir(event: dict[str, Any]) -> Path:
@@ -122,8 +135,14 @@ def load_state(event: dict[str, Any]) -> dict[str, Any]:
 
 def save_state(event: dict[str, Any], state: dict[str, Any]) -> None:
     directory = state_dir(event)
-    directory.mkdir(parents=True, exist_ok=True)
-    state_path(event).write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        state_path(event).write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        # Fail-open for state persistence issues so hook control flow remains usable.
+        return
 
 
 def print_json(payload: dict[str, Any]) -> None:
@@ -150,7 +169,38 @@ def handle_before_submit(event: dict[str, Any]) -> int:
 
 def handle_subagent_start(event: dict[str, Any]) -> int:
     state = load_state(event)
-    state["review_subagent_seen"] = True
+    if state.get("review_required") or state.get("delegation_required"):
+        descriptor = " ".join(
+            str(value)
+            for key, value in event.items()
+            if key
+            in {
+                "description",
+                "prompt",
+                "task",
+                "subagent_type",
+                "agent_type",
+                "title",
+                "name",
+            }
+            and isinstance(value, str)
+        ).lower()
+        reviewer_markers = (
+            "review",
+            "审查",
+            "审核",
+            "评审",
+            "security",
+            "architecture",
+            "risk",
+            "bug",
+            "regression",
+            "finding",
+            "ci-investigator",
+            "explore",
+        )
+        if any(marker in descriptor for marker in reviewer_markers):
+            state["review_subagent_seen"] = True
     save_state(event, state)
     print_json({})
     return 0
@@ -159,17 +209,28 @@ def handle_subagent_start(event: dict[str, Any]) -> int:
 def handle_stop(event: dict[str, Any]) -> int:
     state = load_state(event)
     loop_count = event.get("loop_count")
-    loop_count = int(loop_count) if isinstance(loop_count, int) else 0
+    try:
+        loop_count = int(loop_count)
+    except (TypeError, ValueError):
+        loop_count = 0
     required = bool(state.get("review_required") or state.get("delegation_required"))
     overridden = bool(state.get("review_override") or state.get("delegation_override"))
     seen = bool(state.get("review_subagent_seen"))
-    if required and not overridden and not seen and loop_count < 5:
+    if required and not overridden and not seen:
+        state["followup_count"] = int(state.get("followup_count", 0)) + 1
+        save_state(event, state)
+        escalation = (
+            "This has already looped multiple times; do not silently continue. "
+            if loop_count >= 5
+            else ""
+        )
         print_json(
             {
                 "followup_message": (
                     "Broad/deep review (or independent parallel lanes) was requested, but no "
                     "independent subagent/sidecar was observed. Spawn a suitable subagent lane now, "
-                    "or explicitly state why spawning is rejected."
+                    "or explicitly state why spawning is rejected. "
+                    + escalation
                 )
             }
         )
