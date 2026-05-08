@@ -34,6 +34,7 @@ output/
 .aionui_patch_tree
 .playwright-mcp/
 .workbuddy/
+.cursor/hook-state/
 archives/artifact-history/
 artifacts/current/
 artifacts/bootstrap/

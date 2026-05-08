@@ -64,7 +64,7 @@ use host_integration::run_host_integration_from_args;
 use route::{
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
     build_search_results_payload, literal_framework_alias_decision, load_inline_records,
-    load_records, load_records_cached_for_stdio, load_records_from_manifest, route_task,
+    load_records, load_records_cached_for_stdio, load_records_from_manifest, read_json, route_task,
     search_skills, should_accept_manifest_fallback, should_retry_with_manifest, MatchRow,
     RouteDecision, RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload,
     RouteSnapshotRequestPayload, SearchResultsPayload, SkillRecord, ROUTE_AUTHORITY,
@@ -764,10 +764,18 @@ fn manifest_fallback_path(
         }
         return Err(format!("manifest path does not exist: {}", path.display()));
     }
-    let fallback = runtime_path
-        .and_then(Path::parent)
-        .map(|parent| parent.join("SKILL_MANIFEST.json"))
+    let runtime_declared_fallback = match runtime_path {
+        Some(path) => resolve_runtime_declared_manifest_fallback(path)?,
+        None => None,
+    };
+    let fallback = runtime_declared_fallback
         .filter(|path| path.exists())
+        .or_else(|| {
+            runtime_path
+                .and_then(Path::parent)
+                .map(|parent| parent.join("SKILL_MANIFEST.json"))
+                .filter(|path| path.exists())
+        })
         .or_else(|| {
             Some(
                 repo_root_from_cargo_manifest_dir()
@@ -777,6 +785,26 @@ fn manifest_fallback_path(
             .filter(|path| path.exists())
         });
     Ok(fallback)
+}
+
+fn resolve_runtime_declared_manifest_fallback(runtime_path: &Path) -> Result<Option<PathBuf>, String> {
+    let runtime_payload = read_json(runtime_path)?;
+    let declared = runtime_payload
+        .get("scope")
+        .and_then(Value::as_object)
+        .and_then(|scope| scope.get("fallback_manifest"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let Some(declared) = declared else {
+        return Ok(None);
+    };
+    let resolved = if Path::new(declared).is_absolute() {
+        PathBuf::from(declared)
+    } else {
+        repo_root_from_cargo_manifest_dir().join(declared)
+    };
+    Ok(Some(resolved))
 }
 
 fn route_task_with_manifest_fallback(
@@ -814,6 +842,7 @@ fn route_task_with_manifest_fallback(
     if should_accept_manifest_fallback(
         &hot_decision,
         &full_decision,
+        runtime_records,
         should_retry,
         manifest_path.is_some(),
     ) {

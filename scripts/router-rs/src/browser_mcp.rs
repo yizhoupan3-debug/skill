@@ -3662,7 +3662,13 @@ fn route_with_full_manifest_fallback(
         return Ok(hot_decision);
     }
     let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
-    if should_accept_manifest_fallback(&hot_decision, &full_decision, should_retry, false) {
+    if should_accept_manifest_fallback(
+        &hot_decision,
+        &full_decision,
+        runtime_records,
+        should_retry,
+        false,
+    ) {
         Ok(full_decision)
     } else {
         Ok(hot_decision)
