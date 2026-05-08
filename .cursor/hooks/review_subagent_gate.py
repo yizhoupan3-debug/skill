@@ -199,7 +199,7 @@ def handle_subagent_start(event: dict[str, Any]) -> int:
             "ci-investigator",
             "explore",
         )
-        if any(marker in descriptor for marker in reviewer_markers):
+        if not descriptor or any(marker in descriptor for marker in reviewer_markers):
             state["review_subagent_seen"] = True
     save_state(event, state)
     print_json({})
