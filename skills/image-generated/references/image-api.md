@@ -1,77 +1,23 @@
-# Responses image-generation quick reference
+# Image API Reference
 
-This file documents the direct VibeProxy Local path used by `rust_tools/image_gen_rs`.
+This skill uses the official OpenAI Images API.
 
-## Endpoint
+## Endpoints
 
-- `POST /v1/responses`
+- Generation: `https://api.openai.com/v1/images/generations`
+- Edits: `https://api.openai.com/v1/images/edits` (DALL-E 2 only)
+- Variations: `https://api.openai.com/v1/images/variations` (DALL-E 2 only)
 
-Default local URL:
+## Authentication
 
-- `http://127.0.0.1:8318/v1/responses`
+Authentication is handled via the `OPENAI_API_KEY` environment variable.
 
-## Minimal generate payload
+## Models
 
-```json
-{
-  "model": "gpt-5.4",
-  "input": "Generate a simple red square centered on a white background.",
-  "tools": [
-    {
-      "type": "image_generation"
-    }
-  ]
-}
-```
+- `dall-e-3`: Default for generation. Supports higher quality and complex prompts.
+- `dall-e-2`: Required for image editing and variations.
 
-## Tool options used by this CLI
+## Response Format
 
-Inside `tools[0]`:
-
-- `type: "image_generation"`
-- `size`
-- `quality`
-- `background`
-- `output_format`
-- `output_compression`
-- `moderation`
-- `input_fidelity` for edit
-- `action: "edit"` for edit mode
-
-## Edit payload shape
-
-The script uses `input_image` items inside `input` and sends local files as Base64 data URLs.
-
-```json
-{
-  "model": "gpt-5.4",
-  "input": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "input_text", "text": "Change only the background to a warm sunset."},
-        {"type": "input_image", "image_url": "data:image/png;base64,..."}
-      ]
-    }
-  ],
-  "tools": [
-    {
-      "type": "image_generation",
-      "action": "edit",
-      "input_fidelity": "high"
-    }
-  ]
-}
-```
-
-## Output extraction
-
-Look for `output[*].type == "image_generation_call"` and decode `result` into a file. The CLI accepts either raw Base64 or a Base64 data URL.
-
-## Notes
-
-- This CLI uses the Responses API image-generation tool, not the legacy image-generation endpoints.
-- The CLI keeps `generate`, `edit`, and `generate-batch`, but internally uses repeated single-image Responses calls.
-- Local input images are sent as data URLs.
-- `--mask` is currently unsupported in this CLI because that would require a separate mask/file-upload path.
-- The default model is `gpt-5.4`, but `--model` can override it.
+The Rust CLI defaults to requesting `b64_json` or `url` depending on the use case.
+Official OpenAI responses contain a `data` array with the image data.

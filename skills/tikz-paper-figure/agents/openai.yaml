@@ -1,0 +1,5 @@
+interface:
+  display_name: "TikZ Paper Figure"
+  short_description: "Convert AI or raster drafts into paper-ready TikZ standalone figures"
+  default_prompt: "Use $tikz-paper-figure to convert this AI-generated diagram or paper figure draft into a compiled LaTeX standalone TikZ asset with PDF/PNG preview and an include snippet."
+

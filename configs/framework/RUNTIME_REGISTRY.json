@@ -8,11 +8,13 @@
   "host_targets": {
     "policy": "shared-rust-core-explicit-host-projections",
     "supported": [
-      "codex-cli"
+      "codex-cli",
+      "cursor"
     ],
     "shared_system_source": "skills",
     "entrypoint_files": {
-      "codex-cli": "AGENTS.md"
+      "codex-cli": "AGENTS.md",
+      "cursor": "AGENTS.md"
     }
   },
   "workspace_bootstrap_defaults": {
@@ -88,7 +90,8 @@
         ]
       },
       "host_entrypoints": {
-        "codex-cli": "/autopilot"
+        "codex-cli": "/autopilot",
+        "cursor": "/autopilot"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -133,7 +136,8 @@
         "sentry"
       ],
       "host_entrypoints": {
-        "codex-cli": "/deepinterview"
+        "codex-cli": "/deepinterview",
+        "cursor": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -152,7 +156,8 @@
       "canonical_owner": "gitx",
       "skill_path": "skills/gitx/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/gitx"
+        "codex-cli": "/gitx",
+        "cursor": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -320,7 +325,8 @@
         "verification_evidence_required_before_cleanup": true
       },
       "host_entrypoints": {
-        "codex-cli": "/team"
+        "codex-cli": "/team",
+        "cursor": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -379,6 +385,45 @@
         "rate_limit_auto_resume",
         "host_resume_entrypoint",
         "host_tmux_worker_management",
+        "framework_alias_entrypoints"
+      ]
+    },
+    "cursor": {
+      "profile_id": "cursor_profile",
+      "host_id": "cursor",
+      "transport": "cursor-agent",
+      "context_files": [
+        "AGENTS.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "user",
+          "host_root": "cursor",
+          "relative": "settings.json"
+        },
+        {
+          "scope": "project",
+          "relative": ".cursor/settings.json"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "project",
+          "relative": ".cursor/mcp.json"
+        }
+      ],
+      "session_supervisor_driver": "cursor_driver",
+      "resume_command_examples": [
+        "在 Cursor 中继续当前会话",
+        "在同一工作区重新打开 Agent 对话"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "memory_mounts",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
+        "host_resume_entrypoint",
         "framework_alias_entrypoints"
       ]
     }

@@ -224,6 +224,25 @@ fn rust_contracts_doc_records_current_minimal_implementation_truth() {
 }
 
 #[test]
+fn runtime_plugin_contract_freezes_plugin_abi_and_health_loop() {
+    let text = read_text(&project_root().join("docs/runtime_plugin_contract.md"));
+    for required_phrase in [
+        "The Rust runtime remains the control-plane authority.",
+        "Unknown capability classes must fail closed.",
+        "skills/SKILL_PLUGIN_CATALOG.json",
+        "skills/SKILL_ROUTING_METADATA.json",
+        "skills/SKILL_HEALTH_MANIFEST.json",
+        "configs/framework/RUNTIME_PROVIDER_REGISTRY.json",
+        "adds named `records` for plugin-ready consumers",
+    ] {
+        assert!(
+            text.contains(required_phrase),
+            "missing plugin contract phrase: {required_phrase}"
+        );
+    }
+}
+
+#[test]
 fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
     let root = project_root();
     let scoped_docs = [
@@ -231,6 +250,7 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
         "docs/framework_profile_contract.md",
         "docs/host_adapter_contracts.md",
         "docs/runtime_observability_contract.md",
+        "docs/runtime_plugin_contract.md",
         "docs/runtime_sandbox_contract.md",
     ];
     let joined = scoped_docs

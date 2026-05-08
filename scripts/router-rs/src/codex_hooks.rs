@@ -122,9 +122,10 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
         "shared_system": {
             "policy": "host-specific-agent-policy-v1",
             "source_of_truth": "skills/",
-            "supported_hosts": ["codex-cli"],
+            "supported_hosts": ["codex-cli", "cursor"],
             "host_entrypoints": {
                 "codex-cli": CODEX_AGENT_POLICY_PATH,
+                "cursor": CODEX_AGENT_POLICY_PATH,
             },
         },
         "full_sync": {

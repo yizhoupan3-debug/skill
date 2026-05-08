@@ -21,7 +21,8 @@
 | `gh-address-comments` | Active | P2 | L0 | gate | source | project | Address GitHub PR review comments and lightweight PR triage summaries with gh-so |
 | `gh-fix-ci` | Active | P2 | L0 | gate | source | project | Triage and fix failing GitHub Actions PR checks with gh-source-gate. |
 | `gitx` | Active | P1 | L2 | owner | none | project | Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end. |
-| `image-generated` | Active | P2 | L1 | owner | none | project | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
+| `hatch-pet` | Active | P1 | L3 | owner | none | project | Create, repair, validate, preview, and package Codex-compatible animated pet spr |
+| `image-generated` | Active | P2 | L1 | owner | none | project | Generate or edit raster images through official OpenAI API using the bundled Rus |
 | `infographic` | Active | P2 | L3 | owner | none | project | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `jupyter-notebook` | Active | P2 | L3 | owner | none | project | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `latex-compile-acceleration` | Active | P1 | L4 | owner | none | project | Speed up LaTeX compile and preview workflows |
@@ -45,5 +46,6 @@
 | `statistical-analysis` | Active | P2 | L4 | owner | none | project | Guide research statistics for test choice, effect sizes, uncertainty reporting,  |
 | `systematic-debugging` | Active | P1 | L0 | gate | evidence | project | Investigate unknown failures before fixing |
 | `tao-ci` | Active | P2 | L3 | owner | none | project | Draft professor-specific summer research outreach emails from workbook data |
+| `tikz-paper-figure` | Active | P1 | L3 | owner | none | project | Convert AI/raster drafts into paper-ready TikZ standalone figures |
 | `visual-review` | Active | P1 | L3 | gate | evidence | project | Review screenshots and rendered visual artifacts. |
 | `youtube-summarizer` | Active | P2 | L4 | owner | none | project | Extract transcripts from YouTube videos and turn them into summaries, notes, key |

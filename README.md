@@ -1,10 +1,10 @@
-# Codex Skill System Handoff Guide
+# Codex + Cursor Skill System Handoff Guide
 
-这份仓库是一整套给 Codex 使用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆下来，直接把它当作 Codex 的工作目录使用。
+这份仓库是一整套给 Codex 和 Cursor 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆下来，直接作为 Codex/Cursor 的工作目录使用。
 
 ## 这套系统包含什么
 
-- `AGENTS.md`：Codex 每次进入本仓库时最先遵守的项目规则。
+- `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。
 - `skills/SKILL_ROUTING_RUNTIME.json`：运行时路由入口。Codex 应先查这个文件，再按命中结果读取对应 skill。
 - `skills/SKILL_MANIFEST.json`、`skills/SKILL_ROUTING_INDEX.md`、`skills/SKILL_ROUTING_REGISTRY.md` 等：由编译器生成的路由/索引产物。
@@ -111,7 +111,7 @@ cargo test --test policy_contracts
 
 如果上面都通过，说明 skill 编译器、路由产物和策略测试在她的 Windows 环境里可用。
 
-## 在 Codex 里使用
+## 在 Codex / Cursor 里使用
 
 让 Codex 打开这个仓库目录：
 

@@ -48,6 +48,10 @@ struct SkillBundle {
     index: String,
     manifest: Value,
     runtime_index: Value,
+    runtime_explain: Value,
+    plugin_catalog: Value,
+    routing_metadata: Value,
+    health_manifest: Value,
     shadow_map: Value,
     approval_policy: Value,
     loadouts: Value,
@@ -345,6 +349,22 @@ fn write_bundle(skills_root: &Path, bundle: &SkillBundle) -> Result<(), String> 
         &bundle.runtime_index,
     )?;
     write_json_if_changed(
+        &skills_root.join("SKILL_ROUTING_RUNTIME_EXPLAIN.json"),
+        &bundle.runtime_explain,
+    )?;
+    write_json_if_changed(
+        &skills_root.join("SKILL_PLUGIN_CATALOG.json"),
+        &bundle.plugin_catalog,
+    )?;
+    write_json_if_changed(
+        &skills_root.join("SKILL_ROUTING_METADATA.json"),
+        &bundle.routing_metadata,
+    )?;
+    write_json_if_changed(
+        &skills_root.join("SKILL_HEALTH_MANIFEST.json"),
+        &bundle.health_manifest,
+    )?;
+    write_json_if_changed(
         &skills_root.join("SKILL_SHADOW_MAP.json"),
         &bundle.shadow_map,
     )?;
@@ -413,13 +433,38 @@ fn compile_bundle(
     let framework_surface_policy =
         build_framework_surface_policy(&tiers, configured_surface_policy.as_ref());
     let index = build_index(&manifest, &framework_rows, &framework_surface_policy);
-    let runtime_index = build_runtime_index(&manifest, &framework_rows, &framework_surface_policy);
+    let plugin_catalog = build_plugin_catalog(docs, &manifest, &framework_rows);
+    let routing_metadata = build_routing_metadata_catalog(docs, &manifest, &framework_rows);
+    let runtime_index = build_runtime_index(
+        &manifest,
+        &framework_rows,
+        &framework_surface_policy,
+        &plugin_catalog,
+        &routing_metadata,
+    );
+    let runtime_explain = build_runtime_explain(
+        &manifest,
+        &runtime_index,
+        &plugin_catalog,
+        &routing_metadata,
+    );
+    let health_manifest = build_health_manifest(
+        skills_root,
+        &manifest,
+        &runtime_index,
+        &plugin_catalog,
+        &routing_metadata,
+    );
     let loadouts = build_loadouts(&framework_surface_policy, &manifest);
     Ok(SkillBundle {
         registry,
         index,
         manifest,
         runtime_index,
+        runtime_explain,
+        plugin_catalog,
+        routing_metadata,
+        health_manifest,
         shadow_map,
         approval_policy,
         loadouts,
@@ -782,7 +827,15 @@ fn build_registry_and_manifest(
         "# Skill Routing Registry\n\n| Skill | Status | P | Layer | Owner | Gate | Source | Description |\n|---|---|---|---|---|---|---|---|\n{}\n",
         rows.join("\n")
     );
-    Ok((registry, json!({"keys": keys, "skills": skills})))
+    Ok((
+        registry,
+        json!({
+            "schema_version": "skill-manifest-v2",
+            "plugin_abi_version": "skill-plugin-abi-v1",
+            "keys": keys,
+            "skills": skills
+        }),
+    ))
 }
 
 fn is_runtime_owned_skill(slug: &str) -> bool {
@@ -914,6 +967,8 @@ fn build_runtime_index(
     manifest: &Value,
     framework_rows: &[Value],
     surface_policy: &Value,
+    plugin_catalog: &Value,
+    routing_metadata: &Value,
 ) -> Value {
     let selected = select_runtime_skills(manifest, surface_policy);
     let full_manifest_path = "skills/SKILL_MANIFEST.json";
@@ -936,8 +991,11 @@ fn build_runtime_index(
     for row in framework_rows {
         skills.push(row.clone());
     }
+    let records = runtime_named_records(&skills, plugin_catalog, routing_metadata);
     json!({
         "version": 3,
+        "schema_version": "skill-routing-runtime-v3",
+        "plugin_abi_version": "skill-plugin-abi-v1",
         "checklist": index_checklist(),
         "scope": {
             "kind": "hot",
@@ -948,7 +1006,43 @@ fn build_runtime_index(
         },
         "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
         "skills": skills,
+        "records": records,
+        "vnext": {
+            "schema_version": "skill-routing-runtime-records-v1",
+            "compatibility": "legacy keys/skills rows remain canonical for v3 consumers; records provide named plugin-ready projections",
+            "plugin_catalog_ref": "skills/SKILL_PLUGIN_CATALOG.json",
+            "routing_metadata_ref": "skills/SKILL_ROUTING_METADATA.json",
+            "runtime_explain_ref": "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
+            "health_manifest_ref": "skills/SKILL_HEALTH_MANIFEST.json"
+        },
     })
+}
+
+fn runtime_named_records(
+    skills: &[Value],
+    plugin_catalog: &Value,
+    routing_metadata: &Value,
+) -> Vec<Value> {
+    skills
+        .iter()
+        .filter_map(Value::as_array)
+        .map(|row| {
+            let slug = string_at(row, 0);
+            json!({
+                "slug": slug,
+                "layer": string_at(row, 1),
+                "owner": string_at(row, 2),
+                "gate": string_at(row, 3),
+                "session_start": string_at(row, 4),
+                "summary": string_at(row, 5),
+                "trigger_hints": value_at(row, 6),
+                "priority": string_at(row, 7),
+                "skill_path": string_at(row, 8),
+                "plugin": plugin_catalog.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or_else(|| Value::Null),
+                "routing_metadata": routing_metadata.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or_else(|| Value::Null)
+            })
+        })
+        .collect()
 }
 
 fn framework_command_runtime_rows(skills_root: &Path) -> Result<Vec<Value>, String> {
@@ -1046,6 +1140,498 @@ fn fallback_framework_command_runtime_row(slug: &str) -> Value {
         _ => json!({}),
     };
     framework_command_runtime_row(slug, &command)
+}
+
+fn build_plugin_catalog(docs: &[SkillDoc], manifest: &Value, framework_rows: &[Value]) -> Value {
+    let doc_lookup = docs
+        .iter()
+        .map(|doc| (doc.slug.as_str(), doc))
+        .collect::<HashMap<_, _>>();
+    let mut skills = Map::new();
+    for row in manifest
+        .get("skills")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+    {
+        let slug = string_at(row, 0);
+        if slug.is_empty() {
+            continue;
+        }
+        let metadata = doc_lookup.get(slug.as_str()).map(|doc| &doc.metadata);
+        skills.insert(
+            slug.clone(),
+            build_skill_plugin_record(&slug, row, metadata),
+        );
+    }
+    for row in framework_rows.iter().filter_map(Value::as_array) {
+        let slug = string_at(row, 0);
+        if slug.is_empty() {
+            continue;
+        }
+        skills.insert(
+            slug.clone(),
+            build_framework_command_plugin_record(&slug, row),
+        );
+    }
+    json!({
+        "schema_version": "skill-plugin-catalog-v1",
+        "plugin_abi_version": "skill-plugin-abi-v1",
+        "source": "generated-by-skill-compiler-rs",
+        "contract": {
+            "record_shape": [
+                "slug",
+                "kind",
+                "skill_path",
+                "entrypoint",
+                "capabilities",
+                "dependencies",
+                "risk",
+                "host_support",
+                "test_fixtures",
+                "lifecycle"
+            ],
+            "compatibility_rule": "new plugin capabilities must be additive or versioned",
+            "fail_closed_rule": "unknown capability classes are denied until the runtime explicitly supports them"
+        },
+        "capability_classes": [
+            "routing_owner",
+            "routing_gate",
+            "artifact",
+            "source",
+            "evidence",
+            "delegation",
+            "workspace_mutating",
+            "networked",
+            "high_risk"
+        ],
+        "skills": Value::Object(skills)
+    })
+}
+
+fn build_skill_plugin_record(
+    slug: &str,
+    row: &[Value],
+    metadata: Option<&HashMap<String, Value>>,
+) -> Value {
+    let allowed_tools =
+        metadata.map_or_else(Vec::new, |meta| normalize_list(meta.get("allowed_tools")));
+    let approval_required_tools = metadata.map_or_else(Vec::new, |meta| {
+        normalize_list(meta.get("approval_required_tools"))
+    });
+    let artifact_outputs = metadata.map_or_else(Vec::new, |meta| {
+        normalize_list(meta.get("artifact_outputs"))
+    });
+    let platforms = metadata
+        .map(|meta| {
+            normalize_list(meta.get("platforms"))
+                .into_iter()
+                .collect::<Vec<_>>()
+        })
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| vec!["codex".to_string()]);
+    let network_access = metadata
+        .and_then(|meta| optional_string_field(meta, "network_access"))
+        .unwrap_or_else(|| "unspecified".to_string());
+    let destructive_risk = metadata
+        .and_then(|meta| optional_string_field(meta, "destructive_risk"))
+        .unwrap_or_else(|| "unspecified".to_string());
+    let lifecycle_status = metadata
+        .and_then(|meta| optional_string_field(meta, "status"))
+        .unwrap_or_else(|| "active".to_string());
+    let approval_required = !approval_required_tools.is_empty();
+    json!({
+        "slug": slug,
+        "kind": "skill",
+        "skill_path": string_at(row, 10),
+        "entrypoint": "SKILL.md",
+        "capabilities": {
+            "routing_layer": string_at(row, 1),
+            "routing_owner": string_at(row, 2),
+            "routing_gate": string_at(row, 3),
+            "allowed_tools": allowed_tools,
+            "approval_required_tools": approval_required_tools,
+            "artifact_outputs": artifact_outputs,
+            "network_access": network_access
+        },
+        "dependencies": {
+            "skill_paths": [string_at(row, 10)],
+            "allowed_tools": allowed_tools,
+            "artifact_outputs": artifact_outputs,
+            "runtime_refs": [
+                "skills/SKILL_ROUTING_METADATA.json",
+                "skills/SKILL_HEALTH_MANIFEST.json"
+            ]
+        },
+        "risk": {
+            "priority": string_at(row, 4),
+            "destructive_risk": destructive_risk,
+            "approval_required": approval_required
+        },
+        "host_support": {
+            "platforms": platforms,
+            "projection": "skill-body"
+        },
+        "test_fixtures": {
+            "routing_eval_cases": "tests/routing_eval_cases.json",
+            "contract_tests": ["manifest_and_runtime_skill_paths_are_loadable"],
+            "health_checks": ["skill_path_declared_safe", "plugin_record_present", "routing_metadata_present"]
+        },
+        "lifecycle": {
+            "status": lifecycle_status,
+            "source": string_at(row, 8),
+            "source_position": value_at(row, 9),
+            "retirement": {
+                "state": if lifecycle_status.eq_ignore_ascii_case("active") { "active" } else { "non_active" },
+                "replacement": Value::Null,
+                "removal_policy": "remove from manifest/runtime first, then delete package after route/eval parity"
+            }
+        }
+    })
+}
+
+fn build_framework_command_plugin_record(slug: &str, row: &[Value]) -> Value {
+    json!({
+        "slug": slug,
+        "kind": "framework_command",
+        "skill_path": string_at(row, 8),
+        "entrypoint": "explicit-framework-command",
+        "capabilities": {
+            "routing_layer": string_at(row, 1),
+            "routing_owner": string_at(row, 2),
+            "routing_gate": string_at(row, 3),
+            "allowed_tools": [],
+            "approval_required_tools": [],
+            "artifact_outputs": [],
+            "network_access": "local"
+        },
+        "dependencies": {
+            "skill_paths": [string_at(row, 8)],
+            "allowed_tools": [],
+            "artifact_outputs": [],
+            "runtime_refs": ["configs/framework/RUNTIME_REGISTRY.json"]
+        },
+        "risk": {
+            "priority": string_at(row, 7),
+            "destructive_risk": "command-dependent",
+            "approval_required": false
+        },
+        "host_support": {
+            "platforms": ["codex-cli", "codex-app"],
+            "projection": "explicit-entrypoint"
+        },
+        "test_fixtures": {
+            "routing_eval_cases": "tests/routing_eval_cases.json",
+            "contract_tests": ["framework_aliases_reference_manifest_skills"],
+            "health_checks": ["plugin_record_present", "routing_metadata_present"]
+        },
+        "lifecycle": {
+            "status": "active",
+            "source": "framework-registry",
+            "source_position": 100,
+            "retirement": {
+                "state": "active",
+                "replacement": Value::Null,
+                "removal_policy": "remove explicit entrypoints from RUNTIME_REGISTRY before deleting surfaced command skill"
+            }
+        }
+    })
+}
+
+fn build_routing_metadata_catalog(
+    docs: &[SkillDoc],
+    manifest: &Value,
+    framework_rows: &[Value],
+) -> Value {
+    let doc_lookup = docs
+        .iter()
+        .map(|doc| (doc.slug.as_str(), doc))
+        .collect::<HashMap<_, _>>();
+    let mut skills = Map::new();
+    for row in manifest
+        .get("skills")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+    {
+        let slug = string_at(row, 0);
+        if slug.is_empty() {
+            continue;
+        }
+        let metadata = doc_lookup.get(slug.as_str()).map(|doc| &doc.metadata);
+        skills.insert(
+            slug.clone(),
+            build_route_metadata_record(&slug, row, metadata),
+        );
+    }
+    for row in framework_rows.iter().filter_map(Value::as_array) {
+        let slug = string_at(row, 0);
+        if slug.is_empty() {
+            continue;
+        }
+        skills.insert(slug.clone(), build_route_metadata_record(&slug, row, None));
+    }
+    json!({
+        "schema_version": "skill-routing-metadata-v1",
+        "source": "generated-by-skill-compiler-rs",
+        "contract": {
+            "purpose": "move skill-specific route behavior out of router code and into versioned declarations",
+            "migration_rule": "router hardcoded boosts may only be kept while the equivalent declarative field is missing",
+            "fail_closed_rule": "unknown route policy values are ignored by legacy consumers and rejected by strict vNext consumers"
+        },
+        "fields": [
+            "intent_tags",
+            "positive_triggers",
+            "negative_triggers",
+            "gate_policy",
+            "overlay_policy",
+            "fallback_policy",
+            "selection_reason"
+        ],
+        "skills": Value::Object(skills)
+    })
+}
+
+fn build_route_metadata_record(
+    slug: &str,
+    row: &[Value],
+    metadata: Option<&HashMap<String, Value>>,
+) -> Value {
+    let owner = string_at(row, 2);
+    let gate = string_at(row, 3);
+    let session_start = if row.len() > 9 {
+        string_at(row, 6)
+    } else {
+        string_at(row, 4)
+    };
+    let trigger_hints = if row.len() > 9 {
+        value_at(row, 7)
+    } else {
+        value_at(row, 6)
+    };
+    let negative_triggers = metadata
+        .map(|meta| normalize_list(meta.get("do_not_use")))
+        .unwrap_or_default();
+    let tags = metadata
+        .map(|meta| normalize_list(meta.get("tags")))
+        .unwrap_or_default();
+    let mut intent_tags = vec![
+        format!("owner:{owner}"),
+        format!("gate:{gate}"),
+        format!("session_start:{session_start}"),
+    ];
+    intent_tags.extend(tags);
+    json!({
+        "slug": slug,
+        "intent_tags": intent_tags,
+        "positive_triggers": trigger_hints,
+        "negative_triggers": negative_triggers,
+        "gate_policy": if owner == "gate" || gate != "none" {
+            json!({
+                "mode": "gate-before-owner",
+                "gate": gate,
+                "required_at_session_start": session_start == "required"
+            })
+        } else {
+            json!({"mode": "owner"})
+        },
+        "overlay_policy": if owner == "overlay" {
+            json!({"mode": "overlay-only", "primary_allowed": false})
+        } else {
+            json!({"mode": "primary-or-gate", "primary_allowed": owner != "gate"})
+        },
+        "fallback_policy": if session_start == "n/a" {
+            json!({"mode": "explicit-or-fallback"})
+        } else {
+            json!({"mode": "eligible-in-runtime"})
+        },
+        "selection_reason": route_selection_reason(row)
+    })
+}
+
+fn route_selection_reason(row: &[Value]) -> String {
+    let owner = string_at(row, 2);
+    let gate = string_at(row, 3);
+    let session_start = if row.len() > 9 {
+        string_at(row, 6)
+    } else {
+        string_at(row, 4)
+    };
+    if owner == "gate" && session_start == "required" {
+        format!("required {gate} gate")
+    } else if owner == "owner" && session_start == "preferred" {
+        "allowlisted first-turn owner".to_string()
+    } else if session_start == "n/a" {
+        "explicit framework entrypoint or fallback-only owner".to_string()
+    } else {
+        "specialist opt-in owner".to_string()
+    }
+}
+
+fn build_runtime_explain(
+    manifest: &Value,
+    runtime_index: &Value,
+    plugin_catalog: &Value,
+    routing_metadata: &Value,
+) -> Value {
+    let runtime_slugs = runtime_index
+        .get("skills")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+        .map(|row| string_at(row, 0))
+        .collect::<HashSet<_>>();
+    let mut selected = Map::new();
+    for row in runtime_index
+        .get("skills")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+    {
+        let slug = string_at(row, 0);
+        selected.insert(
+            slug.clone(),
+            json!({
+                "selection_reason": routing_metadata.get("skills").and_then(|skills| skills.get(&slug)).and_then(|meta| meta.get("selection_reason")).cloned().unwrap_or_else(|| json!("runtime-selected")),
+                "plugin_kind": plugin_catalog.get("skills").and_then(|skills| skills.get(&slug)).and_then(|plugin| plugin.get("kind")).cloned().unwrap_or_else(|| json!("unknown")),
+                "skill_path": string_at(row, 8)
+            }),
+        );
+    }
+    let mut excluded = Map::new();
+    for row in manifest
+        .get("skills")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+    {
+        let slug = string_at(row, 0);
+        if slug.is_empty() || runtime_slugs.contains(&slug) {
+            continue;
+        }
+        excluded.insert(
+            slug.clone(),
+            json!({
+                "reason": route_selection_reason(row),
+                "activation": "explicit_opt_in_or_manifest_fallback",
+                "skill_path": string_at(row, 10)
+            }),
+        );
+    }
+    json!({
+        "schema_version": "skill-routing-runtime-explain-v1",
+        "source": "generated-by-skill-compiler-rs",
+        "runtime_ref": "skills/SKILL_ROUTING_RUNTIME.json",
+        "plugin_catalog_ref": "skills/SKILL_PLUGIN_CATALOG.json",
+        "routing_metadata_ref": "skills/SKILL_ROUTING_METADATA.json",
+        "summary": {
+            "runtime_skill_count": runtime_slugs.len(),
+            "manifest_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
+            "policy": "hot runtime keeps required gates plus allowlisted first-turn control owners; everything else remains explicit opt-in or fallback searchable"
+        },
+        "selected": Value::Object(selected),
+        "excluded": Value::Object(excluded)
+    })
+}
+
+fn build_health_manifest(
+    _skills_root: &Path,
+    manifest: &Value,
+    runtime_index: &Value,
+    plugin_catalog: &Value,
+    routing_metadata: &Value,
+) -> Value {
+    let mut skills = Map::new();
+    let mut degraded = 0usize;
+    let mut checked = 0usize;
+    for (source, payload) in [("manifest", manifest), ("runtime", runtime_index)] {
+        let Some(rows) = payload.get("skills").and_then(Value::as_array) else {
+            continue;
+        };
+        let Some(keys) = payload.get("keys").and_then(Value::as_array) else {
+            continue;
+        };
+        let key_map = key_index(keys);
+        let Some(slug_idx) = key_map.get("slug").copied() else {
+            continue;
+        };
+        let Some(path_idx) = key_map.get("skill_path").copied() else {
+            continue;
+        };
+        let trigger_idx = key_map.get("trigger_hints").copied();
+        for row in rows.iter().filter_map(Value::as_array) {
+            let slug = string_at(row, slug_idx);
+            let skill_path = string_at(row, path_idx);
+            if slug.is_empty() {
+                continue;
+            }
+            checked += 1;
+            let mut checks = Vec::new();
+            let path_declared_safe = !skill_path.is_empty()
+                && !skill_path.starts_with('/')
+                && !skill_path.contains("..");
+            checks.push(json!({"id": "skill_path_declared_safe", "passed": path_declared_safe}));
+            let has_plugin = plugin_catalog
+                .get("skills")
+                .and_then(|items| items.get(&slug))
+                .is_some();
+            checks.push(json!({"id": "plugin_record_present", "passed": has_plugin}));
+            let has_route_metadata = routing_metadata
+                .get("skills")
+                .and_then(|items| items.get(&slug))
+                .is_some();
+            checks.push(json!({"id": "routing_metadata_present", "passed": has_route_metadata}));
+            let trigger_quality = trigger_idx
+                .and_then(|idx| row.get(idx))
+                .and_then(Value::as_array)
+                .map(|items| !items.is_empty())
+                .unwrap_or(true);
+            checks.push(
+                json!({"id": "trigger_surface_nonempty_or_optional", "passed": trigger_quality}),
+            );
+            let healthy = checks.iter().all(|check| {
+                check
+                    .get("passed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            });
+            if !healthy {
+                degraded += 1;
+            }
+            skills.insert(
+                format!("{source}:{slug}"),
+                json!({
+                    "source": source,
+                    "slug": slug,
+                    "skill_path": skill_path,
+                    "status": if healthy { "healthy" } else { "degraded" },
+                    "checks": checks
+                }),
+            );
+        }
+    }
+    json!({
+        "schema_version": "skill-health-manifest-v2",
+        "source": "generated-by-skill-compiler-rs",
+        "status": if degraded == 0 { "healthy" } else { "degraded" },
+        "summary": {
+            "checked_records": checked,
+            "degraded_records": degraded,
+            "healthy_records": checked.saturating_sub(degraded)
+        },
+        "checks": [
+            "skill_path_declared_safe",
+            "plugin_record_present",
+            "routing_metadata_present",
+            "trigger_surface_nonempty_or_optional"
+        ],
+        "skills": Value::Object(skills)
+    })
 }
 
 fn string_list_at(value: &Value, path: &[&str]) -> Vec<String> {
@@ -1950,7 +2536,15 @@ mod tests {
         let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
         let tiers = build_tier_catalog(&manifest);
         let surface_policy = build_framework_surface_policy(&tiers, None);
-        let runtime = build_runtime_index(&manifest, &framework_rows, &surface_policy);
+        let plugin_catalog = build_plugin_catalog(&docs, &manifest, &framework_rows);
+        let routing_metadata = build_routing_metadata_catalog(&docs, &manifest, &framework_rows);
+        let runtime = build_runtime_index(
+            &manifest,
+            &framework_rows,
+            &surface_policy,
+            &plugin_catalog,
+            &routing_metadata,
+        );
         let shadow_map = build_shadow_map(&entries, &source_manifest);
 
         assert_eq!(
@@ -1975,6 +2569,9 @@ mod tests {
         assert!(manifest["skills"][0][7].is_array());
         assert!(runtime["skills"][0][6].is_array());
         assert_eq!(runtime["skills"][0][7], json!("P2"));
+        assert_eq!(runtime["plugin_abi_version"], json!("skill-plugin-abi-v1"));
+        assert!(runtime["records"][0]["plugin"].is_object());
+        assert!(runtime["records"][0]["routing_metadata"].is_object());
     }
 
     #[test]
@@ -2090,10 +2687,13 @@ mod tests {
                 }
             })),
         );
+        let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
         let configured_runtime = build_runtime_index(
             &bundle.manifest,
-            &framework_command_runtime_rows(&skills_root).expect("framework rows"),
+            &framework_rows,
             &configured_surface_policy,
+            &bundle.plugin_catalog,
+            &bundle.routing_metadata,
         );
         assert!(configured_runtime["skills"]
             .as_array()

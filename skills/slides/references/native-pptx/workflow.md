@@ -242,7 +242,7 @@ Use `build-qa` for code-authored decks and `intake` for existing-deck rebuilds.
 For a full regression pass from the skill root, run:
 
 ```bash
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
+cargo run --manifest-path rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
 ```
 
 ## What To Look For In Rendered Slides

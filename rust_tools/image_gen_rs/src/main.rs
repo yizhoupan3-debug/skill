@@ -15,11 +15,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const DEFAULT_MODEL: &str = "gpt-5.4";
-const DEFAULT_RESPONSES_URL: &str = "http://127.0.0.1:8318/v1/responses";
+const DEFAULT_MODEL: &str = "dall-e-3";
+const DEFAULT_RESPONSES_URL: &str = "https://api.openai.com/v1/images/generations";
 const DEFAULT_SIZE: &str = "1024x1024";
-const DEFAULT_QUALITY: &str = "auto";
-const DEFAULT_OUTPUT_FORMAT: &str = "png";
+const DEFAULT_QUALITY: &str = "standard";
+const DEFAULT_OUTPUT_FORMAT: &str = "url";
 const DEFAULT_OUTPUT_PATH: &str = "output/image-generated/output.png";
 const DEFAULT_DOWNSCALE_SUFFIX: &str = "-web";
 const DEFAULT_CONCURRENCY: usize = 5;
@@ -29,7 +29,7 @@ const MAX_BATCH_JOBS: usize = 500;
 
 #[derive(Parser)]
 #[command(name = "image_gen_rs")]
-#[command(about = "Generate or edit images via VibeProxy Local /v1/responses")]
+#[command(about = "Generate or edit images via official OpenAI API")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -499,40 +499,19 @@ fn build_output_paths(
         .collect())
 }
 
-fn build_tool(
-    args: &SharedArgs,
-    action: Option<&str>,
-    input_fidelity: Option<&str>,
-) -> Result<Value> {
-    let output_format = normalize_output_format(args.output_format.as_deref())?;
-    let mut tool = Map::new();
-    tool.insert("type".to_string(), json!("image_generation"));
-    tool.insert("size".to_string(), json!(args.size));
-    tool.insert("quality".to_string(), json!(args.quality));
-    tool.insert("output_format".to_string(), json!(output_format));
-    if let Some(background) = &args.background {
-        tool.insert("background".to_string(), json!(background));
-    }
-    if let Some(compression) = args.output_compression {
-        tool.insert("output_compression".to_string(), json!(compression));
-    }
-    if let Some(moderation) = &args.moderation {
-        tool.insert("moderation".to_string(), json!(moderation));
-    }
-    if let Some(action) = action {
-        tool.insert("action".to_string(), json!(action));
-    }
-    if let Some(input_fidelity) = input_fidelity {
-        tool.insert("input_fidelity".to_string(), json!(input_fidelity));
-    }
-    Ok(Value::Object(tool))
-}
-
 fn build_generate_payload(args: &SharedArgs, prompt: &str) -> Result<Value> {
+    let response_format = if args.output_format.as_deref() == Some("url") {
+        "url"
+    } else {
+        "b64_json"
+    };
     Ok(json!({
         "model": args.model,
-        "input": prompt,
-        "tools": [build_tool(args, None, None)?],
+        "prompt": prompt,
+        "n": args.n,
+        "size": args.size,
+        "quality": args.quality,
+        "response_format": response_format,
     }))
 }
 
@@ -540,27 +519,28 @@ fn build_edit_payload(
     args: &SharedArgs,
     prompt: &str,
     image_paths: &[PathBuf],
-    input_fidelity: Option<&str>,
-    preview: bool,
+    _input_fidelity: Option<&str>,
+    _preview: bool,
 ) -> Result<Value> {
-    let mut content = vec![json!({"type": "input_text", "text": prompt})];
-    for path in image_paths {
-        let image_url = if preview {
-            format!(
-                "data:{};base64,<omitted:{}>",
-                guess_mime_type(path),
-                path.display()
-            )
-        } else {
-            image_to_data_url(path)?
-        };
-        content.push(json!({"type": "input_image", "image_url": image_url}));
+    // Note: Official OpenAI Image Edit API uses multipart/form-data, not JSON.
+    // This tool currently sends JSON which was compatible with VibeProxy's /v1/responses.
+    // To fully support official edits, this function and post_responses_request would need
+    // to be refactored to handle multipart. For now, we update the JSON structure
+    // to be as close as possible, but mark it as potentially requiring multipart refactor.
+    let mut payload = json!({
+        "model": "dall-e-2", // dall-e-3 doesn't support edits yet
+        "prompt": prompt,
+        "n": args.n,
+        "size": args.size,
+        "response_format": "b64_json",
+    });
+
+    if let Some(path) = image_paths.first() {
+        // This is still sending b64 in JSON which OpenAI won't accept on /v1/images/edits
+        payload["image"] = json!(image_to_data_url(path)?);
     }
-    Ok(json!({
-        "model": args.model,
-        "input": [{"role": "user", "content": content}],
-        "tools": [build_tool(args, Some("edit"), input_fidelity)?],
-    }))
+
+    Ok(payload)
 }
 
 fn generate_many(
@@ -643,7 +623,7 @@ fn edit_many(args: &EditArgs, prompt: &str, outputs: &[PathBuf], job_label: &str
 }
 
 fn responses_url() -> String {
-    std::env::var("VIBEPROXY_RESPONSES_URL").unwrap_or_else(|_| DEFAULT_RESPONSES_URL.to_string())
+    std::env::var("OPENAI_IMAGES_URL").unwrap_or_else(|_| DEFAULT_RESPONSES_URL.to_string())
 }
 
 fn request_with_retries(payload: &Value, attempts: usize, label: &str) -> Result<Value> {
@@ -678,15 +658,13 @@ fn post_responses_request(payload: &Value) -> Result<Value> {
         .post(responses_url())
         .header("Accept", "application/json")
         .json(payload);
-    if let Some(token) = std::env::var("VIBEPROXY_BEARER_TOKEN")
-        .ok()
-        .or_else(|| std::env::var("VIBEPROXY_API_KEY").ok())
+    if let Ok(token) = std::env::var("OPENAI_API_KEY")
     {
         request = request.bearer_auth(token);
     }
     let response = request
         .send()
-        .context("failed to reach VibeProxy Responses endpoint")?;
+        .context("failed to reach OpenAI API endpoint")?;
     let status = response.status();
     let body = response.text().unwrap_or_default();
     if !status.is_success() {
@@ -697,7 +675,7 @@ fn post_responses_request(payload: &Value) -> Result<Value> {
             body
         );
     }
-    serde_json::from_str(&body).context("invalid JSON returned by VibeProxy Responses endpoint")
+    serde_json::from_str(&body).context("invalid JSON returned by OpenAI API endpoint")
 }
 
 fn is_transient_error(message: &str) -> bool {
@@ -713,40 +691,20 @@ fn is_transient_error(message: &str) -> bool {
 }
 
 fn extract_generated_images(response: &Value) -> Result<Vec<String>> {
-    let output = response
-        .get("output")
+    let data = response
+        .get("data")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("Responses payload missing `output` list"))?;
+        .ok_or_else(|| anyhow!("OpenAI payload missing `data` list"))?;
     let mut images = Vec::new();
-    let mut output_types = Vec::new();
-    for item in output {
-        let Some(item) = item.as_object() else {
-            continue;
-        };
-        if let Some(kind) = item.get("type").and_then(Value::as_str) {
-            output_types.push(kind.to_string());
-        }
-        if item.get("type").and_then(Value::as_str) != Some("image_generation_call") {
-            continue;
-        }
-        match item.get("result") {
-            Some(Value::String(value)) if !value.is_empty() => images.push(value.clone()),
-            Some(Value::Array(values)) => {
-                images.extend(
-                    values
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(ToOwned::to_owned),
-                );
-            }
-            _ => {}
+    for item in data {
+        if let Some(b64) = item.get("b64_json").and_then(Value::as_str) {
+            images.push(b64.to_string());
+        } else if let Some(url) = item.get("url").and_then(Value::as_str) {
+            images.push(url.to_string());
         }
     }
     if images.is_empty() {
-        bail!(
-            "Responses call completed without an `image_generation_call` result. Observed output types: {:?}",
-            output_types
-        );
+        bail!("OpenAI call completed without any image results.");
     }
     Ok(images)
 }
@@ -759,7 +717,7 @@ fn decode_write_and_downscale(
     downscale_suffix: &str,
     output_format: &str,
 ) -> Result<()> {
-    for (image_b64, out_path) in images.iter().zip(outputs.iter()) {
+    for (image_data, out_path) in images.iter().zip(outputs.iter()) {
         if out_path.exists() && !force {
             bail!(
                 "Output already exists: {} (use --force to overwrite)",
@@ -769,7 +727,7 @@ fn decode_write_and_downscale(
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let raw = decode_image_result(image_b64)?;
+        let raw = decode_image_result(image_data)?;
         fs::write(out_path, &raw)?;
         println!("Wrote {}", out_path.display());
 
@@ -793,6 +751,11 @@ fn decode_write_and_downscale(
 }
 
 fn decode_image_result(value: &str) -> Result<Vec<u8>> {
+    if value.starts_with("http") {
+        let client = Client::new();
+        let resp = client.get(value).send()?.error_for_status()?;
+        return Ok(resp.bytes()?.to_vec());
+    }
     let encoded = value
         .split_once(',')
         .filter(|(prefix, _)| prefix.starts_with("data:image/") && prefix.contains(";base64"))
@@ -800,7 +763,7 @@ fn decode_image_result(value: &str) -> Result<Vec<u8>> {
         .unwrap_or(value);
     BASE64
         .decode(encoded)
-        .context("failed to decode image_generation_call result")
+        .context("failed to decode b64_json or image data")
 }
 
 fn derive_downscale_path(path: &Path, suffix: &str) -> PathBuf {

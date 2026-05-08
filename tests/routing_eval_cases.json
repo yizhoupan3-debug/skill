@@ -367,6 +367,19 @@
         "slides"
       ],
       "first_turn": true
+    },
+    {
+      "id": "hatch-pet-custom-codex-pet-package",
+      "category": "gate-vs-owner-conflict",
+      "task": "帮我做一个 Codex custom animated pet，输出 pet.json 和 spritesheet.webp",
+      "focus_skill": "hatch-pet",
+      "expected_owner": "hatch-pet",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "image-generated",
+        "visual-review"
+      ],
+      "first_turn": true
     }
   ]
 }

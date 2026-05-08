@@ -308,9 +308,41 @@ fn install_skills_codex_target_installs_only_codex() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["codex"]["status"], "installed");
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
+    assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert!(!home.join(".codex/skills").exists());
+}
+
+#[test]
+fn install_skills_cursor_target_installs_only_cursor() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+
+    let result = host_integration_json(&[
+        "install-skills",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--bootstrap-output-dir",
+        tmp.path().join("bootstrap").to_str().unwrap(),
+        "cursor",
+    ]);
+
+    assert_eq!(result["success"], true);
+    assert_eq!(result["results"]["cursor"]["status"], "installed");
+    assert!(repo_root.join(".cursor/rules/framework.mdc").exists());
+    assert!(!repo_root.join(".codex/prompts/framework.md").exists());
 }
 
 #[test]
@@ -446,6 +478,10 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         "skills/SKILL_ROUTING_INDEX.md",
         "skills/SKILL_MANIFEST.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
+        "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
+        "skills/SKILL_PLUGIN_CATALOG.json",
+        "skills/SKILL_ROUTING_METADATA.json",
+        "skills/SKILL_HEALTH_MANIFEST.json",
         "skills/SKILL_SHADOW_MAP.json",
         "skills/SKILL_APPROVAL_POLICY.json",
         "skills/SKILL_LOADOUTS.json",
@@ -956,7 +992,7 @@ fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
 fn seed_framework_markers(root: &Path) {
     write_text(
         &root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_projections":{"codex-cli":{"profile_id":"codex_profile"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_targets":{"policy":"shared-rust-core-explicit-host-projections","supported":["codex-cli","cursor"],"shared_system_source":"skills","entrypoint_files":{"codex-cli":"AGENTS.md","cursor":"AGENTS.md"}},"host_projections":{"codex-cli":{"profile_id":"codex_profile"},"cursor":{"profile_id":"cursor_profile"}}}"#,
     );
     write_text(
         &root.join("scripts/router-rs/Cargo.toml"),
@@ -1035,6 +1071,10 @@ fn runtime_registry_missing_file_uses_default_registry() {
         payload["host_projections"]["codex-cli"]["profile_id"],
         "codex_profile"
     );
+    assert_eq!(
+        payload["host_projections"]["cursor"]["profile_id"],
+        "cursor_profile"
+    );
 }
 
 #[test]
@@ -1077,6 +1117,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         aliases["autopilot"]["host_entrypoints"]["codex-cli"],
         "/autopilot"
     );
+    assert_eq!(aliases["autopilot"]["host_entrypoints"]["cursor"], "/autopilot");
     assert_eq!(
         aliases["autopilot"]["interaction_invariants"]["implicit_route_policy"],
         "never"
@@ -1085,12 +1126,17 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         aliases["deepinterview"]["host_entrypoints"]["codex-cli"],
         "/deepinterview"
     );
+    assert_eq!(
+        aliases["deepinterview"]["host_entrypoints"]["cursor"],
+        "/deepinterview"
+    );
     assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "/team");
+    assert_eq!(aliases["team"]["host_entrypoints"]["cursor"], "/team");
     assert_eq!(
         payload["host_targets"]["policy"],
         "shared-rust-core-explicit-host-projections"
     );
-    assert_eq!(payload["host_targets"]["supported"], json!(["codex-cli"]));
+    assert_eq!(payload["host_targets"]["supported"], json!(["codex-cli", "cursor"]));
     assert!(payload.get("mcp_clients").is_none());
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");
     let autopilot = &aliases["autopilot"];
@@ -1116,6 +1162,9 @@ fn runtime_registry_host_projections_expose_supervisor_capabilities() {
         assert!(codex_capabilities.contains(&json!(capability)));
     }
     assert_eq!(codex["session_supervisor_driver"], "codex_driver");
+
+    let cursor = &payload["host_projections"]["cursor"];
+    assert_eq!(cursor["profile_id"], "cursor_profile");
 }
 
 fn runtime_registry(repo_root: &std::path::Path) -> serde_json::Value {

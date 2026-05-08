@@ -116,6 +116,7 @@ struct RecordsCacheKey {
 struct RecordsCacheEntry {
     runtime_mtime: Option<SystemTime>,
     manifest_mtime: Option<SystemTime>,
+    metadata_mtime: Option<SystemTime>,
     records: Arc<Vec<SkillRecord>>,
 }
 
@@ -329,12 +330,7 @@ impl SkillRecord {
             .collect::<HashSet<_>>();
         let framework_alias_entrypoints =
             framework_alias_entrypoints_from_hints(&slug_lower, &layer, &trigger_hints);
-        let do_not_use_tokens = tokenize_query(&do_not_use)
-            .into_iter()
-            .filter(|token| {
-                !common_route_stop_tokens().contains(&token.as_str()) && token.len() > 2
-            })
-            .collect::<HashSet<_>>();
+        let do_not_use_tokens = negative_trigger_tokens([do_not_use.as_str()]);
         let gate_phrases = gate_hint_phrases(&gate);
         let name_tokens = tokenize_query(&slug.replace('-', " "))
             .into_iter()
@@ -374,6 +370,14 @@ impl SkillRecord {
     }
 }
 
+fn negative_trigger_tokens<'a>(phrases: impl IntoIterator<Item = &'a str>) -> HashSet<String> {
+    phrases
+        .into_iter()
+        .flat_map(tokenize_query)
+        .filter(|token| !common_route_stop_tokens().contains(&token.as_str()) && token.len() > 2)
+        .collect::<HashSet<_>>()
+}
+
 struct RawSkillRecord {
     slug: String,
     layer: String,
@@ -387,6 +391,13 @@ struct RawSkillRecord {
     do_not_use: String,
     tags: Vec<String>,
     trigger_hints: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RouteMetadataPatch {
+    priority: Option<String>,
+    session_start: Option<String>,
+    negative_triggers: Vec<String>,
 }
 
 fn default_skill_layer() -> String {
@@ -583,23 +594,33 @@ fn collect_skill_records_from_rows(rows: &[Value], indexes: RecordRowIndexes) ->
 
 fn apply_manifest_route_meta(
     records: &mut [SkillRecord],
-    meta: &HashMap<String, (String, String)>,
+    meta: &HashMap<String, RouteMetadataPatch>,
 ) {
     if records.len() < PARALLEL_RECORD_SCAN_MIN {
         for record in records {
-            if let Some((priority, session_start)) = meta.get(&record.slug) {
-                record.priority = priority.clone();
-                record.session_start = session_start.clone();
+            if let Some(patch) = meta.get(&record.slug) {
+                apply_route_metadata_patch(record, patch);
             }
         }
         return;
     }
     records.par_iter_mut().for_each(|record| {
-        if let Some((priority, session_start)) = meta.get(&record.slug) {
-            record.priority = priority.clone();
-            record.session_start = session_start.clone();
+        if let Some(patch) = meta.get(&record.slug) {
+            apply_route_metadata_patch(record, patch);
         }
     });
+}
+
+fn apply_route_metadata_patch(record: &mut SkillRecord, patch: &RouteMetadataPatch) {
+    if let Some(priority) = &patch.priority {
+        record.priority = priority.clone();
+    }
+    if let Some(session_start) = &patch.session_start {
+        record.session_start = session_start.clone();
+    }
+    record.do_not_use_tokens.extend(negative_trigger_tokens(
+        patch.negative_triggers.iter().map(String::as_str),
+    ));
 }
 
 fn default_runtime_path() -> Option<PathBuf> {
@@ -645,6 +666,12 @@ fn file_modified_at(path: Option<&Path>) -> Option<SystemTime> {
     path.and_then(|item| fs::metadata(item).ok()?.modified().ok())
 }
 
+fn route_metadata_sidecar_path(manifest_path: &Path) -> Option<PathBuf> {
+    manifest_path
+        .parent()
+        .map(|parent| parent.join("SKILL_ROUTING_METADATA.json"))
+}
+
 fn records_cache() -> &'static Mutex<HashMap<RecordsCacheKey, RecordsCacheEntry>> {
     static RECORDS_CACHE: OnceLock<Mutex<HashMap<RecordsCacheKey, RecordsCacheEntry>>> =
         OnceLock::new();
@@ -667,13 +694,21 @@ fn load_records_cached_for_stdio_resolved(
     let key = records_cache_key(runtime_path, manifest_path);
     let runtime_mtime = file_modified_at(runtime_path);
     let manifest_mtime = file_modified_at(manifest_path);
+    let metadata_mtime = file_modified_at(
+        manifest_path
+            .and_then(route_metadata_sidecar_path)
+            .as_deref(),
+    );
 
     {
         let cache = records_cache()
             .lock()
             .map_err(|_| "route records cache lock poisoned".to_string())?;
         if let Some(entry) = cache.get(&key) {
-            if entry.runtime_mtime == runtime_mtime && entry.manifest_mtime == manifest_mtime {
+            if entry.runtime_mtime == runtime_mtime
+                && entry.manifest_mtime == manifest_mtime
+                && entry.metadata_mtime == metadata_mtime
+            {
                 return Ok(Arc::clone(&entry.records));
             }
         }
@@ -683,6 +718,7 @@ fn load_records_cached_for_stdio_resolved(
     let entry = RecordsCacheEntry {
         runtime_mtime,
         manifest_mtime,
+        metadata_mtime,
         records: Arc::clone(&records),
     };
     let mut cache = records_cache()
@@ -692,7 +728,7 @@ fn load_records_cached_for_stdio_resolved(
     Ok(records)
 }
 
-fn load_manifest_route_meta(path: &Path) -> Result<HashMap<String, (String, String)>, String> {
+fn load_manifest_route_meta(path: &Path) -> Result<HashMap<String, RouteMetadataPatch>, String> {
     let payload = read_json(path)?;
     let rows = payload
         .get("skills")
@@ -724,18 +760,74 @@ fn load_manifest_route_meta(path: &Path) -> Result<HashMap<String, (String, Stri
         let priority = idx_priority
             .and_then(|idx| row.get(idx))
             .map(value_to_string)
-            .unwrap_or_else(|| "P2".to_string());
+            .filter(|value| !value.trim().is_empty());
         let session_start = idx_session_start
             .and_then(|idx| row.get(idx))
             .map(value_to_string)
-            .unwrap_or_else(|| "n/a".to_string());
-        meta.insert(slug, (priority, session_start));
+            .filter(|value| !value.trim().is_empty());
+        meta.insert(
+            slug,
+            RouteMetadataPatch {
+                priority,
+                session_start,
+                negative_triggers: Vec::new(),
+            },
+        );
     }
+    merge_sidecar_route_metadata(path, &mut meta)?;
     Ok(meta)
+}
+
+fn merge_sidecar_route_metadata(
+    manifest_path: &Path,
+    meta: &mut HashMap<String, RouteMetadataPatch>,
+) -> Result<(), String> {
+    let Some(sidecar) = route_metadata_sidecar_path(manifest_path) else {
+        return Ok(());
+    };
+    if !sidecar.is_file() {
+        return Ok(());
+    }
+    let payload = read_json(&sidecar)?;
+    merge_route_metadata_payload(&payload, meta);
+    Ok(())
+}
+
+fn merge_route_metadata_payload(payload: &Value, meta: &mut HashMap<String, RouteMetadataPatch>) {
+    let Some(skills) = payload.get("skills").and_then(Value::as_object) else {
+        return;
+    };
+    for (slug, record) in skills {
+        let negative_triggers = record
+            .get("negative_triggers")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if negative_triggers.is_empty() {
+            continue;
+        }
+        meta.entry(slug.clone())
+            .or_default()
+            .negative_triggers
+            .extend(negative_triggers);
+    }
 }
 
 fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
     let payload = read_json(path)?;
+    if let Some(records) = collect_skill_records_from_named_runtime_records(&payload) {
+        let mut meta = HashMap::new();
+        merge_runtime_records_route_metadata(&payload, &mut meta);
+        let mut records = records;
+        apply_manifest_route_meta(&mut records, &meta);
+        return Ok(records);
+    }
     let rows = payload
         .get("skills")
         .and_then(Value::as_array)
@@ -792,7 +884,111 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
         idx_session_start,
     );
 
-    Ok(collect_skill_records_from_rows(rows, indexes))
+    let mut records = collect_skill_records_from_rows(rows, indexes);
+    let mut meta = HashMap::new();
+    merge_runtime_records_route_metadata(&payload, &mut meta);
+    apply_manifest_route_meta(&mut records, &meta);
+    Ok(records)
+}
+
+fn collect_skill_records_from_named_runtime_records(payload: &Value) -> Option<Vec<SkillRecord>> {
+    let records = payload.get("records")?.as_array()?;
+    if records.is_empty() {
+        return None;
+    }
+    let collect = || {
+        records
+            .iter()
+            .filter_map(Value::as_object)
+            .map(build_skill_record_from_named_runtime_record)
+            .collect::<Vec<_>>()
+    };
+    if records.len() < PARALLEL_RECORD_SCAN_MIN {
+        return Some(collect());
+    }
+    Some(
+        records
+            .par_iter()
+            .filter_map(Value::as_object)
+            .map(build_skill_record_from_named_runtime_record)
+            .collect(),
+    )
+}
+
+fn build_skill_record_from_named_runtime_record(
+    record: &serde_json::Map<String, Value>,
+) -> SkillRecord {
+    SkillRecord::from_raw(RawSkillRecord {
+        slug: object_string_field(record, "slug"),
+        layer: object_string_field(record, "layer"),
+        owner: object_string_field(record, "owner"),
+        gate: object_string_field(record, "gate"),
+        priority: object_string_field_with_default(record, "priority", "P2"),
+        session_start: object_string_field_with_default(record, "session_start", "n/a"),
+        summary: object_string_field(record, "summary"),
+        short_description: String::new(),
+        when_to_use: String::new(),
+        do_not_use: String::new(),
+        tags: Vec::new(),
+        trigger_hints: record
+            .get("trigger_hints")
+            .map(value_to_string_list)
+            .unwrap_or_default(),
+    })
+}
+
+fn object_string_field(record: &serde_json::Map<String, Value>, field: &str) -> String {
+    record.get(field).map(value_to_string).unwrap_or_default()
+}
+
+fn object_string_field_with_default(
+    record: &serde_json::Map<String, Value>,
+    field: &str,
+    default: &str,
+) -> String {
+    record
+        .get(field)
+        .map(value_to_string)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default.to_string())
+}
+
+fn merge_runtime_records_route_metadata(
+    payload: &Value,
+    meta: &mut HashMap<String, RouteMetadataPatch>,
+) {
+    let Some(records) = payload.get("records").and_then(Value::as_array) else {
+        return;
+    };
+    for record in records.iter().filter_map(Value::as_object) {
+        let slug = record
+            .get("slug")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if slug.is_empty() {
+            continue;
+        }
+        let metadata = record.get("routing_metadata").unwrap_or(&Value::Null);
+        let negative_triggers = metadata
+            .get("negative_triggers")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if negative_triggers.is_empty() {
+            continue;
+        }
+        meta.entry(slug)
+            .or_default()
+            .negative_triggers
+            .extend(negative_triggers);
+    }
 }
 
 pub(crate) fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
@@ -4207,5 +4403,269 @@ fn layer_threshold(layer: &str) -> f64 {
         "L1" => 16.0,
         "L2" | "L3" => 14.0,
         _ => 15.0,
+    }
+}
+
+#[cfg(test)]
+mod route_metadata_tests {
+    use super::*;
+    use serde_json::json;
+    use std::thread;
+    use std::time::Duration;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_route_path(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos();
+        std::env::temp_dir().join(format!("router-rs-route-meta-{name}-{unique}.json"))
+    }
+
+    #[test]
+    fn runtime_records_apply_declarative_negative_triggers() {
+        let path = temp_route_path("runtime-records");
+        fs::write(
+            &path,
+            serde_json::to_string(&json!({
+                "version": 3,
+                "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
+                "skills": [[
+                    "sample-skill",
+                    "L1",
+                    "owner",
+                    "none",
+                    "n/a",
+                    "Sample skill",
+                    ["sample"],
+                    "P1",
+                    "skills/sample-skill/SKILL.md"
+                ]],
+                "records": [{
+                    "slug": "sample-skill",
+                    "routing_metadata": {
+                        "negative_triggers": ["blocked route"]
+                    }
+                }]
+            }))
+            .expect("serialize runtime"),
+        )
+        .expect("write runtime");
+
+        let records = load_records_from_runtime(&path).expect("load runtime");
+        let record = records
+            .iter()
+            .find(|record| record.slug == "sample-skill")
+            .expect("sample record");
+        assert!(record.do_not_use_tokens.contains("blocked"));
+        assert!(record.do_not_use_tokens.contains("route"));
+
+        fs::remove_file(path).expect("cleanup runtime");
+    }
+
+    #[test]
+    fn runtime_named_records_load_without_legacy_skill_rows() {
+        let path = temp_route_path("named-records-only");
+        fs::write(
+            &path,
+            serde_json::to_string(&json!({
+                "version": 3,
+                "records": [{
+                    "slug": "sample-skill",
+                    "layer": "L1",
+                    "owner": "owner",
+                    "gate": "none",
+                    "session_start": "n/a",
+                    "summary": "Sample skill",
+                    "trigger_hints": ["sample"],
+                    "priority": "P1",
+                    "skill_path": "skills/sample-skill/SKILL.md",
+                    "routing_metadata": {
+                        "negative_triggers": ["named blocked"]
+                    }
+                }]
+            }))
+            .expect("serialize runtime"),
+        )
+        .expect("write runtime");
+
+        let records = load_records_from_runtime(&path).expect("load runtime");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].slug, "sample-skill");
+        assert_eq!(records[0].priority, "P1");
+        assert!(records[0].trigger_hints.contains(&"sample".to_string()));
+        assert!(records[0].do_not_use_tokens.contains("named"));
+        assert!(records[0].do_not_use_tokens.contains("blocked"));
+
+        fs::remove_file(path).expect("cleanup runtime");
+    }
+
+    #[test]
+    fn manifest_sidecar_applies_declarative_negative_triggers_to_runtime_records() {
+        let root = std::env::temp_dir().join(format!(
+            "router-rs-route-meta-sidecar-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time went backwards")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("create temp route root");
+        let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
+        let manifest_path = root.join("SKILL_MANIFEST.json");
+        let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
+        let runtime_payload = json!({
+            "version": 3,
+            "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
+            "skills": [[
+                "sample-skill",
+                "L1",
+                "owner",
+                "none",
+                "n/a",
+                "Sample skill",
+                ["sample"],
+                "P1",
+                "skills/sample-skill/SKILL.md"
+            ]]
+        });
+        let manifest_payload = json!({
+            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path"],
+            "skills": [[
+                "sample-skill",
+                "L1",
+                "owner",
+                "none",
+                "P1",
+                "Sample skill",
+                "n/a",
+                ["sample"],
+                "project",
+                3,
+                "skills/sample-skill/SKILL.md"
+            ]]
+        });
+        let metadata_payload = json!({
+            "schema_version": "skill-routing-metadata-v1",
+            "skills": {
+                "sample-skill": {
+                    "negative_triggers": ["sidecar blocked"]
+                }
+            }
+        });
+        fs::write(
+            &runtime_path,
+            serde_json::to_string(&runtime_payload).unwrap(),
+        )
+        .expect("write runtime");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string(&manifest_payload).unwrap(),
+        )
+        .expect("write manifest");
+        fs::write(
+            &metadata_path,
+            serde_json::to_string(&metadata_payload).unwrap(),
+        )
+        .expect("write metadata");
+
+        let records =
+            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load route records");
+        let record = records
+            .iter()
+            .find(|record| record.slug == "sample-skill")
+            .expect("sample record");
+        assert!(record.do_not_use_tokens.contains("sidecar"));
+        assert!(record.do_not_use_tokens.contains("blocked"));
+
+        fs::remove_dir_all(root).expect("cleanup route root");
+    }
+
+    #[test]
+    fn stdio_route_cache_refreshes_when_metadata_sidecar_changes() {
+        let root = std::env::temp_dir().join(format!(
+            "router-rs-route-meta-cache-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time went backwards")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("create temp route root");
+        let runtime_path = root.join("SKILL_ROUTING_RUNTIME.json");
+        let manifest_path = root.join("SKILL_MANIFEST.json");
+        let metadata_path = root.join("SKILL_ROUTING_METADATA.json");
+        fs::write(
+            &runtime_path,
+            serde_json::to_string(&json!({
+                "version": 3,
+                "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
+                "skills": [[
+                    "sample-skill",
+                    "L1",
+                    "owner",
+                    "none",
+                    "n/a",
+                    "Sample skill",
+                    ["sample"],
+                    "P1",
+                    "skills/sample-skill/SKILL.md"
+                ]]
+            }))
+            .unwrap(),
+        )
+        .expect("write runtime");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string(&json!({
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path"],
+                "skills": [[
+                    "sample-skill",
+                    "L1",
+                    "owner",
+                    "none",
+                    "P1",
+                    "Sample skill",
+                    "n/a",
+                    ["sample"],
+                    "project",
+                    3,
+                    "skills/sample-skill/SKILL.md"
+                ]]
+            }))
+            .unwrap(),
+        )
+        .expect("write manifest");
+        fs::write(
+            &metadata_path,
+            serde_json::to_string(&json!({
+                "schema_version": "skill-routing-metadata-v1",
+                "skills": {"sample-skill": {"negative_triggers": ["first blocked"]}}
+            }))
+            .unwrap(),
+        )
+        .expect("write metadata");
+
+        let first =
+            load_records_cached_for_stdio_resolved(Some(&runtime_path), Some(&manifest_path))
+                .expect("first cached load");
+        assert!(first[0].do_not_use_tokens.contains("first"));
+        assert!(!first[0].do_not_use_tokens.contains("second"));
+
+        thread::sleep(Duration::from_millis(25));
+        fs::write(
+            &metadata_path,
+            serde_json::to_string(&json!({
+                "schema_version": "skill-routing-metadata-v1",
+                "skills": {"sample-skill": {"negative_triggers": ["second blocked"]}}
+            }))
+            .unwrap(),
+        )
+        .expect("update metadata");
+        let second =
+            load_records_cached_for_stdio_resolved(Some(&runtime_path), Some(&manifest_path))
+                .expect("second cached load");
+        assert!(!second[0].do_not_use_tokens.contains("first"));
+        assert!(second[0].do_not_use_tokens.contains("second"));
+
+        fs::remove_dir_all(root).expect("cleanup route root");
     }
 }

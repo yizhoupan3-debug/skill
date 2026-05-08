@@ -1,0 +1,133 @@
+{
+  "schema_version": "runtime-provider-registry-v1",
+  "source": "repo-local-runtime-contract",
+  "plugin_abi_version": "skill-plugin-abi-v1",
+  "policy": {
+    "core_rule": "Rust control plane stays stable; providers are declared, versioned, and fail closed when unsupported.",
+    "path_rule": "All provider paths are repo-relative or logical provider ids.",
+    "compatibility_rule": "Provider additions are additive; breaking provider shape changes require a schema version bump."
+  },
+  "execution_providers": {
+    "local_rust": {
+      "status": "implemented",
+      "delegate_family": "rust-cli",
+      "result_envelope": "router-rs-execute-response-v1",
+      "capabilities": ["dry_run", "live_primary", "trace_output"]
+    },
+    "host_tool": {
+      "status": "declared",
+      "delegate_family": "host-tool",
+      "result_envelope": "router-rs-execute-response-v1",
+      "capabilities": ["tool_call", "host_policy_gate"]
+    },
+    "remote_worker": {
+      "status": "planned",
+      "delegate_family": "remote-worker",
+      "result_envelope": "router-rs-execute-response-v1",
+      "capabilities": ["lease", "resume_cursor", "remote_trace"]
+    },
+    "browser": {
+      "status": "declared",
+      "delegate_family": "browser-runtime",
+      "result_envelope": "router-rs-execute-response-v1",
+      "capabilities": ["attached_event_transport", "screenshot_evidence"]
+    },
+    "mcp_tool": {
+      "status": "declared",
+      "delegate_family": "mcp-tool",
+      "result_envelope": "router-rs-execute-response-v1",
+      "capabilities": ["tool_schema", "resource_schema", "capability_negotiation"]
+    }
+  },
+  "storage_providers": {
+    "filesystem": {
+      "status": "implemented",
+      "capabilities": ["atomic_replace", "consistent_append", "remote_event_transport"],
+      "missing": ["compaction", "snapshot_delta", "sqlite_wal"]
+    },
+    "sqlite": {
+      "status": "implemented",
+      "capabilities": ["atomic_replace", "consistent_append", "remote_event_transport", "compaction", "snapshot_delta", "sqlite_wal"],
+      "missing": []
+    },
+    "memory": {
+      "status": "test_only",
+      "capabilities": ["remote_event_transport"],
+      "missing": ["durable_append", "compaction", "snapshot_delta"]
+    }
+  },
+  "trace_replay_providers": {
+    "jsonl_stream": {
+      "status": "implemented",
+      "capabilities": ["cursor", "resume", "inspect"]
+    },
+    "snapshot_delta": {
+      "status": "implemented",
+      "capabilities": ["snapshot", "delta_replay", "artifact_refs", "fail_closed_digest"]
+    },
+    "human_intervention": {
+      "status": "declared",
+      "event_kinds": ["human.approval_requested", "human.approval_granted", "human.approval_rejected", "human.input_received"],
+      "capabilities": ["durable_pause", "resume_after_input", "audit_trail"]
+    }
+  },
+  "observability_providers": {
+    "runtime_slo_loop": {
+      "status": "declared",
+      "signals": ["route_mismatch", "fallback_accept", "skill_load_failure", "eval_drift", "sandbox_timeout", "replay_resume"],
+      "outputs": ["dashboard_panel", "alert", "auto_tuning_recommendation"]
+    }
+  },
+  "sandbox_profile_providers": {
+    "read_only": {
+      "status": "implemented",
+      "capabilities": ["read_only"]
+    },
+    "workspace": {
+      "status": "implemented",
+      "capabilities": ["read_only", "workspace_mutating"]
+    },
+    "network": {
+      "status": "declared",
+      "capabilities": ["read_only", "networked"]
+    },
+    "high_risk": {
+      "status": "declared",
+      "capabilities": ["read_only", "workspace_mutating", "networked", "high_risk"],
+      "isolation": "dedicated-profile-required"
+    }
+  },
+  "host_projection_providers": {
+    "codex-cli": {
+      "status": "implemented",
+      "projection": "codex_profile",
+      "capabilities": ["context_files", "settings_paths", "mcp_config_paths", "resume_command_examples"]
+    },
+    "cursor": {
+      "status": "implemented",
+      "projection": "cursor_profile",
+      "capabilities": ["context_files", "settings_paths", "mcp_config_paths", "interactive_agent_chat"]
+    },
+    "codex-app": {
+      "status": "declared",
+      "projection": "codex_app_profile",
+      "capabilities": ["thread_destination", "automation_hooks", "non_technical_ui"]
+    },
+    "mcp": {
+      "status": "declared",
+      "projection": "mcp_capability_profile",
+      "capabilities": ["tools", "resources", "prompts", "capability_negotiation"]
+    },
+    "browser": {
+      "status": "declared",
+      "projection": "browser_runtime_profile",
+      "capabilities": ["attached_event_transport", "screenshot_evidence", "local_target_navigation"]
+    }
+  },
+  "governance_eval_loop": {
+    "status": "declared",
+    "inputs": ["tests/routing_eval_cases.json", "skills/SKILL_HEALTH_MANIFEST.json", "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json"],
+    "metrics": ["route_expected_owner_accuracy", "overlay_accuracy", "overtrigger_rate", "fallback_accept_rate", "token_cost", "latency", "recoverability"],
+    "outputs": ["runtime_findings", "metadata_patch_candidates", "dashboard_summary"]
+  }
+}
