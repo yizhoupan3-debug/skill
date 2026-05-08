@@ -4,8 +4,10 @@ use crate::route::{
     search_skills, should_accept_manifest_fallback, should_retry_with_manifest, RouteDecision,
     SkillRecord,
 };
+use crate::session_supervisor::handle_session_supervisor_operation;
 use crate::{
-    attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
+    attach_runtime_event_transport, handle_background_state_operation, inspect_trace_stream,
+    replay_trace_stream,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
 };
 use chrono::{Local, SecondsFormat};
@@ -45,6 +47,7 @@ const TRACE_RESUME_MANIFEST_SCHEMA_VERSION: &str = "runtime-resume-manifest-v1";
 const ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-v1";
 const ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
 const ROUTER_RS_TRACE_IO_AUTHORITY: &str = "rust-runtime-trace-io";
+const BACKGROUND_STATE_REQUEST_SCHEMA_VERSION: &str = "router-rs-background-state-request-v1";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BrowserMcpTransportMode {
@@ -245,6 +248,17 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         "browser_save_session" => runtime.save_session(&arguments),
         "browser_restore_session" => runtime.restore_session(&arguments),
         "browser_get_attached_runtime_events" => runtime.get_attached_runtime_events(&arguments),
+        "runtime_heartbeat" => runtime.runtime_heartbeat(&arguments),
+        "session_launch" => runtime.session_launch(&arguments),
+        "session_list" => runtime.session_list(&arguments),
+        "session_inspect" => runtime.session_inspect(&arguments),
+        "session_terminate" => runtime.session_terminate(&arguments),
+        "session_mark_blocked" => runtime.session_mark_blocked(&arguments),
+        "session_resume_due" => runtime.session_resume_due(&arguments),
+        "session_classify_block" => runtime.session_classify_block(&arguments),
+        "background_list" => runtime.background_list(&arguments),
+        "background_inspect" => runtime.background_inspect(&arguments),
+        "background_terminate" => runtime.background_terminate(&arguments),
         "skill_route" => runtime.skill_route(&arguments),
         "skill_search" => runtime.skill_search(&arguments),
         "skill_read" => runtime.skill_read(&arguments),
@@ -385,6 +399,83 @@ fn tool_definitions(repo_root: &Path) -> Vec<Value> {
             "Replay Attached Runtime Events",
             "Replay runtime events through the configured Rust attach descriptor.",
             json!({"type": "object", "properties": {"afterEventId": {"type": "string"}, "limit": {"type": "integer", "minimum": 1}, "heartbeat": {"type": "boolean"}}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "runtime_heartbeat",
+            "Heartbeat Attached Runtime",
+            "Emit an idle heartbeat when no new attached runtime events are available.",
+            json!({"type": "object", "properties": {"afterEventId": {"type": "string"}, "limit": {"type": "integer", "minimum": 1}}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_launch",
+            "Launch Session Worker",
+            "Launch one long-running worker session through the Rust session supervisor.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "tmuxSession": {"type": "string"}, "nativeTmux": {"type": "boolean"}, "dryRun": {"type": "boolean"}}, "required": ["host", "cwd"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_list",
+            "List Session Workers",
+            "List current session supervisor workers and refresh their runtime state.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_inspect",
+            "Inspect Session Worker",
+            "Inspect one session supervisor worker by worker id.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}}, "required": ["workerId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_terminate",
+            "Terminate Session Worker",
+            "Terminate one session supervisor worker by worker id.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}, "dryRun": {"type": "boolean"}}, "required": ["workerId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_mark_blocked",
+            "Mark Session Blocked",
+            "Mark a worker blocked with evidence so resume policy can back off.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}, "host": {"type": "string"}, "blockedReason": {"type": "string"}, "evidenceText": {"type": "string"}, "backoffSeconds": {"type": "integer"}}, "required": ["workerId", "host", "evidenceText"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_resume_due",
+            "Resume Due Sessions",
+            "Resume all due blocked workers using the supervisor resume policy.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "dryRun": {"type": "boolean"}}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "session_classify_block",
+            "Classify Session Block",
+            "Classify a rate-limit/block signal from host evidence text.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "evidenceText": {"type": "string"}}, "required": ["host", "evidenceText"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "background_list",
+            "List Background Jobs",
+            "Return the background job snapshot from Rust durable state.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "backendFamily": {"type": "string"}, "sqliteDbPath": {"type": "string"}}}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "background_inspect",
+            "Inspect Background Job",
+            "Return one background job by job id from Rust durable state.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "backendFamily": {"type": "string"}, "sqliteDbPath": {"type": "string"}, "jobId": {"type": "string"}}, "required": ["jobId"]}),
+            empty_output.clone(),
+        ),
+        tool_definition(
+            "background_terminate",
+            "Terminate Background Job",
+            "Mark one background job interrupted in Rust durable state.",
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "backendFamily": {"type": "string"}, "sqliteDbPath": {"type": "string"}, "jobId": {"type": "string"}, "error": {"type": "string"}}, "required": ["jobId"]}),
             empty_output.clone(),
         ),
     ];
@@ -736,6 +827,20 @@ impl BrowserRuntime {
     fn skill_route_status(&self) -> Result<Value, Value> {
         let runtime_path = skill_runtime_path(&self.repo_root);
         let manifest_path = skill_manifest_path(&self.repo_root);
+        let mut remediation = Vec::new();
+        if !runtime_path.is_file() {
+            remediation.push(format!(
+                "generate repository runtime artifacts so {} exists",
+                runtime_path.to_string_lossy()
+            ));
+        }
+        if !manifest_path.is_file() {
+            remediation.push(format!(
+                "generate repository runtime artifacts so {} exists",
+                manifest_path.to_string_lossy()
+            ));
+        }
+        remediation.push("call browser_diagnostics for attach/runtime details".to_string());
         Ok(json!({
             "schema_version": "cowork-skill-route-status-v1",
             "authority": "router-rs-browser-mcp",
@@ -746,7 +851,160 @@ impl BrowserRuntime {
             "manifest_path": manifest_path.to_string_lossy(),
             "manifest_exists": manifest_path.is_file(),
             "routing_tools_exposed": skill_runtime_available(&self.repo_root),
+            "remediation": remediation,
         }))
+    }
+
+    fn runtime_heartbeat(&mut self, input: &Value) -> Result<Value, Value> {
+        let mut payload = json!({});
+        if let Some(after_event_id) = optional_string(input, "afterEventId") {
+            payload["afterEventId"] = Value::String(after_event_id);
+        }
+        if let Some(limit) = optional_u64(input, "limit")? {
+            payload["limit"] = json!(limit);
+        }
+        payload["heartbeat"] = Value::Bool(true);
+        self.get_attached_runtime_events(&payload)
+    }
+
+    fn session_launch(&self, input: &Value) -> Result<Value, Value> {
+        self.session_supervisor_call("launch", input, true)
+    }
+
+    fn session_list(&self, input: &Value) -> Result<Value, Value> {
+        self.session_supervisor_call("list", input, false)
+    }
+
+    fn session_inspect(&self, input: &Value) -> Result<Value, Value> {
+        self.session_supervisor_call("inspect", input, true)
+    }
+
+    fn session_terminate(&self, input: &Value) -> Result<Value, Value> {
+        self.session_supervisor_call("terminate", input, true)
+    }
+
+    fn session_mark_blocked(&self, input: &Value) -> Result<Value, Value> {
+        self.session_supervisor_call("mark_blocked", input, true)
+    }
+
+    fn session_resume_due(&self, input: &Value) -> Result<Value, Value> {
+        self.session_supervisor_call("resume_due", input, false)
+    }
+
+    fn session_classify_block(&self, input: &Value) -> Result<Value, Value> {
+        self.session_supervisor_call("classify_block", input, false)
+    }
+
+    fn session_supervisor_call(
+        &self,
+        operation: &str,
+        input: &Value,
+        requires_worker_id: bool,
+    ) -> Result<Value, Value> {
+        let mut payload = json!({
+            "operation": operation,
+        });
+        if let Some(state_path) = optional_string(input, "statePath") {
+            payload["state_path"] = Value::String(state_path);
+        }
+        if let Some(dry_run) = optional_bool(input, "dryRun") {
+            payload["dry_run"] = Value::Bool(dry_run);
+        }
+        if requires_worker_id {
+            payload["worker_id"] = Value::String(required_string_arg(input, "workerId")?);
+        } else if let Some(worker_id) = optional_string(input, "workerId") {
+            payload["worker_id"] = Value::String(worker_id);
+        }
+        if let Some(host) = optional_string(input, "host") {
+            payload["host"] = Value::String(host);
+        }
+        if let Some(cwd) = optional_string(input, "cwd") {
+            payload["cwd"] = Value::String(cwd);
+        }
+        if let Some(prompt) = optional_string(input, "prompt") {
+            payload["prompt"] = Value::String(prompt);
+        }
+        if let Some(resume_target) = optional_string(input, "resumeTarget") {
+            payload["resume_target"] = Value::String(resume_target);
+        }
+        if let Some(resume_mode) = optional_string(input, "resumeMode") {
+            payload["resume_mode"] = Value::String(resume_mode);
+        }
+        if let Some(tmux_session) = optional_string(input, "tmuxSession") {
+            payload["tmux_session"] = Value::String(tmux_session);
+        }
+        if let Some(native_tmux) = optional_bool(input, "nativeTmux") {
+            payload["native_tmux"] = Value::Bool(native_tmux);
+        }
+        if let Some(evidence_text) = optional_string(input, "evidenceText") {
+            payload["evidence_text"] = Value::String(evidence_text);
+        }
+        if let Some(blocked_reason) = optional_string(input, "blockedReason") {
+            payload["blocked_reason"] = Value::String(blocked_reason);
+        }
+        if let Some(backoff_seconds) = optional_u64(input, "backoffSeconds")? {
+            payload["backoff_seconds"] = json!(backoff_seconds);
+        }
+        handle_session_supervisor_operation(payload)
+            .map_err(|err| runtime_error("SESSION_SUPERVISOR_FAILED", &err))
+    }
+
+    fn background_list(&self, input: &Value) -> Result<Value, Value> {
+        self.background_state_call("snapshot", input)
+    }
+
+    fn background_inspect(&self, input: &Value) -> Result<Value, Value> {
+        let mut payload = json!({
+            "operation": "get",
+            "job_id": required_string_arg(input, "jobId")?,
+        });
+        self.populate_background_common_fields(input, &mut payload)?;
+        self.dispatch_background_state(payload)
+    }
+
+    fn background_terminate(&self, input: &Value) -> Result<Value, Value> {
+        let payload = json!({
+            "operation": "apply_mutation",
+            "job_id": required_string_arg(input, "jobId")?,
+            "mutation": {
+                "status": "interrupted",
+                "error": optional_string(input, "error").unwrap_or_else(|| "terminated from browser-mcp".to_string()),
+            }
+        });
+        let mut payload = payload;
+        self.populate_background_common_fields(input, &mut payload)?;
+        self.dispatch_background_state(payload)
+    }
+
+    fn background_state_call(&self, operation: &str, input: &Value) -> Result<Value, Value> {
+        let mut payload = json!({
+            "operation": operation,
+        });
+        self.populate_background_common_fields(input, &mut payload)?;
+        self.dispatch_background_state(payload)
+    }
+
+    fn populate_background_common_fields(
+        &self,
+        input: &Value,
+        payload: &mut Value,
+    ) -> Result<(), Value> {
+        payload["schema_version"] = Value::String(BACKGROUND_STATE_REQUEST_SCHEMA_VERSION.to_string());
+        if let Some(state_path) = optional_string(input, "statePath") {
+            payload["state_path"] = Value::String(state_path);
+        }
+        if let Some(backend_family) = optional_string(input, "backendFamily") {
+            payload["backend_family"] = Value::String(backend_family);
+        }
+        if let Some(sqlite_db_path) = optional_string(input, "sqliteDbPath") {
+            payload["sqlite_db_path"] = Value::String(sqlite_db_path);
+        }
+        Ok(())
+    }
+
+    fn dispatch_background_state(&self, payload: Value) -> Result<Value, Value> {
+        handle_background_state_operation(payload)
+            .map_err(|err| runtime_error("BACKGROUND_STATE_FAILED", &err))
     }
 
     fn open(&mut self, input: &Value) -> Result<Value, Value> {
@@ -1403,14 +1661,21 @@ impl BrowserRuntime {
                 true,
             )
         })?;
-        let session_ids = self.sessions.keys().cloned().collect::<Vec<_>>();
-        for session_id in session_ids {
-            let _ = self.dispose_session(&session_id);
-        }
         let session_id = self.get_or_create_session()?;
         if let Some(cookies) = payload.get("cookies").and_then(Value::as_array) {
             let cdp = self.cdp_mut(&session_id)?;
-            cdp.call(None, "Storage.setCookies", json!({"cookies": cookies}))?;
+            cdp.call(None, "Storage.setCookies", json!({"cookies": cookies}))
+                .map_err(|err| {
+                    browser_error(
+                        "SESSION_RESTORE_FAILED",
+                        &format!("restore cookies failed: {err}"),
+                        &[
+                            "call browser_save_session again",
+                            "verify the session snapshot is valid",
+                        ],
+                        true,
+                    )
+                })?;
         }
         Ok(
             json!({"ok": true, "restoredFrom": session_path.to_string_lossy(), "sessionId": session_id}),
@@ -1509,6 +1774,25 @@ impl BrowserRuntime {
     fn diagnostics(&mut self, _input: &Value) -> Result<Value, Value> {
         let mut tabs = 0usize;
         let mut network_events = 0usize;
+        let runtime_path = skill_runtime_path(&self.repo_root);
+        let manifest_path = skill_manifest_path(&self.repo_root);
+        let routing_tools_exposed = skill_runtime_available(&self.repo_root);
+        let mut skill_remediation = Vec::new();
+        if !runtime_path.is_file() {
+            skill_remediation.push(format!(
+                "generate {}",
+                runtime_path.to_string_lossy()
+            ));
+        }
+        if !manifest_path.is_file() {
+            skill_remediation.push(format!(
+                "generate {}",
+                manifest_path.to_string_lossy()
+            ));
+        }
+        if skill_remediation.is_empty() {
+            skill_remediation.push("skill runtime artifacts look healthy".to_string());
+        }
         for session in self.sessions.values() {
             tabs += session.tabs.len();
             for tab in session.tabs.values() {
@@ -1536,6 +1820,14 @@ impl BrowserRuntime {
             "networkEventBufferSize": network_events,
             "screenshotCount": screenshot_count,
             "runtimeVersion": SERVER_VERSION,
+            "skillRouting": {
+                "runtimePath": runtime_path.to_string_lossy(),
+                "runtimeExists": runtime_path.is_file(),
+                "manifestPath": manifest_path.to_string_lossy(),
+                "manifestExists": manifest_path.is_file(),
+                "routingToolsExposed": routing_tools_exposed,
+                "remediation": skill_remediation,
+            },
             "attachedRuntime": self.attached_runtime_diagnostics(),
         }))
     }
@@ -2199,15 +2491,18 @@ impl BrowserRuntime {
         let deadline = SystemTime::now() + Duration::from_millis(timeout_ms);
         while SystemTime::now() < deadline {
             self.drain_cdp_events(session_id, 100)?;
-            let state = self
-                .evaluate_string(session_id, tab_id, "document.readyState")
-                .unwrap_or_else(|_| "complete".to_string());
+            let state = self.evaluate_string(session_id, tab_id, "document.readyState")?;
             if state == "complete" || state == "interactive" {
                 self.drain_cdp_events(session_id, 250)?;
                 return Ok(());
             }
         }
-        Ok(())
+        Err(browser_error(
+            "BROWSER_PAGE_NOT_READY",
+            "Page readiness timed out before document.readyState became interactive/complete.",
+            &["wait briefly and retry", "verify the target page is accessible"],
+            true,
+        ))
     }
 
     fn refresh_snapshot(&mut self, session_id: &str, tab_id: &str) -> Result<PageSnapshot, Value> {
@@ -3277,11 +3572,17 @@ fn collect_attach_artifact_candidates(root: &Path, candidates: &mut Vec<AttachAr
 }
 
 fn default_attach_discovery_roots(repo_root: &Path) -> Vec<PathBuf> {
-    vec![
+    let mut roots = vec![
         repo_root.join("artifacts").join("scratch"),
         repo_root.join("artifacts").join("current"),
-        repo_root.to_path_buf(),
-    ]
+    ];
+    if std::env::var("BROWSER_MCP_DISCOVER_REPO_ROOT")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        roots.push(repo_root.to_path_buf());
+    }
+    roots
 }
 
 fn select_attach_artifact_candidate(roots: Vec<PathBuf>) -> Option<String> {
@@ -3305,6 +3606,18 @@ fn collect_filesystem_attach_candidates(
     root: &Path,
     candidates: &mut Vec<AttachArtifactCandidate>,
 ) {
+    collect_filesystem_attach_candidates_with_depth(root, candidates, 0);
+}
+
+fn collect_filesystem_attach_candidates_with_depth(
+    root: &Path,
+    candidates: &mut Vec<AttachArtifactCandidate>,
+    depth: usize,
+) {
+    const MAX_DISCOVERY_DEPTH: usize = 8;
+    if depth > MAX_DISCOVERY_DEPTH {
+        return;
+    }
     let Ok(entries) = fs::read_dir(root) else {
         return;
     };
@@ -3314,7 +3627,10 @@ fn collect_filesystem_attach_candidates(
             continue;
         };
         if file_type.is_dir() {
-            collect_filesystem_attach_candidates(&path, candidates);
+            if should_skip_attach_discovery_dir(&path) {
+                continue;
+            }
+            collect_filesystem_attach_candidates_with_depth(&path, candidates, depth + 1);
             continue;
         }
         if !file_type.is_file() {
@@ -3360,6 +3676,18 @@ fn collect_filesystem_attach_candidates(
 }
 
 fn collect_sqlite_attach_candidates(root: &Path, candidates: &mut Vec<AttachArtifactCandidate>) {
+    collect_sqlite_attach_candidates_with_depth(root, candidates, 0);
+}
+
+fn collect_sqlite_attach_candidates_with_depth(
+    root: &Path,
+    candidates: &mut Vec<AttachArtifactCandidate>,
+    depth: usize,
+) {
+    const MAX_DISCOVERY_DEPTH: usize = 8;
+    if depth > MAX_DISCOVERY_DEPTH {
+        return;
+    }
     let Ok(entries) = fs::read_dir(root) else {
         return;
     };
@@ -3369,7 +3697,10 @@ fn collect_sqlite_attach_candidates(root: &Path, candidates: &mut Vec<AttachArti
             continue;
         };
         if file_type.is_dir() {
-            collect_sqlite_attach_candidates(&path, candidates);
+            if should_skip_attach_discovery_dir(&path) {
+                continue;
+            }
+            collect_sqlite_attach_candidates_with_depth(&path, candidates, depth + 1);
             continue;
         }
         if !file_type.is_file()
@@ -3387,6 +3718,25 @@ fn collect_sqlite_attach_candidates(root: &Path, candidates: &mut Vec<AttachArti
             .unwrap_or(0);
         append_sqlite_attach_candidates(&path, recency_ms, candidates);
     }
+}
+
+fn should_skip_attach_discovery_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    matches!(
+        name,
+        ".git"
+            | ".cursor"
+            | "node_modules"
+            | "target"
+            | ".venv"
+            | "venv"
+            | "__pycache__"
+            | ".next"
+            | ".idea"
+            | ".vscode"
+    )
 }
 
 fn append_sqlite_attach_candidates(
@@ -3549,6 +3899,18 @@ fn skill_error(code: &str, message: &str) -> Value {
         &[
             "ensure the MCP server was started with --repo-root pointing at the repository root",
             "ensure skills/SKILL_ROUTING_RUNTIME.json and skills/SKILL_MANIFEST.json are generated",
+        ],
+        true,
+    )
+}
+
+fn runtime_error(code: &str, message: &str) -> Value {
+    browser_error(
+        code,
+        message,
+        &[
+            "inspect browser_diagnostics",
+            "verify runtime state paths and operation inputs",
         ],
         true,
     )
@@ -3933,6 +4295,17 @@ mod tests {
                 "browser_save_session",
                 "browser_restore_session",
                 "browser_get_attached_runtime_events",
+                "runtime_heartbeat",
+                "session_launch",
+                "session_list",
+                "session_inspect",
+                "session_terminate",
+                "session_mark_blocked",
+                "session_resume_due",
+                "session_classify_block",
+                "background_list",
+                "background_inspect",
+                "background_terminate",
                 "browser_diagnostics",
                 "skill_route_status",
             ]
@@ -3971,6 +4344,8 @@ mod tests {
         assert!(names.contains(&"skill_route"));
         assert!(names.contains(&"skill_search"));
         assert!(names.contains(&"skill_read"));
+        assert!(names.contains(&"session_list"));
+        assert!(names.contains(&"background_list"));
 
         let route_response = handle_browser_mcp_request(
             &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "skill_route", "arguments": {"query": "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar"}}}),
@@ -4011,6 +4386,37 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("# agent-swarm-orchestration"));
+
+        let session_list_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "session_list", "arguments": {}}}),
+            &mut runtime,
+        )
+        .expect("session list response");
+        assert_eq!(session_list_response["result"]["isError"], false);
+        assert!(session_list_response["result"]["structuredContent"]["workers"].is_array());
+
+        let background_path = repo_root
+            .join("artifacts")
+            .join("runtime")
+            .join("background_state.json");
+        let background_list_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "background_list", "arguments": {"statePath": background_path.to_string_lossy()}}}),
+            &mut runtime,
+        )
+        .expect("background list response");
+        assert_eq!(background_list_response["result"]["isError"], false);
+        assert!(background_list_response["result"]["structuredContent"]["state"]["jobs"].is_array());
+
+        let background_terminate_response = handle_browser_mcp_request(
+            &json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "background_terminate", "arguments": {"statePath": background_path.to_string_lossy(), "jobId": "job-1"}}}),
+            &mut runtime,
+        )
+        .expect("background terminate response");
+        assert_eq!(background_terminate_response["result"]["isError"], false);
+        assert_eq!(
+            background_terminate_response["result"]["structuredContent"]["job"]["status"],
+            "interrupted"
+        );
     }
 
     #[test]
@@ -4109,13 +4515,11 @@ mod tests {
     fn browser_mcp_auto_discovers_newest_attach_manifest() {
         let repo_root = temp_root("attach-discovery");
         let older = repo_root
-            .join("framework_runtime")
             .join("artifacts")
             .join("scratch")
             .join("older")
             .join("TRACE_RESUME_MANIFEST.json");
         let newer = repo_root
-            .join("framework_runtime")
             .join("artifacts")
             .join("scratch")
             .join("newer")

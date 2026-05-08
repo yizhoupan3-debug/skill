@@ -1114,6 +1114,14 @@ fn ppt_rust_cli_owns_workspace_and_outline_commands() {
 
 #[test]
 fn ppt_rust_cli_builds_editable_deck_without_node_assets() {
+    // This is an expensive integration test that depends on host PDF render tooling.
+    // Keep the default contract suite portable by requiring an explicit opt-in.
+    let enabled = std::env::var("SKILL_RUN_PPT_RENDER_TESTS")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if !enabled {
+        return;
+    }
     let temp = tempdir().unwrap();
     let manifest = project_root().join("rust_tools/pptx_tool_rs/Cargo.toml");
 
@@ -1485,6 +1493,9 @@ fn allowed_python_control_plane_path(path: &Path) -> bool {
     let text = path.to_string_lossy();
     text == ".codex/hook-tests/test_codex_hooks.py"
         || text == ".codex/hooks/review_subagent_gate.py"
+        || text == ".cursor/hooks/review_subagent_gate.py"
+        || text == ".cursor/hook-tests/test_cursor_hooks.py"
+        || text == ".cursor/hook-tests/test_install_codex_cli_hooks.py"
         || text.starts_with("skills/codex-hook-builder/assets/templates/")
         || text.starts_with("skills/codex-hook-builder/scripts/")
 }
@@ -1527,6 +1538,7 @@ fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
                         | "node_modules"
                         | ".venv"
                         | "venv"
+                        | "__pycache__"
                         | "codex-skill-surface"
                         | "generated-artifacts-drift-check"
                 )
