@@ -1130,11 +1130,34 @@ fn is_generated_artifact_scan_file(path: &Path) -> bool {
 
 fn skills_source_rel(repo_root: &Path) -> Result<String, String> {
     let registry = load_runtime_registry(repo_root)?;
-    Ok(registry
+    let source_rel = registry
         .workspace_bootstrap_defaults
         .skills
         .source_rel
-        .unwrap_or_else(|| "skills".to_string()))
+        .unwrap_or_else(|| "skills".to_string());
+    validate_source_rel(&source_rel)?;
+    Ok(source_rel)
+}
+
+fn validate_source_rel(source_rel: &str) -> Result<(), String> {
+    let candidate = Path::new(source_rel);
+    if candidate.as_os_str().is_empty() {
+        return Err("skills source_rel must not be empty".to_string());
+    }
+    if candidate.is_absolute() {
+        return Err(format!(
+            "skills source_rel must be repository-relative, got absolute path: {source_rel}"
+        ));
+    }
+    if candidate
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(format!(
+            "skills source_rel must not contain '..' segments: {source_rel}"
+        ));
+    }
+    Ok(())
 }
 
 fn router_rs_crate_root() -> PathBuf {
@@ -1850,8 +1873,11 @@ fn write_cursor_projection_manifest(
 }
 
 fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+    let runtime_rel = skills_source_rel(&roots.framework_root)
+        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
+        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `{}`.\nProject root: `{}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `{}`.\nProject root: `{}`.\n",
         roots.framework_root.to_string_lossy(),
         roots.project_root.to_string_lossy(),
     )
@@ -1956,7 +1982,17 @@ fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
 }
 
 fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
-    Ok(repo_root.join(skills_source_rel(repo_root)?))
+    let repo_root = normalize_path(repo_root)?;
+    let source_rel = skills_source_rel(&repo_root)?;
+    let candidate = repo_root.join(&source_rel);
+    let normalized = normalize_path(&candidate)?;
+    if !normalized.starts_with(&repo_root) {
+        return Err(format!(
+            "resolved skills source escapes repository root: {}",
+            normalized.display()
+        ));
+    }
+    Ok(normalized)
 }
 
 fn shared_codex_skill_surface(repo_root: &Path) -> PathBuf {

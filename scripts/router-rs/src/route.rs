@@ -43,6 +43,7 @@ const PARALLEL_EVAL_CASE_MIN: usize = 8;
 #[derive(Debug, Clone)]
 pub(crate) struct SkillRecord {
     pub(crate) slug: String,
+    pub(crate) skill_path: Option<String>,
     pub(crate) layer: String,
     pub(crate) owner: String,
     pub(crate) gate: String,
@@ -154,6 +155,8 @@ pub(crate) struct RouteDecision {
     pub(crate) task: String,
     pub(crate) session_id: String,
     pub(crate) selected_skill: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) selected_skill_path: Option<String>,
     pub(crate) overlay_skill: Option<String>,
     #[serde(default = "default_route_context_payload")]
     pub(crate) route_context: RouteContextPayload,
@@ -308,6 +311,7 @@ impl SkillRecord {
     fn from_raw(raw: RawSkillRecord) -> Self {
         let RawSkillRecord {
             slug,
+            skill_path,
             layer,
             owner,
             gate,
@@ -349,6 +353,7 @@ impl SkillRecord {
 
         Self {
             slug,
+            skill_path,
             layer,
             owner,
             gate,
@@ -380,6 +385,7 @@ fn negative_trigger_tokens<'a>(phrases: impl IntoIterator<Item = &'a str>) -> Ha
 
 struct RawSkillRecord {
     slug: String,
+    skill_path: Option<String>,
     layer: String,
     owner: String,
     gate: String,
@@ -500,6 +506,7 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
         .map_err(|err| format!("parse inline skill payload failed: {err}"))?;
     Ok(SkillRecord::from_raw(RawSkillRecord {
         slug: skill.name,
+        skill_path: None,
         layer: skill.routing_layer,
         owner: skill.routing_owner,
         gate: skill.routing_gate,
@@ -517,6 +524,11 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
 fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes) -> SkillRecord {
     SkillRecord::from_raw(RawSkillRecord {
         slug: value_to_string(&row[indexes.slug]),
+        skill_path: indexes
+            .skill_path
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string)
+            .filter(|value| !value.trim().is_empty()),
         layer: value_to_string(&row[indexes.layer]),
         owner: value_to_string(&row[indexes.owner]),
         gate: value_to_string(&row[indexes.gate]),
@@ -542,6 +554,7 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
 #[derive(Debug, Clone, Copy)]
 struct RecordRowIndexes {
     slug: usize,
+    skill_path: Option<usize>,
     layer: usize,
     owner: usize,
     gate: usize,
@@ -562,6 +575,7 @@ impl RecordRowIndexes {
         let required_max = *required.iter().max().expect("required columns");
         Self {
             slug,
+            skill_path: None,
             layer,
             owner,
             gate,
@@ -624,15 +638,6 @@ fn apply_route_metadata_patch(record: &mut SkillRecord, patch: &RouteMetadataPat
 }
 
 fn default_runtime_path() -> Option<PathBuf> {
-    if let Ok(current_dir) = std::env::current_dir() {
-        let runtime_path = current_dir
-            .join("skills")
-            .join("SKILL_ROUTING_RUNTIME.json");
-        if runtime_path.is_file() {
-            return Some(runtime_path);
-        }
-    }
-
     Some(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -883,6 +888,10 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
         idx_priority,
         idx_session_start,
     );
+    let indexes = RecordRowIndexes {
+        skill_path: index.get("skill_path").copied(),
+        ..indexes
+    };
 
     let mut records = collect_skill_records_from_rows(rows, indexes);
     let mut meta = HashMap::new();
@@ -920,6 +929,10 @@ fn build_skill_record_from_named_runtime_record(
 ) -> SkillRecord {
     SkillRecord::from_raw(RawSkillRecord {
         slug: object_string_field(record, "slug"),
+        skill_path: record
+            .get("skill_path")
+            .map(value_to_string)
+            .filter(|value| !value.trim().is_empty()),
         layer: object_string_field(record, "layer"),
         owner: object_string_field(record, "owner"),
         gate: object_string_field(record, "gate"),
@@ -1042,6 +1055,10 @@ pub(crate) fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>
         idx_priority,
         idx_session_start,
     );
+    let indexes = RecordRowIndexes {
+        skill_path: key_index.get("skill_path").copied(),
+        ..indexes
+    };
 
     Ok(collect_skill_records_from_rows(rows, indexes))
 }
@@ -1699,6 +1716,7 @@ pub(crate) fn route_task(
             task: query.to_string(),
             session_id: session_id.to_string(),
             selected_skill: record.slug.clone(),
+            selected_skill_path: record.skill_path.clone(),
             overlay_skill: None,
             route_context,
             layer: record.layer.clone(),
@@ -1750,6 +1768,7 @@ pub(crate) fn route_task(
             task: query.to_string(),
             session_id: session_id.to_string(),
             selected_skill: NO_SKILL_SELECTED.to_string(),
+            selected_skill_path: None,
             overlay_skill: None,
             route_context,
             layer: "runtime".to_string(),
@@ -1781,6 +1800,7 @@ pub(crate) fn route_task(
             task: query.to_string(),
             session_id: session_id.to_string(),
             selected_skill: NO_SKILL_SELECTED.to_string(),
+            selected_skill_path: None,
             overlay_skill: None,
             route_context,
             layer: "runtime".to_string(),
@@ -1810,6 +1830,7 @@ pub(crate) fn route_task(
             task: query.to_string(),
             session_id: session_id.to_string(),
             selected_skill: NO_SKILL_SELECTED.to_string(),
+            selected_skill_path: None,
             overlay_skill: None,
             route_context,
             layer: "runtime".to_string(),
@@ -1849,6 +1870,7 @@ pub(crate) fn route_task(
         task: query.to_string(),
         session_id: session_id.to_string(),
         selected_skill: selected.record.slug.clone(),
+        selected_skill_path: selected.record.skill_path.clone(),
         overlay_skill: filtered_overlay,
         route_context,
         layer: selected.record.layer.clone(),
@@ -1887,6 +1909,7 @@ pub(crate) fn literal_framework_alias_decision(
         task: query.to_string(),
         session_id: session_id.to_string(),
         selected_skill: record.slug.clone(),
+        selected_skill_path: record.skill_path.clone(),
         overlay_skill: None,
         route_context,
         layer: record.layer.clone(),
@@ -1940,25 +1963,13 @@ pub(crate) fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
         || (decision.selected_skill == "visual-review"
             && decision.route_context.execution_protocol != "audit")
         || (decision.selected_skill == "systematic-debugging" && decision.score < 35.0)
-        || decision
-            .reasons
-            .iter()
-            .any(|reason| reason.contains("fell back to highest-priority layer owner"))
-        || decision.reasons.iter().any(|reason| {
-            reason.contains("Fallback owner selected")
-                || reason.contains("No explicit keyword hit")
-                || reason.contains("No explicit skill hit")
-        })
+        || route_decision_is_no_hit(decision)
 }
 
 fn route_decision_is_no_hit(decision: &RouteDecision) -> bool {
     decision.score <= 0.0
-        || decision.reasons.iter().any(|reason| {
-            reason.contains("No explicit keyword hit")
-                || reason.contains("No explicit skill hit")
-                || reason.contains("fell back to highest-priority layer owner")
-                || reason.contains("Only overlay signals matched")
-        })
+        || decision.selected_skill == NO_SKILL_SELECTED
+        || decision.layer == "runtime"
 }
 
 fn route_reason_terms(decision: &RouteDecision) -> Vec<String> {
@@ -1998,10 +2009,11 @@ fn has_non_generic_manifest_signal(decision: &RouteDecision) -> bool {
 pub(crate) fn should_accept_manifest_fallback(
     hot_decision: &RouteDecision,
     full_decision: &RouteDecision,
+    runtime_records: &[SkillRecord],
     should_retry: bool,
     explicit_manifest: bool,
 ) -> bool {
-    if runtime_gate_blocks_manifest_owner(hot_decision, full_decision) {
+    if runtime_gate_blocks_manifest_owner(hot_decision, full_decision, runtime_records) {
         return false;
     }
 
@@ -2061,6 +2073,7 @@ pub(crate) fn should_accept_manifest_fallback(
 fn runtime_gate_blocks_manifest_owner(
     hot_decision: &RouteDecision,
     full_decision: &RouteDecision,
+    runtime_records: &[SkillRecord],
 ) -> bool {
     if route_decision_is_no_hit(hot_decision)
         || hot_decision.selected_skill == full_decision.selected_skill
@@ -2086,24 +2099,17 @@ fn runtime_gate_blocks_manifest_owner(
         return false;
     }
 
-    is_runtime_required_gate(&hot_decision.selected_skill)
+    is_runtime_required_gate(&hot_decision.selected_skill, runtime_records)
 }
 
-fn is_runtime_required_gate(slug: &str) -> bool {
-    matches!(
-        slug,
-        "agent-swarm-orchestration"
-            | "gh-address-comments"
-            | "gh-fix-ci"
-            | "sentry"
-            | "openai-docs"
-            | "design-md"
-            | "doc"
-            | "pdf"
-            | "slides"
-            | "spreadsheets"
-            | "visual-review"
-    )
+fn is_runtime_required_gate(slug: &str, runtime_records: &[SkillRecord]) -> bool {
+    runtime_records
+        .iter()
+        .find(|record| record.slug == slug)
+        .is_some_and(|record| {
+            record.session_start_lower == "required"
+                && (record.owner_lower == "gate" || record.gate_lower != "none")
+        })
 }
 
 fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteContextPayload {
