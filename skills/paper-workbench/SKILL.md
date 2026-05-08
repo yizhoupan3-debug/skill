@@ -17,7 +17,7 @@ description: |
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
-session_start: n/a
+session_start: preferred
 user-invocable: false
 disable-model-invocation: true
 trigger_hints:
@@ -172,6 +172,8 @@ separate "known blocker" from "uncertainty that needs lookup".
 - Do not present "top-tier" as a style problem. Treat it as a selective-venue
   acceptance problem: novelty, evidence, comparison fairness, venue fit, and
   reproducibility must survive before prose polish matters.
+- Do not allow claim drift across rounds: every rewrite must stay inside the
+  frozen claim ceiling unless the main decision lane explicitly reopens it.
 
 ## Top-tier submission bar
 
@@ -233,9 +235,18 @@ active_lane:
 next_edit:
 external_calibration_needed:
 top_tier_bar:
+claim_lock_status:
 ```
 
 Behind the scenes, this skill may switch lanes. The user should not need to.
+
+For multi-turn work, the front door should maintain a compact claim ledger and
+evidence anchors as stable artifacts:
+
+- `paper_story/CLAIM_LEDGER.md`
+- `paper_story/EVIDENCE_ANCHOR_MAP.md`
+
+These artifacts are required before repeated local polishing passes.
 
 ## Ref-first manuscript workflow
 

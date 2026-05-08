@@ -13,6 +13,7 @@ CRATE_ROOT=$(cd -- "$(dirname -- "$MANIFEST_PATH")" && pwd)
 REPO_ROOT=$(cd -- "$CRATE_ROOT/../.." && pwd)
 SHARED_TARGET_DIR=${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}
 BUILD_LOCK_DIR="$SHARED_TARGET_DIR/.router-rs-build.lock"
+BUILD_LOCK_TIMEOUT_SEC=${ROUTER_RS_BUILD_LOCK_TIMEOUT_SEC:-30}
 
 router_bin_compatible() {
   local candidate=$1
@@ -69,6 +70,8 @@ build_router_bin() {
 
 acquire_build_lock() {
   mkdir -p "$SHARED_TARGET_DIR"
+  local lock_start=${SECONDS:-0}
+  local lock_owner=""
   while true; do
     if mkdir "$BUILD_LOCK_DIR" 2>/dev/null; then
       if printf '%s\n' "$$" >"$BUILD_LOCK_DIR/pid" 2>/dev/null; then
@@ -86,6 +89,14 @@ acquire_build_lock() {
       fi
     elif rmdir "$BUILD_LOCK_DIR" 2>/dev/null; then
       continue
+    fi
+    if [ "${BUILD_LOCK_TIMEOUT_SEC:-0}" -gt 0 ] && [ $((SECONDS - lock_start)) -ge "$BUILD_LOCK_TIMEOUT_SEC" ]; then
+      echo "router-rs launcher timed out waiting for build lock at $BUILD_LOCK_DIR after ${BUILD_LOCK_TIMEOUT_SEC}s." >&2
+      if [ -n "$lock_owner" ]; then
+        echo "lock owner pid: $lock_owner" >&2
+      fi
+      echo "Set ROUTER_RS_BUILD_LOCK_TIMEOUT_SEC to tune this threshold." >&2
+      return 1
     fi
     sleep 0.1
   done

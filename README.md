@@ -113,7 +113,7 @@ cargo test --test policy_contracts
 
 ## 在 Codex / Cursor 里使用
 
-让 Codex 打开这个仓库目录：
+先让 Codex 打开这个仓库目录：
 
 ```powershell
 cd $HOME\Documents\codex-skill-system
@@ -122,7 +122,7 @@ codex
 
 或在 Codex 桌面版中选择这个文件夹作为工作区。
 
-使用时的核心规则是：
+### Codex 侧（仓库级）
 
 1. Codex 先读取根目录 `AGENTS.md`。
 2. Codex 再查 `skills/SKILL_ROUTING_RUNTIME.json`。
@@ -134,6 +134,15 @@ codex
 ```text
 请根据本仓库 AGENTS.md 的规则，先查 skills/SKILL_ROUTING_RUNTIME.json，再选择合适 skill 回答：我想新增一个 Codex skill。
 ```
+
+### Cursor 侧（工作区级）
+
+- Cursor 规则来自 `.cursor/rules/`，对当前工作区（本仓库根目录）生效。
+- Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
+- 本仓库 Cursor review hook 状态文件在 `.cursor/hook-state/`。
+- 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
+- 策略强度差异：Codex CLI hook 走 fail-closed（可 `decision: block`）；Cursor `stop` hook 受宿主限制只能 soft gate（`followup_message`），但会持续升级提醒。
+- Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
 ## 日常更新方式
 

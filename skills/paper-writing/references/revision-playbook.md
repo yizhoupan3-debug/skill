@@ -128,6 +128,12 @@ Use "clarified" when the work did not change, "added" only when new material exi
 
 Good academic prose is specific, modest, and easy to verify.
 
+For top-tier narrative pacing, make the prose direct and forward-driving:
+
+- open with contribution or finding, then evidence, then implication;
+- avoid defensive framing as the default sentence posture;
+- keep paragraph momentum by limiting throat-clearing transitions.
+
 Prefer:
 - concrete nouns over vague bundles such as "this issue", "these aspects", "the aforementioned";
 - active verbs when the actor matters;
@@ -141,6 +147,9 @@ Avoid:
 - throat-clearing: "It should be noted that", "It is worth mentioning";
 - vague AI-style summaries: "plays an important role", "has attracted much attention", "various factors";
 - unsupported priority claims: "first", "novel", "state-of-the-art" without evidence.
+- defensive scaffolding: "we admit that", "although our method is limited, we still";
+- internal/process phrasing: "in this revision we tried to", "the workflow here is to";
+- negative-leading discourse that hides the core contribution behind caveats.
 
 ## Paragraph Repair Patterns
 
@@ -186,10 +195,29 @@ Match verbs to evidence:
 - **Interpretation**: may explain, could reflect, is one possible reason
 - **No direct evidence**: we hypothesize, we conjecture, future work should test
 
+Top-tier force rule:
+
+- If evidence is strong enough for "show/demonstrate/establish", do not downgrade
+  to weaker verbs just to sound cautious.
+- If evidence is not strong enough, narrow scope explicitly rather than writing a
+  long defensive disclaimer.
+
 Scope markers are often better than hedging:
 
 - "improves accuracy on all three evaluated datasets" is clearer than "may improve performance".
 - "under the assumptions of Section 3" is safer than "generally works".
+
+## Multi-Round Drift Guard
+
+Before each new revision round, run this quick guard:
+
+1. Compare changed sentences against the current claim ledger.
+2. Check whether any verb/scope marker implies stronger causality or
+   generalization.
+3. Verify each strengthened phrase has a matching evidence anchor update.
+4. If not, revert wording strength and emit `[VERIFY: claim drift risk]`.
+
+Never trade away auditable experiment detail just to improve narrative smoothness.
 
 ## De-AI Cleanup
 

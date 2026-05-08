@@ -81,16 +81,78 @@ pub fn evaluate_hook_policy(
                 response.reason = Some("This file is a generated or retired host surface. Regenerate it through the framework runtime instead of editing it directly.".to_string());
             }
         }
+        "provider-rank" => {
+            response.categories = vec!["provider-rank".to_string()];
+            response.category = Some("provider-rank".to_string());
+        }
+        "save-optimize-category" => {
+            let optimize_category = classify_save_optimize_category(
+                request.path.as_deref().unwrap_or(""),
+                request.command.as_deref().unwrap_or(""),
+            );
+            response.category = Some(optimize_category.to_string());
+            response.categories = vec![optimize_category.to_string()];
+        }
+        "save-optimize-guard" => {
+            let path = request.path.as_deref().unwrap_or("");
+            let repo_root = request.repo_root.as_deref().map(Path::new);
+            let runtime_root = request.runtime_root.as_deref().map(Path::new);
+            if let Some(kind) = classify_protected_path(path, repo_root, runtime_root) {
+                response.blocked = true;
+                response.protected = true;
+                response.protection_kind = Some(kind.to_string());
+                response.reason = Some(
+                    "Path is protected and must not be auto-optimized by save hooks.".to_string(),
+                );
+            } else {
+                let optimize_category =
+                    classify_save_optimize_category(path, request.command.as_deref().unwrap_or(""));
+                response.category = Some(optimize_category.to_string());
+                response.categories = vec![optimize_category.to_string()];
+                if optimize_category == "skip" {
+                    response.blocked = true;
+                    response.reason = Some(
+                        "Skip auto optimization for non-code or unsupported path category."
+                            .to_string(),
+                    );
+                }
+            }
+        }
         other => return Err(format!("unsupported hook policy operation: {other}")),
     }
     Ok(response)
 }
 
 pub fn evaluate_hook_policy_value(payload: Value) -> Result<Value, String> {
+    if matches!(
+        payload.get("operation").and_then(Value::as_str),
+        Some("provider-rank")
+    ) {
+        return Ok(provider_rank_payload());
+    }
     let request = serde_json::from_value::<HookPolicyEvaluateRequest>(payload)
         .map_err(|err| format!("parse hook policy input failed: {err}"))?;
     serde_json::to_value(evaluate_hook_policy(request)?)
         .map_err(|err| format!("serialize hook policy output failed: {err}"))
+}
+
+fn provider_rank_payload() -> Value {
+    json!({
+        "schema_version": HOOK_POLICY_SCHEMA_VERSION,
+        "authority": HOOK_POLICY_AUTHORITY,
+        "operation": "provider-rank",
+        "preference": "prefer-rust-when-implemented",
+        "ranking": [
+            { "provider": "rust-control-plane", "tier": "primary", "delegate_family": "rust-cli", "status": "implemented" },
+            { "provider": "host-tool", "tier": "fallback", "delegate_family": "host-tool", "status": "declared" },
+            { "provider": "python-legacy-hook", "tier": "fallback", "delegate_family": "python-script", "status": "legacy", "scope": "review-subagent-gate" }
+        ],
+        "rust_acceleration": {
+            "policy": "raise-priority-when-control-plane-paths-rustify",
+            "python_fallback_acceptance": "only-when-rust-unimplemented-or-explicit-override",
+            "linked_registry": "configs/framework/RUNTIME_PROVIDER_REGISTRY.json"
+        }
+    })
 }
 
 pub fn dangerous_bash_reason(command: &str) -> Option<String> {
@@ -381,6 +443,20 @@ fn glob_match(pattern: &str, path: &str) -> bool {
     }
 }
 
+fn classify_save_optimize_category(path: &str, command: &str) -> &'static str {
+    let lower_command = command.to_ascii_lowercase();
+    if lower_command.contains("memory") || lower_command.contains("allocation") {
+        return "memory";
+    }
+    if lower_command.contains("latency") || lower_command.contains("perf") {
+        return "runtime";
+    }
+    match file_category(path).as_str() {
+        "rust" | "python" | "js_ts" => "balanced",
+        _ => "skip",
+    }
+}
+
 pub fn hook_policy_contract() -> Value {
     json!({
         "schema_version": HOOK_POLICY_SCHEMA_VERSION,
@@ -389,8 +465,16 @@ pub fn hook_policy_contract() -> Value {
             "bash-danger",
             "validation-categories",
             "file-category",
-            "protected-path"
+            "protected-path",
+            "provider-rank",
+            "save-optimize-category",
+            "save-optimize-guard"
         ],
+        "provider_priority": {
+            "primary": "rust-control-plane",
+            "preference": "prefer-rust-when-implemented",
+            "fallback_acceptance": "only-when-rust-unimplemented-or-explicit-override"
+        },
         "protected_path_kinds": [
             "generated_host_entrypoint",
             "retired_native_plugin_surface"
@@ -401,6 +485,7 @@ pub fn hook_policy_contract() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn dangerous_bash_matches_python_guard_cases() {
@@ -458,6 +543,89 @@ mod tests {
                 Some(Path::new("/tmp/runtime"))
             ),
             None
+        );
+    }
+
+    #[test]
+    fn provider_rank_returns_rust_first_payload() {
+        let payload = evaluate_hook_policy_value(json!({"operation": "provider-rank"})).unwrap();
+        assert_eq!(payload["operation"], "provider-rank");
+        assert_eq!(payload["preference"], "prefer-rust-when-implemented");
+        assert_eq!(payload["ranking"][0]["tier"], "primary");
+        assert_eq!(payload["ranking"][0]["provider"], "rust-control-plane");
+    }
+
+    #[test]
+    fn provider_rank_struct_response_carries_category() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "provider-rank".to_string(),
+            command: None,
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        assert_eq!(response.operation, "provider-rank");
+        assert_eq!(response.category.as_deref(), Some("provider-rank"));
+        assert!(response.categories.iter().any(|c| c == "provider-rank"));
+    }
+
+    #[test]
+    fn contract_advertises_provider_rank_operation() {
+        let contract = hook_policy_contract();
+        let ops = contract
+            .get("operations")
+            .or_else(|| contract.get("supported_operations"));
+        let ops_arr = ops
+            .expect("contract should expose operations")
+            .as_array()
+            .expect("operations must be array");
+        assert!(ops_arr.iter().any(|v| v.as_str() == Some("provider-rank")));
+        assert!(contract.get("provider_priority").is_some());
+    }
+
+    #[test]
+    fn save_optimize_category_defaults_to_balanced_for_code() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "save-optimize-category".to_string(),
+            command: None,
+            path: Some("src/main.rs".to_string()),
+            repo_root: None,
+            runtime_root: None,
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        assert_eq!(response.category.as_deref(), Some("balanced"));
+    }
+
+    #[test]
+    fn save_optimize_guard_blocks_non_code_paths() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "save-optimize-guard".to_string(),
+            command: None,
+            path: Some("README.md".to_string()),
+            repo_root: None,
+            runtime_root: None,
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        assert!(response.blocked);
+        assert_eq!(response.category.as_deref(), Some("skip"));
+    }
+
+    #[test]
+    fn save_optimize_guard_respects_protected_paths() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "save-optimize-guard".to_string(),
+            command: None,
+            path: Some("AGENTS.md".to_string()),
+            repo_root: None,
+            runtime_root: None,
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        assert!(response.blocked);
+        assert!(response.protected);
+        assert_eq!(
+            response.protection_kind.as_deref(),
+            Some("generated_host_entrypoint")
         );
     }
 }

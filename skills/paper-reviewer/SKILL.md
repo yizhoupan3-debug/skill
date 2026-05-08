@@ -146,6 +146,14 @@ claim_ceiling:
 next_honest_move:
 ```
 
+For multi-round review, include a short claim-lock addendum:
+
+```text
+claim_ledger_updates:
+new_or_removed_claim_ids:
+drift_risk_surfaces:
+```
+
 Use severity only as plain reviewer priority:
 
 - `A 致命`: likely reject unless repaired or narrowed
@@ -196,7 +204,9 @@ For normal interactive review, use this compressed order:
    whether it is genuinely fatal.
 5. Separate fix types: new evidence, claim narrowing, appendix routing,
    citation repair, figure/table/layout repair, or prose cleanup.
-6. Report only the actionable conclusion unless the user asks for the full
+6. Emit claim ledger updates when claim ceiling, scope markers, or evidence
+   anchors changed.
+7. Report only the actionable conclusion unless the user asks for the full
    audit trail.
 
 In protocol mode, prefer `串行主链 + 并行 sidecar lane`:

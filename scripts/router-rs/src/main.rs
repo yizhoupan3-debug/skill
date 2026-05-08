@@ -19,6 +19,7 @@ mod background_state;
 mod browser_mcp;
 mod cli_modes;
 mod codex_hooks;
+mod cursor_hooks;
 mod execution_contract;
 mod framework_profile;
 mod framework_runtime;
@@ -36,6 +37,7 @@ use browser_mcp::{
 };
 use cli_modes::{dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op};
 use codex_hooks::{build_codex_hook_projection, run_codex_audit_hook, sync_host_entrypoints};
+use cursor_hooks::run_cursor_review_gate;
 use execution_contract::{
     build_execution_contract_bundle, build_execution_kernel_contracts_by_mode,
     build_execution_kernel_metadata_contract, build_steady_state_execution_kernel_metadata,
@@ -160,6 +162,10 @@ enum RouterCommand {
         #[command(subcommand)]
         command: CodexCommand,
     },
+    Cursor {
+        #[command(subcommand)]
+        command: CursorCommand,
+    },
     Trace {
         #[command(subcommand)]
         command: TraceCommand,
@@ -236,6 +242,11 @@ enum CodexCommand {
     Check(RepoRootCommand),
     Hook(CodexHookCommand),
     HostIntegration(ForwardedArgsCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum CursorCommand {
+    Hook(CursorHookCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -345,6 +356,14 @@ struct FrameworkAliasCommand {
 #[derive(Args, Debug, Clone)]
 struct CodexHookCommand {
     command: String,
+    #[arg(long)]
+    repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+struct CursorHookCommand {
+    #[arg(long)]
+    event: String,
     #[arg(long)]
     repo_root: Option<PathBuf>,
 }
@@ -884,6 +903,7 @@ fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Codex { command } => dispatch_codex_command(command),
+        RouterCommand::Cursor { command } => dispatch_cursor_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
         RouterCommand::Browser { command } => dispatch_browser_command(command),
@@ -1006,6 +1026,15 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
         CodexCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
             print_json_value(&payload)
+        }
+    }
+}
+
+fn dispatch_cursor_command(command: CursorCommand) -> Result<(), String> {
+    match command {
+        CursorCommand::Hook(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            run_cursor_review_gate(&command.event, &repo_root)
         }
     }
 }

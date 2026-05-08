@@ -61,6 +61,8 @@ Rules:
 | Field | Meaning |
 |---|---|
 | `target_contract` | Locked target venue, article type, audience, page/word budget, disclosure requirements, and comparison bar |
+| `claim_ledger` | Stable per-claim register: `claim_id`, allowed level, scope markers, and forbidden upgrades |
+| `evidence_anchor_map` | Map from each `claim_id` to concrete supporting evidence objects and citation anchors |
 | `benchmark_ref_pool` | Local `paper_ref/` pool state: manifest version, retained PDFs, search date, and coverage gaps |
 | `object_map` | Inventory of review units by abstract dimension rather than by paper section |
 | `review_scope` | `full_chain` by default, or `single_gate` when the user explicitly names one dimension / gate |
@@ -90,6 +92,8 @@ Rules:
 | `claim_floor` | Lowest honest claim that still survives without new support |
 | `claim_ceiling` | Highest honest claim currently supportable for the target article |
 | `selected_claim_level` | The chosen claim level after G3 |
+| `claim_ledger_delta` | Explicit per-round changes to claim definitions, levels, or scope markers |
+| `drift_check_result` | `pass` or `backjump` result from mirror-surface claim drift checks |
 | `math_closure_required` | Whether the surviving claim requires formal closure in G4 |
 | `overmath_risk` | Whether the draft is carrying math beyond what the surviving claim needs |
 | `appendix_routing` | Which content stays in main text vs appendix vs gets removed |
@@ -187,6 +191,8 @@ Rules:
 6. Sidecar lanes may collect evidence or propose local edits, but they may not
    independently freeze a gate, advance the chain, or override the main-thread
    decision.
+7. Any change that affects claim level, scope, or implied causality must record
+   `claim_ledger_delta`; silent claim upgrades are invalid.
 
 ## 7. Scope Modes
 
@@ -360,7 +366,8 @@ The main thread may not:
 Default merge policy:
 
 - decision gates: merge evidence first, decide second
-- quality gates: merge local audit findings, then emit one pass or backjump decision
+- quality gates: merge local audit findings, run a claim-drift check against
+  `claim_ledger`, then emit one pass or backjump decision
 
 ## 12. Automation Wrapper Contract
 

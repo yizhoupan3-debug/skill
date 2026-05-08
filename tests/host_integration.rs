@@ -1269,6 +1269,18 @@ fn runtime_registry_missing_file_uses_default_registry() {
         payload["host_projections"]["cursor"]["profile_id"],
         "cursor_profile"
     );
+    assert_eq!(
+        payload["framework_commands"]["autopilot"]["reroute_when_root_cause_unknown"],
+        "deepinterview"
+    );
+    assert_eq!(
+        payload["framework_commands"]["autopilot"]["host_entrypoints"]["cursor"],
+        "/autopilot"
+    );
+    assert_eq!(
+        payload["framework_commands"]["autopilot"]["autonomy_contract"]["goal_style_execution"]["control_surface"],
+        json!(["goal_start", "goal_pause", "goal_resume", "goal_clear"])
+    );
 }
 
 #[test]
@@ -1383,6 +1395,11 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         autopilot["autonomy_contract"]["goal_style_execution"]["pause_requires_explicit_resume"],
         true
     );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface"],
+        json!(["goal_start", "goal_pause", "goal_resume", "goal_clear"])
+    );
+    assert_eq!(autopilot["reroute_when_root_cause_unknown"], "deepinterview");
 }
 
 #[test]
@@ -1403,6 +1420,28 @@ fn runtime_registry_host_projections_expose_supervisor_capabilities() {
 
     let cursor = &payload["host_projections"]["cursor"];
     assert_eq!(cursor["profile_id"], "cursor_profile");
+}
+
+#[test]
+fn hook_policy_save_optimize_operations_are_exposed() {
+    let category_payload = router_rs_json(&[
+        "hook-policy",
+        "evaluate",
+        "--input-json",
+        r#"{"operation":"save-optimize-category","path":"src/main.rs"}"#,
+    ]);
+    assert_eq!(category_payload["operation"], "save-optimize-category");
+    assert_eq!(category_payload["category"], "balanced");
+
+    let guard_payload = router_rs_json(&[
+        "hook-policy",
+        "evaluate",
+        "--input-json",
+        r#"{"operation":"save-optimize-guard","path":"README.md"}"#,
+    ]);
+    assert_eq!(guard_payload["operation"], "save-optimize-guard");
+    assert_eq!(guard_payload["blocked"], true);
+    assert_eq!(guard_payload["category"], "skip");
 }
 
 fn runtime_registry(repo_root: &std::path::Path) -> serde_json::Value {

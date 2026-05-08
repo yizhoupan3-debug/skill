@@ -10,7 +10,7 @@ description: |
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
-session_start: n/a
+session_start: preferred
 user-invocable: false
 disable-model-invocation: true
 trigger_hints:
@@ -86,6 +86,22 @@ science, citations, results, or reviewer-facing promises.
 - Preserve methods, results, numbers, abbreviations, and citation intent.
 - If the requested prose needs missing evidence, ask or mark the gap.
 - Never fabricate references or reviewer commitments.
+- In multi-round editing, never "upgrade by wording" after claim ceiling is frozen.
+
+## Multi-Round Claim Lock
+
+When a manuscript is revised across turns, keep a visible claim lock:
+
+1. Create or update a compact `claim_ledger` before rewriting:
+   - claim_id
+   - allowed_claim_level
+   - required_evidence_anchor
+   - forbidden_upgrade_terms
+2. Treat the ledger as authoritative for wording choices.
+3. If requested edits conflict with the ledger, stop and route to
+   `$paper-reviewer`/`$paper-reviser` for a claim decision first.
+4. Do not hide missing evidence in "future work" wording if the current sentence
+   still implies support.
 
 ## Top-tier Writing Rules
 
@@ -100,13 +116,35 @@ as a guardrail when the user wants 顶刊/顶会/top-tier writing.
 - If top-tier readiness depends on missing evidence, stop and route back to
   `$paper-reviewer` or `$paper-reviser` rather than polishing around the gap.
 
+## Top-tier Narrative Style
+
+When the user asks for stronger writing style, default to direct, high-agency,
+top-tier narrative rhythm while staying inside the claim ledger:
+
+- Lead each paragraph with a clear move, not defensive framing.
+- Use affirmative, evidence-backed verbs instead of internal/process-heavy voice.
+- Keep limitation language precise but non-shrinking: disclose boundary without
+  burying the paper's central contribution.
+- Do not use negative posture as a default rhetorical style.
+- Avoid internal or self-protective phrasing that distracts from the scientific
+  throughline.
+
+Hard style bans unless explicitly requested:
+
+- "绕行" openings that delay the main point.
+- internal-tone wording focused on process or self-justification.
+- defensive over-hedging that weakens already-supported claims.
+
 ## Workflow
 
 1. Identify section type, target audience, journal/register, and allowed claims.
 2. Extract supplied facts, evidence, and constraints before rewriting.
-3. Choose the section move: motivate, gap, method, result, implication, or response.
-4. Rewrite for flow and precision while keeping claim ceiling intact.
-5. Return the polished text first; include notes only for important claim risks.
+3. For multi-round work, refresh `claim_ledger` and check proposed edits against it.
+4. Choose the section move: motivate, gap, method, result, implication, or response.
+5. Rewrite for flow and precision while keeping claim ceiling intact.
+6. Run a mirror check on abstract/introduction/conclusion/captions to ensure no
+   surface silently exceeds the allowed claim level.
+7. Return the polished text first; include notes only for important claim risks.
 
 ## Output Defaults
 

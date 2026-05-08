@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""Legacy Python review-gate tests, retained for break-glass parity verification only.
+
+The active Cursor review-subagent gate is now implemented in Rust at
+`scripts/router-rs/src/cursor_hooks.rs` and wired through `.cursor/hooks.json`
+via `router-rs cursor hook --event=...`. These Python tests target the legacy
+implementation kept under `.cursor/hooks/legacy/` and are no longer part of
+the default test surface. Run manually only when comparing legacy behaviour.
+"""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -7,17 +15,30 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
-HOOK = ROOT / ".cursor" / "hooks" / "review_subagent_gate.py"
+ROOT = Path(__file__).resolve().parents[3]
+HOOK = ROOT / ".cursor" / "hooks" / "legacy" / "review_subagent_gate.py"
+AUTO_OPT_HOOK = ROOT / ".cursor" / "hooks" / "legacy" / "auto_optimize_on_save.py"
 
 
 def run_hook(event: str, payload: dict) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(HOOK), "--event", event],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        cwd=ROOT,
+        timeout=10,
+    )
+
+
+def run_auto_opt_hook(event: str, payload: dict) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(AUTO_OPT_HOOK), "--event", event],
         input=json.dumps(payload),
         text=True,
         capture_output=True,
@@ -360,6 +381,33 @@ def test_autopilot_goal_mode_passes_with_goal_evidence() -> None:
     assert_true(
         "followup_message" not in parsed_stdout(result),
         "autopilot should pass when goal contract/progress/verification are present",
+    )
+
+
+def test_autopilot_goal_mode_escalates_after_repeated_no_progress() -> None:
+    cleanup_state()
+    session_id = f"cursor-{uuid.uuid4()}"
+    run_hook(
+        "beforeSubmitPrompt",
+        {"session_id": session_id, "cwd": str(ROOT), "prompt": "/autopilot 修复回归"},
+    )
+    run_hook(
+        "subagentStart",
+        {
+            "session_id": session_id,
+            "cwd": str(ROOT),
+            "subagent_type": "explore",
+            "description": "independent lane",
+        },
+    )
+    first = run_hook("stop", {"session_id": session_id, "cwd": str(ROOT)})
+    second = run_hook("stop", {"session_id": session_id, "cwd": str(ROOT)})
+    assert_true("No-progress loops: 1" in parsed_stdout(first).get("followup_message", ""), "first no-progress loop should be counted")
+    assert_true(
+        "No-progress loops: 2" in parsed_stdout(second).get("followup_message", "")
+        and "Autopilot appears stalled" in parsed_stdout(second).get("followup_message", "")
+        and "Next action template" in parsed_stdout(second).get("followup_message", ""),
+        "second no-progress loop should escalate",
     )
 
 
@@ -787,6 +835,40 @@ def test_concurrent_writes_preserve_gate_state() -> None:
         assert_true(key in state, f"state should retain schema key: {key}")
 
 
+def test_auto_optimize_on_save_applies_rust_rewrite() -> None:
+    cleanup_state()
+    with tempfile.TemporaryDirectory(prefix="cursor-auto-opt-rs-") as tmp:
+        sample = Path(tmp) / "sample.rs"
+        sample.write_text(
+            "fn main() {\n    let xs = [1,2,3];\n    let _copy = xs.iter().cloned().collect::<Vec<_>>();\n}\n",
+            encoding="utf-8",
+        )
+        result = run_auto_opt_hook(
+            "afterFileEdit",
+            {"session_id": f"cursor-{uuid.uuid4()}", "cwd": str(ROOT), "path": str(sample)},
+        )
+        assert_true(result.returncode == 0, "auto optimize hook should exit 0")
+        content = sample.read_text(encoding="utf-8")
+        assert_true(".to_vec()" in content, "rust optimization should rewrite collect clone pattern")
+
+
+def test_auto_optimize_on_save_reverts_on_python_validation_failure() -> None:
+    cleanup_state()
+    with tempfile.TemporaryDirectory(prefix="cursor-auto-opt-py-") as tmp:
+        sample = Path(tmp) / "sample.py"
+        sample.write_text("x = dict()\nif True print('oops')\n", encoding="utf-8")
+        result = run_auto_opt_hook(
+            "afterFileEdit",
+            {"session_id": f"cursor-{uuid.uuid4()}", "cwd": str(ROOT), "path": str(sample)},
+        )
+        assert_true(result.returncode == 0, "auto optimize hook should exit 0 on invalid python")
+        content = sample.read_text(encoding="utf-8")
+        assert_true("x = dict()" in content, "failed validation should revert python rewrite")
+        summary = json.loads((ROOT / ".cursor" / "hook-state" / "auto-optimize-last.json").read_text())
+        statuses = [item.get("status") for item in summary.get("results", [])]
+        assert_true("reverted" in statuses, "summary should record reverted result")
+
+
 def main() -> int:
     test_broad_review_arms_state()
     test_parallel_lanes_arms_delegation()
@@ -805,6 +887,7 @@ def main() -> int:
     test_framework_entrypoint_stop_blocks_without_subagent()
     test_autopilot_goal_mode_blocks_without_goal_evidence()
     test_autopilot_goal_mode_passes_with_goal_evidence()
+    test_autopilot_goal_mode_escalates_after_repeated_no_progress()
     test_gitx_entrypoint_stop_blocks_without_subagent()
     test_stop_passes_when_phase_2()
     test_stop_passes_when_phase_3()
@@ -828,6 +911,8 @@ def main() -> int:
     test_subagent_start_without_armed_does_nothing()
     test_print_json_has_trailing_newline()
     test_concurrent_writes_preserve_gate_state()
+    test_auto_optimize_on_save_applies_rust_rewrite()
+    test_auto_optimize_on_save_reverts_on_python_validation_failure()
     cleanup_state()
     print("cursor hook tests passed")
     return 0
