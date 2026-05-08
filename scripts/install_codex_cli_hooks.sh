@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
+# Installs Codex CLI hooks into ~/.codex/{config.toml,hooks.json}.
+# Hook command invokes the Rust router-rs review-subagent-gate via run_router_rs.sh
+# (replaces the legacy `.codex/hooks/review_subagent_gate.py` Python entrypoint).
 set -euo pipefail
 
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
-HOOK_SCRIPT="$REPO_ROOT/.codex/hooks/review_subagent_gate.py"
-HOOK_COMMAND="/usr/bin/env python3 \"$HOOK_SCRIPT\""
+ROUTER_RS_LAUNCHER="$REPO_ROOT/scripts/router-rs/run_router_rs.sh"
+ROUTER_RS_MANIFEST="$REPO_ROOT/scripts/router-rs/Cargo.toml"
+HOOK_COMMAND='/usr/bin/env bash -lc '"'"'CODEX_PROJECT_ROOT="${CODEX_PROJECT_ROOT:-'"$REPO_ROOT"'}"; ROUTER_RS_LAUNCHER="$CODEX_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh"; ROUTER_RS_MANIFEST="$CODEX_PROJECT_ROOT/scripts/router-rs/Cargo.toml"; if [ ! -x "$ROUTER_RS_LAUNCHER" ]; then exit 0; fi; "$ROUTER_RS_LAUNCHER" "$ROUTER_RS_MANIFEST" codex hook review-subagent-gate --repo-root "$CODEX_PROJECT_ROOT"'"'"
 
 mkdir -p "$CODEX_HOME"
 
@@ -17,13 +21,18 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -f "$HOOK_SCRIPT" ]]; then
-  printf 'Hook script not found: %s\n' "$HOOK_SCRIPT" >&2
+if [[ ! -f "$ROUTER_RS_LAUNCHER" ]]; then
+  printf 'router-rs launcher not found: %s\n' "$ROUTER_RS_LAUNCHER" >&2
   exit 1
 fi
 
-if [[ ! -r "$HOOK_SCRIPT" ]]; then
-  printf 'Hook script is not readable: %s\n' "$HOOK_SCRIPT" >&2
+if [[ ! -x "$ROUTER_RS_LAUNCHER" ]]; then
+  printf 'router-rs launcher is not executable: %s\n' "$ROUTER_RS_LAUNCHER" >&2
+  exit 1
+fi
+
+if [[ ! -f "$ROUTER_RS_MANIFEST" ]]; then
+  printf 'router-rs Cargo manifest not found: %s\n' "$ROUTER_RS_MANIFEST" >&2
   exit 1
 fi
 

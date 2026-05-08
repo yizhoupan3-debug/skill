@@ -11,7 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "scripts" / "install_codex_cli_hooks.sh"
-HOOK_SCRIPT = ROOT / ".codex" / "hooks" / "review_subagent_gate.py"
+ROUTER_RS_LAUNCHER = ROOT / "scripts" / "router-rs" / "run_router_rs.sh"
+ROUTER_RS_MANIFEST = ROOT / "scripts" / "router-rs" / "Cargo.toml"
 
 
 def assert_true(condition: bool, message: str) -> None:
@@ -71,7 +72,16 @@ def test_preserves_existing_event_hooks() -> None:
                 if isinstance(hook, dict):
                     commands.append(hook.get("command"))
         assert_true("/usr/bin/env echo existing" in commands, "existing stop hook should be preserved")
-        expected_command = f"/usr/bin/env python3 \"{HOOK_SCRIPT.as_posix()}\""
+        expected_command = (
+            f"/usr/bin/env bash -lc '"
+            f'CODEX_PROJECT_ROOT="${{CODEX_PROJECT_ROOT:-{ROOT.as_posix()}}}"; '
+            f'ROUTER_RS_LAUNCHER="$CODEX_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh"; '
+            f'ROUTER_RS_MANIFEST="$CODEX_PROJECT_ROOT/scripts/router-rs/Cargo.toml"; '
+            f'if [ ! -x "$ROUTER_RS_LAUNCHER" ]; then exit 0; fi; '
+            f'"$ROUTER_RS_LAUNCHER" "$ROUTER_RS_MANIFEST" codex hook review-subagent-gate '
+            f'--repo-root "$CODEX_PROJECT_ROOT"'
+            f"'"
+        )
         assert_true(expected_command in commands, "installer hook should be added")
 
 

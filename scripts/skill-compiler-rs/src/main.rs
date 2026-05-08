@@ -1485,6 +1485,8 @@ fn build_runtime_explain(
         .map(|row| string_at(row, 0))
         .collect::<HashSet<_>>();
     let mut selected = Map::new();
+    let mut selected_sparse = Map::new();
+    let mut selected_anomaly_count = 0usize;
     for row in runtime_index
         .get("skills")
         .and_then(Value::as_array)
@@ -1493,14 +1495,31 @@ fn build_runtime_explain(
         .filter_map(Value::as_array)
     {
         let slug = string_at(row, 0);
-        selected.insert(
-            slug.clone(),
-            json!({
-                "selection_reason": routing_metadata.get("skills").and_then(|skills| skills.get(&slug)).and_then(|meta| meta.get("selection_reason")).cloned().unwrap_or_else(|| json!("runtime-selected")),
-                "plugin_kind": plugin_catalog.get("skills").and_then(|skills| skills.get(&slug)).and_then(|plugin| plugin.get("kind")).cloned().unwrap_or_else(|| json!("unknown")),
-                "skill_path": string_at(row, 8)
-            }),
-        );
+        let has_plugin = plugin_catalog
+            .get("skills")
+            .and_then(|skills| skills.get(&slug))
+            .is_some();
+        let has_routing_meta = routing_metadata
+            .get("skills")
+            .and_then(|skills| skills.get(&slug))
+            .is_some();
+        let skill_path = string_at(row, 8);
+        let has_path = !skill_path.is_empty();
+        let entry = json!({
+            "selection_reason": routing_metadata.get("skills").and_then(|skills| skills.get(&slug)).and_then(|meta| meta.get("selection_reason")).cloned().unwrap_or_else(|| json!("runtime-selected")),
+            "plugin_kind": plugin_catalog.get("skills").and_then(|skills| skills.get(&slug)).and_then(|plugin| plugin.get("kind")).cloned().unwrap_or_else(|| json!("unknown")),
+            "skill_path": skill_path,
+            "anomaly": {
+                "missing_plugin_record": !has_plugin,
+                "missing_routing_metadata": !has_routing_meta,
+                "missing_skill_path": !has_path
+            }
+        });
+        if !has_plugin || !has_routing_meta || !has_path {
+            selected_anomaly_count += 1;
+            selected_sparse.insert(slug.clone(), entry.clone());
+        }
+        selected.insert(slug, entry);
     }
     let mut excluded = Map::new();
     for row in manifest
@@ -1523,6 +1542,19 @@ fn build_runtime_explain(
             }),
         );
     }
+    let sparse_mode = true;
+    let selected_total_count = selected.len();
+    let selected_payload = if sparse_mode {
+        Value::Object(selected_sparse)
+    } else {
+        Value::Object(selected)
+    };
+    let selected_entry_count = selected_payload
+        .as_object()
+        .map(|rows| rows.len())
+        .unwrap_or(0);
+    let excluded_entry_count = excluded.len();
+    let has_sparse_entries = selected_entry_count > 0 || excluded_entry_count > 0;
     json!({
         "schema_version": "skill-routing-runtime-explain-v1",
         "source": "generated-by-skill-compiler-rs",
@@ -1532,9 +1564,15 @@ fn build_runtime_explain(
         "summary": {
             "runtime_skill_count": runtime_slugs.len(),
             "manifest_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
-            "policy": "hot runtime keeps required gates plus allowlisted first-turn control owners; everything else remains explicit opt-in or fallback searchable"
+            "policy": "hot runtime keeps required gates plus allowlisted first-turn control owners; everything else remains explicit opt-in or fallback searchable",
+            "sparse_mode": sparse_mode,
+            "selected_total_count": selected_total_count,
+            "selected_emitted_count": selected_entry_count,
+            "selected_anomaly_count": selected_anomaly_count,
+            "excluded_total_count": excluded_entry_count,
+            "has_sparse_entries": has_sparse_entries
         },
-        "selected": Value::Object(selected),
+        "selected": selected_payload,
         "excluded": Value::Object(excluded)
     })
 }
@@ -1861,10 +1899,14 @@ fn build_shadow_map(skill_entries: &[SkillEntry], source_manifest: &Value) -> Va
     }
 
     let mut skills = serde_json::Map::new();
+    let mut total_skills = 0usize;
+    let mut shadowed_skill_count = 0usize;
+    let mut shadowed_entry_count = 0usize;
     let mut slugs = grouped.keys().cloned().collect::<Vec<_>>();
     slugs.sort();
     for slug in slugs {
         if let Some(group) = grouped.get(&slug) {
+            total_skills += 1;
             let mut ordered = group.clone();
             ordered.sort_by(|left, right| {
                 left.source_position
@@ -1876,22 +1918,35 @@ fn build_shadow_map(skill_entries: &[SkillEntry], source_manifest: &Value) -> Va
                 .iter()
                 .map(|entry| skill_entry_to_value(entry))
                 .collect::<Vec<_>>();
-            skills.insert(
-                slug,
-                json!({
-                    "winner": skill_entry_to_value(winner),
-                    "shadowed": shadowed,
-                    "shadowed_by": if shadowed.is_empty() { Vec::<String>::new() } else { vec![winner.path.clone()] },
-                    "has_shadow": !shadowed.is_empty(),
-                }),
-            );
+            let has_shadow = !shadowed.is_empty();
+            if has_shadow {
+                shadowed_skill_count += 1;
+                shadowed_entry_count += shadowed.len();
+                skills.insert(
+                    slug,
+                    json!({
+                        "winner": skill_entry_to_value(winner),
+                        "shadowed": shadowed,
+                        "shadowed_by": vec![winner.path.clone()],
+                        "has_shadow": true,
+                    }),
+                );
+            }
         }
     }
 
+    let sparse_mode = true;
     json!({
         "version": 1,
         "winning_rule": source_manifest.get("winning_rule").cloned().unwrap_or_else(|| Value::String("highest-position-wins".to_string())),
         "sources": source_manifest.get("sources").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
+        "summary": {
+            "sparse_mode": sparse_mode,
+            "skill_total_count": total_skills,
+            "shadowed_skill_count": shadowed_skill_count,
+            "shadowed_entry_count": shadowed_entry_count,
+            "has_sparse_entries": shadowed_skill_count > 0
+        },
         "skills": Value::Object(skills),
     })
 }
@@ -2597,6 +2652,67 @@ mod tests {
         assert_eq!(manifest["skills"][0][0], json!("skill-a"));
         assert_eq!(manifest["skills"][0][8], json!("project"));
         assert_eq!(manifest["skills"][0][9], json!(3));
+    }
+
+    #[test]
+    fn runtime_explain_and_shadow_map_emit_sparse_payloads() {
+        let skills_root = temp_skills_root("sparse-explain-shadow");
+        fs::create_dir_all(skills_root.join("source-gate")).expect("create source gate dir");
+        fs::write(
+            skills_root.join("source-gate").join("SKILL.md"),
+            "---\nname: source-gate\ndescription: source gate\nrouting_layer: L0\nrouting_owner: gate\nrouting_gate: source\nrouting_priority: P1\nsession_start: required\n---\n## When to use\n- source gate\n",
+        )
+        .expect("write source gate skill");
+        write_skill(&skills_root.join("optional-owner"), "optional-owner");
+        write_skill(&skills_root.join(".system").join("beta"), "beta");
+        write_skill(&skills_root.join("beta"), "beta");
+
+        let docs = load_skill_documents(&skills_root).expect("load skill docs");
+        let source_manifest = json!({
+            "version": 2,
+            "winning_rule": "highest-position-wins",
+            "sources": [
+                {"name": "system", "position": 0},
+                {"name": "project", "position": 3}
+            ],
+        });
+        let entries =
+            collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
+        let bundle =
+            compile_bundle(&skills_root, &docs, &entries, &source_manifest).expect("compile");
+
+        assert_eq!(
+            bundle.runtime_explain["summary"]["sparse_mode"],
+            json!(true)
+        );
+        assert_eq!(
+            bundle.runtime_explain["summary"]["selected_total_count"],
+            json!(bundle.runtime_index["skills"].as_array().map(Vec::len).unwrap_or(0))
+        );
+        assert_eq!(
+            bundle.runtime_explain["summary"]["selected_emitted_count"],
+            json!(0)
+        );
+        assert!(bundle.runtime_explain["selected"]
+            .as_object()
+            .expect("selected object")
+            .is_empty());
+        assert!(bundle.runtime_explain["excluded"]
+            .as_object()
+            .expect("excluded object")
+            .contains_key("optional-owner"));
+
+        assert_eq!(bundle.shadow_map["summary"]["sparse_mode"], json!(true));
+        assert_eq!(bundle.shadow_map["summary"]["skill_total_count"], json!(3));
+        assert_eq!(bundle.shadow_map["summary"]["shadowed_skill_count"], json!(1));
+        assert!(bundle.shadow_map["skills"]
+            .as_object()
+            .expect("skills object")
+            .contains_key("beta"));
+        assert!(!bundle.shadow_map["skills"]
+            .as_object()
+            .expect("skills object")
+            .contains_key("alpha"));
     }
 
     #[test]

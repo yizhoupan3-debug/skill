@@ -65,8 +65,8 @@ fn install_native_integration_is_idempotent() {
     let content = read_text(&home_config_path);
     assert_eq!(first["success"], true);
     assert_eq!(second["success"], true);
-    assert_eq!(content.matches("[features]").count(), 0);
-    assert_eq!(content.matches("codex_hooks = false").count(), 0);
+    assert_eq!(content.matches("[features]").count(), 1);
+    assert_eq!(content.matches("codex_hooks = false").count(), 1);
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
     assert_eq!(content.matches("[mcp_servers.browser-mcp]").count(), 0);
     assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 0);
@@ -108,7 +108,118 @@ fn install_native_integration_is_idempotent() {
 }
 
 #[test]
-fn install_native_integration_preserves_codex_hook_value_and_dedupes() {
+fn install_native_integration_forces_codex_hook_false_when_true_only() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
+        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
+    );
+    let home_config_path = tmp.path().join("home/.codex/config.toml");
+    write_text(
+        &home_config_path,
+        "[features]\ncodex_hooks_extra = true\ncodex_hooks = true\n",
+    );
+
+    let result = host_integration_json(&[
+        "install-native-integration",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--home-config-path",
+        home_config_path.to_str().unwrap(),
+        "--home-codex-skills-path",
+        tmp.path().join("home/.codex/skills").to_str().unwrap(),
+        "--skip-default-bootstrap",
+    ]);
+
+    assert_eq!(result["success"], true);
+    let content = read_text(&home_config_path);
+    assert!(content.contains("codex_hooks_extra = true"));
+    assert_eq!(content.matches("codex_hooks = true").count(), 0);
+    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+}
+
+#[test]
+fn install_native_integration_adds_codex_hook_when_missing_in_features() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
+        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
+    );
+    let home_config_path = tmp.path().join("home/.codex/config.toml");
+    write_text(&home_config_path, "[features]\ncodex_hooks_extra = true\n");
+
+    let result = host_integration_json(&[
+        "install-native-integration",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--home-config-path",
+        home_config_path.to_str().unwrap(),
+        "--home-codex-skills-path",
+        tmp.path().join("home/.codex/skills").to_str().unwrap(),
+        "--skip-default-bootstrap",
+    ]);
+
+    assert_eq!(result["success"], true);
+    let content = read_text(&home_config_path);
+    assert!(content.contains("[features]"));
+    assert!(content.contains("codex_hooks_extra = true"));
+    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+}
+
+#[test]
+fn install_native_integration_adds_features_block_when_missing() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
+        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
+    );
+    let home_config_path = tmp.path().join("home/.codex/config.toml");
+    write_text(
+        &home_config_path,
+        "[tui]\nstatus_line = [\"model\", \"tokens\"]\n",
+    );
+
+    let result = host_integration_json(&[
+        "install-native-integration",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--home-config-path",
+        home_config_path.to_str().unwrap(),
+        "--home-codex-skills-path",
+        tmp.path().join("home/.codex/skills").to_str().unwrap(),
+        "--skip-default-bootstrap",
+    ]);
+
+    assert_eq!(result["success"], true);
+    let content = read_text(&home_config_path);
+    assert!(content.contains("[tui]"));
+    assert!(content.contains("[features]"));
+    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+}
+
+#[test]
+fn install_native_integration_dedupes_codex_hooks_and_forces_false() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
@@ -141,8 +252,8 @@ fn install_native_integration_preserves_codex_hook_value_and_dedupes() {
     assert_eq!(result["success"], true);
     let content = read_text(&home_config_path);
     assert!(content.contains("codex_hooks_extra = true"));
-    assert_eq!(content.matches("codex_hooks = true").count(), 1);
-    assert_eq!(content.matches("codex_hooks = false").count(), 0);
+    assert_eq!(content.matches("codex_hooks = true").count(), 0);
+    assert_eq!(content.matches("codex_hooks = false").count(), 1);
 }
 
 #[test]
@@ -375,6 +486,11 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
     ]);
     assert_eq!(install["success"], true);
     assert_eq!(install["results"]["cursor"]["status"], "installed");
+    assert_eq!(install["results"]["cursor"]["mcp"]["managed"], true);
+    assert_eq!(
+        install["results"]["cursor"]["mcp"]["reason"],
+        json!("installed")
+    );
 
     let mcp_path = cursor_home.join("mcp.json");
     let mcp_payload = common::read_json(&mcp_path);
@@ -387,6 +503,14 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
             .as_str()
             .unwrap()
             .ends_with("tools/browser-mcp/scripts/start_browser_mcp.sh")
+    );
+    let manifest_path = cursor_home.join(".framework-projection.json");
+    let manifest_payload = common::read_json(&manifest_path);
+    assert!(
+        manifest_payload["settings"]["managed_key_paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("mcp_servers.browser-mcp"))
     );
 
     let remove = router_rs_json(&[
@@ -459,11 +583,185 @@ fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
     assert_eq!(install["success"], true);
     assert_eq!(install["results"]["cursor"]["status"], "installed");
     assert_eq!(install["results"]["cursor"]["mcp"]["changed"], false);
+    assert_eq!(install["results"]["cursor"]["mcp"]["managed"], false);
+    assert_eq!(
+        install["results"]["cursor"]["mcp"]["reason"],
+        json!("skipped_user_owned")
+    );
+    assert_eq!(
+        install["results"]["cursor"]["mcp"]["skipped_user_owned"],
+        json!(true)
+    );
 
     let mcp_payload = common::read_json(&mcp_path);
     assert_eq!(
         mcp_payload["mcp_servers"]["browser-mcp"]["command"],
         json!("custom-browser-mcp")
+    );
+    let manifest_path = cursor_home.join(".framework-projection.json");
+    let manifest_payload = common::read_json(&manifest_path);
+    assert_eq!(
+        manifest_payload["settings"]["managed_key_paths"],
+        json!([])
+    );
+    assert!(
+        !manifest_payload["files"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(mcp_path.to_string_lossy().to_string()))
+    );
+}
+
+#[test]
+fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
+    let tmp = tempdir().unwrap();
+    let framework_root = project_root();
+    let project_root = tmp.path().join("consumer");
+    let artifact_root = tmp.path().join("artifacts");
+    let cursor_home = tmp.path().join("cursor-home");
+    std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&cursor_home).unwrap();
+
+    let mcp_path = cursor_home.join("mcp.json");
+    write_json(
+        &mcp_path,
+        &json!({
+            "mcp_servers": {
+                "browser-mcp": {
+                    "command": "bash",
+                    "args": [framework_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh").to_string_lossy()]
+                }
+            }
+        }),
+    );
+
+    let install = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(install["success"], true);
+    assert_eq!(install["results"]["cursor"]["mcp"]["managed"], true);
+    assert_eq!(install["results"]["cursor"]["mcp"]["changed"], false);
+    assert_eq!(
+        install["results"]["cursor"]["mcp"]["reason"],
+        json!("already-managed-equivalent")
+    );
+    assert_eq!(
+        install["results"]["cursor"]["mcp"]["skipped_user_owned"],
+        json!(false)
+    );
+
+    let manifest_path = cursor_home.join(".framework-projection.json");
+    let manifest_payload = common::read_json(&manifest_path);
+    assert!(
+        manifest_payload["settings"]["managed_key_paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("mcp_servers.browser-mcp"))
+    );
+}
+
+#[test]
+fn cursor_user_scope_equivalence_check_requires_framework_root_script_path() {
+    let tmp = tempdir().unwrap();
+    let framework_root = project_root();
+    let project_root = tmp.path().join("consumer");
+    let artifact_root = tmp.path().join("artifacts");
+    let cursor_home = tmp.path().join("cursor-home");
+    std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&cursor_home).unwrap();
+
+    let mcp_path = cursor_home.join("mcp.json");
+    let fake_framework_root = tmp.path().join("not-framework-root");
+    write_json(
+        &mcp_path,
+        &json!({
+            "mcp_servers": {
+                "browser-mcp": {
+                    "command": "bash",
+                    "args": [fake_framework_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh").to_string_lossy()]
+                }
+            }
+        }),
+    );
+
+    let install_with_fake_suffix_match = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(install_with_fake_suffix_match["success"], true);
+    assert_eq!(
+        install_with_fake_suffix_match["results"]["cursor"]["mcp"]["managed"],
+        false
+    );
+    assert_eq!(
+        install_with_fake_suffix_match["results"]["cursor"]["mcp"]["reason"],
+        json!("skipped_user_owned")
+    );
+
+    write_json(
+        &mcp_path,
+        &json!({
+            "mcp_servers": {
+                "browser-mcp": {
+                    "command": "bash",
+                    "args": [framework_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh").to_string_lossy()]
+                }
+            }
+        }),
+    );
+
+    let install_with_real_framework_root = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(install_with_real_framework_root["success"], true);
+    assert_eq!(
+        install_with_real_framework_root["results"]["cursor"]["mcp"]["managed"],
+        true
+    );
+    assert_eq!(
+        install_with_real_framework_root["results"]["cursor"]["mcp"]["reason"],
+        json!("already-managed-equivalent")
     );
 }
 

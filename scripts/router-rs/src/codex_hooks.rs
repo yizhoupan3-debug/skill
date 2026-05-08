@@ -1,6 +1,11 @@
 use crate::framework_runtime::build_framework_contract_summary_envelope;
+use crate::cursor_hooks::{
+    has_delegation_override, has_override, has_review_override, is_parallel_delegation_prompt,
+    is_review_prompt, normalize_subagent_type, normalize_tool_name, saw_reject_reason,
+};
 use regex::Regex;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::fs;
@@ -17,6 +22,341 @@ const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
 const PROTECTED_GENERATED_PATHS: [&str; 2] =
     [CODEX_AGENT_POLICY_PATH, HOST_ENTRYPOINT_SYNC_MANIFEST_PATH];
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
+const CODEX_REVIEW_SUBAGENT_TOOL_NAMES: [&str; 6] = [
+    "task",
+    "functions.task",
+    "functions.subagent",
+    "functions.spawn_agent",
+    "subagent",
+    "spawn_agent",
+];
+const CODEX_REVIEW_SUBAGENT_TYPES: [&str; 13] = [
+    "generalpurpose",
+    "explore",
+    "shell",
+    "browser-use",
+    "browseruse",
+    "cursor-guide",
+    "cursorguide",
+    "ci-investigator",
+    "ciinvestigator",
+    "best-of-n-runner",
+    "bestofnrunner",
+    "explorer",
+    "general-purpose",
+];
+
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+struct CodexReviewGateState {
+    #[serde(default)]
+    seq: i64,
+    #[serde(default)]
+    subagent_required: bool,
+    #[serde(default)]
+    review_required: bool,
+    #[serde(default)]
+    delegation_required: bool,
+    #[serde(default)]
+    review_override: bool,
+    #[serde(default)]
+    delegation_override: bool,
+    #[serde(default)]
+    reject_reason_seen: bool,
+    #[serde(default)]
+    review_subagent_seen: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    review_subagent_tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prompt: Option<String>,
+}
+
+fn codex_state_dir(repo_root: &Path) -> PathBuf {
+    repo_root.join(".codex").join("hook-state")
+}
+
+fn codex_session_key(event: &Value) -> String {
+    let raw = event
+        .get("session_id")
+        .or_else(|| event.get("conversation_id"))
+        .or_else(|| event.get("thread_id"))
+        .or_else(|| event.get("cwd"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("default");
+    let mut hasher = Sha256::new();
+    hasher.update(raw.as_bytes());
+    let digest = hasher.finalize();
+    let full_hex = digest
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>();
+    full_hex.chars().take(32).collect()
+}
+
+fn codex_state_path(repo_root: &Path, event: &Value) -> PathBuf {
+    codex_state_dir(repo_root).join(format!("review-subagent-{}.json", codex_session_key(event)))
+}
+
+fn codex_load_state(repo_root: &Path, event: &Value) -> Result<Option<CodexReviewGateState>, String> {
+    let path = codex_state_path(repo_root, event);
+    let text = match fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("state_read_failed".to_string()),
+    };
+    serde_json::from_str::<CodexReviewGateState>(&text)
+        .map(Some)
+        .map_err(|_| "state_json_invalid".to_string())
+}
+
+fn codex_save_state(repo_root: &Path, event: &Value, state: &CodexReviewGateState) -> bool {
+    let directory = codex_state_dir(repo_root);
+    let target = codex_state_path(repo_root, event);
+    let mut payload = match serde_json::to_string_pretty(state) {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+    payload.push('\n');
+    if fs::create_dir_all(&directory).is_err() {
+        return false;
+    }
+    let tmp = directory.join(format!(
+        ".tmp-{}-{}",
+        std::process::id(),
+        target
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("state.json")
+    ));
+    if fs::write(&tmp, payload).is_err() {
+        return false;
+    }
+    if fs::rename(&tmp, &target).is_err() {
+        let _ = fs::remove_file(&tmp);
+        return false;
+    }
+    true
+}
+
+fn codex_prompt_text(event: &Value) -> String {
+    for key in ["prompt", "user_prompt", "message", "input"] {
+        if let Some(value) = event.get(key).and_then(Value::as_str) {
+            return value.to_string();
+        }
+    }
+    String::new()
+}
+
+fn codex_tool_name(event: &Value) -> String {
+    event
+        .get("tool_name")
+        .or_else(|| event.get("tool"))
+        .or_else(|| event.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn codex_tool_input(event: &Value) -> Value {
+    event
+        .get("tool_input")
+        .or_else(|| event.get("input"))
+        .or_else(|| event.get("arguments"))
+        .cloned()
+        .filter(Value::is_object)
+        .unwrap_or_else(|| json!({}))
+}
+
+fn saw_subagent_codex(event: &Value) -> bool {
+    let name = normalize_tool_name(Some(&codex_tool_name(event)));
+    if !CODEX_REVIEW_SUBAGENT_TOOL_NAMES.contains(&name.as_str()) {
+        return false;
+    }
+    let input = codex_tool_input(event);
+    let typed_fields = [
+        input.get("subagent_type").and_then(Value::as_str),
+        input.get("agent_type").and_then(Value::as_str),
+        input.get("agentType").and_then(Value::as_str),
+    ];
+    typed_fields.iter().any(|field| {
+        let normalized = normalize_subagent_type(*field);
+        CODEX_REVIEW_SUBAGENT_TYPES.contains(&normalized.as_str())
+    })
+}
+
+fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
+    let text = codex_prompt_text(event);
+    let mut state = CodexReviewGateState {
+        seq: 0,
+        subagent_required: true,
+        ..CodexReviewGateState::default()
+    };
+
+    if is_review_prompt(&text) {
+        state.review_required = true;
+        state.prompt = Some(text.chars().take(500).collect());
+    }
+    if is_parallel_delegation_prompt(&text) {
+        state.delegation_required = true;
+        state.prompt = Some(text.chars().take(500).collect());
+    }
+    if has_override(&text) {
+        state.review_override = true;
+        state.delegation_override = true;
+    }
+    if saw_reject_reason(&text) {
+        state.reject_reason_seen = true;
+    }
+
+    if !codex_save_state(repo_root, event, &state) {
+        return Some(json!({
+            "decision": "block",
+            "reason": "Review gate state could not be persisted under .codex/hook-state. Fail-closed to avoid silent policy bypass.",
+        }));
+    }
+
+    let mut contexts: Vec<String> = Vec::new();
+    if state.subagent_required && !state.review_override {
+        contexts.push(
+            "Default subagent policy is active. Spawn one or more bounded subagent lanes NOW (before doing the main analysis). If you will not spawn, explicitly state one reject reason: small_task / shared_context_heavy / write_scope_overlap / next_step_blocked / verification_missing / token_overhead_dominates.\n\nQuick evaluation guide:\n- Use subagent by default for search, review, testing, or independent module work\n- Skip subagent only when one reject reason clearly applies\n".to_string()
+        );
+    }
+    if state.review_required && !state.review_override {
+        contexts.push(
+            "Broad/deep review detected. Spawn independent reviewer subagent lanes NOW (before doing the main analysis). If you will not spawn, explicitly state one reject reason: small_task / shared_context_heavy / write_scope_overlap / next_step_blocked / verification_missing / token_overhead_dominates.\n\nSuggested lanes (copy/paste and customize):\n- Security lane: threat model + secrets + auth + supply chain risks\n- Architecture lane: boundaries + data flow + invariants + sharp edges\n- Regression lane: behavior changes + tests gaps + rollout risk\n".to_string()
+        );
+    }
+    if state.delegation_required && !state.delegation_override {
+        contexts.push(
+            "Parallel lane request detected. Spawn bounded subagent lanes NOW (before integrating). If you will not spawn, explicitly state one reject reason.\n\nSuggested lanes (copy/paste):\n- API lane: contracts + backward compatibility + error semantics\n- DB lane: migrations + indexes + consistency + performance\n- UI lane: UX regressions + accessibility + edge cases\n".to_string()
+        );
+    }
+
+    if contexts.is_empty() {
+        None
+    } else {
+        Some(json!({
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": contexts.join("\n"),
+            }
+        }))
+    }
+}
+
+fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
+    if !saw_subagent_codex(event) {
+        return None;
+    }
+    let mut state = codex_load_state(repo_root, event).ok().flatten().unwrap_or_default();
+    state.review_subagent_seen = true;
+    state.review_subagent_tool = Some(codex_tool_name(event));
+    if !codex_save_state(repo_root, event, &state) {
+        return Some(json!({
+            "decision": "block",
+            "reason": "Review gate state update failed under .codex/hook-state after subagent evidence. Fail-closed to avoid inconsistent gating.",
+        }));
+    }
+    None
+}
+
+fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
+    if event
+        .get("stop_hook_active")
+        .or_else(|| event.get("stopHookActive"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+
+    let loaded = codex_load_state(repo_root, event);
+    let text = codex_prompt_text(event);
+    let inferred_overridden = has_override(&text)
+        || has_review_override(&text)
+        || has_delegation_override(&text)
+        || saw_reject_reason(&text);
+    let inferred_required = !text.trim().is_empty() && !inferred_overridden;
+
+    let state = match loaded {
+        Ok(None) => {
+            let mut reason = "Review gate state is missing under .codex/hook-state. Fail-closed to avoid bypass when enforcement state is unavailable.".to_string();
+            if !inferred_required {
+                reason.push_str(" Stop payload had no review context; blocking conservatively.");
+            }
+            return Some(json!({
+                "decision": "block",
+                "reason": reason,
+            }));
+        }
+        Err(io_error) => {
+            return Some(json!({
+                "decision": "block",
+                "reason": format!(
+                    "Review gate state is unreadable or unavailable under .codex/hook-state ({}). Fail-closed to avoid silent policy bypass.",
+                    io_error
+                ),
+            }))
+        }
+        Ok(Some(value)) => value,
+    };
+
+    if state.subagent_required
+        && !state.review_override
+        && !state.reject_reason_seen
+        && !state.review_subagent_seen
+    {
+        return Some(json!({
+            "decision": "block",
+            "reason": "Default subagent policy is active, but no subagent was observed. Spawn a bounded subagent lane now, or explicitly record a reject reason (small_task/shared_context_heavy/write_scope_overlap/next_step_blocked/verification_missing/token_overhead_dominates).",
+        }));
+    }
+    if state.review_required
+        && !state.review_override
+        && !state.reject_reason_seen
+        && !state.review_subagent_seen
+    {
+        return Some(json!({
+            "decision": "block",
+            "reason": "Broad/deep review was requested, but no independent subagent review was observed. Spawn suitable reviewer sidecars now, or explicitly record why spawning is rejected.",
+        }));
+    }
+    if state.delegation_required
+        && !state.delegation_override
+        && !state.reject_reason_seen
+        && !state.review_subagent_seen
+    {
+        return Some(json!({
+            "decision": "block",
+            "reason": "Independent parallel lanes were requested, but no bounded subagent sidecar was observed. Spawn suitable sidecars before finalizing, or rerun with an explicit no-subagent override.",
+        }));
+    }
+
+    let reset = CodexReviewGateState {
+        seq: 0,
+        ..CodexReviewGateState::default()
+    };
+    let _ = codex_save_state(repo_root, event, &reset);
+    None
+}
+
+fn run_codex_review_subagent_gate(
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<Option<Value>, String> {
+    let event_name = payload
+        .get("hook_event_name")
+        .or_else(|| payload.get("event"))
+        .and_then(Value::as_str)
+        .map(|s| s.trim().to_lowercase())
+        .unwrap_or_default();
+    Ok(match event_name.as_str() {
+        "userpromptsubmit" => handle_codex_userpromptsubmit(repo_root, payload),
+        "posttooluse" => handle_codex_posttooluse(repo_root, payload),
+        "stop" => handle_codex_stop(repo_root, payload),
+        _ => None,
+    })
+}
 pub fn build_codex_hook_manifest() -> Value {
     json!({
         "hooks": {}
@@ -337,6 +677,7 @@ pub fn build_codex_hook_projection() -> Value {
         "codex_audit_commands": {
             "pre_tool_use": build_codex_hook_command("pre-tool-use"),
             "contract_guard": build_codex_hook_command("contract-guard"),
+            "review_subagent_gate": build_codex_hook_command("review-subagent-gate"),
         },
     })
 }
@@ -398,6 +739,7 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
     match canonical {
         "pre-tool-use" => run_codex_pre_tool_use(repo_root, &payload),
         "contract-guard" => run_codex_contract_guard(repo_root, &payload),
+        "review-subagent-gate" => run_codex_review_subagent_gate(repo_root, &payload),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
 }
@@ -463,6 +805,7 @@ fn canonical_codex_audit_command(command: &str) -> Result<&'static str, String> 
     match command {
         "pre-tool-use" => Ok("pre-tool-use"),
         "contract-guard" => Ok("contract-guard"),
+        "review-subagent-gate" => Ok("review-subagent-gate"),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
 }
@@ -965,5 +1308,206 @@ mod tests {
         assert_eq!(written, 0);
 
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    mod review_gate_tests {
+        use super::*;
+        use serde_json::json;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+
+        fn fresh_repo() -> std::path::PathBuf {
+            let dir = std::env::temp_dir().join(format!(
+                "codex-review-gate-test-{}-{}",
+                std::process::id(),
+                SEQ.fetch_add(1, Ordering::SeqCst)
+            ));
+            std::fs::create_dir_all(dir.join(".codex/hook-state")).unwrap();
+            std::fs::create_dir_all(dir.join(".codex/hooks")).unwrap();
+            std::fs::write(dir.join(".codex/hooks/review_subagent_gate.py"), b"# stub").unwrap();
+            dir
+        }
+
+        #[test]
+        fn user_prompt_submit_review_emits_additional_context() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-1",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review全仓找bug"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let ctx = out
+                .and_then(|v| v.get("hookSpecificOutput").cloned())
+                .unwrap()
+                .get("additionalContext")
+                .and_then(Value::as_str)
+                .unwrap()
+                .to_string();
+            assert!(ctx.contains("Default subagent policy is active."));
+            assert!(ctx.contains("Broad/deep review detected."));
+        }
+
+        #[test]
+        fn user_prompt_submit_with_override_does_not_emit() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-ovr",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review全仓找bug，不要用子代理"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            assert!(out.is_none());
+        }
+
+        #[test]
+        fn post_tool_use_with_subagent_marks_seen() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-2",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-2",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"explore"}
+            });
+            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            assert!(out.is_none());
+            let state = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(state.review_subagent_seen);
+        }
+
+        #[test]
+        fn stop_without_state_blocks_when_required() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-3",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap().unwrap();
+            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+        }
+
+        #[test]
+        fn stop_without_state_still_blocks_when_no_text() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-4",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":""
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap().unwrap();
+            let reason = out.get("reason").and_then(Value::as_str).unwrap();
+            assert!(reason.contains("Stop payload had no review context"));
+        }
+
+        #[test]
+        fn stop_with_review_required_no_subagent_blocks() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-5",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-5",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap().unwrap();
+            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+        }
+
+        #[test]
+        fn stop_with_delegation_required_blocks() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-6",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"前端后端测试并行推进"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-6",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap().unwrap();
+            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+        }
+
+        #[test]
+        fn stop_with_subagent_seen_resets_state() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-7",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-7",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"explore"}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-7",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none());
+            let state = codex_load_state(&repo, &stop).unwrap().unwrap();
+            assert_eq!(state.seq, 0);
+            assert!(!state.review_subagent_seen);
+        }
+
+        #[test]
+        fn stop_hook_active_returns_none() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-8",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review",
+                "stop_hook_active": true
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            assert!(out.is_none());
+        }
+
+        #[test]
+        fn dispatch_unknown_event_returns_none() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"Other",
+                "session_id":"sm-9",
+                "cwd": repo.to_string_lossy().to_string()
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            assert!(out.is_none());
+        }
     }
 }

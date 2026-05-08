@@ -303,6 +303,8 @@ pub struct ReviewGateState {
     pub subagent_start_count: u32,
     pub subagent_stop_count: u32,
     pub followup_count: u32,
+    pub review_followup_count: u32,
+    pub goal_followup_count: u32,
     pub goal_required: bool,
     pub goal_contract_seen: bool,
     pub goal_progress_seen: bool,
@@ -464,6 +466,8 @@ fn empty_state() -> ReviewGateState {
         subagent_start_count: 0,
         subagent_stop_count: 0,
         followup_count: 0,
+        review_followup_count: 0,
+        goal_followup_count: 0,
         goal_required: false,
         goal_contract_seen: false,
         goal_progress_seen: false,
@@ -509,6 +513,14 @@ fn migrate_v1(raw: &Value) -> ReviewGateState {
     }
     state.followup_count = raw
         .get("followup_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as u32;
+    state.review_followup_count = raw
+        .get("review_followup_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as u32;
+    state.goal_followup_count = raw
+        .get("goal_followup_count")
         .and_then(Value::as_u64)
         .unwrap_or(0) as u32;
     state
@@ -558,6 +570,12 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
         }
         if let Some(v) = obj.get("followup_count").and_then(Value::as_u64) {
             base.followup_count = v as u32;
+        }
+        if let Some(v) = obj.get("review_followup_count").and_then(Value::as_u64) {
+            base.review_followup_count = v as u32;
+        }
+        if let Some(v) = obj.get("goal_followup_count").and_then(Value::as_u64) {
+            base.goal_followup_count = v as u32;
         }
     }
     base.version = STATE_VERSION;
@@ -636,6 +654,14 @@ fn goal_followup_message() -> &'static str {
     "Autopilot goal mode requires completion evidence before closeout. Provide: 1) goal contract (Goal/Done when/Validation commands), 2) checkpoint progress + next step, and 3) verification result or explicit blocker."
 }
 
+fn review_followup_message() -> &'static str {
+    "Broad/deep review (or independent parallel lanes) was requested, but no independent subagent/sidecar was observed. Spawn a suitable subagent lane now, or explicitly state why spawning is rejected."
+}
+
+fn review_missing_parts(_state: &ReviewGateState) -> String {
+    "independent_subagent_or_reject_reason".to_string()
+}
+
 fn goal_missing_parts(state: &ReviewGateState) -> String {
     let mut missing = Vec::new();
     if !state.goal_contract_seen {
@@ -650,8 +676,18 @@ fn goal_missing_parts(state: &ReviewGateState) -> String {
     missing.join(", ")
 }
 
+fn state_lock_degraded_followup() -> &'static str {
+    "Cursor review gate state lock is unavailable under .cursor/hook-state, so enforcement is fail-closed/degraded for this turn. Do not finalize until an independent subagent lane is observed or an explicit reject reason is stated in assistant output."
+}
+
 fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let lock = acquire_state_lock(repo_root, event);
+    if lock.is_none() {
+        return json!({
+            "continue": true,
+            "followup_message": state_lock_degraded_followup()
+        });
+    }
     let mut state = load_state(repo_root, event)
         .ok()
         .flatten()
@@ -663,18 +699,16 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let delegation = is_parallel_delegation_prompt(&text) || framework_entrypoint;
     let review_override = has_review_override(&text) || has_override(&text);
     let delegation_override = has_delegation_override(&text) || has_override(&text);
-    let rejected = saw_reject_reason(&text);
 
     state.review_required = state.review_required || review;
     state.delegation_required = state.delegation_required || delegation;
     state.review_override = state.review_override || review_override;
     state.delegation_override = state.delegation_override || delegation_override;
-    state.reject_reason_seen = state.reject_reason_seen || rejected;
     state.goal_required = state.goal_required || autopilot_entrypoint;
     state.goal_contract_seen = state.goal_contract_seen || has_goal_contract_signal(&text);
     state.goal_progress_seen = state.goal_progress_seen || has_goal_progress_signal(&text);
     state.goal_verify_or_block_seen =
-        state.goal_verify_or_block_seen || has_goal_verify_or_block_signal(&text) || rejected;
+        state.goal_verify_or_block_seen || has_goal_verify_or_block_signal(&text);
     if review || delegation {
         state.last_prompt = Some(text.chars().take(500).collect());
     }
@@ -691,14 +725,26 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         && state.phase < 2;
     let mut output = json!({ "continue": true });
     if needs_followup {
-        let msg = if state.review_required {
-            "Broad/deep review detected. Spawn an independent reviewer subagent lane now; if you will not spawn, provide one explicit reject reason before finalizing."
+        let is_first_followup = state.review_followup_count == 0;
+        state.followup_count += 1;
+        state.review_followup_count += 1;
+        let msg = if is_first_followup {
+            if state.review_required {
+                "Broad/deep review detected. Spawn an independent reviewer subagent lane now; if you will not spawn, provide one explicit reject reason before finalizing.".to_string()
+            } else {
+                "Parallel lane request detected. Spawn bounded subagent lanes now; if you will not spawn, provide one explicit reject reason before finalizing.".to_string()
+            }
         } else {
-            "Parallel lane request detected. Spawn bounded subagent lanes now; if you will not spawn, provide one explicit reject reason before finalizing."
+            format!("RG_FOLLOWUP missing_parts={}", review_missing_parts(&state))
         };
-        output["followup_message"] = Value::String(msg.to_string());
+        output["followup_message"] = Value::String(msg);
     }
-    if !persisted {
+    let persisted_after_followup = if needs_followup {
+        save_state(repo_root, event, &mut state)
+    } else {
+        persisted
+    };
+    if !persisted || !persisted_after_followup {
         let warning = "Cursor review gate state could not be persisted under .cursor/hook-state. Review/delegation enforcement may be degraded for this turn.";
         let merged = output
             .get("followup_message")
@@ -712,6 +758,9 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
 
 fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     let lock = acquire_state_lock(repo_root, event);
+    if lock.is_none() {
+        return json!({});
+    }
     let mut state = load_state(repo_root, event)
         .ok()
         .flatten()
@@ -743,6 +792,9 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
 
 fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
     let lock = acquire_state_lock(repo_root, event);
+    if lock.is_none() {
+        return json!({});
+    }
     let mut state = load_state(repo_root, event)
         .ok()
         .flatten()
@@ -759,6 +811,9 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
 
 fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let lock = acquire_state_lock(repo_root, event);
+    if lock.is_none() {
+        return json!({});
+    }
     let mut state = load_state(repo_root, event)
         .ok()
         .flatten()
@@ -804,6 +859,9 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
 
 fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
     let lock = acquire_state_lock(repo_root, event);
+    if lock.is_none() {
+        return json!({});
+    }
     let mut state = load_state(repo_root, event)
         .ok()
         .flatten()
@@ -837,6 +895,11 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
 
 fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     let lock = acquire_state_lock(repo_root, event);
+    if lock.is_none() {
+        return json!({
+            "followup_message": state_lock_degraded_followup()
+        });
+    }
     let loaded = load_state(repo_root, event);
     let text = prompt_text(event);
     let inferred_required = is_review_prompt(&text)
@@ -844,8 +907,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         || is_framework_entrypoint_prompt(&text);
     let inferred_overridden = has_review_override(&text)
         || has_delegation_override(&text)
-        || has_override(&text)
-        || saw_reject_reason(&text);
+        || has_override(&text);
     let loop_count = loop_count_of(event);
     let output = match loaded {
         Ok(None) => {
@@ -870,10 +932,6 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             if has_delegation_override(&text) || has_override(&text) {
                 state.delegation_override = true;
             }
-            if saw_reject_reason(&text) {
-                state.reject_reason_seen = true;
-                state.goal_verify_or_block_seen = true;
-            }
             if has_goal_contract_signal(&text) {
                 state.goal_contract_seen = true;
             }
@@ -884,21 +942,46 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 state.goal_verify_or_block_seen = true;
             }
             if !is_satisfied(&state) {
+                let is_first_followup = state.review_followup_count == 0;
                 state.followup_count += 1;
+                state.review_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
                 let escalation = if loop_count >= 3 || state.followup_count >= 3 {
                     "This has already looped multiple times; do not silently continue. "
                 } else {
                     ""
                 };
+                let message = if is_first_followup {
+                    format!("{} {}", review_followup_message(), escalation).trim().to_string()
+                } else {
+                    format!(
+                        "RG_FOLLOWUP missing_parts={}{}",
+                        review_missing_parts(&state),
+                        if escalation.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" escalation={}", escalation.trim())
+                        }
+                    )
+                };
                 json!({
-                    "followup_message": format!("Broad/deep review (or independent parallel lanes) was requested, but no independent subagent/sidecar was observed. Spawn a suitable subagent lane now, or explicitly state why spawning is rejected. {}", escalation).trim()
+                    "followup_message": message
                 })
             } else if !goal_is_satisfied(&state) {
+                let is_first_followup = state.goal_followup_count == 0;
                 state.followup_count += 1;
+                state.goal_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
+                let message = if is_first_followup {
+                    format!("{} Missing: {}.", goal_followup_message(), goal_missing_parts(&state))
+                } else {
+                    format!(
+                        "AG_FOLLOWUP missing_parts={}",
+                        goal_missing_parts(&state)
+                    )
+                };
                 json!({
-                    "followup_message": format!("{} Missing: {}.", goal_followup_message(), goal_missing_parts(&state))
+                    "followup_message": message
                 })
             } else {
                 let mut reset = empty_state();
@@ -1063,12 +1146,70 @@ mod tests {
             "beforeSubmitPrompt",
             &event("s4", "全面review这个仓库"),
         );
+        let _ = dispatch_event(
+            &repo,
+            "afterAgentResponse",
+            &json!({ "session_id": "s4", "response": "reject reason: small_task" }),
+        );
         let out = dispatch_event(
             &repo,
             "stop",
             &event("s4", "reject reason: small_task"),
         );
         assert_eq!(out, json!({}));
+    }
+
+    #[test]
+    fn reject_reason_in_user_prompt_does_not_satisfy_gate() {
+        let repo = fresh_repo();
+        let _ = dispatch_event(
+            &repo,
+            "beforeSubmitPrompt",
+            &event("s13", "全面review这个仓库"),
+        );
+        let out = dispatch_event(
+            &repo,
+            "stop",
+            &event("s13", "reject reason: small_task"),
+        );
+        let followup = out
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(followup.contains("Broad/deep review") || followup.contains("RG_FOLLOWUP"));
+        let state = load_state_for(&repo, "s13");
+        assert!(!state.reject_reason_seen);
+    }
+
+    #[test]
+    fn before_submit_lock_failure_fails_closed_without_writing_state() {
+        let repo = fresh_repo();
+        let payload = event("s14", "全面review这个仓库");
+        let lock_path = state_lock_path(&repo, &payload);
+        fs::create_dir_all(lock_path.parent().expect("parent")).expect("mkdir");
+        fs::write(&lock_path, b"locked").expect("seed lock");
+        let out = dispatch_event(&repo, "beforeSubmitPrompt", &payload);
+        assert!(out
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .contains("state lock is unavailable"));
+        assert!(!state_path(&repo, &payload).exists());
+    }
+
+    #[test]
+    fn stop_lock_failure_reports_degraded_followup() {
+        let repo = fresh_repo();
+        let payload = event("s15", "全面review这个仓库");
+        let lock_path = state_lock_path(&repo, &payload);
+        fs::create_dir_all(lock_path.parent().expect("parent")).expect("mkdir");
+        fs::write(&lock_path, b"locked").expect("seed lock");
+        let out = dispatch_event(&repo, "stop", &payload);
+        assert!(out
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .contains("state lock is unavailable"));
     }
 
     #[test]
@@ -1104,11 +1245,12 @@ mod tests {
         let repo = fresh_repo();
         let _ = dispatch_event(&repo, "beforeSubmitPrompt", &event("s7", "全面review这个仓库"));
         let out = dispatch_event(&repo, "stop", &event("s7", "继续"));
-        assert!(out
+        let msg = out
             .get("followup_message")
             .and_then(Value::as_str)
             .unwrap_or_default()
-            .contains("Broad/deep review"));
+            .to_string();
+        assert!(msg.contains("Broad/deep review") || msg.starts_with("RG_FOLLOWUP missing_parts="));
     }
 
     #[test]
@@ -1186,5 +1328,53 @@ mod tests {
         );
         let state = load_state_for(&repo, "s12");
         assert!(state.phase >= 2);
+    }
+
+    #[test]
+    fn review_followup_is_detailed_then_short_code() {
+        let repo = fresh_repo();
+        let first = dispatch_event(&repo, "beforeSubmitPrompt", &event("s16", "全面review这个仓库"));
+        let first_msg = first
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(first_msg.contains("Broad/deep review"));
+        let second = dispatch_event(&repo, "stop", &event("s16", "继续"));
+        let second_msg = second
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(second_msg.starts_with("RG_FOLLOWUP missing_parts="));
+    }
+
+    #[test]
+    fn goal_followup_is_detailed_then_short_code() {
+        let repo = fresh_repo();
+        let _ = dispatch_event(&repo, "beforeSubmitPrompt", &event("s17", "/autopilot 完成任务"));
+        let _ = dispatch_event(
+            &repo,
+            "postToolUse",
+            &json!({
+                "session_id":"s17",
+                "tool_name":"functions.subagent",
+                "tool_input":{"subagent_type":"explore"}
+            }),
+        );
+        let first = dispatch_event(&repo, "stop", &event("s17", "继续"));
+        let first_msg = first
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(first_msg.contains("Autopilot goal mode requires completion evidence"));
+        let second = dispatch_event(&repo, "stop", &event("s17", "继续"));
+        let second_msg = second
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(second_msg.starts_with("AG_FOLLOWUP missing_parts="));
     }
 }

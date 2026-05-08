@@ -71,7 +71,7 @@ bridge_behavior: mobile_complete_once
 1. 先看清真实 Git 状态，而不是直接提交
 2. 先 review 再 fix
 3. 先整理脏改动和 worktree，再决定怎么提交或合并分支
-4. 最后把应该推送的分支安全推上去
+4. 最后把应该推送的分支安全推上去（默认直接执行，不再二次询问）
 
 如果当前目录不是 Git 仓库，不要擅自初始化；直接说明不是仓库并停下。
 
@@ -124,6 +124,8 @@ bridge_behavior: mobile_complete_once
 12. 推送：
    - 推送前确认 upstream、ahead/behind、remote 目标
    - 用显式 remote 和 branch；不要盲推
+   - 默认在收口完成后立即推送，不需要再次征求用户确认
+   - 仅在高风险阻塞场景暂停推送并说明原因：冲突、非快进拒绝、分叉历史不清、目标远端不明确、或权限/认证失败
 
 ## Hard constraints
 
