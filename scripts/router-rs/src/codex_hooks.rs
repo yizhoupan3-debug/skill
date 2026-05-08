@@ -19,32 +19,7 @@ const PROTECTED_GENERATED_PATHS: [&str; 2] =
 const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 pub fn build_codex_hook_manifest() -> Value {
     json!({
-        "hooks": {
-            "UserPromptSubmit": [{
-                "hooks": [{
-                    "type": "command",
-                    "command": "/usr/bin/env python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
-                    "timeout": 10,
-                    "statusMessage": "Checking review/subagent gate"
-                }]
-            }],
-            "PostToolUse": [{
-                "hooks": [{
-                    "type": "command",
-                    "command": "/usr/bin/env python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
-                    "timeout": 10,
-                    "statusMessage": "Updating review/subagent gate state"
-                }]
-            }],
-            "Stop": [{
-                "hooks": [{
-                    "type": "command",
-                    "command": "/usr/bin/env python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/review_subagent_gate.py\"",
-                    "timeout": 10,
-                    "statusMessage": "Enforcing review/subagent gate"
-                }]
-            }]
-        }
+        "hooks": {}
     })
 }
 
@@ -68,6 +43,7 @@ fn host_entrypoint_partial_sync_section(
 #[derive(Default)]
 struct SingleSyncReport {
     written: Vec<String>,
+    would_write: Vec<String>,
     unchanged: Vec<String>,
     created_dirs: Vec<String>,
 }
@@ -79,6 +55,7 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
     let (matched_worktrees, skipped_worktrees) = discover_matching_worktrees(&root);
     let mut report = json!({
         "written": [],
+        "would_write": [],
         "unchanged": [],
         "created_dirs": [],
         "synced_worktrees": [],
@@ -108,6 +85,7 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
         let single =
             sync_host_entrypoints_single_root(&desired_files, &target_root, &root, apply, section)?;
         extend_report_array(&mut report, "written", single.written)?;
+        extend_report_array(&mut report, "would_write", single.would_write)?;
         extend_report_array(&mut report, "unchanged", single.unchanged)?;
         extend_report_array(&mut report, "created_dirs", single.created_dirs)?;
         if target_root != root {
@@ -120,6 +98,7 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
     }
 
     sort_report_array(&mut report, "written")?;
+    sort_report_array(&mut report, "would_write")?;
     sort_report_array(&mut report, "unchanged")?;
     sort_report_array(&mut report, "created_dirs")?;
     sort_report_array(&mut report, "synced_worktrees")?;
@@ -226,8 +205,10 @@ fn sync_host_entrypoint_file(
         }
         fs::write(&destination, desired).map_err(|err| err.to_string())?;
     }
-    let bucket = if changed {
+    let bucket = if changed && apply {
         &mut report.written
+    } else if changed {
+        &mut report.would_write
     } else {
         &mut report.unchanged
     };
@@ -366,10 +347,13 @@ fn build_codex_agent_policy() -> String {
 
 fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
-Codex hooks are enabled for this repo.\n\n\
-Project-local `.codex/hooks.json` contains the active hook handlers for this repo.\n\n\
-Hook scripts live under `.codex/hooks/`.\n\n\
+Codex hooks are disabled for this repo by default.\n\n\
+Project-local `.codex/hooks.json` intentionally contains no active hooks.\n\n\
+By default, the hook scripts under `.codex/hooks/` are inactive fixtures or explicit audit helpers.\n\n\
+After running `scripts/install_codex_cli_hooks.sh`, `~/.codex/hooks.json` will include a codex-cli command hook for `.codex/hooks/review_subagent_gate.py` on `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 The Rust hook commands remain available for explicit one-off audits.\n\n\
+Use `scripts/install_codex_cli_hooks.sh` to install user-level hooks into `~/.codex/` for codex-cli only. The installer validates `python3` and hook script presence, enables `[features].codex_hooks = true` in `~/.codex/config.toml`, keeps existing hooks, and idempotently appends the review-subagent command hook without replacing unrelated handlers.\n\n\
+The review-subagent hook writes transient state under `.codex/hook-state/` in the current repository while the session is active.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
@@ -539,11 +523,13 @@ fn detect_contract_drift(summary: &Value, payload: &Value) -> Vec<String> {
         }
 
         let live_evidence = string_array(summary.get("evidence_required"));
+        let proposed_evidence_exists = payload.get("proposed_evidence_required").is_some();
         let proposed_evidence = string_array(payload.get("proposed_evidence_required"));
-        if !live_evidence.is_empty()
-            && proposed_evidence.is_empty()
-            && (payload_bool(payload, "drops_evidence_required")
-                || payload.get("proposed_evidence_required").is_some())
+        let drops_evidence = payload_bool(payload, "drops_evidence_required");
+        if drops_evidence && !live_evidence.is_empty() {
+            flags.push("evidence_drift".to_string());
+        } else if proposed_evidence_exists
+            && normalized_string_set(&proposed_evidence) != normalized_string_set(&live_evidence)
         {
             flags.push("evidence_drift".to_string());
         }
@@ -589,6 +575,21 @@ fn string_array(value: Option<&Value>) -> Vec<String> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+fn normalized_string_set(values: &[String]) -> Vec<String> {
+    let mut deduped = HashSet::new();
+    let mut normalized = values
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .filter_map(|item| {
+            let lower = item.to_ascii_lowercase();
+            deduped.insert(lower.clone()).then_some(lower)
+        })
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized
 }
 
 fn block_codex_pre_tool_use(reason: String) -> Option<Value> {
@@ -757,18 +758,52 @@ fn bash_generated_write_target(payload: &Value) -> Option<String> {
 }
 
 fn split_bash_segments(command: &str) -> Vec<String> {
-    Regex::new(r"\s*(?:&&|\|\||;|\|)\s*")
-        .ok()
-        .map(|regex| {
-            regex
-                .split(command)
-                .filter_map(|segment| {
-                    let trimmed = segment.trim();
-                    (!trimmed.is_empty()).then(|| trimmed.to_string())
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| vec![command.trim().to_string()])
+    let chars = command.chars().collect::<Vec<_>>();
+    let mut segments = Vec::new();
+    let mut start = 0usize;
+    let mut idx = 0usize;
+
+    while idx < chars.len() {
+        let current = chars[idx];
+        let next = chars.get(idx + 1).copied();
+        let prev = if idx > 0 { Some(chars[idx - 1]) } else { None };
+        let mut separator_len = 0usize;
+
+        if current == ';' {
+            separator_len = 1;
+        } else if current == '&' && next == Some('&') {
+            separator_len = 2;
+        } else if current == '|' && next == Some('|') {
+            separator_len = 2;
+        } else if current == '|' && prev != Some('>') {
+            separator_len = 1;
+        }
+
+        if separator_len > 0 {
+            let segment = chars[start..idx].iter().collect::<String>();
+            let trimmed = segment.trim();
+            if !trimmed.is_empty() {
+                segments.push(trimmed.to_string());
+            }
+            idx += separator_len;
+            start = idx;
+            continue;
+        }
+
+        idx += 1;
+    }
+
+    let tail = chars[start..].iter().collect::<String>();
+    let trimmed = tail.trim();
+    if !trimmed.is_empty() {
+        segments.push(trimmed.to_string());
+    }
+
+    if segments.is_empty() {
+        vec![command.trim().to_string()]
+    } else {
+        segments
+    }
 }
 
 fn bash_command_looks_mutating(command: &str) -> bool {
@@ -813,14 +848,16 @@ fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
             .ok()
             .map(|regex| regex.is_match(segment))
             .unwrap_or(false)
-    }) || bash_segment_mentions_generated_path(segment, hint)
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::fs;
     use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn protected_generated_paths_match_lexical_variants() {
@@ -876,5 +913,57 @@ mod tests {
         assert!(run_pre_tool_use(Path::new("."), &payload)
             .unwrap()
             .is_none());
+
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf x >| ./AGENTS.md"}
+        });
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
+    fn pre_tool_use_allows_read_only_bash_commands_on_protected_paths() {
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat ./AGENTS.md"}
+        });
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_none());
+
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "rg contract_digest .codex/host_entrypoints_sync_manifest.json"}
+        });
+        assert!(run_pre_tool_use(Path::new("."), &payload)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn sync_host_entrypoints_reports_would_write_in_dry_run() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("router-rs-codex-hooks-{stamp}"));
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(root.join(".codex")).unwrap();
+        fs::write(root.join("AGENTS.md"), "stale").unwrap();
+        fs::write(root.join(".codex/host_entrypoints_sync_manifest.json"), "{}").unwrap();
+
+        let report = sync_host_entrypoints(&root, false).unwrap();
+        let would_write = report
+            .get("would_write")
+            .and_then(Value::as_array)
+            .unwrap()
+            .len();
+        let written = report.get("written").and_then(Value::as_array).unwrap().len();
+        assert!(would_write > 0);
+        assert_eq!(written, 0);
+
+        fs::remove_dir_all(&root).unwrap();
     }
 }
