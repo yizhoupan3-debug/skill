@@ -1,0 +1,47 @@
+---
+description: Require intelligent execution lane split for implementation tasks
+alwaysApply: true
+---
+
+# Execution Subagent Gate
+
+When implementation can be decomposed, subagent lane execution is the default mode. Keep supervisor ownership for architecture decisions, integration, and final verification.
+
+## Trigger intent
+
+Trigger applies to implementation-heavy requests, especially when any of the following appears:
+- multi-module or cross-layer changes (for example API + service + UI)
+- explicit parallel execution intent ("同时做", "分头实现", "并行推进", "多模块一起改")
+- feature delivery with independent sub-parts
+- bugfix set with separable root causes
+- `/autopilot`, `$autopilot`, `/team`, `$team` entrypoints
+
+## Required behavior
+
+Before finalizing execution work:
+1. Perform lane-admission first: identify whether work can be split into independent, bounded lanes.
+2. If splittable, spawn 1-3 independent subagents in parallel with explicit lane contracts:
+   - Goal and expected artifact per lane
+   - Allowed/forbidden file scope
+   - Verification command(s) and pass criteria
+   - Handoff output format for supervisor integration
+3. Reserve supervisor thread for shared decisions, merge conflict prevention, and end-to-end validation.
+4. If not spawning subagents, explicitly state one reject reason:
+   `small_task`, `shared_context_heavy`, `write_scope_overlap`, `next_step_blocked`, `verification_missing`, or `token_overhead_dominates`.
+5. After lane completion, run supervisor-level integration checks and report:
+   - merged diff scope
+   - validation evidence (tests/build/lint/runtime)
+   - residual risk or blocker
+
+## Lane design constraints
+
+- Independent means no overlapping write scope and no hidden ordering dependency.
+- Shared contract artifacts (for example API schema or migration plan) are supervisor-owned unless one lane is explicitly designated as owner.
+- If overlap emerges during execution, pause lane writes and re-plan ownership before continuing.
+
+## Goal-style continuity
+
+For `/autopilot` goal-style runs, do not stop at planning:
+- checkpoint progress each loop (plan -> implement -> verify -> repair -> closeout)
+- continue until verification passes or an explicit blocker is reached
+- include clear next action when blocked

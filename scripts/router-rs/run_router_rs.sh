@@ -72,6 +72,10 @@ acquire_build_lock() {
   mkdir -p "$SHARED_TARGET_DIR"
   local lock_start=${SECONDS:-0}
   local lock_owner=""
+  local sleep_ms=50
+  local max_sleep_ms=1000
+  local jitter_ms=0
+  local wait_ms=0
   while true; do
     if mkdir "$BUILD_LOCK_DIR" 2>/dev/null; then
       if printf '%s\n' "$$" >"$BUILD_LOCK_DIR/pid" 2>/dev/null; then
@@ -98,7 +102,15 @@ acquire_build_lock() {
       echo "Set ROUTER_RS_BUILD_LOCK_TIMEOUT_SEC to tune this threshold." >&2
       return 1
     fi
-    sleep 0.1
+    jitter_ms=$((RANDOM % ((sleep_ms / 4) + 1)))
+    wait_ms=$((sleep_ms + jitter_ms))
+    sleep "$(awk "BEGIN {printf \"%.3f\", ${wait_ms}/1000}")"
+    if [ "$sleep_ms" -lt "$max_sleep_ms" ]; then
+      sleep_ms=$((sleep_ms * 2))
+      if [ "$sleep_ms" -gt "$max_sleep_ms" ]; then
+        sleep_ms=$max_sleep_ms
+      fi
+    fi
   done
 }
 

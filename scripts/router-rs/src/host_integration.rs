@@ -1568,15 +1568,19 @@ fn install_cursor_projection(
     });
     if scope == "user" {
         let mcp_path = cursor_mcp_config_path(roots);
-        let mcp_changed = install_cursor_mcp_server(roots, &mcp_path)?;
-        changed |= mcp_changed;
-        managed_files.push(mcp_path.to_string_lossy().to_string());
-        managed_key_paths.push(cursor_mcp_server_key_path().to_string());
+        let mcp_install = install_cursor_mcp_server(roots, &mcp_path)?;
+        changed |= mcp_install.changed;
+        if mcp_install.managed {
+            managed_files.push(mcp_path.to_string_lossy().to_string());
+            managed_key_paths.push(cursor_mcp_server_key_path().to_string());
+        }
         mcp = json!({
-            "managed": true,
+            "managed": mcp_install.managed,
             "path": mcp_path.to_string_lossy(),
             "server": "browser-mcp",
-            "changed": mcp_changed,
+            "changed": mcp_install.changed,
+            "reason": mcp_install.reason,
+            "skipped_user_owned": mcp_install.skipped_user_owned,
         });
     }
     let manifest_changed =
@@ -1963,7 +1967,18 @@ fn cursor_mcp_server_key_path() -> &'static str {
     "mcp_servers.browser-mcp"
 }
 
-fn install_cursor_mcp_server(roots: &ResolvedProjectionRoots, path: &Path) -> Result<bool, String> {
+#[derive(Debug, Clone)]
+struct CursorMcpInstallOutcome {
+    managed: bool,
+    changed: bool,
+    reason: &'static str,
+    skipped_user_owned: bool,
+}
+
+fn install_cursor_mcp_server(
+    roots: &ResolvedProjectionRoots,
+    path: &Path,
+) -> Result<CursorMcpInstallOutcome, String> {
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     if !payload.is_object() {
         payload = json!({});
@@ -1982,14 +1997,28 @@ fn install_cursor_mcp_server(roots: &ResolvedProjectionRoots, path: &Path) -> Re
         .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
     let server = cursor_mcp_server_payload(roots);
     if matches!(servers.get("browser-mcp"), Some(existing) if existing != &server) {
-        return Ok(false);
+        return Ok(CursorMcpInstallOutcome {
+            managed: false,
+            changed: false,
+            reason: "skipped_user_owned",
+            skipped_user_owned: true,
+        });
     }
     let changed = servers.get("browser-mcp").is_none();
     if changed {
         servers.insert("browser-mcp".to_string(), server);
     }
     let file_changed = write_json_if_changed(path, &payload)?;
-    Ok(changed || file_changed)
+    Ok(CursorMcpInstallOutcome {
+        managed: true,
+        changed: changed || file_changed,
+        reason: if changed {
+            "installed"
+        } else {
+            "already-managed-equivalent"
+        },
+        skipped_user_owned: false,
+    })
 }
 
 fn remove_cursor_mcp_server(path: &Path) -> Result<bool, String> {
@@ -2043,7 +2072,7 @@ fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<b
 }
 
 fn cursor_mcp_server_matches_framework(
-    _roots: &ResolvedProjectionRoots,
+    roots: &ResolvedProjectionRoots,
     path: &Path,
 ) -> Result<Option<bool>, String> {
     let Some(payload) = read_json_if_exists(path)? else {
@@ -2056,17 +2085,29 @@ fn cursor_mcp_server_matches_framework(
     let Some(server) = actual else {
         return Ok(None);
     };
-    let is_framework_server = server
-        .get("command")
-        .and_then(Value::as_str)
-        == Some("bash")
+    let expected_script = roots
+        .framework_root
+        .join("tools/browser-mcp/scripts/start_browser_mcp.sh");
+    let is_framework_server = server.get("command").and_then(Value::as_str) == Some("bash")
         && server
             .get("args")
             .and_then(Value::as_array)
             .and_then(|args| args.first())
             .and_then(Value::as_str)
-            .is_some_and(|arg| arg.ends_with("tools/browser-mcp/scripts/start_browser_mcp.sh"));
+            .map(PathBuf::from)
+            .map(|script_path| paths_match_framework_script(&script_path, &expected_script))
+            .transpose()?
+            .unwrap_or(false);
     Ok(Some(is_framework_server))
+}
+
+fn paths_match_framework_script(actual: &Path, expected: &Path) -> Result<bool, String> {
+    if let (Ok(actual_canonical), Ok(expected_canonical)) =
+        (fs::canonicalize(actual), fs::canonicalize(expected))
+    {
+        return Ok(actual_canonical == expected_canonical);
+    }
+    Ok(normalize_path(actual)? == normalize_path(expected)?)
 }
 
 fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
@@ -4085,33 +4126,37 @@ fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
 }
 
 fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
+    const CODEX_HOOKS_DISABLED_LINE: &str = "codex_hooks = false";
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
         let block = content[start..end].trim_end_matches('\n');
-        let codex_hook_lines = block
-            .lines()
-            .filter(|line| is_named_setting(line, "codex_hooks"))
-            .count();
-        if codex_hook_lines <= 1 {
-            return Ok(false);
-        }
-        let mut replaced = false;
+        let mut has_codex_hooks = false;
         let mut updated_lines = Vec::new();
         for line in block.lines() {
             if is_named_setting(line, "codex_hooks") {
-                if !replaced {
-                    updated_lines.push(line.to_string());
-                    replaced = true;
+                if !has_codex_hooks {
+                    updated_lines.push(CODEX_HOOKS_DISABLED_LINE.to_string());
+                    has_codex_hooks = true;
                 }
             } else {
                 updated_lines.push(line.to_string());
             }
         }
+        if !has_codex_hooks {
+            updated_lines.push(CODEX_HOOKS_DISABLED_LINE.to_string());
+        }
         let new_block = format!("{}\n", updated_lines.join("\n"));
         let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
         return write_text_if_changed(config_path, &updated);
     }
-    Ok(false)
+    let mut updated = content.trim_end().to_string();
+    if !updated.is_empty() {
+        updated.push_str("\n\n");
+    }
+    updated.push_str("[features]\n");
+    updated.push_str(CODEX_HOOKS_DISABLED_LINE);
+    updated.push('\n');
+    write_text_if_changed(config_path, &updated)
 }
 
 fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {

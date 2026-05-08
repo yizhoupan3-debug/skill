@@ -1941,6 +1941,19 @@ fn compute_backoff_seconds(
     delay
 }
 
+fn compute_release_poll_interval_seconds(retry_count: Option<usize>) -> f64 {
+    const SESSION_RELEASE_BASE_POLL_SECONDS: f64 = 0.02;
+    const SESSION_RELEASE_BACKOFF_MULTIPLIER: f64 = 1.5;
+    const SESSION_RELEASE_MAX_POLL_SECONDS: f64 = 0.25;
+    let retry_step = retry_count.unwrap_or(0).saturating_add(1);
+    compute_backoff_seconds(
+        SESSION_RELEASE_BASE_POLL_SECONDS,
+        SESSION_RELEASE_BACKOFF_MULTIPLIER,
+        retry_step,
+        Some(SESSION_RELEASE_MAX_POLL_SECONDS),
+    )
+}
+
 fn next_background_parallel_group_id() -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2576,7 +2589,8 @@ fn build_background_control_response(
         "session-release" => {
             let mut effect_plan = background_effect_plan("wait_for_release");
             effect_plan.wait_timeout_seconds = Some(5.0);
-            effect_plan.wait_poll_interval_seconds = Some(0.01);
+            effect_plan.wait_poll_interval_seconds =
+                Some(compute_release_poll_interval_seconds(payload.retry_count));
             Ok(BackgroundControlResponsePayload {
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
@@ -9596,7 +9610,19 @@ mod tests {
         assert_eq!(release.reason, "session-release-wait");
         assert_eq!(release.effect_plan.next_step, "wait_for_release");
         assert_eq!(release.effect_plan.wait_timeout_seconds, Some(5.0));
-        assert_eq!(release.effect_plan.wait_poll_interval_seconds, Some(0.01));
+        assert_eq!(release.effect_plan.wait_poll_interval_seconds, Some(0.02));
+
+        let backed_off = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "session-release".to_string(),
+            retry_count: Some(3),
+            ..background_control_request_defaults()
+        })
+        .expect("session release backoff response");
+        assert_eq!(
+            backed_off.effect_plan.wait_poll_interval_seconds,
+            Some(0.0675)
+        );
     }
 
     #[test]
