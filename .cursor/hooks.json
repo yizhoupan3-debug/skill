@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "/usr/bin/env python3 .cursor/hooks/review_subagent_gate.py --event beforeSubmitPrompt"
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": "/usr/bin/env python3 .cursor/hooks/review_subagent_gate.py --event subagentStart"
+      }
+    ],
+    "stop": [
+      {
+        "command": "/usr/bin/env python3 .cursor/hooks/review_subagent_gate.py --event stop",
+        "loop_limit": 5
+      }
+    ]
+  }
+}
+
