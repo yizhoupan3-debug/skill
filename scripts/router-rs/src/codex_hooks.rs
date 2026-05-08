@@ -1,8 +1,8 @@
-use crate::framework_runtime::build_framework_contract_summary_envelope;
 use crate::cursor_hooks::{
     has_delegation_override, has_override, has_review_override, is_parallel_delegation_prompt,
     is_review_prompt, normalize_subagent_type, normalize_tool_name, saw_reject_reason,
 };
+use crate::framework_runtime::build_framework_contract_summary_envelope;
 use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -97,7 +97,10 @@ fn codex_state_path(repo_root: &Path, event: &Value) -> PathBuf {
     codex_state_dir(repo_root).join(format!("review-subagent-{}.json", codex_session_key(event)))
 }
 
-fn codex_load_state(repo_root: &Path, event: &Value) -> Result<Option<CodexReviewGateState>, String> {
+fn codex_load_state(
+    repo_root: &Path,
+    event: &Value,
+) -> Result<Option<CodexReviewGateState>, String> {
     let path = codex_state_path(repo_root, event);
     let text = match fs::read_to_string(path) {
         Ok(value) => value,
@@ -248,7 +251,10 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
     if !saw_subagent_codex(event) {
         return None;
     }
-    let mut state = codex_load_state(repo_root, event).ok().flatten().unwrap_or_default();
+    let mut state = codex_load_state(repo_root, event)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     state.review_subagent_seen = true;
     state.review_subagent_tool = Some(codex_tool_name(event));
     if !codex_save_state(repo_root, event, &state) {
@@ -690,10 +696,9 @@ fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
 Codex hooks are disabled for this repo by default.\n\n\
 Project-local `.codex/hooks.json` intentionally contains no active hooks.\n\n\
-By default, the hook scripts under `.codex/hooks/` are inactive fixtures or explicit audit helpers.\n\n\
-After running `scripts/install_codex_cli_hooks.sh`, `~/.codex/hooks.json` will include a codex-cli command hook for `.codex/hooks/review_subagent_gate.py` on `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
+After running `scripts/install_codex_cli_hooks.sh`, `~/.codex/hooks.json` will include a codex-cli command hook that invokes the Rust `router-rs` review-subagent gate on `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 The Rust hook commands remain available for explicit one-off audits.\n\n\
-Use `scripts/install_codex_cli_hooks.sh` to install user-level hooks into `~/.codex/` for codex-cli only. The installer validates `python3` and hook script presence, enables `[features].codex_hooks = true` in `~/.codex/config.toml`, keeps existing hooks, and idempotently appends the review-subagent command hook without replacing unrelated handlers.\n\n\
+Use `scripts/install_codex_cli_hooks.sh` to install user-level hooks into `~/.codex/` for codex-cli only. The installer validates `python3` for config editing, enables `[features].codex_hooks = true` in `~/.codex/config.toml`, keeps existing hooks, and idempotently appends the review-subagent command hook without replacing unrelated handlers.\n\n\
 The review-subagent hook writes transient state under `.codex/hook-state/` in the current repository while the session is active.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
@@ -1295,7 +1300,11 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(root.join(".codex")).unwrap();
         fs::write(root.join("AGENTS.md"), "stale").unwrap();
-        fs::write(root.join(".codex/host_entrypoints_sync_manifest.json"), "{}").unwrap();
+        fs::write(
+            root.join(".codex/host_entrypoints_sync_manifest.json"),
+            "{}",
+        )
+        .unwrap();
 
         let report = sync_host_entrypoints(&root, false).unwrap();
         let would_write = report
@@ -1303,7 +1312,11 @@ mod tests {
             .and_then(Value::as_array)
             .unwrap()
             .len();
-        let written = report.get("written").and_then(Value::as_array).unwrap().len();
+        let written = report
+            .get("written")
+            .and_then(Value::as_array)
+            .unwrap()
+            .len();
         assert!(would_write > 0);
         assert_eq!(written, 0);
 
@@ -1324,8 +1337,6 @@ mod tests {
                 SEQ.fetch_add(1, Ordering::SeqCst)
             ));
             std::fs::create_dir_all(dir.join(".codex/hook-state")).unwrap();
-            std::fs::create_dir_all(dir.join(".codex/hooks")).unwrap();
-            std::fs::write(dir.join(".codex/hooks/review_subagent_gate.py"), b"# stub").unwrap();
             dir
         }
 
@@ -1395,7 +1406,9 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap().unwrap();
+            let out = run_codex_review_subagent_gate(&repo, &payload)
+                .unwrap()
+                .unwrap();
             assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
         }
 
@@ -1408,7 +1421,9 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":""
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap().unwrap();
+            let out = run_codex_review_subagent_gate(&repo, &payload)
+                .unwrap()
+                .unwrap();
             let reason = out.get("reason").and_then(Value::as_str).unwrap();
             assert!(reason.contains("Stop payload had no review context"));
         }
@@ -1429,7 +1444,9 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap().unwrap();
+            let out = run_codex_review_subagent_gate(&repo, &stop)
+                .unwrap()
+                .unwrap();
             assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
         }
 
@@ -1449,7 +1466,9 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap().unwrap();
+            let out = run_codex_review_subagent_gate(&repo, &stop)
+                .unwrap()
+                .unwrap();
             assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
         }
 

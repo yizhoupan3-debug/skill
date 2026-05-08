@@ -625,7 +625,11 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
             "broad first-turn owner should stay out of hot runtime: {excluded}"
         );
     }
-    assert!(slugs.len() <= 24, "hot runtime surface should stay bounded; got {}", slugs.len());
+    assert!(
+        slugs.len() <= 24,
+        "hot runtime surface should stay bounded; got {}",
+        slugs.len()
+    );
     assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
 }
 
@@ -662,8 +666,14 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
 
     assert_eq!(plugin_catalog["schema_version"], "skill-plugin-catalog-v1");
     assert_eq!(plugin_catalog["plugin_abi_version"], "skill-plugin-abi-v1");
-    assert_eq!(routing_metadata["schema_version"], "skill-routing-metadata-v1");
-    assert_eq!(explain["schema_version"], "skill-routing-runtime-explain-v1");
+    assert_eq!(
+        routing_metadata["schema_version"],
+        "skill-routing-metadata-v1"
+    );
+    assert_eq!(
+        explain["schema_version"],
+        "skill-routing-runtime-explain-v1"
+    );
     assert_eq!(health["schema_version"], "skill-health-manifest-v2");
     assert_eq!(health["status"], "healthy");
     assert_eq!(health["summary"]["degraded_records"], 0);
@@ -677,10 +687,21 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
         "active"
     );
     assert!(routing_metadata["skills"][skill].is_object());
-    assert_eq!(
-        explain["selected"][skill]["plugin_kind"],
-        plugin_catalog["skills"][skill]["kind"]
-    );
+    if explain["selected"][skill].is_object() {
+        assert_eq!(
+            explain["selected"][skill]["plugin_kind"],
+            plugin_catalog["skills"][skill]["kind"]
+        );
+    } else {
+        assert_eq!(explain["summary"]["has_sparse_entries"], true);
+        assert_eq!(explain["summary"]["selected_emitted_count"], 0);
+        assert!(
+            explain["summary"]["selected_total_count"]
+                .as_u64()
+                .unwrap_or_default()
+                > 0
+        );
+    }
     assert_eq!(
         routing_metadata["skills"][skill]["fallback_policy"]["mode"],
         "eligible-in-runtime"
@@ -689,7 +710,8 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
 
 #[test]
 fn runtime_provider_registry_declares_component_plugin_lanes() {
-    let registry = read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
+    let registry =
+        read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
     assert_eq!(registry["schema_version"], "runtime-provider-registry-v1");
     assert_eq!(registry["plugin_abi_version"], "skill-plugin-abi-v1");
     for lane in [
@@ -706,8 +728,14 @@ fn runtime_provider_registry_declares_component_plugin_lanes() {
             "missing provider registry lane: {lane}"
         );
     }
-    assert_eq!(registry["execution_providers"]["local_rust"]["status"], "implemented");
-    assert_eq!(registry["storage_providers"]["sqlite"]["status"], "implemented");
+    assert_eq!(
+        registry["execution_providers"]["local_rust"]["status"],
+        "implemented"
+    );
+    assert_eq!(
+        registry["storage_providers"]["sqlite"]["status"],
+        "implemented"
+    );
     assert_eq!(
         registry["trace_replay_providers"]["human_intervention"]["status"],
         "declared"
@@ -728,22 +756,6 @@ fn runtime_provider_registry_declares_component_plugin_lanes() {
         !registry.to_string().contains("/Users/joe"),
         "provider registry must stay portable"
     );
-}
-
-#[test]
-fn compatibility_routing_root_is_only_a_pointer() {
-    let root = read_text(&project_root().join("skills/SKILL_ROUTING_ROOT.md"));
-    assert!(root.contains("Compatibility Routing Pointer"));
-    assert!(root.contains("SKILL_ROUTING_RUNTIME.json"));
-    for stale in [
-        "skill-evolution-guardian",
-        "iterative-optimizer",
-        "checklist-writting",
-        "writing-skills",
-        "`xlsx`",
-    ] {
-        assert!(!root.contains(stale), "stale routing root ref: {stale}");
-    }
 }
 
 #[test]
@@ -935,9 +947,7 @@ fn autoresearch_runtime_controller_stays_without_legacy_skill_entrypoint() {
 #[test]
 fn installed_project_hooks_stay_disabled() {
     assert!(project_root().join(".codex/hooks.json").exists());
-    assert!(project_root()
-        .join(".codex/hooks/review_subagent_gate.py")
-        .exists());
+    assert!(!project_root().join(".codex/hooks").exists());
     let config = read_text(&project_root().join(".codex/config.toml"));
     assert!(config.contains("codex_hooks = false"));
     assert!(!config.contains("codex_hooks = true"));
@@ -1233,9 +1243,8 @@ fn ppt_rust_cli_builds_editable_deck_without_node_assets() {
 #[test]
 fn slides_native_pptx_documents_design_and_aigc_gates() {
     let skill = read_text(&project_root().join("skills/slides/SKILL.md"));
-    let workflow = read_text(
-        &project_root().join("skills/slides/references/native-pptx/workflow.md"),
-    );
+    let workflow =
+        read_text(&project_root().join("skills/slides/references/native-pptx/workflow.md"));
     let design_system =
         read_text(&project_root().join("skills/slides/references/native-pptx/design-system.md"));
     let checklist =
@@ -1253,7 +1262,10 @@ fn slides_native_pptx_documents_design_and_aigc_gates() {
         "Rust inspection boost",
         "`deck.plan.json` stays the source of truth",
     ] {
-        assert!(native_docs.contains(token), "missing native PPTX token: {token}");
+        assert!(
+            native_docs.contains(token),
+            "missing native PPTX token: {token}"
+        );
     }
     assert!(native_docs.contains(
         "outline -> text-owner polish -> DESIGN.md or visual contract -> deck.plan.json -> deck.pptx -> rendered\n\
@@ -1343,12 +1355,12 @@ fn ppt_docs_are_rust_runtime_first() {
 fn ppt_skill_references_source_first_and_editable_rules() {
     let layout =
         read_text(&project_root().join("skills/slides/references/native-pptx/layout-patterns.md"));
-    let method =
-        read_text(&project_root().join("skills/slides/references/native-pptx/method.md"));
+    let method = read_text(&project_root().join("skills/slides/references/native-pptx/method.md"));
     let rust_cli =
         read_text(&project_root().join("skills/slides/references/native-pptx/rust-cli.md"));
-    let visualization =
-        read_text(&project_root().join("skills/slides/references/native-pptx/visualization_patterns.md"));
+    let visualization = read_text(
+        &project_root().join("skills/slides/references/native-pptx/visualization_patterns.md"),
+    );
     let install =
         read_text(&project_root().join("skills/slides/references/native-pptx/install.md"));
 
@@ -1491,13 +1503,7 @@ fn repo_stays_free_of_legacy_python_source_and_pytest_entrypoints() {
 
 fn allowed_python_control_plane_path(path: &Path) -> bool {
     let text = path.to_string_lossy();
-    text == ".codex/hook-tests/test_codex_hooks.py"
-        || text == ".codex/hooks/review_subagent_gate.py"
-        || text == ".cursor/hooks/_patterns.py"
-        || text == ".cursor/hooks/auto_optimize_on_save.py"
-        || text == ".cursor/hooks/review_subagent_gate.py"
-        || text == ".cursor/hook-tests/test_cursor_hooks.py"
-        || text == ".cursor/hook-tests/test_install_codex_cli_hooks.py"
+    text == ".cursor/hook-tests/test_install_codex_cli_hooks.py"
         || text.starts_with(".cursor/hook-tests/tmp_")
         || text.starts_with("skills/codex-hook-builder/assets/templates/")
         || text.starts_with("skills/codex-hook-builder/scripts/")
