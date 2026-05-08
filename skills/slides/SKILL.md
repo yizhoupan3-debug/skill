@@ -99,7 +99,7 @@ Use these commands from the deck workspace. If `ppt` is not already on `PATH`,
 run it through Cargo:
 
 ```bash
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- <command>
+cargo run --manifest-path rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- <command>
 ```
 
 New deck or rebuild:

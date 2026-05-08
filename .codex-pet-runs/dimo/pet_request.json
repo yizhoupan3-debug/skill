@@ -1,0 +1,217 @@
+{
+  "pet_id": "dimo",
+  "display_name": "Dimo",
+  "description": "A tiny blue-and-white Dimo companion from Rock Kingdom, simplified into a Codex digital pet.",
+  "created_at": "2026-05-02T16:42:50.259714+00:00",
+  "atlas": {
+    "columns": 8,
+    "rows": 9,
+    "cell_width": 192,
+    "cell_height": 208,
+    "width": 1536,
+    "height": 1872
+  },
+  "rows": [
+    {
+      "state": "idle",
+      "row": 0,
+      "frames": 6,
+      "purpose": "neutral breathing/blinking loop"
+    },
+    {
+      "state": "running-right",
+      "row": 1,
+      "frames": 8,
+      "purpose": "rightward locomotion loop"
+    },
+    {
+      "state": "running-left",
+      "row": 2,
+      "frames": 8,
+      "purpose": "leftward locomotion loop"
+    },
+    {
+      "state": "waving",
+      "row": 3,
+      "frames": 4,
+      "purpose": "greeting gesture with raised wave and return"
+    },
+    {
+      "state": "jumping",
+      "row": 4,
+      "frames": 5,
+      "purpose": "anticipation, lift, peak, descent, settle"
+    },
+    {
+      "state": "failed",
+      "row": 5,
+      "frames": 8,
+      "purpose": "sad, failed, or deflated reaction"
+    },
+    {
+      "state": "waiting",
+      "row": 6,
+      "frames": 6,
+      "purpose": "patient waiting loop with small motion"
+    },
+    {
+      "state": "running",
+      "row": 7,
+      "frames": 6,
+      "purpose": "generic in-place running loop"
+    },
+    {
+      "state": "review",
+      "row": 8,
+      "frames": 6,
+      "purpose": "focused inspecting or review loop"
+    }
+  ],
+  "layout_guides": [
+    {
+      "state": "idle",
+      "path": "references/layout-guides/idle.png",
+      "width": 1152,
+      "height": 208,
+      "frames": 6,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "running-right",
+      "path": "references/layout-guides/running-right.png",
+      "width": 1536,
+      "height": 208,
+      "frames": 8,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "running-left",
+      "path": "references/layout-guides/running-left.png",
+      "width": 1536,
+      "height": 208,
+      "frames": 8,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "waving",
+      "path": "references/layout-guides/waving.png",
+      "width": 768,
+      "height": 208,
+      "frames": 4,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "jumping",
+      "path": "references/layout-guides/jumping.png",
+      "width": 960,
+      "height": 208,
+      "frames": 5,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "failed",
+      "path": "references/layout-guides/failed.png",
+      "width": 1536,
+      "height": 208,
+      "frames": 8,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "waiting",
+      "path": "references/layout-guides/waiting.png",
+      "width": 1152,
+      "height": 208,
+      "frames": 6,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "running",
+      "path": "references/layout-guides/running.png",
+      "width": 1152,
+      "height": 208,
+      "frames": 6,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    },
+    {
+      "state": "review",
+      "path": "references/layout-guides/review.png",
+      "width": 1152,
+      "height": 208,
+      "frames": 6,
+      "cell_width": 192,
+      "cell_height": 208,
+      "safe_margin_x": 18,
+      "safe_margin_y": 16,
+      "usage": "layout guide input only; do not copy visible guide lines into generated sprite strips"
+    }
+  ],
+  "references": [
+    {
+      "path": "/Users/joe/Documents/skill/.codex-pet-runs/dimo/references/reference-01.png",
+      "width": 101,
+      "height": 117,
+      "mode": "RGBA",
+      "format": "WEBP",
+      "source_path": "/Users/joe/Documents/skill/.codex-pet-runs/references/dimo-reference.png",
+      "copied_path": "/Users/joe/Documents/skill/.codex-pet-runs/dimo/references/reference-01.png"
+    }
+  ],
+  "chroma_key": {
+    "hex": "#00FF00",
+    "rgb": [
+      0,
+      255,
+      0
+    ],
+    "name": "green",
+    "selection": "auto",
+    "score": 214.63
+  },
+  "pet_notes": "A Dimo-like tiny blue-and-white chibi light creature matching the reference: giant rounded white face continuing into a white chest/belly point, compact tiny blue body, dark red-brown oval determined cute eyes, tiny mouth, sky-blue head cap and torso, two long sky-blue ear fins swept upward/back with yellow tips, small jagged blue head tufts, a small yellow V/lightning mark on the forehead, white side cheek fins, short blue arms, stubby blue legs, a small blue back wing, and a curved blue tail with a simple pale/yellow tip. Preserve Dimo's proportions and color blocking; do not turn it into a generic dragon, fox, deer, or mascot.",
+  "style_notes": "Codex digital pet style: pixel-art-adjacent, compact chibi proportions, chunky readable silhouette, thick dark 1-2 px outline, visible stepped pixel edges, limited sky-blue white yellow dark-red palette, flat cel shading, transparent-ready sprite, no text, no scenery, no shadows, no glow, no detached effects.",
+  "house_style": "Codex digital pet sprite style: pixel-art-adjacent low-resolution mascot sprite, compact chibi proportions, chunky whole-body silhouette, thick dark 1-2 px outline, visible stepped/pixel edges, limited palette, flat cel shading with at most one small highlight and one shadow step, simple readable face, tiny limbs, and no detail that disappears at 192x208. Avoid polished illustration, painterly rendering, anime key art, 3D render, vector app-icon polish, glossy lighting, soft gradients, realistic fur or material texture, anti-aliased high-detail edges, and complex tiny accessories.",
+  "primary_generation_skill": "$imagegen",
+  "canonical_identity_reference": {
+    "path": "references/canonical-base.png",
+    "source_job": "base",
+    "sha256": "b6b868bbd36f7670d5a3fa4d36bc97d6fc7bb84f4d40cf21e08f7ef6773873ad",
+    "metadata": {
+      "width": 1203,
+      "height": 1307,
+      "mode": "RGB",
+      "format": "PNG"
+    }
+  }
+}

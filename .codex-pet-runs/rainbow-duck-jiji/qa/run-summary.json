@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "run_dir": "/Users/joe/Documents/skill/.codex-pet-runs/rainbow-duck-jiji",
+  "spritesheet": "/Users/joe/Documents/skill/.codex-pet-runs/rainbow-duck-jiji/final/spritesheet.webp",
+  "validation": "/Users/joe/Documents/skill/.codex-pet-runs/rainbow-duck-jiji/final/validation.json",
+  "contact_sheet": "/Users/joe/Documents/skill/.codex-pet-runs/rainbow-duck-jiji/qa/contact-sheet.png",
+  "review": "/Users/joe/Documents/skill/.codex-pet-runs/rainbow-duck-jiji/qa/review.json",
+  "videos": "/Users/joe/Documents/skill/.codex-pet-runs/rainbow-duck-jiji/qa/videos",
+  "package": "/Users/joe/.codex/pets/rainbow-duck-jiji"
+}

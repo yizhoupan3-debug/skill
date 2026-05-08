@@ -427,6 +427,10 @@ fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
     let generated = [
         "skills/SKILL_MANIFEST.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
+        "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
+        "skills/SKILL_PLUGIN_CATALOG.json",
+        "skills/SKILL_ROUTING_METADATA.json",
+        "skills/SKILL_HEALTH_MANIFEST.json",
         "skills/SKILL_ROUTING_REGISTRY.md",
         "skills/SKILL_ROUTING_INDEX.md",
         "skills/SKILL_APPROVAL_POLICY.json",
@@ -623,6 +627,107 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         slugs.len()
     );
     assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
+}
+
+#[test]
+fn runtime_plugin_records_are_available_without_breaking_v3_rows() {
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    assert_eq!(runtime["version"], 3);
+    assert_eq!(runtime["schema_version"], "skill-routing-runtime-v3");
+    assert_eq!(runtime["plugin_abi_version"], "skill-plugin-abi-v1");
+    assert_eq!(
+        runtime["vnext"]["plugin_catalog_ref"],
+        "skills/SKILL_PLUGIN_CATALOG.json"
+    );
+    let records = runtime["records"].as_array().expect("runtime records");
+    let rows = runtime["skills"].as_array().expect("runtime rows");
+    assert_eq!(records.len(), rows.len());
+    let framework_record = records
+        .iter()
+        .find(|record| record["slug"] == "skill-framework-developer")
+        .expect("skill-framework-developer runtime record");
+    assert_eq!(framework_record["plugin"]["kind"], "skill");
+    assert_eq!(
+        framework_record["routing_metadata"]["selection_reason"],
+        "allowlisted first-turn owner"
+    );
+}
+
+#[test]
+fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
+    let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
+    let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
+    let explain = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json"));
+    let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
+
+    assert_eq!(plugin_catalog["schema_version"], "skill-plugin-catalog-v1");
+    assert_eq!(plugin_catalog["plugin_abi_version"], "skill-plugin-abi-v1");
+    assert_eq!(routing_metadata["schema_version"], "skill-routing-metadata-v1");
+    assert_eq!(explain["schema_version"], "skill-routing-runtime-explain-v1");
+    assert_eq!(health["schema_version"], "skill-health-manifest-v2");
+    assert_eq!(health["status"], "healthy");
+    assert_eq!(health["summary"]["degraded_records"], 0);
+
+    let skill = "skill-framework-developer";
+    assert!(plugin_catalog["skills"][skill].is_object());
+    assert!(plugin_catalog["skills"][skill]["dependencies"].is_object());
+    assert!(plugin_catalog["skills"][skill]["test_fixtures"].is_object());
+    assert_eq!(
+        plugin_catalog["skills"][skill]["lifecycle"]["retirement"]["state"],
+        "active"
+    );
+    assert!(routing_metadata["skills"][skill].is_object());
+    assert_eq!(
+        explain["selected"][skill]["plugin_kind"],
+        plugin_catalog["skills"][skill]["kind"]
+    );
+    assert_eq!(
+        routing_metadata["skills"][skill]["fallback_policy"]["mode"],
+        "eligible-in-runtime"
+    );
+}
+
+#[test]
+fn runtime_provider_registry_declares_component_plugin_lanes() {
+    let registry = read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
+    assert_eq!(registry["schema_version"], "runtime-provider-registry-v1");
+    assert_eq!(registry["plugin_abi_version"], "skill-plugin-abi-v1");
+    for lane in [
+        "execution_providers",
+        "storage_providers",
+        "trace_replay_providers",
+        "observability_providers",
+        "sandbox_profile_providers",
+        "host_projection_providers",
+        "governance_eval_loop",
+    ] {
+        assert!(
+            registry.get(lane).is_some(),
+            "missing provider registry lane: {lane}"
+        );
+    }
+    assert_eq!(registry["execution_providers"]["local_rust"]["status"], "implemented");
+    assert_eq!(registry["storage_providers"]["sqlite"]["status"], "implemented");
+    assert_eq!(
+        registry["trace_replay_providers"]["human_intervention"]["status"],
+        "declared"
+    );
+    assert_eq!(
+        registry["host_projection_providers"]["codex-cli"]["status"],
+        "implemented"
+    );
+    assert_eq!(
+        registry["host_projection_providers"]["mcp"]["status"],
+        "declared"
+    );
+    assert_eq!(
+        registry["governance_eval_loop"]["metrics"][0],
+        "route_expected_owner_accuracy"
+    );
+    assert!(
+        !registry.to_string().contains("/Users/joe"),
+        "provider registry must stay portable"
+    );
 }
 
 #[test]
@@ -1259,7 +1364,7 @@ fn slides_gate_is_executable_and_evidence_closed() {
         "Do not stop to ask for goal, audience, visual bar, or format when a safe default exists",
         "Re-run routing or consult the fallback manifest for that exact owner",
         "Rust `ppt` CLI",
-        "cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- <command>",
+        "cargo run --manifest-path rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- <command>",
         "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json",
         "## Existing PPTX Safety",
         "Preserve the original file by writing a new output path",

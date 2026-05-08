@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "run_dir": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong",
+  "spritesheet": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/final/spritesheet.webp",
+  "validation": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/final/validation.json",
+  "contact_sheet": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/qa/contact-sheet.png",
+  "review": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/qa/review.json",
+  "videos": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/qa/videos",
+  "package": "/Users/joe/.codex/pets/xiaohong"
+}

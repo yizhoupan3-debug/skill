@@ -7,7 +7,7 @@ Use this reference when setting up a fresh `.pptx` deck workspace or when the Ru
 The native PPTX lane runtime path is the Rust `ppt` binary from this repository:
 
 ```bash
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
+cargo run --manifest-path rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
 ```
 
 For faster repeated use, build the Rust tools and put the resulting binary on `PATH` as `ppt`.

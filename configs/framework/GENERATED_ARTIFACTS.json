@@ -27,6 +27,26 @@
       "compare": "byte-for-byte"
     },
     {
+      "path": "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_PLUGIN_CATALOG.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_METADATA.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
+      "path": "skills/SKILL_HEALTH_MANIFEST.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
+      "compare": "byte-for-byte"
+    },
+    {
       "path": "skills/SKILL_SHADOW_MAP.json",
       "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
       "compare": "byte-for-byte"

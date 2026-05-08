@@ -1,6 +1,6 @@
 ---
 name: "image-generated"
-description: "Generate or edit raster images through VibeProxy Local /v1/responses using the bundled Rust CLI."
+description: "Generate or edit raster images through official OpenAI API using the bundled Rust CLI."
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
@@ -15,17 +15,17 @@ trigger_hints:
   - 做封面图
   - image generation
   - generate image
-  - VibeProxy
-  - Responses API
+  - OpenAI
+  - DALL-E
   - image-generated
 source: local
 metadata:
-  version: "1.3.0"
+  version: "2.0.0"
   platforms: [codex]
   tags:
     - image-generated
-    - vibeproxy
-    - responses-api
+    - openai
+    - dall-e
 
 ---
 
@@ -43,27 +43,23 @@ There is no Python execution path for this skill.
 
 Use the bundled Rust CLI as the default and canonical path for this skill library.
 
-- Endpoint: `http://127.0.0.1:8318/v1/responses`
-- Tool payload: `tools: [{"type": "image_generation"}]`
-- Default model: `gpt-5.4`
-- Override endpoint with `VIBEPROXY_RESPONSES_URL`
-- Optional bearer auth can be supplied with `VIBEPROXY_BEARER_TOKEN` or `VIBEPROXY_API_KEY`
+- Endpoint: `https://api.openai.com/v1/images/generations`
+- Default model: `dall-e-3`
+- Override endpoint with `OPENAI_IMAGES_URL`
+- Authentication: Requires `OPENAI_API_KEY` environment variable.
 
-Use the direct Responses path as the only execution path in this skill library.
+Use the official OpenAI API as the canonical execution path in this skill library.
 
 Reason:
-- this VibeProxy `/v1/responses` path has been locally verified to return `image_generation_call`
-- the goal here is deterministic local execution, not provider-surface guessing
-- keeping one canonical route avoids provider-surface drift
+- Direct access to official DALL-E models ensures the highest quality and consistency.
+- Removes dependency on local proxy middleware.
 
 ## Rules
 
 - Use `rust_tools/image_gen_rs` by default for all normal image generation and editing requests.
-- Do not ask for OpenAI API credentials; this path does not use them.
+- Ensure `OPENAI_API_KEY` is available in the environment.
 - Do not create Python or one-off image generation runners when the bundled Rust CLI already fits.
 - Keep the existing command surface: `generate`, `edit`, `generate-batch`.
-- `edit` supports local images through `input_image` on the Responses API path.
-- `--mask` is currently unsupported on this direct path; do not imply otherwise.
 - For project-bound assets, save into the workspace rather than leaving finals in temp locations.
 - Do not overwrite an existing asset unless the user explicitly asked for replacement.
 
@@ -83,9 +79,9 @@ CLI/runtime details live in:
 ## When to use
 
 - Generate a new bitmap image: hero image, product shot, mockup, concept art, comic, infographic
-- Edit an existing local bitmap image while preserving most of it
+- Edit an existing local bitmap image (DALL-E 2 only)
 - Produce several variants from one or many prompts
-- Use one or more images as edit/reference inputs on the direct Responses API path
+- Use official OpenAI DALL-E models for high-quality visual assets
 
 ## When not to use
 
@@ -100,16 +96,12 @@ CLI/runtime details live in:
 1. Decide `generate`, `edit`, or `generate-batch`.
 2. Decide whether the output is preview-only or meant for the current project.
 3. Collect prompt, constraints, exact text, and any local input images up front.
-4. For each input image, label its role explicitly in the prompt:
-   - edit target
-   - style reference
-   - supporting insert/compositing input
-5. Normalize the prompt into a short structured spec when it helps.
-6. Run the bundled CLI against the VibeProxy Responses endpoint.
-7. Inspect the output for subject, text accuracy, composition, and preserved invariants.
-8. Iterate with one targeted change at a time.
-9. Persist only the selected finals into the workspace unless the user explicitly asked to keep discarded variants.
-10. Report the final saved path, final prompt, and that the request used the VibeProxy `/v1/responses` path.
+4. Normalize the prompt into a short structured spec when it helps.
+5. Run the bundled CLI against the OpenAI API endpoint.
+6. Inspect the output for subject, text accuracy, composition, and preserved invariants.
+7. Iterate with one targeted change at a time.
+8. Persist only the selected finals into the workspace unless the user explicitly asked to keep discarded variants.
+9. Report the final saved path, final prompt, and that the request used the official OpenAI API.
 
 Prompt schema, taxonomy, and examples live in the prompt references above; load
 only the relevant reference when the request needs that extra structure.

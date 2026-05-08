@@ -1,0 +1,962 @@
+{
+  "ok": true,
+  "frames_root": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames",
+  "errors": [],
+  "warnings": [],
+  "rows": [
+    {
+      "state": "idle",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/idle/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22106,
+          "bbox": [
+            5,
+            20,
+            187,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 182
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/idle/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22130,
+          "bbox": [
+            5,
+            20,
+            187,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 213
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/idle/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22297,
+          "bbox": [
+            5,
+            19,
+            187,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 209
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/idle/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21962,
+          "bbox": [
+            5,
+            21,
+            187,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 208
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/idle/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22083,
+          "bbox": [
+            5,
+            20,
+            187,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 166
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/idle/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22130,
+          "bbox": [
+            5,
+            21,
+            187,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 223
+        }
+      ]
+    },
+    {
+      "state": "running-right",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19384,
+          "bbox": [
+            5,
+            29,
+            187,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 291
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19100,
+          "bbox": [
+            5,
+            36,
+            187,
+            171
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 254
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18374,
+          "bbox": [
+            5,
+            35,
+            187,
+            173
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 274
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20856,
+          "bbox": [
+            5,
+            29,
+            187,
+            179
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 207
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16216,
+          "bbox": [
+            5,
+            42,
+            187,
+            166
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 201
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20263,
+          "bbox": [
+            5,
+            34,
+            187,
+            174
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 277
+        },
+        {
+          "index": 6,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22730,
+          "bbox": [
+            5,
+            19,
+            187,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 305
+        },
+        {
+          "index": 7,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-right/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 24395,
+          "bbox": [
+            5,
+            15,
+            187,
+            192
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 281
+        }
+      ]
+    },
+    {
+      "state": "running-left",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 24395,
+          "bbox": [
+            5,
+            15,
+            187,
+            192
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 281
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22730,
+          "bbox": [
+            5,
+            19,
+            187,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 305
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20263,
+          "bbox": [
+            5,
+            34,
+            187,
+            174
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 277
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16216,
+          "bbox": [
+            5,
+            42,
+            187,
+            166
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 201
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20856,
+          "bbox": [
+            5,
+            29,
+            187,
+            179
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 207
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18374,
+          "bbox": [
+            5,
+            35,
+            187,
+            173
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 274
+        },
+        {
+          "index": 6,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19100,
+          "bbox": [
+            5,
+            36,
+            187,
+            171
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 254
+        },
+        {
+          "index": 7,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running-left/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19384,
+          "bbox": [
+            5,
+            29,
+            187,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 291
+        }
+      ]
+    },
+    {
+      "state": "waving",
+      "expected_frames": 4,
+      "actual_frames": 4,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waving/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23260,
+          "bbox": [
+            5,
+            16,
+            187,
+            192
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 191
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waving/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21754,
+          "bbox": [
+            5,
+            21,
+            187,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 135
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waving/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22765,
+          "bbox": [
+            5,
+            17,
+            187,
+            191
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 153
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waving/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23424,
+          "bbox": [
+            5,
+            15,
+            187,
+            192
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 183
+        }
+      ]
+    },
+    {
+      "state": "jumping",
+      "expected_frames": 5,
+      "actual_frames": 5,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/jumping/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18562,
+          "bbox": [
+            5,
+            38,
+            187,
+            169
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 182
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/jumping/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19533,
+          "bbox": [
+            5,
+            23,
+            187,
+            184
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 171
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/jumping/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23456,
+          "bbox": [
+            5,
+            10,
+            187,
+            197
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 289
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/jumping/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21782,
+          "bbox": [
+            5,
+            8,
+            187,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 231
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/jumping/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23370,
+          "bbox": [
+            5,
+            14,
+            187,
+            193
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 231
+        }
+      ]
+    },
+    {
+      "state": "failed",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21094,
+          "bbox": [
+            5,
+            24,
+            187,
+            183
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 215
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21167,
+          "bbox": [
+            5,
+            25,
+            187,
+            182
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 238
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16160,
+          "bbox": [
+            5,
+            42,
+            187,
+            165
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 269
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14564,
+          "bbox": [
+            5,
+            53,
+            187,
+            154
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 202
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23037,
+          "bbox": [
+            5,
+            18,
+            187,
+            189
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 326
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22221,
+          "bbox": [
+            5,
+            22,
+            187,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 317
+        },
+        {
+          "index": 6,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23652,
+          "bbox": [
+            5,
+            15,
+            187,
+            193
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 229
+        },
+        {
+          "index": 7,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/failed/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21332,
+          "bbox": [
+            5,
+            24,
+            187,
+            183
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 253
+        }
+      ]
+    },
+    {
+      "state": "waiting",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waiting/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22766,
+          "bbox": [
+            5,
+            16,
+            187,
+            192
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 239
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waiting/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 26122,
+          "bbox": [
+            5,
+            6,
+            187,
+            201
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 260
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waiting/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 24828,
+          "bbox": [
+            5,
+            11,
+            187,
+            196
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 257
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waiting/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 25496,
+          "bbox": [
+            5,
+            9,
+            187,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 215
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waiting/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23031,
+          "bbox": [
+            5,
+            10,
+            187,
+            197
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 272
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/waiting/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22096,
+          "bbox": [
+            5,
+            13,
+            187,
+            194
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 254
+        }
+      ]
+    },
+    {
+      "state": "running",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20846,
+          "bbox": [
+            5,
+            32,
+            187,
+            176
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 176
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20411,
+          "bbox": [
+            5,
+            31,
+            187,
+            176
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 197
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21633,
+          "bbox": [
+            5,
+            29,
+            187,
+            179
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 167
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17461,
+          "bbox": [
+            5,
+            35,
+            187,
+            172
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 165
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21319,
+          "bbox": [
+            5,
+            29,
+            187,
+            179
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 258
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/running/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21653,
+          "bbox": [
+            5,
+            27,
+            187,
+            180
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 225
+        }
+      ]
+    },
+    {
+      "state": "review",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/review/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20318,
+          "bbox": [
+            5,
+            24,
+            187,
+            183
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 191
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/review/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21183,
+          "bbox": [
+            5,
+            24,
+            187,
+            183
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 179
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/review/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21626,
+          "bbox": [
+            5,
+            23,
+            187,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 201
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/review/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21305,
+          "bbox": [
+            5,
+            22,
+            187,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 183
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/review/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20782,
+          "bbox": [
+            5,
+            20,
+            187,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 197
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Documents/skill/.codex-pet-runs/xiaohong/frames/review/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20220,
+          "bbox": [
+            5,
+            26,
+            187,
+            181
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 182
+        }
+      ]
+    }
+  ]
+}

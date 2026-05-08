@@ -21,7 +21,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-remaining",
     "git-branch",
 ];
-const INSTALL_SKILLS_TOOLS: [&str; 1] = ["codex"];
+const INSTALL_SKILLS_TOOLS: [&str; 2] = ["codex", "cursor"];
 const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
 const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
@@ -43,12 +43,16 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
 const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 4] = ["autopilot", "deepinterview", "gitx", "team"];
-const REQUIRED_GENERATED_ARTIFACTS: [&str; 11] = [
+const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
     "skills/SKILL_ROUTING_INDEX.md",
     "skills/SKILL_MANIFEST.json",
     "skills/SKILL_ROUTING_RUNTIME.json",
+    "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
+    "skills/SKILL_PLUGIN_CATALOG.json",
+    "skills/SKILL_ROUTING_METADATA.json",
+    "skills/SKILL_HEALTH_MANIFEST.json",
     "skills/SKILL_SHADOW_MAP.json",
     "skills/SKILL_APPROVAL_POLICY.json",
     "skills/SKILL_LOADOUTS.json",
@@ -208,6 +212,8 @@ enum Commands {
         #[arg(long)]
         codex_home: Option<PathBuf>,
         #[arg(long)]
+        cursor_home: Option<PathBuf>,
+        #[arg(long)]
         to: Vec<String>,
         #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
         scope: String,
@@ -244,6 +250,8 @@ struct ProjectionCommand {
     #[arg(long)]
     codex_home: Option<PathBuf>,
     #[arg(long)]
+    cursor_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
     #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
     scope: String,
@@ -264,6 +272,8 @@ struct ProjectionStatusCommand {
     #[arg(long)]
     codex_home: Option<PathBuf>,
     #[arg(long)]
+    cursor_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
 }
 
@@ -273,6 +283,7 @@ struct ResolvedProjectionRoots {
     project_root: PathBuf,
     artifact_root: PathBuf,
     codex_home_root: PathBuf,
+    cursor_home_root: PathBuf,
 }
 
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
@@ -380,6 +391,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             artifact_root,
             home,
             codex_home,
+            cursor_home,
             to,
             scope,
             bootstrap_output_dir,
@@ -394,6 +406,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 project_root,
                 artifact_root,
                 codex_home,
+                cursor_home,
                 home,
                 scope,
                 to: selected,
@@ -408,6 +421,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         project_root: projection_command.project_root.clone(),
                         artifact_root: projection_command.artifact_root.clone(),
                         codex_home: projection_command.codex_home.clone(),
+                        cursor_home: projection_command.cursor_home.clone(),
                         home: projection_command.home.clone(),
                     })?
                 }
@@ -542,17 +556,20 @@ fn resolve_projection_roots(
     project_root: Option<&Path>,
     artifact_root: Option<&Path>,
     codex_home: Option<&Path>,
+    cursor_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
     let project_root = resolve_project_root(project_root, &framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
     let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
+    let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
         artifact_root,
         codex_home_root,
+        cursor_home_root,
     })
 }
 
@@ -1234,6 +1251,7 @@ fn projection_install_command(
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
         command.codex_home.as_deref(),
+        command.cursor_home.as_deref(),
         command.home.as_deref(),
     )?;
     let selected_tools = selected_projection_tools(&command.to, true)?;
@@ -1260,6 +1278,7 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
         command.codex_home.as_deref(),
+        command.cursor_home.as_deref(),
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
@@ -1290,6 +1309,7 @@ fn projection_remove_or_cleanup_command(
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
         command.codex_home.as_deref(),
+        command.cursor_home.as_deref(),
         command.home.as_deref(),
     )?;
     let selected_tools = selected_projection_tools(&command.to, false)?;
@@ -1323,11 +1343,14 @@ fn validate_cleanup_scope(
     for tool in tools {
         let explicit_home = match *tool {
             "codex" => command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some(),
+            "cursor" => {
+                command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some()
+            }
             _ => true,
         };
         if !explicit_home && command.home.is_none() {
             return Err(format!(
-                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home, --home, or the matching host HOME environment variable"
+                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home/--cursor-home, --home, or the matching host HOME environment variable"
             ));
         }
     }
@@ -1343,6 +1366,7 @@ fn projection_envelope(
 ) -> Value {
     let host_targets = json!({
         "codex-cli": results.get("codex").cloned().unwrap_or(Value::Null),
+        "cursor": results.get("cursor").cloned().unwrap_or(Value::Null),
     });
     json!({
         "success": true,
@@ -1366,6 +1390,7 @@ fn resolved_roots_payload(roots: &ResolvedProjectionRoots) -> Value {
         "artifact_root": roots.artifact_root.to_string_lossy(),
         "host_home_roots": {
             "codex-cli": roots.codex_home_root.to_string_lossy(),
+            "cursor": roots.cursor_home_root.to_string_lossy(),
         },
     })
 }
@@ -1393,7 +1418,7 @@ fn selected_projection_tools(
         }
     }
     if selected.is_empty() {
-        return Err("projection command requires --to codex or --to all".to_string());
+        return Err("projection command requires --to codex/--to cursor or --to all".to_string());
     }
     Ok(selected)
 }
@@ -1415,6 +1440,7 @@ fn install_projection_tool(
 ) -> Result<Value, String> {
     match tool {
         "codex" => install_codex_projection(roots, scope),
+        "cursor" => install_cursor_projection(roots, scope),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1422,6 +1448,7 @@ fn install_projection_tool(
 fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
     match tool {
         "codex" => codex_projection_status(roots),
+        "cursor" => cursor_projection_status(roots),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1434,6 +1461,7 @@ fn remove_projection_tool(
 ) -> Result<Value, String> {
     match tool {
         "codex" => remove_codex_projection(roots, scope, dry_run),
+        "cursor" => remove_cursor_projection(roots, scope, dry_run),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1486,6 +1514,53 @@ fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, Str
     }))
 }
 
+fn install_cursor_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
+    let target = cursor_entrypoint_target(roots, scope);
+    let changed = write_text_if_changed(
+        &target,
+        &render_cursor_framework_entrypoint(roots, scope),
+    )?;
+    let manifest_changed = write_cursor_projection_manifest(roots, scope, &target)?;
+    Ok(json!({
+        "status": "installed",
+        "changed": changed || manifest_changed,
+        "scope": scope,
+        "rules": {
+            "framework": {
+                "scope": scope,
+                "path": target.to_string_lossy(),
+                "logical_entrypoint": "/framework",
+                "native_representation": "cursor-rule-mdc",
+            }
+        },
+        "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
+        "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
+    }))
+}
+
+fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    let project_target = cursor_entrypoint_target(roots, "project");
+    let user_target = cursor_entrypoint_target(roots, "user");
+    Ok(json!({
+        "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
+        "status": "projection-status",
+        "rules": {
+            "framework": {
+                "project": cursor_projection_file_status(&project_target)?,
+                "user": cursor_projection_file_status(&user_target)?,
+            }
+        },
+        "manifest": {
+            "project": projection_manifest_status(&projection_manifest_path(roots, "cursor", "project"))?,
+            "user": projection_manifest_status(&projection_manifest_path(roots, "cursor", "user"))?,
+        },
+        "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
+    }))
+}
+
 fn remove_codex_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -1495,6 +1570,40 @@ fn remove_codex_projection(
     let manifest_path = projection_manifest_path(roots, "codex-cli", scope);
     let manifest_ownership =
         projection_manifest_ownership(&manifest_path, "codex-cli", scope, &target)?;
+    let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
+    let changed = if !dry_run && would_remove_projection {
+        fs::remove_file(&target).map_err(|err| err.to_string())?;
+        true
+    } else {
+        false
+    };
+    let would_remove_manifest = manifest_ownership.managed;
+    let manifest_removed = if !dry_run && would_remove_manifest {
+        fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
+        true
+    } else {
+        false
+    };
+    let any_changed = changed || manifest_removed;
+    Ok(json!({
+        "status": if dry_run && (would_remove_projection || would_remove_manifest) { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
+        "changed": any_changed,
+        "dry_run": dry_run,
+        "scope": scope,
+        "removed_paths": removed_projection_paths(changed, &target, manifest_removed, &manifest_path),
+        "would_remove_paths": removed_projection_paths(would_remove_projection, &target, would_remove_manifest, &manifest_path),
+        "skipped_user_owned_paths": if would_remove_projection || !target.exists() { json!([]) } else { json!([target.to_string_lossy()]) },
+    }))
+}
+
+fn remove_cursor_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    dry_run: bool,
+) -> Result<Value, String> {
+    let target = cursor_entrypoint_target(roots, scope);
+    let manifest_path = projection_manifest_path(roots, "cursor", scope);
+    let manifest_ownership = projection_manifest_ownership(&manifest_path, "cursor", scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
         fs::remove_file(&target).map_err(|err| err.to_string())?;
@@ -1648,6 +1757,18 @@ fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> Path
     }
 }
 
+fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.cursor_home_root.join("rules").join("framework.mdc")
+    } else {
+        roots
+            .project_root
+            .join(".cursor")
+            .join("rules")
+            .join("framework.mdc")
+    }
+}
+
 fn codex_prompt_entrypoints_root(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.codex_home_root.clone()
@@ -1668,6 +1789,13 @@ fn projection_manifest_path(
         ("codex-cli", _) => roots
             .project_root
             .join(".codex")
+            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+        ("cursor", "user") => roots
+            .cursor_home_root
+            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+        ("cursor", _) => roots
+            .project_root
+            .join(".cursor")
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
         _ => roots.project_root.join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
     }
@@ -1701,6 +1829,34 @@ fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &st
     )
 }
 
+fn write_cursor_projection_manifest(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    command_path: &Path,
+) -> Result<bool, String> {
+    write_json_if_changed(
+        &projection_manifest_path(roots, "cursor", scope),
+        &json!({
+            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
+            "managed_by": "skill-framework",
+            "host_projection": "cursor",
+            "scope": scope,
+            "files": [command_path.to_string_lossy()],
+            "settings": {
+                "managed_key_paths": [],
+            }
+        }),
+    )
+}
+
+fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+    format!(
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `{}`.\nProject root: `{}`.\n",
+        roots.framework_root.to_string_lossy(),
+        roots.project_root.to_string_lossy(),
+    )
+}
+
 fn managed_projection_file_exists(path: &Path) -> Result<bool, String> {
     let Some(content) = read_text_if_exists(path)? else {
         return Ok(false);
@@ -1718,6 +1874,26 @@ fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
         && content
             .as_deref()
             .map(|content| content.contains("host_projection: codex-cli"))
+            .unwrap_or(false);
+    Ok(json!({
+        "path": path.to_string_lossy(),
+        "exists": path.exists(),
+        "managed": verified,
+        "verification": if verified { "verified" } else if marker_managed { "unknown" } else { "unmanaged" },
+        "marker_managed": marker_managed,
+    }))
+}
+
+fn cursor_projection_file_status(path: &Path) -> Result<Value, String> {
+    let content = read_text_if_exists(path)?;
+    let marker_managed = content
+        .as_deref()
+        .map(is_managed_projection_content)
+        .unwrap_or(false);
+    let verified = marker_managed
+        && content
+            .as_deref()
+            .map(|content| content.contains("host_projection: cursor"))
             .unwrap_or(false);
     Ok(json!({
         "path": path.to_string_lossy(),
@@ -1760,6 +1936,7 @@ fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String
 fn canonical_tool_name(raw: &str) -> Result<&'static str, String> {
     match raw.trim().to_lowercase().as_str() {
         "codex" => Ok("codex"),
+        "cursor" => Ok("cursor"),
         other => Err(format!(
             "Unknown tool: {other}. Supported tools: {}",
             INSTALL_SKILLS_TOOLS.join(" ")
