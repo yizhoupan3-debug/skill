@@ -1,20 +1,21 @@
 ---
-description: Require independent subagent lanes for broad/deep review requests
+description: Require subagent lanes by default, with explicit no-subagent reasons
 alwaysApply: true
 ---
 
 # Review Subagent Gate
 
-When a user asks for broad or deep review, treat it as requiring independent reviewer subagent lanes before finalizing.
+Subagent is the default execution mode once this gate is triggered. Unless explicitly overridden, require independent subagent lanes before finalizing.
 
 ## Trigger intent
 
-Apply this gate when the request indicates broad review scope, such as:
+Trigger applies to review/delegation intents; especially for:
 - code/security/architecture review
 - review a PR or pull request
 - deep/full-repo/cross-module review
 - review with severity-ranked findings, regression risk, or architecture risk
 - explicit parallel lane requests (for example API, database, and UI in parallel)
+- explicit framework orchestration entrypoints (`/autopilot`, `$autopilot`, `/team`, `$team`, `/gitx`, `$gitx`)
 
 ## Required behavior
 
@@ -22,6 +23,7 @@ Before finalizing:
 1. Spawn one or more independent subagents for reviewer lanes when scope can be split.
 2. Keep supervisor ownership for integration and final verification.
 3. If you do not spawn subagents, explicitly state one reject reason: `small_task`, `shared_context_heavy`, `write_scope_overlap`, `next_step_blocked`, `verification_missing`, or `token_overhead_dominates`.
+4. For `/autopilot` goal-style runs, do not stop at planning only: include goal contract, checkpoint progress, and verification result (or explicit blocker) before closeout.
 
 Independent means:
 - launch fresh subagents for each lane (do not reuse parent context as the worker context),

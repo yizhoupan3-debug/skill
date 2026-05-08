@@ -65,8 +65,9 @@ fn install_native_integration_is_idempotent() {
     let content = read_text(&home_config_path);
     assert_eq!(first["success"], true);
     assert_eq!(second["success"], true);
-    assert_eq!(content.matches("[features]").count(), 1);
-    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+    assert_eq!(content.matches("[features]").count(), 0);
+    assert_eq!(content.matches("codex_hooks = false").count(), 0);
+    assert_eq!(content.matches("codex_hooks = true").count(), 0);
     assert_eq!(content.matches("[mcp_servers.browser-mcp]").count(), 0);
     assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 0);
     assert_eq!(
@@ -107,7 +108,7 @@ fn install_native_integration_is_idempotent() {
 }
 
 #[test]
-fn install_native_integration_preserves_similar_codex_hook_keys_and_dedupes() {
+fn install_native_integration_preserves_codex_hook_value_and_dedupes() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
@@ -140,8 +141,8 @@ fn install_native_integration_preserves_similar_codex_hook_keys_and_dedupes() {
     assert_eq!(result["success"], true);
     let content = read_text(&home_config_path);
     assert!(content.contains("codex_hooks_extra = true"));
-    assert_eq!(content.matches("codex_hooks = false").count(), 1);
-    assert!(!content.contains("codex_hooks = true"));
+    assert_eq!(content.matches("codex_hooks = true").count(), 1);
+    assert_eq!(content.matches("codex_hooks = false").count(), 0);
 }
 
 #[test]
@@ -343,6 +344,199 @@ fn install_skills_cursor_target_installs_only_cursor() {
     assert_eq!(result["results"]["cursor"]["status"], "installed");
     assert!(repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/framework.md").exists());
+}
+
+#[test]
+fn cursor_user_scope_projection_manages_browser_mcp_server() {
+    let tmp = tempdir().unwrap();
+    let framework_root = project_root();
+    let project_root = tmp.path().join("consumer");
+    let artifact_root = tmp.path().join("artifacts");
+    let cursor_home = tmp.path().join("cursor-home");
+    std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&cursor_home).unwrap();
+
+    let install = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(install["success"], true);
+    assert_eq!(install["results"]["cursor"]["status"], "installed");
+
+    let mcp_path = cursor_home.join("mcp.json");
+    let mcp_payload = common::read_json(&mcp_path);
+    assert_eq!(
+        mcp_payload["mcp_servers"]["browser-mcp"]["command"],
+        json!("bash")
+    );
+    assert!(
+        mcp_payload["mcp_servers"]["browser-mcp"]["args"][0]
+            .as_str()
+            .unwrap()
+            .ends_with("tools/browser-mcp/scripts/start_browser_mcp.sh")
+    );
+
+    let remove = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "remove",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(remove["success"], true);
+    let removed_payload = common::read_json(&mcp_path);
+    assert!(
+        removed_payload
+            .get("mcp_servers")
+            .and_then(|servers| servers.get("browser-mcp"))
+            .is_none()
+    );
+}
+
+#[test]
+fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
+    let tmp = tempdir().unwrap();
+    let framework_root = project_root();
+    let project_root = tmp.path().join("consumer");
+    let artifact_root = tmp.path().join("artifacts");
+    let cursor_home = tmp.path().join("cursor-home");
+    std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&cursor_home).unwrap();
+
+    let mcp_path = cursor_home.join("mcp.json");
+    write_json(
+        &mcp_path,
+        &json!({
+            "mcp_servers": {
+                "browser-mcp": {
+                    "command": "custom-browser-mcp",
+                    "args": ["--local"]
+                }
+            }
+        }),
+    );
+
+    let install = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(install["success"], true);
+    assert_eq!(install["results"]["cursor"]["status"], "installed");
+    assert_eq!(install["results"]["cursor"]["mcp"]["changed"], false);
+
+    let mcp_payload = common::read_json(&mcp_path);
+    assert_eq!(
+        mcp_payload["mcp_servers"]["browser-mcp"]["command"],
+        json!("custom-browser-mcp")
+    );
+}
+
+#[test]
+fn cursor_user_scope_remove_preserves_user_owned_browser_mcp_server() {
+    let tmp = tempdir().unwrap();
+    let framework_root = project_root();
+    let project_root = tmp.path().join("consumer");
+    let artifact_root = tmp.path().join("artifacts");
+    let cursor_home = tmp.path().join("cursor-home");
+    std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&cursor_home).unwrap();
+
+    let install = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(install["success"], true);
+
+    let mcp_path = cursor_home.join("mcp.json");
+    write_json(
+        &mcp_path,
+        &json!({
+            "mcp_servers": {
+                "browser-mcp": {
+                    "command": "custom-browser-mcp",
+                    "args": ["--local"]
+                }
+            }
+        }),
+    );
+
+    let remove = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "remove",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
+        "--to",
+        "cursor",
+        "--scope",
+        "user",
+    ]);
+    assert_eq!(remove["success"], true);
+    assert_eq!(remove["results"]["cursor"]["mcp"]["changed"], false);
+    assert_eq!(
+        remove["results"]["cursor"]["mcp"]["skipped_user_owned"],
+        json!(true)
+    );
+    let removed_payload = common::read_json(&mcp_path);
+    assert_eq!(
+        removed_payload["mcp_servers"]["browser-mcp"]["command"],
+        json!("custom-browser-mcp")
+    );
 }
 
 #[test]
@@ -1130,6 +1324,22 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         aliases["deepinterview"]["host_entrypoints"]["cursor"],
         "/deepinterview"
     );
+    assert_eq!(aliases["gitx"]["host_entrypoints"]["codex-cli"], "/gitx");
+    assert_eq!(aliases["gitx"]["host_entrypoints"]["cursor"], "/gitx");
+    assert_eq!(
+        aliases["gitx"]["interaction_invariants"]["implicit_route_policy"],
+        "never"
+    );
+    assert_eq!(
+        aliases["gitx"]["interaction_invariants"]["requires_explicit_entrypoint"],
+        true
+    );
+    let gitx_entrypoints = aliases["gitx"]["interaction_invariants"]["explicit_entrypoints"]
+        .as_array()
+        .expect("gitx explicit_entrypoints should be an array");
+    assert!(gitx_entrypoints.contains(&json!("/gitx")));
+    assert!(gitx_entrypoints.contains(&json!("$gitx")));
+    assert!(gitx_entrypoints.contains(&json!("gitx")));
     assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "/team");
     assert_eq!(aliases["team"]["host_entrypoints"]["cursor"], "/team");
     assert_eq!(
@@ -1145,6 +1355,34 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         .as_array()
         .unwrap()
         .contains(&json!("resume-and-recovery-required")));
+    assert_eq!(
+        autopilot["autonomy_contract"]["auto_agent_orchestration"]["enabled"],
+        true
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["auto_agent_orchestration"]["max_parallel_lanes"],
+        3
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["run_to_completion"],
+        "until-done-or-blocked"
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["requires_non_goals_definition"],
+        true
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["never_stop_at_plan_only"],
+        true
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["allow_network_research_for_unknowns"],
+        true
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["pause_requires_explicit_resume"],
+        true
+    );
 }
 
 #[test]
