@@ -38,12 +38,12 @@ output/
 archives/artifact-history/
 artifacts/current/
 artifacts/bootstrap/
+**/.router-rs.*.lock
 artifacts/codex-skill-surface/
 artifacts/ops/
 artifacts/evidence/
 artifacts/scratch/
 artifacts/generated-artifacts-drift-check/
-artifacts/memory_automation/current/
 artifacts/tmp-*/
 uploads/
 codex_agno_runtime/tmp-data-test/
@@ -52,11 +52,6 @@ codex_agno_runtime/data/runtime_checkpoint_store.sqlite3
 codex_agno_runtime/data/runtime_checkpoint_store.sqlite3-*
 codex_agno_runtime/data/runtime_event_transports/
 codex_agno_runtime/data/runtime_sandbox_events.jsonl
-memory/*.db
-memory/*.sqlite3
-memory/.*.sqlite3
-memory/archive/
-memory/state.json
 skills/.evolution_journal.jsonl
 skills/dist/*.skill
 rust_tools/target/

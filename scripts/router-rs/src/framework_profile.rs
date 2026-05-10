@@ -4,13 +4,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const REQUIRED_CORE_CAPABILITIES: [&str; 4] = ["runtime", "memory", "artifact", "orchestration"];
-const RUNTIME_SURFACE_FIELDS: [&str; 4] = [
-    "routing",
-    "memory_mounts",
-    "continuity_contract",
-    "host_projection",
-];
+const REQUIRED_CORE_CAPABILITIES: [&str; 3] = ["runtime", "artifact", "orchestration"];
+const RUNTIME_SURFACE_FIELDS: [&str; 3] = ["routing", "continuity_contract", "host_projection"];
 const CAPABILITY_SURFACE_FIELDS: [&str; 12] = [
     "artifact_contract",
     "mcp_servers",
@@ -25,9 +20,8 @@ const CAPABILITY_SURFACE_FIELDS: [&str; 12] = [
     "delegation_contract",
     "supervisor_state_contract",
 ];
-const CODEX_HOST_CAPABILITIES: [&str; 13] = [
+const CODEX_HOST_CAPABILITIES: [&str; 12] = [
     "artifact_contract",
-    "memory_mounts",
     "mcp_servers",
     "workspace_bootstrap",
     "batch_execution",
@@ -68,7 +62,6 @@ const DELEGATION_CONTRACT_ARTIFACT_ID: &str = "delegation_contract";
 const SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID: &str = "supervisor_state_contract";
 
 struct HostProfileBuildContext<'a> {
-    normalized_memory_mounts: &'a [Value],
     normalized_mcp_servers: &'a [Value],
     workspace_bootstrap: &'a Map<String, Value>,
 }
@@ -106,8 +99,6 @@ pub struct FrameworkProfileContract {
     #[serde(default)]
     pub model_policy: Map<String, Value>,
     #[serde(default)]
-    pub memory_mounts: Vec<Value>,
-    #[serde(default)]
     pub mcp_servers: Vec<Value>,
     #[serde(default)]
     pub workspace_bootstrap: Map<String, Value>,
@@ -134,7 +125,6 @@ pub struct ProfileBundle {
     pub framework_surface_policy: Map<String, Value>,
     pub artifact_contract: Map<String, Value>,
     pub model_policy: Map<String, Value>,
-    pub memory_mounts: Vec<Value>,
     pub mcp_servers: Vec<Value>,
     pub workspace_bootstrap: Map<String, Value>,
     pub host_capability_requirements: Map<String, Value>,
@@ -162,15 +152,10 @@ pub fn load_framework_profile(path: &Path) -> Result<FrameworkProfileContract, S
 pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<ProfileBundle, String> {
     validate_framework_profile(profile)?;
 
-    let normalized_memory_mounts = normalize_mounts(&profile.memory_mounts);
     let normalized_mcp_servers = normalize_mcp_servers(&profile.mcp_servers);
-    let workspace_bootstrap = compile_workspace_bootstrap(profile, &normalized_memory_mounts);
-    let shared_contract = build_shared_contract(
-        profile,
-        &normalized_memory_mounts,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-    );
+    let workspace_bootstrap = compile_workspace_bootstrap(profile);
+    let shared_contract =
+        build_shared_contract(profile, &normalized_mcp_servers, &workspace_bootstrap);
     let codex_host_payload = complete_host_payload("codex", build_codex_host_payload());
     let mut host_payloads = Map::new();
     host_payloads.insert(
@@ -179,7 +164,6 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
     );
     let codex_profile = build_host_profile(
         profile,
-        &normalized_memory_mounts,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
@@ -189,7 +173,6 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
     );
     let full_codex_profile = build_host_profile(
         profile,
-        &normalized_memory_mounts,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
@@ -216,7 +199,6 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         framework_surface_policy: profile.framework_surface_policy.clone(),
         artifact_contract: profile.artifact_contract.clone(),
         model_policy: profile.model_policy.clone(),
-        memory_mounts: normalized_memory_mounts.clone(),
         mcp_servers: normalized_mcp_servers.clone(),
         workspace_bootstrap: workspace_bootstrap.clone(),
         host_capability_requirements: profile.host_capability_requirements.clone(),
@@ -289,34 +271,6 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
     Ok(())
 }
 
-fn normalize_mounts(memory_mounts: &[Value]) -> Vec<Value> {
-    memory_mounts
-        .iter()
-        .map(|mount| match mount {
-            Value::Object(obj) => {
-                let mut payload = obj.clone();
-                if !payload.contains_key("mount_id") {
-                    let mount_id = payload
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .unwrap_or("unnamed-memory-mount")
-                        .to_string();
-                    payload.insert("mount_id".to_string(), Value::String(mount_id));
-                }
-                Value::Object(payload)
-            }
-            other => value_object([
-                ("mount_id", Value::String(value_to_string(other))),
-                ("source", Value::String(value_to_string(other))),
-                (
-                    "mount_kind",
-                    Value::String("framework-memory-mount".to_string()),
-                ),
-            ]),
-        })
-        .collect()
-}
-
 fn normalize_mcp_servers(mcp_servers: &[Value]) -> Vec<Value> {
     mcp_servers
         .iter()
@@ -338,10 +292,7 @@ fn normalize_mcp_servers(mcp_servers: &[Value]) -> Vec<Value> {
         .collect()
 }
 
-fn compile_workspace_bootstrap(
-    profile: &FrameworkProfileContract,
-    normalized_memory_mounts: &[Value],
-) -> Map<String, Value> {
+fn compile_workspace_bootstrap(profile: &FrameworkProfileContract) -> Map<String, Value> {
     let mut bootstrap = profile.workspace_bootstrap.clone();
     let mut resources = bootstrap
         .get("resources")
@@ -362,19 +313,9 @@ fn compile_workspace_bootstrap(
         });
         resources.insert("skills".to_string(), skills);
     }
-    if !resources.contains_key("memory") {
-        let memory = bootstrap.get("memory").cloned().unwrap_or_else(|| {
-            value_object([
-                ("source_dir", Value::String("memory".to_string())),
-                ("mounts", Value::Array(normalized_memory_mounts.to_vec())),
-            ])
-        });
-        resources.insert("memory".to_string(), memory);
-    }
     bootstrap.insert("resources".to_string(), Value::Object(resources));
     bootstrap.remove("bridges");
     bootstrap.remove("skill_bridge");
-    bootstrap.remove("memory_bridge");
     bootstrap
 }
 
@@ -425,7 +366,6 @@ fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
 
 fn build_shared_contract(
     profile: &FrameworkProfileContract,
-    normalized_memory_mounts: &[Value],
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
 ) -> Map<String, Value> {
@@ -449,10 +389,6 @@ fn build_shared_contract(
     shared_contract.insert(
         "artifact_contract".to_string(),
         Value::Object(profile.artifact_contract.clone()),
-    );
-    shared_contract.insert(
-        "memory_mounts".to_string(),
-        Value::Array(normalized_memory_mounts.to_vec()),
     );
     shared_contract.insert(
         "mcp_servers".to_string(),
@@ -608,10 +544,6 @@ fn build_host_profile_output_base(
     payload.insert(
         "model_policy".to_string(),
         Value::Object(profile.model_policy.clone()),
-    );
-    payload.insert(
-        "memory_mounts".to_string(),
-        Value::Array(context.normalized_memory_mounts.to_vec()),
     );
     payload.insert(
         "mcp_servers".to_string(),
@@ -784,9 +716,9 @@ impl HostProfileKind {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_host_profile(
     profile: &FrameworkProfileContract,
-    normalized_memory_mounts: &[Value],
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
     shared_contract: &Map<String, Value>,
@@ -797,7 +729,6 @@ fn build_host_profile(
     let mut payload = build_host_profile_output_base(
         profile,
         &HostProfileBuildContext {
-            normalized_memory_mounts,
             normalized_mcp_servers,
             workspace_bootstrap,
         },
@@ -1458,21 +1389,20 @@ mod tests {
             "framework_profile_version": "0.1.0",
             "runtime_family": "portable",
             "host_family": "shared-rust-core",
-            "core_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+            "core_capabilities": ["runtime", "artifact", "orchestration"],
             "rules_bundle": {"rules": [{"id": "outer-owned"}]},
-            "skill_bundle": {"skills": ["router", "memory-bridge"]},
+            "skill_bundle": {"skills": ["router"]},
             "session_policy": {"mode": "bounded", "approval_mode": "manual"},
             "tool_policy": {"shell": "allow"},
             "approval_policy": {"mode": "manual"},
             "loadout_policy": {"default": "portable"},
             "framework_surface_policy": {
-                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
+                "kernel": {"canonical_axes": ["routing", "continuity", "host_projection"]},
                 "default_surface": {"default_loadouts": ["default_surface_loadout"]}
             },
             "artifact_contract": {"layout": "stable-v1"},
             "model_policy": {"provider": "openai", "model": "gpt-5"},
-            "memory_mounts": ["project"],
-            "mcp_servers": ["local-memory"]
+            "mcp_servers": ["local-tools"]
         }))
         .expect("sample profile should deserialize")
     }
@@ -1481,7 +1411,7 @@ mod tests {
     fn profile_bundle_builds_first_class_rust_profile() {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         assert_eq!(bundle.profile_id, "fusion-default");
-        assert_eq!(bundle.capabilities.core.len(), 4);
+        assert_eq!(bundle.capabilities.core.len(), 3);
         assert_eq!(bundle.host_family, "shared-rust-core");
         assert!(bundle.codex_profile["metadata"].get("adapter_id").is_none());
         assert_eq!(
@@ -1505,30 +1435,17 @@ mod tests {
     #[test]
     fn profile_bundle_keeps_workspace_bootstrap_single_sourced() {
         let mut profile = sample_profile();
-        profile.memory_mounts = vec![json!({
-            "mount_id": "project",
-            "source": "memory"
-        })];
         profile.workspace_bootstrap = serde_json::from_value(json!({
             "skills": {
                 "project_dir": "skills"
             },
-            "resources": {
-                "memory": {
-                    "source_dir": "memory",
-                    "mounts": []
-                }
-            }
+            "resources": {}
         }))
         .expect("workspace bootstrap should deserialize");
 
         let bundle = build_profile_bundle(&profile).expect("bundle should build");
         let expected_bootstrap = json!({
             "resources": {
-                "memory": {
-                    "source_dir": "memory",
-                    "mounts": []
-                },
                 "skills": {
                     "project_dir": "skills"
                 }

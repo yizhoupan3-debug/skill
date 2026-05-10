@@ -7,8 +7,12 @@ pub const HOOK_POLICY_SCHEMA_VERSION: &str = "router-rs-hook-policy-v1";
 pub const HOOK_POLICY_AUTHORITY: &str = "rust-hook-policy";
 
 const RETIRED_PROTECTED_GLOBS: [&str; 1] = ["plugins/skill-framework-native/**"];
-const CODEX_PROTECTED_GENERATED_PATHS: [&str; 2] =
-    ["AGENTS.md", ".codex/host_entrypoints_sync_manifest.json"];
+const CODEX_PROTECTED_GENERATED_PATHS: [&str; 4] = [
+    "AGENTS.md",
+    ".codex/hooks.json",
+    ".codex/README.md",
+    ".codex/host_entrypoints_sync_manifest.json",
+];
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HookPolicyEvaluateRequest {

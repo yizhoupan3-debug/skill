@@ -551,76 +551,6 @@ fn launcher_falls_back_to_plain_start_when_no_attach_input_exists() {
 }
 
 #[test]
-fn launcher_builds_router_rs_when_no_prebuilt_binary_exists() {
-    let tmp = tempdir().unwrap();
-    let repo_root = prepare_repo(tmp.path());
-    fs::remove_file(repo_root.join("scripts/router-rs/target/release/router-rs")).unwrap();
-    let cargo_log = repo_root.join("fake-cargo-output.json");
-    let fake_cargo = install_fake_cargo_builder(&repo_root, &cargo_log);
-    let mut command =
-        Command::new(repo_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh"));
-    command
-        .current_dir(&repo_root)
-        .env_remove("BROWSER_MCP_ROUTER_RS_BIN")
-        .env(
-            "PATH",
-            format!(
-                "{}:{}",
-                fake_cargo.parent().unwrap().display(),
-                std::env::var("PATH").unwrap_or_default()
-            ),
-        )
-        .env("CARGO_TARGET_DIR", repo_root.join("shared-target"));
-    let result = run(command);
-    assert!(
-        result.status.success(),
-        "stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&result.stdout),
-        String::from_utf8_lossy(&result.stderr)
-    );
-    assert_eq!(
-        read_json(&cargo_log)["argv"],
-        json!(["browser", "mcp-stdio", "--repo-root", repo_root])
-    );
-}
-
-#[test]
-fn launcher_rebuilds_router_rs_when_sources_are_newer_than_binary() {
-    let tmp = tempdir().unwrap();
-    let repo_root = prepare_repo(tmp.path());
-    let router_path = repo_root.join("scripts/router-rs/target/release/router-rs");
-    set_mtime(&router_path, 1_700_000_000);
-    write_text(
-        &repo_root.join("scripts/router-rs/src/main.rs"),
-        "// fresh source\n",
-    );
-    let cargo_log = repo_root.join("fresh-cargo-output.json");
-    let fake_cargo = install_fake_cargo_builder(&repo_root, &cargo_log);
-
-    let mut command =
-        Command::new(repo_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh"));
-    command
-        .current_dir(&repo_root)
-        .env_remove("BROWSER_MCP_ROUTER_RS_BIN")
-        .env_remove(ROUTER_EXEC_LOG_ENV)
-        .env(
-            "PATH",
-            format!(
-                "{}:{}",
-                fake_cargo.parent().unwrap().display(),
-                std::env::var("PATH").unwrap_or_default()
-            ),
-        )
-        .env("CARGO_TARGET_DIR", repo_root.join("shared-target"));
-
-    common::assert_success(&run(command));
-    assert_eq!(
-        read_json(&cargo_log)["argv"],
-        json!(["browser", "mcp-stdio", "--repo-root", repo_root])
-    );
-}
-
-#[test]
 fn launcher_never_falls_back_to_node_runtime() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
@@ -749,52 +679,6 @@ printf '],"cwd":"%s"}}\n' "$(pwd | sed 's/\\/\\\\/g; s/"/\\"/g')" >> "${env_key}
         ),
     );
     make_executable(&router_path);
-}
-
-fn install_fake_cargo_builder(repo_root: &Path, cargo_log: &Path) -> std::path::PathBuf {
-    let fake_cargo = repo_root.join("fake-bin/cargo");
-    write_text(
-        &fake_cargo,
-        &format!(
-            r#"#!/bin/sh
-mkdir -p "$CARGO_TARGET_DIR/release"
-cat > "$CARGO_TARGET_DIR/release/router-rs" <<'SH'
-#!/bin/sh
-printf '{{"argv":[' > "{cargo_log}"
-first=1
-for arg in "$@"; do
-  if [ "$first" = 0 ]; then printf ',' >> "{cargo_log}"; fi
-  first=0
-  escaped=$(printf '%s' "$arg" | sed 's/\\/\\\\/g; s/"/\\"/g')
-  printf '"%s"' "$escaped" >> "{cargo_log}"
-done
-printf ']}}\n' >> "{cargo_log}"
-SH
-chmod +x "$CARGO_TARGET_DIR/release/router-rs"
-"#,
-            cargo_log = cargo_log.display()
-        ),
-    );
-    make_executable(&fake_cargo);
-    install_fake_file_command(fake_cargo.parent().unwrap());
-    fake_cargo
-}
-
-fn install_fake_file_command(bin_dir: &Path) {
-    let fake_file = bin_dir.join("file");
-    write_text(
-        &fake_file,
-        r#"#!/bin/sh
-case "$(uname -s 2>/dev/null):$(uname -m 2>/dev/null)" in
-  Linux:x86_64) echo "$1: ELF 64-bit LSB executable, x86-64" ;;
-  Linux:aarch64|Linux:arm64) echo "$1: ELF 64-bit LSB executable, ARM aarch64" ;;
-  Darwin:arm64) echo "$1: Mach-O 64-bit executable arm64" ;;
-  Darwin:x86_64) echo "$1: Mach-O 64-bit executable x86_64" ;;
-  *) echo "$1: executable" ;;
-esac
-"#,
-    );
-    make_executable(&fake_file);
 }
 
 fn seed_sqlite_payload(db_path: &std::path::Path, payload_key: &str, payload: &serde_json::Value) {

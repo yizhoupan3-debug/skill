@@ -1,5 +1,5 @@
-use crate::runtime_storage::runtime_backend_capabilities;
-use chrono::Utc;
+use crate::runtime_storage::{acquire_runtime_path_lock, runtime_backend_capabilities};
+use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -27,6 +27,19 @@ const DEFAULT_BACKGROUND_JOB_BACKOFF_MULTIPLIER: f64 = 2.0;
 const DEFAULT_MAX_BACKGROUND_JOBS: usize = 16;
 const MAX_BACKGROUND_JOBS_LIMIT: usize = 64;
 const SQLITE_TABLE_NAME: &str = "runtime_storage_payloads";
+
+/// Reap window for jobs whose status is still active (queued/running/...) but
+/// whose `updated_at` heartbeat has gone silent. Such jobs are typically
+/// produced when a host process is killed without a clean transition; if we
+/// don't reap them they hold session reservations forever and block legitimate
+/// new owners. Default 1h gives plenty of slack for slow-but-alive workers.
+const STALE_ACTIVE_HEARTBEAT_TTL_SECS: i64 = 3600;
+
+/// Garbage-collection window for jobs already in a terminal state
+/// (completed/failed/interrupted/retry_exhausted). After this, the job is
+/// dropped from the in-memory map so the persisted file does not grow without
+/// bound across long-running deployments.
+const STALE_TERMINAL_JOB_TTL_SECS: i64 = 24 * 3600;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -190,6 +203,11 @@ struct BackgroundStateStore {
     jobs: HashMap<String, BackgroundRunStatus>,
     active_sessions: HashMap<String, String>,
     pending_session_takeovers: HashMap<String, String>,
+    /// Set by `load` when reaper modified jobs in memory but did not yet
+    /// persist them. Mutating handlers consume this flag via
+    /// `flush_reap_if_dirty` to fold the reap into their persist step;
+    /// read-only handlers leave it alone so reads stay disk-side-effect-free.
+    reaped_dirty: bool,
 }
 
 fn default_multitask_strategy() -> String {
@@ -218,6 +236,14 @@ fn default_backoff_multiplier() -> f64 {
 
 fn now_iso() -> String {
     Utc::now().to_rfc3339()
+}
+
+/// Best-effort RFC3339 parse used by the reaper. Non-RFC3339 timestamps
+/// (legacy or hand-edited state) are treated as "unknown age" and skipped.
+fn parse_rfc3339_to_utc(value: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
 }
 
 fn is_active_status(status: &str) -> bool {
@@ -286,7 +312,14 @@ fn validate_transition(previous_status: Option<&str>, next_status: &str) -> Resu
         Some("failed") => next_status == "failed",
         Some("interrupted") => next_status == "interrupted",
         Some("retry_exhausted") => next_status == "retry_exhausted",
-        Some(_) => true,
+        // Unknown prior status (legacy / hand-edited / corrupted state).
+        // Previously we returned `true` here as a permissive escape hatch,
+        // which let zombie or invalid statuses transition to anything and
+        // hid storage corruption. Be strict instead: refuse any transition
+        // out of an unrecognized state. Operators can still reset such jobs
+        // explicitly via reseed (status=None branch above), forcing the
+        // problem to the surface.
+        Some(_) => false,
     };
     if allowed {
         Ok(())
@@ -382,6 +415,41 @@ impl BackgroundRunStatus {
         let mut updated = self.clone();
         updated.updated_at = now_iso();
         updated
+    }
+
+    fn claimed_placeholder(job_id: &str, session_id: &str) -> Self {
+        let now = now_iso();
+        BackgroundRunStatus {
+            job_id: job_id.to_string(),
+            session_id: Some(session_id.to_string()),
+            status: "retry_claimed".to_string(),
+            parallel_group_id: None,
+            lane_id: None,
+            parent_job_id: None,
+            multitask_strategy: default_multitask_strategy(),
+            result: None,
+            error: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            attempt: DEFAULT_BACKGROUND_JOB_ATTEMPT,
+            retry_count: DEFAULT_BACKGROUND_JOB_RETRY_COUNT,
+            max_attempts: DEFAULT_BACKGROUND_JOB_MAX_ATTEMPTS,
+            timeout_seconds: None,
+            claimed_by: Some(job_id.to_string()),
+            claimed_at: Some(now.clone()),
+            backoff_base_seconds: DEFAULT_BACKGROUND_JOB_BACKOFF_BASE_SECONDS,
+            backoff_multiplier: DEFAULT_BACKGROUND_JOB_BACKOFF_MULTIPLIER,
+            max_backoff_seconds: None,
+            backoff_seconds: None,
+            next_retry_at: None,
+            retry_scheduled_at: None,
+            retry_claimed_at: Some(now),
+            interrupt_requested_at: None,
+            interrupted_at: None,
+            last_attempt_started_at: None,
+            last_attempt_finished_at: None,
+            last_failure_at: None,
+        }
     }
 }
 
@@ -540,12 +608,163 @@ impl BackgroundStateStore {
             jobs: HashMap::new(),
             active_sessions: HashMap::new(),
             pending_session_takeovers: HashMap::new(),
+            reaped_dirty: false,
         };
         if let Some(persisted) = persisted {
             store.merge_persisted(persisted)?;
         }
+        // Reap zombie / over-aged jobs into the in-memory view so every
+        // operation sees a clean snapshot. We deliberately do **not** persist
+        // here: that would turn pure-read operations (snapshot/get/health)
+        // into silent disk writers, breaking the "read = read-only" contract
+        // and forcing every reader through the path-lock + filesystem rename
+        // machinery. Instead, `reaped_dirty` is set so mutating handlers
+        // (`apply_mutation`, arbitration, reservation) flush the cleanup as
+        // part of their normal persist step. Pure readers keep the cleanup
+        // in their local view and re-derive it on the next load — cheap,
+        // since the reap is an in-memory HashMap scan.
+        let now = Utc::now();
+        let reaped_active = store.reap_stale_active_jobs(now);
+        let reaped_terminal = store.reap_stale_terminal_jobs(now);
+        let reaped_ghost = store.reap_ghost_status_jobs(now);
+        if reaped_active + reaped_terminal + reaped_ghost > 0 {
+            store.reaped_dirty = true;
+        }
         store.compact_terminal_over_capacity(request.capacity_limit);
         Ok(store)
+    }
+
+    /// Best-effort persist of the in-memory reap cleanup. Called by mutating
+    /// handlers right after `load` so reaped state lands on disk together
+    /// with the user-driven mutation. Failures are logged loudly to stderr
+    /// instead of being silently dropped: an indefinitely-failing reap
+    /// persist (full disk, permissions, etc.) is an operational concern that
+    /// must surface in logs, not hide behind `let _ =`.
+    fn flush_reap_if_dirty(&mut self) {
+        if !self.reaped_dirty {
+            return;
+        }
+        match self.persist() {
+            Ok(_) => {
+                self.reaped_dirty = false;
+            }
+            Err(err) => {
+                eprintln!(
+                    "[router-rs] background_state reaper persist failed for {} (non-fatal, will retry on next mutation): {err}",
+                    self.state_path.display()
+                );
+            }
+        }
+    }
+
+    /// Transition active jobs whose `updated_at` heartbeat is older than
+    /// `STALE_ACTIVE_HEARTBEAT_TTL_SECS` to `interrupted` so they release
+    /// session reservations and become eligible for garbage collection.
+    /// Returns the number of jobs reaped.
+    fn reap_stale_active_jobs(&mut self, now: DateTime<Utc>) -> usize {
+        let cutoff = now - chrono::Duration::seconds(STALE_ACTIVE_HEARTBEAT_TTL_SECS);
+        let stale_ids: Vec<String> = self
+            .jobs
+            .iter()
+            .filter(|(_, job)| is_active_status(&job.status))
+            .filter(|(_, job)| {
+                parse_rfc3339_to_utc(&job.updated_at)
+                    .map(|ts| ts < cutoff)
+                    .unwrap_or(false)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        let now_iso = now.to_rfc3339();
+        for job_id in &stale_ids {
+            if let Some(job) = self.jobs.get_mut(job_id) {
+                let prev_status = job.status.clone();
+                job.status = "interrupted".to_string();
+                job.interrupted_at = Some(now_iso.clone());
+                job.updated_at = now_iso.clone();
+                let reaper_msg = format!(
+                    "reaped: {prev_status} heartbeat stale > {STALE_ACTIVE_HEARTBEAT_TTL_SECS}s"
+                );
+                job.error = Some(match job.error.as_deref() {
+                    Some(prev) if !prev.is_empty() => format!("{prev}; {reaper_msg}"),
+                    _ => reaper_msg,
+                });
+            }
+        }
+        if !stale_ids.is_empty() {
+            self.active_sessions
+                .retain(|_, owner| !stale_ids.iter().any(|id| id == owner));
+            self.pending_session_takeovers
+                .retain(|_, incoming| !stale_ids.iter().any(|id| id == incoming));
+        }
+        stale_ids.len()
+    }
+
+    /// Drop terminal jobs older than `STALE_TERMINAL_JOB_TTL_SECS` so the
+    /// persisted file stays bounded across days/weeks of long-running use.
+    fn reap_stale_terminal_jobs(&mut self, now: DateTime<Utc>) -> usize {
+        let cutoff = now - chrono::Duration::seconds(STALE_TERMINAL_JOB_TTL_SECS);
+        let drop_ids: Vec<String> = self
+            .jobs
+            .iter()
+            .filter(|(_, job)| is_terminal_status(&job.status))
+            .filter(|(_, job)| {
+                parse_rfc3339_to_utc(&job.updated_at)
+                    .map(|ts| ts < cutoff)
+                    .unwrap_or(false)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        let count = drop_ids.len();
+        for id in drop_ids {
+            self.jobs.remove(&id);
+        }
+        count
+    }
+
+    /// Sweep "ghost" jobs whose `status` is neither active nor terminal.
+    ///
+    /// After we tightened `validate_transition` to refuse transitions out of
+    /// unrecognized prior statuses, any pre-existing ghost (e.g. a status
+    /// string introduced by a future schema, hand-edited, or persisted from
+    /// a corrupted run) becomes permanently uncoverable: the FSM rejects
+    /// every mutation and the active/terminal reapers never see it. Force
+    /// such jobs into `interrupted` with a diagnostic `error` so:
+    ///   - the next terminal-TTL pass can drop them on schedule,
+    ///   - operators see exactly which ghost status was observed,
+    ///   - session/takeover maps releasing the slot follow the same flow as
+    ///     stale-active reaping.
+    ///
+    /// Returns the number of jobs converted.
+    fn reap_ghost_status_jobs(&mut self, now: DateTime<Utc>) -> usize {
+        let ghost_pairs: Vec<(String, String)> = self
+            .jobs
+            .iter()
+            .filter(|(_, job)| !is_active_status(&job.status) && !is_terminal_status(&job.status))
+            .map(|(id, job)| (id.clone(), job.status.clone()))
+            .collect();
+        if ghost_pairs.is_empty() {
+            return 0;
+        }
+        let now_iso = now.to_rfc3339();
+        for (job_id, prev_status) in &ghost_pairs {
+            if let Some(job) = self.jobs.get_mut(job_id) {
+                job.status = "interrupted".to_string();
+                job.interrupted_at = Some(now_iso.clone());
+                job.updated_at = now_iso.clone();
+                let reaper_msg =
+                    format!("reaped: ghost_status={prev_status:?} not in active/terminal FSM");
+                job.error = Some(match job.error.as_deref() {
+                    Some(prev) if !prev.is_empty() => format!("{prev}; {reaper_msg}"),
+                    _ => reaper_msg,
+                });
+            }
+        }
+        let ghost_ids: Vec<&str> = ghost_pairs.iter().map(|(id, _)| id.as_str()).collect();
+        self.active_sessions
+            .retain(|_, owner| !ghost_ids.iter().any(|id| *id == owner));
+        self.pending_session_takeovers
+            .retain(|_, incoming| !ghost_ids.iter().any(|id| *id == incoming));
+        ghost_pairs.len()
     }
 
     fn merge_persisted(&mut self, persisted: PersistedBackgroundState) -> Result<(), String> {
@@ -576,16 +795,25 @@ impl BackgroundStateStore {
             self.jobs
                 .get(job_id)
                 .map(|job| is_active_status(&job.status))
-                .unwrap_or(true)
+                .unwrap_or(false)
         });
         self.pending_session_takeovers = persisted
             .pending_session_takeovers
             .into_iter()
             .filter(|row| {
+                // Keep pending takeover when either:
+                // 1) incoming job exists and is still active, or
+                // 2) the target session is still known in persisted jobs
+                //    (including recently completed owners) so a follow-up claim
+                //    can finish the handoff.
                 self.jobs
                     .get(&row.incoming_job_id)
                     .map(|job| is_active_status(&job.status))
-                    .unwrap_or(true)
+                    .unwrap_or(false)
+                    || self
+                        .jobs
+                        .values()
+                        .any(|job| job.session_id.as_deref() == Some(row.session_id.as_str()))
             })
             .map(|row| (row.session_id, row.incoming_job_id))
             .collect();
@@ -910,6 +1138,13 @@ impl BackgroundStateStore {
                 if previous_active_job_id.as_deref() != Some(incoming_job_id) {
                     self.active_sessions
                         .insert(session_id.to_string(), incoming_job_id.to_string());
+                    changed = true;
+                }
+                if !self.jobs.contains_key(incoming_job_id) {
+                    self.jobs.insert(
+                        incoming_job_id.to_string(),
+                        BackgroundRunStatus::claimed_placeholder(incoming_job_id, session_id),
+                    );
                     changed = true;
                 }
                 if previous_pending_job_id.is_some() {
@@ -1249,6 +1484,17 @@ fn open_sqlite_connection(db_path: &Path) -> Result<Connection, String> {
     Ok(conn)
 }
 
+/// Returns true for operations that mutate the persisted store. Used by
+/// `handle_background_state_operation` to decide whether to flush the
+/// in-memory reaper cleanup as part of this operation's persist step
+/// (mutating) versus deferring it to the next mutation (read-only).
+fn is_mutating_background_operation(op: &str) -> bool {
+    matches!(
+        op,
+        "apply_mutation" | "arbitrate_session_takeover" | "reserve" | "claim" | "release"
+    )
+}
+
 pub fn handle_background_state_operation(payload: Value) -> Result<Value, String> {
     let request = serde_json::from_value::<BackgroundStateRequestPayload>(payload)
         .map_err(|err| format!("parse background state request failed: {err}"))?;
@@ -1258,7 +1504,41 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
             request.schema_version
         ));
     }
+    // Cross-process critical section: durable-backed state must serialize
+    // load -> mutate -> persist so concurrent writers (codex+cursor+tests)
+    // cannot clobber each other. We acquire an advisory lock on a sentinel
+    // file keyed by `state_path` for both filesystem and sqlite backends:
+    //   - filesystem: serializes the load+rename cycle on the JSON file.
+    //   - sqlite: serializes the load+UPDATE cycle on the row keyed by
+    //     `state_path`. SQLite's own row-level locking only protects a
+    //     single SQL statement, not our higher-level read-modify-write
+    //     compound operation; without this sentinel two concurrent
+    //     handlers that both load, both reap, both mutate could interleave
+    //     and lose updates. The sentinel file is independent of the sqlite
+    //     db file, so it does not interfere with SQLite's own locks.
+    // Memory backend has no cross-process surface and skips the advisory
+    // lock entirely.
+    let backend_family = request.backend_family.as_deref().unwrap_or("filesystem");
+    let normalized_backend = normalized_backend_family(backend_family);
+    let needs_path_lock = matches!(
+        normalized_backend.as_str(),
+        "filesystem" | "file" | "sqlite" | "sqlite3"
+    );
+    let _path_lock = if needs_path_lock {
+        match request.state_path.as_deref() {
+            Some(p) => Some(acquire_runtime_path_lock(Path::new(p))?),
+            None => None,
+        }
+    } else {
+        None
+    };
     let mut store = BackgroundStateStore::load(&request)?;
+    // Mutating operations fold the in-memory reaper cleanup into their
+    // persist step. Read-only operations leave the store as-is so reads
+    // remain disk-side-effect-free.
+    if is_mutating_background_operation(&request.operation) {
+        store.flush_reap_if_dirty();
+    }
     let operation = request.operation.clone();
     let mut response = json!({
         "schema_version": BACKGROUND_STATE_STORE_SCHEMA_VERSION,
@@ -1373,4 +1653,238 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
         }
     }
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn validate_transition_rejects_unknown_prior_status() {
+        // Strict-FSM: any unrecognized prior status (legacy data, hand-edits,
+        // disk corruption) must NOT silently transition to anything. Previously
+        // the wildcard arm returned `true` and let zombie statuses propagate.
+        assert!(validate_transition(Some("ghost_status"), "running").is_err());
+        assert!(validate_transition(Some("legacy_v0"), "completed").is_err());
+        // Known transitions still work.
+        assert!(validate_transition(None, "queued").is_ok());
+        assert!(validate_transition(Some("running"), "completed").is_ok());
+        assert!(validate_transition(Some("interrupted"), "interrupted").is_ok());
+        // Known invalid transitions still rejected.
+        assert!(validate_transition(Some("completed"), "running").is_err());
+    }
+
+    fn make_test_store() -> BackgroundStateStore {
+        BackgroundStateStore {
+            state_path: PathBuf::from("/tmp/router-rs-reaper-test-state.json"),
+            backend_family: "filesystem".to_string(),
+            sqlite_db_path: None,
+            control_plane: Value::Object(serde_json::Map::new()),
+            jobs: HashMap::new(),
+            active_sessions: HashMap::new(),
+            pending_session_takeovers: HashMap::new(),
+            reaped_dirty: false,
+        }
+    }
+
+    fn make_job(id: &str, status: &str, updated_at: &str) -> BackgroundRunStatus {
+        BackgroundRunStatus {
+            job_id: id.to_string(),
+            session_id: Some(format!("session-{id}")),
+            status: status.to_string(),
+            updated_at: updated_at.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn reap_stale_active_jobs_marks_old_running_as_interrupted() {
+        // Heartbeat ttl = 3600s; a `running` job last seen 2h ago is stale.
+        let mut store = make_test_store();
+        let now = Utc::now();
+        let stale_ts =
+            (now - chrono::Duration::seconds(STALE_ACTIVE_HEARTBEAT_TTL_SECS + 1800)).to_rfc3339();
+        let fresh_ts = (now - chrono::Duration::seconds(60)).to_rfc3339();
+        store
+            .jobs
+            .insert("stale".to_string(), make_job("stale", "running", &stale_ts));
+        store
+            .jobs
+            .insert("fresh".to_string(), make_job("fresh", "running", &fresh_ts));
+        store
+            .active_sessions
+            .insert("session-stale".to_string(), "stale".to_string());
+
+        let reaped = store.reap_stale_active_jobs(now);
+        assert_eq!(reaped, 1);
+        let stale_job = store.jobs.get("stale").expect("stale job kept");
+        assert_eq!(stale_job.status, "interrupted");
+        assert!(stale_job.interrupted_at.is_some());
+        assert!(stale_job
+            .error
+            .as_deref()
+            .map(|e| e.contains("heartbeat stale"))
+            .unwrap_or(false));
+        // session reservation released
+        assert!(!store.active_sessions.contains_key("session-stale"));
+        // fresh job untouched
+        assert_eq!(store.jobs.get("fresh").unwrap().status, "running");
+    }
+
+    #[test]
+    fn reap_stale_terminal_jobs_drops_old_terminal() {
+        // Terminal-TTL = 24h; older terminal jobs should be dropped wholesale.
+        let mut store = make_test_store();
+        let now = Utc::now();
+        let stale_ts =
+            (now - chrono::Duration::seconds(STALE_TERMINAL_JOB_TTL_SECS + 60)).to_rfc3339();
+        let fresh_ts = (now - chrono::Duration::seconds(3600)).to_rfc3339();
+        store.jobs.insert(
+            "old-completed".to_string(),
+            make_job("old-completed", "completed", &stale_ts),
+        );
+        store.jobs.insert(
+            "recent-completed".to_string(),
+            make_job("recent-completed", "completed", &fresh_ts),
+        );
+        store.jobs.insert(
+            "running".to_string(),
+            make_job("running", "running", &stale_ts),
+        );
+
+        let reaped = store.reap_stale_terminal_jobs(now);
+        assert_eq!(reaped, 1);
+        assert!(!store.jobs.contains_key("old-completed"));
+        assert!(store.jobs.contains_key("recent-completed"));
+        // active job (even if old) untouched by terminal reaper
+        assert!(store.jobs.contains_key("running"));
+    }
+
+    #[test]
+    fn reap_ghost_status_jobs_marks_unknown_as_interrupted() {
+        // Ghost status (not in active or terminal FSM) must be force-converted
+        // to `interrupted` with diagnostic so terminal-TTL eventually drops
+        // them and operators can see the corruption.
+        let mut store = make_test_store();
+        let now = Utc::now();
+        let ts = (now - chrono::Duration::seconds(60)).to_rfc3339();
+        store.jobs.insert(
+            "ghost".to_string(),
+            make_job("ghost", "weird_legacy_status", &ts),
+        );
+        store
+            .jobs
+            .insert("ok".to_string(), make_job("ok", "running", &ts));
+        store
+            .active_sessions
+            .insert("session-ghost".to_string(), "ghost".to_string());
+        store
+            .pending_session_takeovers
+            .insert("session-x".to_string(), "ghost".to_string());
+
+        let reaped = store.reap_ghost_status_jobs(now);
+        assert_eq!(reaped, 1);
+        let ghost = store.jobs.get("ghost").expect("ghost job kept after reap");
+        assert_eq!(ghost.status, "interrupted");
+        assert!(ghost
+            .error
+            .as_deref()
+            .map(|e| e.contains("ghost_status") && e.contains("weird_legacy_status"))
+            .unwrap_or(false));
+        // active maps released
+        assert!(!store.active_sessions.contains_key("session-ghost"));
+        assert!(!store.pending_session_takeovers.contains_key("session-x"));
+        // healthy job untouched
+        assert_eq!(store.jobs.get("ok").unwrap().status, "running");
+    }
+
+    #[test]
+    fn reap_preserves_recent_jobs() {
+        // Sanity: nothing should be reaped when all jobs are within TTL.
+        let mut store = make_test_store();
+        let now = Utc::now();
+        let recent = (now - chrono::Duration::seconds(60)).to_rfc3339();
+        store
+            .jobs
+            .insert("a".to_string(), make_job("a", "running", &recent));
+        store
+            .jobs
+            .insert("b".to_string(), make_job("b", "completed", &recent));
+        let active_reaped = store.reap_stale_active_jobs(now);
+        let terminal_reaped = store.reap_stale_terminal_jobs(now);
+        let ghost_reaped = store.reap_ghost_status_jobs(now);
+        assert_eq!(active_reaped, 0);
+        assert_eq!(terminal_reaped, 0);
+        assert_eq!(ghost_reaped, 0);
+        assert_eq!(store.jobs.len(), 2);
+    }
+
+    #[test]
+    fn is_mutating_background_operation_classifies_correctly() {
+        // Read-only ops must be classified as non-mutating so they don't
+        // trigger reap-flush disk writes.
+        for op in [
+            "snapshot",
+            "get",
+            "get_active_job",
+            "parallel_group_summary",
+            "parallel_group_summaries",
+            "health",
+        ] {
+            assert!(
+                !is_mutating_background_operation(op),
+                "{op} should be read-only"
+            );
+        }
+        for op in [
+            "apply_mutation",
+            "arbitrate_session_takeover",
+            "reserve",
+            "claim",
+            "release",
+        ] {
+            assert!(
+                is_mutating_background_operation(op),
+                "{op} should be mutating"
+            );
+        }
+    }
+
+    #[test]
+    fn snapshot_drops_dangling_session_mappings() {
+        let persisted = json!({
+            "version": 2,
+            "schema_version": BACKGROUND_STATE_SCHEMA_VERSION,
+            "control_plane": null,
+            "jobs": [],
+            "active_sessions": [{"session_id": "s-1", "job_id": "missing-job"}],
+            "pending_session_takeovers": [{"session_id": "s-2", "incoming_job_id": "missing-job"}]
+        });
+        let response = handle_background_state_operation(json!({
+            "schema_version": BACKGROUND_STATE_REQUEST_SCHEMA_VERSION,
+            "operation": "snapshot",
+            "state_path": "/tmp/router-rs-background-state-test.json",
+            "backend_family": "memory",
+            "state_payload_text": format!("{}\n", persisted)
+        }))
+        .expect("snapshot should parse persisted state");
+        let state = response
+            .get("state")
+            .expect("snapshot response state payload");
+        assert_eq!(
+            state
+                .get("active_sessions")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(0)
+        );
+        assert_eq!(
+            state
+                .get("pending_session_takeovers")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(0)
+        );
+    }
 }

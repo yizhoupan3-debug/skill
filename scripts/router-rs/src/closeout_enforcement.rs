@@ -1,0 +1,488 @@
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+pub const CLOSEOUT_RECORD_SCHEMA_VERSION: &str = "closeout-record-v1";
+pub const CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION: &str =
+    "router-rs-closeout-enforcement-response-v1";
+pub const CLOSEOUT_ENFORCEMENT_AUTHORITY: &str = "rust-closeout-enforcement";
+
+const COMPLETION_KEYWORDS: &[&str] = &[
+    "done",
+    "finished",
+    "completed",
+    "succeeded",
+    "passed",
+    "已完成",
+    "完成",
+    "通过",
+    "搞定",
+];
+
+const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", "not_run"];
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+pub struct CloseoutCommandRecord {
+    #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub exit_code: i64,
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    #[serde(default)]
+    pub stdout_summary: Option<String>,
+    #[serde(default)]
+    pub stderr_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+pub struct CloseoutArtifactRecord {
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub exists: bool,
+    #[serde(default)]
+    pub size_bytes: Option<i64>,
+    #[serde(default)]
+    pub checks: Vec<String>,
+}
+
+/// Deny unknown fields so that typos like `verification_state` (instead of
+/// `verification_status`) or `commands_ran` (instead of `commands_run`) fail
+/// loud with a `parse closeout record failed` error rather than being
+/// silently ignored by serde defaults. The schema is closed; new fields must
+/// be added in lockstep with `configs/framework/CLOSEOUT_RECORD_SCHEMA.json`.
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+pub struct CloseoutRecord {
+    #[serde(default)]
+    pub schema_version: String,
+    #[serde(default)]
+    pub task_id: String,
+    #[serde(default)]
+    pub started_at: Option<String>,
+    #[serde(default)]
+    pub ended_at: Option<String>,
+    #[serde(default)]
+    pub changed_files: Vec<String>,
+    #[serde(default)]
+    pub commands_run: Vec<CloseoutCommandRecord>,
+    #[serde(default)]
+    pub artifacts_checked: Vec<CloseoutArtifactRecord>,
+    #[serde(default)]
+    pub verification_status: String,
+    #[serde(default)]
+    pub blockers: Vec<String>,
+    #[serde(default)]
+    pub risks: Vec<String>,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CloseoutViolation {
+    pub rule: String,
+    pub severity: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CloseoutEnforcementResponse {
+    pub schema_version: String,
+    pub authority: String,
+    pub task_id: String,
+    pub closeout_allowed: bool,
+    pub claimed_completion: bool,
+    pub violations: Vec<CloseoutViolation>,
+    pub missing_evidence: Vec<String>,
+    pub verification_status: String,
+}
+
+pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
+    let record: CloseoutRecord = serde_json::from_value(payload)
+        .map_err(|err| format!("parse closeout record failed: {err}"))?;
+    let response = evaluate_closeout_record(&record);
+    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+}
+
+pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementResponse {
+    let mut violations: Vec<CloseoutViolation> = Vec::new();
+    let mut missing: Vec<String> = Vec::new();
+
+    // 0. schema_version sanity (warn-style block: refuse evaluation of unknown shape).
+    if !record.schema_version.is_empty() && record.schema_version != CLOSEOUT_RECORD_SCHEMA_VERSION
+    {
+        violations.push(CloseoutViolation {
+            rule: "schema_version_mismatch".to_string(),
+            severity: "block".to_string(),
+            detail: format!(
+                "expected schema_version={CLOSEOUT_RECORD_SCHEMA_VERSION}, got {:?}",
+                record.schema_version
+            ),
+        });
+    }
+
+    if record.task_id.trim().is_empty() {
+        violations.push(CloseoutViolation {
+            rule: "task_id_missing".to_string(),
+            severity: "block".to_string(),
+            detail: "task_id must be non-empty".to_string(),
+        });
+        missing.push("task_id".to_string());
+    }
+
+    let summary_trimmed = record.summary.trim();
+    if summary_trimmed.is_empty() {
+        violations.push(CloseoutViolation {
+            rule: "summary_missing".to_string(),
+            severity: "block".to_string(),
+            detail: "summary must be non-empty".to_string(),
+        });
+        missing.push("summary".to_string());
+    }
+
+    let claimed_completion = summary_claims_completion(summary_trimmed);
+
+    let status_lower = record.verification_status.trim().to_ascii_lowercase();
+    let status_recognized = ALLOWED_VERIFICATION_STATUSES.contains(&status_lower.as_str());
+    if !status_lower.is_empty() && !status_recognized {
+        violations.push(CloseoutViolation {
+            rule: "verification_status_invalid".to_string(),
+            severity: "block".to_string(),
+            detail: format!(
+                "verification_status must be one of {:?}, got {:?}",
+                ALLOWED_VERIFICATION_STATUSES, record.verification_status
+            ),
+        });
+    }
+    if status_lower.is_empty() {
+        violations.push(CloseoutViolation {
+            rule: "verification_status_missing".to_string(),
+            severity: "block".to_string(),
+            detail: "verification_status must be one of passed|failed|partial|not_run".to_string(),
+        });
+        missing.push("verification_status".to_string());
+    }
+
+    // R1: claimed completion but no evidence and no acknowledged risk.
+    if claimed_completion
+        && status_lower == "not_run"
+        && record.risks.is_empty()
+        && record.blockers.is_empty()
+    {
+        violations.push(CloseoutViolation {
+            rule: "claimed_done_without_evidence".to_string(),
+            severity: "block".to_string(),
+            detail: "summary claims completion but verification_status=not_run with no risks or blockers".to_string(),
+        });
+        missing.push("validation_command_or_risk_acknowledgement".to_string());
+    }
+
+    // R2: changed files but no commands_run and no risks recorded.
+    if !record.changed_files.is_empty() && record.commands_run.is_empty() && record.risks.is_empty()
+    {
+        violations.push(CloseoutViolation {
+            rule: "changed_files_without_command_or_risk".to_string(),
+            severity: "block".to_string(),
+            detail: format!(
+                "{} changed file(s) recorded but no commands_run and no risks declared",
+                record.changed_files.len()
+            ),
+        });
+        missing.push("validation_command".to_string());
+    }
+
+    // R3: verification_status=passed but a command failed.
+    if status_lower == "passed" {
+        if let Some(failed) = record.commands_run.iter().find(|c| c.exit_code != 0) {
+            violations.push(CloseoutViolation {
+                rule: "verification_passed_with_failed_command".to_string(),
+                severity: "block".to_string(),
+                detail: format!(
+                    "verification_status=passed but command exited {}: {}",
+                    failed.exit_code, failed.command
+                ),
+            });
+        }
+    }
+
+    // R4: verification_status=passed but artifact missing.
+    if status_lower == "passed" {
+        if let Some(missing_artifact) = record.artifacts_checked.iter().find(|a| !a.exists) {
+            violations.push(CloseoutViolation {
+                rule: "verification_passed_with_missing_artifact".to_string(),
+                severity: "block".to_string(),
+                detail: format!(
+                    "verification_status=passed but artifact does not exist: {}",
+                    missing_artifact.path
+                ),
+            });
+        }
+    }
+
+    // R5: not_run without blockers or risks.
+    if status_lower == "not_run" && record.blockers.is_empty() && record.risks.is_empty() {
+        // Only emit if not already covered by R1.
+        let already_covered = violations
+            .iter()
+            .any(|v| v.rule == "claimed_done_without_evidence");
+        if !already_covered {
+            violations.push(CloseoutViolation {
+                rule: "not_run_without_blockers_or_risks".to_string(),
+                severity: "block".to_string(),
+                detail: "verification_status=not_run requires at least one blocker or risk"
+                    .to_string(),
+            });
+            missing.push("blocker_or_risk".to_string());
+        }
+    }
+
+    // R6: failed verification but summary still claims completion without acknowledged risks.
+    if status_lower == "failed"
+        && claimed_completion
+        && record.risks.is_empty()
+        && record.blockers.is_empty()
+    {
+        violations.push(CloseoutViolation {
+            rule: "claimed_done_with_failed_verification".to_string(),
+            severity: "block".to_string(),
+            detail: "summary claims completion but verification_status=failed without recorded risks or blockers".to_string(),
+        });
+    }
+
+    let blocking = violations.iter().any(|v| v.severity == "block");
+
+    CloseoutEnforcementResponse {
+        schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
+        authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
+        task_id: record.task_id.clone(),
+        closeout_allowed: !blocking,
+        claimed_completion,
+        violations,
+        missing_evidence: missing,
+        verification_status: status_lower,
+    }
+}
+
+pub fn closeout_enforcement_contract() -> Value {
+    json!({
+        "schema_version": CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION,
+        "authority": CLOSEOUT_ENFORCEMENT_AUTHORITY,
+        "record_schema_version": CLOSEOUT_RECORD_SCHEMA_VERSION,
+        "allowed_verification_statuses": ALLOWED_VERIFICATION_STATUSES,
+        "completion_keywords": COMPLETION_KEYWORDS,
+        "rules": [
+            "schema_version_mismatch",
+            "task_id_missing",
+            "summary_missing",
+            "verification_status_missing",
+            "verification_status_invalid",
+            "claimed_done_without_evidence",
+            "changed_files_without_command_or_risk",
+            "verification_passed_with_failed_command",
+            "verification_passed_with_missing_artifact",
+            "not_run_without_blockers_or_risks",
+            "claimed_done_with_failed_verification"
+        ]
+    })
+}
+
+fn summary_claims_completion(summary: &str) -> bool {
+    if summary.is_empty() {
+        return false;
+    }
+    let lower = summary.to_ascii_lowercase();
+    COMPLETION_KEYWORDS
+        .iter()
+        .any(|kw| lower.contains(&kw.to_ascii_lowercase()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record_with(summary: &str, status: &str) -> CloseoutRecord {
+        CloseoutRecord {
+            schema_version: CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+            task_id: "t-1".to_string(),
+            summary: summary.to_string(),
+            verification_status: status.to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn has_rule(resp: &CloseoutEnforcementResponse, rule: &str) -> bool {
+        resp.violations.iter().any(|v| v.rule == rule)
+    }
+
+    #[test]
+    fn passed_clean_record_is_allowed() {
+        let mut record = record_with("已完成 deck rebuild and verified output", "passed");
+        record.commands_run.push(CloseoutCommandRecord {
+            command: "python build_deck.py".to_string(),
+            exit_code: 0,
+            ..Default::default()
+        });
+        record.artifacts_checked.push(CloseoutArtifactRecord {
+            path: "ppt/deck_v3.pptx".to_string(),
+            exists: true,
+            ..Default::default()
+        });
+        record.changed_files.push("ppt/build_deck.py".to_string());
+        let resp = evaluate_closeout_record(&record);
+        assert!(
+            resp.closeout_allowed,
+            "expected allowed, got {:?}",
+            resp.violations
+        );
+        assert!(resp.claimed_completion);
+    }
+
+    #[test]
+    fn claimed_done_without_evidence_is_blocked() {
+        let record = record_with("已完成", "not_run");
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "claimed_done_without_evidence"));
+    }
+
+    #[test]
+    fn changed_files_without_command_or_risk_is_blocked() {
+        let mut record = record_with("Refactored builder", "partial");
+        record.changed_files.push("ppt/build_deck.py".to_string());
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "changed_files_without_command_or_risk"));
+    }
+
+    #[test]
+    fn changed_files_with_risk_is_allowed() {
+        let mut record = record_with("Refactored builder; tests not run", "partial");
+        record.changed_files.push("ppt/build_deck.py".to_string());
+        record
+            .risks
+            .push("did not execute python build_deck.py because PIL missing".to_string());
+        let resp = evaluate_closeout_record(&record);
+        assert!(
+            resp.closeout_allowed,
+            "expected allowed, violations: {:?}",
+            resp.violations
+        );
+    }
+
+    #[test]
+    fn verification_passed_with_failed_command_is_blocked() {
+        let mut record = record_with("done", "passed");
+        record.commands_run.push(CloseoutCommandRecord {
+            command: "pytest".to_string(),
+            exit_code: 1,
+            ..Default::default()
+        });
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "verification_passed_with_failed_command"));
+    }
+
+    #[test]
+    fn verification_passed_with_missing_artifact_is_blocked() {
+        let mut record = record_with("done", "passed");
+        record.artifacts_checked.push(CloseoutArtifactRecord {
+            path: "ppt/deck_v3.pptx".to_string(),
+            exists: false,
+            ..Default::default()
+        });
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "verification_passed_with_missing_artifact"));
+    }
+
+    #[test]
+    fn not_run_without_blockers_is_blocked() {
+        let record = record_with("Investigating but not yet done", "not_run");
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(
+            has_rule(&resp, "not_run_without_blockers_or_risks")
+                || has_rule(&resp, "claimed_done_without_evidence")
+        );
+    }
+
+    #[test]
+    fn not_run_with_blocker_is_allowed() {
+        let mut record = record_with("Paused awaiting user", "not_run");
+        record
+            .blockers
+            .push("Need user to approve schema migration".to_string());
+        let resp = evaluate_closeout_record(&record);
+        assert!(resp.closeout_allowed, "violations: {:?}", resp.violations);
+    }
+
+    #[test]
+    fn failed_status_with_done_summary_is_blocked() {
+        let mut record = record_with("已完成", "failed");
+        // No risks/blockers.
+        record.commands_run.push(CloseoutCommandRecord {
+            command: "pytest".to_string(),
+            exit_code: 2,
+            ..Default::default()
+        });
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "claimed_done_with_failed_verification"));
+    }
+
+    #[test]
+    fn empty_summary_and_status_blocks() {
+        let record = CloseoutRecord {
+            schema_version: CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+            task_id: "t-empty".to_string(),
+            ..Default::default()
+        };
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "summary_missing"));
+        assert!(has_rule(&resp, "verification_status_missing"));
+    }
+
+    #[test]
+    fn schema_version_mismatch_blocks() {
+        let record = CloseoutRecord {
+            schema_version: "wrong-v0".to_string(),
+            task_id: "t".to_string(),
+            summary: "ok".to_string(),
+            verification_status: "partial".to_string(),
+            ..Default::default()
+        };
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "schema_version_mismatch"));
+    }
+
+    #[test]
+    fn invalid_status_is_blocked() {
+        let record = record_with("ok", "maybe");
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed);
+        assert!(has_rule(&resp, "verification_status_invalid"));
+    }
+
+    #[test]
+    fn contract_payload_lists_rules() {
+        let payload = closeout_enforcement_contract();
+        let rules = payload["rules"].as_array().expect("rules array");
+        assert!(rules.iter().any(|v| v == "claimed_done_without_evidence"));
+        assert!(rules
+            .iter()
+            .any(|v| v == "verification_passed_with_missing_artifact"));
+        assert_eq!(
+            payload["record_schema_version"],
+            CLOSEOUT_RECORD_SCHEMA_VERSION
+        );
+    }
+}

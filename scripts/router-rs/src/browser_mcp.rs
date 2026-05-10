@@ -7,8 +7,7 @@ use crate::route::{
 use crate::session_supervisor::handle_session_supervisor_operation;
 use crate::{
     attach_runtime_event_transport, handle_background_state_operation, inspect_trace_stream,
-    replay_trace_stream,
-    TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
+    replay_trace_stream, TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
 };
 use chrono::{Local, SecondsFormat};
 use rusqlite::Connection;
@@ -989,7 +988,8 @@ impl BrowserRuntime {
         input: &Value,
         payload: &mut Value,
     ) -> Result<(), Value> {
-        payload["schema_version"] = Value::String(BACKGROUND_STATE_REQUEST_SCHEMA_VERSION.to_string());
+        payload["schema_version"] =
+            Value::String(BACKGROUND_STATE_REQUEST_SCHEMA_VERSION.to_string());
         if let Some(state_path) = optional_string(input, "statePath") {
             payload["state_path"] = Value::String(state_path);
         }
@@ -1779,16 +1779,10 @@ impl BrowserRuntime {
         let routing_tools_exposed = skill_runtime_available(&self.repo_root);
         let mut skill_remediation = Vec::new();
         if !runtime_path.is_file() {
-            skill_remediation.push(format!(
-                "generate {}",
-                runtime_path.to_string_lossy()
-            ));
+            skill_remediation.push(format!("generate {}", runtime_path.to_string_lossy()));
         }
         if !manifest_path.is_file() {
-            skill_remediation.push(format!(
-                "generate {}",
-                manifest_path.to_string_lossy()
-            ));
+            skill_remediation.push(format!("generate {}", manifest_path.to_string_lossy()));
         }
         if skill_remediation.is_empty() {
             skill_remediation.push("skill runtime artifacts look healthy".to_string());
@@ -2500,7 +2494,10 @@ impl BrowserRuntime {
         Err(browser_error(
             "BROWSER_PAGE_NOT_READY",
             "Page readiness timed out before document.readyState became interactive/complete.",
-            &["wait briefly and retry", "verify the target page is accessible"],
+            &[
+                "wait briefly and retry",
+                "verify the target page is accessible",
+            ],
             true,
         ))
     }
@@ -4405,7 +4402,9 @@ mod tests {
         )
         .expect("background list response");
         assert_eq!(background_list_response["result"]["isError"], false);
-        assert!(background_list_response["result"]["structuredContent"]["state"]["jobs"].is_array());
+        assert!(
+            background_list_response["result"]["structuredContent"]["state"]["jobs"].is_array()
+        );
 
         let background_terminate_response = handle_browser_mcp_request(
             &json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "background_terminate", "arguments": {"statePath": background_path.to_string_lossy(), "jobId": "job-1"}}}),

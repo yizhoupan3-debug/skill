@@ -347,7 +347,7 @@ impl SkillRecord {
         .into_iter()
         .filter(|token| {
             !common_route_stop_tokens().contains(&token.as_str())
-                && (token.chars().count() > 1 || token.chars().any(|ch| !ch.is_ascii()))
+                && (token.chars().count() > 1 || !token.is_ascii())
         })
         .collect::<HashSet<_>>();
 
@@ -461,13 +461,6 @@ pub(crate) fn load_records(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
 ) -> Result<Vec<SkillRecord>, String> {
-    if runtime_path.is_none() {
-        if let Some(path) = manifest_path {
-            if path.exists() {
-                return load_records_from_manifest(path);
-            }
-        }
-    }
     let default_runtime_path = default_runtime_path();
     let runtime_path = runtime_path.or(default_runtime_path.as_deref());
     if let Some(path) = runtime_path {
@@ -638,12 +631,17 @@ fn apply_route_metadata_patch(record: &mut SkillRecord, patch: &RouteMetadataPat
 }
 
 fn default_runtime_path() -> Option<PathBuf> {
-    Some(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .join("skills")
-            .join("SKILL_ROUTING_RUNTIME.json"),
-    )
+    if let Some(root) = crate::skill_repo::discover_skill_policy_repo_root() {
+        let path = crate::skill_repo::skill_routing_runtime_json(&root);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("skills")
+        .join("SKILL_ROUTING_RUNTIME.json");
+    fallback.is_file().then_some(fallback)
 }
 
 fn effective_runtime_path(runtime_path: Option<&Path>) -> Option<PathBuf> {
@@ -1179,6 +1177,7 @@ fn is_meta_routing_task(query_text: &str) -> bool {
     (query_text.contains("skill")
         || query_text.contains("skill.md")
         || query_text.contains("runtime")
+        || query_text.contains("framework")
         || query_text.contains("框架"))
         && [
             "路由",
@@ -1959,17 +1958,155 @@ fn default_route_context_payload() -> RouteContextPayload {
 }
 
 pub(crate) fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
-    decision.score < 35.0
-        || (decision.selected_skill == "visual-review"
-            && decision.route_context.execution_protocol != "audit")
-        || (decision.selected_skill == "systematic-debugging" && decision.score < 35.0)
-        || route_decision_is_no_hit(decision)
+    if route_decision_is_no_hit(decision) {
+        return true;
+    }
+    if decision.score < 35.0 {
+        return true;
+    }
+    if decision.selected_skill == "visual-review" {
+        return decision.route_context.execution_protocol != "audit"
+            || !visual_review_has_concrete_visual_signal(decision);
+    }
+    false
 }
 
 fn route_decision_is_no_hit(decision: &RouteDecision) -> bool {
     decision.score <= 0.0
         || decision.selected_skill == NO_SKILL_SELECTED
         || decision.layer == "runtime"
+}
+
+fn visual_review_has_concrete_visual_signal(decision: &RouteDecision) -> bool {
+    decision.reasons.iter().any(|reason| {
+        let lowered = reason.to_ascii_lowercase();
+        lowered.contains("visual-review boost")
+            || lowered.contains("screenshot")
+            || lowered.contains("rendered")
+            || lowered.contains("chart")
+            || lowered.contains("ui")
+            || lowered.contains("截图")
+            || lowered.contains("视觉")
+    })
+}
+
+#[cfg(test)]
+mod should_retry_with_manifest_tests {
+    use super::*;
+
+    fn make_decision(skill: &str, score: f64, layer: &str, protocol: &str) -> RouteDecision {
+        RouteDecision {
+            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+            authority: ROUTE_AUTHORITY.to_string(),
+            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+            task: "test".to_string(),
+            session_id: "test-session".to_string(),
+            selected_skill: skill.to_string(),
+            selected_skill_path: None,
+            overlay_skill: None,
+            route_context: RouteContextPayload {
+                execution_protocol: protocol.to_string(),
+                verification_required: true,
+                evidence_required: true,
+                supervisor_required: false,
+                delegation_candidate: false,
+                continue_safe_local_steps: false,
+                route_reason: "test".to_string(),
+            },
+            layer: layer.to_string(),
+            score,
+            reasons: Vec::new(),
+            route_snapshot: RouteDecisionSnapshotPayload {
+                engine: "rust".to_string(),
+                selected_skill: skill.to_string(),
+                overlay_skill: None,
+                layer: layer.to_string(),
+                score,
+                score_bucket: String::new(),
+                reasons: Vec::new(),
+                reasons_class: String::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn low_score_triggers_retry() {
+        let decision = make_decision("doc", 20.0, "L1", "four_step");
+        assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn high_score_owner_does_not_retry() {
+        let decision = make_decision("doc", 60.0, "L1", "four_step");
+        assert!(!should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn boundary_score_at_threshold_does_not_retry() {
+        let decision = make_decision("doc", 35.0, "L1", "four_step");
+        assert!(!should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn no_hit_skill_triggers_retry_even_with_high_score() {
+        let mut decision = make_decision(NO_SKILL_SELECTED, 100.0, "L1", "four_step");
+        decision.route_snapshot.selected_skill = NO_SKILL_SELECTED.to_string();
+        assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn runtime_layer_triggers_retry_even_with_high_score() {
+        let decision = make_decision("doc", 80.0, "runtime", "four_step");
+        assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn zero_score_triggers_retry() {
+        let decision = make_decision("doc", 0.0, "L1", "four_step");
+        assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn visual_review_non_audit_triggers_retry_even_with_high_score() {
+        let decision = make_decision("visual-review", 90.0, "L1", "four_step");
+        assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn visual_review_audit_does_not_retry_when_score_is_high() {
+        let mut decision = make_decision("visual-review", 90.0, "L1", "audit");
+        decision
+            .reasons
+            .push("Visual-review boost applied: visible UI evidence and concrete visual findings requested.".to_string());
+        assert!(!should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn visual_review_audit_still_retries_when_score_is_low() {
+        let decision = make_decision("visual-review", 20.0, "L1", "audit");
+        assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn visual_review_audit_retries_without_concrete_visual_signal() {
+        let mut decision = make_decision("visual-review", 90.0, "L1", "audit");
+        decision
+            .reasons
+            .push("Trigger hint matched: review.".to_string());
+        assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn systematic_debugging_high_score_does_not_retry() {
+        let decision = make_decision("systematic-debugging", 60.0, "L1", "four_step");
+        assert!(!should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn systematic_debugging_low_score_retries_via_threshold() {
+        let decision = make_decision("systematic-debugging", 30.0, "L1", "four_step");
+        assert!(should_retry_with_manifest(&decision));
+    }
 }
 
 fn route_reason_terms(decision: &RouteDecision) -> Vec<String> {
@@ -2486,7 +2623,22 @@ fn framework_alias_entrypoints_from_hints(
     let mut entrypoints = trigger_hints
         .iter()
         .map(|hint| normalize_text(hint))
-        .filter(|hint| hint == &format!("${slug_lower}") || hint == &format!("/{slug_lower}"))
+        .filter(|hint| {
+            if hint == slug_lower {
+                return false;
+            }
+            if let Some(without_prefix) = hint.strip_prefix('/') {
+                return without_prefix == slug_lower
+                    || without_prefix.starts_with(&format!("{slug_lower}-"))
+                    || without_prefix.starts_with(&format!("{slug_lower} "));
+            }
+            if let Some(without_prefix) = hint.strip_prefix('$') {
+                return without_prefix == slug_lower
+                    || without_prefix.starts_with(&format!("{slug_lower}-"))
+                    || without_prefix.starts_with(&format!("{slug_lower} "));
+            }
+            false
+        })
         .collect::<Vec<_>>();
     if layer == "L0"
         && !entrypoints.is_empty()
@@ -2496,6 +2648,24 @@ fn framework_alias_entrypoints_from_hints(
             .any(|hint| hint == slug_lower)
     {
         entrypoints.push(slug_lower.to_string());
+    }
+    if slug_lower == "autopilot" {
+        let has_slash_entrypoint = entrypoints.iter().any(|value| value == "/autopilot");
+        let has_dollar_entrypoint = entrypoints.iter().any(|value| value == "$autopilot");
+        if has_slash_entrypoint {
+            entrypoints.extend([
+                "/autopilot-quick".to_string(),
+                "/autopilot-deep".to_string(),
+                "/autopilot quick".to_string(),
+                "/autopilot deep".to_string(),
+            ]);
+        }
+        if has_dollar_entrypoint {
+            entrypoints.extend([
+                "$autopilot-quick".to_string(),
+                "$autopilot-deep".to_string(),
+            ]);
+        }
     }
     entrypoints.sort();
     entrypoints.dedup();
@@ -2515,7 +2685,7 @@ fn has_literal_framework_alias_call(query_text: &str, record: &SkillRecord) -> b
 
 fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool {
     query_text.split_whitespace().any(|part| {
-        part.trim_matches(|ch: char| {
+        let token = part.trim_matches(|ch: char| {
             matches!(
                 ch,
                 '(' | ')'
@@ -2537,7 +2707,10 @@ fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool {
                     | '\''
                     | '`'
             )
-        }) == entrypoint
+        });
+        token == entrypoint
+            || token.starts_with(&format!("{entrypoint}-"))
+            || token.starts_with(&format!("{entrypoint} "))
     })
 }
 
@@ -3532,6 +3705,19 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: code-generated scientific figure work should route to scientific-figure-plotting before visual or raster-image lanes."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "visual-review"
+        && is_meta_routing_task(query_text)
+        && !has_rendered_visual_evidence_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: framework/runtime routing reviews should not route to visual-review without concrete rendered visual evidence."
                     .to_string(),
             ],
         };
@@ -4673,5 +4859,111 @@ mod route_metadata_tests {
         assert!(second[0].do_not_use_tokens.contains("second"));
 
         fs::remove_dir_all(root).expect("cleanup route root");
+    }
+
+    #[test]
+    fn framework_alias_entrypoints_include_mode_variants() {
+        let entrypoints = framework_alias_entrypoints_from_hints(
+            "autopilot",
+            "L0",
+            &[
+                "/autopilot".to_string(),
+                "$autopilot".to_string(),
+                "/autopilot-quick".to_string(),
+                "$autopilot-quick".to_string(),
+                "/autopilot-deep".to_string(),
+                "$autopilot-deep".to_string(),
+                "/autopilot deep".to_string(),
+                "autopilot".to_string(),
+            ],
+        );
+        for expected in [
+            "/autopilot",
+            "$autopilot",
+            "/autopilot-quick",
+            "$autopilot-quick",
+            "/autopilot-deep",
+            "$autopilot-deep",
+            "/autopilot deep",
+            "autopilot",
+        ] {
+            assert!(
+                entrypoints.contains(&expected.to_string()),
+                "missing entrypoint {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn route_task_matches_autopilot_quick_and_deep_entrypoints() {
+        let records = vec![SkillRecord::from_raw(RawSkillRecord {
+            slug: "autopilot".to_string(),
+            skill_path: Some("skills/autopilot/SKILL.md".to_string()),
+            layer: "L0".to_string(),
+            owner: "owner".to_string(),
+            gate: "none".to_string(),
+            priority: "P1".to_string(),
+            session_start: "required".to_string(),
+            summary: "Autopilot owner".to_string(),
+            short_description: String::new(),
+            when_to_use: String::new(),
+            do_not_use: String::new(),
+            tags: Vec::new(),
+            trigger_hints: vec![
+                "/autopilot".to_string(),
+                "$autopilot".to_string(),
+                "/autopilot-quick".to_string(),
+                "$autopilot-quick".to_string(),
+                "/autopilot-deep".to_string(),
+                "$autopilot-deep".to_string(),
+            ],
+        })];
+        for query in ["/autopilot", "/autopilot-quick", "/autopilot-deep"] {
+            let decision =
+                route_task(&records, query, "session", false, false).expect("route decision");
+            assert_eq!(decision.selected_skill, "autopilot");
+            assert_eq!(decision.layer, "L0");
+        }
+    }
+
+    #[test]
+    fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
+        let root = temp_route_path("runtime-first-manifest");
+        let skills_root = root.join("skills");
+        fs::create_dir_all(&skills_root).expect("create skills root");
+        let manifest_path = skills_root.join("SKILL_MANIFEST.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string(&json!({
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path"],
+                "skills": [[
+                    "manifest-owner",
+                    "L1",
+                    "manifest-owner",
+                    "none",
+                    "P1",
+                    "Manifest owner",
+                    "n/a",
+                    ["manifest owner"],
+                    "project",
+                    1,
+                    "skills/manifest-owner/SKILL.md"
+                ]]
+            }))
+            .expect("serialize manifest"),
+        )
+        .expect("write manifest");
+
+        let loaded = load_records(None, Some(&manifest_path)).expect("load records");
+        assert!(
+            loaded.iter().any(|record| record.slug == "autopilot"),
+            "default runtime records should be preferred when available"
+        );
+        assert!(
+            loaded.iter().all(|record| record.slug != "manifest-owner"),
+            "explicit manifest should not bypass runtime-first loading"
+        );
+
+        fs::remove_dir_all(&root).expect("cleanup route root");
     }
 }

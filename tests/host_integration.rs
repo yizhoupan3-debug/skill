@@ -10,6 +10,34 @@ use std::process::Command;
 use tempfile::tempdir;
 
 #[test]
+fn shell_installer_e2e_writes_expected_files() {
+    let repo = project_root();
+    let codex_home = tempdir().unwrap();
+    let status = Command::new("bash")
+        .arg(repo.join("scripts/install_codex_cli_hooks.sh"))
+        .env("CODEX_HOME", codex_home.path())
+        .env("HOME", codex_home.path())
+        .status()
+        .expect("bash exec failed");
+    assert!(status.success());
+
+    let config = std::fs::read_to_string(codex_home.path().join("config.toml")).unwrap();
+    assert!(config.contains("[features]"));
+    assert!(config.contains("hooks = true"));
+    assert!(!config.contains("codex_hooks"));
+
+    let hooks = std::fs::read_to_string(codex_home.path().join("hooks.json")).unwrap();
+    assert!(hooks.contains("PreToolUse"));
+    assert!(hooks.contains("SessionStart"));
+    assert!(hooks.contains("UserPromptSubmit"));
+    assert!(hooks.contains("PostToolUse"));
+    assert!(hooks.contains("Stop"));
+    assert!(hooks.contains("router-rs"));
+    assert!(hooks.contains("codex hook --event="));
+    assert!(!hooks.contains("sessionEnd"));
+}
+
+#[test]
 fn install_native_integration_is_idempotent() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
@@ -66,7 +94,7 @@ fn install_native_integration_is_idempotent() {
     assert_eq!(first["success"], true);
     assert_eq!(second["success"], true);
     assert_eq!(content.matches("[features]").count(), 1);
-    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+    assert_eq!(content.matches("hooks = false").count(), 1);
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
     assert_eq!(content.matches("[mcp_servers.browser-mcp]").count(), 0);
     assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 0);
@@ -142,7 +170,7 @@ fn install_native_integration_forces_codex_hook_false_when_true_only() {
     let content = read_text(&home_config_path);
     assert!(content.contains("codex_hooks_extra = true"));
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
-    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+    assert_eq!(content.matches("hooks = false").count(), 1);
 }
 
 #[test]
@@ -177,7 +205,7 @@ fn install_native_integration_adds_codex_hook_when_missing_in_features() {
     let content = read_text(&home_config_path);
     assert!(content.contains("[features]"));
     assert!(content.contains("codex_hooks_extra = true"));
-    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+    assert_eq!(content.matches("hooks = false").count(), 1);
 }
 
 #[test]
@@ -215,7 +243,7 @@ fn install_native_integration_adds_features_block_when_missing() {
     let content = read_text(&home_config_path);
     assert!(content.contains("[tui]"));
     assert!(content.contains("[features]"));
-    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+    assert_eq!(content.matches("hooks = false").count(), 1);
 }
 
 #[test]
@@ -253,7 +281,7 @@ fn install_native_integration_dedupes_codex_hooks_and_forces_false() {
     let content = read_text(&home_config_path);
     assert!(content.contains("codex_hooks_extra = true"));
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
-    assert_eq!(content.matches("codex_hooks = false").count(), 1);
+    assert_eq!(content.matches("hooks = false").count(), 1);
 }
 
 #[test]
@@ -326,70 +354,6 @@ fn current_artifact_clutter_plan_archives_current_mirrors() {
     assert!(!sources
         .iter()
         .any(|path| path.ends_with("artifacts/current/task-1/CONTINUITY_JOURNAL.json")));
-}
-
-#[test]
-fn memory_automation_materializes_sqlite_and_continuity_control_plane() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let output_dir = tmp.path().join("memory-automation");
-    std::fs::create_dir_all(&repo_root).unwrap();
-
-    let result = host_integration_json(&[
-        "run-memory-automation",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--workspace",
-        "skill",
-        "--output-dir",
-        output_dir.to_str().unwrap(),
-        "--query",
-        "memory audit",
-    ]);
-
-    assert_eq!(result["sqlite_result"]["exists"], true);
-    assert_eq!(result["sqlite_result"]["memory_items"], 1);
-    assert_eq!(result["continuity_seed"]["status"], "materialized");
-    assert_eq!(result["continuity_audit"]["status"], "ready_to_resume");
-    assert_eq!(result["continuity_audit"]["control_plane_present"], true);
-    assert_eq!(
-        result["continuity_audit"]["missing_control_plane_anchors"],
-        json!([])
-    );
-    assert_eq!(result["continuity_audit"]["residual_blocker_count"], 0);
-
-    let health = &result["continuity_health"];
-    assert_eq!(health["status"], "ok");
-
-    let active = common::read_json(&repo_root.join("artifacts/current/active_task.json"));
-    let task_id = active["task_id"].as_str().unwrap();
-    let task_root = repo_root.join("artifacts/current").join(task_id);
-    for path in [
-        repo_root.join("artifacts/current/active_task.json"),
-        repo_root.join("artifacts/current/focus_task.json"),
-        repo_root.join("artifacts/current/task_registry.json"),
-        repo_root.join(".supervisor_state.json"),
-        repo_root.join("memory/memory.sqlite3"),
-        task_root.join("SESSION_SUMMARY.md"),
-        task_root.join("NEXT_ACTIONS.json"),
-        task_root.join("EVIDENCE_INDEX.json"),
-        task_root.join("TRACE_METADATA.json"),
-        task_root.join("CONTINUITY_JOURNAL.json"),
-        output_dir.join("run_summary.json"),
-        output_dir.join("snapshot.json"),
-        output_dir.join("storage_audit.json"),
-        repo_root.join("artifacts/bootstrap/framework_default_bootstrap.json"),
-    ] {
-        assert!(path.is_file(), "missing {}", path.display());
-    }
-
-    let run_summary = common::read_json(&output_dir.join("run_summary.json"));
-    assert_eq!(run_summary["sqlite_result"]["memory_items"], 1);
-    assert_eq!(run_summary["continuity_audit"]["status"], "ready_to_resume");
-    let snapshot = read_text(&output_dir.join("snapshot.md"));
-    assert!(snapshot.contains("- sqlite_exists: true"));
-    assert!(snapshot.contains("- continuity_status: ready_to_resume"));
-    assert!(snapshot.contains("- continuity_residual_blockers: 0"));
 }
 
 #[test]
@@ -498,20 +462,16 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
         mcp_payload["mcp_servers"]["browser-mcp"]["command"],
         json!("bash")
     );
-    assert!(
-        mcp_payload["mcp_servers"]["browser-mcp"]["args"][0]
-            .as_str()
-            .unwrap()
-            .ends_with("tools/browser-mcp/scripts/start_browser_mcp.sh")
-    );
+    assert!(mcp_payload["mcp_servers"]["browser-mcp"]["args"][0]
+        .as_str()
+        .unwrap()
+        .ends_with("tools/browser-mcp/scripts/start_browser_mcp.sh"));
     let manifest_path = cursor_home.join(".framework-projection.json");
     let manifest_payload = common::read_json(&manifest_path);
-    assert!(
-        manifest_payload["settings"]["managed_key_paths"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("mcp_servers.browser-mcp"))
-    );
+    assert!(manifest_payload["settings"]["managed_key_paths"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("mcp_servers.browser-mcp")));
 
     let remove = router_rs_json(&[
         "framework",
@@ -532,12 +492,10 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
     ]);
     assert_eq!(remove["success"], true);
     let removed_payload = common::read_json(&mcp_path);
-    assert!(
-        removed_payload
-            .get("mcp_servers")
-            .and_then(|servers| servers.get("browser-mcp"))
-            .is_none()
-    );
+    assert!(removed_payload
+        .get("mcp_servers")
+        .and_then(|servers| servers.get("browser-mcp"))
+        .is_none());
 }
 
 #[test]
@@ -600,16 +558,11 @@ fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
     );
     let manifest_path = cursor_home.join(".framework-projection.json");
     let manifest_payload = common::read_json(&manifest_path);
-    assert_eq!(
-        manifest_payload["settings"]["managed_key_paths"],
-        json!([])
-    );
-    assert!(
-        !manifest_payload["files"]
-            .as_array()
-            .unwrap()
-            .contains(&json!(mcp_path.to_string_lossy().to_string()))
-    );
+    assert_eq!(manifest_payload["settings"]["managed_key_paths"], json!([]));
+    assert!(!manifest_payload["files"]
+        .as_array()
+        .unwrap()
+        .contains(&json!(mcp_path.to_string_lossy().to_string())));
 }
 
 #[test]
@@ -666,12 +619,10 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
 
     let manifest_path = cursor_home.join(".framework-projection.json");
     let manifest_payload = common::read_json(&manifest_path);
-    assert!(
-        manifest_payload["settings"]["managed_key_paths"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("mcp_servers.browser-mcp"))
-    );
+    assert!(manifest_payload["settings"]["managed_key_paths"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("mcp_servers.browser-mcp")));
 }
 
 #[test]
@@ -1514,6 +1465,7 @@ fn validation_subcommands_cover_install_skills_contract() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    seed_framework_markers(&repo_root);
     let bootstrap_path = tmp.path().join("framework_default_bootstrap.json");
     host_integration_json(&[
         "ensure-default-bootstrap",
@@ -1552,33 +1504,21 @@ fn framework_runtime_package_stays_absent() {
 }
 
 #[test]
-fn runtime_registry_missing_file_uses_default_registry() {
+fn runtime_registry_missing_file_fails_closed_with_actionable_error() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
-    let payload = runtime_registry(&repo_root);
-    assert_eq!(payload["schema_version"], "framework-runtime-registry-v1");
-    assert_eq!(payload["framework_core"]["authority"], "rust");
-    assert_eq!(
-        payload["host_projections"]["codex-cli"]["profile_id"],
-        "codex_profile"
-    );
-    assert_eq!(
-        payload["host_projections"]["cursor"]["profile_id"],
-        "cursor_profile"
-    );
-    assert_eq!(
-        payload["framework_commands"]["autopilot"]["reroute_when_root_cause_unknown"],
-        "deepinterview"
-    );
-    assert_eq!(
-        payload["framework_commands"]["autopilot"]["host_entrypoints"]["cursor"],
-        "/autopilot"
-    );
-    assert_eq!(
-        payload["framework_commands"]["autopilot"]["autonomy_contract"]["goal_style_execution"]["control_surface"],
-        json!(["goal_start", "goal_pause", "goal_resume", "goal_clear"])
-    );
+    let output = run(router_rs_command([
+        "codex",
+        "host-integration",
+        "export-runtime-registry",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]));
+    assert!(!output.status.success());
+    let (_stdout, stderr) = output_text(&output);
+    assert!(stderr.contains("Runtime registry not found"));
+    assert!(stderr.contains("--framework-root"));
 }
 
 #[test]
@@ -1621,7 +1561,25 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         aliases["autopilot"]["host_entrypoints"]["codex-cli"],
         "/autopilot"
     );
-    assert_eq!(aliases["autopilot"]["host_entrypoints"]["cursor"], "/autopilot");
+    assert_eq!(
+        aliases["autopilot"]["host_entrypoints"]["cursor"],
+        "/autopilot"
+    );
+    assert_eq!(
+        aliases["autopilot"]["entrypoint_modes"]["quick"]["codex-cli"],
+        "/autopilot-quick"
+    );
+    assert_eq!(
+        aliases["autopilot"]["entrypoint_modes"]["deep"]["cursor"],
+        "/autopilot-deep"
+    );
+    let autopilot_entrypoints = aliases["autopilot"]["interaction_invariants"]
+        ["explicit_entrypoints"]
+        .as_array()
+        .expect("autopilot explicit_entrypoints should be an array");
+    assert!(autopilot_entrypoints.contains(&json!("/autopilot")));
+    assert!(autopilot_entrypoints.contains(&json!("/autopilot-quick")));
+    assert!(autopilot_entrypoints.contains(&json!("/autopilot-deep")));
     assert_eq!(
         aliases["autopilot"]["interaction_invariants"]["implicit_route_policy"],
         "never"
@@ -1650,13 +1608,19 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert!(gitx_entrypoints.contains(&json!("/gitx")));
     assert!(gitx_entrypoints.contains(&json!("$gitx")));
     assert!(gitx_entrypoints.contains(&json!("gitx")));
+    assert_eq!(aliases["loop"]["host_entrypoints"]["codex-cli"], "/loop");
+    assert_eq!(aliases["loop"]["host_entrypoints"]["cursor"], "/loop");
+    assert_eq!(aliases["loop"]["canonical_owner"], "loop");
     assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "/team");
     assert_eq!(aliases["team"]["host_entrypoints"]["cursor"], "/team");
     assert_eq!(
         payload["host_targets"]["policy"],
         "shared-rust-core-explicit-host-projections"
     );
-    assert_eq!(payload["host_targets"]["supported"], json!(["codex-cli", "cursor"]));
+    assert_eq!(
+        payload["host_targets"]["supported"],
+        json!(["codex-cli", "cursor"])
+    );
     assert!(payload.get("mcp_clients").is_none());
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");
     let autopilot = &aliases["autopilot"];
@@ -1686,7 +1650,8 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         true
     );
     assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["allow_network_research_for_unknowns"],
+        autopilot["autonomy_contract"]["goal_style_execution"]
+            ["allow_network_research_for_unknowns"],
         true
     );
     assert_eq!(
@@ -1697,7 +1662,48 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         autopilot["autonomy_contract"]["goal_style_execution"]["control_surface"],
         json!(["goal_start", "goal_pause", "goal_resume", "goal_clear"])
     );
-    assert_eq!(autopilot["reroute_when_root_cause_unknown"], "deepinterview");
+    // control_surface: host interprets NL; Rust persists goal state + optional drive hook.
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface_implementation"]
+            ["owner"],
+        "hybrid_host_plus_rust_persistence"
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface_implementation"]
+            ["status"],
+        "rust_stdio_goal_store_plus_cursor_followup"
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface_implementation"]
+            ["rust_runtime_coverage"],
+        "goal_persistence_and_drive_hook"
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["lifecycle_states_implementation"]
+            ["owner"],
+        "host_agent_layer"
+    );
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]["lifecycle_states_implementation"]
+            ["rust_runtime_coverage"],
+        "job_lifecycle_only"
+    );
+    // Lock the pause-scope clarification so resume_due rate-limit auto-resume
+    // is documented as out of scope for "pause_requires_explicit_resume".
+    assert_eq!(
+        autopilot["autonomy_contract"]["goal_style_execution"]
+            ["pause_requires_explicit_resume_scope"]["applies_to"],
+        json!(["goal_lifecycle_pause"])
+    );
+    assert!(autopilot["autonomy_contract"]["goal_style_execution"]
+        ["pause_requires_explicit_resume_scope"]["excludes"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("rate_limit_resume_due")));
+    assert_eq!(
+        autopilot["reroute_when_root_cause_unknown"],
+        "deepinterview"
+    );
 }
 
 #[test]
@@ -1718,6 +1724,11 @@ fn runtime_registry_host_projections_expose_supervisor_capabilities() {
 
     let cursor = &payload["host_projections"]["cursor"];
     assert_eq!(cursor["profile_id"], "cursor_profile");
+    // Lock the contract-with-code alignment: session_supervisor.rs only
+    // accepts codex/codex-cli, so the registry must mark the cursor driver
+    // as unsupported (was previously misdeclared as "cursor_driver").
+    assert_eq!(cursor["session_supervisor_driver"], "unsupported");
+    assert_eq!(cursor["session_supervisor_status"]["supported"], false);
 }
 
 #[test]
