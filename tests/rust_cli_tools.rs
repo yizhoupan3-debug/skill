@@ -47,8 +47,7 @@ fn image_generated_skill_docs_point_to_rust_cli_only() {
 }
 
 #[test]
-#[ignore = "Awaiting OpenAI Image Generations migration follow-up: build_generate_payload no longer emits Responses-API tools/input shape; see ee93323."]
-fn image_generated_generate_dry_run_uses_responses_tool() {
+fn image_generated_generate_dry_run_emits_openai_images_payload() {
     let result = run_image_generated_ok(&[
         "generate",
         "--prompt",
@@ -58,17 +57,21 @@ fn image_generated_generate_dry_run_uses_responses_tool() {
         "--dry-run",
     ]);
     let payload: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(payload["endpoint"], "http://127.0.0.1:8318/v1/responses");
-    assert_eq!(payload["model"], "gpt-5.4");
-    assert_eq!(payload["tools"][0]["type"], "image_generation");
-    assert!(payload["input"]
-        .as_str()
-        .unwrap()
-        .starts_with("Use case: infographic-diagram"));
-    assert!(payload["input"]
-        .as_str()
-        .unwrap()
-        .contains("Primary request: red square"));
+    assert_eq!(
+        payload["endpoint"],
+        "https://api.openai.com/v1/images/generations"
+    );
+    assert_eq!(payload["model"], "dall-e-3");
+    assert_eq!(payload["n"], 1);
+    assert_eq!(payload["size"], "1024x1024");
+    assert_eq!(payload["quality"], "auto");
+    assert_eq!(payload["response_format"], "b64_json");
+    let prompt = payload["prompt"].as_str().unwrap();
+    assert!(prompt.starts_with("Use case: infographic-diagram"));
+    assert!(prompt.contains("Primary request: red square"));
+    let outputs = payload["outputs"].as_array().unwrap();
+    assert_eq!(outputs.len(), 1);
+    assert!(outputs[0].as_str().unwrap().ends_with("output.png"));
 }
 
 #[test]
