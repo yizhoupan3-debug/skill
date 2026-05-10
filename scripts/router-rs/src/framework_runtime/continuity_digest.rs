@@ -36,7 +36,7 @@ pub fn build_framework_continuity_digest_prompt(
 /// 把 `GOAL_STATE.json` 嵌进 digest，使 SessionStart 等可见「可执行目标」而非仅有连续性摘要。
 /// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 使用冗长 checklist。
 ///
-/// GOAL 段落走 `HARNESS_OPERATOR_NUDGES.json` 真源（与 RFV/AUTOPILOT 续跑共用），含可选 **`math_reasoning_harness_line`**，并附带「深度自检」行。
+/// GOAL 段落走 `HARNESS_OPERATOR_NUDGES.json` 真源（与 RFV/AUTOPILOT 续跑共用），含可选 **`math_reasoning_harness_line`** / **`retrieval_trace_harness_line`**，并附带「深度自检」行。
 /// `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 仅去掉 JSON 配置的 operator 文案；**深度自检行仍在**。
 /// 另：digest 主线在 `build_framework_continuity_digest_prompt` 中追加 `task_state::depth_compliance_refresh_hint`。
 fn format_goal_state_digest_section(repo_root: &Path, goal: &Value) -> String {
@@ -116,6 +116,9 @@ fn format_goal_state_digest_section_verbose(repo_root: &Path, goal: &Value) -> S
     if !nudges.math_reasoning_harness_line.trim().is_empty() {
         lines.push(format!("- {}", nudges.math_reasoning_harness_line.trim()));
     }
+    if !nudges.retrieval_trace_harness_line.trim().is_empty() {
+        lines.push(format!("- {}", nudges.retrieval_trace_harness_line.trim()));
+    }
     lines.extend(digest_depth_self_check_lines(true));
     lines.join("\n")
 }
@@ -182,6 +185,9 @@ fn format_goal_state_digest_section_compact(repo_root: &Path, goal: &Value) -> S
     }
     if !nudges.math_reasoning_harness_line.trim().is_empty() {
         lines.push(format!("- {}", nudges.math_reasoning_harness_line.trim()));
+    }
+    if !nudges.retrieval_trace_harness_line.trim().is_empty() {
+        lines.push(format!("- {}", nudges.retrieval_trace_harness_line.trim()));
     }
     lines.extend(digest_depth_self_check_lines(false));
     lines.join("\n")

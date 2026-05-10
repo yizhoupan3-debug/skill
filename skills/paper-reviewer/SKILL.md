@@ -28,17 +28,19 @@ trigger_hints:
   - 整篇严审
   - 能不能投
   - 投稿前把关
-  - 投稿前 review
-  - 顶刊审稿标准
-  - 顶会审稿标准
-  - 顶刊顶会 review
-  - top-tier review
-  - top conference review
-  - top journal review
   - 外部调研严审
   - 查文献后审
   - 外研必填检索轨迹
   - closest-work 偷袭预演
+  - contradiction sweep paper
+  - 投稿前 review
+  - 顶刊审稿标准
+  - 顶会审稿标准
+  - 顶刊顶会 review
+  - retrieval trace paper review
+  - top-tier review
+  - top conference review
+  - top journal review
   - reviewer-style critique
   - 只做整篇严审不改稿
   - 只做投稿判断
@@ -54,10 +56,6 @@ trigger_hints:
   - 只审语言
   - 最严厉审稿
   - strict reviewer
-  - 外研必填检索轨迹
-  - contradiction sweep paper
-  - closest-work 偷袭预演
-  - retrieval trace paper review
 metadata:
   version: "4.5.1"
   platforms: [codex]

@@ -44,6 +44,11 @@ struct NudgesBody {
     /// Optional second line after reasoning-depth nudges: STEM / witness + checker reminder.
     #[serde(default)]
     math_reasoning_harness_line: String,
+    #[serde(default)]
+    retrieval_trace_harness_line: String,
+    /// Compact one-liner appended when structured external research hint applies (RFV_LOOP_CONTINUE path).
+    #[serde(default)]
+    rfv_loop_external_struct_hint_line: String,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +57,8 @@ pub struct ResolvedHarnessNudges {
     pub autopilot_drive_verbose_reasoning_depth: String,
     pub autopilot_drive_compact_reasoning_depth: String,
     pub math_reasoning_harness_line: String,
+    pub retrieval_trace_harness_line: String,
+    pub rfv_loop_external_struct_hint_line: String,
 }
 
 impl ResolvedHarnessNudges {
@@ -61,6 +68,8 @@ impl ResolvedHarnessNudges {
             autopilot_drive_verbose_reasoning_depth: String::new(),
             autopilot_drive_compact_reasoning_depth: String::new(),
             math_reasoning_harness_line: String::new(),
+            retrieval_trace_harness_line: String::new(),
+            rfv_loop_external_struct_hint_line: String::new(),
         }
     }
 }
@@ -74,6 +83,10 @@ fn builtin_defaults() -> ResolvedHarnessNudges {
         autopilot_drive_compact_reasoning_depth: "深度：切片+验证证据链，非单模型堆长推理。"
             .to_string(),
         math_reasoning_harness_line: String::new(),
+        retrieval_trace_harness_line: String::new(),
+        rfv_loop_external_struct_hint_line:
+            "外研结构化（默认 strict）：每 claim ≥2 可溯源 sources；contradiction_sweep ≥ max(2, claims)；queries_used ≥3；retrieval_trace 三字段各 ≥40 字；须含 unknowns 键（[] 或 null）。关闭：start 传 external_research_strict:false。见 configs/framework/RFV_EXTERNAL_RESEARCH.schema.json。"
+                .to_string(),
     }
 }
 
@@ -120,15 +133,37 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         &mut out.math_reasoning_harness_line,
         &file.nudges.math_reasoning_harness_line,
     );
+    merge_nonempty(
+        &mut out.retrieval_trace_harness_line,
+        &file.nudges.retrieval_trace_harness_line,
+    );
+    merge_nonempty(
+        &mut out.rfv_loop_external_struct_hint_line,
+        &file.nudges.rfv_loop_external_struct_hint_line,
+    );
     out
+}
+
+fn push_optional_operator_line(lines: &mut Vec<String>, line: &str) {
+    let t = line.trim();
+    if !t.is_empty() {
+        lines.push(t.to_string());
+    }
 }
 
 /// Append optional STEM line after primary reasoning-depth nudge (RFV / Autopilot / digest).
 pub fn push_math_reasoning_line(lines: &mut Vec<String>, nudges: &ResolvedHarnessNudges) {
-    let t = nudges.math_reasoning_harness_line.trim();
-    if !t.is_empty() {
-        lines.push(t.to_string());
-    }
+    push_optional_operator_line(lines, &nudges.math_reasoning_harness_line);
+}
+
+/// Append optional retrieval / external-research audit line after math nudge (same surfaces).
+pub fn push_retrieval_trace_line(lines: &mut Vec<String>, nudges: &ResolvedHarnessNudges) {
+    push_optional_operator_line(lines, &nudges.retrieval_trace_harness_line);
+}
+
+/// Append optional structured external-research hint (RFV only; callers gate conditions).
+pub fn push_rfv_external_struct_hint_line(lines: &mut Vec<String>, nudges: &ResolvedHarnessNudges) {
+    push_optional_operator_line(lines, &nudges.rfv_loop_external_struct_hint_line);
 }
 
 fn merge_nonempty(target: &mut String, incoming: &str) {
@@ -228,6 +263,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    #[test]
+    fn resolve_retrieval_line_from_json() {
+        let _g = harness_nudges_env_test_lock();
+        std::env::remove_var(HARNESS_NUDGES_ENV);
+        let tmp = std::env::temp_dir().join(format!(
+            "harness-nudges-retrieval-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("configs/framework")).unwrap();
+        let p = tmp.join(NUDGES_REL_PATH);
+        let mut f = std::fs::File::create(&p).unwrap();
+        write!(
+            f,
+            r#"{{"schema_version":"harness-operator-nudges-v1","nudges":{{"retrieval_trace_harness_line":"RETR_TEST_LINE"}}}}"#
+        )
+        .unwrap();
+        drop(f);
+        let n = resolve_harness_operator_nudges(&tmp);
+        assert_eq!(n.retrieval_trace_harness_line, "RETR_TEST_LINE");
+        let mut lines: Vec<String> = vec!["x".into()];
+        push_retrieval_trace_line(&mut lines, &n);
+        assert_eq!(lines, vec!["x", "RETR_TEST_LINE"]);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     /// P0-F: an unknown `schema_version` must fall back to compiled defaults (no partial merge),
     /// so future v2 additions can never silently corrupt the v1 model-facing prompt.
     #[test]
@@ -285,6 +349,9 @@ mod tests {
             "aggregate kill-switch must zero out nudges"
         );
         assert!(n.autopilot_drive_compact_reasoning_depth.is_empty());
+        assert!(n.math_reasoning_harness_line.is_empty());
+        assert!(n.retrieval_trace_harness_line.is_empty());
+        assert!(n.rfv_loop_external_struct_hint_line.is_empty());
         match prior_nudge {
             Some(v) => std::env::set_var(HARNESS_NUDGES_ENV, v),
             None => std::env::remove_var(HARNESS_NUDGES_ENV),
@@ -305,6 +372,8 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
         let n = resolve_harness_operator_nudges(&tmp);
         assert!(n.rfv_loop_continue_reasoning_depth.is_empty());
+        assert!(n.retrieval_trace_harness_line.is_empty());
+        assert!(n.rfv_loop_external_struct_hint_line.is_empty());
         match prior {
             Some(v) => std::env::set_var(HARNESS_NUDGES_ENV, v),
             None => std::env::remove_var(HARNESS_NUDGES_ENV),

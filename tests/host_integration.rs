@@ -574,20 +574,6 @@ fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
         .contains(&json!(mcp_path.to_string_lossy().to_string())));
 }
 
-fn browser_mcp_managed_payload(framework_root: &Path) -> serde_json::Value {
-    json!({
-        "command": common::router_rs_binary()
-            .expect("router-rs binary")
-            .to_string_lossy(),
-        "args": [
-            "browser",
-            "mcp-stdio",
-            "--repo-root",
-            framework_root.to_string_lossy(),
-        ],
-    })
-}
-
 #[test]
 fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
     let tmp = tempdir().unwrap();
@@ -603,7 +589,7 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
         &mcp_path,
         &json!({
             "mcp_servers": {
-                "browser-mcp": browser_mcp_managed_payload(&framework_root)
+                "browser-mcp": common::browser_mcp_server_payload_like_host(&framework_root)
             }
         }),
     );
@@ -705,7 +691,7 @@ fn cursor_user_scope_equivalence_check_requires_matching_repo_root_arg() {
         &mcp_path,
         &json!({
             "mcp_servers": {
-                "browser-mcp": browser_mcp_managed_payload(&framework_root)
+                "browser-mcp": common::browser_mcp_server_payload_like_host(&framework_root)
             }
         }),
     );
@@ -1626,6 +1612,14 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert_eq!(
         payload["host_targets"]["supported"],
         json!(["codex-cli", "cursor"])
+    );
+    assert_eq!(
+        payload["host_targets"]["metadata"]["codex-cli"]["install_tool"],
+        "codex"
+    );
+    assert_eq!(
+        payload["host_targets"]["metadata"]["cursor"]["host_entrypoints"],
+        json!(["AGENTS.md", ".cursor/rules/*.mdc"])
     );
     assert!(payload.get("mcp_clients").is_none());
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");

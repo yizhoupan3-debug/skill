@@ -184,6 +184,7 @@ const AUDIT_LOADOUT_OWNERS: &[&str] = &[
     "gh-address-comments",
     "gh-fix-ci",
     "sentry",
+    "code-review-deep",
 ];
 const FRAMEWORK_LOADOUT_OWNERS: &[&str] = &[
     "skill-framework-developer",

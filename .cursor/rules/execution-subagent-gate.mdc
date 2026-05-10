@@ -1,11 +1,11 @@
 ---
-description: Require intelligent execution lane split for implementation tasks
+description: Suggest intelligent execution lane split for implementation tasks
 alwaysApply: true
 ---
 
 # Execution Subagent Gate（仅 Cursor）
 
-跨宿主基线与叙事见 `AGENTS.md` → **Execution Ladder** → **宿主优先级**。**本文件与 `AGENTS.md` 一起构成 Cursor 执行面真源**：凡可分解为多 lane 的实现类工作，默认使用独立 subagent lanes；主线程保留架构决策、集成与最终验证。
+跨宿主基线与叙事见 `AGENTS.md` → **Execution Ladder** → **宿主优先级**。**本文件与 `AGENTS.md` 一起构成 Cursor 执行面叙事**：对可分解的实现类工作，**建议**（默认倾向）使用独立 subagent lanes；主线程保留架构决策、集成与最终验证。
 
 执行偏好：对“明显可并行”的实现任务，倾向**一开始就并发拆 lane**（而不是先串行探索），并遵循 `AGENTS.md` 中更新后的默认并行度（通常 3-5 lanes；必要时可到 6-8）。
 

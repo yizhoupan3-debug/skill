@@ -178,7 +178,7 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
 fn dispatch_cursor_command(command: CursorCommand) -> Result<(), String> {
     match command {
         CursorCommand::Hook(command) => {
-            run_cursor_review_gate(&command.event, command.repo_root.as_deref())
+            run_review_gate(&command.event, command.repo_root.as_deref())
         }
     }
 }

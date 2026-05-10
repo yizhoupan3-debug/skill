@@ -7,7 +7,9 @@ use crate::autopilot_goal::{
     goal_state_requests_continuation, read_active_task_id, read_focus_task_id, read_goal_state,
     task_evidence_artifacts_summary_for_task,
 };
-use crate::rfv_loop::read_rfv_loop_state;
+use crate::rfv_loop::{
+    read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
+};
 use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
@@ -65,6 +67,8 @@ pub struct EvidenceRollup {
 /// - `rfv_unknown_round_count` and `rfv_pass_without_evidence_count` are explicitly broken out
 ///   so dashboards can flag "RFV says PASS but EVIDENCE shows no successful row in the same
 ///   window" — the cross-check label written by `rfv_loop::cross_link_evidence`.
+/// - `rfv_external_strict_ok_round_count` counts rounds whose `external_research` object passes
+///   `validate_external_research_strict` while the RFV state has `external_research_strict=true`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
 pub struct DepthCompliance {
     pub rfv_pass_round_count: u64,
@@ -74,6 +78,11 @@ pub struct DepthCompliance {
     pub rfv_pass_without_evidence_count: u64,
     pub rfv_adversarial_round_count: u64,
     pub rfv_falsification_test_count: u64,
+    /// RFV rounds with non-null **`external_research`** object (`append_round` 结构化块).
+    pub rfv_external_deep_structured_round_count: u64,
+    /// RFV rounds where `external_research` was an object, task **`external_research_strict`** was
+    /// true at rollup time, and the blob passes [`validate_external_research_strict`].
+    pub rfv_external_strict_ok_round_count: u64,
     pub goal_checkpoint_count: u64,
     pub depth_score: u8,
 }
@@ -92,6 +101,10 @@ fn depth_compliance_from_disk(
     }
 
     if let Some(r) = rfv {
+        let strict_task = r
+            .get("external_research_strict")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         if let Some(rounds) = r.get("rounds").and_then(Value::as_array) {
             for round in rounds {
                 if round
@@ -123,6 +136,21 @@ fn depth_compliance_from_disk(
                         .unwrap_or(false)
                 {
                     c.rfv_pass_without_evidence_count += 1;
+                }
+                if round
+                    .get("external_research")
+                    .is_some_and(|v| !v.is_null() && v.is_object())
+                {
+                    c.rfv_external_deep_structured_round_count += 1;
+                    if strict_task {
+                        if let Some(er) = round.get("external_research") {
+                            if validate_external_research_structured(er).is_ok()
+                                && validate_external_research_strict(er).is_ok()
+                            {
+                                c.rfv_external_strict_ok_round_count += 1;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -291,6 +319,18 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
             dc.rfv_pass_without_evidence_count
         ));
     }
+    if dc.rfv_external_deep_structured_round_count > 0 {
+        out.push_str(&format!(
+            " · 结构化外研轮次={}",
+            dc.rfv_external_deep_structured_round_count
+        ));
+    }
+    if dc.rfv_external_strict_ok_round_count > 0 {
+        out.push_str(&format!(
+            " · 外研strict通过轮次={}",
+            dc.rfv_external_strict_ok_round_count
+        ));
+    }
     Some(out)
 }
 
@@ -447,6 +487,139 @@ mod tests {
             dc.depth_score, 2,
             "PASS (1) + adversarial (1) = 2, no evidence"
         );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn depth_compliance_counts_structured_external_research_rounds() {
+        let tmp = unique_repo("ext-deep");
+        let tid = "t-ext";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("RFV_LOOP_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "loop_status": "active",
+                "goal": "g",
+                "max_rounds": 3,
+                "current_round": 2,
+                "rounds": [
+                    {"round": 1, "verify_result": "PASS", "external_research": {"claims": [{"x": 1}]}},
+                    {"round": 2, "verify_result": "FAIL"}
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        let dc = v.depth_compliance.as_ref().expect("dc");
+        assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
+
+        let hint = depth_compliance_refresh_hint(&v).expect("hint");
+        assert!(hint.contains("结构化外研轮次=1"));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn depth_compliance_counts_external_strict_ok_when_flag_true() {
+        let tmp = unique_repo("ext-strict");
+        let tid = "t-ext-st";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        let t40 = "0123456789012345678901234567890123456789";
+        fs::write(
+            task_dir.join("RFV_LOOP_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "external_research_strict": true,
+                "loop_status": "active",
+                "goal": "g",
+                "max_rounds": 3,
+                "current_round": 1,
+                "rounds": [{
+                    "round": 1,
+                    "verify_result": "PASS",
+                    "external_research": {
+                        "claims": [{"claim": "c1", "sources": ["https://a.example/foo", "doi:10.1000/182"]}],
+                        "contradiction_sweep": [
+                            {"related_claim_or_topic": "t1", "contradicting_or_limiting_evidence": "e1", "sources": ["https://c.example/x"]},
+                            {"related_claim_or_topic": "t2", "contradicting_or_limiting_evidence": "e2", "sources": ["https://d.example/y"]}
+                        ],
+                        "unknowns": [],
+                        "retrieval_trace": {
+                            "queries_used": ["q1 one two", "q2 three four", "q3 five six"],
+                            "inclusion_rules": t40,
+                            "exclusions": t40,
+                            "exclusion_rationale": t40
+                        }
+                    }
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        let dc = v.depth_compliance.as_ref().expect("dc");
+        assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
+        assert_eq!(dc.rfv_external_strict_ok_round_count, 1);
+
+        let hint = depth_compliance_refresh_hint(&v).expect("hint");
+        assert!(hint.contains("外研strict通过轮次=1"));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn depth_compliance_strict_ok_zero_when_strict_flag_false() {
+        let tmp = unique_repo("ext-strict-off");
+        let tid = "t-off";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        let t40 = "0123456789012345678901234567890123456789";
+        fs::write(
+            task_dir.join("RFV_LOOP_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "external_research_strict": false,
+                "loop_status": "active",
+                "goal": "g",
+                "max_rounds": 3,
+                "current_round": 1,
+                "rounds": [{
+                    "round": 1,
+                    "verify_result": "PASS",
+                    "external_research": {
+                        "claims": [{"claim": "c1", "sources": ["https://a.example/foo", "doi:10.1000/182"]}],
+                        "contradiction_sweep": [
+                            {"related_claim_or_topic": "t1", "contradicting_or_limiting_evidence": "e1", "sources": ["https://c.example/x"]},
+                            {"related_claim_or_topic": "t2", "contradicting_or_limiting_evidence": "e2", "sources": ["https://d.example/y"]}
+                        ],
+                        "unknowns": [],
+                        "retrieval_trace": {
+                            "queries_used": ["q1 one two", "q2 three four", "q3 five six"],
+                            "inclusion_rules": t40,
+                            "exclusions": t40,
+                            "exclusion_rationale": t40
+                        }
+                    }
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        let dc = v.depth_compliance.as_ref().expect("dc");
+        assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
+        assert_eq!(dc.rfv_external_strict_ok_round_count, 0);
+
         let _ = fs::remove_dir_all(&tmp);
     }
 

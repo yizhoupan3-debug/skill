@@ -436,27 +436,21 @@ fn cursor_home_path() -> Result<PathBuf, String> {
 }
 
 fn autoresearch_integration_tests_enabled() -> bool {
-    matches!(
-        std::env::var("ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS")
-            .map(|v| {
-                let t = v.trim().to_ascii_lowercase();
-                matches!(t.as_str(), "1" | "true" | "yes" | "on")
-            })
-            .unwrap_or(false),
-        true
-    )
+    std::env::var("ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS")
+        .map(|v| {
+            let t = v.trim().to_ascii_lowercase();
+            matches!(t.as_str(), "1" | "true" | "yes" | "on")
+        })
+        .unwrap_or(false)
 }
 
 fn host_skills_publish_enabled() -> bool {
-    matches!(
-        std::env::var("ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS")
-            .map(|v| {
-                let t = v.trim().to_ascii_lowercase();
-                matches!(t.as_str(), "1" | "true" | "yes" | "on")
-            })
-            .unwrap_or(false),
-        true
-    )
+    std::env::var("ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS")
+        .map(|v| {
+            let t = v.trim().to_ascii_lowercase();
+            matches!(t.as_str(), "1" | "true" | "yes" | "on")
+        })
+        .unwrap_or(false)
 }
 
 fn print_local_homes(fw: PathBuf) -> Result<(), String> {
@@ -475,20 +469,27 @@ fn print_local_homes(fw: PathBuf) -> Result<(), String> {
 fn install_codex_user_hooks(args: InstallCodexUserHooksArgs) -> Result<(), String> {
     let fw = resolve_maint_roots(args.framework_root.as_deref(), None)?.0;
     let manifest = fw.join("scripts/router-rs/Cargo.toml");
-    eprintln!("Building router-rs (release)...");
-    run_cargo(
-        &fw,
-        &[
-            "build",
-            "--release",
-            "--manifest-path",
-            manifest.to_string_lossy().as_ref(),
-        ],
-    )?;
-    let bin = cargo_router_rs_executable(&fw).ok_or_else(|| {
-        "router-rs binary missing after release build (check cargo metadata target_directory)"
-            .to_string()
-    })?;
+
+    // Prefer existing dev binary (typically already built before `maint install-*` nested under
+    // `cargo test`). Avoid unconditional `--release`; it contends forever on Cargo package locks.
+    let bin = match cargo_router_rs_executable(&fw) {
+        Some(p) if p.is_file() => p,
+        _ => {
+            eprintln!("Building router-rs (dev) for codex hook install...");
+            run_cargo(
+                &fw,
+                &[
+                    "build",
+                    "--manifest-path",
+                    manifest.to_string_lossy().as_ref(),
+                ],
+            )?;
+            cargo_router_rs_executable(&fw).ok_or_else(|| {
+                "router-rs binary missing after dev build (check cargo metadata target_directory)"
+                    .to_string()
+            })?
+        }
+    };
     let codex_home = match args.codex_home.clone() {
         Some(p) => p,
         None => std::env::var_os("HOME")

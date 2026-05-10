@@ -1,11 +1,11 @@
-use crate::cursor_hooks::{
-    has_delegation_override, has_override, has_review_override, is_parallel_delegation_prompt,
-    is_review_prompt, normalize_subagent_type, normalize_tool_name, saw_reject_reason,
-};
 use crate::framework_runtime::{
     build_automatic_continuity_checkpoint_payload, build_framework_continuity_digest_prompt,
-    build_framework_contract_summary_envelope, try_append_codex_post_tool_evidence,
+    build_framework_contract_summary_envelope, try_append_post_tool_shell_evidence,
     write_framework_session_artifacts,
+};
+use crate::hook_common::{
+    has_delegation_override, has_override, has_review_override, is_parallel_delegation_prompt,
+    is_review_prompt, normalize_subagent_type, normalize_tool_name, saw_reject_reason,
 };
 use crate::host_integration::ensure_codex_skill_surface;
 use crate::router_env_flags::router_rs_env_enabled_default_true;
@@ -625,7 +625,9 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
 }
 
 fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
-    if let Err(err) = try_append_codex_post_tool_evidence(repo_root, event) {
+    if let Err(err) =
+        try_append_post_tool_shell_evidence(repo_root, event, "codex_post_tool_verification")
+    {
         eprintln!("[router-rs] post-tool evidence append failed (non-fatal): {err}");
     }
     let tool_name = codex_tool_name(event);
@@ -903,7 +905,7 @@ struct SingleSyncReport {
 
 pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Value, String> {
     let root = normalize_repo_root(repo_root)?;
-    let desired_files = build_host_entrypoint_files(&root)?;
+    let desired_files = collect_codex_host_sync_file_bytes(&root)?;
     let partial_section = host_entrypoint_partial_sync_section(&desired_files);
     let (matched_worktrees, skipped_worktrees) = discover_matching_worktrees(&root);
     let mut report = json!({
@@ -979,7 +981,9 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
     Ok(report)
 }
 
-fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
+fn collect_codex_host_sync_file_bytes(
+    repo_root: &Path,
+) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut files = BTreeMap::new();
     let policy_path = repo_root.join(CODEX_AGENT_POLICY_PATH);
     let policy = match fs::read(&policy_path) {
@@ -1005,30 +1009,32 @@ fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<
     );
     files.insert(
         HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
-        serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files))?,
+        serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files, repo_root)?)?,
     );
     Ok(files)
 }
 
-fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>) -> Value {
+fn build_host_entrypoint_sync_manifest(
+    desired_files: &BTreeMap<String, Vec<u8>>,
+    repo_root: &Path,
+) -> Result<Value, String> {
     let full_text_files = desired_host_entrypoint_text_files(desired_files);
     let mut json_files = HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
         .iter()
         .map(|path| (*path).to_string())
         .collect::<Vec<_>>();
     json_files.push(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string());
-    json!({
+    let mut shared_system =
+        crate::framework_host_targets::sync_manifest_shared_system_block(repo_root)?;
+    if let Some(obj) = shared_system.as_object_mut() {
+        obj.insert(
+            "agent_policy_entrypoint".to_string(),
+            Value::String(CODEX_AGENT_POLICY_PATH.to_string()),
+        );
+    }
+    Ok(json!({
         "schema_version": "host-entrypoints-sync-manifest-v1",
-        "shared_system": {
-            "policy": "host-specific-agent-policy-v1",
-            "routing_source_of_truth": "skills/",
-            "agent_policy_entrypoint": CODEX_AGENT_POLICY_PATH,
-            "supported_hosts": ["codex-cli", "cursor"],
-            "host_entrypoints": {
-                "codex-cli": CODEX_AGENT_POLICY_PATH,
-                "cursor": [CODEX_AGENT_POLICY_PATH, ".cursor/rules/*.mdc"],
-            },
-        },
+        "shared_system": shared_system,
         "full_sync": {
             "text_files": full_text_files,
             "json_files": json_files.clone(),
@@ -1037,7 +1043,7 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
             "text_files": full_text_files,
             "json_files": json_files,
         },
-    })
+    }))
 }
 
 fn desired_host_entrypoint_text_files(desired_files: &BTreeMap<String, Vec<u8>>) -> Vec<String> {
@@ -2502,6 +2508,19 @@ mod tests {
             "{}",
         )
         .unwrap();
+        let registry_dir = root.join("configs/framework");
+        fs::create_dir_all(&registry_dir).unwrap();
+        let registry_json = registry_dir.join("RUNTIME_REGISTRY.json");
+        fs::write(
+            &registry_json,
+            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","cursor"],"metadata":{"codex-cli":{"install_tool":"codex","host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]}}}}"#,
+        )
+        .unwrap();
+        assert!(
+            registry_json.is_file(),
+            "fixture RUNTIME_REGISTRY.json missing at {}",
+            registry_json.display()
+        );
 
         let report = sync_host_entrypoints(&root, false).unwrap();
         let would_write = report

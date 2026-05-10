@@ -15,8 +15,8 @@
 
 - 文件：`artifacts/current/<task_id>/RFV_LOOP_STATE.json`
 - stdio op：**`framework_rfv_loop`**
-  - `operation: start` — 字段含 `goal`、`max_rounds`、`allow_external_research`、`parallel_external_with_review`（默认 `true`）、`review_scope`、`fix_scope`、`verify_commands`、`stop_when`
-  - `operation: append_round` — 每轮结束后 supervisor 写入：`round`、`review_summary`、`external_research_summary`（可空）、`fix_summary`、`verify_result`（`PASS|FAIL|SKIPPED`）、`supervisor_decision`（`continue|close|block`）、`reason`
+  - `operation: start` — 字段含 `goal`、`max_rounds`、`allow_external_research`、`parallel_external_with_review`（默认 `true`）、`prefer_structured_external_research`（默认 `false`，为 `true` 时可触发单行结构化外研提示）、**`external_research_strict`**（默认 **`true`**；显式 `false` 关闭；旧 `RFV_LOOP_STATE.json` 缺此键时 `append_round` 视为宽松）、`review_scope`、`fix_scope`、`verify_commands`、`stop_when`
+  - `operation: append_round` — 每轮结束后 supervisor 写入：`round`、`review_summary`、`external_research_summary`（可空）、可选结构化 **`external_research`**（校验见 [references/rfv-loop/external-research-harness.md](references/rfv-loop/external-research-harness.md)）、`fix_summary`、`verify_result`（`PASS|FAIL|SKIPPED`）、`supervisor_decision`（`continue|close|block`）、`reason`
   - `operation: status`
 - `max_rounds` 在 Rust 侧有 **硬上限 1000**（防止误填天文数字）；超过会截断并在响应中带 `warning`。
 - **Cursor**：若 `.cursor/hooks.json` 接入 `router-rs cursor hook`，且 **`RFV_LOOP_STATE.json`** 中 **`loop_status=active`**，Stop / beforeSubmit 可合并 **RFV_LOOP_CONTINUE** 跟进；preCompact 可附带一行 RFV 摘要。关闭注入：`ROUTER_RS_RFV_LOOP_HOOK=0`。
@@ -27,7 +27,7 @@
 
 - **真源**：[references/rfv-loop/reasoning-depth-contract.md](references/rfv-loop/reasoning-depth-contract.md) — **不靠单模型拉长 CoT**；靠 **`review ∥ external → fix → verify`** + **`EVIDENCE_INDEX` / `append_round`** 形成可审计链。
 - **提升调研深度的计划（契约级）**：同文件 §**提升调研深度的 harness 方向** — **A** 外研 API 式输出（Claims / Contradiction sweep / Unknowns）；**B** 检索留下可复核轨迹并与定量复算命令同源；**C** 多视角真并行、角色分离（禁止同上下文换帽）。
-- **宿主注入文案**：`configs/framework/HARNESS_OPERATOR_NUDGES.json`（RFV / Autopilot 续跑末尾附带的「推理深度」句，及可选 **`math_reasoning_harness_line`** 数理一句）；**`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`** 可整体关闭。
+- **宿主注入文案**：`configs/framework/HARNESS_OPERATOR_NUDGES.json`（RFV / Autopilot 续跑末尾附带的「推理深度」句，及可选 **`math_reasoning_harness_line`**（数理）、**`retrieval_trace_harness_line`**（外研检索轨迹）、**`rfv_loop_external_struct_hint_line`**（结构化外研单行提示）；**`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`** 可整体关闭；**`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT=0`** 仅关结构化单行。
 - **数理 / STEM 契约长文**：[references/rfv-loop/math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)（witness、符号 verifier、反事实探针；与 lane 模板同目录）。
 - **外研不得顶替 verify**：external 只产出可引用结论与假设；**Pass/Fail 只认可执行验证**。定量复算的 **replay** 与 `cargo test` 同类 spirit：写入 `verify_commands` 或 `quantitative_replays` 并由 verifier / supervisor 执行，证据进 `EVIDENCE_INDEX`（或等价记录）。
 

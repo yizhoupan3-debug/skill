@@ -129,7 +129,7 @@ This skill is the one front door for paper work.
 
 与本立场冲突的捷径（降口径逃难、rebuttal-only、代码空诺、数学直觉化、`surgical` 全局乱改等）一律以 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 为硬闸。
 
-启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`$paper-reviewer`** 的 External lane shape 约定。
+启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`$paper-reviewer`** 的 External lane shape 约定。
 
 **Cursor 宿主（可选）**：在 shell/IDE 环境设 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` 时，`router-rs` 可在 **`beforeSubmit`** 合并短段 **`PAPER_ADVERSARIAL_HOOK`**（真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），与本 skill 同向加压；受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。见根 `AGENTS.md` 与 `docs/harness_architecture.md`。
 

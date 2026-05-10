@@ -146,10 +146,15 @@ codex
 
 ## 日常更新方式
 
-**全量维护（推荐，等同 `/update`）**：在仓库根执行（需 `cargo`）：
+**全量维护（推荐，等同 `/update`）**：首选已安装的 `router-rs`（任意 cwd）；否则在设置框架根后用 `cargo run`：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+router-rs framework maint update-one-shot
+```
+
+```bash
+export SKILL_FRAMEWORK_ROOT=/abs/path/to/framework-repo   # 或与 Cursor 单根一致的 CURSOR_WORKSPACE_ROOT
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
 ```
 
 你更新 skill 后若只需最小验证，可拆步：

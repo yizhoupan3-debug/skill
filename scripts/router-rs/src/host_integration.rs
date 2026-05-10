@@ -1,4 +1,4 @@
-use crate::framework_runtime::is_framework_root;
+use crate::framework_runtime::{framework_root_from_executable_path, is_framework_root};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
@@ -20,7 +20,6 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-remaining",
     "git-branch",
 ];
-const INSTALL_SKILLS_TOOLS: [&str; 2] = ["codex", "cursor"];
 const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
 const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
@@ -411,6 +410,26 @@ fn normalize_path(path: &Path) -> Result<PathBuf, String> {
     }
 }
 
+fn try_framework_root_from_workspace_env() -> Option<PathBuf> {
+    for name in ["ROUTER_RS_CURSOR_WORKSPACE_ROOT", "CURSOR_WORKSPACE_ROOT"] {
+        let Some(raw) = std::env::var_os(name) else {
+            continue;
+        };
+        let candidate = PathBuf::from(raw);
+        if let Ok(root) = normalize_path(&candidate) {
+            if is_framework_root(&root) {
+                return Some(root);
+            }
+        }
+    }
+    None
+}
+
+fn try_framework_root_from_current_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    framework_root_from_executable_path(&exe)
+}
+
 fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String> {
     if let Some(path) = explicit {
         return normalize_path(path);
@@ -427,7 +446,17 @@ fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String> {
             return normalize_path(ancestor);
         }
     }
-    Err("missing framework_root; pass --framework-root or set SKILL_FRAMEWORK_ROOT".to_string())
+    if let Some(root) = try_framework_root_from_workspace_env() {
+        return Ok(root);
+    }
+    if let Some(root) = try_framework_root_from_current_exe() {
+        return Ok(root);
+    }
+    Err(
+        "missing framework_root; pass --framework-root, set SKILL_FRAMEWORK_ROOT, \
+         or set ROUTER_RS_CURSOR_WORKSPACE_ROOT / CURSOR_WORKSPACE_ROOT to the framework checkout when cwd is outside the repo"
+            .to_string(),
+    )
 }
 
 fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String> {
@@ -592,26 +621,11 @@ fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, String> {
 }
 
 fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
-    let path = runtime_registry_path(repo_root)?;
-    let payload = fs::read_to_string(&path).map_err(|err| err.to_string())?;
-    let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| err.to_string())?;
-    let schema_version = parsed
-        .get("schema_version")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            format!(
-                "Runtime registry missing schema_version at {}",
-                path.to_string_lossy()
-            )
-        })?;
-    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
-        return Err(format!(
-            "Unsupported runtime registry schema_version {:?} at {}",
-            schema_version,
-            path.to_string_lossy()
-        ));
+    match runtime_registry_path(repo_root) {
+        Ok(_) => {}
+        Err(e) => return Err(e),
     }
-    Ok(parsed)
+    crate::framework_host_targets::load_runtime_registry_json(repo_root)
 }
 
 fn load_runtime_registry_payload_if_repo_local(repo_root: &Path) -> Result<Option<Value>, String> {
@@ -1299,22 +1313,16 @@ fn projection_install_command(
         command.cursor_home.as_deref(),
         command.home.as_deref(),
     )?;
-    let selected_tools = selected_projection_tools(&command.to, true)?;
+    let selected_tools = selected_projection_tools(&roots.framework_root, &command.to, true)?;
     let scope = canonical_scope(&command.scope)?;
     let mut results = Map::new();
     for tool in selected_tools {
         results.insert(
             tool.to_string(),
-            install_projection_tool(&roots, tool, scope)?,
+            install_projection_tool(&roots, &tool, scope)?,
         );
     }
-    Ok(projection_envelope(
-        "install",
-        compatibility_alias,
-        &roots,
-        Some(scope),
-        results,
-    ))
+    projection_envelope("install", compatibility_alias, &roots, Some(scope), results)
 }
 
 fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, String> {
@@ -1327,10 +1335,11 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
-    for tool in INSTALL_SKILLS_TOOLS {
-        results.insert(tool.to_string(), projection_tool_status(&roots, tool)?);
+    for tool in crate::framework_host_targets::skills_install_tools_ordered(&roots.framework_root)?
+    {
+        results.insert(tool.to_string(), projection_tool_status(&roots, &tool)?);
     }
-    Ok(projection_envelope("status", false, &roots, None, results))
+    projection_envelope("status", false, &roots, None, results)
 }
 
 fn projection_remove_command(
@@ -1357,36 +1366,36 @@ fn projection_remove_or_cleanup_command(
         command.cursor_home.as_deref(),
         command.home.as_deref(),
     )?;
-    let selected_tools = selected_projection_tools(&command.to, false)?;
+    let selected_tools = selected_projection_tools(&roots.framework_root, &command.to, false)?;
     let scope = canonical_scope(&command.scope)?;
     validate_cleanup_scope(&command, scope, &selected_tools, cleanup_mode)?;
     let mut results = Map::new();
     for tool in selected_tools {
         results.insert(
             tool.to_string(),
-            remove_projection_tool(&roots, tool, scope, command.dry_run)?,
+            remove_projection_tool(&roots, &tool, scope, command.dry_run)?,
         );
     }
-    Ok(projection_envelope(
+    projection_envelope(
         if cleanup_mode { "cleanup" } else { "remove" },
         compatibility_alias,
         &roots,
         Some(scope),
         results,
-    ))
+    )
 }
 
 fn validate_cleanup_scope(
     command: &ProjectionCommand,
     scope: &str,
-    tools: &[&'static str],
+    tools: &[String],
     cleanup_mode: bool,
 ) -> Result<(), String> {
     if !cleanup_mode || scope != "user" {
         return Ok(());
     }
     for tool in tools {
-        let explicit_home = match *tool {
+        let explicit_home = match tool.as_str() {
             "codex" => command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some(),
             "cursor" => command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some(),
             _ => true,
@@ -1406,12 +1415,19 @@ fn projection_envelope(
     roots: &ResolvedProjectionRoots,
     scope: Option<&str>,
     results: Map<String, Value>,
-) -> Value {
-    let host_targets = json!({
-        "codex-cli": results.get("codex").cloned().unwrap_or(Value::Null),
-        "cursor": results.get("cursor").cloned().unwrap_or(Value::Null),
-    });
-    json!({
+) -> Result<Value, String> {
+    let pairs = crate::framework_host_targets::host_id_and_skills_install_tool_pairs(
+        &roots.framework_root,
+    )?;
+    let mut host_targets_map = serde_json::Map::new();
+    for (host_id, tool) in &pairs {
+        host_targets_map.insert(
+            host_id.clone(),
+            results.get(tool.as_str()).cloned().unwrap_or(Value::Null),
+        );
+    }
+    let host_targets = Value::Object(host_targets_map);
+    Ok(json!({
         "success": true,
         "command": command,
         "invocation": {
@@ -1419,43 +1435,59 @@ fn projection_envelope(
             "alias_used": if compatibility_alias { Value::String("install-skills".to_string()) } else { Value::Null },
             "deprecated_alias": compatibility_alias,
         },
-        "resolved_roots": resolved_roots_payload(roots),
+        "resolved_roots": resolved_roots_payload(roots, &pairs)?,
         "scope": scope.unwrap_or("all-scopes-status"),
         "results": results,
         "host_targets": host_targets,
-    })
+    }))
 }
 
-fn resolved_roots_payload(roots: &ResolvedProjectionRoots) -> Value {
-    json!({
+fn resolved_roots_payload(
+    roots: &ResolvedProjectionRoots,
+    pairs: &[(String, String)],
+) -> Result<Value, String> {
+    let mut host_home_roots = serde_json::Map::new();
+    for (host_id, tool) in pairs {
+        let path = match tool.as_str() {
+            "codex" => roots.codex_home_root.to_string_lossy(),
+            "cursor" => roots.cursor_home_root.to_string_lossy(),
+            other => {
+                return Err(format!(
+                    "resolved_roots_payload: unsupported skills-install tool `{other}` \
+                     (extend host home mapping when adding hosts)"
+                ));
+            }
+        };
+        host_home_roots.insert(host_id.clone(), json!(path));
+    }
+    Ok(json!({
         "framework_root": roots.framework_root.to_string_lossy(),
         "project_root": roots.project_root.to_string_lossy(),
         "artifact_root": roots.artifact_root.to_string_lossy(),
-        "host_home_roots": {
-            "codex-cli": roots.codex_home_root.to_string_lossy(),
-            "cursor": roots.cursor_home_root.to_string_lossy(),
-        },
-    })
+        "host_home_roots": Value::Object(host_home_roots),
+    }))
 }
 
 fn selected_projection_tools(
+    framework_root: &Path,
     raw_tools: &[String],
     default_all: bool,
-) -> Result<Vec<&'static str>, String> {
+) -> Result<Vec<String>, String> {
     if raw_tools.is_empty() && default_all {
-        return Ok(INSTALL_SKILLS_TOOLS.to_vec());
+        return crate::framework_host_targets::skills_install_tools_ordered(framework_root);
     }
     let mut selected = Vec::new();
     for raw in raw_tools {
         if raw.trim().eq_ignore_ascii_case("all") {
-            for tool in INSTALL_SKILLS_TOOLS {
+            for tool in crate::framework_host_targets::skills_install_tools_ordered(framework_root)?
+            {
                 if !selected.contains(&tool) {
                     selected.push(tool);
                 }
             }
             continue;
         }
-        let tool = canonical_tool_name(raw)?;
+        let tool = canonical_tool_name(raw, framework_root)?;
         if !selected.contains(&tool) {
             selected.push(tool);
         }
@@ -2064,7 +2096,8 @@ fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String>
 
 fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let args = cursor_mcp_browser_stdio_args(roots);
-    let exe = cargo_router_rs_executable(&roots.framework_root).or_else(|| which::which("router-rs").ok());
+    let exe = cargo_router_rs_executable(&roots.framework_root)
+        .or_else(|| which::which("router-rs").ok());
     match exe {
         Some(path) => json!({
             "command": path.to_string_lossy().to_string(),
@@ -2228,14 +2261,18 @@ fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String
     }
 }
 
-fn canonical_tool_name(raw: &str) -> Result<&'static str, String> {
+fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
     match raw.trim().to_lowercase().as_str() {
-        "codex" => Ok("codex"),
-        "cursor" => Ok("cursor"),
-        other => Err(format!(
-            "Unknown tool: {other}. Supported tools: {}",
-            INSTALL_SKILLS_TOOLS.join(" ")
-        )),
+        "codex" | "codex-cli" => Ok("codex".to_string()),
+        "cursor" => Ok("cursor".to_string()),
+        other => {
+            let known = crate::framework_host_targets::skills_install_tools_ordered(framework_root)
+                .unwrap_or_else(|_| vec!["codex".to_string(), "cursor".to_string()]);
+            Err(format!(
+                "Unknown tool: {other}. Supported tools: {} (alias: codex-cli → codex)",
+                known.join(", ")
+            ))
+        }
     }
 }
 
@@ -3270,8 +3307,8 @@ mod tests {
             "error should include expected repo-local registry path: {err}"
         );
         assert!(
-            err.contains("--framework-root"),
-            "error should suggest --framework-root fix path/flag: {err}"
+            err.contains("framework-root"),
+            "error should mention framework-root / --framework-root: {err}"
         );
 
         let _ = fs::remove_dir_all(root);

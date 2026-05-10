@@ -63,28 +63,40 @@ network_access: local
 
 ## One-shot（真源，Rust）
 
-在仓库根（`cargo` 需在 PATH）：
+首选（`router-rs` **已在 PATH**，与 cwd 无关）：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+router-rs framework maint update-one-shot
 ```
 
-等价于：`router-rs framework maint refresh-host-projections` → `skill-compiler-rs/Cargo.toml` `--apply` → **上述 integration 套件** → `skill-compiler-rs` crate tests → `generated-artifacts-status` OK →（可选）`install-skills install`。（未装 `router-rs` 到 PATH 时用 `cargo run --manifest-path scripts/router-rs/Cargo.toml --` 前缀。）
+**cwd 落在框架仓库外时**（例如只对子项目开了终端）：`router-rs`/宿主子命令会在 `SKILL_FRAMEWORK_ROOT` 与自 `cwd` 向上探测之后，再尝试 **`ROUTER_RS_CURSOR_WORKSPACE_ROOT` / `CURSOR_WORKSPACE_ROOT`**（经路径归一化并校验 `configs/framework/RUNTIME_REGISTRY.json` + `scripts/router-rs/Cargo.toml`），最后从 **`std::env::current_exe()`** 向上探测同一套标记。你在本机手敲命令时，仍建议显式导出框架根变量，减少歧义：
 
-编译后的二进制亦可：`router-rs framework maint update-one-shot`。
+- **`SKILL_FRAMEWORK_ROOT`**：框架 skill 仓库根的绝对路径（推荐真源）。
+- **`CURSOR_WORKSPACE_ROOT`**：Cursor 单根工作区打开该仓库时，通常与上面相同；未使用 Cursor 时可忽略。
+
+未安装 `router-rs` 时，用 `cargo run`（manifest 必须解析到框架仓库内的 `Cargo.toml`）：
+
+```bash
+export SKILL_FRAMEWORK_ROOT=/abs/path/to/framework-repo
+# 若适用：export CURSOR_WORKSPACE_ROOT=/abs/path/to/framework-repo
+
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
+```
+
+等价于：`router-rs framework maint refresh-host-projections` → `skill-compiler-rs/Cargo.toml` `--apply` → **上述 integration 套件** → `skill-compiler-rs` crate tests → `generated-artifacts-status` OK →（可选）`install-skills install`。（未装 `router-rs` 到 PATH 时用上面 `cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" --` 前缀。）
 
 ### 可选：会话级隔离 homes（不写用户目录）
 
 ```bash
-eval "$(cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework maint print-local-homes)"
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+eval "$(cargo run --quiet --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint print-local-homes)"
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
 ```
 
 ### 可选：把 `autoresearch_cli`（外网）纳入一条龙
 
 ```bash
 export ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
 ```
 
 ### 可选：全局宿主投影（Codex + Cursor）
@@ -93,16 +105,16 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update
 
 ```bash
 export ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
 ```
 
 或仅发布（等价于一条龙末尾条件块）：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- \
   codex host-integration install-skills \
-  --repo-root "$PWD" \
-  --artifact-root "${ARTIFACT_ROOT:-$PWD/artifacts}" \
+  --repo-root "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}" \
+  --artifact-root "${ARTIFACT_ROOT:-${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/artifacts}" \
   --codex-home "${CODEX_HOME:-$HOME/.codex}" \
   --cursor-home "${CURSOR_HOME:-$HOME/.cursor}" \
   install
@@ -111,11 +123,11 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
 ### 单片维护子命令（调试）
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint refresh-host-projections
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-codex-hooks
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint clean-rust-targets
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint refresh-host-projections
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint verify-cursor-hooks
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint verify-codex-hooks
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint clean-rust-targets
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint install-codex-user-hooks
 ```
 
 ## 分步手写（不推荐；顺序与 maint 对齐）
@@ -123,11 +135,11 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 若需徒手拆阶段：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint refresh-host-projections
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint refresh-host-projections
 
-cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
-  --skills-root skills \
-  --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
+cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/skill-compiler-rs/Cargo.toml" -- \
+  --skills-root "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/skills" \
+  --source-manifest "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/skills/SKILL_SOURCE_MANIFEST.json" \
   --apply
 
 # 默认与 update-one-shot 一致的离线套件：
@@ -139,12 +151,12 @@ cargo test --test host_integration
 cargo test --test browser_mcp_scripts
 cargo test --test codex_aggregator_rustification
 # 可选全量（含外网 autoresearch_cli）：cargo test
-cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml
+cargo test --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/skill-compiler-rs/Cargo.toml"
 
-cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- \
+cargo run --quiet --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- \
   framework host-integration generated-artifacts-status \
-  --framework-root "$PWD" \
-  --artifact-root "${ARTIFACT_ROOT:-$PWD/artifacts}" \
+  --framework-root "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}" \
+  --artifact-root "${ARTIFACT_ROOT:-${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/artifacts}" \
   | python3 -c 'import json,sys; j=json.load(sys.stdin); sys.exit(0 if j.get("ok") is True else 1)'
 ```
 
