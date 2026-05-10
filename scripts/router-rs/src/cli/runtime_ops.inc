@@ -1745,6 +1745,8 @@ pub(crate) fn required_non_empty_string(
         .ok_or_else(|| format!("{context} requires non-empty {key}"))
 }
 
+// Retained for integration tests; retired top-level continuity refresh CLI path was removed.
+#[allow(dead_code)]
 pub(crate) fn copy_text_to_clipboard(text: &str) -> Result<Value, String> {
     if let Ok(path_value) = std::env::var("ROUTER_RS_CLIPBOARD_PATH") {
         let path = PathBuf::from(path_value);

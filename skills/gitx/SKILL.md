@@ -1,7 +1,7 @@
 ---
 name: gitx
 description: |
-  Codex 里的 Git 主入口。Use when the user says `$gitx` / `/gitx` / `gitx`, or
+  Codex 里的 Git 主入口。Use when the user says `/gitx` or natural `gitx`, or
   needs branch、merge、rebase、push、worktree、仓库收口、推送失败排查等 Git 实操。
   This skill owns practical Git work in this repo, from quick diagnosis to end-to-end closeout.
 routing_layer: L2
@@ -13,7 +13,6 @@ user-invocable: false
 disable-model-invocation: true
 short_description: Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.
 trigger_hints:
-  - $gitx
   - /gitx
   - gitx
   - git 一条龙
@@ -48,11 +47,11 @@ bridge_behavior: mobile_complete_once
 
 # gitx
 
-`gitx` 是给 Codex 用的 Git 收口快捷入口。
+`gitx` 是给 Codex 用的 Git 收口快捷入口。推荐显式入口：`/gitx`（不再使用 `$gitx`）。
 
 ## When to use
 
-- 用户明确说 `$gitx`、`/gitx`、`gitx`
+- 用户明确说 `/gitx` 或口语 `gitx`
 - 用户要查分支、合并分支、rebase、push、远程、worktree、stash、仓库状态这类 Git 实操
 - 用户要把 review、修复、整理、提交、合并分支、合并 worktree、推送当成一次连续动作做完
 - 当前重点是把仓库安全收口，或把 Git 问题落到真实仓库状态上处理
@@ -66,7 +65,7 @@ bridge_behavior: mobile_complete_once
 
 ## Default contract
 
-把 `$gitx` 视为用户对当前仓库发出的“安全一条龙收口”授权，默认目标是：
+把 **`/gitx`** 视为用户对当前仓库发出的“安全一条龙收口”授权，默认目标是：
 
 1. 先看清真实 Git 状态，而不是直接提交
 2. 先 review 再 fix
@@ -74,6 +73,16 @@ bridge_behavior: mobile_complete_once
 4. 最后把应该推送的分支安全推上去（默认直接执行，不再二次询问）
 
 如果当前目录不是 Git 仓库，不要擅自初始化；直接说明不是仓库并停下。
+
+## 入口语义：空 `/gitx` vs 带参
+
+- **仅入口词、无后续说明**（行内只有 `/gitx` 或口语 `gitx`，或去掉首尾空白后不再有其它文字）：视为 **全工作区 Git 收口**——把当前仓库当作一个整体：所有已跟踪改动、暂存区、未跟踪里与本次收口相关的文件、stash、worktree 关系、当前分支与 upstream 等，按下文 **Required workflow** 一条龙处理到安全状态（整理、提交/拆分提交、merge、push 等）；**「弄干净」指有序收口而非擅自 `git clean -fd` 等破坏性清理**。
+- **入口词后面还有内容**（例如 `/gitx scripts/router-rs`、`/gitx 只处理 AGENTS.md`）：视为 **范围限定**——仍以全仓诊断命令看清全局，但 **review、修复、拆分/整理提交面、验证与最终纳入提交的 path** 只针对用户给出的范围（路径、目录、模块、分支名或一句明确议题）；**不要把明显无关路径的改动顺手塞进同一提交**，除非为消除该范围内的构建/测试失败所必需。
+
+## Review 深度（是否「先深度 review」）
+
+- **不是**默认第一步做全仓深度代码审阅；默认顺序是：**诊断 → 提交面/范围摸底 → 对拟纳入收口的改动做务实 review**（明显 bug、回归、脏文件、生成物、遗漏测试等），再 fix 与验证。
+- 宿主若对 `/gitx` 启用并行 reviewer lane，属于执行面上的评审分路，**不改变**上述「先看清 Git 状态与范围，再审改动面」的顺序。
 
 ## Execution tiers
 
@@ -138,5 +147,6 @@ bridge_behavior: mobile_complete_once
 ## Usage
 
 ```text
-$gitx
+/gitx
+/gitx <路径、目录、分支或一句明确范围>
 ```

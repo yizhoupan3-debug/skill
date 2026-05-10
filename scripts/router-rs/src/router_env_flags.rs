@@ -18,7 +18,7 @@ pub fn router_rs_cursor_hook_chat_followup_enabled() -> bool {
     }
 }
 
-/// `ROUTER_RS_GOAL_PROMPT_VERBOSE`：为 `1`/`true`/`yes`/`on`（trim + ASCII 小写）时，`framework refresh` 的 Goal 段落、**AUTOPILOT_DRIVE**、**RFV_LOOP_CONTINUE**、以及 `/autopilot` **pre-goal** 提示使用冗长版；**默认紧凑**。
+/// `ROUTER_RS_GOAL_PROMPT_VERBOSE`：为 `1`/`true`/`yes`/`on`（trim + ASCII 小写）时，continuity digest 的 Goal 段落、**AUTOPILOT_DRIVE**、**RFV_LOOP_CONTINUE**、以及 `/autopilot` **pre-goal** 提示使用冗长版；**默认紧凑**。
 pub fn router_rs_goal_prompt_verbose() -> bool {
     match env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE") {
         Ok(value) => {
@@ -40,14 +40,26 @@ pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
     }
 }
 
+/// 未设置视为**关闭**；仅 `1`/`true`/`yes`/`on`（trim + ASCII 小写）时开启。（用于 opt-in 类钩子，如论文强对抗审稿 beforeSubmit。）
+pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
+    match env::var(var_name) {
+        Ok(value) => {
+            let token = value.trim().to_ascii_lowercase();
+            matches!(token.as_str(), "1" | "true" | "yes" | "on")
+        }
+        Err(_) => false,
+    }
+}
+
 /// `ROUTER_RS_OPERATOR_INJECT`：跨切片**聚合关断**（P1-E）。
 ///
-/// 当此变量为 `0`/`false`/`off`/`no` 时，下列三类「面向模型的 operator 注入」**全部**视为关闭：
+/// 当此变量为 `0`/`false`/`off`/`no` 时，下列四类「面向模型的 operator 注入」**全部**视为关闭：
 /// - `HARNESS_OPERATOR_NUDGES`（推理深度等 nudge 句）
 /// - `AUTOPILOT_DRIVE_HOOK`（Cursor Stop/beforeSubmit 的 GOAL 续跑块）
 /// - `RFV_LOOP_HOOK`（Cursor Stop/beforeSubmit 的 RFV 续跑块）
+/// - **`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` 已启用时**：Cursor **`beforeSubmit`** 的 **`PAPER_ADVERSARIAL_HOOK`** 短文（论文强对抗审稿提示）
 ///
-/// 三个细粒度变量仍可单独关掉某一类；本变量是「一键关全部续跑/nudge」的总闸。**默认开启**。
+/// 细粒度变量仍可单独关掉某一类；本变量是「一键关全部续跑/nudge」的总闸。**默认开启**。
 pub fn router_rs_operator_inject_globally_enabled() -> bool {
     router_rs_env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
 }

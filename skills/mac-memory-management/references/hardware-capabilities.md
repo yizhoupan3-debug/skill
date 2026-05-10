@@ -10,6 +10,16 @@ Use this reference to translate chip class into a practical memory policy.
 | Pro | Moderate unified-memory budgets | Can absorb larger activations, but DataLoader and cache pressure still matter |
 | Max | Larger unified-memory budgets | Still bounded by unified memory; do not treat it like discrete VRAM |
 
+## Conservative Starting Policy
+
+Use these as starting points, not promises:
+
+| Chip class | Batch fallback posture | DataLoader posture | Cache posture |
+|---|---|---|---|
+| Base M1 / M2 / M3 / M4 | Start with the smallest practical batch and add bounded shrink-on-failure fallback | Start at `num_workers=0`; try `1-2` only after measuring memory pressure | Disable or tightly bound preprocessing caches until the loop is stable |
+| Pro | Start from the base-safe policy, then increase batch or accumulation after a stable smoke run | Try `0-2` workers before wider fan-out | Bound caches by measured headroom and clear retained histories |
+| Max | Increase live state only after confirming swap and pressure stay flat | Worker count can be tuned for throughput, but revert if RSS or swap grows across epochs | Larger caches still need explicit caps and eviction |
+
 ## What Matters Operationally
 
 - Unified memory is shared across model state, activations, preprocessing buffers, and the OS.

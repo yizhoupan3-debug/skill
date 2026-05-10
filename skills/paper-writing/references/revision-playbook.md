@@ -47,7 +47,7 @@ Treat these as paper-writing requests when the text unit is bounded and the scie
 
 Near misses:
 
-- "找文献", "补 citation", "related work 缺文献" -> route to literature or citation skills.
+- "找文献", "related work 缺文献" -> keep the work under `$paper-workbench` (ref-first / external calibration); use `$citation-management` only when the active object is bibliography hygiene.
 - "创新性够不够", "实验站不站得住" -> route to paper logic/reviewer skills.
 - "整篇能不能投", "投稿前把关" -> route to paper workbench/reviewer.
 - "查重降重" with intent to conceal copying -> refuse that part; offer legitimate clarity/originality revision.

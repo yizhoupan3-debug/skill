@@ -41,6 +41,9 @@ struct NudgesBody {
     autopilot_drive_verbose_reasoning_depth: String,
     #[serde(default)]
     autopilot_drive_compact_reasoning_depth: String,
+    /// Optional second line after reasoning-depth nudges: STEM / witness + checker reminder.
+    #[serde(default)]
+    math_reasoning_harness_line: String,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +51,7 @@ pub struct ResolvedHarnessNudges {
     pub rfv_loop_continue_reasoning_depth: String,
     pub autopilot_drive_verbose_reasoning_depth: String,
     pub autopilot_drive_compact_reasoning_depth: String,
+    pub math_reasoning_harness_line: String,
 }
 
 impl ResolvedHarnessNudges {
@@ -56,6 +60,7 @@ impl ResolvedHarnessNudges {
             rfv_loop_continue_reasoning_depth: String::new(),
             autopilot_drive_verbose_reasoning_depth: String::new(),
             autopilot_drive_compact_reasoning_depth: String::new(),
+            math_reasoning_harness_line: String::new(),
         }
     }
 }
@@ -68,6 +73,7 @@ fn builtin_defaults() -> ResolvedHarnessNudges {
             .to_string(),
         autopilot_drive_compact_reasoning_depth: "深度：切片+验证证据链，非单模型堆长推理。"
             .to_string(),
+        math_reasoning_harness_line: String::new(),
     }
 }
 
@@ -110,7 +116,19 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         &mut out.autopilot_drive_compact_reasoning_depth,
         &file.nudges.autopilot_drive_compact_reasoning_depth,
     );
+    merge_nonempty(
+        &mut out.math_reasoning_harness_line,
+        &file.nudges.math_reasoning_harness_line,
+    );
     out
+}
+
+/// Append optional STEM line after primary reasoning-depth nudge (RFV / Autopilot / digest).
+pub fn push_math_reasoning_line(lines: &mut Vec<String>, nudges: &ResolvedHarnessNudges) {
+    let t = nudges.math_reasoning_harness_line.trim();
+    if !t.is_empty() {
+        lines.push(t.to_string());
+    }
 }
 
 fn merge_nonempty(target: &mut String, incoming: &str) {
@@ -179,6 +197,102 @@ mod tests {
         assert_eq!(n.rfv_loop_continue_reasoning_depth, "CUSTOM_RFV_NUDGE");
         assert!(n.autopilot_drive_verbose_reasoning_depth.contains("地平线"));
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_math_line_from_json() {
+        let _g = harness_nudges_env_test_lock();
+        std::env::remove_var(HARNESS_NUDGES_ENV);
+        let tmp = std::env::temp_dir().join(format!(
+            "harness-nudges-math-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("configs/framework")).unwrap();
+        let p = tmp.join(NUDGES_REL_PATH);
+        let mut f = std::fs::File::create(&p).unwrap();
+        write!(
+            f,
+            r#"{{"schema_version":"harness-operator-nudges-v1","nudges":{{"math_reasoning_harness_line":"MATH_TEST_LINE"}}}}"#
+        )
+        .unwrap();
+        drop(f);
+        let n = resolve_harness_operator_nudges(&tmp);
+        assert_eq!(n.math_reasoning_harness_line, "MATH_TEST_LINE");
+        let mut lines: Vec<String> = vec!["a".into()];
+        push_math_reasoning_line(&mut lines, &n);
+        assert_eq!(lines, vec!["a", "MATH_TEST_LINE"]);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// P0-F: an unknown `schema_version` must fall back to compiled defaults (no partial merge),
+    /// so future v2 additions can never silently corrupt the v1 model-facing prompt.
+    #[test]
+    fn schema_version_mismatch_falls_back_to_builtin_defaults() {
+        let _g = harness_nudges_env_test_lock();
+        std::env::remove_var(HARNESS_NUDGES_ENV);
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        let tmp = std::env::temp_dir().join(format!(
+            "harness-nudges-schema-mismatch-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("configs/framework")).unwrap();
+        let p = tmp.join(NUDGES_REL_PATH);
+        let mut f = std::fs::File::create(&p).unwrap();
+        write!(
+            f,
+            r#"{{"schema_version":"harness-operator-nudges-v999","nudges":{{"rfv_loop_continue_reasoning_depth":"NEW_V999_VALUE_SHOULD_BE_IGNORED"}}}}"#
+        )
+        .unwrap();
+        drop(f);
+        let n = resolve_harness_operator_nudges(&tmp);
+        // Built-in default mentions EVIDENCE_INDEX; the V999 override must not have leaked through.
+        assert!(
+            n.rfv_loop_continue_reasoning_depth
+                .contains("EVIDENCE_INDEX"),
+            "expected built-in default after schema mismatch; got {:?}",
+            n.rfv_loop_continue_reasoning_depth
+        );
+        assert!(
+            !n.rfv_loop_continue_reasoning_depth.contains("V999"),
+            "schema_version mismatch must not silently merge fields"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// P1-E: `ROUTER_RS_OPERATOR_INJECT=0` aggregate kill-switch disables nudges even when
+    /// the per-nudge env is unset (default-on).
+    #[test]
+    fn operator_inject_kill_switch_disables_nudges() {
+        let _g = harness_nudges_env_test_lock();
+        let prior_nudge = std::env::var(HARNESS_NUDGES_ENV).ok();
+        let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
+        std::env::remove_var(HARNESS_NUDGES_ENV);
+        std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+        let tmp = std::env::temp_dir().join("harness-nudges-aggregate-off");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let n = resolve_harness_operator_nudges(&tmp);
+        assert!(
+            n.rfv_loop_continue_reasoning_depth.is_empty(),
+            "aggregate kill-switch must zero out nudges"
+        );
+        assert!(n.autopilot_drive_compact_reasoning_depth.is_empty());
+        match prior_nudge {
+            Some(v) => std::env::set_var(HARNESS_NUDGES_ENV, v),
+            None => std::env::remove_var(HARNESS_NUDGES_ENV),
+        }
+        match prior_inject {
+            Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
+            None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+        }
     }
 
     #[test]

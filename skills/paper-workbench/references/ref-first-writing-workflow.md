@@ -22,7 +22,7 @@ This is not a citation-hunting workflow. The corpus teaches story architecture, 
 
 ## Lane Order
 
-1. `$literature-synthesis`: build the target-journal reference corpus and `ref_learning_brief.md`.
+1. `$paper-workbench` (ref-corpus phase): build the target-journal reference corpus and `ref_learning_brief.md` — no separate literature skill; stay on the front door until the brief exists.
 2. `$paper-reviewer` logic mode: only if the corpus reveals novelty, baseline, or claim/evidence risk.
 3. `$paper-writing`: build the story card, section rewrite plan, and revised prose.
 4. `$citation-management`: final citation truth, `.bib`, and claim-to-citation cleanup.
@@ -32,7 +32,7 @@ Do not start with `$citation-management` unless the active problem is bibliograp
 ## Minimal Artifact Layout
 
 ```text
-refs/
+paper_ref/
   candidates.tsv
   retained.tsv
   notes/
@@ -48,7 +48,7 @@ If the task is quick and chat-only, keep these as headings in the response inste
 
 ## Ref Learning Brief Contract
 
-`refs/ref_learning_brief.md` should answer:
+`paper_ref/ref_learning_brief.md` should answer:
 
 - What target venue and article type are being imitated?
 - Which about-20 papers were retained, and why?
@@ -103,7 +103,7 @@ Stop and route to `$paper-reviewer` logic mode when:
 - the paper's novelty becomes unclear after reading close refs
 - the chosen contribution posture depends on evidence not yet present
 
-Stop and route to `$literature-synthesis` when:
+Stop and expand/refine the ref corpus under `$paper-workbench` when:
 
 - the retained corpus is too weak, off-topic, or not target-venue-like
 - the target journal has multiple subgenres and the current corpus mixes them

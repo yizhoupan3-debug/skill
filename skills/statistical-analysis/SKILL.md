@@ -2,7 +2,7 @@
 name: statistical-analysis
 description: |
   Guide research statistics for test choice, effect sizes, uncertainty reporting, and interpretation.
-  Use when the user asks 用什么检验、显著性怎么算、p 值、效应量、贝叶斯、多重比较、统计功效、回归诊断, or needs help choosing, running, or interpreting hypothesis tests, Bayesian inference, confidence intervals, power analysis, regression diagnostics, or statistical figures for research data.
+  Use when the user asks 用什么检验、显著性怎么算、p 值、效应量、贝叶斯、多重比较、统计功效、回归诊断, or needs help choosing, executing, or interpreting hypothesis tests, Bayesian inference, confidence intervals, power analysis, regression diagnostics, or statistical figures for research data.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -18,10 +18,15 @@ trigger_hints:
   - 多重比较
   - 统计功效
   - 回归诊断
-  - running
   - interpreting hypothesis tests
+  - 假设检验怎么选
+  - 置信区间怎么报
+  - A/B 测试怎么做显著性
+  - 多组比较怎么校正
+  - 需要多少样本量
+  - power analysis
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   platforms: [codex]
   tags:
     - statistics
@@ -35,9 +40,10 @@ source: local
 
 ---
 
-- **Two-stage rigor check (test selection -> result interpretation)** for high-stakes analyses
-
 # Statistical Analysis
+
+- **Two-stage rigor check (test selection -> result interpretation)** for high-stakes analyses
+- Manuscript stack when co-invoked with paper work: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 
 This skill owns **statistical method selection, execution, and interpretation** for research.
 
@@ -150,7 +156,7 @@ assumption check, or interpretation is settled.
 - Do not apply multiple tests without correction
 - Do not confuse statistical significance with practical importance
 - Always state assumptions and check them before running tests
-- For high-stakes statistical results, run a dedicated rigor verification pass against [Superior Quality Bar](runtime verification criteria).
+- For high-stakes statistical results, run a dedicated rigor verification pass against the claim/evidence bar in [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md).
 - Report exact p-values (p = 0.037) not just threshold labels (p < 0.05)
 
 ## Cross-references
@@ -158,6 +164,10 @@ assumption check, or interpretation is settled.
 - `$paper-reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
 - `$paper-reviewer` Tier-1 statistical rigor checks may route here
 - `$experiment-reproducibility` routes result validation statistics here
+- When invoked as a **gate-chain lane owner** (G2 / G3 / G5 statistical rigor
+  checks under the manuscript protocol), follow the lane contract in
+  [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md); produce only the
+  gate-required evidence and hand back to the protocol main chain.
 
 ## Trigger examples
 

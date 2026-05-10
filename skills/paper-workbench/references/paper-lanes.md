@@ -8,7 +8,7 @@ Lane choices:
 - `review-only`: hand to `paper-reviewer` when the user explicitly wants critique without edits.
 - `revision`: hand to `paper-reviser` when comments/findings are known and edits should happen now.
 - `bounded prose`: hand to `paper-writing` when claim scope is fixed and only wording should change.
-- `literature`: hand to `literature-synthesis` when the task is truly related-work or novelty corpus work.
+- `literature`: keep ref / related-work corpus building under `paper-workbench` as source-backed context, then hand bounded prose to `paper-writing` (no separate top-level literature skill).
 
 Dimension modes:
 

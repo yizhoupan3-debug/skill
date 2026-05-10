@@ -4,13 +4,11 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-INSTALLER = ROOT / "scripts" / "install_codex_cli_hooks.sh"
 
 
 def assert_true(condition: bool, message: str) -> None:
@@ -21,13 +19,26 @@ def assert_true(condition: bool, message: str) -> None:
 def run_installer(codex_home: Path) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["CODEX_HOME"] = str(codex_home)
+    env.setdefault("HOME", str(codex_home.parent))
     return subprocess.run(
-        ["/usr/bin/env", "bash", str(INSTALLER)],
+        [
+            "cargo",
+            "run",
+            "-q",
+            "--manifest-path",
+            str(ROOT / "scripts/router-rs/Cargo.toml"),
+            "--",
+            "framework",
+            "maint",
+            "install-codex-user-hooks",
+            "--codex-home",
+            str(codex_home),
+        ],
         cwd=ROOT,
         env=env,
         text=True,
         capture_output=True,
-        timeout=180,
+        timeout=900,
     )
 
 

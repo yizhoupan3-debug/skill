@@ -59,7 +59,7 @@ jobs:
         run: cargo test --manifest-path scripts/router-rs/Cargo.toml
 
       - name: Verify Cursor hooks wiring
-        run: bash scripts/verify_cursor_hooks.sh
+        run: cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
 
       - name: Run Codex hook installer tests
         run: python3 .cursor/hook-tests/test_install_codex_cli_hooks.py

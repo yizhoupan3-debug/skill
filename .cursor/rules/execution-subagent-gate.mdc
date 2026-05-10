@@ -7,6 +7,10 @@ alwaysApply: true
 
 跨宿主基线与叙事见 `AGENTS.md` → **Execution Ladder** → **宿主优先级**。**本文件与 `AGENTS.md` 一起构成 Cursor 执行面真源**：凡可分解为多 lane 的实现类工作，默认使用独立 subagent lanes；主线程保留架构决策、集成与最终验证。
 
-细则（触发画像、lane 契约、拒因集合、禁止向用户暴露拒因元说明、`/autopilot` / `$autopilot` goal-style 连续性、closeout）：一律以 `AGENTS.md` 同章及 **Autopilot Goal Mechanism**、**Closeout** 为准。
+执行偏好：对“明显可并行”的实现任务，倾向**一开始就并发拆 lane**（而不是先串行探索），并遵循 `AGENTS.md` 中更新后的默认并行度（通常 3-5 lanes；必要时可到 6-8）。
+
+细则（触发画像、lane 契约、拒因集合、禁止向用户暴露拒因元说明、`/autopilot` goal-style 连续性、closeout）：一律以 `AGENTS.md` 同章及 **Autopilot Goal Mechanism**、**Closeout** 为准。
+
+**反模式（硬禁止）**：在可见回复里自拟整段仿宿主的机读续跑块（**像**工单键值、内部字段名、长段「升级」叙事等）——与当前 **Cursor hook 真源**不一致；见 `AGENTS.md` **Host Boundaries**。清门只用了 **单行** token。
 
 **显式豁免**：用户要求不使用 subagent（例如 "do not use subagent" / 「不要用子代理」）→ 不适用上述默认。

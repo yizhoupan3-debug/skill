@@ -23,6 +23,10 @@ A top-tier paper needs all six layers to survive at once:
 - What is the strongest prior method, dataset, theorem, baseline, or clinical/empirical comparator that a reviewer will expect?
 - Which result would still matter if the weakest supporting experiment were removed?
 - Where does the paper overclaim beyond evidence, novelty, or population scope?
+- **Before** recommending cut/appendix/downgrade: what is the **smallest
+  evidence-first** fix (extra experiment, analysis, baseline, or figure) that
+  could close the gap? Only if that path is blocked or rejected, prioritize cut
+  or downgrade (see [`claim-evidence-ladder.md`](claim-evidence-ladder.md)).
 - What must be cut, moved to appendix, or downgraded so the remaining paper is clearer, better supported, and easier to validate?
 - Is the paper reproducible and transparent enough for the target venue's norms?
 
@@ -71,7 +75,13 @@ Cross-venue reporting norms to enforce when applicable:
 - Start with review, not prose, when contribution/evidence/novelty is unknown.
 - Use external calibration when the venue bar, closest work, or required baseline could change the verdict.
 - Prefer one strong, defensible story over several weak contribution angles.
-- If the evidence cannot support a top-tier claim, choose among new evidence, narrower claim, different venue, appendix routing, or stopping the claim.
+- **Ordered escape hatch** when claims look too strong for the draft: follow
+  [`claim-evidence-ladder.md`](claim-evidence-ladder.md) — default **strengthen
+  evidence and analysis first** (minimal add-on experiments, fairer comparisons,
+  tighter stats, decisive figures/tables), then presentation cuts, and only then
+  narrower claims, appendix demotion, venue retargeting, or dropping a claim.
+  **Do not treat claim-downgrade as the lazy default** when B-tier gaps are
+  closable with plausible extra work.
 - Only after the scientific bar is safe should `paper-writing` optimize story, tone, and sentence-level polish.
 
 ## Expression Strength Rule

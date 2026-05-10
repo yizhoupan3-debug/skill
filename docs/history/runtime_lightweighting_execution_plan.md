@@ -70,7 +70,7 @@ scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml route '继续深
 
 | 条件 | 说明 |
 |---|---|
-| 它是用户显式能力入口 | 例如 `browser mcp-stdio`、`framework refresh` |
+| 它是用户显式能力入口 | 例如 `browser mcp-stdio`、显式 `router framework ...` 子命令 |
 | 它是安全的迁移保护 | 例如 retired flag fail-fast guidance |
 | 它是功能回归测试的唯一覆盖 | 先迁移测试，再删实现 |
 | 它只按需读取，不在默认 runtime 热路径 | 例如 Cloudflare references |
@@ -218,48 +218,22 @@ profile
 migrate
 ```
 
-但仍有文档和 skill 在教用户使用旧 flags：
+历史上曾存在若干 **router-rs 顶层 JSON-only flags** 与独立的 **continuity 剪贴板 refresh 入口**；steady-state 已收敛为 `router framework ...` / `codex sync` / stdio `execute` 等 canonical 面（细节以当期实现与 `RTK.md`、`docs/rust_contracts.md` 为准）。
 
-| 位置 | 旧入口 | 新入口 |
-|---|---|---|
-| `skills/refresh/SKILL.md` | `--framework-refresh-json` | `framework refresh` |
-| `skills/refresh/SKILL.md` | `--framework-refresh-verbose` | `framework refresh --verbose` |
-| `RTK.md` | `--sync-host-entrypoints-json` | `codex sync` |
-| `docs/rust_contracts.md` | `--execute-json` | stdio `execute` contract 或 explicit execution surface |
-| `docs/deerflow2_runtime_benchmark.md` | `--execute-json` | stdio `execute` contract |
+### 修改（归档摘要）
 
-### 修改
+1. 删除已退役 skill 与历史文档中的旧入口叙述；用户侧只保留 canonical 命令示例。
+2. `retired_top_level_flag_migration()` 等保护层可继续存在，但**面向用户的 markdown**不得再宣传已删除 flags。
 
-1. 把 `skills/refresh/SKILL.md` 的命令改成：
+### 验收（归档摘要）
 
-```bash
-PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml framework refresh --repo-root "$PROJECT_DIR"
-```
-
-2. debug 模式改成追加 `--verbose`。
-3. `RTK.md` 示例改成：
-
-```bash
-rtk cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- codex sync --repo-root "$PWD"
-```
-
-4. docs 中的 `--execute-json` 改成“Rust stdio `execute` operation owns the contract”。
-5. `retired_top_level_flag_migration()` 暂时保留，因为它是保护层，不是 live runtime。
-6. 等 repo 内 stale caller 全清完，再把 retired flag 表从“长兼容表”压成“短迁移 lint 表”。
-
-### 验收
-
-```bash
-rg -n -- '--framework-refresh-json|--framework-refresh-verbose|--sync-host-entrypoints-json|router-rs --execute-json' skills docs RTK.md
-cargo test --test policy_contracts --quiet
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- --help
-```
+- 跑 `cargo test --test policy_contracts` 与 `router-rs --help`，确认 canonical subcommands 与契约测试仍成立。
+- 对用户文档做一次定向检索：不得再出现已删除的顶层 JSON flag 拼写（具体集合以 `policy_contracts::removed_router_flags_are_absent_from_user_docs` 为准）。
 
 通过标准：
 
-- 上面的 `rg` 只允许在 migration guidance 或测试中命中。
 - 用户文档不再展示 retired top-level flags。
-- 使用旧 flags 仍 fail-fast 给迁移提示，而不是默默执行。
+- 需要 fail-fast 迁移提示时，由代码侧集中处理，而不是复制第二份“教程型”真源。
 
 ## 7. P2：合并 surface/loadout/tier 真源
 
@@ -565,7 +539,7 @@ cargo test --manifest-path scripts/router-rs/Cargo.toml framework_profile --quie
 第一批只做三件事，收益最大，风险最小：
 
 1. P0 route fallback guard 和两条 runtime-lightweighting regression。
-2. P1 清掉 `skills/refresh/SKILL.md`、`RTK.md`、`docs/rust_contracts.md`、`docs/deerflow2_runtime_benchmark.md` 的 retired flag 文案。
+2. P1 清掉 `RTK.md`、`docs/rust_contracts.md`、`docs/deerflow2_runtime_benchmark.md` 等处对用户可见的 retired flag 文案，并移除已退役 continuity refresh skill 包。
 3. P2 给 surface/loadout/tier 写清真源关系，先不删除生成物。
 
 不建议第一批就做：
@@ -583,7 +557,7 @@ cargo test --manifest-path scripts/router-rs/Cargo.toml framework_profile --quie
 cargo test --manifest-path scripts/router-rs/Cargo.toml --quiet
 cargo test --test policy_contracts --quiet
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- --help
-rg -n -- '--framework-refresh-json|--framework-refresh-verbose|--sync-host-entrypoints-json|router-rs --execute-json' skills docs RTK.md
+# （可选）对用户文档定向检索已删除顶层 flags：以 policy_contracts 中 removed_router_flags 列表为准
 scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml route '核查我现在的runtime，什么部分是没有用的或者加重负担的，值得去掉的？'
 scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml route '继续深度诊断，写更周密的可执行计划，我希望更加轻量化，减少兼容层和胶水层，减少入口，不要损害功能'
 scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml route '后端 Rust 服务运行时 OOM 并且请求一直 hang，先诊断 traceback、deadlock 和资源泄漏'

@@ -48,7 +48,7 @@
 ## 4. 可以合并的入口
 
 - [x] 合并 `--json`、`--route-json`、`--route-policy-json`、`--route-snapshot-json`、`--route-report-json`、`--route-resolution-json` 到 `router route|search|eval|report` 子命令。
-- [x] 合并 `--framework-runtime-snapshot-json`、`--framework-session-artifact-write-json`、`--framework-refresh-json`、`--framework-alias-json` 到 `router framework ...` 子命令。
+- [x] 合并多条历史性的 `framework` 相关 JSON-only 顶层 flags（运行时快照、会话工件写入、宿主别名等）到 `router framework ...` 子命令。
 - [x] 合并 trace/checkpoint/attached-event flags 到 `router trace ...` 子命令。
 - [x] 合并 storage/backend/checkpoint-control-plane flags 到 `router storage ...` 子命令。
 - [x] 合并 `--host-integration <subcommand>` 与 `--sync-host-entrypoints-json`、`--codex-hook-projection-json`、`--codex-hook-command` 到 `router codex ...` 子命令。

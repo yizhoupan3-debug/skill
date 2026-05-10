@@ -6,7 +6,7 @@ gate (schema + evaluator rules).
 Documentation index (steady-state vs archive): [`README.md`](README.md).
 
 **Skill / AGENTS norms:** Skills that own task execution (autopilot, team,
-gh-fix-ci, systematic-debugging, deepinterview, review-fix-verify-loop, slides,
+gh-fix-ci, systematic-debugging, deepinterview, slides,
 paper-*) should emit a closeout record consistent with this contract before
 claiming completion — this stays true even when router-rs is in the **local soft**
 programmatic tier (see below).
@@ -156,7 +156,7 @@ the artifact write locally, but emitting and evaluating records keeps completion
 honest for operators and for CI.
 
 Each owner skill (autopilot, team, gh-fix-ci, systematic-debugging,
-deepinterview, review-fix-verify-loop) MUST:
+deepinterview, loop) MUST:
 
 1. **Materialize a record** at task end into
    `artifacts/closeout/<task_id>.json`.

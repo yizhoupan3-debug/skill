@@ -10,7 +10,7 @@ session_start: n/a
 user-invocable: false
 disable-model-invocation: true
 trigger_hints:
-  - $deepinterview
+  - /deepinterview
   - deepinterview
   - deep-interview
   - deep interview
@@ -52,7 +52,7 @@ approval_required_tools: []
 `deepinterview` 是本仓自有的深度澄清流程：单轮单问、持续量化模糊度、达标后再交给执行；状态和 handoff 都走证据、continuity 与 Rust supervisor。
 
 显式入口：
-- Codex：`$deepinterview`
+- Codex：`/deepinterview`
 
 ## Native Workflow
 

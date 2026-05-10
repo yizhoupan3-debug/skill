@@ -239,6 +239,19 @@ fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>, String> {
+    let Some(v) = payload.get(key) else {
+        return Ok(Vec::new());
+    };
+    if v.is_null() {
+        return Ok(Vec::new());
+    }
+    let Some(arr) = v.as_array() else {
+        return Err(format!("{key} must be array (or null), got {v:?}"));
+    };
+    Ok(arr.clone())
+}
+
 fn clamp_max_rounds(raw: u64) -> (u64, bool) {
     if raw > MAX_ROUNDS_HARD_CAP {
         (MAX_ROUNDS_HARD_CAP, true)
@@ -461,6 +474,11 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 .unwrap_or("")
                 .to_string();
 
+            // Optional "adversarial depth" fields: stored as-is (array) for audit; no new state machine.
+            // Shapes are minimally validated here so later rollups can trust arrays.
+            let adversarial_findings = value_array_or_empty(&payload, "adversarial_findings")?;
+            let falsification_tests = value_array_or_empty(&payload, "falsification_tests")?;
+
             // Cross-link this round's verify claim against EVIDENCE_INDEX successful rows
             // recorded since the previous round (audit trail; not a hard block — supervisor
             // still owns the call, but the discrepancy lands in `cross_check`).
@@ -483,6 +501,18 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             entry_map.insert("reason".to_string(), json!(reason));
             entry_map.insert("at".to_string(), json!(now_iso()));
             entry_map.insert("evidence_refs".to_string(), Value::Array(evidence_refs));
+            if !adversarial_findings.is_empty() {
+                entry_map.insert(
+                    "adversarial_findings".to_string(),
+                    Value::Array(adversarial_findings),
+                );
+            }
+            if !falsification_tests.is_empty() {
+                entry_map.insert(
+                    "falsification_tests".to_string(),
+                    Value::Array(falsification_tests),
+                );
+            }
             if let Some(label) = cross_check_label {
                 entry_map.insert("cross_check".to_string(), json!(label));
             }
@@ -595,8 +625,9 @@ pub fn build_rfv_loop_followup_message_from_state(
         }
         let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
         if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
-            lines.push(nudges.rfv_loop_continue_reasoning_depth);
+            lines.push(nudges.rfv_loop_continue_reasoning_depth.clone());
         }
+        crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
         return Some(lines.join("\n"));
     }
     let rel = format!("artifacts/current/{task_id}/RFV_LOOP_STATE.json");
@@ -613,8 +644,9 @@ pub fn build_rfv_loop_followup_message_from_state(
     });
     let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
     if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
-        lines.push(nudges.rfv_loop_continue_reasoning_depth);
+        lines.push(nudges.rfv_loop_continue_reasoning_depth.clone());
     }
+    crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
     Some(lines.join("\n"))
 }
 
@@ -685,6 +717,12 @@ mod tests {
             "external_research_summary": "web: none",
             "fix_summary": "f1",
             "verify_result": "PASS",
+            "adversarial_findings": [
+                {"id":"A1","hypothesis":"panic on empty input","severity":"high"}
+            ],
+            "falsification_tests": [
+                {"id":"T1","command":"cargo test -q","expect":"pass"}
+            ],
             "supervisor_decision": "continue",
             "reason": "ok",
         }))
@@ -698,6 +736,10 @@ mod tests {
         let gs = st["rfv_loop_state"].as_object().expect("obj");
         assert_eq!(gs["current_round"], json!(1));
         assert_eq!(gs["loop_status"], json!("active"));
+        let rounds = gs["rounds"].as_array().expect("rounds");
+        let r1 = rounds[0].as_object().expect("round1 obj");
+        assert!(r1.get("adversarial_findings").is_some());
+        assert!(r1.get("falsification_tests").is_some());
         let _via_api = read_rfv_loop_state(&repo, None)
             .expect("read api")
             .expect("state");
@@ -859,6 +901,9 @@ mod tests {
             "operation": "start",
             "task_id": "rfv-mx",
             "goal": "macro first",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
         .expect("goal start");

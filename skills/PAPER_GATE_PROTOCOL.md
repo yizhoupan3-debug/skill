@@ -3,9 +3,24 @@
 This file defines the shared gate-chain contract used by `$paper-workbench`,
 `$paper-reviewer`, and `$paper-reviser`.
 
+**Stack map / when to open this file**: see
+[`paper-workbench/references/RESEARCH_PAPER_STACK.md`](paper-workbench/references/RESEARCH_PAPER_STACK.md)
+(L3 only — multi-turn disk state).
+
 `$paper-workbench` is the default front door. The protocol still keeps the
 internal main chain and sidecar lanes explicit so no capability is lost when the
 front door is unified.
+
+## Relationship to RFV reasoning-depth contract (orientation only)
+
+This protocol enforces depth via **gate files + freeze/backjump + lane scope**
+on **manuscript artifacts** — `verify` here is gate-judgment + evidence anchors,
+**not** shell commands. It is **orthogonal** to the RFV reasoning-depth
+contract ([`docs/references/rfv-loop/reasoning-depth-contract.md`](../docs/references/rfv-loop/reasoning-depth-contract.md)),
+which enforces depth via **`verify_commands` + `EVIDENCE_INDEX` rows** on **code**.
+Do not conflate the two: RFV's "PASS" requires executable command exit codes;
+PAPER_GATE's "pass" requires reviewer freeze + evidence-anchor coverage. Use the
+right contract for the artifact class.
 
 Use this protocol only when disk-backed, repeatable, multi-turn review state is
 actually useful. For normal interactive paper review, keep the protocol
@@ -41,6 +56,18 @@ whole-paper refactoring. Canonical contract:
   cross-section restructuring under `$paper-reviser` honesty rules.
 - **`refactor`** 常拆成**多个** `lane_scope` 批次；各批次仍用 `lanes/` 侧车，主链串行
   合并，语义见 `edit-scope-gate.md` 末段。
+- **`surgical`** 的防扩写、锚定、改动上限、`change_id` 交付清单与改前自检，一律以同文件
+  `edit-scope-gate.md`（该章为真源）为准。
+
+## Claim / evidence decision ladder (manuscript honesty)
+
+Gate decisions that **lower `claim_ceiling`**, shrink contribution, or demote
+claims to limitations must not be the silent default when the active gate
+failure is a **B-tier closable evidence gap**. Before freezing a downgrade,
+the main chain should record **evidence-first options** (minimal add-on
+experiments/analyses) and why they are infeasible or rejected — see
+[`paper-workbench/references/claim-evidence-ladder.md`](paper-workbench/references/claim-evidence-ladder.md).
+User-explicit "no more experiments" overrides this ordering.
 
 ## 1. Root Artifact Layout
 
@@ -78,7 +105,10 @@ Rules:
 1. Start a new `paper_review_v<N>` only for a new whole-paper review cycle.
 2. Continue the current unfinished `paper_review_v<N>` when the user is still
    working through the same cycle.
-3. Every turn must create exactly one new actionable gate file.
+3. Disk-backed gate files are optional: create or append a new `gate_r<M>.md`
+   **only when** the user explicitly requests multi-turn tracking, parallel
+   lanes, or protocol artifacts. For normal interactive review, keep the
+   verdict/blockers/next-move in the response instead of writing files.
 4. Never overwrite an older `gate_r<M>.md`.
 5. If the current gate passes, create the next gate's `r1` file.
 6. If the current gate fails, or a later quality gate backjumps upstream, create
@@ -87,6 +117,10 @@ Rules:
    replace the one-main-gate-file rule.
 
 ## 2. Shared Fields
+
+This section is **L3-only** (disk-backed protocol mode). Interactive reviews do
+not need these fields; they only need verdict, blockers, evidence gaps, and the
+next honest move.
 
 | Field | Meaning |
 |---|---|
@@ -106,7 +140,7 @@ Rules:
 | `automation_tick_goal` | What one heartbeat tick is allowed to complete, normally one gate-round advancement |
 | `parallel_group_id` | Stable id for one bounded sidecar batch attached to the current main gate |
 | `lane_id` | Stable id for one sidecar lane inside that parallel batch |
-| `lane_kind` | `evidence_extract`, `citation_verify`, `figure_audit`, `table_audit`, `notation_audit`, `layout_audit`, `mirror_cleanup`, or `prose_local` |
+| `lane_kind` | `evidence_extract`, `citation_verify`, `figure_audit`, `table_audit`, `notation_audit`, `layout_audit`, `mirror_cleanup`, `prose_local`, `statistical_rigor`, or `reproducibility_check` |
 | `lane_scope` | Concrete slice owned by that lane, such as `figure:F3-F6` or `citation_cluster:C5-C11` |
 | `lane_owner` | Specialist skill or worker responsible for that lane |
 | `lane_status` | `queued`, `running`, `merged`, `blocked`, or `dropped` |
@@ -181,37 +215,22 @@ Do not organize the review primarily as "Section 1, Section 2, Section 3".
 
 ## 5. Gate File Template
 
-Each newly created `gate_r<M>.md` must be an executable checklist with these
-sections in this order:
+L3-only. When a disk-backed `gate_r<M>.md` is created, keep it minimal.
+The recommended template is:
 
 1. `Goal`
-2. `Frozen Inputs`
-3. `Review Objects`
-4. `Hard Bar`
-5. `Checklist`
-6. `Decision Slot`
-7. `Backjump Rule`
-8. `Pass Line`
-9. `Next File If Pass`
-10. `Next File If Fail`
+2. `Checklist`
+3. `Decision`
+4. `Next`
 
 Rules:
 
-- `Decision Slot` must be `pass/fail` for `G0`, `ideal/hide/abandon` for
+- `Decision` must be `pass/fail` for `G0`, `ideal/hide/abandon` for
   decision gates, and `ideal_only` for quality gates.
-- `Backjump Rule` must be concrete for quality gates. If no backjump exists yet,
-  write the earliest upstream gate that would need reopening if a regression is
-  found.
-- `Frozen Inputs` should name the already-passed gates and artifacts that cannot
-  be silently rewritten.
-- `Review Objects` should name stable `unit_type:unit_id` entries from the
-  `object_map`.
-- For `G7`, the checklist must include and attach `narrative_spine_map.md`,
-  `narrative_flow_breaks.md`, and `main_vs_appendix_presence_check.md`.
-- For `G8`, the checklist must include and attach `front_door_claim_matrix.md`,
-  `front_door_overshoot_report.md`, and `front_door_new_claim_check.md`.
-- For `G9`, the checklist must include and attach `mirror_surface_inventory.md`,
-  `mirror_claim_alignment.md`, and `callout_caption_consistency.md`.
+- If a quality gate finds regression, `Next` should specify the earliest
+  upstream gate to revisit (backjump), but do not add extra attachment files by
+  default. Keep any supporting checklists inline unless the user explicitly
+  asks for separate artifacts.
 
 ## 6. Freeze and Backjump Rules
 
@@ -234,20 +253,22 @@ Rules:
 
 Two review scopes are valid:
 
-- `full_chain`: default when the user does not explicitly name a gate or review
-  dimension
+- `full_chain`: only when the user explicitly requests a full gate-chain
+  progression or multi-turn disk-backed tracking
 - `single_gate`: only when the user explicitly names a gate or dimension such as
   `claim ceiling`, `math closure`, `reference support`, `figure gate`, or `G3`
 
 Rules:
 
-1. Unspecified review requests default to `full_chain`.
+1. Unspecified review requests default to interactive review (no disk-backed
+   gate files); use `single_gate` framing in the response when useful.
 2. Explicit gate or dimension requests use `single_gate`.
 3. In `single_gate`, review only the requested gate for that turn.
 4. If the requested gate depends on upstream gates that were not actually passed,
    record them as `assumed_frozen_inputs` instead of silently backfilling the
    whole chain.
-5. `single_gate` still creates exactly one new non-overwriting gate file.
+5. `single_gate` does not require writing a gate file unless the user requested
+   disk-backed protocol artifacts.
 
 ## 8. Review Isolation Contract
 
@@ -309,6 +330,8 @@ Recommended families:
 - `G0`: target-venue-near paper collection and local PDF inventory
 - `G2`: table/figure/result extraction, strongest-baseline checks, ablation inventory
 - `G5`: citation existence checks, claim-to-citation precision checks, venue calibration sweeps
+- `G2` / `G3` / `G5`: statistical rigor checks (test choice, effect size, multiple-comparison, power, uncertainty reporting) via `statistical_rigor` (owner: `statistical-analysis`)
+- `G2` / `G5` / `G14`: reproducibility checks (environment/seed/config/data/versioning/reporting norms) via `reproducibility_check` (owner: `experiment-reproducibility`)
 - `G7-G9`: mirror-surface diffing across abstract / intro / conclusion / captions / rebuttal
 - `G10`: notation and abbreviation consistency scans
 - `G11-G12`: per-figure and per-table audits at final scale
@@ -359,28 +382,10 @@ Rules:
 
 Bundled scaffold helper:
 
-```bash
-python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py \
-  --workspace /path/to/manuscript \
-  --review-dir paper_review_v3 \
-  --batch-id g11_figures_a \
-  --main-gate G11 \
-  --batch-goal "Audit final-scale figures before gate closeout." \
-  --frozen-input "G2 passed" \
-  --frozen-input "G3 selected_claim_level locked" \
-  --lane "fig_a|figure_audit|figure:F1-F2|figure-table-mode" \
-  --lane "fig_b|figure_audit|figure:F3-F4|figure-table-mode"
-```
-
-Or let the script auto-fill a default batch for supported gates:
-
-```bash
-python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py \
-  --workspace /path/to/manuscript \
-  --review-dir paper_review_v3 \
-  --main-gate G11 \
-  --preset-by-gate
-```
+This repository intentionally does **not** ship a required scaffold script.
+If you need a disk-backed parallel batch, create a `lane_manifest.md` under
+`paper_review_v<N>/lanes/<batch_id>/` with the required fields above, then add
+one subfolder per lane. Keep the manifest minimal and append-only.
 
 ## 11. Merge-Back Contract
 

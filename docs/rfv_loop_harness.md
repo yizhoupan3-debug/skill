@@ -1,39 +1,13 @@
----
-name: review-fix-verify-loop
-description: |
-  Orchestrate a configurable multi-round self-loop with independent subagents per round (review / optional external research in parallel with review / fix / verify). Use for Codex or Cursor self-loop, 自循环轮次控制, review-fix-verify closed loop, or evidence-driven passes until convergence. Entrypoints $review-fix-verify-loop and /review-fix-verify-loop. Large max_rounds (e.g. 100) require Rust ledger `RFV_LOOP_STATE.json` via stdio op `framework_rfv_loop`.
-routing_layer: L1
-routing_owner: owner
-routing_gate: none
-routing_priority: P1
-session_start: preferred
-user-invocable: true
-disable-model-invocation: true
-trigger_hints:
-  - $review-fix-verify-loop
-  - /review-fix-verify-loop
-  - review fix verify loop
-  - codex self-loop
-  - 自循环
-  - 指定轮次
-  - review->fix->verify
-  - rfv loop
-  - 多轮修复
-  - 多轮审查
-  - 独立 subagent 循环
-metadata:
-  version: "1.2.0"
-  platforms: [codex, cursor]
-  tags: [loop, review, fix, verify, subagent, orchestration, external-research, long-running]
----
+# RFV  harness 参考（`framework_rfv_loop` / `RFV_LOOP_STATE.json`）
 
-# review-fix-verify-loop
+> **范围**：RFV 多轮账本与 lane 契约说明；**不进入** `skills/SKILL_ROUTING_RUNTIME.json` 热路由。  
+> Rust 行为真源：`scripts/router-rs/src/rfv_loop.rs` 及相关 hook 合并逻辑。
 
-显式入口（与路由 description 对齐）：`$review-fix-verify-loop`、`/review-fix-verify-loop`。
+**不进入热 skill 路由**（`skills/SKILL_ROUTING_RUNTIME.json` 不含本主题的独立 slug）。此处保留 **`framework_rfv_loop` 字段契约、lane 模板与推理深度说明**，供 Autopilot / Team / [`loop`](../skills/loop/SKILL.md) 与工具链引用。
 
-编排前先过 [`agent-swarm-orchestration`](../agent-swarm-orchestration/SKILL.md)：确认各 lane 可独立、`fix_scope` disjoint、且 `verify_commands` 已定义；若启用外部调研并行，还须明确 **external 与 review 的只读边界** 及汇总责任在 supervisor。不满足则拒绝 spawning 并给出 reject reason。
+编排前先过 [`agent-swarm-orchestration`](../skills/agent-swarm-orchestration/SKILL.md)：确认各 lane 可独立、`fix_scope` disjoint、且 `verify_commands` 已定义；若启用外部调研并行，还须明确 **external 与 review 的只读边界** 及汇总责任在 supervisor。不满足则拒绝 spawning 并给出 reject reason。
 
-可复制 lane 与轮次日志模板见 [references/lane-templates.md](references/lane-templates.md)。
+可复制 lane 与轮次日志模板见 [references/rfv-loop/lane-templates.md](references/rfv-loop/lane-templates.md)。
 
 ## Rust 轮次真源（长任务必用）
 
@@ -51,9 +25,11 @@ metadata:
 
 ### 推理深度契约（与可审计链）
 
-- **真源**：[references/reasoning-depth-contract.md](references/reasoning-depth-contract.md) — **不靠单模型拉长 CoT**；靠 **`review ∥ external → fix → verify`** + **`EVIDENCE_INDEX` / `append_round`** 形成可审计链。
-- **宿主注入文案**：`configs/framework/HARNESS_OPERATOR_NUDGES.json`（RFV / Autopilot 续跑末尾附带的「推理深度」句）；**`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`** 可整体关闭。
-- **外研不得顶替 verify**：external 只产出可引用结论与假设；**Pass/Fail 只认可执行验证**。
+- **真源**：[references/rfv-loop/reasoning-depth-contract.md](references/rfv-loop/reasoning-depth-contract.md) — **不靠单模型拉长 CoT**；靠 **`review ∥ external → fix → verify`** + **`EVIDENCE_INDEX` / `append_round`** 形成可审计链。
+- **提升调研深度的计划（契约级）**：同文件 §**提升调研深度的 harness 方向** — **A** 外研 API 式输出（Claims / Contradiction sweep / Unknowns）；**B** 检索留下可复核轨迹并与定量复算命令同源；**C** 多视角真并行、角色分离（禁止同上下文换帽）。
+- **宿主注入文案**：`configs/framework/HARNESS_OPERATOR_NUDGES.json`（RFV / Autopilot 续跑末尾附带的「推理深度」句，及可选 **`math_reasoning_harness_line`** 数理一句）；**`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`** 可整体关闭。
+- **数理 / STEM 契约长文**：[references/rfv-loop/math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)（witness、符号 verifier、反事实探针；与 lane 模板同目录）。
+- **外研不得顶替 verify**：external 只产出可引用结论与假设；**Pass/Fail 只认可执行验证**。定量复算的 **replay** 与 `cargo test` 同类 spirit：写入 `verify_commands` 或 `quantitative_replays` 并由 verifier / supervisor 执行，证据进 `EVIDENCE_INDEX`（或等价记录）。
 
 ### 可执行验证与 Cursor 钩子（证据自动落盘）
 

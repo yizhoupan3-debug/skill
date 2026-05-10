@@ -37,7 +37,7 @@ Before rewriting, classify the current manuscript problem:
 
 ## Ref-Guided Writing Workflow
 
-When the research synthesis runtime lane provides a target-journal ref-learning brief:
+When `$paper-workbench` provides a target-journal ref-learning brief (ref-first workflow):
 
 1. Extract the venue's common story norm: opening move, gap type, contribution posture, evidence sequence, limitation placement.
 2. Map the user's manuscript facts onto that norm.

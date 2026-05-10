@@ -24,7 +24,7 @@
    cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml
    cargo test --test policy_contracts
    ```
-   本地人工执行这些高输出命令时，可按 [`RTK.md`](/Users/joe/Documents/skill/RTK.md) 改用 `rtk ...` 包装形式。
+   本地人工执行这些高输出命令时，可按 [`RTK.md`](../RTK.md) 改用 `rtk ...` 包装形式。
 5. 提交后 CI 自动验证（`.github/workflows/skill-ci.yml`）
 
 ## 改 Skill 必查
@@ -32,7 +32,7 @@
 - 触发词是否变化 → 更新 description
 - 边界是否变化 → 重新运行 Rust skill compiler `--apply`
 - 是否引入第二份 live source → 删除多余副本
-- 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `router-rs codex host-integration install-skills --repo-root /Users/joe/Documents/skill install codex`，不要手动改 `~/.codex/skills`
+- 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex host-integration install-skills --repo-root \"$PWD\" install`（或使用已安装的 `router-rs` 等价命令），不要手动改 `~/.codex/skills`
 
 ## 边界重叠处理
 

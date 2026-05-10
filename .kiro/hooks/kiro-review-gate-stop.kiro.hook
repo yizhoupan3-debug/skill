@@ -8,6 +8,6 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Review gate enforcement: If the original request required review or parallel delegation (patterns: \"review\", \"深度审查\", \"并行\", \"/autopilot\", \"$team\"), verify that you either: 1) Spawned independent subagent(s) using invoke_sub_agent, OR 2) Explicitly stated a reject reason (small_task, shared_context_heavy, write_scope_overlap, next_step_blocked, verification_missing, token_overhead_dominates). If neither condition is met, DO NOT finalize. Instead, spawn the required subagent now or state the reject reason."
+    "prompt": "Review gate enforcement: If the original request required review or parallel delegation (patterns: \"review\", \"深度审查\", \"并行\", \"/autopilot\", \"/team\"), verify that you either: 1) Spawned independent subagent(s) using invoke_sub_agent, OR 2) Explicitly stated a reject reason (small_task, shared_context_heavy, write_scope_overlap, next_step_blocked, verification_missing, token_overhead_dominates). If neither condition is met, DO NOT finalize. Instead, spawn the required subagent now or state the reject reason."
   }
 }

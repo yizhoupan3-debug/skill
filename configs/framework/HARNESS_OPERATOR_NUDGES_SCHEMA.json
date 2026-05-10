@@ -24,6 +24,10 @@
         "autopilot_drive_compact_reasoning_depth": {
           "type": "string",
           "description": "Appended in compact AUTOPILOT_DRIVE."
+        },
+        "math_reasoning_harness_line": {
+          "type": "string",
+          "description": "Optional second line after reasoning-depth nudges: STEM / witness + checker reminder (RFV, AUTOPILOT, continuity digest)."
         }
       }
     }

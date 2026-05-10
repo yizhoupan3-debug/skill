@@ -87,11 +87,52 @@ pub(crate) struct SearchCommand {
 }
 
 #[derive(Subcommand, Debug, Clone)]
+pub(crate) enum MaintSubcommand {
+    /// Rebuild router-rs, `codex sync`, Cursor framework install, verify Cursor hooks.
+    RefreshHostProjections(MaintRootsArgs),
+    VerifyCursorHooks(MaintRepoArgs),
+    VerifyCodexHooks(MaintRepoArgs),
+    /// Refresh → skill-compiler --apply → cargo test → generated-artifacts-status (optional host publish).
+    UpdateOneShot(MaintRootsArgs),
+    /// Delete every `target/` tree under the repo (skips `.git/`).
+    CleanRustTargets(MaintRepoArgs),
+    /// Print `export CODEX_HOME=…` / `CURSOR_HOME=…` for repo-local session homes.
+    PrintLocalHomes(MaintRepoArgs),
+    InstallCodexUserHooks(InstallCodexUserHooksArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct MaintRootsArgs {
+    #[arg(long)]
+    pub(crate) framework_root: Option<PathBuf>,
+    #[arg(long)]
+    pub(crate) artifact_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct MaintRepoArgs {
+    #[arg(long)]
+    pub(crate) framework_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct InstallCodexUserHooksArgs {
+    #[arg(long)]
+    pub(crate) framework_root: Option<PathBuf>,
+    #[arg(long)]
+    pub(crate) codex_home: Option<PathBuf>,
+}
+
+#[derive(Subcommand, Debug, Clone)]
 pub(crate) enum FrameworkCommand {
+    /// Repository maintenance / `/update` (replaces retired `scripts/*.sh` wrappers).
+    Maint {
+        #[command(subcommand)]
+        command: MaintSubcommand,
+    },
     Snapshot(FrameworkSnapshotCommand),
     ContractSummary(RepoRootCommand),
     PromptCompression(JsonInputCommand),
-    Refresh(FrameworkRefreshCommand),
     Statusline(RepoRootCommand),
     SessionArtifactWrite(JsonInputCommand),
     /// 追加一条外部 hook 验证记录到 `EVIDENCE_INDEX.json`（需连续性已初始化）。
@@ -236,16 +277,6 @@ pub(crate) struct FrameworkSnapshotCommand {
     pub(crate) artifact_source_dir: Option<PathBuf>,
     #[arg(long)]
     pub(crate) task_id: Option<String>,
-}
-
-#[derive(Args, Debug, Clone)]
-pub(crate) struct FrameworkRefreshCommand {
-    #[arg(long)]
-    pub(crate) repo_root: Option<PathBuf>,
-    #[arg(long, default_value_t = 4)]
-    pub(crate) max_lines: usize,
-    #[arg(long)]
-    pub(crate) verbose: bool,
 }
 
 #[derive(Args, Debug, Clone)]

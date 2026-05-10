@@ -16,6 +16,7 @@ serde_json = "1.0.140"
 sha2 = "0.10.8"
 tungstenite = "0.24.0"
 fs2 = "0.4"
+which = "8.0.0"
 
 [profile.release]
 lto = true

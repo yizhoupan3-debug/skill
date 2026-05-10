@@ -3,10 +3,11 @@ use crate::cursor_hooks::{
     is_review_prompt, normalize_subagent_type, normalize_tool_name, saw_reject_reason,
 };
 use crate::framework_runtime::{
-    build_automatic_continuity_checkpoint_payload, build_framework_contract_summary_envelope,
-    build_framework_refresh_payload, try_append_codex_post_tool_evidence,
+    build_automatic_continuity_checkpoint_payload, build_framework_continuity_digest_prompt,
+    build_framework_contract_summary_envelope, try_append_codex_post_tool_evidence,
     write_framework_session_artifacts,
 };
+use crate::host_integration::ensure_codex_skill_surface;
 use crate::router_env_flags::router_rs_env_enabled_default_true;
 use chrono::Utc;
 use regex::Regex;
@@ -568,7 +569,7 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         state.review_override = true;
         state.delegation_override = true;
     }
-    if saw_reject_reason(&text) {
+    if saw_reject_reason(&text, &text) {
         state.reject_reason_seen = true;
     }
 
@@ -678,7 +679,7 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
     let inferred_overridden = has_override(&text)
         || has_review_override(&text)
         || has_delegation_override(&text)
-        || saw_reject_reason(&text);
+        || saw_reject_reason(&text, &text);
     let inferred_required = !text.trim().is_empty() && !inferred_overridden;
     match with_codex_state_lock(repo_root, event, |loaded| {
         let state = match loaded {
@@ -791,12 +792,10 @@ fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value
             repo_root.display()
         ),
     ];
-    // Keep refresh compact: SessionStart additionalContext is capped (~640 chars) by codex_compact_contexts.
-    if let Ok(refresh) = build_framework_refresh_payload(repo_root, 4, false) {
-        if let Some(prompt) = refresh.get("prompt").and_then(Value::as_str) {
-            if !prompt.trim().is_empty() {
-                contexts.push(format!("Continuity digest:\n{}", prompt.trim()));
-            }
+    // Keep digest compact: SessionStart additionalContext is capped (~640 chars) by codex_compact_contexts.
+    if let Ok(prompt) = build_framework_continuity_digest_prompt(repo_root, 4) {
+        if !prompt.trim().is_empty() {
+            contexts.push(format!("Continuity digest:\n{}", prompt.trim()));
         }
     }
     contexts.push(
@@ -974,6 +973,9 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
     sort_report_array(&mut report, "created_dirs")?;
     sort_report_array(&mut report, "synced_worktrees")?;
     sort_report_array(&mut report, "skipped_worktrees")?;
+    if apply {
+        ensure_codex_skill_surface(&root)?;
+    }
     Ok(report)
 }
 
@@ -1246,9 +1248,9 @@ Codex hooks are enabled for this repo and are managed by the Rust `router-rs` co
 <!-- managed_by: router-rs codex sync -->\n\n\
 **Policy snapshot:** the `codex_agent_policy` payload embeds the repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` preserves an existing root `AGENTS.md` from disk and only uses the embedded copy to bootstrap a missing file; rebuild before sync when you need generated Codex payloads to carry policy edits (see `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**).\n\n\
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
-`SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` updates review gate state for subagent tools and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` enforces review gates then (when unblocked) writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Durable cleanup should use explicit refresh commands rather than an extra end-of-session hook.\n\n\
+`SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` updates review gate state for subagent tools and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` enforces review gates then (when unblocked) writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active.\n\n\
-Use `scripts/install_codex_cli_hooks.sh` only when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
+Use `router-rs framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
@@ -1356,7 +1358,7 @@ fn projection_version_older(manifest_version: &str, current: &str) -> bool {
 }
 
 fn codex_projection_drift_warning(repo_root: &Path) -> Option<String> {
-    let warning = "[router-rs] hook projection drift detected; consider re-running scripts/install_codex_cli_hooks.sh.".to_string();
+    let warning = "[router-rs] hook projection drift detected; consider re-running `router-rs framework maint install-codex-user-hooks`.".to_string();
     let local_codex_home = repo_root.join("codex-home");
     let manifest_path = if local_codex_home.is_dir() {
         local_codex_home.join(".router-rs-install.manifest.json")
@@ -3324,11 +3326,11 @@ mod tests {
                 "token_overhead_dominates",
             ] {
                 let text = format!("全面review，但reject reason: {token}");
-                assert!(saw_reject_reason(&text));
+                assert!(saw_reject_reason(&text, &text));
                 let inferred_overridden = has_override(&text)
                     || has_review_override(&text)
                     || has_delegation_override(&text)
-                    || saw_reject_reason(&text);
+                    || saw_reject_reason(&text, &text);
                 assert!(inferred_overridden);
             }
         }

@@ -43,10 +43,10 @@ trigger_hints:
   - 局部润色
   - 不要动结构
   - 大面积重构
-  - edit_scope: surgical
-  - edit_scope: refactor
+  - "edit_scope: surgical"
+  - "edit_scope: refactor"
 metadata:
-  version: "2.11.0"
+  version: "2.13.5"
   platforms: [codex]
   tags: [paper, writing, rewrite, abstract, introduction, caption, rebuttal]
 framework_roles:
@@ -82,6 +82,15 @@ Before rewriting, set **`edit_scope`** per
 
 If scope is unclear, ask one question before producing text.
 
+For **`surgical`**, follow the expanded precision contract (**hard fail on
+out-of-scope edits**, forbidden stealth edits, **no full-manuscript/section dump**,
+anchor-before-edit, per-item change cap, **patch/hunk-first delivery**, delivered
+change ledger) in
+[`../paper-workbench/references/edit-scope-gate.md`](../paper-workbench/references/edit-scope-gate.md).
+Do not treat vague polish requests as permission to rewrite unstated spans.
+Do not run a **read-through consistency pass** on abstract, intro, or conclusion
+when those surfaces are not in **`scope_items`**.
+
 ## When to Use
 
 - The user asks to draft or polish a bounded paper section.
@@ -97,8 +106,34 @@ If scope is unclear, ask one question before producing text.
 - Citation formatting or verification -> use `$citation-management`.
 - Generic non-academic prose -> use the owning domain skill, or `$documentation-engineering` for project docs.
 
+## Research language norms (long-running)
+
+Default on every manuscript pass unless the user explicitly waives it:
+
+- Follow [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+  for field-standard terminology, anti-coinage, repetition control, reader-facing
+  tone (no internal / defensive stacking of `but` / `not` / `rather than`; no
+  code names or raw `.csv`/path citations as stand-ins for results), and
+  stable wording under **`surgical`**.
+- If multi-round work already has `paper_story/TERMINOLOGY_GLOSSARY.md`, treat it
+  as authoritative for preferred terms and forbidden aliases.
+
 ## Claim-Safety Rules
 
+- Do not **wordsmith a weaker claim** into the manuscript to dodge a gap that
+  the reviewer lane still classifies as closable with evidence/analysis; route
+  back to `$paper-reviewer` / `$paper-reviser` per
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md).
+- For **response / rebuttal prose**: do not let polite acknowledgment or a
+  longer limitation paragraph **stand in for** the manuscript edits or evidence
+  work the comment requires; align with
+  [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+  §「修稿与审稿回应：不得以话术防御顶替实质修改」and the R&R section of the same
+  claim–evidence ladder.
+- **Code or math reviewer comments** are not "tone" tasks: the response text must
+  point to **artifacts** (hashes/commands/proof appendices/errata) dictated by
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
+  §「代码/实现质疑」与 **§数学/推导质疑**，not vague release timelines or cautious rephrasing alone.
 - Do not add unsupported novelty, superiority, causality, or clinical/practical impact.
 - Keep hedging aligned with evidence strength.
 - Preserve methods, results, numbers, abbreviations, and citation intent.
@@ -191,11 +226,15 @@ Canonical slot checks:
 
 - For short passages: polished text only.
 - For section rewrites: revised section plus concise rationale if useful.
-- For rebuttals: point-by-point response with polite stance and no overpromise.
+- For rebuttals: point-by-point response with polite stance and no overpromise;
+  each point should **point to a concrete manuscript/supplement change** or an
+  explicit cannot-fix reason, not defense-only prose.
 - For captions: self-contained caption with variables, cohort/data, and key takeaway.
 
 ## References
 
+- [../paper-workbench/references/RESEARCH_PAPER_STACK.md](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
+- [../paper-workbench/references/research-language-norms.md](../paper-workbench/references/research-language-norms.md)
 - [references/section-by-section.md](./references/section-by-section.md)
 - [references/storytelling-patterns.md](./references/storytelling-patterns.md)
 - [references/rebuttal-patterns.md](./references/rebuttal-patterns.md)

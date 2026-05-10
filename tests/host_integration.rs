@@ -2,7 +2,7 @@ mod common;
 
 use common::{
     host_integration_json, json_from_output, output_text, project_root, read_text,
-    router_rs_command, router_rs_json, run, write_json, write_text,
+    router_rs_command, router_rs_json, run, seed_framework_markers, write_json, write_text,
 };
 use serde_json::json;
 use std::path::Path;
@@ -11,14 +11,17 @@ use tempfile::tempdir;
 
 #[test]
 fn shell_installer_e2e_writes_expected_files() {
-    let repo = project_root();
     let codex_home = tempdir().unwrap();
-    let status = Command::new("bash")
-        .arg(repo.join("scripts/install_codex_cli_hooks.sh"))
-        .env("CODEX_HOME", codex_home.path())
-        .env("HOME", codex_home.path())
-        .status()
-        .expect("bash exec failed");
+    let status = router_rs_command([
+        "framework",
+        "maint",
+        "install-codex-user-hooks",
+        "--codex-home",
+        codex_home.path().to_str().unwrap(),
+    ])
+    .env("HOME", codex_home.path())
+    .status()
+    .expect("router-rs maint install-codex-user-hooks");
     assert!(status.success());
 
     let config = std::fs::read_to_string(codex_home.path().join("config.toml")).unwrap();
@@ -458,14 +461,20 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
 
     let mcp_path = cursor_home.join("mcp.json");
     let mcp_payload = common::read_json(&mcp_path);
-    assert_eq!(
-        mcp_payload["mcp_servers"]["browser-mcp"]["command"],
-        json!("bash")
-    );
-    assert!(mcp_payload["mcp_servers"]["browser-mcp"]["args"][0]
+    let cmd = mcp_payload["mcp_servers"]["browser-mcp"]["command"]
         .as_str()
-        .unwrap()
-        .ends_with("tools/browser-mcp/scripts/start_browser_mcp.sh"));
+        .expect("browser-mcp command");
+    assert!(
+        cmd == "router-rs" || cmd.ends_with("/router-rs"),
+        "unexpected command: {cmd}"
+    );
+    let args = mcp_payload["mcp_servers"]["browser-mcp"]["args"]
+        .as_array()
+        .expect("browser-mcp args");
+    assert_eq!(args[0], json!("browser"));
+    assert_eq!(args[1], json!("mcp-stdio"));
+    assert_eq!(args[2], json!("--repo-root"));
+    assert_eq!(args[3], json!(framework_root.to_string_lossy()));
     let manifest_path = cursor_home.join(".framework-projection.json");
     let manifest_payload = common::read_json(&manifest_path);
     assert!(manifest_payload["settings"]["managed_key_paths"]
@@ -565,6 +574,20 @@ fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
         .contains(&json!(mcp_path.to_string_lossy().to_string())));
 }
 
+fn browser_mcp_managed_payload(framework_root: &Path) -> serde_json::Value {
+    json!({
+        "command": common::router_rs_binary()
+            .expect("router-rs binary")
+            .to_string_lossy(),
+        "args": [
+            "browser",
+            "mcp-stdio",
+            "--repo-root",
+            framework_root.to_string_lossy(),
+        ],
+    })
+}
+
 #[test]
 fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
     let tmp = tempdir().unwrap();
@@ -580,10 +603,7 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
         &mcp_path,
         &json!({
             "mcp_servers": {
-                "browser-mcp": {
-                    "command": "bash",
-                    "args": [framework_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh").to_string_lossy()]
-                }
+                "browser-mcp": browser_mcp_managed_payload(&framework_root)
             }
         }),
     );
@@ -626,7 +646,7 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
 }
 
 #[test]
-fn cursor_user_scope_equivalence_check_requires_framework_root_script_path() {
+fn cursor_user_scope_equivalence_check_requires_matching_repo_root_arg() {
     let tmp = tempdir().unwrap();
     let framework_root = project_root();
     let project_root = tmp.path().join("consumer");
@@ -641,10 +661,15 @@ fn cursor_user_scope_equivalence_check_requires_framework_root_script_path() {
         &mcp_path,
         &json!({
             "mcp_servers": {
-                "browser-mcp": {
-                    "command": "bash",
-                    "args": [fake_framework_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh").to_string_lossy()]
-                }
+                "browser-mcp": json!({
+                    "command": common::router_rs_binary().expect("router-rs").to_string_lossy(),
+                    "args": [
+                        "browser",
+                        "mcp-stdio",
+                        "--repo-root",
+                        fake_framework_root.to_string_lossy(),
+                    ]
+                })
             }
         }),
     );
@@ -680,10 +705,7 @@ fn cursor_user_scope_equivalence_check_requires_framework_root_script_path() {
         &mcp_path,
         &json!({
             "mcp_servers": {
-                "browser-mcp": {
-                    "command": "bash",
-                    "args": [framework_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh").to_string_lossy()]
-                }
+                "browser-mcp": browser_mcp_managed_payload(&framework_root)
             }
         }),
     );
@@ -1432,17 +1454,6 @@ fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
     target.canonicalize().ok() == expected_target.canonicalize().ok()
 }
 
-fn seed_framework_markers(root: &Path) {
-    write_text(
-        &root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_targets":{"policy":"shared-rust-core-explicit-host-projections","supported":["codex-cli","cursor"],"shared_system_source":"skills","entrypoint_files":{"codex-cli":"AGENTS.md","cursor":"AGENTS.md"}},"host_projections":{"codex-cli":{"profile_id":"codex_profile"},"cursor":{"profile_id":"cursor_profile"}}}"#,
-    );
-    write_text(
-        &root.join("scripts/router-rs/Cargo.toml"),
-        "[package]\nname = \"router-rs-marker\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
-    );
-}
-
 fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Value {
     if let Some(object) = payload.as_object_mut() {
         object.remove("invocation");
@@ -1452,11 +1463,10 @@ fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Va
 
 fn assert_framework_alias_skill(surface_root: &Path, slug: &str) {
     let content = read_text(&surface_root.join(slug).join("SKILL.md"));
-    let dollar_entrypoint = format!("${slug}");
     assert!(content.contains(&format!("name: {slug}")));
     assert!(content.contains("generated lightweight Codex CLI alias"));
-    assert!(content.contains(&format!("`{dollar_entrypoint}`")));
     assert!(content.contains(&format!("`/{slug}`")));
+    assert!(!content.contains(&format!("`${slug}`")));
     assert!(content.contains("skills/skill-framework-developer/SKILL.md"));
 }
 
@@ -1607,9 +1617,6 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         .expect("gitx explicit_entrypoints should be an array");
     assert!(gitx_entrypoints.contains(&json!("/gitx")));
     assert!(gitx_entrypoints.contains(&json!("gitx")));
-    assert_eq!(aliases["loop"]["host_entrypoints"]["codex-cli"], "/loop");
-    assert_eq!(aliases["loop"]["host_entrypoints"]["cursor"], "/loop");
-    assert_eq!(aliases["loop"]["canonical_owner"], "loop");
     assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "/team");
     assert_eq!(aliases["team"]["host_entrypoints"]["cursor"], "/team");
     assert_eq!(
@@ -1634,7 +1641,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         autopilot["autonomy_contract"]["auto_agent_orchestration"]["max_parallel_lanes"],
-        3
+        5
     );
     assert_eq!(
         autopilot["autonomy_contract"]["goal_style_execution"]["run_to_completion"],

@@ -61,11 +61,16 @@ Prefer:
 When claiming an improvement, capture at least:
 
 - device path used: `mps` or `cpu`
-- chip class
+- macOS version
+- Python and PyTorch versions
+- chip class and unified memory capacity
+- MPS availability and relevant runtime flags
 - batch size and accumulation policy
 - worker count
-- peak memory or swap behavior
-- throughput or latency over a short, repeatable window
+- precision policy
+- peak RSS, swap, or memory-pressure behavior, including the measurement source
+- throughput or latency over a fixed short window with the same warmup and sample count before and after the change
+- statistic reported, such as median step time, p95 step time, samples/sec, or tokens/sec
 
 If stability is the blocker, record:
 - whether the run completed

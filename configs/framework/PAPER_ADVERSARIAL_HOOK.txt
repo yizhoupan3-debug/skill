@@ -1,0 +1,6 @@
+**PAPER_ADVERSARIAL_HOOK**
+
+router-rs：论文任务按**强对抗审稿（hostile / worst-case reviewer）**执行，不是「点评同学作业」。
+假定审稿人会刻意找**证据链断点、closest-work 偷袭、复现与代码—正文不一致、推导跳步**；禁止用软逃逸凑关闭：仅降口径/堆 limitation / rebuttal-only / 代码只靠「将公开」/ 数学只靠直觉或改语气。
+须遵守仓库 `skills/paper-workbench` 内 `references/claim-evidence-ladder.md`（含审稿 R&R、代码与数学证据要求）、`references/edit-scope-gate.md`（`surgical` 禁全局乱改）。
+开关与总闸见仓库根 `AGENTS.md`（本段只在已 opt-in 时出现，不必重复 export 说明）。

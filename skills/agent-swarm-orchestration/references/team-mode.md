@@ -1,6 +1,6 @@
 # Team Mode
 
-Use this reference only for explicit `$team` / `/team` entrypoints or strong full team-orchestration requests.
+Use this reference only for explicit `/team` entrypoints or strong full team-orchestration requests.
 
 `agent-swarm-orchestration` owns the delegation decision. The `team` framework command is an alias/runtime controller, not an ordinary skill competing for first-turn ownership.
 

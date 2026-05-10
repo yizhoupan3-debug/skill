@@ -1,8 +1,9 @@
 {
   "schema_version": "harness-operator-nudges-v1",
   "nudges": {
-    "rfv_loop_continue_reasoning_depth": "推理深度：不靠单模型拉长 CoT；靠 review∥external→fix→verify 分工 + EVIDENCE_INDEX 可审计链。",
-    "autopilot_drive_verbose_reasoning_depth": "推理深度：不靠单模型拉长 CoT；靠地平线切片 + 可执行验证写入 EVIDENCE_INDEX/检查点，形成可审计链。",
-    "autopilot_drive_compact_reasoning_depth": "深度：切片+验证证据链，非单模型堆长推理。"
+    "rfv_loop_continue_reasoning_depth": "推理深度：不靠单模型拉长 CoT；先做 fan-out/fan-in 编排（lane+读写范围+join+验证命令），再用 review∥external→fix→verify 分工 + EVIDENCE_INDEX 可审计链。",
+    "autopilot_drive_verbose_reasoning_depth": "推理深度：不靠单模型拉长 CoT；先做 fan-out/fan-in 编排（lane+读写范围+join+验证命令），再用地平线切片 + 可执行验证写入 EVIDENCE_INDEX/检查点，形成可审计链。",
+    "autopilot_drive_compact_reasoning_depth": "深度：先编排（lane/读写/join/验证）+ 切片 + 证据链；非单模型堆长推理。",
+    "math_reasoning_harness_line": "数理：用可检验 witness（极限/特例/双轨）+ 符号或脚本 verifier 定 PASS/FAIL；不靠 prose 冒充证明（见 docs/references/rfv-loop/math-reasoning-harness.md）。"
   }
 }

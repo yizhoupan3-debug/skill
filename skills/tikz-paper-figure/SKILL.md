@@ -90,9 +90,13 @@ one-off screenshot. It is:
 4. Write an explicit drawing brief before code: layout, zones, nodes, edges,
    labels, style, and what to omit from the raster draft.
 5. Generate a self-contained `standalone` `.tex` using
-   `assets/standalone-figure.tex` as the default template.
-6. Run `scripts/check_tikz_figure.sh figure.tex` before compiling.
-7. Compile with `scripts/compile_standalone.sh figure.tex`.
+   `skills/tikz-paper-figure/assets/standalone-figure.tex` as the default
+   template (paths are repo-root relative; if `cwd` is the skill directory, the
+   leading `skills/tikz-paper-figure/` may be dropped).
+6. Run `skills/tikz-paper-figure/scripts/check_tikz_figure.sh figure.tex`
+   before compiling.
+7. Compile with `skills/tikz-paper-figure/scripts/compile_standalone.sh
+   figure.tex`.
 8. Inspect the rendered PNG. Do not claim completion from code alone.
 9. Iterate until there are no clipped labels, unreadable text, arrow-direction
    errors, overlap, excessive whitespace, or paper-inclusion issues.

@@ -2,7 +2,7 @@ mod common;
 
 use common::{
     assert_success, cargo_manifest_command, json_from_output, project_root, read_json, read_text,
-    router_rs_json, run,
+    router_rs_json, run, seed_framework_markers,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -76,7 +76,7 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "web-scraping",
 ];
 
-const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "loop", "team"];
+const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "team", "update"];
 
 fn retired_runtime_owned_skill_slugs() -> HashSet<&'static str> {
     RETIRED_RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
@@ -134,7 +134,63 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
 }
 
 #[test]
+fn readme_does_not_revive_cursor_hook_shell_shims_in_cursor_section() {
+    let readme = read_text(&project_root().join("README.md"));
+    for forbidden in [
+        "review-gate.sh",
+        "post-tool-use.sh",
+        "session-start.sh",
+        "precompact-full.sh",
+        "rustfmt.sh",
+        "resolve-router-rs.sh",
+    ] {
+        assert!(
+            !readme.contains(forbidden),
+            "README.md must not reference retired Cursor hook shim {forbidden}; use router-rs cursor hook"
+        );
+    }
+}
+
+#[test]
+fn update_skill_exposes_explicit_entrypoint_like_gitx() {
+    let content = read_text(&project_root().join("skills/update/SKILL.md"));
+    for marker in [
+        "name: update",
+        "推荐显式写法：`/update`",
+        "registry 更新",
+        "router-rs framework maint refresh-host-projections",
+        "skill-compiler-rs/Cargo.toml",
+        "policy_contracts",
+        "router-rs framework maint update-one-shot",
+        "documentation_contracts",
+        "tracked_markdown_utf8_contract",
+        "cargo test",
+        "ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS",
+        "ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS",
+    ] {
+        assert!(content.contains(marker), "missing marker: {marker}");
+    }
+    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let update = &registry["framework_commands"]["update"];
+    assert_eq!(
+        update["skill_path"].as_str().expect("update skill_path"),
+        "skills/update/SKILL.md"
+    );
+    let entrypoints = update["interaction_invariants"]["explicit_entrypoints"]
+        .as_array()
+        .expect("explicit entrypoints");
+    assert!(
+        entrypoints
+            .iter()
+            .filter_map(|v| v.as_str())
+            .any(|e| e == "/update"),
+        "expected /update explicit entrypoint: {entrypoints:?}"
+    );
+}
+
+#[test]
 fn refresh_skill_stays_out_of_project_host_entrypoints() {
+    assert!(!project_root().join("skills/refresh/SKILL.md").exists());
     assert!(!project_root().join(".codex/skills/refresh").exists());
     assert!(!project_root()
         .join("artifacts/codex-skill-surface/skills/refresh")
@@ -144,10 +200,21 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
 }
 
 #[test]
+fn rfv_harness_reference_moved_to_docs() {
+    assert!(!project_root()
+        .join("skills/review-fix-verify-loop/SKILL.md")
+        .exists());
+    assert!(project_root().join("docs/rfv_loop_harness.md").exists());
+    assert!(project_root()
+        .join("docs/references/rfv-loop/reasoning-depth-contract.md")
+        .exists());
+}
+
+#[test]
 fn retired_runtime_owned_skill_directories_stay_removed() {
     let existing = retired_runtime_owned_skill_slugs()
         .into_iter()
-        .map(|slug| project_root().join("skills").join(slug))
+        .map(|slug| project_root().join("skills").join(slug).join("SKILL.md"))
         .filter(|path| path.exists())
         .collect::<Vec<_>>();
     assert_eq!(existing, Vec::<PathBuf>::new());
@@ -160,6 +227,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
+    seed_framework_markers(&repo_root);
     let sync_report =
         router_rs_json(&["codex", "sync", "--repo-root", repo_root.to_str().unwrap()]);
     let manifest = read_json(&repo_root.join(".codex/host_entrypoints_sync_manifest.json"));
@@ -230,6 +298,7 @@ fn codex_sync_preserves_existing_agents_policy_file() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
+    seed_framework_markers(&repo_root);
     let policy = "custom policy from disk\nbounded sidecar admission\n同一轮并发启动\n";
     std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
 
@@ -272,10 +341,10 @@ fn codex_user_skill_surface_stays_lightweight_and_explicit() {
     assert!(surface_root.join("team/SKILL.md").exists());
     let autopilot = read_text(&surface_root.join("autopilot/SKILL.md"));
     let team = read_text(&surface_root.join("team/SKILL.md"));
-    assert!(autopilot.contains("`$autopilot`"));
     assert!(autopilot.contains("`/autopilot`"));
-    assert!(team.contains("`$team`"));
+    assert!(!autopilot.contains("`$autopilot`"));
     assert!(team.contains("`/team`"));
+    assert!(!team.contains("`$team`"));
 }
 
 #[test]
@@ -497,15 +566,11 @@ fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
 
 #[test]
 fn removed_router_flags_are_absent_from_user_docs() {
-    let docs = [
-        "skills/refresh/SKILL.md",
-        "RTK.md",
-        "docs/rust_contracts.md",
-    ]
-    .iter()
-    .map(|path| read_text(&project_root().join(path)))
-    .collect::<Vec<_>>()
-    .join("\n");
+    let docs = ["RTK.md", "docs/rust_contracts.md"]
+        .iter()
+        .map(|path| read_text(&project_root().join(path)))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     for removed_flag in [
         "--framework-refresh-json",
@@ -518,7 +583,7 @@ fn removed_router_flags_are_absent_from_user_docs() {
             "removed flag leaked: {removed_flag}"
         );
     }
-    assert!(docs.contains("framework refresh --repo-root"));
+    assert!(docs.contains("router-rs framework snapshot"));
     assert!(docs.contains("codex sync --repo-root"));
     assert!(docs.contains("stdio `execute` operation"));
 }
@@ -1076,7 +1141,7 @@ fn repo_local_codex_omits_framework_mcp_entrypoint() {
 fn browser_mcp_live_config_never_points_to_node_runtime() {
     let surfaces = [
         ".codex/config.toml",
-        "tools/browser-mcp/scripts/start_browser_mcp.sh",
+        "scripts/router-rs/src/host_integration.rs",
         "tools/browser-mcp/README.md",
     ];
     let joined = surfaces
@@ -1129,9 +1194,12 @@ fn sync_skills_uses_router_rs_directly() {
 
 #[test]
 fn prompt_policy_is_rust_owned() {
-    let source = read_text(&project_root().join("scripts/router-rs/src/framework_runtime.rs"));
-    assert!(source.contains("build_framework_prompt_compression_envelope"));
-    assert!(source.contains("prompt_policy_owner"));
+    let root = project_root();
+    let mod_rs = read_text(&root.join("scripts/router-rs/src/framework_runtime/mod.rs"));
+    let compression =
+        read_text(&root.join("scripts/router-rs/src/framework_runtime/prompt_compression.rs"));
+    assert!(mod_rs.contains("build_framework_prompt_compression_envelope"));
+    assert!(compression.contains("prompt_policy_owner"));
 }
 
 #[test]
