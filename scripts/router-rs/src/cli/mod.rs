@@ -8,12 +8,12 @@ pub(crate) mod runtime_ops;
 pub(crate) use common::{
     configure_compute_parallelism, env_usize, route_task_with_manifest_fallback,
 };
-pub(crate) use runtime_ops::{dispatch_stdio_json_request, dispatch_stdio_json_request_payload};
+pub(crate) use runtime_ops::dispatch_stdio_json_request_payload;
 
 #[cfg(test)]
 pub(crate) use runtime_ops::{
-    classify_stdio_op, is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op,
-    is_trace_stdio_op, StdioOpDomain,
+    classify_stdio_op, dispatch_stdio_json_request, is_framework_stdio_op, is_routing_stdio_op,
+    is_runtime_stdio_op, is_trace_stdio_op, StdioOpDomain,
 };
 
 pub(crate) fn run(args: &args::Cli) -> Result<(), String> {
