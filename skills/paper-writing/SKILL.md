@@ -102,6 +102,7 @@ when those surfaces are not in **`scope_items`**.
 ## Do Not Use
 
 - Whole-paper judgment, novelty, or experimental validity review -> use `$paper-reviewer` logic mode.
+- Programmatic reviewer lists, Major/Minor point-by-point R&R, or meta-review checklists that require **manuscript / figure / appendix / reproducibility closures** -> keep the execution spine under `$paper-workbench` / `$paper-reviser` until point-to-point closure mapping exists; then use this skill only for bounded prose patches inside confirmed scope.
 - Literature search/synthesis before writing -> keep the task in `$paper-workbench` until the source-backed story context is fixed.
 - Citation formatting or verification -> use `$citation-management`.
 - Generic non-academic prose -> use the owning domain skill, or `$documentation-engineering` for project docs.

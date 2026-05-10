@@ -213,6 +213,7 @@ separate "known blocker" from "uncertainty that needs lookup".
 - When **edit_scope=surgical**, do not delete, merge, or relocate sections and do not run cross-section throughline rewrites unless the user listed that work in **scope_items** (see [`references/edit-scope-gate.md`](references/edit-scope-gate.md)).
 - When **edit_scope=surgical**, do not return a **whole-section or whole-document paste** as the primary deliverable if `scope_items` only names local spans—use **patches/hunks or excerpt-to-excerpt replacements** tied to `change_id` (same gate reference).
 - Do not end at critique if the user asked to get the paper closer to submission; convert findings into ordered edits.
+- **审稿 R&R**：若是 **repair** 类意见，关停件应优先落在 **图/表/方法/统计/附录/补充材料** 的可核验修改（或已定稿的补充实验落点），不得把「只改摘要、只加长 hedge」当主交付；见 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md) §「审稿意见 / R&R」。
 - Do not present "top-tier" as a style problem. Treat it as a selective-venue
   acceptance problem: novelty, evidence, comparison fairness, venue fit, and
   reproducibility must survive before prose polish matters.
@@ -226,6 +227,7 @@ separate "known blocker" from "uncertainty that needs lookup".
 - **数学/推导质疑**不是「文风问题」：禁止用直觉句、Notation 洗牙或把 Wrong proof
   悄悄收成「非正式叙述」来回避；必须 **补证明 / 定理勘误 / 反例收窄 / 或为 conjecture
   并改 claim**；细则见阶梯文 **§数学/推导质疑**。
+- **R&R / repair 类意见**：closure 工件优先落在 **图/方法/统计/附录** 等可核验改动，而非仅靠 abstract 层面 hedge；见 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md) §审稿意见 / R&R。
 - Keep this front door thin: if a rule needs more than one sentence, link the
   owning reference instead of restating it here.
 
