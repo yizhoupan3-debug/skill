@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Review Subagent Gate (Stop)",
+  "description": "Enforce review/subagent gate on agent stop. Verifies that if review or delegation was required, either a subagent was spawned or an explicit reject reason was stated. Blocks finalization if gate is not satisfied.",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review gate enforcement: If the original request required review or parallel delegation (patterns: \"review\", \"深度审查\", \"并行\", \"/autopilot\", \"$team\"), verify that you either: 1) Spawned independent subagent(s) using invoke_sub_agent, OR 2) Explicitly stated a reject reason (small_task, shared_context_heavy, write_scope_overlap, next_step_blocked, verification_missing, token_overhead_dominates). If neither condition is met, DO NOT finalize. Instead, spawn the required subagent now or state the reject reason."
+  }
+}

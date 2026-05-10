@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Execution Subagent Gate
 
+仅 Cursor：跨宿主基线与 Codex 默认见 `AGENTS.md` → **Execution Ladder** → **宿主优先级**；本文件在 alwaysApply 下为 Cursor 执行面真源。
+
 When implementation can be decomposed, subagent lane execution is the default mode. Keep supervisor ownership for architecture decisions, integration, and final verification.
 
 ## Trigger intent
@@ -20,7 +22,7 @@ Trigger applies to implementation-heavy requests, especially when any of the fol
 
 Before finalizing execution work:
 1. Perform lane-admission first: identify whether work can be split into independent, bounded lanes.
-2. If splittable, spawn 1-3 independent subagents in parallel with explicit lane contracts:
+2. If splittable, spawn 1-6 independent subagents in parallel with explicit lane contracts:
    - Goal and expected artifact per lane
    - Allowed/forbidden file scope
    - Verification command(s) and pass criteria

@@ -1,0 +1,108 @@
+{
+  "schema_registry_version": "eval-schema-registry-v1",
+  "description": "Eval 目录的人类可读契约说明。机器真源以 router-rs 中 serde 结构与 tests/routing_eval_cases.json 为准。",
+  "routing_eval_cases_v1": {
+    "schema_version": "routing-eval-cases-v1",
+    "canonical_cases_path": "tests/routing_eval_cases.json",
+    "file_shape": {
+      "schema_version": {
+        "type": "string",
+        "required": true,
+        "const": "routing-eval-cases-v1",
+        "description": "路由评测集版本；route.rs 的测试加载器会校验此值。"
+      },
+      "cases": {
+        "type": "array",
+        "required": true,
+        "description": "评测用例列表；空 task 的条目在运行时被跳过。"
+      }
+    },
+    "case_fields": {
+      "id": {
+        "type": "string",
+        "required": false,
+        "description": "用例标识；eval route 会生成 session_id；缺省时 serde 默认为空字符串。"
+      },
+      "task": {
+        "type": "string",
+        "required": true,
+        "description": "输入给路由器的自然语言任务（与旧字段名 user_request 不同，真源字段名为 task）。"
+      },
+      "category": {
+        "type": "string",
+        "required": true,
+        "description": "用例语义分类。仓库中已出现：should-trigger、should-not-trigger、gate-vs-owner-conflict、gate-vs-artifact-gate-conflict、wrong-owner-near-miss、explicit-framework-command、explicit-loop-command。route.rs 内嵌评测据此计算 trigger_hit / overtrigger；router-rs eval route 仅作透传存储，不校验枚举闭集。"
+      },
+      "first_turn": {
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": "传给 route_task 的首轮标记；仅 route.rs 的 routing eval 测试路径读取。eval route CLI 内部固定 first_turn=true，且 EvalCasePayload 无此字段，故 CLI 路径下 JSON 中的 first_turn 会被 serde 忽略。"
+      },
+      "expected_owner": {
+        "type": "string|null",
+        "required": false,
+        "description": "期望选中的 skill slug；eval route 与 routing eval 均会校验（若提供且非空）。"
+      },
+      "expected_overlay": {
+        "type": "string|null",
+        "required": false,
+        "description": "期望的 overlay；null 表示期望无 overlay。"
+      },
+      "expected_layer": {
+        "type": "string",
+        "required": false,
+        "description": "期望路由层（如 L0–L4）；仅 eval route（EvalCasePayload）参与断言；routing eval 结构体无此字段，serde 会忽略多余键。"
+      },
+      "focus_skill": {
+        "type": "string",
+        "required": false,
+        "description": "在 should-trigger / gate-vs-owner-conflict 等分类下，用于 routing eval 计算 trigger_hit（选中 owner 是否等于 focus_skill）。eval route 的 EvalCasePayload 不含此字段，JSON 中的键会被忽略。"
+      },
+      "forbidden_owners": {
+        "type": "array<string>",
+        "required": false,
+        "description": "禁止被选中的 owner 列表；eval route 会逐条断言；routing eval 在 should-not-trigger 等分类下参与 overtrigger 判断。"
+      },
+      "notes": {
+        "type": "string",
+        "required": false,
+        "description": "人类注释；eval route 反序列化保留但不参与评分；routing eval 忽略。"
+      }
+    },
+    "consumers": {
+      "router_rs_eval_route": {
+        "binary": "router-rs",
+        "subcommand": "eval route",
+        "rust_type": "scripts/router-rs/src/eval_route.rs::EvalCasePayload",
+        "behavior": "route_task_with_manifest_fallback；first_turn 固定为 true；校验 expected_owner、expected_overlay、expected_layer、forbidden_owners。"
+      },
+      "router_rs_routing_eval_tests": {
+        "rust_type": "scripts/router-rs/src/route.rs::RoutingEvalCasePayload（cfg(test)）",
+        "behavior": "route_task；读取 first_turn；按 category 计算 trigger_hit/overtrigger；不校验 expected_layer。"
+      }
+    },
+    "serde_unknown_fields": "默认忽略：同一 JSON 可合并两类消费者各自需要的字段，无需拆文件。"
+  },
+  "routing_eval_report_v1": {
+    "schema_version": "routing-eval-report-v1",
+    "authority": "rust-eval-route",
+    "rust_const": "scripts/router-rs/src/eval_route.rs::EVAL_ROUTE_REPORT_SCHEMA_VERSION",
+    "fields": {
+      "schema_version": "routing-eval-report-v1",
+      "authority": "rust-eval-route",
+      "total_cases": "integer",
+      "passed": "integer",
+      "failed": "integer",
+      "route_accuracy": "float 0.0–1.0",
+      "wrong_owner_rate": "float",
+      "wrong_overlay_rate": "float",
+      "wrong_layer_rate": "float",
+      "failures": "array of { case_id, field, expected, got, task }"
+    },
+    "contract_cli": "router-rs eval route-contract 输出与上述 metrics 列表一致。"
+  },
+  "deprecated": {
+    "behavioral_eval_cases_v1": "历史占位名；真实文件与 CLI 使用 routing-eval-cases-v1。旧字段 user_request 从未在 Rust 侧实现，请使用 task。"
+  }
+}

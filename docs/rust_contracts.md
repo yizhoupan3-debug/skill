@@ -12,7 +12,7 @@ It is the contract source of truth for:
 - profile / explicit host projection compilation
 - execution response shape
 - runtime control-plane descriptors
-- framework runtime snapshot / memory / artifact continuity
+- framework runtime snapshot / artifact continuity
 - trace transport, checkpointing, compaction, observability, and sandbox policy
 
 ## Current Boundary
@@ -22,10 +22,10 @@ Rust owns the default runtime and contract path.
 - `router-rs route <query>` owns route decisions; route diagnostics use the Rust stdio route policy/report operations.
 - `router-rs profile emit` and `router-rs profile artifacts` own the shared framework profile plus explicit Codex projection artifacts.
 - Rust stdio `execute` operation owns the live/dry-run execution response contract.
-- `router-rs framework snapshot`, `contract-summary`, `memory-recall`, `session-artifact-write`, `memory-policy`, and `prompt-compression` own framework runtime read/write/policy surfaces.
+- `router-rs framework snapshot`, `contract-summary`, `session-artifact-write`, `hook-evidence-append`, and `prompt-compression` own framework runtime read/write/policy surfaces.
+- Stdio op `framework_hook_evidence_append` mirrors `router-rs framework hook-evidence-append --input-json …` for scripted callers appending rows to `EVIDENCE_INDEX.json` under continuity (same payload shape as the CLI).
 - `router-rs codex sync` owns repo host-entrypoint materialization.
-- `router-rs framework host-integration ...` owns native install/status/remove, bootstrap, projection, memory automation, and related host integration flows. `router-rs codex host-integration ...` is a thin compatibility alias only.
-- Rust memory policy persistence writes SQLite rows by default. Stable journals are reserved for promoted `decision` and `preference` items: decisions go to `decisions.md`, preferences go to `preferences.md`, and generic facts stay SQLite-only until promoted.
+- `router-rs framework host-integration ...` owns native install/status/remove, bootstrap, projection, and related host integration flows. `router-rs codex host-integration ...` is a thin compatibility alias only.
 
 ## Current Status Ledger
 
@@ -33,10 +33,9 @@ Rust owns the default runtime and contract path.
 
 - Routing authority is Rust.
 - Live execution and dry-run preview use Rust stdio.
-- Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, `memory`, and `background`.
-- Framework snapshot, contract summary, memory recall, session artifact writing, and prompt/memory policy use direct `router-rs` surfaces.
-- Memory policy extraction reports source/fact counts, persists active rows to `memory.sqlite3`, filters expired rows from recall, and only mirrors promoted decisions/preferences into stable journals without introducing an alternate writer.
-- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the supported host projection is `codex-cli`.
+- Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, storage, and `background`.
+- Framework snapshot, contract summary, session artifact writing, hook evidence append (CLI + stdio), and prompt policy use direct `router-rs` surfaces.
+- Host entrypoint sync and native integration are Rust-owned through `router-rs`; supported host projections are `codex-cli` and `cursor`.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.
 - SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains the safe default storage.
@@ -69,7 +68,7 @@ Rust owns the default runtime and contract path.
 ## Host Projection Invariants
 
 - The shared framework core is the profile authority; host projections are closed-set and explicit.
-- Supported host projection is exactly `codex-cli`.
+- Supported host projections are exactly `codex-cli` and `cursor`.
 - `codex_profile` is the Codex projection artifact and may carry Codex-private payload fields.
 - Generated host projections are disposable install targets and must remain thin bootstrap pointers to the Rust core.
 - `framework host-integration remove` removes only framework-owned projection files and manifest-recorded settings keys; user-authored files and unrelated settings are preserved.
@@ -112,7 +111,6 @@ Runtime control-plane payloads must keep these owner markers stable:
 - `rust-runtime-trace-io`
 - `rust-framework-runtime-read-model`
 - `rust-framework-session-artifact-writer`
-- `rust-framework-memory-policy`
 - `rust-framework-prompt-policy`
 
 ## External Benchmark

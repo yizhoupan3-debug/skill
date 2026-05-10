@@ -5,7 +5,7 @@
 # Machine-wide defaults belong in ~/.codex/config.toml.
 
 [features]
-codex_hooks = false
+hooks = true
 memories = false
 
 [memories]

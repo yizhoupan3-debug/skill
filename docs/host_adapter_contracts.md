@@ -3,8 +3,8 @@
 ## Goal
 
 Codex CLI consumes one Rust-owned framework core. Host integration is a
-projection/install layer only; routing ownership, memory policy, continuity
-state, and artifact contracts remain framework-root-native and Rust-generated.
+projection/install layer only; routing ownership, continuity state, and
+artifact contracts remain framework-root-native and Rust-generated.
 
 - `codex-cli` reads `AGENTS.md`.
 
@@ -43,7 +43,7 @@ state, and artifact contracts remain framework-root-native and Rust-generated.
 
 1. `framework_profile` stays pinned to the shared Rust core; host-private fields
    stay under explicit host projection payloads.
-2. `workspace_bootstrap.resources` is the only skills/memory default source.
+2. `workspace_bootstrap.resources` is the only default skill resource source.
 3. `router-rs framework host-integration status/install/remove` is the primary
    host-neutral command path; `codex host-integration` is a compatibility alias
    only.
@@ -53,4 +53,4 @@ state, and artifact contracts remain framework-root-native and Rust-generated.
    snapshots, Python runtime fallbacks, Node runtime fallbacks, and plugin
    runtime truth are regressions.
 6. Generated host projections must not copy full skill bodies, routing tables,
-   memory policy, or registry payloads into host-private directories.
+   continuity state, or registry payloads into host-private directories.

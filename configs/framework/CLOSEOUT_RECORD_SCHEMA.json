@@ -1,0 +1,125 @@
+{
+  "schema_version": "closeout-record-v1",
+  "authority": "rust-closeout-enforcement",
+  "owner": "rust-closeout-enforcement",
+  "description": "Structured closeout evidence record consumed by router-rs closeout evaluator. Under strict programmatic enforcement (CI / GitHub Actions detection, or ROUTER_RS_CLOSEOUT_ENFORCEMENT set to a non-soft-disable value), completion claims require a valid record; with local soft enforcement, AGENTS.md still recommends emitting evidence before claiming done.",
+  "required_fields": [
+    "schema_version",
+    "task_id",
+    "verification_status",
+    "summary"
+  ],
+  "optional_fields": [
+    "started_at",
+    "ended_at",
+    "changed_files",
+    "commands_run",
+    "artifacts_checked",
+    "blockers",
+    "risks",
+    "notes"
+  ],
+  "field_specs": {
+    "schema_version": {
+      "type": "string",
+      "expected": "closeout-record-v1"
+    },
+    "task_id": {
+      "type": "string",
+      "non_empty": true
+    },
+    "started_at": {
+      "type": "string",
+      "format": "iso8601"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "iso8601"
+    },
+    "changed_files": {
+      "type": "array",
+      "item_type": "string"
+    },
+    "commands_run": {
+      "type": "array",
+      "item_shape": {
+        "command": "string",
+        "exit_code": "integer",
+        "duration_ms": "integer?",
+        "stdout_summary": "string?",
+        "stderr_summary": "string?"
+      }
+    },
+    "artifacts_checked": {
+      "type": "array",
+      "item_shape": {
+        "path": "string",
+        "exists": "boolean",
+        "size_bytes": "integer?",
+        "checks": "array<string>?"
+      }
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": ["passed", "failed", "partial", "not_run"]
+    },
+    "blockers": {
+      "type": "array",
+      "item_type": "string"
+    },
+    "risks": {
+      "type": "array",
+      "item_type": "string"
+    },
+    "summary": {
+      "type": "string",
+      "non_empty": true
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "enforcement_rules": [
+    {
+      "id": "claimed_done_without_evidence",
+      "description": "Summary asserts completion (done/finished/completed/passed/通过/完成/已完成) but verification_status is not_run and no risks/blockers are declared.",
+      "severity": "block"
+    },
+    {
+      "id": "changed_files_without_command_or_risk",
+      "description": "changed_files is non-empty but commands_run and risks are both empty.",
+      "severity": "block"
+    },
+    {
+      "id": "verification_passed_with_failed_command",
+      "description": "verification_status=passed but at least one entry in commands_run has non-zero exit_code.",
+      "severity": "block"
+    },
+    {
+      "id": "verification_passed_with_missing_artifact",
+      "description": "verification_status=passed but at least one artifact in artifacts_checked has exists=false.",
+      "severity": "block"
+    },
+    {
+      "id": "not_run_without_blockers_or_risks",
+      "description": "verification_status=not_run but neither blockers nor risks were recorded.",
+      "severity": "block"
+    },
+    {
+      "id": "summary_missing",
+      "description": "summary is empty or whitespace-only.",
+      "severity": "block"
+    }
+  ],
+  "completion_keywords": [
+    "done",
+    "finished",
+    "completed",
+    "passed",
+    "succeeded",
+    "已完成",
+    "完成",
+    "通过",
+    "搞定"
+  ]
+}

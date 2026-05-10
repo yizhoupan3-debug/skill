@@ -68,12 +68,12 @@
     },
     {
       "path": "AGENTS.md",
-      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"",
       "compare": "byte-for-byte"
     },
     {
       "path": ".codex/host_entrypoints_sync_manifest.json",
-      "generator": "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"",
       "compare": "byte-for-byte"
     }
   ]

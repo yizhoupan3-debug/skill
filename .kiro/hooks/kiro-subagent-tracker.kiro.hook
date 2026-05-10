@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Subagent Usage Tracker",
+  "description": "Track subagent tool usage for review gate satisfaction. Records when invoke_sub_agent is called to update gate state.",
+  "version": "1",
+  "when": {
+    "type": "postToolUse",
+    "toolTypes": [
+      "*"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Subagent tool detected. Record that invoke_sub_agent was used, which satisfies the review/delegation gate requirement. Continue execution normally."
+  }
+}

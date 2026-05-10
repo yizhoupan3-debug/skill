@@ -1,8 +1,7 @@
 # browser-mcp
 
 A lean MCP browser server optimized for agent use. The stdio server is the Rust
-implementation in `router-rs`; the launcher no longer falls back to the legacy
-TypeScript runtime.
+implementation in `router-rs`; live startup is Rust-only.
 
 Rust stdio is the only supported live Codex path. The TypeScript package under
 this directory is a development harness for parity tests only; do not configure
@@ -46,9 +45,9 @@ Codex or MCP live startup to execute the Node build.
 
 ## Startup options
 
-### stdio (default)
+### stdio (recommended/production)
 ```bash
-./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml browser mcp-stdio --repo-root /Users/joe/Documents/skill
+router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill
 # Flags: --headless true|false
 #        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
@@ -57,7 +56,7 @@ Codex or MCP live startup to execute the Node build.
 ## Smoke test
 
 ```bash
-printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml browser mcp-stdio --repo-root /Users/joe/Documents/skill
+printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill
 ```
 
 ## Routing
@@ -77,7 +76,7 @@ If you already have a Rust-first runtime attach descriptor, browser-mcp can
 consume it directly for self-inspection:
 
 ```bash
-./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml browser mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
+router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
 # or
 BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json ./tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
@@ -102,6 +101,6 @@ through that same attach descriptor; replay results now include a lighter
 `replayContext` mirror so consumers can read attach provenance without
 re-parsing the full diagnostics block.
 
-The legacy `start_browser_mcp.sh` launcher delegates directly to the Rust
-launcher and does not require the TypeScript build output, Node, or npm; MCP
-config can call the same Rust-owned launcher directly.
+The `start_browser_mcp.sh` script delegates directly to the Rust launcher and
+does not require the TypeScript build output, Node, or npm; MCP config can call
+the same Rust-owned launcher directly.
