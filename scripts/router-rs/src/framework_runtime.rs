@@ -579,7 +579,7 @@ pub fn build_framework_refresh_payload(
         .flatten();
     if let Some(ref g) = goal_state {
         prompt.push_str("\n\n");
-        prompt.push_str(&format_goal_state_refresh_section(g));
+        prompt.push_str(&format_goal_state_refresh_section(repo_root, g));
     }
     let debug = if verbose {
         json!({
@@ -613,15 +613,36 @@ pub fn build_framework_refresh_payload(
 
 /// 把 `GOAL_STATE.json` 嵌进 `framework refresh` 提示，使 `$refresh` 与 Codex SessionStart digest 可见「可执行目标」而非仅有连续性摘要。
 /// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 使用冗长 checklist（完整字段始终在 JSON `goal_state`）。
-fn format_goal_state_refresh_section(goal: &Value) -> String {
+///
+/// P0-E + P1-D：自 v? 起，refresh / SessionStart digest 也走 `HARNESS_OPERATOR_NUDGES.json`
+/// 真源（同一 nudge 与 RFV/AUTOPILOT 续跑共用），并附带「深度自检三问」一行（verbose 完整三条；
+/// compact 单行压缩），让接力面也带上深度提醒。`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 关全部。
+fn format_goal_state_refresh_section(repo_root: &Path, goal: &Value) -> String {
     if router_rs_goal_prompt_verbose() {
-        format_goal_state_refresh_section_verbose(goal)
+        format_goal_state_refresh_section_verbose(repo_root, goal)
     } else {
-        format_goal_state_refresh_section_compact(goal)
+        format_goal_state_refresh_section_compact(repo_root, goal)
     }
 }
 
-fn format_goal_state_refresh_section_verbose(goal: &Value) -> String {
+/// Verbose 版本（仅 GOAL_PROMPT_VERBOSE=1 时启用）：使用 RFV reasoning-depth contract 的完整三问。
+/// Compact 版本：单行；保留 SessionStart 640 字符上限友好。
+fn refresh_depth_self_check_lines(verbose: bool) -> Vec<String> {
+    if verbose {
+        vec![
+            "- 深度自检（reasoning-depth-contract）：".to_string(),
+            "  1) A 阶段是否 **并行** 仅含只读 lane（review + optional external）？".to_string(),
+            "  2) verify 是否对应明确 `verify_commands`，PASS/FAIL 有命令/日志而非「感觉通过」？"
+                .to_string(),
+            "  3) 本轮是否写入 RFV `append_round`（含 `verify_result`）或 EVIDENCE_INDEX 行？"
+                .to_string(),
+        ]
+    } else {
+        vec!["- 深度自检：并行只读→fix→verify；PASS 必有命令/exit；本轮落 EVIDENCE 或 append_round。".to_string()]
+    }
+}
+
+fn format_goal_state_refresh_section_verbose(repo_root: &Path, goal: &Value) -> String {
     let g = value_text(goal.get("goal"));
     let st = value_text(goal.get("status"));
     let drive = goal
@@ -661,10 +682,18 @@ fn format_goal_state_refresh_section_verbose(goal: &Value) -> String {
         "- 下一跳: 实现 → 跑验证命令 → 更新 SESSION_SUMMARY/NEXT_ACTIONS；满足验收后 `stdio` op `framework_autopilot_goal` operation=complete。"
             .to_string(),
     );
+    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
+    if !nudges.autopilot_drive_verbose_reasoning_depth.is_empty() {
+        lines.push(format!(
+            "- {}",
+            nudges.autopilot_drive_verbose_reasoning_depth
+        ));
+    }
+    lines.extend(refresh_depth_self_check_lines(true));
     lines.join("\n")
 }
 
-fn format_goal_state_refresh_section_compact(goal: &Value) -> String {
+fn format_goal_state_refresh_section_compact(repo_root: &Path, goal: &Value) -> String {
     let g = value_text(goal.get("goal"));
     let st = value_text(goal.get("status"));
     let drive = goal
@@ -717,6 +746,14 @@ fn format_goal_state_refresh_section_compact(goal: &Value) -> String {
     lines.push(
         "- 收口: `framework_autopilot_goal` operation=complete（或 pause/block）。".to_string(),
     );
+    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
+    if !nudges.autopilot_drive_compact_reasoning_depth.is_empty() {
+        lines.push(format!(
+            "- {}",
+            nudges.autopilot_drive_compact_reasoning_depth
+        ));
+    }
+    lines.extend(refresh_depth_self_check_lines(false));
     lines.join("\n")
 }
 

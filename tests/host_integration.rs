@@ -1606,7 +1606,6 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         .as_array()
         .expect("gitx explicit_entrypoints should be an array");
     assert!(gitx_entrypoints.contains(&json!("/gitx")));
-    assert!(gitx_entrypoints.contains(&json!("$gitx")));
     assert!(gitx_entrypoints.contains(&json!("gitx")));
     assert_eq!(aliases["loop"]["host_entrypoints"]["codex-cli"], "/loop");
     assert_eq!(aliases["loop"]["host_entrypoints"]["cursor"], "/loop");

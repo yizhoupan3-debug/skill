@@ -40,6 +40,18 @@ pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
     }
 }
 
+/// `ROUTER_RS_OPERATOR_INJECT`：跨切片**聚合关断**（P1-E）。
+///
+/// 当此变量为 `0`/`false`/`off`/`no` 时，下列三类「面向模型的 operator 注入」**全部**视为关闭：
+/// - `HARNESS_OPERATOR_NUDGES`（推理深度等 nudge 句）
+/// - `AUTOPILOT_DRIVE_HOOK`（Cursor Stop/beforeSubmit 的 GOAL 续跑块）
+/// - `RFV_LOOP_HOOK`（Cursor Stop/beforeSubmit 的 RFV 续跑块）
+///
+/// 三个细粒度变量仍可单独关掉某一类；本变量是「一键关全部续跑/nudge」的总闸。**默认开启**。
+pub fn router_rs_operator_inject_globally_enabled() -> bool {
+    router_rs_env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -49,6 +49,87 @@ pub struct EvidenceRollup {
     pub has_successful_verification: bool,
 }
 
+/// Aggregate "depth compliance" view (P1-A): cross-cuts RFV rounds, EVIDENCE_INDEX, and
+/// goal checkpoints into a single read-only score. Consumers (closeout enforcement,
+/// SessionStart digest, statusline) can inspect `depth_score` instead of re-deriving the
+/// same booleans separately.
+///
+/// `depth_score` ∈ {0, 1, 2, 3}:
+/// - 1 point: at least one RFV round with `verify_result=PASS`.
+/// - 1 point: at least one successful EVIDENCE_INDEX row (`success==true` or `exit_code==0`).
+/// - 1 point: at least one goal checkpoint recorded (model wrote progress at least once).
+///
+/// Notes:
+/// - This is **advisory** — it does not gate writes. Use it as a discriminator when displaying
+///   continuity status or as one of several signals in custom enforcement.
+/// - `rfv_unknown_round_count` and `rfv_pass_without_evidence_count` are explicitly broken out
+///   so dashboards can flag "RFV says PASS but EVIDENCE shows no successful row in the same
+///   window" — the cross-check label written by `rfv_loop::cross_link_evidence`.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
+pub struct DepthCompliance {
+    pub rfv_pass_round_count: u64,
+    pub rfv_fail_round_count: u64,
+    pub rfv_skipped_round_count: u64,
+    pub rfv_unknown_round_count: u64,
+    pub rfv_pass_without_evidence_count: u64,
+    pub goal_checkpoint_count: u64,
+    pub depth_score: u8,
+}
+
+fn depth_compliance_from_disk(
+    goal: Option<&Value>,
+    rfv: Option<&Value>,
+    evidence_ok: bool,
+) -> DepthCompliance {
+    let mut c = DepthCompliance::default();
+
+    if let Some(g) = goal {
+        if let Some(arr) = g.get("checkpoints").and_then(Value::as_array) {
+            c.goal_checkpoint_count = arr.len() as u64;
+        }
+    }
+
+    if let Some(r) = rfv {
+        if let Some(rounds) = r.get("rounds").and_then(Value::as_array) {
+            for round in rounds {
+                let vr = round
+                    .get("verify_result")
+                    .and_then(Value::as_str)
+                    .unwrap_or("UNKNOWN")
+                    .to_ascii_uppercase();
+                match vr.as_str() {
+                    "PASS" => c.rfv_pass_round_count += 1,
+                    "FAIL" => c.rfv_fail_round_count += 1,
+                    "SKIPPED" => c.rfv_skipped_round_count += 1,
+                    _ => c.rfv_unknown_round_count += 1,
+                }
+                if vr == "PASS"
+                    && round
+                        .get("cross_check")
+                        .and_then(Value::as_str)
+                        .map(|s| s == "no_evidence_window")
+                        .unwrap_or(false)
+                {
+                    c.rfv_pass_without_evidence_count += 1;
+                }
+            }
+        }
+    }
+
+    let mut score: u8 = 0;
+    if c.rfv_pass_round_count > 0 {
+        score += 1;
+    }
+    if evidence_ok {
+        score += 1;
+    }
+    if c.goal_checkpoint_count > 0 {
+        score += 1;
+    }
+    c.depth_score = score;
+    c
+}
+
 /// High-level macro-controller mode for the resolved task id.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -71,6 +152,10 @@ pub struct ResolvedTaskView {
     pub rfv_loop_state: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence: Option<EvidenceRollup>,
+    /// Aggregate depth-compliance view (P1-A); always present alongside `evidence` for tasks
+    /// with a resolved id. `None` when no task id resolves.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth_compliance: Option<DepthCompliance>,
     pub control_mode: TaskControlMode,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub resolution_notes: Vec<String>,
@@ -133,6 +218,7 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
             goal_state: None,
             rfv_loop_state: None,
             evidence: None,
+            depth_compliance: None,
             control_mode: TaskControlMode::Idle,
             resolution_notes: vec![
                 "no_task_id: override empty and no active/focus pointer".to_string()
@@ -151,6 +237,12 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
         has_successful_verification: evidence_ok,
     });
 
+    let depth_compliance = Some(depth_compliance_from_disk(
+        goal_state.as_ref(),
+        rfv_loop_state.as_ref(),
+        evidence_ok,
+    ));
+
     let control_mode = classify_control_mode(
         goal_state.as_ref(),
         rfv_loop_state.as_ref(),
@@ -164,6 +256,7 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
         goal_state,
         rfv_loop_state,
         evidence,
+        depth_compliance,
         control_mode,
         resolution_notes,
     }

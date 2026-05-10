@@ -556,9 +556,91 @@ mod tests {
         assert!(rules
             .iter()
             .any(|v| v == "verification_passed_with_missing_artifact"));
+        assert!(rules.iter().any(|v| v == "claimed_passed_without_evidence"));
+        assert!(rules
+            .iter()
+            .any(|v| v == "claimed_passed_without_evidence_index_rows"));
         assert_eq!(
             payload["record_schema_version"],
             CLOSEOUT_RECORD_SCHEMA_VERSION
+        );
+    }
+
+    /// P0-B / R7: passed + nothing else recorded → block.
+    #[test]
+    fn passed_with_no_evidence_or_acknowledgement_is_blocked() {
+        let record = record_with("已完成 verification skipped", "passed");
+        let resp = evaluate_closeout_record(&record);
+        assert!(!resp.closeout_allowed, "violations: {:?}", resp.violations);
+        assert!(has_rule(&resp, "claimed_passed_without_evidence"));
+    }
+
+    /// R7 must not fire when an artifact-existence check is recorded (R4 still owns missing-artifact case).
+    #[test]
+    fn passed_with_only_artifact_check_is_allowed_by_r7() {
+        let mut record = record_with("done", "passed");
+        record.artifacts_checked.push(CloseoutArtifactRecord {
+            path: "out/release.tar.gz".to_string(),
+            exists: true,
+            ..Default::default()
+        });
+        let resp = evaluate_closeout_record(&record);
+        // R7 scope = empty {commands_run, artifacts_checked, risks, blockers}; artifact present → R7 silent.
+        assert!(!has_rule(&resp, "claimed_passed_without_evidence"));
+    }
+
+    /// R8: passed + commands_run empty + EVIDENCE rollup empty → block by context-aware path.
+    #[test]
+    fn r8_blocks_passed_when_evidence_rollup_empty() {
+        let mut record = record_with("done", "passed");
+        // Acknowledge a risk so R7 stays silent and we isolate R8.
+        record
+            .risks
+            .push("did not run verifier locally".to_string());
+        let ctx = CloseoutEvidenceContext {
+            evidence_rows_non_empty: false,
+            has_successful_verification: false,
+        };
+        let resp = evaluate_closeout_record_with_context(&record, &ctx);
+        assert!(!resp.closeout_allowed, "violations: {:?}", resp.violations);
+        assert!(has_rule(
+            &resp,
+            "claimed_passed_without_evidence_index_rows"
+        ));
+    }
+
+    /// R8 silent when EVIDENCE rollup has at least one successful row.
+    #[test]
+    fn r8_allows_passed_when_evidence_has_successful_row() {
+        let mut record = record_with("done", "passed");
+        record.risks.push(
+            "commands_run intentionally empty; relying on hook-appended evidence".to_string(),
+        );
+        let ctx = CloseoutEvidenceContext {
+            evidence_rows_non_empty: true,
+            has_successful_verification: true,
+        };
+        let resp = evaluate_closeout_record_with_context(&record, &ctx);
+        assert!(resp.closeout_allowed, "violations: {:?}", resp.violations);
+        assert!(!has_rule(
+            &resp,
+            "claimed_passed_without_evidence_index_rows"
+        ));
+    }
+
+    /// P0-F-style invariant: typo'd field rejected by deny_unknown_fields, not silently ignored.
+    #[test]
+    fn unknown_field_in_record_is_rejected_at_parse() {
+        let bad = json!({
+            "schema_version": CLOSEOUT_RECORD_SCHEMA_VERSION,
+            "task_id": "t",
+            "summary": "ok",
+            "verification_state": "passed"
+        });
+        let err = evaluate_closeout_record_value(bad).expect_err("typo must fail parse");
+        assert!(
+            err.contains("parse closeout record failed"),
+            "unexpected error: {err}"
         );
     }
 }

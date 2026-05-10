@@ -121,7 +121,7 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
     let content = read_text(&project_root().join("skills/gitx/SKILL.md"));
     for marker in [
         "name: gitx",
-        "$gitx",
+        "推荐显式入口：`/gitx`",
         "review、修复、整理、提交、合并分支、合并 worktree、推送",
         "git status --short --branch",
         "git worktree list --porcelain",

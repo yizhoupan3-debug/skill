@@ -3,7 +3,9 @@
 //! Truth source: `configs/framework/HARNESS_OPERATOR_NUDGES.json` under repo root.
 //! Disable all injected nudges: `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` (same soft-off tokens as other `ROUTER_RS_*` defaults).
 
-use crate::router_env_flags::router_rs_env_enabled_default_true;
+use crate::router_env_flags::{
+    router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
+};
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -13,8 +15,12 @@ const HARNESS_NUDGES_ENV: &str = "ROUTER_RS_HARNESS_OPERATOR_NUDGES";
 const EXPECTED_SCHEMA_VERSION: &str = "harness-operator-nudges-v1";
 
 /// Global enable for JSON-backed operator nudges. Default on; `0`/`false`/`off`/`no` disables injection.
+///
+/// P1-E: also OR-gated by `ROUTER_RS_OPERATOR_INJECT` (aggregate kill-switch). When the
+/// aggregate flag is off, nudges are disabled regardless of the per-nudge env.
 pub fn harness_operator_nudges_globally_enabled() -> bool {
-    router_rs_env_enabled_default_true(HARNESS_NUDGES_ENV)
+    router_rs_operator_inject_globally_enabled()
+        && router_rs_env_enabled_default_true(HARNESS_NUDGES_ENV)
 }
 
 #[derive(Debug, Clone, Deserialize)]

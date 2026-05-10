@@ -69,7 +69,8 @@
 1. **新宿主行为** → 先标清属于 L3 哪条管道（PostTool / Stop / refresh），再实现；禁止在 L4 bash 里复制 L3 逻辑。
 2. **新 env 开关** → 仅在 **跨用户可见噪音 / 合规** 需要时添加；优先收束到 `router_env_flags` + 文档表，**禁止**在随机模块读裸 `std::env::var`。
 3. **新验证启发式** → 必须 **可测**（单测含命令样例）；宁可 **少而准**，用 `hook-evidence-append` 补长尾。
-4. **新 operator 文案** → 默认进 **L5 文档**；注入宿主时以 **`configs/framework/HARNESS_OPERATOR_NUDGES.json`** 为真源（`router-rs` 启动时合并内置默认值）。**关闭全部此类注入**：`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`（与其它 `ROUTER_RS_*` 软关断语义一致）。Schema 说明见同目录 `HARNESS_OPERATOR_NUDGES_SCHEMA.json`。
+4. **新 operator 文案** → 默认进 **L5 文档**；注入宿主时以 **`configs/framework/HARNESS_OPERATOR_NUDGES.json`** 为真源（`router-rs` 启动时合并内置默认值）。Schema 不匹配会**回退到内置默认**（不再做部分合并）。**关闭全部此类注入**：`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`（与其它 `ROUTER_RS_*` 软关断语义一致）。Schema 说明见同目录 `HARNESS_OPERATOR_NUDGES_SCHEMA.json`。
+5. **同时关掉所有续跑/nudge** → `ROUTER_RS_OPERATOR_INJECT=0`（聚合关断；P1-E）。等价于同时设 `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` + `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` + `ROUTER_RS_RFV_LOOP_HOOK=0`，单变量更易调试。
 
 ---
 
@@ -92,3 +93,37 @@
 维护：当新增一类 hook 行为或全局开关时，**至少更新本节 §5 与 §6 表格中的一行**，避免「只有代码没有地图」。
 
 **读模型**：多账本统一只读聚合见 [`task_state_unified_resolve.md`](task_state_unified_resolve.md)（`router-rs` `task_state` / `framework task-state-resolve`；阶段 3 另见 `TASK_STATE.json` 与 `framework task-state-aggregate-sync`）。完整文档目录见 [`README.md`](README.md)。
+
+---
+
+## 8. 开关取舍矩阵（深度注入相关）
+
+每个开关「关」时影响的注入面不同；下表给出对照，避免误以为关一个等于关全部。
+
+| 环境变量 | 默认 | 关闭后影响（其余面不变） |
+|---------|------|------------------------|
+| `ROUTER_RS_OPERATOR_INJECT` | 开 | **聚合关断**：以下三类**全部**消失 |
+| `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉「推理深度」**那一句话**；续跑骨架仍在 |
+| `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | 整个 **AUTOPILOT_DRIVE** 续跑块（含其内的 nudge 句）消失 |
+| `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 整个 **RFV_LOOP_CONTINUE** 续跑块（含其内的 nudge 句）消失 |
+| `ROUTER_RS_GOAL_PROMPT_VERBOSE` | 关（默认紧凑） | 仅切换 verbose/compact 模板；与「是否注入」无关 |
+| `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` | 关 | 改写入 `additional_context` vs `followup_message` |
+| `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | 输出层整段剥离（含 nudge）|
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | 仅短路 review/delegation 门控；**续跑仍合并** |
+
+实现入口：所有开关均通过 [`router_env_flags`](../scripts/router-rs/src/router_env_flags.rs) 解析；新增分支或开关请加在该模块并在此表登记。
+
+---
+
+## 9. 推理深度跨账本校验（review P0/P1）
+
+| 信号 | 来源 | 消费方（程序化） |
+|------|------|-----------------|
+| `verify_result ∈ {PASS,FAIL,SKIPPED,UNKNOWN}` | `RFV_LOOP_STATE.rounds[]`（`append_round` 强校验枚举） | `DepthCompliance`（rolled-up counts） |
+| `evidence_refs` / `cross_check` | RFV 写入 round 时自动 cross-link `EVIDENCE_INDEX` | `DepthCompliance.rfv_pass_without_evidence_count` |
+| `claimed_passed_without_evidence` | `closeout_enforcement` R7（record 内自检） | `enforce_closeout_for_session_payload` 阻断 |
+| `claimed_passed_without_evidence_index_rows` | `closeout_enforcement` R8（context-aware；读 EVIDENCE_INDEX） | 同上 |
+| `goal_verify_or_block_seen` | `cursor_hooks::hydrate_goal_gate_from_disk`（已收紧：纯 has_goal_text 不够）| Stop AG_FOLLOWUP 决策 |
+| `depth_score ∈ {0..3}` | `task_state::DepthCompliance` | 读模型；可被 SessionStart digest / statusline 消费 |
+
+详细深度契约（语义层）见 [`reasoning-depth-contract.md`](../skills/review-fix-verify-loop/references/reasoning-depth-contract.md)。
