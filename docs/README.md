@@ -17,7 +17,8 @@
 | RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
-| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 见 [host_adapter_contract.md](host_adapter_contract.md)；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md) |
+| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 见 [host_adapter_contract.md](host_adapter_contract.md)；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md)；Harness 改进 backlog（路线图展开） [plans/harness_improvement_backlog.md](plans/harness_improvement_backlog.md) |
+| Cursor Plan / 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)（含 **CreatePlan 输出契约**）；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；短清单 [plans/plan_todo_checklist.md](plans/plan_todo_checklist.md)；草稿目录 `.cursor/plans/` |
 | Codex 宿主投影边界 | [host_adapter_contracts.md](host_adapter_contracts.md)，[.codex/README.md](../.codex/README.md) |
 | 插件 ABI / routing metadata | [runtime_plugin_contract.md](runtime_plugin_contract.md) |
 | 历史迁移、减法记录 | [history/](history/) |
