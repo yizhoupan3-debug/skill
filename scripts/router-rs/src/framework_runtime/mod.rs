@@ -12,235 +12,32 @@ use std::ops::Not;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Status values that signal the caller is claiming the task is finished.
-/// When the status matches one of these **and** programmatic closeout enforcement
-/// is active, `write_framework_session_artifacts` requires a `closeout_record`
-/// and refuses the write if evaluation fails. When enforcement is off (see
-/// `closeout_enforcement_disabled_by_env`), completion writes proceed without
-/// that gate. Non-completion statuses skip parsing `closeout_record` on this
-/// path so in-progress checkpoints are not blocked by draft records.
-const CLOSEOUT_COMPLETION_STATUSES: &[&str] = &[
-    "completed",
-    "complete",
-    "done",
-    "finished",
-    "succeeded",
-    "passed",
-];
+mod constants;
+mod repo_roots;
+mod types;
 
-pub const FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION: &str =
-    "router-rs-framework-runtime-snapshot-v1";
-pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
-    "router-rs-framework-contract-summary-v1";
-pub const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
-pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION: &str =
-    "router-rs-framework-session-artifact-write-v1";
-pub const FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION: &str =
-    "router-rs-framework-prompt-compression-v1";
-pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
-pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY: &str =
-    "rust-framework-session-artifact-writer";
-pub const FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY: &str = "rust-framework-prompt-policy";
+pub use constants::{
+    FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION,
+    FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY, FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
+    FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION,
+    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
+};
+pub use repo_roots::{is_framework_root, resolve_repo_root_arg};
+pub use types::FrameworkAliasBuildOptions;
 
-const CURRENT_ARTIFACT_DIR: &str = "current";
-const ACTIVE_TASK_POINTER_NAME: &str = "active_task.json";
-const FOCUS_TASK_POINTER_NAME: &str = "focus_task.json";
-const TASK_REGISTRY_NAME: &str = "task_registry.json";
-const SESSION_SUMMARY_FILENAME: &str = "SESSION_SUMMARY.md";
-const NEXT_ACTIONS_FILENAME: &str = "NEXT_ACTIONS.json";
-const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
-const TRACE_METADATA_FILENAME: &str = "TRACE_METADATA.json";
-const CONTINUITY_JOURNAL_FILENAME: &str = "CONTINUITY_JOURNAL.json";
-const SUPERVISOR_STATE_FILENAME: &str = ".supervisor_state.json";
-const NEXT_ACTIONS_SCHEMA_VERSION: &str = "next-actions-v2";
-const EVIDENCE_INDEX_SCHEMA_VERSION: &str = "evidence-index-v2";
-const TRACE_METADATA_SCHEMA_VERSION: &str = "trace-metadata-v2";
-const CONTINUITY_JOURNAL_SCHEMA_VERSION: &str = "continuity-journal-v1";
-const SUPERVISOR_STATE_SCHEMA_VERSION: &str = "supervisor-state-v2";
-const TASK_REGISTRY_SCHEMA_VERSION: &str = "task-registry-v1";
-const TERMINAL_STORY_STATES: &[&str] = &[
-    "completed",
-    "finalized",
-    "closed",
-    "cancelled",
-    "abandoned",
-    "failed",
-];
-const TERMINAL_PHASES: &[&str] = &[
-    "completed",
-    "finalized",
-    "closed",
-    "cancelled",
-    "abandoned",
-    "failed",
-    "done",
-];
-const TERMINAL_VERIFICATION_STATUSES: &[&str] = &[
-    "completed",
-    "passed",
-    "verified",
-    "cancelled",
-    "abandoned",
-    "failed",
-];
-const STALE_STORY_STATES: &[&str] = &["stale", "expired", "invalid"];
-
-#[derive(Debug, Clone, Copy)]
-struct ArtifactPaths<'a> {
-    summary: &'a Path,
-    next_actions: &'a Path,
-    evidence: &'a Path,
-    trace_metadata: Option<&'a Path>,
-    journal: Option<&'a Path>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ArtifactPayloads<'a> {
-    summary_text: &'a str,
-    next_actions: &'a Value,
-    evidence: &'a Value,
-    trace_metadata: &'a Value,
-    journal: Option<&'a Value>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct SupervisorStateInput<'a> {
-    task_id: &'a str,
-    task: &'a str,
-    phase: &'a str,
-    status: &'a str,
-    summary: &'a str,
-    next_actions_payload: &'a Value,
-    evidence_payload: &'a Value,
-    trace_metadata_payload: &'a Value,
-    artifact_dir: &'a Path,
-    supervisor_state: Option<&'a Value>,
-    execution_contract: Option<&'a Value>,
-    blockers: Option<&'a Value>,
-    continuity: Option<&'a Value>,
-}
-
-#[derive(Debug, Clone)]
-struct ContinuityJournalInput<'a> {
-    task_id: &'a str,
-    task: &'a str,
-    phase: &'a str,
-    status: &'a str,
-    artifact_dir: &'a Path,
-    summary_text: &'a str,
-    next_actions_payload: &'a Value,
-    evidence_payload: &'a Value,
-    trace_metadata_payload: &'a Value,
-    supervisor_state_payload: &'a Value,
-    existing_journal: Value,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct TaskRegistryEntry<'a> {
-    task_id: &'a str,
-    task: &'a str,
-    phase: &'a str,
-    status: &'a str,
-    resume_allowed: Option<bool>,
-    updated_at: &'a str,
-    focus_task_id: Option<&'a str>,
-}
-
-#[derive(Debug, Clone)]
-struct SessionArtifactWritePlan {
-    task: String,
-    phase: String,
-    status: String,
-    summary: String,
-    task_id: String,
-    focus: bool,
-    repo_root: Option<PathBuf>,
-    mirror_output_dir: Option<PathBuf>,
-    summary_path: PathBuf,
-    next_actions_path: PathBuf,
-    evidence_path: PathBuf,
-    trace_metadata_path: PathBuf,
-    journal_path: PathBuf,
-    next_actions_payload: Value,
-    evidence_payload: Value,
-    trace_metadata_payload: Value,
-    supervisor_state_payload: Value,
-    journal_payload: Value,
-    expected_active_task_hash: Option<String>,
-    expected_focus_task_hash: Option<String>,
-    expected_supervisor_state_hash: Option<String>,
-    changed_paths: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-struct FrameworkRuntimeView {
-    session_summary_text: String,
-    next_actions: Value,
-    evidence_index: Value,
-    trace_metadata: Value,
-    supervisor_state: Map<String, Value>,
-    routing_runtime_version: u64,
-    repo_root: PathBuf,
-    artifact_base: PathBuf,
-    current_root: PathBuf,
-    mirror_root: PathBuf,
-    task_root: PathBuf,
-    active_task_pointer_present: bool,
-    focus_task_pointer_present: bool,
-    task_registry_present: bool,
-    active_task_id: Option<String>,
-    focus_task_id: Option<String>,
-    control_plane_inconsistency_reasons: Vec<String>,
-    known_task_ids: Vec<String>,
-    recoverable_task_ids: Vec<String>,
-    registered_tasks: Value,
-    collected_at: String,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct FrameworkAliasBuildOptions<'a> {
-    pub max_lines: usize,
-    pub compact: bool,
-    pub host_id: Option<&'a str>,
-}
-
-impl<'a> Default for FrameworkAliasBuildOptions<'a> {
-    fn default() -> Self {
-        Self {
-            max_lines: 4,
-            compact: false,
-            host_id: None,
-        }
-    }
-}
-
-/// Skill framework 仓库根：`RUNTIME_REGISTRY` + `router-rs` 清单同时存在。
-/// 与 host 投影解析共用此判定，避免双份漂移。
-pub fn is_framework_root(path: &Path) -> bool {
-    path.join("configs/framework/RUNTIME_REGISTRY.json")
-        .is_file()
-        && path.join("scripts/router-rs/Cargo.toml").is_file()
-}
-
-/// CLI / 若干调用方常在 `scripts/router-rs/` 等子目录执行；continuity、`RUNTIME_REGISTRY`
-/// 与 `artifacts/current` 均以仓库根为真源，因此从 cwd 或传入路径向上探测 framework root。
-pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
-    let base = if let Some(path) = repo_root {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir().map_err(|err| format!("resolve current directory failed: {err}"))?
-    };
-    let normalized = base.canonicalize().unwrap_or(base);
-    if is_framework_root(&normalized) {
-        return Ok(normalized);
-    }
-    for ancestor in normalized.ancestors() {
-        if is_framework_root(ancestor) {
-            return Ok(ancestor.to_path_buf());
-        }
-    }
-    Ok(normalized)
-}
+use constants::{
+    ACTIVE_TASK_POINTER_NAME, CLOSEOUT_COMPLETION_STATUSES, CONTINUITY_JOURNAL_FILENAME,
+    CONTINUITY_JOURNAL_SCHEMA_VERSION, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
+    EVIDENCE_INDEX_SCHEMA_VERSION, FOCUS_TASK_POINTER_NAME, NEXT_ACTIONS_FILENAME,
+    NEXT_ACTIONS_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME, STALE_STORY_STATES,
+    SUPERVISOR_STATE_FILENAME, SUPERVISOR_STATE_SCHEMA_VERSION, TASK_REGISTRY_NAME,
+    TASK_REGISTRY_SCHEMA_VERSION, TERMINAL_PHASES, TERMINAL_STORY_STATES,
+    TERMINAL_VERIFICATION_STATUSES, TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
+};
+use types::{
+    ArtifactPaths, ArtifactPayloads, ContinuityJournalInput, FrameworkRuntimeView,
+    SessionArtifactWritePlan, StaleContinuityInputs, SupervisorStateInput, TaskRegistryEntry,
+};
 
 pub fn build_framework_runtime_snapshot_envelope(
     repo_root: &Path,
@@ -573,7 +370,17 @@ pub fn build_framework_refresh_payload(
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
+    let task_view = crate::task_state::resolve_task_view(repo_root, None);
+    let depth_compliance_json = task_view
+        .depth_compliance
+        .as_ref()
+        .and_then(|dc| serde_json::to_value(dc).ok())
+        .unwrap_or(Value::Null);
     let mut prompt = render_framework_refresh_prompt(&continuity, &contract, max_lines);
+    if let Some(hint) = crate::task_state::depth_compliance_refresh_hint(&task_view) {
+        prompt.push_str("\n\n");
+        prompt.push_str(&hint);
+    }
     let goal_state = crate::autopilot_goal::read_goal_state(repo_root, None)
         .ok()
         .flatten();
@@ -607,6 +414,7 @@ pub fn build_framework_refresh_payload(
         "status": continuity.get("status").cloned().unwrap_or(Value::Null),
         "prompt": prompt,
         "goal_state": goal_state.clone().unwrap_or(Value::Null),
+        "depth_compliance": depth_compliance_json,
         "debug": debug,
     }))
 }
@@ -614,9 +422,11 @@ pub fn build_framework_refresh_payload(
 /// 把 `GOAL_STATE.json` 嵌进 `framework refresh` 提示，使 `$refresh` 与 Codex SessionStart digest 可见「可执行目标」而非仅有连续性摘要。
 /// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 使用冗长 checklist（完整字段始终在 JSON `goal_state`）。
 ///
-/// P0-E + P1-D：自 v? 起，refresh / SessionStart digest 也走 `HARNESS_OPERATOR_NUDGES.json`
-/// 真源（同一 nudge 与 RFV/AUTOPILOT 续跑共用），并附带「深度自检三问」一行（verbose 完整三条；
-/// compact 单行压缩），让接力面也带上深度提醒。`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 关全部。
+/// P0-E + P1-D：refresh / SessionStart digest 的 GOAL 段落走 `HARNESS_OPERATOR_NUDGES.json`
+/// 真源（与 RFV/AUTOPILOT 续跑共用），并附带「深度自检」行（verbose 三条；compact 单行）。
+/// `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 仅去掉 JSON 配置的那句「推理深度」；**深度自检行仍在**。
+/// 另：`build_framework_refresh_payload` 在主线 `prompt` 中追加 `task_state::depth_compliance_refresh_hint`
+///（`depth_compliance` 同步写入 refresh JSON），不受该 env 影响。
 fn format_goal_state_refresh_section(repo_root: &Path, goal: &Value) -> String {
     if router_rs_goal_prompt_verbose() {
         format_goal_state_refresh_section_verbose(repo_root, goal)
@@ -760,6 +570,27 @@ fn format_goal_state_refresh_section_compact(repo_root: &Path, goal: &Value) -> 
 pub fn build_framework_statusline(repo_root: &Path) -> Result<String, String> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
+    let task_view = crate::task_state::resolve_task_view(repo_root, None);
+    let depth_status = task_view
+        .depth_compliance
+        .as_ref()
+        .and_then(|dc| {
+            let tid_ok = task_view
+                .task_id
+                .as_deref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            tid_ok.then_some(dc)
+        })
+        .map(|dc| {
+            let bang = if dc.rfv_pass_without_evidence_count > 0 {
+                "!"
+            } else {
+                ""
+            };
+            format!("depth=d{}{} | ", dc.depth_score, bang)
+        })
+        .unwrap_or_default();
     let supervisor_state = &snapshot.supervisor_state;
     let task = first_nonempty_text(&[
         continuity.get("task"),
@@ -791,7 +622,7 @@ pub fn build_framework_statusline(repo_root: &Path) -> Result<String, String> {
         .filter(|task_id| !task_id.is_empty() && **task_id != focus_task_id)
         .count();
     Ok(format!(
-        "{} | {} | {}/{} | task={} | route={} | nexts={} | blockers={} | others={} | resumable={} | git={}",
+        "{} | {} | {}/{} | task={} | route={} | nexts={} | blockers={} | others={} | resumable={} | {}git={}",
         branch,
         statusline_decision_hint(&blockers, &next_actions, &git_state, &status),
         phase,
@@ -802,6 +633,7 @@ pub fn build_framework_statusline(repo_root: &Path) -> Result<String, String> {
         blockers.len(),
         other_known_count,
         other_recoverable_count,
+        depth_status,
         git_state,
     ))
 }
@@ -1226,11 +1058,8 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": [
                     "/autopilot",
-                    "$autopilot",
                     "/autopilot-quick",
-                    "$autopilot-quick",
                     "/autopilot-deep",
-                    "$autopilot-deep",
                     "/autopilot quick",
                     "/autopilot deep"
                 ],
@@ -1291,7 +1120,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/deepinterview", "$deepinterview"],
+                "explicit_entrypoints": ["/deepinterview"],
                 "implicit_route_policy": "never"
             }
         })),
@@ -1430,7 +1259,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/team", "$team"],
+                "explicit_entrypoints": ["/team"],
                 "implicit_route_policy": "never"
             }
         })),
@@ -2609,18 +2438,6 @@ fn missing_control_plane_anchors(snapshot: &FrameworkRuntimeView) -> Vec<String>
             String::new()
         },
     ])
-}
-
-#[derive(Debug, Clone, Copy)]
-struct StaleContinuityInputs<'a> {
-    continuity: &'a Map<String, Value>,
-    story_state: &'a str,
-    task: &'a str,
-    supervisor_phase: &'a str,
-    verification_status: &'a str,
-    next_actions: &'a [String],
-    session_summary_missing: bool,
-    terminal_reasons_empty: bool,
 }
 
 fn object_field(map: &Map<String, Value>, key: &str) -> Map<String, Value> {

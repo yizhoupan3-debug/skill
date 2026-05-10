@@ -103,7 +103,7 @@
 | 环境变量 | 默认 | 关闭后影响（其余面不变） |
 |---------|------|------------------------|
 | `ROUTER_RS_OPERATOR_INJECT` | 开 | **聚合关断**：以下三类**全部**消失 |
-| `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉「推理深度」**那一句话**；续跑骨架仍在 |
+| `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉 `HARNESS_OPERATOR_NUDGES.json` 注入的「推理深度」**配置句**；RFV/AUTOPILOT 续跑骨架仍在。**不**影响：`framework refresh` 主线 `prompt` 里的 **`深度信号: dN/3`**（`depth_compliance` rollup）与 GOAL 段落内硬编码的 **深度自检** 行（见 `framework_runtime::refresh_depth_self_check_lines`） |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | 整个 **AUTOPILOT_DRIVE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 整个 **RFV_LOOP_CONTINUE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_GOAL_PROMPT_VERBOSE` | 关（默认紧凑） | 仅切换 verbose/compact 模板；与「是否注入」无关 |
@@ -124,6 +124,6 @@
 | `claimed_passed_without_evidence` | `closeout_enforcement` R7（record 内自检） | `enforce_closeout_for_session_payload` 阻断 |
 | `claimed_passed_without_evidence_index_rows` | `closeout_enforcement` R8（context-aware；读 EVIDENCE_INDEX） | 同上 |
 | `goal_verify_or_block_seen` | `cursor_hooks::hydrate_goal_gate_from_disk`（已收紧：纯 has_goal_text 不够）| Stop AG_FOLLOWUP 决策 |
-| `depth_score ∈ {0..3}` | `task_state::DepthCompliance` | 读模型；可被 SessionStart digest / statusline 消费 |
+| `depth_score ∈ {0..3}` | `task_state::DepthCompliance` | **`framework refresh` JSON 字段 `depth_compliance`**；**`prompt` 一行 `深度信号`**（经 Codex SessionStart digest）；**`framework statusline` 段 `depth=dN`**（`PASS` 无对照证据时后缀 `!`） |
 
 详细深度契约（语义层）见 [`reasoning-depth-contract.md`](../skills/review-fix-verify-loop/references/reasoning-depth-contract.md)。
