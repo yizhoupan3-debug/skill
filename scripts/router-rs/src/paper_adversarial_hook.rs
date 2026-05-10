@@ -99,8 +99,8 @@ pub(crate) fn resolve_paper_adversarial_block(repo_root: &Path) -> String {
                 return builtin_block();
             }
             // 真源已带首行 PREFIX：整段采用；若用户只写了单行标题、无正文，回退内置（避免 PREFIX 双写）。
-            if trimmed.starts_with(PREFIX_LINE) {
-                let after = trimmed[PREFIX_LINE.len()..].trim();
+            if let Some(after) = trimmed.strip_prefix(PREFIX_LINE) {
+                let after = after.trim();
                 if after.is_empty() {
                     return builtin_block();
                 }
