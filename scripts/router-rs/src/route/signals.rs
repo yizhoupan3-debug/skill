@@ -892,6 +892,17 @@ pub(crate) fn has_paper_review_judgment_context(
         "reviewer style",
         "外部调研",
         "查文献后审",
+        "科学性批评",
+        "科学批评",
+        "只要批评",
+        "只批评",
+        "只要科学",
+        "不要改稿",
+        "别改稿",
+        "只审不改",
+        "critique only",
+        "critique-only",
+        "review only",
     ]
     .iter()
     .any(|marker| {

@@ -140,7 +140,7 @@ printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"repo_root":"'
 
 多轮 **review → fix → verify** 大轮次（含外部调研并行 lane）的字段与 lane 契约见 harness 参考 [`rfv_loop_harness.md`](../docs/rfv_loop_harness.md)（**非热 skill 路由**）；用户侧对抗式渐进披露见 [`loop`](../loop/SKILL.md)。轮次账本使用 **`framework_rfv_loop`**（`RFV_LOOP_STATE.json`，与 `GOAL_STATE.json` 同任务目录）。
 
-**推理深度真源**：分工 + 可执行验证 + 可审计链的具体契约见 [`reasoning-depth-contract.md`](../docs/references/rfv-loop/reasoning-depth-contract.md)。**数理 / STEM 题**另见 [`math-reasoning-harness.md`](../docs/references/rfv-loop/math-reasoning-harness.md)（witness、双轨脚本、符号 checker；续跑句见 `HARNESS_OPERATOR_NUDGES.json` 的 `math_reasoning_harness_line`）。Autopilot 同样适用——`Validation commands` 必须给出可执行命令；声称完成前必须有 `EVIDENCE_INDEX` 成功行或显式 blocker。
+**推理深度真源**：分工 + 可执行验证 + 可审计链的具体契约见 [`reasoning-depth-contract.md`](../docs/references/rfv-loop/reasoning-depth-contract.md)。**数理 / STEM** 见 [`math-reasoning-harness.md`](../docs/references/rfv-loop/math-reasoning-harness.md)（宿主短句：`HARNESS_OPERATOR_NUDGES.json` 的 **`math_reasoning_harness_line`**）。**深度外研 / 检索** 同契约 §B：`retrieval_trace` + contradiction sweep（宿主短句：**`retrieval_trace_harness_line`**）。Autopilot 同样适用——`Validation commands` 必须给出可执行命令；声称完成前须有 `EVIDENCE_INDEX` 成功行或显式 blocker。
 
 **Codex SessionStart continuity digest**（`build_framework_continuity_digest_prompt`，与 `framework snapshot` / `contract-summary` 同源读模型）会在 **`prompt` 文本末尾拼接整段 `GOAL_STATE` 约束**、追加 `HARNESS_OPERATOR_NUDGES` 中的「推理深度」一句，并附带「**深度自检三问**」（来自 reasoning-depth-contract）——目标从「纯文件」变成 **会话注入里可直接执行的 checklist**；机器可读字段用 **`router-rs framework task-state-resolve`** 或读磁盘 `GOAL_STATE.json`。
 

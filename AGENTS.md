@@ -58,7 +58,7 @@ router-rs codex sync --repo-root "$PWD"
 - **连续性降噪（可选）**：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭 PostTool 向 `EVIDENCE_INDEX` 的追加；`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0` 关闭 Codex `Stop` 自动检查点写入。Cursor 注入跟进：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` 关闭 `GOAL_STATE` 续跑提示；`ROUTER_RS_RFV_LOOP_HOOK=0` 关闭 `RFV_LOOP_STATE` 多轮 RFV 提示。**论文强对抗审稿（可选）**：`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1`/`true`/`yes`/`on` 时，在满足启发式的用户 **`beforeSubmit`** 上合并一段 **`PAPER_ADVERSARIAL_HOOK`**（hostile / worst-case 审稿姿态 + **软逃逸禁令**：禁止仅降口径 / 堆 limitation / rebuttal-only / 代码空诺 / 数学直觉化；文案真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`，由 `include_str!` 在编译期嵌入同一份内容作为缺失文件回落）；总闸与同表其它 operator 注入一致：`ROUTER_RS_OPERATOR_INJECT=0` 时也关闭该段。Goal 在 **Codex SessionStart continuity digest**、**AUTOPILOT_DRIVE**、**RFV_LOOP_CONTINUE**、pre-goal 提示中默认**紧凑**；需要旧版长文案时设 `ROUTER_RS_GOAL_PROMPT_VERBOSE=1`（`true`/`yes`/`on` 亦可），完整字段仍以磁盘 `GOAL_STATE.json` / 账本文件为准。
 - **Cursor SessionEnd 终端回收（可选）**：默认在对话结束时仅向本会话 shell 账本登记的 Cursor terminal 发终止信号；`ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0`/`false`/`off`/`no` 关闭该步骤；若需恢复旧行为（按仓库 cwd 扫描**所有**仍 active 的集成终端）设 `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy`（或 `all`/`repo`/`repo-wide`）。
 - **完成态 closeout**：程序化门禁分层——**本地且未设置 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 且非 CI** → **软**（完成态可不附带 `closeout_record`）；**检测到 CI/GitHub Actions**，或变量 **已设置** 且 trim 后 **不是** `0`/`false`/`off`/`no`（含 **空字符串**、`1`、`true`、`yes` 等任意其它取值）→ **硬**，须提供能通过 harness 的 record。**`export ROUTER_RS_CLOSEOUT_ENFORCEMENT=`（空字符串）≠「未设置」**，通常仍走硬路径。显式关闭程序化硬门禁：`ROUTER_RS_CLOSEOUT_ENFORCEMENT=0`（`0`/`false`/`off`/`no`）。软规范仍见下文 **Closeout**。
-- **Autopilot pre-goal 防卡死（Cursor）**：`router-rs` beforeSubmit 在仍缺独立 fork pre-goal 时反复提示，`Stop` 上还会给 `router-rs AG_FOLLOWUP`。若你只走小任务又不想被缠住：**用户输入单独一行** `small_task` 即可清门。默认在 **累计 8 次**仍卡 pre-goal 后会 **自动放行**（仍会合并一行提示）；要严格不自动：`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES=0`，或改数字自定义上限。**“对话中止”体感**多来自钩子反复注入跟进 + 模型自拟仿宿主的长篇续跑——真实 hook **`continue` 一般仍为允许提交**。
+- **Autopilot pre-goal（Cursor，opt-in）**：默认关闭；需要 beforeSubmit 侧「独立 fork pre-goal」提示与计数放行时设 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1`**。若开启后仍卡：**单独一行** `small_task` 可清门；自动放行次数由 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES`** 控制（ unset 默认 **8**；设为 **`0`**/`false`/`off`/`no` 关闭自动放行）。Stop 上 goal 收口仍可能给出 **`router-rs AG_FOLLOWUP`**（与 pre-goal 注入独立）。
 
 ## Skill Routing
 
@@ -74,13 +74,13 @@ router-rs codex sync --repo-root "$PWD"
 - **真源目录**：`artifacts/current/`（SESSION_SUMMARY / NEXT_ACTIONS / EVIDENCE_INDEX / TRACE_METADATA / CONTINUITY_JOURNAL；指针 `active_task.json`，汇总 `.supervisor_state.json`）。
 - **Goal / RFV**：同一 task 下可能出现 `GOAL_STATE.json` 与 `RFV_LOOP_STATE.json`；机器可读视图优先用 `router-rs framework snapshot` / `contract-summary`。
 - **证据追加（可关）**：验证类命令会被追加到 `EVIDENCE_INDEX.json`（关：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`）。
-- **续跑注入（可关）**：AUTOPILOT/RFV 续跑提示由 Cursor/Codex hook 合并（关：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`、`ROUTER_RS_RFV_LOOP_HOOK=0`）。
+- **续跑注入（可关）**：**Stop** 等路径：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`、`ROUTER_RS_RFV_LOOP_HOOK=0`。Cursor **`beforeSubmit`** 默认**不**合并 **AUTOPILOT_DRIVE** / **RFV_LOOP_CONTINUE**；显式合并：`ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT=1`、`ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT=1`。
 - **降噪与应急**：`ROUTER_RS_CURSOR_HOOK_SILENT=1` 可压制非必要提示（但合规/硬阻塞类提示仍应可见）；完整开关矩阵与语义以 `docs/harness_architecture.md` 为准。
 
 ## Host Boundaries
 
 - `AGENTS.md` 负责跨宿主通用执行协议；Cursor hook 行为由相应宿主自己的 hook 配置定义。
-- **Cursor（`router-rs cursor hook`）机读续跑/门控短码的真源示例**：`**AG_FOLLOWUP**`（Stop 上对未满足 autopilot goal 时由宿主注入 **`router-rs AG_FOLLOWUP`** 起头的单行短码）、`**AUTOPILOT_DRIVE**`、`**RFV_LOOP_CONTINUE**`、`**CLOSEOUT_FOLLOWUP**` 等（以实际 `followup_message` / `additional_context` 为准）。**不要**在可见回复中自拟多段仿宿主的长篇机读排版；若某段看起来像 hook 却从未由宿主注入 **`router-rs …`** 起头的单行，应视为**非真源**。（已废止的双字母+FOLLOWUP 前缀与自拟「键值对式」仿真机读同样不是宿主注入。）确需清门仍只用 **单独一行**拒因 token（见 **Execution Ladder**）。
+- **Cursor（`router-rs cursor hook`）机读续跑/门控短码的真源示例**：`**AG_FOLLOWUP**`（Stop 上对未满足 autopilot goal 时由宿主注入 **`router-rs AG_FOLLOWUP`** 起头的单行短码）、`**REVIEW_GATE**`（Stop 上对未满足 review 子代理证据链时 **`router-rs REVIEW_GATE`**）、`**AUTOPILOT_DRIVE**`、`**RFV_LOOP_CONTINUE**`、`**CLOSEOUT_FOLLOWUP**` 等（以实际 `followup_message` / `additional_context` 为准）。**不要**在可见回复中自拟多段仿宿主的长篇机读排版；若某段看起来像 hook 却从未由宿主注入 **`router-rs …`** 起头的单行，应视为**非真源**。（已废止的双字母+FOLLOWUP 前缀与自拟「键值对式」仿真机读同样不是宿主注入。）确需清门仍只用 **单独一行**拒因 token（见 **Execution Ladder**）。
 - Codex 全局安装后的 skill 路由真源是 `$CODEX_HOME/skills/SKILL_ROUTING_RUNTIME.json`；仓库开发态的路由真源是 `skills/SKILL_ROUTING_RUNTIME.json`。
 - 发生「路由策略」问题先查 `skills/` runtime；发生「hook 触发/拦截」问题先查对应宿主的 hooks 配置。
 
@@ -110,7 +110,8 @@ router-rs codex sync --repo-root "$PWD"
 
 ### 宿主优先级（避免双真源）
 
-- **Cursor 工作区**：仅当工作区为 Cursor 且加载对应 alwaysApply 规则时，`.cursor/rules/execution-subagent-gate.mdc` 与 `review-subagent-gate.mdc` 可对「可分解的实现类任务」或「评审/委托类任务」设定 **默认 subagent lane**。当本条与下文「Codex 默认主线程」表述并存时，**以 Cursor 侧规则为执行面真源**。用户若明确要求不使用 subagent（例如「不要用子代理」），则豁免对应 gate。
+- **Cursor 工作区**：仅当工作区为 Cursor 且加载对应 alwaysApply 规则时，`.cursor/rules/execution-subagent-gate.mdc` 与 `review-subagent-gate.mdc` 提供执行面叙事（实现侧多为**建议**默认；**review** 侧对齐宿主 **`router-rs REVIEW_GATE`** 硬路径）。当本条与下文「Codex 默认主线程」表述并存时，**以 Cursor 侧规则为执行面真源**。用户若明确要求不使用 subagent（例如「不要用子代理」），则豁免对应 gate。
+- **Cursor hook 可执行硬点（review）**：独立上下文 subagent 证据链由 **`router-rs`** 对 **review** 类请求校验（见 `.cursor/hook-state` phase 与 Stop 单行短码）；并行实现、`/autopilot`、RFV 等不与该硬路径共用 pre-goal 子代理门槛，其它开关见 **`ROUTER_RS_*`** 与 `docs/harness_architecture.md`。
 - **Codex CLI 及未加载上述 Cursor 规则的环境**：默认由主线程本地执行；只有用户显式要求 subagent、delegation、parallel agent work、多 agent、分路、分头、并行，或显式调用 `/autopilot` / `/team` 时，才进入 bounded sidecar admission。
 
 - 主线程始终负责上下文判断、阻塞项、共享决策、集成与最终验证。

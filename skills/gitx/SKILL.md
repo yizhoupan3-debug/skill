@@ -11,10 +11,12 @@ routing_priority: P1
 session_start: n/a
 user-invocable: false
 disable-model-invocation: true
-short_description: Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.
+short_description: Run the Git closeout workflow with deep review on the substantive diff before commit/merge/push.
 trigger_hints:
   - /gitx
+  - /gitx plan
   - gitx
+  - 规划后收口
   - git 一条龙
   - review 修复 整理 提交 推送
   - 合并分支
@@ -51,9 +53,10 @@ bridge_behavior: mobile_complete_once
 
 ## When to use
 
-- 用户明确说 `/gitx` 或口语 `gitx`
+- 用户明确说 `/gitx`、`/gitx plan`（两者等价）或口语 `gitx`
 - 用户要查分支、合并分支、rebase、push、远程、worktree、stash、仓库状态这类 Git 实操
 - 用户要把 review、修复、整理、提交、合并分支、合并 worktree、推送当成一次连续动作做完
+- 「规划后收口」、multitask 的最后一环或多路执行告一段落后的 **收尾入库**：`/gitx` 默认就是这一轮——Git/worktree/stash 面先厘清，再在 **写入 commit/merge/push 前**按 **深度 review checklist** 审透拟提交 diff，然后 fix → 验证 → 提交推送
 - 当前重点是把仓库安全收口，或把 Git 问题落到真实仓库状态上处理
 
 ## Do not use
@@ -65,24 +68,36 @@ bridge_behavior: mobile_complete_once
 
 ## Default contract
 
-把 **`/gitx`** 视为用户对当前仓库发出的“安全一条龙收口”授权，默认目标是：
+把 **`/gitx`**（与 **`/gitx plan`** 等价）视为用户对当前仓库发出的“安全一条龙收口”授权；**默认在完成诊断与提交面厘清之后、执行面向收口的 commit/merge/push 之前**，必须满足下文 **深度 review checklist**（含实质性 diff、回归向量、验证记录），而非“浅扫一眼就上提交”。默认目标是：
 
 1. 先看清真实 Git 状态，而不是直接提交
-2. 先 review 再 fix
+2. 提交边界可读之后：先 **深度 review**（checklist），再 fix 与验证
 3. 先整理脏改动和 worktree，再决定怎么提交或合并分支
 4. 最后把应该推送的分支安全推上去（默认直接执行，不再二次询问）
 
 如果当前目录不是 Git 仓库，不要擅自初始化；直接说明不是仓库并停下。
 
-## 入口语义：空 `/gitx` vs 带参
+## 入口语义：`/gitx` 与 `/gitx plan`
 
-- **仅入口词、无后续说明**（行内只有 `/gitx` 或口语 `gitx`，或去掉首尾空白后不再有其它文字）：视为 **全工作区 Git 收口**——把当前仓库当作一个整体：所有已跟踪改动、暂存区、未跟踪里与本次收口相关的文件、stash、worktree 关系、当前分支与 upstream 等，按下文 **Required workflow** 一条龙处理到安全状态（整理、提交/拆分提交、merge、push 等）；**「弄干净」指有序收口而非擅自 `git clean -fd` 等破坏性清理**。
-- **入口词后面还有内容**（例如 `/gitx scripts/router-rs`、`/gitx 只处理 AGENTS.md`）：视为 **范围限定**——仍以全仓诊断命令看清全局，但 **review、修复、拆分/整理提交面、验证与最终纳入提交的 path** 只针对用户给出的范围（路径、目录、模块、分支名或一句明确议题）；**不要把明显无关路径的改动顺手塞进同一提交**，除非为消除该范围内的构建/测试失败所必需。
+- **`/gitx`** 与 **`/gitx plan`**：**同一契约**。**`plan`** 仅供习惯输入或文档对齐，**不改变**深度、顺序或可省略的步骤；可把 `/gitx plan` 记下来作为等价别名。
+- **无范围后缀**（行内仅为 `/gitx`、`/gitx plan`、或等价口语且无路径/议题文字）：视为 **全工作区 Git 收口**——把当前仓库当作一个整体：所有已跟踪改动、暂存区、未跟踪里与本次收口相关的文件、stash、worktree 关系、当前分支与 upstream 等，按下文 **Required workflow** 一条龙处理到安全状态；**「弄干净」指有序收口而非擅自 `git clean -fd` 等破坏性清理**。
+- **有范围后缀**（例如 **`/gitx scripts/router-rs`** 或 **`/gitx plan scripts/router-rs`**、或一句明确议题）：两种前缀等价；仍以全仓诊断命令看清全局，但 **深度 review、修复、拆分/整理提交面、验证与最终纳入提交的 path** 只针对用户给出的范围；**不要把明显无关路径的改动顺手塞进同一提交**，除非为消除该范围内的构建/测试失败所必需。
 
-## Review 深度（是否「先深度 review」）
+## Review 深度与宿主并行审阅
 
-- **不是**默认第一步做全仓深度代码审阅；默认顺序是：**诊断 → 提交面/范围摸底 → 对拟纳入收口的改动做务实 review**（明显 bug、回归、脏文件、生成物、遗漏测试等），再 fix 与验证。
-- 宿主若对 `/gitx` 启用并行 reviewer lane，属于执行面上的评审分路，**不改变**上述「先看清 Git 状态与范围，再审改动面」的顺序。
+- **默认**：**不是**从全仓无死角通读起手；顺序是：**诊断 → worktree/stash 与提交面厘清** → **对拟提交的 diff 做深度 review**（完整 checklist）→ fix → 验证 → 收口写入。未完成 checklist 中与本次提交面相称的条目前，不进入 **commit / merge（写历史）/ push**。
+- **`/gitx plan`** **不**再表示“更深的例外档”；与裸 `/gitx` **同档**。
+- 宿主若对 `/gitx` 启用并行 reviewer lane，属于执行面上的评审分路，**不改变**上述顺序。**Cursor**：当任务适合并行审阅时，可拆 **并行 reviewer lane**（与仓库 `.cursor/rules` 中与 **review-subagent-gate** 一致的宿主默认一致），专注于风险与 diff 阅读理解；**改仓库与同一提交临界区仍由收口主线程串行**，避免分叉式改同一文件的写入冲突。
+
+## 深度 review checklist（默认 `/gitx`；`/gitx plan` 等价）
+
+在 **staging / 拟定提交边界** 上逐项落实（范围模式则对该范围内的变更为主，跨边界依赖仍可全局扫一眼）：
+
+1. **Substantive diff**：读 **真实补丁内容**（完整的 `git diff` / `git diff --cached` 或等价），**不止** `--stat`；确认每条变更与本次议题/收口说明一致，无夹带无关文件、调试残留或误改的生成物。
+2. **回归向量**：对本仓库与改动面相称的 **`cargo test` / `clippy` / `pytest` / `npm test` 等按需跑最小充分组合**；若 touch 契约与文档策略，补上或确认已有 **`cargo test policy_contracts`（或等价 `policy_contracts` 门禁）** 等既定策略测试通过。
+3. **风险收口**：策略/契约、hook、路由、skill 等跨界改动，核对是否与 `AGENTS.md` / runtime 真源冲突；有怀疑处先 **fix** 再提交，不把「待定风险」带进 push。
+4. **验证记录**：收口说明里要带 **通过的命令摘要**（或明确 blocker）；避免「未跑测试却声称完成」。
+5. **并行审阅**：在 Cursor 上若拆 reviewer lane，约定输出为 **可操作性发现项**（问题位置 + 建议修复方向），由收口执行面合并决策与落地修改（见上文 **并行 reviewer lane**）。
 
 ## Execution tiers
 
@@ -105,9 +120,9 @@ bridge_behavior: mobile_complete_once
 3. 若发现脏改动直接堆在 `main`、存在 stash、或 worktree 头部不一致：
    - 先做手动 checkpoint：保存 `git diff`、`git diff --staged`、必要的 untracked 清单到 `artifacts/ops/`
    - 不要直接在混乱状态下提交
-4. 对待提交改动做 review：
-   - 先找明显 bug、回归、脏文件、生成物噪音、遗漏测试
-   - 需要时先修复再继续
+4. 对待提交改动做 **深度 review**（默认必做，顺序见上文 **Review 深度**）：
+   - 按 **深度 review checklist** 逐项落实后再推进 commit/push（实质性 diff / 回归向量 / 风险与验证记录）
+   - 发现问题时先修复再继续
 5. 能并行的面尽量放在收口前半段：
    - 只读审计可以并行看：status / worktree / stash / hooks / reflog
    - 验证命令可以并行跑，但提交、merge、push 必须串行
@@ -147,6 +162,8 @@ bridge_behavior: mobile_complete_once
 ## Usage
 
 ```text
-/gitx
+/gitx                               # 与 /gitx plan 等价（深度 review 默认）
+/gitx plan                           # 等价别名
 /gitx <路径、目录、分支或一句明确范围>
+/gitx plan <同上>                    # 与上一行等价
 ```

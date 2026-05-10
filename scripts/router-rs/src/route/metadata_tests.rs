@@ -1,19 +1,23 @@
 #[cfg(test)]
 mod route_metadata_tests {
-    use crate::route::aliases::framework_alias_entrypoints_from_hints;
+    use crate::route::aliases::{
+        framework_alias_entrypoints_from_hints, has_explicit_framework_alias_call,
+        has_literal_framework_alias_call,
+    };
     use crate::route::records::{
         load_records, load_records_cached_for_stdio, load_records_cached_for_stdio_resolved,
-        load_records_from_runtime,
+        load_records_from_manifest, load_records_from_runtime,
     };
     use crate::route::routing::route_task;
+    use crate::route::signals::has_paper_review_judgment_context;
+    use crate::route::text::normalize_text;
     use crate::route::types::{RawSkillRecord, SkillRecord};
     use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
     use std::sync::Arc;
     use std::thread;
-    use std::time::Duration;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn temp_route_path(label: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -416,5 +420,73 @@ mod route_metadata_tests {
         );
 
         fs::remove_dir_all(&root).expect("cleanup cache-evict root");
+    }
+
+    #[test]
+    fn paper_stack_plain_slug_counts_as_explicit_framework_alias_when_hint_has_sigil() {
+        let record = SkillRecord::from_raw(RawSkillRecord {
+            slug: "paper-reviewer".to_string(),
+            skill_path: Some("skills/paper-reviewer/SKILL.md".to_string()),
+            layer: "L2".to_string(),
+            owner: "owner".to_string(),
+            gate: "none".to_string(),
+            priority: "P2".to_string(),
+            session_start: "preferred".to_string(),
+            summary: "paper reviewer lane".to_string(),
+            short_description: String::new(),
+            when_to_use: String::new(),
+            do_not_use: String::new(),
+            tags: Vec::new(),
+            trigger_hints: vec!["$paper-reviewer".to_string(), "/paper-reviewer".to_string()],
+        });
+        assert!(!record.framework_alias_entrypoints.is_empty());
+        let query = normalize_text("用 paper-reviewer 逻辑模式看一下 claim/evidence");
+        assert!(
+            has_literal_framework_alias_call(&query, &record),
+            "expected plain slug token to satisfy literal alias call"
+        );
+        let tokens = vec![
+            "用".into(),
+            "paper-reviewer".into(),
+            "逻辑模式看一下".into(),
+            "claim/evidence".into(),
+        ];
+        assert!(
+            has_explicit_framework_alias_call(&query, &tokens, &record),
+            "expected plain slug parity for scoring gate"
+        );
+        let tight = normalize_text("用paper-reviewer审一下 claim");
+        assert!(
+            has_literal_framework_alias_call(&tight, &record),
+            "expected slug token detection without spaces around CJK adjacency"
+        );
+    }
+
+    #[test]
+    fn manuscript_critique_only_wording_triggers_paper_review_judgment_heuristic() {
+        let qt = normalize_text("只想要科学性批评不要改稿 manuscript");
+        let tokens: Vec<String> = Vec::new();
+        assert!(has_paper_review_judgment_context(&qt, &tokens));
+    }
+
+    #[test]
+    fn manifest_paper_reviewer_row_accepts_plain_slug_literal() {
+        let manifest_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
+        let records = load_records_from_manifest(&manifest_path).expect("manifest load");
+        let rec = records
+            .iter()
+            .find(|r| r.slug == "paper-reviewer")
+            .expect("paper-reviewer row");
+        assert!(
+            !rec.framework_alias_entrypoints.is_empty(),
+            "manifest row should carry framework alias entrypoints"
+        );
+        let q = normalize_text("用 paper-reviewer 逻辑模式审一下 claim evidence");
+        assert!(
+            has_literal_framework_alias_call(&q, rec),
+            "{:?}",
+            rec.framework_alias_entrypoints
+        );
     }
 }

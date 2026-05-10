@@ -35,7 +35,9 @@ pub use constants::{
 };
 pub use continuity_digest::build_framework_continuity_digest_prompt;
 pub use prompt_compression::build_framework_prompt_compression_envelope;
-pub use repo_roots::{is_framework_root, resolve_repo_root_arg};
+pub use repo_roots::{
+    framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
+};
 pub use session_artifacts::write_framework_session_artifacts;
 pub use statusline::build_framework_statusline;
 pub use types::FrameworkAliasBuildOptions;
@@ -1230,21 +1232,6 @@ pub fn try_append_post_tool_shell_evidence(
     }
     append_evidence_index_merged_row(repo_root, entry)?;
     Ok(())
-}
-
-/// 在 Codex `PostToolUse` 中追加一条验证类命令到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
-///
-/// 仅在连续性已初始化（存在 `active_task.json` 或当前根的 `SESSION_SUMMARY.md`）且命令看起来像验证
-///（如包含 `cargo test` / `pytest` 等）时写入。可通过 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭。
-pub fn try_append_codex_post_tool_evidence(repo_root: &Path, event: &Value) -> Result<(), String> {
-    try_append_post_tool_shell_evidence(repo_root, event, "codex_post_tool_verification")
-}
-
-/// Cursor `PostToolUse`：在连续性就绪时记录终端里执行的验证类命令（与 Codex 启发式一致）。
-///
-/// 典型载荷由 `cursor_hooks` 归一成含 `tool_name` / `tool_input.command` / `tool_output` 的形状后传入。
-pub fn try_append_cursor_post_tool_evidence(repo_root: &Path, event: &Value) -> Result<(), String> {
-    try_append_post_tool_shell_evidence(repo_root, event, "cursor_post_tool_verification")
 }
 
 /// Whether programmatic closeout enforcement is enabled in the current process.

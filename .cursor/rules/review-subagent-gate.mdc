@@ -1,16 +1,16 @@
 ---
-description: Require subagent lanes by default, with explicit no-subagent reasons
+description: Independent-context subagent evidence for deep / cross-module review (hard Cursor hook path)
 alwaysApply: true
 ---
 
 # Review Subagent Gate（仅 Cursor）
 
-与 `AGENTS.md` **Execution Ladder** → **宿主优先级**配对。**本文件与 `AGENTS.md` 一起构成 Cursor 执行面真源**：评审、委托、深度/跨模块 review、PR 审查、以及显式编排入口（如 `/autopilot`、`/team`、`/gitx`）等场景，默认应拆独立 reviewer / worker lanes；主线程负责集成与最终验证。
+与 `AGENTS.md` **Execution Ladder** → **宿主优先级**配对。**此处唯一「硬」叙事**：深度 / 跨模块 / PR 级 **review** 类任务在 Cursor 上应由 **`router-rs` hook** 维护独立上下文 subagent 证据链（见磁盘 `.cursor/hook-state` phase 与 Stop 上 **`router-rs REVIEW_GATE`** 单行短码）；不要在可见回复里自拟长篇仿宿主机读块。
 
-执行偏好：当评审/调研/修复/验证可并行时，默认并发拆 lane，并遵循 `AGENTS.md` 的默认并行度（通常 3-5 lanes；必要时可到 6-8），除非存在强依赖或写入范围重叠。
+其它场景（并行实现、委托启发式、`/autopilot`、RFV 续跑等）**不等同**于本条硬路径；编排与多 lane 的细节以 `AGENTS.md` 与 **`ROUTER_RS_*`** 开关为准。
 
-细则（何时必须开 lane、拒因集合、禁止向用户暴露拒因元说明、goal-style 收口要求）：以 `AGENTS.md` **Execution Ladder** 与 **Autopilot Goal Mechanism** 为准。
+细则（拒因集合、禁止向用户暴露拒因元说明、goal-style 收口要求）：以 `AGENTS.md` **Execution Ladder** 与 **Autopilot Goal Mechanism** 为准。
 
-**反模式（硬禁止）**：在可见回复里自拟整段「续跑/门控」机读块（拼装键值、拒因长文、仿内部字段等）——与宿主实际注入的 **`router-rs AG_FOLLOWUP`** 等短码不一致时应视为伪造；应输出业务结论，清门只用了 **单行** token（见 `AGENTS.md` **Host Boundaries** 与 **Execution Ladder**）。
+**反模式（硬禁止）**：在可见回复里自拟整段「续跑/门控」机读块（拼装键值、拒因长文、仿内部字段等）——与宿主实际注入的 **`router-rs REVIEW_GATE`** / **`router-rs AG_FOLLOWUP`** 等短码不一致时应视为伪造；应输出业务结论，清门只用了 **单行** token（见 `AGENTS.md` **Host Boundaries** 与 **Execution Ladder**）。
 
 **显式豁免**：用户要求避免 subagent（例如 "do not use subagent" / 「不要用子代理」）→ 本 gate 不适用。

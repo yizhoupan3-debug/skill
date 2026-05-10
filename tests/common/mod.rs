@@ -1,10 +1,94 @@
 #![allow(dead_code)]
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+
+fn pick_router_rs_under_target_dir(base: &Path) -> Option<PathBuf> {
+    for candidate in [base.join("debug/router-rs"), base.join("release/router-rs")] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// Align with `host_integration::cargo_router_rs_executable`: same `cargo metadata` target dir
+/// as the running `router-rs` uses for MCP payload generation (avoids stale `target-dir` picks).
+/// Same shape as `host_integration::cursor_mcp_server_payload` for pre-seeding `mcp.json` in
+/// tests (matches `cargo_router_rs_executable` + `which::which(\"router-rs\")` fallback).
+pub fn browser_mcp_server_payload_like_host(framework_root: &Path) -> Value {
+    let manifest = framework_root.join("scripts/router-rs/Cargo.toml");
+    let from_metadata = if manifest.is_file() {
+        let output = Command::new("cargo")
+            .current_dir(framework_root)
+            .args([
+                "metadata",
+                "--no-deps",
+                "--format-version",
+                "1",
+                "--manifest-path",
+            ])
+            .arg(&manifest)
+            .output()
+            .ok();
+        output
+            .filter(|o| o.status.success())
+            .and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok())
+            .and_then(|meta| {
+                meta.get("target_directory")
+                    .and_then(|v| v.as_str())
+                    .map(PathBuf::from)
+            })
+            .and_then(|td| pick_router_rs_under_target_dir(&td))
+    } else {
+        None
+    };
+    let exe = from_metadata.or_else(|| which::which("router-rs").ok());
+    let args = vec![
+        json!("browser"),
+        json!("mcp-stdio"),
+        json!("--repo-root"),
+        json!(framework_root.to_string_lossy()),
+    ];
+    match exe {
+        Some(path) => json!({
+            "command": path.to_string_lossy().to_string(),
+            "args": args,
+        }),
+        None => json!({
+            "command": "router-rs",
+            "args": args,
+        }),
+    }
+}
+
+fn router_rs_binary_via_cargo_metadata(repo_root: &Path) -> Option<PathBuf> {
+    let manifest = repo_root.join("scripts/router-rs/Cargo.toml");
+    if !manifest.is_file() {
+        return None;
+    }
+    let output = Command::new("cargo")
+        .current_dir(repo_root)
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(&manifest)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let meta: Value = serde_json::from_slice(&output.stdout).ok()?;
+    let td = meta.get("target_directory")?.as_str()?;
+    pick_router_rs_under_target_dir(&PathBuf::from(td))
+}
 pub fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -23,7 +107,7 @@ pub fn write_text(path: &Path, content: &str) {
 pub fn seed_framework_markers(root: &Path) {
     write_text(
         &root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_targets":{"policy":"shared-rust-core-explicit-host-projections","supported":["codex-cli","cursor"],"shared_system_source":"skills","entrypoint_files":{"codex-cli":"AGENTS.md","cursor":"AGENTS.md"}},"host_projections":{"codex-cli":{"profile_id":"codex_profile"},"cursor":{"profile_id":"cursor_profile"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_targets":{"policy":"shared-rust-core-explicit-host-projections","supported":["codex-cli","cursor"],"shared_system_source":"skills","metadata":{"codex-cli":{"install_tool":"codex","host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]}}},"host_projections":{"codex-cli":{"profile_id":"codex_profile"},"cursor":{"profile_id":"cursor_profile"}}}"#,
     );
     write_text(
         &root.join("scripts/router-rs/Cargo.toml"),
@@ -142,25 +226,25 @@ fn cargo_target_dir_from_config(root: &Path) -> Option<PathBuf> {
 
 fn resolve_router_rs_binary() -> Option<PathBuf> {
     let root = project_root();
+    // Session-local `CARGO_TARGET_DIR`: pick under that tree first when the binary exists (matches
+    // `cargo metadata` in that session).
+    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
+        if let Some(p) = pick_router_rs_under_target_dir(&PathBuf::from(td)) {
+            return Some(p);
+        }
+    }
+    // Same resolution path as `cargo_router_rs_executable` inside router-rs (stable vs MCP stubs).
+    if let Some(p) = router_rs_binary_via_cargo_metadata(&root) {
+        return Some(p);
+    }
     if let Some(base) = cargo_target_dir_from_config(&root) {
-        // Prefer debug so `cargo build` edits win over stale checked-in release slices.
-        for candidate in [base.join("debug/router-rs"), base.join("release/router-rs")] {
-            if candidate.is_file() {
-                return Some(candidate);
-            }
+        if let Some(p) = pick_router_rs_under_target_dir(&base) {
+            return Some(p);
         }
     }
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from) {
         if path.is_file() {
             return Some(path);
-        }
-    }
-    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
-        let base = PathBuf::from(td);
-        for candidate in [base.join("debug/router-rs"), base.join("release/router-rs")] {
-            if candidate.is_file() {
-                return Some(candidate);
-            }
         }
     }
     for candidate in [

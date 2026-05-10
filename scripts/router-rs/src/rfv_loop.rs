@@ -4,7 +4,7 @@ use crate::autopilot_goal::read_active_task_id;
 use crate::framework_runtime::resolve_repo_root_arg;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose,
-    router_rs_operator_inject_globally_enabled,
+    router_rs_operator_inject_globally_enabled, router_rs_rfv_external_struct_hint_enabled,
 };
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -14,12 +14,339 @@ use std::path::{Path, PathBuf};
 pub const RFV_LOOP_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
 pub const RFV_LOOP_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
 const MAX_ROUNDS_HARD_CAP: u64 = 1000;
+/// `retrieval_trace` prose fields must be at least this many **trimmed** chars under strict mode.
+pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
 /// Cursor hook：`RFV_LOOP_CONTINUE` 跟进；设为 `0`/`false`/`off`/`no` 关闭。
 const RFV_LOOP_HOOK_ENV: &str = "ROUTER_RS_RFV_LOOP_HOOK";
 
 /// Allowed `verify_result` enum (uppercase); see `reasoning-depth-contract.md`.
 /// `append_round` rejects values outside this set so PASS/FAIL is auditable, not free-form.
 pub const ALLOWED_VERIFY_RESULTS: &[&str] = &["PASS", "FAIL", "SKIPPED", "UNKNOWN"];
+
+fn nonempty_trimmed_string_at(value: &Value, ctx: &str, key: &str) -> Result<(), String> {
+    let Some(t) = value.as_str() else {
+        return Err(format!("{ctx}: `{key}` must be string"));
+    };
+    if t.trim().is_empty() {
+        return Err(format!("{ctx}: `{key}` must be non-empty"));
+    }
+    Ok(())
+}
+
+fn validate_nonempty_string_items(arr: &[Value], ctx: &str, arr_name: &str) -> Result<(), String> {
+    if arr.is_empty() {
+        return Err(format!("{ctx}: `{arr_name}` must be non-empty"));
+    }
+    for (idx, elem) in arr.iter().enumerate() {
+        let label = format!("{ctx}.{arr_name}[{idx}]");
+        nonempty_trimmed_string_at(elem, &label, "item")?;
+    }
+    Ok(())
+}
+
+/// Heuristic: source string looks like a machine-checkable external pointer (URL, DOI, arXiv, …).
+pub fn source_traceable_heuristic(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let lower = t.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return true;
+    }
+    if lower.starts_with("doi:10.") {
+        return true;
+    }
+    if lower.starts_with("10.") && lower.contains('/') {
+        return true;
+    }
+    for prefix in ["arxiv:", "pmid:", "isbn:", "dataset:", "official_doc:"] {
+        if lower.starts_with(prefix) {
+            return true;
+        }
+    }
+    false
+}
+
+fn validate_source_list_traceable(
+    sources: &[Value],
+    ctx: &str,
+    min_len: usize,
+    err_label: &str,
+) -> Result<(), String> {
+    if sources.len() < min_len {
+        return Err(format!(
+            "external_research strict: {ctx} `{err_label}` must have at least {min_len} entries, got {}",
+            sources.len()
+        ));
+    }
+    for (j, sv) in sources.iter().enumerate() {
+        let Some(s) = sv.as_str() else {
+            return Err(format!(
+                "external_research strict: {ctx} `{err_label}[{j}]` must be string"
+            ));
+        };
+        if !source_traceable_heuristic(s) {
+            return Err(format!(
+                "external_research strict: {ctx} `{err_label}[{j}]` not traceable: {s:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Stricter checks when `RFV_LOOP_STATE.external_research_strict` is true; run only after
+/// [`validate_external_research_structured`] succeeds.
+pub fn validate_external_research_strict(v: &Value) -> Result<(), String> {
+    let obj = v
+        .as_object()
+        .ok_or_else(|| "external_research strict: root must be object".to_string())?;
+
+    let Some(unk) = obj.get("unknowns") else {
+        return Err(
+            "external_research strict: missing `unknowns` key (use [] or null)".to_string(),
+        );
+    };
+    if !unk.is_null() && !unk.is_array() {
+        return Err("external_research strict: `unknowns` must be array or null".to_string());
+    }
+
+    let claims = obj
+        .get("claims")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "external_research strict: claims must be array".to_string())?;
+    let claims_len = claims.len();
+
+    let sweep = obj
+        .get("contradiction_sweep")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "external_research strict: contradiction_sweep must be array".to_string())?;
+    let min_sweep = std::cmp::max(2, claims_len);
+    if sweep.len() < min_sweep {
+        return Err(format!(
+            "external_research strict: contradiction_sweep must have at least {min_sweep} entries, got {}",
+            sweep.len()
+        ));
+    }
+    for (i, item) in sweep.iter().enumerate() {
+        let ctx = format!("contradiction_sweep[{i}]");
+        let row = item
+            .as_object()
+            .ok_or_else(|| format!("external_research strict: {ctx} entry must be object"))?;
+        let sources = row
+            .get("sources")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("external_research strict: {ctx} sources must be array"))?;
+        validate_source_list_traceable(sources, &ctx, 1, "sources")?;
+    }
+
+    for (i, c) in claims.iter().enumerate() {
+        let ctx = format!("claims[{i}]");
+        let row = c
+            .as_object()
+            .ok_or_else(|| format!("external_research strict: {ctx} must be object"))?;
+        let sources = row
+            .get("sources")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("external_research strict: {ctx} sources must be array"))?;
+        validate_source_list_traceable(sources, &ctx, 2, "sources")?;
+    }
+
+    let trace = obj
+        .get("retrieval_trace")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "external_research strict: retrieval_trace must be object".to_string())?;
+    let queries = trace
+        .get("queries_used")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "external_research strict: queries_used must be array".to_string())?;
+    if queries.len() < 3 {
+        return Err(format!(
+            "external_research strict: queries_used must have at least 3 entries, got {}",
+            queries.len()
+        ));
+    }
+
+    for key in ["inclusion_rules", "exclusions", "exclusion_rationale"] {
+        let field = trace.get(key).and_then(Value::as_str).ok_or_else(|| {
+            format!("external_research strict: retrieval_trace `{key}` must be string")
+        })?;
+        if field.trim().len() < EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN {
+            return Err(format!(
+                "external_research strict: retrieval_trace `{key}` must be at least {} non-whitespace chars (trimmed len={})",
+                EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN,
+                field.trim().len()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn external_research_strict_from_loaded_state(obj: &Map<String, Value>) -> bool {
+    match obj.get("external_research_strict") {
+        Some(Value::Bool(b)) => *b,
+        _ => false,
+    }
+}
+
+/// Validates optional structured external research blob for `append_round`.
+/// Aligns with lane-templates **deep mode** YAML (`claims`, `contradiction_sweep`, `retrieval_trace`, optional `unknowns` / `quantitative_replays`).
+pub fn validate_external_research_structured(v: &Value) -> Result<(), String> {
+    let obj = v
+        .as_object()
+        .ok_or_else(|| "external_research must be a JSON object".to_string())?;
+
+    let claims = obj
+        .get("claims")
+        .ok_or_else(|| "external_research missing `claims`".to_string())?;
+    let claims = claims
+        .as_array()
+        .ok_or_else(|| "external_research.claims must be array".to_string())?;
+    if claims.is_empty() {
+        return Err("external_research.claims must be non-empty".to_string());
+    }
+    for (i, c) in claims.iter().enumerate() {
+        let ctx = format!("external_research.claims[{i}]");
+        let row = c
+            .as_object()
+            .ok_or_else(|| format!("{ctx}: claim entry must be object"))?;
+        let claim_v = row
+            .get("claim")
+            .ok_or_else(|| format!("{ctx}: missing `claim`"))?;
+        nonempty_trimmed_string_at(claim_v, &ctx, "claim")?;
+        let sources = row
+            .get("sources")
+            .ok_or_else(|| format!("{ctx}: missing `sources`"))?;
+        let sources = sources
+            .as_array()
+            .ok_or_else(|| format!("{ctx}: sources must be array"))?;
+        validate_nonempty_string_items(sources, &ctx, "sources")?;
+    }
+
+    let sweep_key = obj
+        .get("contradiction_sweep")
+        .ok_or_else(|| "external_research missing `contradiction_sweep`".to_string())?;
+    let sweep = sweep_key
+        .as_array()
+        .ok_or_else(|| "external_research.contradiction_sweep must be array".to_string())?;
+    if sweep.is_empty() {
+        return Err("external_research.contradiction_sweep must be non-empty".to_string());
+    }
+    for (i, item) in sweep.iter().enumerate() {
+        let ctx = format!("external_research.contradiction_sweep[{i}]");
+        let row = item
+            .as_object()
+            .ok_or_else(|| format!("{ctx}: entry must be object"))?;
+        let rk = row
+            .get("related_claim_or_topic")
+            .ok_or_else(|| format!("{ctx}: missing `related_claim_or_topic`"))?;
+        nonempty_trimmed_string_at(rk, &ctx, "related_claim_or_topic")?;
+        let contradict = row
+            .get("contradicting_or_limiting_evidence")
+            .ok_or_else(|| format!("{ctx}: missing `contradicting_or_limiting_evidence`"))?;
+        nonempty_trimmed_string_at(contradict, &ctx, "contradicting_or_limiting_evidence")?;
+        let sources = row
+            .get("sources")
+            .ok_or_else(|| format!("{ctx}: missing `sources`"))?;
+        let sources = sources
+            .as_array()
+            .ok_or_else(|| format!("{ctx}: sources must be array"))?;
+        validate_nonempty_string_items(sources, &ctx, "sources")?;
+    }
+
+    if let Some(u) = obj.get("unknowns") {
+        if u.is_null() {
+            // skip unknowns
+        } else {
+            let arr = u
+                .as_array()
+                .ok_or_else(|| "external_research.unknowns must be array or null".to_string())?;
+            for (i, rowv) in arr.iter().enumerate() {
+                let ctx = format!("external_research.unknowns[{i}]");
+                let row = rowv
+                    .as_object()
+                    .ok_or_else(|| format!("{ctx}: entry must be object"))?;
+                let q = row
+                    .get("question")
+                    .ok_or_else(|| format!("{ctx}: missing `question`"))?;
+                nonempty_trimmed_string_at(q, &ctx, "question")?;
+                let why = row
+                    .get("why_insufficient")
+                    .ok_or_else(|| format!("{ctx}: missing `why_insufficient`"))?;
+                nonempty_trimmed_string_at(why, &ctx, "why_insufficient")?;
+            }
+        }
+    }
+
+    if let Some(qr) = obj.get("quantitative_replays") {
+        if qr.is_null()
+            || (qr
+                .as_str()
+                .is_some_and(|s| s.trim().eq_ignore_ascii_case("none")))
+        {
+            // optional / explicit N/A sentinel
+        } else if let Some(entries) = qr.as_array() {
+            for (i, rowv) in entries.iter().enumerate() {
+                let ctx = format!("external_research.quantitative_replays[{i}]");
+                let row = rowv
+                    .as_object()
+                    .ok_or_else(|| format!("{ctx}: entry must be object"))?;
+                for key in [
+                    "dataset_or_source_id",
+                    "version_or_snapshot",
+                    "window",
+                    "replay_command",
+                ] {
+                    let f = row
+                        .get(key)
+                        .ok_or_else(|| format!("{ctx}: missing `{key}`"))?;
+                    nonempty_trimmed_string_at(f, &ctx, key)?;
+                }
+            }
+        } else {
+            return Err(
+                "external_research.quantitative_replays must be array, null, \"none\", or absent"
+                    .to_string(),
+            );
+        }
+    }
+
+    let trace = obj
+        .get("retrieval_trace")
+        .ok_or_else(|| "external_research missing `retrieval_trace`".to_string())?;
+    let tr = trace
+        .as_object()
+        .ok_or_else(|| "external_research.retrieval_trace must be object".to_string())?;
+    let queries = tr
+        .get("queries_used")
+        .ok_or_else(|| "retrieval_trace missing `queries_used`".to_string())?;
+    let queries = queries
+        .as_array()
+        .ok_or_else(|| "retrieval_trace.queries_used must be array".to_string())?;
+    validate_nonempty_string_items(queries, "external_research.retrieval_trace", "queries_used")?;
+    for key in ["inclusion_rules", "exclusions", "exclusion_rationale"] {
+        let field = tr
+            .get(key)
+            .ok_or_else(|| format!("retrieval_trace missing `{key}`"))?;
+        nonempty_trimmed_string_at(field, "external_research.retrieval_trace", key)?;
+    }
+
+    Ok(())
+}
+
+fn last_round_missing_external_structured_research(state: &Value) -> bool {
+    let Some(rounds) = state.get("rounds").and_then(Value::as_array) else {
+        return false;
+    };
+    let Some(last) = rounds.last() else {
+        return false;
+    };
+    match last.get("external_research") {
+        None | Some(Value::Null) => true,
+        Some(v) => !v.is_object(),
+    }
+}
 
 fn normalize_verify_result(raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
@@ -349,6 +676,14 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 .get("parallel_external_with_review")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
+            let prefer_structured_external = payload
+                .get("prefer_structured_external_research")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let external_research_strict = payload
+                .get("external_research_strict")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
 
             let mut obj = Map::new();
             obj.insert("schema_version".to_string(), json!(RFV_LOOP_SCHEMA_VERSION));
@@ -360,6 +695,14 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             obj.insert(
                 "parallel_external_with_review".to_string(),
                 json!(parallel_external),
+            );
+            obj.insert(
+                "prefer_structured_external_research".to_string(),
+                json!(prefer_structured_external),
+            );
+            obj.insert(
+                "external_research_strict".to_string(),
+                json!(external_research_strict),
             );
             obj.insert(
                 "review_scope".to_string(),
@@ -479,6 +822,16 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             let adversarial_findings = value_array_or_empty(&payload, "adversarial_findings")?;
             let falsification_tests = value_array_or_empty(&payload, "falsification_tests")?;
 
+            let external_research_strict = external_research_strict_from_loaded_state(obj);
+            if let Some(er) = payload.get("external_research") {
+                if !er.is_null() {
+                    validate_external_research_structured(er)?;
+                    if external_research_strict {
+                        validate_external_research_strict(er)?;
+                    }
+                }
+            }
+
             // Cross-link this round's verify claim against EVIDENCE_INDEX successful rows
             // recorded since the previous round (audit trail; not a hard block — supervisor
             // still owns the call, but the discrepancy lands in `cross_check`).
@@ -515,6 +868,11 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             }
             if let Some(label) = cross_check_label {
                 entry_map.insert("cross_check".to_string(), json!(label));
+            }
+            if let Some(er) = payload.get("external_research") {
+                if !er.is_null() {
+                    entry_map.insert("external_research".to_string(), er.clone());
+                }
             }
             let entry = Value::Object(entry_map);
 
@@ -564,6 +922,34 @@ fn rfv_loop_requests_continuation(state: &Value) -> bool {
         .and_then(Value::as_str)
         .map(|s| s.eq_ignore_ascii_case("active"))
         .unwrap_or(false)
+}
+
+fn append_rfv_external_struct_hint_if_applicable(
+    lines: &mut Vec<String>,
+    state: &Value,
+    nudges: &crate::harness_operator_nudges::ResolvedHarnessNudges,
+) {
+    if !router_rs_rfv_external_struct_hint_enabled() {
+        return;
+    }
+    if !crate::harness_operator_nudges::harness_operator_nudges_globally_enabled() {
+        return;
+    }
+    if !state
+        .get("prefer_structured_external_research")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || !state
+            .get("allow_external_research")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    {
+        return;
+    }
+    if !last_round_missing_external_structured_research(state) {
+        return;
+    }
+    crate::harness_operator_nudges::push_rfv_external_struct_hint_line(lines, nudges);
 }
 
 fn rfv_followup_compact_line(text: &str, max_chars: usize) -> String {
@@ -628,6 +1014,8 @@ pub fn build_rfv_loop_followup_message_from_state(
             lines.push(nudges.rfv_loop_continue_reasoning_depth.clone());
         }
         crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
+        crate::harness_operator_nudges::push_retrieval_trace_line(&mut lines, &nudges);
+        append_rfv_external_struct_hint_if_applicable(&mut lines, state, &nudges);
         return Some(lines.join("\n"));
     }
     let rel = format!("artifacts/current/{task_id}/RFV_LOOP_STATE.json");
@@ -647,6 +1035,8 @@ pub fn build_rfv_loop_followup_message_from_state(
         lines.push(nudges.rfv_loop_continue_reasoning_depth.clone());
     }
     crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
+    crate::harness_operator_nudges::push_retrieval_trace_line(&mut lines, &nudges);
+    append_rfv_external_struct_hint_if_applicable(&mut lines, state, &nudges);
     Some(lines.join("\n"))
 }
 
@@ -690,6 +1080,14 @@ mod tests {
         let repo = std::env::temp_dir().join(format!("router-rs-rfv-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/rfv-task")).expect("mkdir");
+        let skill_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let nudge_src = skill_root.join("configs/framework/HARNESS_OPERATOR_NUDGES.json");
+        fs::create_dir_all(repo.join("configs/framework")).expect("nudge dir");
+        fs::copy(
+            &nudge_src,
+            repo.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+        )
+        .expect("copy harness nudges fixture");
         fs::write(
             repo.join("artifacts/current/active_task.json"),
             r#"{"task_id":"rfv-task"}"#,
@@ -734,6 +1132,7 @@ mod tests {
         }))
         .expect("status");
         let gs = st["rfv_loop_state"].as_object().expect("obj");
+        assert_eq!(gs["external_research_strict"], json!(true));
         assert_eq!(gs["current_round"], json!(1));
         assert_eq!(gs["loop_status"], json!("active"));
         let rounds = gs["rounds"].as_array().expect("rounds");
@@ -753,6 +1152,10 @@ mod tests {
         assert!(
             msg.contains("推理深度") && msg.contains("EVIDENCE_INDEX"),
             "registry nudge should append; msg={msg:?}"
+        );
+        assert!(
+            msg.contains("数理") && msg.contains("检索"),
+            "math + retrieval harness lines from repo HARNESS_OPERATOR_NUDGES.json; msg={msg:?}"
         );
 
         let prior = std::env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE").ok();
@@ -923,6 +1326,537 @@ mod tests {
         assert!(!gpath.is_file());
         assert!(crate::autopilot_goal::build_autopilot_drive_followup_message(&repo).is_none());
 
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    fn minimal_external_research_loose_only() -> Value {
+        json!({
+            "claims": [{"claim": "c1", "sources": ["https://a.example/foo"]}],
+            "contradiction_sweep": [{
+                "related_claim_or_topic": "t1",
+                "contradicting_or_limiting_evidence": "e1",
+                "sources": ["https://contradicts.example/bar"],
+            }],
+            "retrieval_trace": {
+                "queries_used": ["duckdb reproducibility"],
+                "inclusion_rules": "official docs first",
+                "exclusions": "forum posts without primary cites",
+                "exclusion_rationale": "noise",
+            }
+        })
+    }
+
+    /// Satisfies both [`validate_external_research_structured`] and [`validate_external_research_strict`].
+    fn minimal_external_research() -> Value {
+        let t40 = "0123456789012345678901234567890123456789";
+        json!({
+            "claims": [{
+                "claim": "c1",
+                "sources": [
+                    "https://a.example/foo",
+                    "doi:10.1000/182"
+                ]
+            }],
+            "contradiction_sweep": [
+                {
+                    "related_claim_or_topic": "t1",
+                    "contradicting_or_limiting_evidence": "e1",
+                    "sources": ["https://contradicts.example/bar"]
+                },
+                {
+                    "related_claim_or_topic": "t2",
+                    "contradicting_or_limiting_evidence": "e2",
+                    "sources": ["arxiv:2301.00001v1"]
+                }
+            ],
+            "unknowns": [],
+            "retrieval_trace": {
+                "queries_used": ["q1 scope literature", "q2 methods survey", "q3 risk edge cases"],
+                "inclusion_rules": t40,
+                "exclusions": t40,
+                "exclusion_rationale": t40
+            }
+        })
+    }
+
+    #[test]
+    fn source_traceable_heuristic_matrix() {
+        assert!(source_traceable_heuristic("  https://x/y "));
+        assert!(source_traceable_heuristic("HTTP://LOCALHOST/z"));
+        assert!(source_traceable_heuristic("doi:10.1000/182"));
+        assert!(source_traceable_heuristic("DOI:10.9999/zenodo.123"));
+        assert!(source_traceable_heuristic("10.5281/zenodo.12345"));
+        assert!(source_traceable_heuristic("ArXiv:2301.00001"));
+        assert!(source_traceable_heuristic("PMID:12345678"));
+        assert!(source_traceable_heuristic("ISBN:978-3-16-148410-0"));
+        assert!(source_traceable_heuristic("dataset:gov.example/series/v1"));
+        assert!(source_traceable_heuristic("official_doc:eu-reg-2024/001"));
+
+        assert!(!source_traceable_heuristic(""));
+        assert!(!source_traceable_heuristic("random blog title"));
+        assert!(!source_traceable_heuristic("ftp://files.example/a"));
+        assert!(!source_traceable_heuristic("doi:9.1234/nope"));
+        assert!(!source_traceable_heuristic("10.1234"));
+    }
+
+    #[test]
+    fn validate_external_research_strict_matrix() {
+        validate_external_research_strict(&minimal_external_research()).expect("strict minimal");
+
+        let err = validate_external_research_strict(&minimal_external_research_loose_only())
+            .expect_err("loose missing unknowns");
+        assert!(err.contains("missing `unknowns` key"), "unexpected: {err}");
+
+        let mut one_src = minimal_external_research();
+        one_src.as_object_mut().unwrap().insert(
+            "claims".to_string(),
+            json!([{"claim":"x","sources":["https://a.example/only-one"]}]),
+        );
+        let err = validate_external_research_strict(&one_src).expect_err("single-source claim");
+        assert!(err.contains("`sources` must have at least 2"), "{err}");
+
+        let mut bad_sweep = minimal_external_research();
+        bad_sweep.as_object_mut().unwrap().insert(
+            "contradiction_sweep".to_string(),
+            json!([{
+                "related_claim_or_topic":"t",
+                "contradicting_or_limiting_evidence":"e",
+                "sources":["https://x"]
+            }]),
+        );
+        let err = validate_external_research_strict(&bad_sweep).expect_err("short sweep");
+        assert!(
+            err.contains("contradiction_sweep must have at least"),
+            "{err}"
+        );
+
+        let mut q2 = minimal_external_research();
+        let tr = q2
+            .as_object_mut()
+            .unwrap()
+            .get_mut("retrieval_trace")
+            .unwrap()
+            .as_object_mut()
+            .unwrap();
+        tr.insert("queries_used".to_string(), json!(["a", "b"]));
+        let err = validate_external_research_strict(&q2).expect_err("queries");
+        assert!(err.contains("queries_used must have at least 3"), "{err}");
+
+        let mut short_trace = minimal_external_research();
+        let tr = short_trace
+            .as_object_mut()
+            .unwrap()
+            .get_mut("retrieval_trace")
+            .unwrap()
+            .as_object_mut()
+            .unwrap();
+        tr.insert("inclusion_rules".to_string(), json!("short"));
+        let err = validate_external_research_strict(&short_trace).expect_err("trace len");
+        assert!(
+            err.contains("inclusion_rules") && err.contains("at least 40"),
+            "{err}"
+        );
+
+        let mut bad_unk = minimal_external_research();
+        bad_unk
+            .as_object_mut()
+            .unwrap()
+            .insert("unknowns".to_string(), json!("nope"));
+        let err = validate_external_research_strict(&bad_unk).expect_err("unknowns type");
+        assert!(err.contains("unknowns` must be array or null"), "{err}");
+    }
+
+    #[test]
+    fn append_round_strict_rejects_without_round_write() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-er-strict-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/t-er-st")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"t-er-st"}"#,
+        )
+        .expect("active");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "t-er-st",
+            "goal": "strict ext",
+            "max_rounds": 3u64,
+        }))
+        .expect("start");
+
+        let err = framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "external_research": minimal_external_research_loose_only(),
+            "verify_result": "PASS",
+        }))
+        .expect_err("strict rejects loose blob");
+        assert!(
+            err.contains("external_research strict"),
+            "unexpected err: {err}"
+        );
+        let st = framework_rfv_loop(json!({"repo_root": rr.clone(), "operation": "status"}))
+            .expect("st");
+        assert!(st["rfv_loop_state"]["rounds"]
+            .as_array()
+            .expect("rounds")
+            .is_empty());
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "external_research": minimal_external_research(),
+            "verify_result": "PASS",
+        }))
+        .expect("strict ok append");
+
+        let st2 = framework_rfv_loop(json!({"repo_root": rr, "operation": "status"})).expect("st2");
+        assert_eq!(st2["rfv_loop_state"]["rounds"].as_array().unwrap().len(), 1);
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn append_round_legacy_missing_strict_flag_accepts_loose_blob() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-legacy-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/t-leg")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"t-leg"}"#,
+        )
+        .expect("active");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "t-leg",
+            "goal": "legacy",
+            "max_rounds": 3u64,
+        }))
+        .expect("start");
+
+        let path = rfv_loop_state_path(&repo, "t-leg");
+        let mut v: Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("parse");
+        v.as_object_mut()
+            .expect("obj")
+            .remove("external_research_strict");
+        write_atomic_json(&path, &v).expect("rewrite");
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "external_research": minimal_external_research_loose_only(),
+            "verify_result": "PASS",
+        }))
+        .expect("legacy append with loose blob");
+
+        let st = framework_rfv_loop(json!({"repo_root": rr, "operation": "status"})).expect("st");
+        assert_eq!(st["rfv_loop_state"]["rounds"].as_array().unwrap().len(), 1);
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn append_round_respects_explicit_external_research_strict_false() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-loose-flag-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/t-loose")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"t-loose"}"#,
+        )
+        .expect("active");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "t-loose",
+            "goal": "loose",
+            "max_rounds": 3u64,
+            "external_research_strict": false,
+        }))
+        .expect("start");
+
+        let st = framework_rfv_loop(json!({"repo_root": rr.clone(), "operation": "status"}))
+            .expect("st");
+        assert_eq!(
+            st["rfv_loop_state"]["external_research_strict"],
+            json!(false)
+        );
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "external_research": minimal_external_research_loose_only(),
+            "verify_result": "PASS",
+        }))
+        .expect("append loose");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn validate_external_research_struct_matrix() {
+        validate_external_research_structured(&minimal_external_research()).expect("minimal ok");
+
+        validate_external_research_structured(&json!({})).expect_err("empty root must reject");
+        validate_external_research_structured(&json!({"claims": [], "contradiction_sweep": [], "retrieval_trace": {"queries_used":[], "inclusion_rules":"a","exclusions":"b","exclusion_rationale":"c"}}))
+            .expect_err("empty arrays");
+
+        validate_external_research_structured(&json!({
+            "claims": [{"claim":"","sources":["u"]}],
+            "contradiction_sweep": [{"related_claim_or_topic":"a","contradicting_or_limiting_evidence":"b","sources":["s"]}],
+            "retrieval_trace": {"queries_used":["q"],"inclusion_rules":"i","exclusions":"x","exclusion_rationale":"r"}
+        })).expect_err("empty claim trim");
+
+        let mut with_unknown = minimal_external_research();
+        let uo = with_unknown.as_object_mut().unwrap();
+        uo.insert(
+            "unknowns".to_string(),
+            json!([
+                {"question": "pq", "why_insufficient": "no data"}
+            ]),
+        );
+        validate_external_research_structured(&with_unknown).expect("unknowns optional");
+
+        let mut qr_none = minimal_external_research();
+        qr_none
+            .as_object_mut()
+            .unwrap()
+            .insert("quantitative_replays".to_string(), json!("NONE"));
+        validate_external_research_structured(&qr_none).expect("uppercase NONE");
+
+        let mut qr_arr = minimal_external_research();
+        qr_arr.as_object_mut().unwrap().insert(
+            "quantitative_replays".to_string(),
+            json!([{
+                "dataset_or_source_id": "d",
+                "version_or_snapshot": "v",
+                "window": "2020-2025",
+                "replay_command": "python - <<'PY'\nPY",
+            }]),
+        );
+        validate_external_research_structured(&qr_arr).expect("quant array");
+    }
+
+    #[test]
+    fn append_round_rejects_bad_external_research_without_write() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-er-bad-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/t-er-bad")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"t-er-bad"}"#,
+        )
+        .expect("active");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "t-er-bad",
+            "goal": "structured ext",
+            "max_rounds": 3u64,
+        }))
+        .expect("start");
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "external_research": {"claims":[],"contradiction_sweep":[],"retrieval_trace":{}},
+            "verify_result": "PASS",
+        }))
+        .expect_err("invalid external payload");
+
+        let st = framework_rfv_loop(json!({"repo_root": rr, "operation": "status"})).expect("st");
+        let rounds = st["rfv_loop_state"]["rounds"].as_array().expect("arr");
+        assert!(rounds.is_empty(), "rounds unchanged on validation failure");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn append_round_persists_valid_external_research() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-er-good-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/t-er-good")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"t-er-good"}"#,
+        )
+        .expect("active");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "t-er-good",
+            "goal": "x",
+            "max_rounds": 3u64,
+        }))
+        .expect("start");
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "external_research": minimal_external_research(),
+            "verify_result": "PASS",
+        }))
+        .expect("append ok");
+
+        let rounds = framework_rfv_loop(json!({"repo_root": rr, "operation": "status"}))
+            .expect("st")["rfv_loop_state"]["rounds"]
+            .as_array()
+            .expect("rounds")
+            .clone();
+        assert_eq!(rounds.len(), 1);
+        let er = rounds[0]
+            .get("external_research")
+            .expect("external_research");
+        assert!(
+            validate_external_research_structured(er).is_ok(),
+            "stored blob should re-validate",
+        );
+        assert!(
+            validate_external_research_strict(er).is_ok(),
+            "stored blob should satisfy strict when task default strict",
+        );
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn rfv_prefers_structured_hint_line_when_configured_and_last_round_gap() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let prior_struct = std::env::var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT").ok();
+        std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT");
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-struct-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/hint-task")).expect("mkdir");
+        let skill_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        fs::create_dir_all(repo.join("configs/framework")).expect("nudge dir");
+        fs::copy(
+            skill_root.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+            repo.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+        )
+        .expect("copy nudges");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"hint-task"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "hint-task",
+            "goal": "web",
+            "max_rounds": 5u64,
+            "allow_external_research": true,
+            "prefer_structured_external_research": true,
+        }))
+        .expect("start");
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "verify_result": "UNKNOWN",
+            "supervisor_decision": "continue",
+        }))
+        .expect("append");
+
+        let state = read_rfv_loop_state(&repo, Some("hint-task"))
+            .expect("read")
+            .expect("state");
+        let msg = build_rfv_loop_followup_message_from_state(&repo, "hint-task", &state)
+            .expect("hook path should yield follow-up when rf active");
+        assert!(
+            msg.contains("RFV_EXTERNAL_RESEARCH.schema.json"),
+            "expected configured struct hint substring; msg={msg:?}",
+        );
+
+        std::env::set_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT", "0");
+        let msg_off = build_rfv_loop_followup_message_from_state(&repo, "hint-task", &state)
+            .expect("still followup without struct hint");
+        assert!(
+            !msg_off.contains("RFV_EXTERNAL_RESEARCH.schema.json"),
+            "struct-env off should omit schema-name line; msg={msg_off:?}",
+        );
+
+        match prior_struct {
+            Some(v) => std::env::set_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT", v),
+            None => std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT"),
+        }
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn rfv_start_writes_prefer_structured_flag() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-pref-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/pref-task")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"pref-task"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "pref-task",
+            "goal": "g",
+            "max_rounds": 2u64,
+            "prefer_structured_external_research": true,
+        }))
+        .expect("start");
+
+        let st =
+            framework_rfv_loop(json!({"repo_root": rr, "operation": "status"})).expect("status");
+        assert_eq!(
+            st["rfv_loop_state"]["prefer_structured_external_research"],
+            json!(true)
+        );
+        assert_eq!(
+            st["rfv_loop_state"]["external_research_strict"],
+            json!(true)
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 }

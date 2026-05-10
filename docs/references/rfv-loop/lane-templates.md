@@ -37,7 +37,9 @@ next_action:
 
 与 Reviewer **并行**启动（默认）。只回答与本轮 `{{RESEARCH_QUESTIONS}}` 及 `{{GOAL}}` 相关的问题；**不得**编辑仓库文件。
 
-**深度模式（默认用于「深度调研」）**：输出必须 **像 API 响应**（固定字段），不像随笔；契约详见 [`reasoning-depth-contract.md`](reasoning-depth-contract.md) 的 **提升调研深度的 harness 方向**。缺 **Contradiction sweep** 或未给出 **retrieval_trace** 时，supervisor 不应把本轮外研标为「深度调研已完成」（除非显式降级为 fast-check 并说明理由）。
+**深度模式（默认用于「深度调研」）**：输出必须 **像 API 响应**（固定字段），不像随笔；契约详见 [`reasoning-depth-contract.md`](reasoning-depth-contract.md) 的 **提升调研深度的 harness 方向**。缺 **Contradiction sweep** 或未给出 **retrieval_trace** 时，supervisor 不应把本轮外研标为「深度调研已完成」（除非显式降级为 fast-check 并说明理由）。与 `append_round` JSON 形状的字段对齐与 runbook：**[`external-research-harness.md`](external-research-harness.md)**。
+
+**默认 strict（router-rs）**：新任务 `start` 持久化 **`external_research_strict=true`**（可显式 `false`）；提交结构化 `external_research` 对象时 Rust 会叠加 **strict** 下限（双可溯源 `sources`、矛盾扫描条数、`queries_used` 条数、`retrieval_trace` 三字段篇幅、**必须含 `unknowns` 键** 且为 `[]` 或 `null`）。旧账本缺 `external_research_strict` 键时 **不** 自动加严。`sources` 推荐形态示例：`https://…`、`http://…`、`doi:10.xxxx/…` 或裸 `10.xxxx/…`、`ArXiv:…`、`PMID:…`、`isbn:…`、`dataset:…`、`official_doc:…`（前缀类匹配大小写不敏感）。
 
 **紧凑模式**（仅当 supervisor 事先声明本轮 `external_mode=compact`）：可只用 `findings_or_fixes` + `verification` 列出来源，但仍禁止无来源的断言语气。
 

@@ -14,9 +14,18 @@
       "cursor"
     ],
     "shared_system_source": "skills",
-    "entrypoint_files": {
-      "codex-cli": "AGENTS.md",
-      "cursor": "AGENTS.md"
+    "metadata": {
+      "codex-cli": {
+        "install_tool": "codex",
+        "host_entrypoints": "AGENTS.md"
+      },
+      "cursor": {
+        "install_tool": "cursor",
+        "host_entrypoints": [
+          "AGENTS.md",
+          ".cursor/rules/*.mdc"
+        ]
+      }
     }
   },
   "workspace_bootstrap_defaults": {

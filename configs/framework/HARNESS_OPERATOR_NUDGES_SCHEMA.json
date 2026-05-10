@@ -28,6 +28,14 @@
         "math_reasoning_harness_line": {
           "type": "string",
           "description": "Optional second line after reasoning-depth nudges: STEM / witness + checker reminder (RFV, AUTOPILOT, continuity digest)."
+        },
+        "retrieval_trace_harness_line": {
+          "type": "string",
+          "description": "Optional line after math nudge: auditable external research / retrieval_trace + contradiction sweep reminder (RFV, AUTOPILOT, continuity digest)."
+        },
+        "rfv_loop_external_struct_hint_line": {
+          "type": "string",
+          "description": "Optional compact line appended to RFV_LOOP_CONTINUE when structured external_research hint applies (prefer_structured + allow_external + last round missing payload). Should reference default strict floors enforced in router-rs (traceable sources, sweep/queries/trace lengths, unknowns key) and point readers to external-research-harness.md."
         }
       }
     }

@@ -122,6 +122,7 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
     for marker in [
         "name: gitx",
         "推荐显式入口：`/gitx`",
+        "/gitx plan",
         "review、修复、整理、提交、合并分支、合并 worktree、推送",
         "git status --short --branch",
         "git worktree list --porcelain",
@@ -207,6 +208,9 @@ fn rfv_harness_reference_moved_to_docs() {
     assert!(project_root().join("docs/rfv_loop_harness.md").exists());
     assert!(project_root()
         .join("docs/references/rfv-loop/reasoning-depth-contract.md")
+        .exists());
+    assert!(project_root()
+        .join("docs/references/rfv-loop/external-research-harness.md")
         .exists());
 }
 
@@ -715,6 +719,8 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "citation-management",
         "paper-workbench",
         "paper-writing",
+        "plan-mode",
+        "code-review-deep",
         "statistical-analysis",
         "experiment-reproducibility",
         "openai-docs",
@@ -742,7 +748,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     assert!(
-        slugs.len() <= 24,
+        slugs.len() <= 25,
         "hot runtime surface should stay bounded; got {}",
         slugs.len()
     );

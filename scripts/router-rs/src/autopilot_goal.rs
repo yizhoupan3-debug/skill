@@ -751,6 +751,7 @@ fn build_autopilot_drive_followup_verbose(
         lines.push(nudges.autopilot_drive_verbose_reasoning_depth.clone());
     }
     crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
+    crate::harness_operator_nudges::push_retrieval_trace_line(&mut lines, &nudges);
     lines.join("\n")
 }
 
@@ -795,6 +796,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
         lines.push(nudges.autopilot_drive_compact_reasoning_depth.clone());
     }
     crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
+    crate::harness_operator_nudges::push_retrieval_trace_line(&mut lines, &nudges);
     lines.push("Done → `framework_autopilot_goal` operation=complete.".to_string());
     Some(lines.join("\n"))
 }

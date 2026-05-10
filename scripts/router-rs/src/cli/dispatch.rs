@@ -19,7 +19,6 @@ use crate::codex_hooks::{
     build_codex_hook_projection, install_codex_cli_hooks, resolve_codex_home, run_codex_audit_hook,
     sync_host_entrypoints, InstallMode,
 };
-use crate::cursor_hooks::run_cursor_review_gate;
 use crate::eval_route::{eval_route_contract, run_eval_route};
 use crate::framework_profile::{
     build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
@@ -33,6 +32,7 @@ use crate::framework_runtime::{
 };
 use crate::hook_policy::{evaluate_hook_policy, hook_policy_contract, HookPolicyEvaluateRequest};
 use crate::host_integration::run_host_integration_from_args;
+use crate::review_gate::run_review_gate;
 use crate::route::{
     build_search_results_payload, load_records, load_records_from_manifest, search_skills,
     MatchRow, SearchResultsPayload,

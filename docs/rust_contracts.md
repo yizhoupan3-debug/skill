@@ -7,7 +7,8 @@ Historical migration notes live under `docs/history/`; this file describes only
 the current runtime truth in `router-rs` and related Rust tools.
 
 Upper-layer control-plane narrative (L1–L5, evidence/resume injection boundaries):
-[`harness_architecture.md`](harness_architecture.md). Steady-state doc index:
+[`harness_architecture.md`](harness_architecture.md). Host adapter portability (portable core, event→CLI pointers, new-host checklist):
+[`host_adapter_contract.md`](host_adapter_contract.md). Steady-state doc index:
 [`README.md`](README.md) in this directory.
 
 It is the contract source of truth for:
@@ -21,7 +22,7 @@ It is the contract source of truth for:
 
 ## Harness architecture (control plane)
 
-Upper-level layering for hooks, continuity artifacts, and evidence flows lives in [`harness_architecture.md`](harness_architecture.md) (L1–L5 model, extension rules). Operator nudge strings for RFV / Autopilot hooks are loaded from `configs/framework/HARNESS_OPERATOR_NUDGES.json` (`harness_operator_nudges`); disable with `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`. Rust contracts below remain the implementation authority.
+Upper-level layering for hooks, continuity artifacts, and evidence flows lives in [`harness_architecture.md`](harness_architecture.md) (L1–L5 model, extension rules). **Closed-set host ids** and install/sync alignment with manifests: `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` (see [`host_adapter_contract.md`](host_adapter_contract.md)). Operator nudge strings for RFV / Autopilot hooks are loaded from `configs/framework/HARNESS_OPERATOR_NUDGES.json` (`harness_operator_nudges`); disable with `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`. Rust contracts below remain the implementation authority.
 
 ## Current Boundary
 
@@ -43,7 +44,7 @@ Rust owns the default runtime and contract path.
 - Live execution and dry-run preview use Rust stdio.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, storage, and `background`.
 - Framework snapshot, contract summary, session artifact writing, hook evidence append (CLI + stdio), and prompt policy use direct `router-rs` surfaces.
-- Host entrypoint sync and native integration are Rust-owned through `router-rs`; supported host projections are `codex-cli` and `cursor`.
+- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the **closed-set supported host projections** are defined by **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (install-skills/tool spellings derive from `framework_host_targets` in router-rs); the checkout default lists `codex-cli` and `cursor`.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.
 - SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains the safe default storage.
@@ -76,7 +77,7 @@ Rust owns the default runtime and contract path.
 ## Host Projection Invariants
 
 - The shared framework core is the profile authority; host projections are closed-set and explicit.
-- Supported host projections are exactly `codex-cli` and `cursor`.
+- Supported host projections are **exactly** the ids enumerated under **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (not a hard-coded second source); the bundled registry currently lists `codex-cli` and `cursor`.
 - `codex_profile` is the Codex projection artifact and may carry Codex-private payload fields.
 - Generated host projections are disposable install targets and must remain thin bootstrap pointers to the Rust core.
 - `framework host-integration remove` removes only framework-owned projection files and manifest-recorded settings keys; user-authored files and unrelated settings are preserved.

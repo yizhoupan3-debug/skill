@@ -10,6 +10,7 @@
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | Check whether a homework or course-project submission satisfies the stated requi |
 | `autopilot` | Active | P1 | L0 | owner | none | project | Repo-native `/autopilot`：goal-style 连续执行、地平线切片、continuity 硬接力； bounded sidecar 并 |
 | `citation-management` | Active | P2 | L1 | owner | none | project | Verify and format academic citations and bibliographies. |
+| `code-review-deep` | Active | P2 | L2 | owner | none | project | Deep adversarial-style code review (review-only verdict first). Use for whole-PR |
 | `copywriting` | Active | P2 | L4 | owner | none | project | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `deepinterview` | Active | P2 | L1 | owner | none | project | Repo-native deepinterview workflow for evidence-first clarification and converge |
 | `design-md` | Active | P1 | L3 | gate | artifact | project | Manage DESIGN.md design-system contracts and visual tokens. |
@@ -21,7 +22,7 @@
 | `financial-data-fetching` | Active | P2 | L4 | owner | none | project | Fetch, validate, normalize, and export real financial market data: OHLCV, OHLCV, |
 | `gh-address-comments` | Active | P2 | L0 | gate | source | project | Address GitHub PR review comments and lightweight PR triage summaries with gh-so |
 | `gh-fix-ci` | Active | P2 | L0 | gate | source | project | Triage and fix failing GitHub Actions PR checks with gh-source-gate. |
-| `gitx` | Active | P1 | L2 | owner | none | project | Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end. |
+| `gitx` | Active | P1 | L2 | owner | none | project | Run the Git closeout workflow with deep review on the substantive diff before co |
 | `hatch-pet` | Active | P1 | L3 | owner | none | project | Create, repair, validate, preview, and package Codex-compatible animated pet spr |
 | `image-generated` | Active | P2 | L1 | owner | none | project | Generate or edit raster images through official OpenAI API using the bundled Rus |
 | `infographic` | Active | P2 | L3 | owner | none | project | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
@@ -36,6 +37,7 @@
 | `paper-workbench` | Active | P2 | L2 | owner | none | project | Unified front door for paper work. Use when the user has a manuscript-level task |
 | `paper-writing` | Active | P2 | L2 | owner | none | project | Write, restructure, or polish bounded academic-paper prose after the claim/evide |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | Handle layout-aware PDF reading, editing, repair, and review. |
+| `plan-mode` | Active | P2 | L1 | owner | none | project | Cursor Plan / 策划文档闸门 owner：先调研与 review，再产出可验收 todo 与修订闭环，最后用 `/gitx plan` 对照计划收口 |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | Create, refactor, and review code-generated scientific figures for papers using  |

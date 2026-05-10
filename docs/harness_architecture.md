@@ -79,8 +79,10 @@
 
 | 概念 | 主要落地 |
 |------|----------|
+| 宿主适配契约 | [`host_adapter_contract.md`](host_adapter_contract.md)（portable core、事件→CLI、新宿主 checklist；**闭集宿主**以 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 为准） |
+| 新宿主接入（快速路径 / 工程顺序） | [`host_adapter_contract.md`](host_adapter_contract.md) 文首 **快速路径**；工程勾选表 [§3.1](host_adapter_contract.md#31-可复制执行清单工程顺序) |
 | L4 | `.cursor/hooks.json`（每条命令直指 `router-rs cursor hook`，无 shell shim）、Codex `hooks.json` |
-| L3 | `scripts/router-rs/src/{cursor_hooks,codex_hooks,framework_runtime,rfv_loop,autopilot_goal,task_state,task_state_aggregate,task_command,task_write_lock,harness_operator_nudges}.rs` |
+| L3 | `scripts/router-rs/src/{cursor_hooks,codex_hooks,hook_common,review_gate,framework_host_targets,framework_runtime,rfv_loop,autopilot_goal,task_state,task_state_aggregate,task_command,task_write_lock,harness_operator_nudges}.rs` |
 | L2 | `artifacts/current/`、`configs/framework/*SCHEMA*` |
 | L5 | `skills/**/SKILL.md`、`docs/rfv_loop_harness.md`、`docs/references/rfv-loop/*`（含 [`math-reasoning-harness.md`](references/rfv-loop/math-reasoning-harness.md)；非热 skill 路由） |
 
@@ -91,7 +93,7 @@
 - 不在本文定义具体模型名、定价或 Cursor Auto 路由（属产品侧，易变）。
 - 不把 **closeout 硬门禁** 规则重复写全（真源仍在 `closeout_enforcement` + schema）。
 
-维护：当新增一类 hook 行为或全局开关时，**至少更新本节 §5 与 §6 表格中的一行**，避免「只有代码没有地图」。
+维护：当新增一类 hook 行为或全局开关时，**至少更新本节 §5 与 §6 表格中的一行**；若牵涉新宿主或可移植边界，同步 [`host_adapter_contract.md`](host_adapter_contract.md)，避免「只有代码没有地图」。
 
 **读模型**：多账本统一只读聚合见 [`task_state_unified_resolve.md`](task_state_unified_resolve.md)（`router-rs` `task_state` / `framework task-state-resolve`；阶段 3 另见 `TASK_STATE.json` 与 `framework task-state-aggregate-sync`）。完整文档目录见 [`README.md`](README.md)。
 
@@ -104,12 +106,15 @@
 | 环境变量 | 默认 | 关闭后影响（其余面不变） |
 |---------|------|------------------------|
 | `ROUTER_RS_OPERATOR_INJECT` | 开 | **聚合关断**：推理 nudge + AUTOPILOT_DRIVE + RFV_LOOP **及**（若启用）Cursor beforeSubmit **`PAPER_ADVERSARIAL_HOOK`** 全部消失 |
-| `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉 `HARNESS_OPERATOR_NUDGES.json` 注入的 operator 文案（含 **推理深度** 三键与可选 **`math_reasoning_harness_line`**）；RFV/AUTOPILOT 续跑骨架仍在。**不**影响：continuity digest 主线 `prompt` 里的 **`深度信号: dN/3`**（`depth_compliance` rollup）与 GOAL 段落内硬编码的 **深度自检** 行（见 `framework_runtime::continuity_digest`） |
+| `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉 `HARNESS_OPERATOR_NUDGES.json` 注入的 operator 文案（含 **推理深度** 三键与可选 **`math_reasoning_harness_line`** / **`retrieval_trace_harness_line`**）；RFV/AUTOPILOT 续跑骨架仍在。**不**影响：continuity digest 主线 `prompt` 里的 **`深度信号: dN/3`**（`depth_compliance` rollup）与 GOAL 段落内硬编码的 **深度自检** 行（见 `framework_runtime::continuity_digest`） |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | 整个 **AUTOPILOT_DRIVE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 整个 **RFV_LOOP_CONTINUE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_GOAL_PROMPT_VERBOSE` | 关（默认紧凑） | 仅切换 verbose/compact 模板；与「是否注入」无关 |
+| `ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT` | 关（**opt-in**） | 仅 Cursor **`beforeSubmit`** 合并 **AUTOPILOT_DRIVE** 续跑块（**Stop** 仍由 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK`） |
+| `ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT` | 关（**opt-in**） | 仅 Cursor **`beforeSubmit`** 合并 **RFV_LOOP_CONTINUE**（**Stop** 仍由 `ROUTER_RS_RFV_LOOP_HOOK`） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | 关（**opt-in**） | `/autopilot` **pre-goal** beforeSubmit 注入与计数放行；不影响磁盘 `GOAL_STATE` 门控 |
 | `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` | 关 | 改写入 `additional_context` vs `followup_message` |
-| `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | 输出层整段剥离（含 nudge）；**例外**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup 会**保留**，避免静默丢失硬阻塞与合规提示|
+| `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | 输出层整段剥离（含 nudge）；**例外**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup 会**保留**，避免静默丢失硬阻塞与合规提示|
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | 仅短路 review/delegation 门控；**续跑仍合并** |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | 关（**opt-in**：须显式 `1`/`true`/`yes`/`on`） | Cursor **`beforeSubmit`**：论文类用户提示合并 **`PAPER_ADVERSARIAL_HOOK`** 短段（强对抗审稿禁令摘要）；文案真源 **`configs/framework/PAPER_ADVERSARIAL_HOOK.txt`**；受 **`ROUTER_RS_OPERATOR_INJECT`** 总闸约束 |
 

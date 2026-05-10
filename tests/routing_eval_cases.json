@@ -56,6 +56,15 @@
       "first_turn": true
     },
     {
+      "id": "plan-mode-cursor-plan-verifiable-todos-case",
+      "category": "should-trigger",
+      "task": "用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。",
+      "focus_skill": "plan-mode",
+      "expected_owner": "plan-mode",
+      "expected_overlay": null,
+      "first_turn": true
+    },
+    {
       "id": "native-runtime-planning-does-not-force-skill",
       "category": "should-not-trigger",
       "task": "根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。",

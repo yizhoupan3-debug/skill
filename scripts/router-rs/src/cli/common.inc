@@ -112,6 +112,9 @@ pub(crate) fn route_task_with_manifest_fallback(
     if full_records.len() <= runtime_records.len() {
         return Ok(hot_decision);
     }
+    if let Some(decision) = literal_framework_alias_decision(&full_records, query, session_id) {
+        return Ok(decision);
+    }
     let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
     if should_accept_manifest_fallback(
         &hot_decision,

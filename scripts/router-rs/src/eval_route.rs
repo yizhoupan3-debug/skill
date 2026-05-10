@@ -8,11 +8,11 @@ pub const EVAL_ROUTE_REPORT_SCHEMA_VERSION: &str = "routing-eval-report-v1";
 pub const EVAL_ROUTE_AUTHORITY: &str = "rust-eval-route";
 
 #[derive(Debug, Clone, Deserialize, Default)]
-#[allow(dead_code)]
 pub struct EvalCasePayload {
     #[serde(default)]
     pub id: String,
     #[serde(default)]
+    #[allow(dead_code)] // Fixture metadata; evaluator does not branch on category.
     pub category: String,
     pub task: String,
     #[serde(default)]
@@ -24,13 +24,14 @@ pub struct EvalCasePayload {
     #[serde(default)]
     pub forbidden_owners: Vec<String>,
     #[serde(default)]
+    #[allow(dead_code)] // Optional human notes in eval JSON fixtures.
     pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct EvalCasesPayload {
     #[serde(default)]
+    #[allow(dead_code)] // Parsed for forwards compatibility; callers use `cases`.
     pub schema_version: String,
     #[serde(default)]
     pub cases: Vec<EvalCasePayload>,

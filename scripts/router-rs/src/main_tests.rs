@@ -945,8 +945,12 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         "session_id": "sess-post-tool-1",
         "tool_output": { "exit_code": 0 },
     });
-    crate::framework_runtime::try_append_codex_post_tool_evidence(&repo_root, &event)
-        .expect("append");
+    crate::framework_runtime::try_append_post_tool_shell_evidence(
+        &repo_root,
+        &event,
+        "codex_post_tool_verification",
+    )
+    .expect("append");
 
     let evidence_path = repo_root
         .join("artifacts/current/evidence-task")
@@ -990,8 +994,12 @@ fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         "session_id": "sess-cursor-post-tool-1",
         "tool_output": { "exit_code": 0 },
     });
-    crate::framework_runtime::try_append_cursor_post_tool_evidence(&repo_root, &event)
-        .expect("append");
+    crate::framework_runtime::try_append_post_tool_shell_evidence(
+        &repo_root,
+        &event,
+        "cursor_post_tool_verification",
+    )
+    .expect("append");
 
     let evidence_path = repo_root
         .join("artifacts/current/cursor-evidence-task")
@@ -1107,8 +1115,12 @@ fn post_tool_evidence_no_ops_without_continuity_seed() {
         "tool_name": "Bash",
         "tool_input": { "command": "cargo test" },
     });
-    crate::framework_runtime::try_append_codex_post_tool_evidence(&repo_root, &event)
-        .expect("noop");
+    crate::framework_runtime::try_append_post_tool_shell_evidence(
+        &repo_root,
+        &event,
+        "codex_post_tool_verification",
+    )
+    .expect("noop");
     assert!(
         !repo_root
             .join("artifacts/current/EVIDENCE_INDEX.json")
@@ -2196,6 +2208,17 @@ fn stdio_framework_rfv_loop_roundtrip() {
     let path = repo_root.join("artifacts/current/rfv-stdio-task/RFV_LOOP_STATE.json");
     assert!(path.is_file(), "missing {}", path.display());
 
+    assert_eq!(
+        body["rfv_loop_state"]["prefer_structured_external_research"],
+        json!(false),
+        "prefer_structured defaults false in persisted RFV state"
+    );
+    assert_eq!(
+        body["rfv_loop_state"]["external_research_strict"],
+        json!(true),
+        "external_research_strict defaults true in persisted RFV state"
+    );
+
     let _ = fs::remove_dir_all(&repo_root);
 }
 
@@ -2662,6 +2685,52 @@ fn routing_eval_report_matches_expected_baseline() {
 }
 
 #[test]
+fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
+    let runtime_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
+    let manifest_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
+    let records =
+        load_records(Some(&runtime_path), None).expect("hot runtime without manifest patch");
+
+    let decision = route_task_with_manifest_fallback(
+        &records,
+        Some(&runtime_path),
+        Some(&manifest_path),
+        "用 paper-reviewer 逻辑模式审一下 claim evidence",
+        "paper-reviewer-token-case",
+        true,
+        true,
+    )
+    .expect("route with manifest fallback");
+
+    assert_eq!(decision.selected_skill, "paper-reviewer");
+    assert!(
+        decision.score >= 95.0,
+        "literal framework alias routing should outweigh paper-workbench heuristics: {:?}",
+        decision.reasons,
+    );
+
+    let critique_only = route_task_with_manifest_fallback(
+        &records,
+        Some(&runtime_path),
+        Some(&manifest_path),
+        "只想要科学性批评不要改稿 manuscript",
+        "paper-critique-only-case",
+        true,
+        true,
+    )
+    .expect("route critique-only query");
+
+    assert_eq!(critique_only.selected_skill, "paper-workbench");
+    assert!(
+        critique_only.score > 14.0,
+        "critique-only manuscript wording should activate paper stack: {:?}",
+        critique_only.reasons,
+    );
+}
+
+#[test]
 fn routing_eval_runtime_fallback_matches_expected_baseline() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
@@ -2936,20 +3005,31 @@ fn framework_command_aliases_require_literal_entrypoints() {
         );
     }
 
-    for query in ["make a plan", "write a small helper function"] {
-        let decision = route_task_with_manifest_fallback(
-            &records,
-            Some(&runtime_path),
-            None,
-            query,
-            &format!("native-runtime-{query}"),
-            true,
-            true,
-        )
-        .unwrap_or_else(|err| panic!("route native runtime case {query}: {err}"));
-        assert_eq!(decision.selected_skill, "none");
-        assert_eq!(decision.overlay_skill, None);
-    }
+    let helper_fn = route_task_with_manifest_fallback(
+        &records,
+        Some(&runtime_path),
+        None,
+        "write a small helper function",
+        "native-runtime-helper-fn",
+        true,
+        true,
+    )
+    .unwrap_or_else(|err| panic!("route native runtime helper case: {err}"));
+    assert_eq!(helper_fn.selected_skill, "none");
+    assert_eq!(helper_fn.overlay_skill, None);
+
+    let plan_query = route_task_with_manifest_fallback(
+        &records,
+        Some(&runtime_path),
+        None,
+        "make a plan",
+        "native-runtime-make-a-plan",
+        true,
+        true,
+    )
+    .unwrap_or_else(|err| panic!("route native runtime plan phrase: {err}"));
+    assert_eq!(plan_query.selected_skill, "plan-mode");
+    assert_eq!(plan_query.overlay_skill, None);
 }
 
 #[test]
