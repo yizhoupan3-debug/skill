@@ -58,6 +58,9 @@ trigger_hints:
   - 外部调研 paper review
   - 允许外部调研
   - 查文献后审 paper
+  - 外研必填检索轨迹
+  - closest-work 偷袭预演
+  - contradiction sweep 外研
   - review with external research
   - 根据 reviewer comments 修改
   - 根据 reviewer comments 改论文
@@ -97,7 +100,7 @@ trigger_hints:
   - 不要生造概念
   - 论文用语长期规范
 metadata:
-  version: "1.11.0"
+  version: "1.11.1"
   platforms: [codex, cursor]
   tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
@@ -125,6 +128,8 @@ This skill is the one front door for paper work.
 一切审阅、返修、预判「能不能投」「顶刊是否能过」时，**不按友好读者模型**，而按**敌意审稿人 / 最坏合理解读（hostile but fair）**：专盯 **claim–evidence 缝、closest-work、复现与代码—正文对齐、推导跳步、统计与比较的公平性**。软球结论、只给情绪价值、或暗示「应该能过」而无逐条可关闭证据，视为**未执行本 skill**。
 
 与本立场冲突的捷径（降口径逃难、rebuttal-only、代码空诺、数学直觉化、`surgical` 全局乱改等）一律以 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 为硬闸。
+
+启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`$paper-reviewer`** 的 External lane shape 约定。
 
 **Cursor 宿主（可选）**：在 shell/IDE 环境设 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` 时，`router-rs` 可在 **`beforeSubmit`** 合并短段 **`PAPER_ADVERSARIAL_HOOK`**（真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），与本 skill 同向加压；受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。见根 `AGENTS.md` 与 `docs/harness_architecture.md`。
 

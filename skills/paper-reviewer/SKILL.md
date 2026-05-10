@@ -37,6 +37,8 @@ trigger_hints:
   - top journal review
   - 外部调研严审
   - 查文献后审
+  - 外研必填检索轨迹
+  - closest-work 偷袭预演
   - reviewer-style critique
   - 只做整篇严审不改稿
   - 只做投稿判断
@@ -52,8 +54,12 @@ trigger_hints:
   - 只审语言
   - 最严厉审稿
   - strict reviewer
+  - 外研必填检索轨迹
+  - contradiction sweep paper
+  - closest-work 偷袭预演
+  - retrieval trace paper review
 metadata:
-  version: "4.5.0"
+  version: "4.5.1"
   platforms: [codex]
   tags: [paper, manuscript, review, reviewer, submission, gate-chain, top-journal]
 framework_roles:
@@ -203,6 +209,19 @@ as internal machinery, not as the main user interface.
 External research is allowed by default for review calibration when network
 access is available.
 
+**Reasoning-depth contract (external lane)** — when network / corpus work is in
+play, align with
+[`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md)
+**§A–B** before treating the round as “done”:
+
+- [ ] **Claims**: each material claim is falsifiable and tied to a traceable
+  source (URL / DOI / section / dataset id + version).
+- [ ] **Contradiction sweep**: explicit counter-evidence or scope limits for the
+  strongest claims—**not** optional for “deep” external calibration.
+- [ ] **Unknowns**: named gaps—not generic uncertainty prose.
+- [ ] **retrieval trace**: queries (or equivalent), inclusion filters, deliberate
+  exclusions, and why; reproducible—not “reads authoritative”.
+
 Use it for:
 
 - target venue scope, article type, page / disclosure / artifact expectations
@@ -221,6 +240,13 @@ Do not use it to:
 Prefer official venue pages, publisher reviewer guidance, DOI/proceedings pages,
 PubMed/PMC where relevant, arXiv only when the field moves fast, and scholarly
 discovery indexes for expansion.
+
+### External lane shape (audit depth, parallel with reviewer lens)
+
+Whenever you call network tools for calibration, outputs must resemble the **API-shaped** lane contract in
+[`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B (`Claims`, **Contradiction sweep**, **Unknowns**) plus **retrieval_trace**: queries or paths used, filtering/exclusion rationale, stale hits rejected.
+
+Narrative lit review alone is insufficient if the task was framed as adversarial readiness or “deep external research.”
 
 ## Review workflow
 
