@@ -320,8 +320,10 @@ pub fn closeout_enforcement_contract() -> Value {
 /// with empty `commands_run` AND zero successful EVIDENCE_INDEX rows is blocked even when
 /// `artifacts_checked` is non-empty (artifact existence ≠ executable verification).
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct CloseoutEvidenceContext {
     /// Whether the task's `EVIDENCE_INDEX.json` `artifacts` array is non-empty.
+    /// (Reserved: future R-rules may want to flag "rows present but none successful".)
     pub evidence_rows_non_empty: bool,
     /// Whether the task's `EVIDENCE_INDEX.json` has at least one row with
     /// `success==true` or `exit_code==0`.

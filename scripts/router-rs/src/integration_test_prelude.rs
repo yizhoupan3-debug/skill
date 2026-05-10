@@ -1,4 +1,5 @@
 //! Re-exports for `main_tests` (crate root stays intentionally thin after CLI split).
+#![allow(unused_imports)]
 
 pub(crate) use serde_json::{json, Map, Value};
 pub(crate) use std::collections::HashSet;
@@ -14,13 +15,12 @@ pub(crate) use crate::cli::runtime_ops::{
     build_live_execute_response, build_runtime_control_plane_payload, build_runtime_metric_record,
     build_runtime_observability_exporter_descriptor, build_runtime_observability_health_snapshot,
     build_runtime_observability_metric_catalog_payload, build_sandbox_control_response,
-    copy_text_to_clipboard, dispatch_stdio_json_request, execute_request,
-    extract_chat_completion_content, inspect_trace_stream, live_execute_http_client,
-    normalize_chat_completions_endpoint, perform_live_execute_with_sender, replay_trace_stream,
-    runtime_observability_dashboard_schema, sha256_hex, subscribe_attached_runtime_events,
-    validate_live_execute_aggregator_base_url, write_text_payload, write_trace_compaction_delta,
-    write_trace_metadata, DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS,
-    EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
+    copy_text_to_clipboard, execute_request, extract_chat_completion_content, inspect_trace_stream,
+    live_execute_http_client, normalize_chat_completions_endpoint,
+    perform_live_execute_with_sender, replay_trace_stream, runtime_observability_dashboard_schema,
+    sha256_hex, subscribe_attached_runtime_events, validate_live_execute_aggregator_base_url,
+    write_text_payload, write_trace_compaction_delta, write_trace_metadata,
+    DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
 };
 pub(crate) use crate::execution_contract::{
     build_execution_kernel_contracts_by_mode, build_execution_kernel_metadata_contract,
