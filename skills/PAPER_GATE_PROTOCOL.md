@@ -28,6 +28,20 @@ Default external response should stay compact:
 3. decisive evidence gaps
 4. next revision move
 
+## Edit scope gate (surgical vs refactor)
+
+Manuscript edits from `$paper-workbench`, `$paper-writing`, and `$paper-reviser`
+must respect **`edit_scope`** so localized polish is not collapsed into
+whole-paper refactoring. Canonical contract:
+[`paper-workbench/references/edit-scope-gate.md`](paper-workbench/references/edit-scope-gate.md).
+
+- **`surgical`**: bounded slices only; `lane_scope` is the disk-backed form of
+  this gate.
+- **`refactor`**: explicit user opt-in or strong refactor signals; allows
+  cross-section restructuring under `$paper-reviser` honesty rules.
+- **`refactor`** 常拆成**多个** `lane_scope` 批次；各批次仍用 `lanes/` 侧车，主链串行
+  合并，语义见 `edit-scope-gate.md` 末段。
+
 ## 1. Root Artifact Layout
 
 All runtime artifacts live in the manuscript workspace root, not in the

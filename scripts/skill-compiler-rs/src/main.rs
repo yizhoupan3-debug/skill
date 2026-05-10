@@ -977,15 +977,15 @@ fn build_runtime_index(
         .iter()
         .map(|skill| {
             json!([
-                string_at(&skill, 0),
-                string_at(&skill, 1),
-                string_at(&skill, 2),
-                string_at(&skill, 3),
-                string_at(&skill, 6),
-                summarize_text(&string_at(&skill, 5), 96),
-                value_at(&skill, 7),
-                string_at(&skill, 4),
-                string_at(&skill, 10),
+                string_at(skill, 0),
+                string_at(skill, 1),
+                string_at(skill, 2),
+                string_at(skill, 3),
+                string_at(skill, 6),
+                summarize_text(&string_at(skill, 5), 96),
+                value_at(skill, 7),
+                string_at(skill, 4),
+                string_at(skill, 10),
             ])
         })
         .collect::<Vec<_>>();
@@ -1039,8 +1039,8 @@ fn runtime_named_records(
                 "trigger_hints": value_at(row, 6),
                 "priority": string_at(row, 7),
                 "skill_path": string_at(row, 8),
-                "plugin": plugin_catalog.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or_else(|| Value::Null),
-                "routing_metadata": routing_metadata.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or_else(|| Value::Null)
+                "plugin": plugin_catalog.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or(Value::Null),
+                "routing_metadata": routing_metadata.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or(Value::Null)
             })
         })
         .collect()

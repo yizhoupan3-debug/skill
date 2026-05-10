@@ -1,4 +1,8 @@
-use crate::closeout_enforcement::evaluate_closeout_record_value;
+use crate::closeout_enforcement::{
+    evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
+    CloseoutEvidenceContext,
+};
+use crate::router_env_flags::{router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose};
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -7,7 +11,6 @@ use std::fs;
 use std::ops::Not;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
 
 /// Status values that signal the caller is claiming the task is finished.
 /// When the status matches one of these **and** programmatic closeout enforcement
@@ -570,7 +573,14 @@ pub fn build_framework_refresh_payload(
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
-    let prompt = render_framework_refresh_prompt(&continuity, &contract, max_lines);
+    let mut prompt = render_framework_refresh_prompt(&continuity, &contract, max_lines);
+    let goal_state = crate::autopilot_goal::read_goal_state(repo_root, None)
+        .ok()
+        .flatten();
+    if let Some(ref g) = goal_state {
+        prompt.push_str("\n\n");
+        prompt.push_str(&format_goal_state_refresh_section(g));
+    }
     let debug = if verbose {
         json!({
             "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
@@ -596,8 +606,118 @@ pub fn build_framework_refresh_payload(
         "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
         "status": continuity.get("status").cloned().unwrap_or(Value::Null),
         "prompt": prompt,
+        "goal_state": goal_state.clone().unwrap_or(Value::Null),
         "debug": debug,
     }))
+}
+
+/// 把 `GOAL_STATE.json` 嵌进 `framework refresh` 提示，使 `$refresh` 与 Codex SessionStart digest 可见「可执行目标」而非仅有连续性摘要。
+/// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 使用冗长 checklist（完整字段始终在 JSON `goal_state`）。
+fn format_goal_state_refresh_section(goal: &Value) -> String {
+    if router_rs_goal_prompt_verbose() {
+        format_goal_state_refresh_section_verbose(goal)
+    } else {
+        format_goal_state_refresh_section_compact(goal)
+    }
+}
+
+fn format_goal_state_refresh_section_verbose(goal: &Value) -> String {
+    let g = value_text(goal.get("goal"));
+    let st = value_text(goal.get("status"));
+    let drive = goal
+        .get("drive_until_done")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let done = value_string_list(goal.get("done_when"));
+    let val = value_string_list(goal.get("validation_commands"));
+    let non = value_string_list(goal.get("non_goals"));
+    let horizon = value_text(goal.get("current_horizon"));
+    let mut lines: Vec<String> = Vec::new();
+    lines.push(
+        "## GOAL_STATE（router-rs 目标机；须据此推进直至 complete 或显式 pause/block）".to_string(),
+    );
+    lines.push(format!(
+        "- 目标: {}",
+        if g.is_empty() {
+            "（未填写）".to_string()
+        } else {
+            g
+        }
+    ));
+    lines.push(format!("- 状态: {} | drive_until_done: {}", st, drive));
+    if !horizon.is_empty() {
+        lines.push(format!("- 当前地平线: {}", horizon));
+    }
+    if !non.is_empty() {
+        lines.push(format!("- 非目标: {}", non.join("；")));
+    }
+    if !done.is_empty() {
+        lines.push(format!("- 验收 done_when: {}", done.join("；")));
+    }
+    if !val.is_empty() {
+        lines.push(format!("- 验证命令: {}", val.join("；")));
+    }
+    lines.push(
+        "- 下一跳: 实现 → 跑验证命令 → 更新 SESSION_SUMMARY/NEXT_ACTIONS；满足验收后 `stdio` op `framework_autopilot_goal` operation=complete。"
+            .to_string(),
+    );
+    lines.join("\n")
+}
+
+fn format_goal_state_refresh_section_compact(goal: &Value) -> String {
+    let g = value_text(goal.get("goal"));
+    let st = value_text(goal.get("status"));
+    let drive = goal
+        .get("drive_until_done")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let done = value_string_list(goal.get("done_when"));
+    let val = value_string_list(goal.get("validation_commands"));
+    let horizon = value_text(goal.get("current_horizon"));
+    let goal_line = if g.is_empty() {
+        "（未填写）".to_string()
+    } else {
+        compact_contract_text(&g, 200)
+    };
+    let mut lines: Vec<String> = Vec::new();
+    lines.push("## Active goal（全文见 JSON `goal_state`）".to_string());
+    lines.push(format!(
+        "- {} · drive={} · {}",
+        if st.is_empty() {
+            "（状态未填）".to_string()
+        } else {
+            st
+        },
+        drive,
+        goal_line
+    ));
+    let mut bits: Vec<String> = Vec::new();
+    if !horizon.is_empty() {
+        bits.push(format!("horizon: {}", compact_contract_text(&horizon, 100)));
+    }
+    if !done.is_empty() {
+        bits.push(format!(
+            "done: {}",
+            compact_contract_text(&done.join(" · "), 160)
+        ));
+    }
+    if !val.is_empty() {
+        let head = val.first().map(|s| s.as_str()).unwrap_or("").to_string();
+        let extra = val.len().saturating_sub(1);
+        let cmd = if extra > 0 {
+            format!("`{}` (+{extra})", compact_contract_text(&head, 72))
+        } else {
+            format!("`{}`", compact_contract_text(&head, 90))
+        };
+        bits.push(format!("verify: {cmd}"));
+    }
+    if !bits.is_empty() {
+        lines.push(format!("- {}", bits.join(" · ")));
+    }
+    lines.push(
+        "- 收口: `framework_autopilot_goal` operation=complete（或 pause/block）。".to_string(),
+    );
+    lines.join("\n")
 }
 
 pub fn build_framework_statusline(repo_root: &Path) -> Result<String, String> {
@@ -1003,7 +1123,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                         "owner": "hybrid_host_plus_rust_persistence",
                         "rust_runtime_coverage": "goal_persistence_and_drive_hook",
                         "status": "rust_stdio_goal_store_plus_cursor_followup",
-                        "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0."
+                        "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block|clear) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit (including hook-state lock failure and ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE) so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0."
                     },
                     "never_stop_at_plan_only": true,
                     "allow_network_research_for_unknowns": true,
@@ -2980,11 +3100,6 @@ fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn session_artifact_write_lock() -> &'static Mutex<()> {
-    static SESSION_ARTIFACT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    SESSION_ARTIFACT_WRITE_LOCK.get_or_init(|| Mutex::new(()))
-}
-
 fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(sha256_hex(&bytes))),
@@ -3998,13 +4113,7 @@ pub fn build_automatic_continuity_checkpoint_payload(
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
 
 fn continuity_post_tool_evidence_env_enabled() -> bool {
-    match std::env::var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") {
-        Ok(value) => {
-            let token = value.trim().to_ascii_lowercase();
-            !(token == "0" || token == "false" || token == "off" || token == "no")
-        }
-        Err(_) => true,
-    }
+    router_rs_env_enabled_default_true("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE")
 }
 
 fn extract_codex_shell_command_preview(event: &Value) -> Option<String> {
@@ -4017,6 +4126,22 @@ fn extract_codex_shell_command_preview(event: &Value) -> Option<String> {
         .or_else(|| {
             input
                 .get("cmd")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            input
+                .get("script")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            input
+                .get("arguments")
+                .and_then(Value::as_object)
+                .and_then(|a| a.get("command"))
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
@@ -4079,9 +4204,9 @@ fn append_evidence_index_merged_row(
     if !continuity_post_tool_evidence_env_enabled() {
         return Ok(());
     }
-    let _guard = session_artifact_write_lock()
+    let _guard = crate::task_write_lock::task_ledger_write_lock()
         .lock()
-        .map_err(|_| "framework session artifact write lock poisoned".to_string())?;
+        .map_err(|_| "task ledger write lock poisoned".to_string())?;
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     if !continuity_session_ready_for_evidence_append(&snapshot) {
         return Ok(());
@@ -4104,6 +4229,11 @@ fn append_evidence_index_merged_row(
         "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
     });
     write_json_if_changed(&evidence_path, &payload)?;
+    if let Some(tid) = crate::autopilot_goal::read_active_task_id(repo_root) {
+        if !tid.is_empty() {
+            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &tid);
+        }
+    }
     Ok(())
 }
 
@@ -4173,26 +4303,38 @@ fn codex_tool_name_normalized(event: &Value) -> String {
 fn tool_name_is_shell_like(name: &str) -> bool {
     let n = name.trim().to_ascii_lowercase();
     n == "bash"
+        || n == "sh"
+        || n == "zsh"
         || n == "shell"
         || n.contains("terminal")
         || n.contains("shell")
         || n == "functions.run_terminal_cmd"
         || n == "run_terminal_cmd"
+        || n == "powershell"
+        || n == "pwsh"
 }
 
 fn shell_command_looks_like_verification(command: &str) -> bool {
     let c = command.to_ascii_lowercase();
+    // Original (Rust / Python / JS test runners + lint).
     c.contains("cargo test")
         || c.contains("cargo check")
         || c.contains("cargo clippy")
         || c.contains("cargo build")
         || c.contains("cargo fmt")
+        || c.contains("cargo nextest")
+        || c.contains("cargo hack")
+        || c.contains("nextest")
         || c.contains("pytest")
         || c.contains("npm test")
         || c.contains("pnpm test")
         || c.contains("yarn test")
         || c.contains("make test")
+        || c.contains("make check")
+        || c.contains("make ci")
+        || c.contains("make verify")
         || c.contains("go test")
+        || c.contains("go vet")
         || c.contains("dotnet test")
         || c.contains("maturin")
         || c.contains("tox")
@@ -4203,6 +4345,37 @@ fn shell_command_looks_like_verification(command: &str) -> bool {
         || c.contains("jest")
         || c.contains("ruby test")
         || c.contains("rake test")
+        || c.contains("verify_cursor_hooks")
+        || c.contains("policy_contracts")
+        || c.contains("ruff check")
+        || c.contains("ruff format")
+        || c.contains("mypy")
+        || c.contains("deno test")
+        || c.contains("bun test")
+        // TypeScript / JS tooling (no `test` keyword).
+        || c.contains("tsc --noemit")
+        || c.contains("tsc -p")
+        || c.contains("eslint")
+        || c.contains("prettier --check")
+        || c.contains("biome check")
+        || c.contains("biome ci")
+        // JVM ecosystems.
+        || c.contains("gradle test")
+        || c.contains("gradlew test")
+        || c.contains("gradle check")
+        || c.contains("mvn test")
+        || c.contains("mvn verify")
+        || c.contains("mvn package")
+        // E2E / cross-runner test frameworks.
+        || c.contains("playwright test")
+        || c.contains("nx test")
+        || c.contains("nx affected")
+        // Repo-local verifier scripts (any path under scripts/ ending with verify*).
+        || c.contains("scripts/verify")
+        || c.contains("/verify.sh")
+        || c.contains("./verify.sh")
+        || c.contains("task test")
+        || c.contains("task check")
 }
 
 fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView) -> bool {
@@ -4213,11 +4386,15 @@ fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView)
     summary_path.is_file()
 }
 
-/// 在 Codex `PostToolUse` 中追加一条验证类命令到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
+/// 在宿主 `PostToolUse` 中追加一条「终端类验证命令」到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
 ///
-/// 仅在连续性已初始化（存在 `active_task.json` 或当前根的 `SESSION_SUMMARY.md`）且命令看起来像验证
-///（如包含 `cargo test` / `pytest` 等）时写入。可通过 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭。
-pub fn try_append_codex_post_tool_evidence(repo_root: &Path, event: &Value) -> Result<(), String> {
+/// `kind` 用于区分来源（如 `codex_post_tool_verification` / `cursor_post_tool_verification`）。
+/// 仅在连续性已初始化且命令启发式匹配验证类时写入。`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭。
+pub fn try_append_post_tool_shell_evidence(
+    repo_root: &Path,
+    event: &Value,
+    kind: &str,
+) -> Result<(), String> {
     if !continuity_post_tool_evidence_env_enabled() {
         return Ok(());
     }
@@ -4239,7 +4416,7 @@ pub fn try_append_codex_post_tool_evidence(repo_root: &Path, event: &Value) -> R
         .to_string();
     let exit_hint = extract_codex_tool_exit_hint(event);
     let mut entry = Map::new();
-    entry.insert("kind".to_string(), json!("codex_post_tool_verification"));
+    entry.insert("kind".to_string(), json!(kind));
     entry.insert("tool_name".to_string(), json!(tool_name));
     entry.insert("command_preview".to_string(), json!(command_preview));
     entry.insert("recorded_at".to_string(), json!(current_local_timestamp()));
@@ -4254,20 +4431,44 @@ pub fn try_append_codex_post_tool_evidence(repo_root: &Path, event: &Value) -> R
     Ok(())
 }
 
+/// 在 Codex `PostToolUse` 中追加一条验证类命令到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
+///
+/// 仅在连续性已初始化（存在 `active_task.json` 或当前根的 `SESSION_SUMMARY.md`）且命令看起来像验证
+///（如包含 `cargo test` / `pytest` 等）时写入。可通过 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭。
+pub fn try_append_codex_post_tool_evidence(repo_root: &Path, event: &Value) -> Result<(), String> {
+    try_append_post_tool_shell_evidence(repo_root, event, "codex_post_tool_verification")
+}
+
+/// Cursor `PostToolUse`：在连续性就绪时记录终端里执行的验证类命令（与 Codex 启发式一致）。
+///
+/// 典型载荷由 `cursor_hooks` 归一成含 `tool_name` / `tool_input.command` / `tool_output` 的形状后传入。
+pub fn try_append_cursor_post_tool_evidence(repo_root: &Path, event: &Value) -> Result<(), String> {
+    try_append_post_tool_shell_evidence(repo_root, event, "cursor_post_tool_verification")
+}
+
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
-    let _guard = session_artifact_write_lock()
+    let _guard = crate::task_write_lock::task_ledger_write_lock()
         .lock()
-        .map_err(|_| "framework session artifact write lock poisoned".to_string())?;
+        .map_err(|_| "task ledger write lock poisoned".to_string())?;
     // Enforce closeout policy before artifact write when applicable.
     // 完成态：硬门禁开启时须附带可通过 evaluate 的 `closeout_record`（见 enforce_closeout_for_session_payload）。
     // 硬门禁：CI/GitHub Actions 下默认开启；本地未设置 ROUTER_RS_CLOSEOUT_ENFORCEMENT 时默认软；显式 `=0` 关闭硬门禁。
     // 非完成态：`enforce_closeout_for_session_payload` 不解析附带 record（避免草稿误伤），需要时请单独 `closeout evaluate`。
     let closeout_evaluation = enforce_closeout_for_session_payload(&payload)?;
     let mut plan = build_session_artifact_write_plan(&payload)?;
+    let sync_repo = plan.repo_root.clone();
+    let sync_tid = plan.task_id.clone();
     write_primary_session_artifacts(&mut plan)?;
     write_optional_session_mirror(&mut plan)?;
     write_repo_session_focus(&mut plan)?;
     let mut response = plan.into_response();
+    if let Some(ref root) = sync_repo {
+        if let Ok(resolved) = resolve_repo_root_arg(Some(root.as_path())) {
+            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                &resolved, &sync_tid,
+            );
+        }
+    }
     if let Some(eval) = closeout_evaluation {
         if let Some(obj) = response.as_object_mut() {
             obj.insert("closeout_evaluation".to_string(), eval);
@@ -4340,8 +4541,28 @@ fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>
          A closeout record is required so closeout_enforcement can verify completion evidence (verification_status, commands_run, artifacts_checked, summary). \
          Re-issue the request with a closeout_record matching configs/framework/CLOSEOUT_RECORD_SCHEMA.json.".to_string()
     })?;
-    let evaluation = evaluate_closeout_record_value(closeout_record)
-        .map_err(|err| format!("closeout enforcement failed: {err}"))?;
+    // Try to attach an EvidenceContext so R8 (`claimed_passed_without_evidence_index_rows`) runs.
+    // Both repo_root and task_id must resolve from the write payload; otherwise fall back to the
+    // record-only evaluator (R7 still catches the most common self-attestation pattern).
+    let repo_root_str = value_text(payload.get("repo_root"));
+    let task_id_str = value_text(payload.get("task_id"));
+    let evaluation = if !repo_root_str.is_empty() && !task_id_str.is_empty() {
+        let repo_root = PathBuf::from(&repo_root_str);
+        let (rows_non_empty, has_success) =
+            crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+                &repo_root,
+                &task_id_str,
+            );
+        let ctx = CloseoutEvidenceContext {
+            evidence_rows_non_empty: rows_non_empty,
+            has_successful_verification: has_success,
+        };
+        evaluate_closeout_record_value_with_context(closeout_record, &ctx)
+            .map_err(|err| format!("closeout enforcement failed: {err}"))?
+    } else {
+        evaluate_closeout_record_value(closeout_record)
+            .map_err(|err| format!("closeout enforcement failed: {err}"))?
+    };
     let allowed = evaluation
         .get("closeout_allowed")
         .and_then(Value::as_bool)

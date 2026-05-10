@@ -39,8 +39,14 @@ trigger_hints:
   - 只改表达不改 claim
   - 科研讲故事
   - 论文故事线
+  - 精准修改
+  - 局部润色
+  - 不要动结构
+  - 大面积重构
+  - edit_scope: surgical
+  - edit_scope: refactor
 metadata:
-  version: "2.9.0"
+  version: "2.11.0"
   platforms: [codex]
   tags: [paper, writing, rewrite, abstract, introduction, caption, rebuttal]
 framework_roles:
@@ -63,6 +69,18 @@ source: local
 This skill owns reader-facing manuscript prose: section purpose, paragraph
 flow, academic tone, claim calibration, and sentence clarity. It must not invent
 science, citations, results, or reviewer-facing promises.
+
+## Edit scope gate
+
+Before rewriting, set **`edit_scope`** per
+[`../paper-workbench/references/edit-scope-gate.md`](../paper-workbench/references/edit-scope-gate.md).
+
+- Default **`surgical`**: only the user-confirmed spans; no cross-section
+  throughline rewrites unless **`refactor`** was chosen.
+- **`refactor`**: allowed only when the user (or `$paper-workbench`) has
+  explicitly authorized structural / multi-section narrative work.
+
+If scope is unclear, ask one question before producing text.
 
 ## When to Use
 
@@ -119,22 +137,30 @@ as a guardrail when the user wants 顶刊/顶会/top-tier writing.
 ## Top-tier Narrative Style
 
 When the user asks for stronger writing style, keep the prose contribution-first
-and evidence-led while staying inside the claim ledger:
+and evidence-led while staying inside the claim ledger.
+
+**Cross-section work (`edit_scope` gate)**：下列「全稿叙事 / 多节对齐」步骤**仅当**
+`edit_scope: refactor`，或 **`scope_items` 已列出**本轮会改写的全部相关表面（章节 /
+小节 / 锚点）时，才允许执行。若在 **`surgical`** 下且未列出那些表面，则只做已锁定
+范围内的局部改写；需要多节 mirror / throughline 时，明确提示用户**升格为
+`refactor` 或补全 `scope_items`**，不要偷偷扩范围。
+
+Within the allowed scope:
 
 - lead with contribution, then evidence, then bounded implication
 - keep wording reader-facing and science-facing, not process-facing
 - keep tone confident within evidence and explicit at scope boundaries
-- keep one manuscript throughline visible across abstract, introduction, results,
-  discussion, and conclusion
+- when multi-section scope is authorized: keep one manuscript throughline visible
+  across abstract, introduction, results, discussion, and conclusion
 
-For multi-section rewrites, lock one canonical throughline (used by all
+For **authorized** multi-section rewrites, lock one canonical throughline (used by all
 paper-writing references):
 
 ```text
 core_problem -> bottleneck -> paper_move -> decisive_evidence -> bounded_implication
 ```
 
-Alignment checks:
+Alignment checks (only across sections that appear in **`scope_items`** or under **`refactor`**):
 
 - every rewritten section advances the same core move
 - no section introduces a competing headline contribution
@@ -155,8 +181,10 @@ Canonical slot checks:
 3. For multi-round work, refresh `claim_ledger` and check proposed edits against it.
 4. Choose the section move: motivate, gap, method, result, implication, or response.
 5. Rewrite for flow and precision while keeping claim ceiling intact.
-6. Run a mirror check on abstract/introduction/conclusion/captions to ensure no
-   surface silently exceeds the allowed claim level.
+6. Mirror check (abstract / introduction / conclusion / captions)：仅当 **`edit_scope:
+   refactor`**，或这些表面**全部**已列入 **`scope_items`** 时执行，确认没有表面在
+   静默超过允许 claim level。若在 **`surgical`** 且未覆盖上述全部表面，则只对
+   **已改写过的表面**做局部一致性检查，或提示升格 / 补全 scope 后再做全 mirror。
 7. Return the polished text first; include notes only for important claim risks.
 
 ## Output Defaults

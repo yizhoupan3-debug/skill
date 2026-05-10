@@ -88,6 +88,7 @@ Run exactly these commands from repo root (supervisor may add env vars in one li
 Rules:
 - Do not fix failures unless supervisor explicitly merged fix+verify into one lane (default: separate fixer exists — report only).
 - Paste concise command exit status and the smallest log tail that proves pass/fail.
+- Prefer commands that match repo `router-rs` PostTool verification heuristics (e.g. `cargo test`, `cargo check`, `pytest`, `verify_cursor_hooks.sh`, `policy_contracts`) so **Cursor** can auto-append `cursor_post_tool_verification` rows to `EVIDENCE_INDEX.json` when continuity is active.
 
 Output exactly this block:
 changed_files:

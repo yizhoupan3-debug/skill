@@ -49,6 +49,17 @@ metadata:
 
 可与宏任务 **`GOAL_STATE.json`** / `framework_autopilot_goal` 同目录并用：目标级续跑 + 轮次级质量闭环。
 
+### 推理深度契约（与可审计链）
+
+- **真源**：[references/reasoning-depth-contract.md](references/reasoning-depth-contract.md) — **不靠单模型拉长 CoT**；靠 **`review ∥ external → fix → verify`** + **`EVIDENCE_INDEX` / `append_round`** 形成可审计链。
+- **宿主注入文案**：`configs/framework/HARNESS_OPERATOR_NUDGES.json`（RFV / Autopilot 续跑末尾附带的「推理深度」句）；**`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`** 可整体关闭。
+- **外研不得顶替 verify**：external 只产出可引用结论与假设；**Pass/Fail 只认可执行验证**。
+
+### 可执行验证与 Cursor 钩子（证据自动落盘）
+
+- 连续性已初始化时，**verifier lane** 在终端跑的命令若匹配 `router-rs` 内置启发式（如 `cargo test` / `cargo check` / `pytest` / `verify_cursor_hooks` / `policy_contracts` / `nextest` 等），**Cursor `postToolUse`** 会把 **`cursor_post_tool_verification`** 写入 `EVIDENCE_INDEX.json`（需 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` 未关闭）。
+- `verify_commands` 建议优先选仓库内 **短、确定性** 命令，并与上述启发式有交集，便于 hook 自动记账；冷僻命令可改用语义等价且含关键字的拼法，或依赖 verifier 人工粘贴 `hook-evidence-append`。
+
 ## When to use
 
 - 用户明确要求可配置轮次的闭环执行，而不是单轮修复

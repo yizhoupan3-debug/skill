@@ -1,7 +1,5 @@
-use crate::{
-    build_runtime_control_plane_payload, required_non_empty_string, RUNTIME_STORAGE_AUTHORITY,
-    RUNTIME_STORAGE_SCHEMA_VERSION,
-};
+use crate::cli::runtime_ops::{build_runtime_control_plane_payload, required_non_empty_string};
+use crate::runtime_envelope_ids::{RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION};
 use fs2::FileExt;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};

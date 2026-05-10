@@ -41,7 +41,10 @@ trigger_hints:
 ```bash
 PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 ROUTER_BIN="$(command -v router-rs 2>/dev/null || true)"
-if [ -z "$ROUTER_BIN" ]; then ROUTER_BIN="$PROJECT_DIR/scripts/router-rs/target/release/router-rs"; fi
+if [ -z "$ROUTER_BIN" ]; then
+  ROUTER_BIN="$("$PROJECT_DIR/.cursor/hooks/resolve-router-rs.sh" "$PROJECT_DIR")"
+fi
+[ -n "$ROUTER_BIN" ] || { echo "router-rs not found; build or install per step below" >&2; exit 1; }
 "$ROUTER_BIN" framework refresh --repo-root "$PROJECT_DIR"
 ```
 

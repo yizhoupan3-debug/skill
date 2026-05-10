@@ -112,13 +112,14 @@ Cursor 侧 hook 可能要求 **pre-goal 独立 reviewer subagent** 或 **单一 
 ## 9. 宿主差异
 
 - **Codex CLI**：可选用 `rust-session-supervisor` / tmux worker 等长会话外壳（以仓库与 AGENTS 描述为准）。
-- **Cursor**：通常 **无** Codex 同款 tmux supervisor；长程依赖 **`artifacts/current` 接力**。若已写入 **`GOAL_STATE.json` 且 `drive_until_done`**，Stop/提交时 hook 会注入 **AUTOPILOT_DRIVE** 续跑提示（见第 11 节）；关闭：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`。
+- **Cursor**：通常 **无** Codex 同款 tmux supervisor；长程依赖 **`artifacts/current` 接力**。`/autopilot` **不再**与 `/$team` 等入口叠乘「并行委托」门控：评审后修复轮应主要受 **goal** 与 **GOAL_STATE** 约束，而不是额外 `RG_FOLLOWUP` 要求先起并行 lane；若磁盘上已有 **`GOAL_STATE.json`**（`framework_autopilot_goal start`），beforeSubmit **不再强制** pre-goal reviewer subagent 提示。若已写入 **`GOAL_STATE.json` 且 `drive_until_done`**，Stop/提交时 hook 会注入 **AUTOPILOT_DRIVE** 续跑提示（见第 11 节）；关闭：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`。
 
 ## 10. 收口与暂停
 
 - 收口：仅当 **Done when 满足** 且有 **验证证据**，或 **单一、明确的 blocker**（含所需用户输入/权限）。
 - **goal_pause**：用户明确要求暂停时；之后不得隐式恢复，需显式 **goal_resume** 语义（由宿主对话触发）。
 - 不把「未验证的乐观结论」当完成。
+- **程序化完成态**（`framework session artifact write` 等路径声明 `completed`/`passed` 等）：在 CI / `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 硬门禁下须附带能通过评估的 **`closeout_record`**（字段见 `configs/framework/CLOSEOUT_RECORD_SCHEMA.json` 与 `docs/closeout_enforcement.md`）。本地软门禁仍建议按同一结构写证据，便于审计与跨宿主对齐。
 
 ## 11. Rust 续跑真源（`GOAL_STATE` + stdio）
 
@@ -129,9 +130,11 @@ printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"repo_root":"'
 ```
 
 - 写入：`artifacts/current/<task_id>/GOAL_STATE.json`（schema `router-rs-autopilot-goal-v1`）。
-- 其它 `operation`：`status` | `checkpoint`（需 `note`）| `pause` | `resume` | `complete` | `block`（需 `blocker`）。
+- 其它 `operation`：`status` | `checkpoint`（需 `note`）| `pause` | `resume` | `complete` | `block`（需 `blocker`）| `clear`（删除当前任务目录下 `GOAL_STATE.json`，停止续跑注入）。
 - **真完成**必须调用 `complete`，否则 Cursor 侧可能持续收到 **AUTOPILOT_DRIVE**。
 
 多轮 **review → fix → verify** 大轮次（含外部调研并行 lane）见 [`review-fix-verify-loop`](../review-fix-verify-loop/SKILL.md)，轮次账本使用 **`framework_rfv_loop`**（`RFV_LOOP_STATE.json`，与 `GOAL_STATE.json` 同任务目录）。
+
+**`router-rs framework refresh`**（及 Codex SessionStart digest 同源读模型）会在 **`prompt` 文本末尾拼接整段 `GOAL_STATE` 约束**，并在 JSON 里返回 **`goal_state`** 字段——目标从「纯文件」变成 **`$refresh` / 剪贴板接力里可直接执行的 checklist**。
 
 Canonical owner: `autopilot`.

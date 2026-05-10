@@ -6,6 +6,10 @@ This document freezes the Rust-owned runtime contracts for this repository.
 Historical migration notes live under `docs/history/`; this file describes only
 the current runtime truth in `router-rs` and related Rust tools.
 
+Upper-layer control-plane narrative (L1–L5, evidence/resume injection boundaries):
+[`harness_architecture.md`](harness_architecture.md). Steady-state doc index:
+[`README.md`](README.md) in this directory.
+
 It is the contract source of truth for:
 
 - routing and route diagnostics
@@ -15,6 +19,10 @@ It is the contract source of truth for:
 - framework runtime snapshot / artifact continuity
 - trace transport, checkpointing, compaction, observability, and sandbox policy
 
+## Harness architecture (control plane)
+
+Upper-level layering for hooks, continuity artifacts, and evidence flows lives in [`harness_architecture.md`](harness_architecture.md) (L1–L5 model, extension rules). Operator nudge strings for RFV / Autopilot hooks are loaded from `configs/framework/HARNESS_OPERATOR_NUDGES.json` (`harness_operator_nudges`); disable with `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`. Rust contracts below remain the implementation authority.
+
 ## Current Boundary
 
 Rust owns the default runtime and contract path.
@@ -22,7 +30,7 @@ Rust owns the default runtime and contract path.
 - `router-rs route <query>` owns route decisions; route diagnostics use the Rust stdio route policy/report operations.
 - `router-rs profile emit` and `router-rs profile artifacts` own the shared framework profile plus explicit Codex projection artifacts.
 - Rust stdio `execute` operation owns the live/dry-run execution response contract.
-- `router-rs framework snapshot`, `contract-summary`, `session-artifact-write`, `hook-evidence-append`, and `prompt-compression` own framework runtime read/write/policy surfaces.
+- `router-rs framework snapshot`, `contract-summary`, `session-artifact-write`, `hook-evidence-append`, and `prompt-compression` own framework runtime read/write/policy surfaces. Cursor `PostToolUse` may append `cursor_post_tool_verification` rows (terminal tools + verification-shaped commands) alongside Codex `codex_post_tool_verification` and `rust-lint`’s `cursor_rust_lint` hook evidence.
 - Stdio op `framework_hook_evidence_append` mirrors `router-rs framework hook-evidence-append --input-json …` for scripted callers appending rows to `EVIDENCE_INDEX.json` under continuity (same payload shape as the CLI).
 - `router-rs codex sync` owns repo host-entrypoint materialization.
 - `router-rs framework host-integration ...` owns native install/status/remove, bootstrap, projection, and related host integration flows. `router-rs codex host-integration ...` is a thin compatibility alias only.

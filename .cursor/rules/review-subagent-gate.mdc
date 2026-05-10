@@ -3,34 +3,10 @@ description: Require subagent lanes by default, with explicit no-subagent reason
 alwaysApply: true
 ---
 
-# Review Subagent Gate
+# Review Subagent Gate（仅 Cursor）
 
-仅 Cursor：与 `AGENTS.md` **Execution Ladder** → **宿主优先级**（Codex / Cursor 分工）配对。
+与 `AGENTS.md` **Execution Ladder** → **宿主优先级**配对。**本文件与 `AGENTS.md` 一起构成 Cursor 执行面真源**：评审、委托、深度/跨模块 review、PR 审查、以及显式编排入口（如 `/autopilot`、`$autopilot`、`/team`、`$team`、`/gitx`、`$gitx`）等场景，默认应拆独立 reviewer / worker lanes；主线程负责集成与最终验证。
 
-Subagent is the default execution mode once this gate is triggered. Unless explicitly overridden, require independent subagent lanes before finalizing.
+细则（何时必须开 lane、拒因集合、禁止向用户暴露拒因元说明、goal-style 收口要求）：以 `AGENTS.md` **Execution Ladder** 与 **Autopilot Goal Mechanism** 为准。
 
-## Trigger intent
-
-Trigger applies to review/delegation intents; especially for:
-- code/security/architecture review
-- review a PR or pull request
-- deep/full-repo/cross-module review
-- review with severity-ranked findings, regression risk, or architecture risk
-- explicit parallel lane requests (for example API, database, and UI in parallel)
-- explicit framework orchestration entrypoints (`/autopilot`, `$autopilot`, `/team`, `$team`, `/gitx`, `$gitx`)
-
-## Required behavior
-
-Before finalizing:
-1. Spawn one or more independent subagents for reviewer lanes when scope can be split.
-2. Keep supervisor ownership for integration and final verification.
-3. If you do not spawn subagents, explicitly state one reject reason: `small_task`, `shared_context_heavy`, `write_scope_overlap`, `next_step_blocked`, `verification_missing`, or `token_overhead_dominates`.
-4. For `/autopilot` goal-style runs, do not stop at planning only: include goal contract, checkpoint progress, and verification result (or explicit blocker) before closeout.
-
-Independent means:
-- launch fresh subagents for each lane (do not reuse parent context as the worker context),
-- pass only bounded lane context, goal, scope limits, and verification contract.
-
-## Explicit override
-
-If user explicitly asks to avoid subagents (for example "do not use subagent" / "不要用子代理"), this gate is waived.
+**显式豁免**：用户要求避免 subagent（例如 "do not use subagent" / 「不要用子代理」）→ 本 gate 不适用。

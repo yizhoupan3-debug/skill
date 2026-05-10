@@ -7,6 +7,8 @@ to keep the Rust control plane stable while letting skills, framework commands,
 storage backends, route policies, host projections, and execution delegates
 evolve as replaceable components.
 
+Documentation index: [`README.md`](README.md) (this directory).
+
 ## Contract Rules
 
 - The Rust runtime remains the control-plane authority.

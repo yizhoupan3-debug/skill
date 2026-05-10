@@ -3,7 +3,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -37,6 +37,10 @@ const ARTIFACT_GATE_PHRASES: [&str; 16] = [
     "slide deck",
 ];
 const PARALLEL_RECORD_SCAN_MIN: usize = 48;
+/// Max distinct `(runtime_path, manifest_path)` entries kept for `load_records_cached_for_stdio`.
+/// Long-lived stdio routers otherwise grow without bound when callers rotate paths.
+/// Test builds use a tiny cap so eviction is covered without allocating dozens of fixtures.
+const RECORDS_CACHE_MAX_KEYS: usize = if cfg!(test) { 4 } else { 64 };
 #[cfg(test)]
 const PARALLEL_EVAL_CASE_MIN: usize = 8;
 
@@ -119,6 +123,14 @@ struct RecordsCacheEntry {
     manifest_mtime: Option<SystemTime>,
     metadata_mtime: Option<SystemTime>,
     records: Arc<Vec<SkillRecord>>,
+}
+
+#[derive(Debug, Default)]
+struct RecordsCacheState {
+    map: HashMap<RecordsCacheKey, RecordsCacheEntry>,
+    /// FIFO of admitted keys; used to evict oldest insertions when `map` exceeds
+    /// [`RECORDS_CACHE_MAX_KEYS`]. Refreshes of an existing key do not enqueue again.
+    fifo: VecDeque<RecordsCacheKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -675,10 +687,25 @@ fn route_metadata_sidecar_path(manifest_path: &Path) -> Option<PathBuf> {
         .map(|parent| parent.join("SKILL_ROUTING_METADATA.json"))
 }
 
-fn records_cache() -> &'static Mutex<HashMap<RecordsCacheKey, RecordsCacheEntry>> {
-    static RECORDS_CACHE: OnceLock<Mutex<HashMap<RecordsCacheKey, RecordsCacheEntry>>> =
-        OnceLock::new();
-    RECORDS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+fn records_cache_state() -> &'static Mutex<RecordsCacheState> {
+    static RECORDS_CACHE: OnceLock<Mutex<RecordsCacheState>> = OnceLock::new();
+    RECORDS_CACHE.get_or_init(|| Mutex::new(RecordsCacheState::default()))
+}
+
+fn evict_records_cache_over_capacity(state: &mut RecordsCacheState) {
+    while state.map.len() > RECORDS_CACHE_MAX_KEYS {
+        let Some(candidate) = state.fifo.pop_front() else {
+            let Some(arbitrary) = state.map.keys().next().cloned() else {
+                break;
+            };
+            state.map.remove(&arbitrary);
+            continue;
+        };
+        if state.map.remove(&candidate).is_none() {
+            // Stale fifo slot (defensive); keep draining.
+            continue;
+        }
+    }
 }
 
 pub(crate) fn load_records_cached_for_stdio(
@@ -704,10 +731,10 @@ fn load_records_cached_for_stdio_resolved(
     );
 
     {
-        let cache = records_cache()
+        let state = records_cache_state()
             .lock()
             .map_err(|_| "route records cache lock poisoned".to_string())?;
-        if let Some(entry) = cache.get(&key) {
+        if let Some(entry) = state.map.get(&key) {
             if entry.runtime_mtime == runtime_mtime
                 && entry.manifest_mtime == manifest_mtime
                 && entry.metadata_mtime == metadata_mtime
@@ -724,10 +751,15 @@ fn load_records_cached_for_stdio_resolved(
         metadata_mtime,
         records: Arc::clone(&records),
     };
-    let mut cache = records_cache()
+    let mut state = records_cache_state()
         .lock()
         .map_err(|_| "route records cache lock poisoned".to_string())?;
-    cache.insert(key, entry);
+    let is_new_key = !state.map.contains_key(&key);
+    state.map.insert(key.clone(), entry);
+    if is_new_key {
+        state.fifo.push_back(key);
+    }
+    evict_records_cache_over_capacity(&mut state);
     Ok(records)
 }
 
@@ -4602,6 +4634,8 @@ fn layer_threshold(layer: &str) -> f64 {
 mod route_metadata_tests {
     use super::*;
     use serde_json::json;
+    use std::path::PathBuf;
+    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -4965,5 +4999,56 @@ mod route_metadata_tests {
         );
 
         fs::remove_dir_all(&root).expect("cleanup route root");
+    }
+
+    #[test]
+    fn records_cache_evicts_oldest_admission_when_over_capacity() {
+        let root = std::env::temp_dir().join(format!(
+            "router-rs-records-cache-evict-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time went backwards")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("create temp cache-evict root");
+        let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
+        for idx in 0..5usize {
+            let runtime_path = root.join(format!("SKILL_ROUTING_RUNTIME_{idx}.json"));
+            let manifest_path = root.join(format!("SKILL_MANIFEST_{idx}.json"));
+            fs::write(
+                &runtime_path,
+                serde_json::to_string(&json!({
+                    "keys": ["slug", "layer", "owner", "gate", "summary", "trigger_hints", "priority", "session_start"],
+                    "skills": [[format!("slug{idx}"), "L2", "primary", "none", format!("summary-{idx}"), ["trigger"], "P1", "always"]]
+                }))
+                .expect("serialize runtime fixture"),
+            )
+            .expect("write runtime fixture");
+            fs::write(
+                &manifest_path,
+                serde_json::to_string(&json!({
+                    "keys": ["slug", "description", "layer", "owner", "gate", "trigger_hints", "priority", "session_start"],
+                    "skills": [[format!("slug{idx}"), format!("manifest-{idx}"), "L2", "primary", "none", ["trigger"], "P1", "always"]]
+                }))
+                .expect("serialize manifest fixture"),
+            )
+            .expect("write manifest fixture");
+            pairs.push((runtime_path, manifest_path));
+        }
+
+        let first = load_records_cached_for_stdio(Some(&pairs[0].0), Some(&pairs[0].1))
+            .expect("load pair 0");
+        for (runtime_path, manifest_path) in pairs.iter().skip(1) {
+            load_records_cached_for_stdio(Some(runtime_path), Some(manifest_path))
+                .expect("load subsequent pair");
+        }
+        let replay = load_records_cached_for_stdio(Some(&pairs[0].0), Some(&pairs[0].1))
+            .expect("reload pair 0 after fifo eviction");
+        assert!(
+            !Arc::ptr_eq(&first, &replay),
+            "test builds cap the cache at RECORDS_CACHE_MAX_KEYS; oldest key must reload"
+        );
+
+        fs::remove_dir_all(&root).expect("cleanup cache-evict root");
     }
 }

@@ -3,6 +3,8 @@
 This document is the operator-facing reference for the harness-level evidence
 gate (schema + evaluator rules).
 
+Documentation index (steady-state vs archive): [`README.md`](README.md).
+
 **Skill / AGENTS norms:** Skills that own task execution (autopilot, team,
 gh-fix-ci, systematic-debugging, deepinterview, review-fix-verify-loop, slides,
 paper-*) should emit a closeout record consistent with this contract before

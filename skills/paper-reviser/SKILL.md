@@ -30,8 +30,12 @@ trigger_hints:
   - top-tier revision
   - revise for top conference
   - revise for top journal
+  - 精准修改
+  - 大面积重构
+  - edit_scope: surgical
+  - edit_scope: refactor
 metadata:
-  version: "3.2.0"
+  version: "3.3.0"
   platforms: [codex]
   tags: [paper, manuscript, revise, reviewer-comments, rebuttal, appendix-routing]
 framework_roles:
@@ -62,6 +66,20 @@ The execution model is:
 - main revision chain = serial
 - local specialist checks and cleanup = bounded parallel sidecars
 - merge-back and final accept/reject of edits = local
+
+## Edit scope gate
+
+Honor **`edit_scope`** from
+[`../paper-workbench/references/edit-scope-gate.md`](../paper-workbench/references/edit-scope-gate.md)
+before applying edits:
+
+- **`surgical`**: execute only the listed reviewer items / blockers / slices; do
+  not expand into whole-paper restructuring, unsolicited appendix routing, or
+  cross-section narrative rewrites.
+- **`refactor`**: full allowed-edit decisions (repair, narrow, delete, appendix,
+  de-emphasize) across the manuscript as needed.
+
+If the user did not declare scope, default to **`surgical`** until clarified.
 
 ## Use this when
 

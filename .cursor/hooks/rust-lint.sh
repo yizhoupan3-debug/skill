@@ -92,16 +92,12 @@ rc=$?
 # Continuity: append cargo check outcome to artifacts/current/EVIDENCE_INDEX.json when router-rs exists
 # (no-op if continuity not seeded). Same env as Codex: ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0 disables.
 REPO_ROOT="$(cd "$cargo_dir" && "${SCRIPT_DIR}/resolve-repo-root.sh")"
-ROUTER_BIN="$(command -v router-rs 2>/dev/null || true)"
-if [[ -z "$ROUTER_BIN" && -n "$REPO_ROOT" ]]; then
-  for c in \
-    "$REPO_ROOT/scripts/router-rs/target/release/router-rs" \
-    "$REPO_ROOT/scripts/router-rs/target/debug/router-rs"; do
-    if [[ -x "$c" ]]; then
-      ROUTER_BIN="$c"
-      break
-    fi
-  done
+ROUTER_BIN=""
+if [[ -n "$REPO_ROOT" ]]; then
+  ROUTER_BIN="$(bash "${SCRIPT_DIR}/resolve-router-rs.sh" "$REPO_ROOT")"
+fi
+if [[ -z "$ROUTER_BIN" ]]; then
+  ROUTER_BIN="$(command -v router-rs 2>/dev/null || true)"
 fi
 if [[ -n "$REPO_ROOT" && -x "$ROUTER_BIN" ]]; then
   CMD_PREVIEW="$(printf '(cd %s && cargo check --message-format=short)' "$cargo_dir")"

@@ -1,0 +1,190 @@
+
+fn default_trace_metadata_schema_version() -> String {
+    "trace-metadata-v2".to_string()
+}
+
+
+fn default_trace_framework_version() -> String {
+    "phase1".to_string()
+}
+
+fn timestamp_now() -> String {
+    Utc::now().to_rfc3339()
+}
+
+fn default_trace_runtime_path() -> PathBuf {
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("skills")
+        .join("SKILL_ROUTING_RUNTIME.json")
+}
+
+fn load_trace_routing_runtime_version(runtime_path: Option<&str>) -> u64 {
+    let resolved_path = runtime_path
+        .map(PathBuf::from)
+        .unwrap_or_else(default_trace_runtime_path);
+    let raw = match fs::read_to_string(&resolved_path) {
+        Ok(value) => value,
+        Err(_) => return 1,
+    };
+    match serde_json::from_str::<Value>(&raw) {
+        Ok(Value::Object(payload)) => payload.get("version").and_then(Value::as_u64).unwrap_or(1),
+        _ => 1,
+    }
+}
+
+fn trace_source_explicitly_provided(payload: &TraceMetadataWriteRequestPayload) -> bool {
+    payload.event_stream_path.is_some()
+        || payload.event_stream_text.is_some()
+        || payload.compaction_manifest_path.is_some()
+        || payload.compaction_manifest_text.is_some()
+}
+
+pub(crate) fn write_trace_metadata(
+    payload: TraceMetadataWriteRequestPayload,
+) -> Result<TraceMetadataWriteResponsePayload, String> {
+    let routing_runtime_version = payload
+        .routing_runtime_version
+        .unwrap_or_else(|| load_trace_routing_runtime_version(payload.runtime_path.as_deref()));
+    let metadata_schema_version = payload
+        .metadata_schema_version
+        .as_deref()
+        .map(str::to_string)
+        .unwrap_or_else(default_trace_metadata_schema_version);
+    let framework_version = payload
+        .framework_version
+        .as_deref()
+        .map(str::to_string)
+        .unwrap_or_else(default_trace_framework_version);
+    let timestamp = payload.ts.clone().unwrap_or_else(timestamp_now);
+    let should_resolve_trace = payload.events.is_none()
+        || payload.stream.is_none()
+        || payload.reroute_count.is_none()
+        || payload.retry_count.is_none();
+    let resolved_trace = if trace_source_explicitly_provided(&payload) {
+        Some(resolve_trace_source(
+            TraceSourceRequest::from_metadata_payload(&payload),
+        )?)
+    } else if should_resolve_trace {
+        resolve_trace_source(TraceSourceRequest::from_metadata_payload(&payload)).ok()
+    } else {
+        None
+    };
+    let resolved_events = payload.events.clone().unwrap_or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| {
+                trace
+                    .events
+                    .iter()
+                    .cloned()
+                    .map(Value::Object)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    });
+    let reroute_count = payload.reroute_count.unwrap_or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| trace_reroute_count(&trace.events))
+            .unwrap_or(0)
+    });
+    let retry_count = payload.retry_count.unwrap_or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| trace_retry_count(&trace.events))
+            .unwrap_or(0)
+    });
+    let resolved_stream = payload.stream.clone().or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| build_trace_stream_metadata(trace, payload.control_plane.as_ref()))
+    });
+
+    let mut document = Map::new();
+    document.insert("version".to_string(), json!(1));
+    document.insert(
+        "schema_version".to_string(),
+        json!(metadata_schema_version.clone()),
+    );
+    document.insert(
+        "metadata_schema_version".to_string(),
+        json!(metadata_schema_version),
+    );
+    document.insert("ts".to_string(), json!(timestamp));
+    document.insert("task".to_string(), json!(payload.task));
+    document.insert("framework_version".to_string(), json!(framework_version));
+    document.insert(
+        "routing_runtime_version".to_string(),
+        json!(routing_runtime_version),
+    );
+    document.insert("matched_skills".to_string(), json!(payload.matched_skills));
+    document.insert(
+        "decision".to_string(),
+        json!({
+            "owner": payload.owner,
+            "gate": payload.gate,
+            "overlay": payload.overlay,
+        }),
+    );
+    document.insert("reroute_count".to_string(), json!(reroute_count));
+    document.insert("retry_count".to_string(), json!(retry_count));
+    document.insert("artifact_paths".to_string(), json!(payload.artifact_paths));
+    document.insert(
+        "verification_status".to_string(),
+        json!(payload.verification_status),
+    );
+    if let Some(value) = payload.trace_event_schema_version {
+        document.insert("trace_event_schema_version".to_string(), json!(value));
+    }
+    if let Some(value) = payload.trace_event_sink_schema_version {
+        document.insert("trace_event_sink_schema_version".to_string(), json!(value));
+    }
+    if let Some(value) = payload.parallel_group {
+        document.insert("parallel_group".to_string(), value);
+    }
+    if let Some(value) = payload.supervisor_projection {
+        document.insert("supervisor_projection".to_string(), value);
+    }
+    if let Some(value) = payload.control_plane {
+        document.insert("control_plane".to_string(), value);
+    }
+    if let Some(value) = resolved_stream {
+        document.insert("stream".to_string(), value);
+    }
+    if !resolved_events.is_empty() {
+        document.insert("events".to_string(), Value::Array(resolved_events));
+    }
+
+    let serialized = serde_json::to_string_pretty(&Value::Object(document))
+        .map_err(|err| format!("serialize trace metadata failed: {err}"))?
+        + "\n";
+    if payload.write_outputs {
+        let outputs =
+            std::iter::once(payload.output_path.clone()).chain(payload.mirror_paths.clone());
+        for output in outputs {
+            let path = PathBuf::from(&output);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(|err| {
+                    format!(
+                        "create trace metadata parent failed for {}: {err}",
+                        parent.display()
+                    )
+                })?;
+            }
+            fs::write(&path, &serialized).map_err(|err| {
+                format!("write trace metadata failed for {}: {err}", path.display())
+            })?;
+        }
+    }
+
+    Ok(TraceMetadataWriteResponsePayload {
+        schema_version: TRACE_METADATA_WRITE_SCHEMA_VERSION.to_string(),
+        authority: TRACE_METADATA_WRITE_AUTHORITY.to_string(),
+        output_path: payload.output_path,
+        mirror_paths: payload.mirror_paths,
+        bytes_written: serialized.len(),
+        routing_runtime_version,
+        payload_text: serialized,
+    })
+}

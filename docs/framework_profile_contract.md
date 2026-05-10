@@ -2,6 +2,8 @@
 
 ## Purpose
 
+文档索引：[`README.md`](README.md)（本目录）。
+
 `framework_profile` 是 shared Rust core 的真源。它只定义 runtime、artifact、orchestration、approval、tool、loadout 和 workspace bootstrap 语义；Codex CLI 只能通过显式 host projection 消费，不能反向改写核心含义。
 
 ## Canonical Fields

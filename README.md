@@ -5,6 +5,9 @@
 ## 这套系统包含什么
 
 - `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
+  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，须先在仓库根重新构建 `router-rs`（`cargo build --manifest-path scripts/router-rs/Cargo.toml`；输出目录以根目录 `.cargo/config.toml` 的 `target-dir` 为准），再运行**该次构建产出**的 `router-rs codex sync --repo-root "$PWD"`；策略正文在二进制内为**编译期嵌入**，否则 Codex 可能仍看到旧文本（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
+- `docs/README.md`：契约与分层文档索引（阅读顺序、主题表、`target-dir`/hook 清理边界）。
+- `docs/harness_architecture.md`：连续性控制面 **L1–L5** 上层设计（证据流、续跑流、扩展规则）。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。
 - `skills/SKILL_ROUTING_RUNTIME.json`：运行时路由入口。Codex 应先查这个文件，再按命中结果读取对应 skill。
 - `skills/SKILL_MANIFEST.json`、`skills/SKILL_ROUTING_INDEX.md`、`skills/SKILL_ROUTING_REGISTRY.md` 等：由编译器生成的路由/索引产物。
@@ -136,9 +139,9 @@ codex
 
 - Cursor 规则来自 `.cursor/rules/`，对当前工作区（本仓库根目录）生效。
 - Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
-- 本仓库默认不在 Cursor 侧启用 `router-rs` review gate；历史状态目录 `.cursor/hook-state/` 可能仍存在但不会被当前 `hooks.json` 写入。
+- 本仓库 **已**在 `.cursor/hooks.json` 接线：`beforeSubmitPrompt` / `stop` / `subagentStart` / `subagentStop` / `sessionEnd` → `review-gate.sh`（`router-rs cursor hook`：**AUTOPILOT_DRIVE**、**RFV 续跑**、review gate）；`postToolUse` → `post-tool-use.sh`（链式：`review-gate` PostToolUse + `rust-lint`）；`sessionStart` → `session-start.sh`；`preCompact` → `precompact-full.sh`；`afterFileEdit` → `rustfmt.sh`。`resolve-router-rs.sh` 按 `cargo metadata` 解析 workspace `target-dir`（见根目录 `.cargo/config.toml`），勿手写假设二进制只在 `scripts/router-rs/target/`。`.cursor/hook-state/` 存门控临时状态。
 - 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
-- 策略强度差异：Codex CLI hook 仍可走 fail-closed（可 `decision: block`）；Cursor 侧当前无 stop/beforeSubmit 级 gate。
+- 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `cursor_hooks.rs`），与 Codex 不完全相同。
 - Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
 ## 日常更新方式
@@ -223,13 +226,13 @@ PowerShell 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` 续行。READ
 
 ## Hook integration quickstart
 
-This repo ships a Rust router (`scripts/router-rs`) that powers Codex CLI hooks and optional continuity; **Cursor IDE hooks in this repo are intentionally gate-free** (format/lint/session helpers only).
+This repo ships a Rust router (`scripts/router-rs`) that powers Codex CLI hooks and optional continuity. **Cursor** workspace hooks (`.cursor/hooks.json`) combine **review/subagent gate** (`review-gate.sh` → `router-rs cursor hook`) with **postToolUse chaining** (`post-tool-use.sh`: gate pre-goal + `rust-lint` / `cargo check`), **rustfmt** on save, **session digest** (`session-start.sh`), **sessionEnd** gate cleanup, and **preCompact** (`precompact-full.sh`, merges token usage from `precompact-notice.sh` with router `PreCompact` output). Autopilot / RFV hints need a buildable `router-rs` on `PATH` or resolved via `.cursor/hooks/resolve-router-rs.sh` (respects workspace `target-dir`).
 
 Hook/runtime policy is Rust-first: use `router-rs` as the authoritative startup path, and do not rely on a `.cursor/hooks/legacy/` fallback path.
 
 ### Cursor
 
-In-repo at `.cursor/hooks.json`. Auto-loaded by Cursor IDE; no install step required. Hooks call `session-start.sh`, `rust-lint.sh` (postToolUse `cargo check` on `.rs` writes), `rustfmt.sh`, and `precompact-notice.sh` only—no `review-gate.sh`. Validate wiring with `bash scripts/verify_cursor_hooks.sh`.
+In-repo at `.cursor/hooks.json`. Auto-loaded by Cursor IDE; no install step required. Current wiring (see file for timeouts): `beforeSubmitPrompt` / `stop` / `subagentStart` / `subagentStop` / `sessionEnd` → `review-gate.sh`; `preCompact` → `precompact-full.sh`; `sessionStart` → `session-start.sh`; `postToolUse` → `post-tool-use.sh` (chains `review-gate` PostToolUse + `rust-lint`); `afterFileEdit` → `rustfmt.sh`. Resolve `router-rs` with `.cursor/hooks/resolve-router-rs.sh` or `PATH`. Validate with `bash scripts/verify_cursor_hooks.sh`.
 
 ### Codex CLI
 
@@ -239,19 +242,21 @@ User-level install:
 bash scripts/install_codex_cli_hooks.sh
 ```
 
-This builds `router-rs` if needed, then runs `router-rs codex install-hooks`. Idempotent. For advanced use:
+This builds `router-rs` if needed, then runs `router-rs codex install-hooks`. Idempotent. For advanced use (binary path follows workspace `target-dir`, see `.cargo/config.toml`):
 
 ```bash
 cargo build --release --manifest-path scripts/router-rs/Cargo.toml
-./scripts/router-rs/target/release/router-rs codex install-hooks --check
+ROUTER_BIN="$(bash .cursor/hooks/resolve-router-rs.sh "$PWD")"
+test -n "$ROUTER_BIN" || { echo "router-rs binary not found after build" >&2; exit 1; }
+"$ROUTER_BIN" codex install-hooks --check
 ```
 
 Global install (recommended once per machine):
 
 ```bash
 cargo install --path scripts/router-rs --locked --force
-# or from an already-built binary:
-./scripts/router-rs/target/release/router-rs self install
+# Or, from a workspace build that respects .cargo/config.toml target-dir:
+# "$(bash .cursor/hooks/resolve-router-rs.sh "$PWD")" self install
 ```
 
 ### Cross-host CLI cheatsheet

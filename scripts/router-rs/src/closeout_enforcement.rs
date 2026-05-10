@@ -256,6 +256,26 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         });
     }
 
+    // R7 (depth review P0-B): verification_status=passed but record carries no command evidence
+    // and the optional EvidenceContext (when supplied by orchestrator) shows no successful
+    // EVIDENCE_INDEX rows either. Pure self-attestation should not be enough to claim "passed".
+    // The context-aware overload `evaluate_closeout_record_with_context` enforces this; here we
+    // emit only the record-internal half so the rule is documented and `commands_run`-empty
+    // claims at least surface a violation when no risks are acknowledged.
+    if status_lower == "passed"
+        && record.commands_run.is_empty()
+        && record.artifacts_checked.is_empty()
+        && record.risks.is_empty()
+        && record.blockers.is_empty()
+    {
+        violations.push(CloseoutViolation {
+            rule: "claimed_passed_without_evidence".to_string(),
+            severity: "block".to_string(),
+            detail: "verification_status=passed but commands_run/artifacts_checked/risks/blockers all empty — supply at least one command, artifact check, risk, or blocker to back the claim".to_string(),
+        });
+        missing.push("evidence_or_acknowledgement".to_string());
+    }
+
     let blocking = violations.iter().any(|v| v.severity == "block");
 
     CloseoutEnforcementResponse {
@@ -288,9 +308,63 @@ pub fn closeout_enforcement_contract() -> Value {
             "verification_passed_with_failed_command",
             "verification_passed_with_missing_artifact",
             "not_run_without_blockers_or_risks",
-            "claimed_done_with_failed_verification"
+            "claimed_done_with_failed_verification",
+            "claimed_passed_without_evidence",
+            "claimed_passed_without_evidence_index_rows"
         ]
     })
+}
+
+/// Optional context for context-aware closeout evaluation. When supplied, R8 also
+/// cross-checks against `EVIDENCE_INDEX.json` rows for the task: `verification_status=passed`
+/// with empty `commands_run` AND zero successful EVIDENCE_INDEX rows is blocked even when
+/// `artifacts_checked` is non-empty (artifact existence ≠ executable verification).
+#[derive(Debug, Clone, Default)]
+pub struct CloseoutEvidenceContext {
+    /// Whether the task's `EVIDENCE_INDEX.json` `artifacts` array is non-empty.
+    pub evidence_rows_non_empty: bool,
+    /// Whether the task's `EVIDENCE_INDEX.json` has at least one row with
+    /// `success==true` or `exit_code==0`.
+    pub has_successful_verification: bool,
+}
+
+/// Like [`evaluate_closeout_record`] but also runs R8 against an external evidence rollup.
+pub fn evaluate_closeout_record_with_context(
+    record: &CloseoutRecord,
+    ctx: &CloseoutEvidenceContext,
+) -> CloseoutEnforcementResponse {
+    let mut response = evaluate_closeout_record(record);
+    let status_lower = record.verification_status.trim().to_ascii_lowercase();
+    if status_lower == "passed"
+        && record.commands_run.is_empty()
+        && !ctx.has_successful_verification
+        && !response
+            .violations
+            .iter()
+            .any(|v| v.rule == "claimed_passed_without_evidence")
+    {
+        response.violations.push(CloseoutViolation {
+            rule: "claimed_passed_without_evidence_index_rows".to_string(),
+            severity: "block".to_string(),
+            detail: "verification_status=passed and commands_run is empty, and EVIDENCE_INDEX.json has no successful rows — record at least one verifier command (or run a verifier so PostTool hooks append to EVIDENCE_INDEX)".to_string(),
+        });
+        response
+            .missing_evidence
+            .push("evidence_index_successful_row".to_string());
+        response.closeout_allowed = false;
+    }
+    response
+}
+
+/// Convenience JSON wrapper mirroring [`evaluate_closeout_record_value`] but with context.
+pub fn evaluate_closeout_record_value_with_context(
+    payload: Value,
+    ctx: &CloseoutEvidenceContext,
+) -> Result<Value, String> {
+    let record: CloseoutRecord = serde_json::from_value(payload)
+        .map_err(|err| format!("parse closeout record failed: {err}"))?;
+    let response = evaluate_closeout_record_with_context(&record, ctx);
+    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
 }
 
 fn summary_claims_completion(summary: &str) -> bool {

@@ -1,7 +1,21 @@
 {
   "version": 1,
-  "_doc": "无 review/autopilot gate：session 简报、Rust 格式化与 postToolUse cargo check。router-rs 未参与 Cursor 钩子。",
+  "_doc": "beforeSubmitPrompt/stop/postToolUse/subagentStart/subagentStop → review-gate.sh（PostToolUse 消费 subagent 证据以满足 pre_goal）。preCompact → precompact-full。router-rs 未编译时 fail-open。",
   "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "_doc": "Goal/autopilot + review gate：stdin JSON → router-rs BeforeSubmitPrompt",
+        "command": ".cursor/hooks/review-gate.sh BeforeSubmitPrompt",
+        "timeout": 20
+      }
+    ],
+    "stop": [
+      {
+        "_doc": "Goal 续跑提示 + gate：stdin JSON → router-rs Stop",
+        "command": ".cursor/hooks/review-gate.sh Stop",
+        "timeout": 20
+      }
+    ],
     "sessionStart": [
       {
         "_doc": "TOKEN REDUCTION: compact project briefing (~300 tokens) at session start.",
@@ -9,11 +23,18 @@
         "timeout": 5
       }
     ],
+    "sessionEnd": [
+      {
+        "_doc": "会话结束：删除 .cursor/hook-state 下 review gate 状态，避免下一会话继承 RG_FOLLOWUP。",
+        "command": ".cursor/hooks/review-gate.sh SessionEnd",
+        "timeout": 10
+      }
+    ],
     "postToolUse": [
       {
-        "_doc": "CODE QUALITY: cargo check on .rs writes.",
-        "command": ".cursor/hooks/rust-lint.sh",
-        "timeout": 45
+        "_doc": "单次 stdin：review-gate PostToolUse（pre_goal）+ rust-lint；见 post-tool-use.sh 头注释。",
+        "command": ".cursor/hooks/post-tool-use.sh",
+        "timeout": 60
       }
     ],
     "afterFileEdit": [
@@ -25,9 +46,23 @@
     ],
     "preCompact": [
       {
-        "_doc": "TOKEN AWARENESS: context window stats before compaction.",
-        "command": ".cursor/hooks/precompact-notice.sh",
-        "timeout": 5
+        "_doc": "Token 用量 + router-rs PreCompact（门状态/RFV 摘要），与 AGENTS/review-fix-verify-loop 对齐。",
+        "command": ".cursor/hooks/precompact-full.sh",
+        "timeout": 25
+      }
+    ],
+    "subagentStart": [
+      {
+        "_doc": "更新 review gate：pre-goal subagent 计数 / phase（与 autopilot 契约对齐）。",
+        "command": ".cursor/hooks/review-gate.sh SubagentStart",
+        "timeout": 20
+      }
+    ],
+    "subagentStop": [
+      {
+        "_doc": "subagent 结束：推进 phase，供 Stop/beforeSubmit 门控消费。",
+        "command": ".cursor/hooks/review-gate.sh SubagentStop",
+        "timeout": 20
       }
     ]
   }

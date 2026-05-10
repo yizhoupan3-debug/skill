@@ -7,6 +7,7 @@ use crate::framework_runtime::{
     build_framework_refresh_payload, try_append_codex_post_tool_evidence,
     write_framework_session_artifacts,
 };
+use crate::router_env_flags::router_rs_env_enabled_default_true;
 use chrono::Utc;
 use regex::Regex;
 use serde_json::{json, Value};
@@ -16,10 +17,12 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -127,10 +130,29 @@ fn codex_state_dir(repo_root: &Path) -> PathBuf {
     repo_root.join(".codex").join("hook-state")
 }
 
+/// Unix: `flock(2)` on `<state>.lock` so same-process threads serialize correctly.
+/// Non-Unix: `O_EXCL` lock file + stale detection (legacy).
+#[cfg(unix)]
+struct CodexStateLock {
+    file: File,
+}
+
+#[cfg(unix)]
+impl Drop for CodexStateLock {
+    fn drop(&mut self) {
+        let fd = self.file.as_raw_fd();
+        unsafe {
+            let _ = libc::flock(fd, libc::LOCK_UN);
+        }
+    }
+}
+
+#[cfg(not(unix))]
 struct CodexStateLock {
     path: PathBuf,
 }
 
+#[cfg(not(unix))]
 impl Drop for CodexStateLock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
@@ -243,6 +265,31 @@ fn lock_is_stale(path: &Path) -> bool {
     ts.is_none_or(|t| now_ms.saturating_sub(t) > 30_000)
 }
 
+#[cfg(unix)]
+fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, String> {
+    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("state_dir_create_failed: {err}"))?;
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|err| format!("state_lock_open_failed: {err}"))?;
+    let fd = file.as_raw_fd();
+    let rc = unsafe { libc::flock(fd, libc::LOCK_EX) };
+    if rc != 0 {
+        return Err(format!(
+            "state_lock_flock_failed: {}",
+            io::Error::last_os_error()
+        ));
+    }
+    Ok(CodexStateLock { file })
+}
+
+#[cfg(not(unix))]
 fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, String> {
     let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
     let started = SystemTime::now();
@@ -710,13 +757,7 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
 }
 
 fn continuity_stop_checkpoint_env_enabled() -> bool {
-    match env::var("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT") {
-        Ok(value) => {
-            let token = value.trim().to_ascii_lowercase();
-            !(token == "0" || token == "false" || token == "off" || token == "no")
-        }
-        Err(_) => true,
-    }
+    router_rs_env_enabled_default_true("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT")
 }
 
 /// Codex Stop 守门通过后写入 `artifacts/current/*` 与指针文件；失败不阻断 Stop（仅 stderr）。
@@ -842,12 +883,14 @@ struct HostEntrypointSyncSection {
 fn host_entrypoint_partial_sync_section(
     desired_files: &BTreeMap<String, Vec<u8>>,
 ) -> HostEntrypointSyncSection {
+    let mut json_files = HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect::<Vec<_>>();
+    json_files.push(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string());
     HostEntrypointSyncSection {
         text_files: desired_host_entrypoint_text_files(desired_files),
-        json_files: HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
-            .iter()
-            .map(|path| (*path).to_string())
-            .collect(),
+        json_files,
     }
 }
 
@@ -934,12 +977,22 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
     Ok(report)
 }
 
-fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
+fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut files = BTreeMap::new();
-    files.insert(
-        CODEX_AGENT_POLICY_PATH.to_string(),
-        build_codex_agent_policy().into_bytes(),
-    );
+    let policy_path = repo_root.join(CODEX_AGENT_POLICY_PATH);
+    let policy = match fs::read(&policy_path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            build_codex_agent_policy().into_bytes()
+        }
+        Err(err) => {
+            return Err(format!(
+                "failed to read {}: {err}",
+                policy_path.to_string_lossy()
+            ));
+        }
+    };
+    files.insert(CODEX_AGENT_POLICY_PATH.to_string(), policy);
     files.insert(
         CODEX_HOOKS_PATH.to_string(),
         serialize_pretty_json_bytes(&build_codex_hook_manifest())?,
@@ -957,26 +1010,30 @@ fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec
 
 fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>) -> Value {
     let full_text_files = desired_host_entrypoint_text_files(desired_files);
+    let mut json_files = HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect::<Vec<_>>();
+    json_files.push(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string());
     json!({
         "schema_version": "host-entrypoints-sync-manifest-v1",
         "shared_system": {
             "policy": "host-specific-agent-policy-v1",
-            "source_of_truth": "skills/",
+            "routing_source_of_truth": "skills/",
+            "agent_policy_entrypoint": CODEX_AGENT_POLICY_PATH,
             "supported_hosts": ["codex-cli", "cursor"],
             "host_entrypoints": {
                 "codex-cli": CODEX_AGENT_POLICY_PATH,
-                "cursor": CODEX_AGENT_POLICY_PATH,
+                "cursor": [CODEX_AGENT_POLICY_PATH, ".cursor/rules/*.mdc"],
             },
         },
         "full_sync": {
             "text_files": full_text_files,
-            "json_files": [
-                HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-            ],
+            "json_files": json_files.clone(),
         },
         "partial_sync": {
             "text_files": full_text_files,
-            "json_files": HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
+            "json_files": json_files,
         },
     })
 }
@@ -986,7 +1043,6 @@ fn desired_host_entrypoint_text_files(desired_files: &BTreeMap<String, Vec<u8>>)
         .keys()
         .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
         .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
-        .filter(|path| path.as_str() != CODEX_HOOKS_README_PATH)
         .cloned()
         .collect()
 }
@@ -1187,6 +1243,8 @@ fn build_codex_agent_policy() -> String {
 fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
 Codex hooks are enabled for this repo and are managed by the Rust `router-rs` control plane.\n\n\
+<!-- managed_by: router-rs codex sync -->\n\n\
+**Policy snapshot:** the `codex_agent_policy` payload embeds the repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` preserves an existing root `AGENTS.md` from disk and only uses the embedded copy to bootstrap a missing file; rebuild before sync when you need generated Codex payloads to carry policy edits (see `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**).\n\n\
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 `SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` updates review gate state for subagent tools and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` enforces review gates then (when unblocked) writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Durable cleanup should use explicit refresh commands rather than an extra end-of-session hook.\n\n\
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active.\n\n\
@@ -1194,8 +1252,10 @@ Use `scripts/install_codex_cli_hooks.sh` only when you want to install the same 
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
+cargo build --manifest-path scripts/router-rs/Cargo.toml\n\
 router-rs codex sync --repo-root \"$PWD\"\n\
-```\n"
+```\n\n\
+Steady-state documentation map (vs `docs/history/` archive): `docs/README.md`.\n"
         .to_string()
 }
 
@@ -3449,6 +3509,32 @@ mod tests {
             assert!(lock.is_ok());
         }
 
+        #[cfg(unix)]
+        #[test]
+        fn codex_state_lock_blocks_until_released() {
+            use std::sync::mpsc;
+
+            let repo = fresh_repo();
+            let event = json!({"session_id":"lock-held"});
+            let state_path = codex_state_path(&repo, &event);
+            fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+            let guard = acquire_codex_state_lock(&state_path).unwrap();
+            let state_path_clone = state_path.clone();
+            let (tx, rx) = mpsc::channel();
+            let waiter = std::thread::spawn(move || {
+                let second = acquire_codex_state_lock(&state_path_clone).unwrap();
+                let _ = tx.send(());
+                drop(second);
+            });
+            std::thread::sleep(Duration::from_millis(50));
+            assert!(rx.try_recv().is_err());
+            drop(guard);
+            rx.recv_timeout(Duration::from_secs(5))
+                .expect("second acquirer should proceed after lock release");
+            waiter.join().unwrap();
+        }
+
+        #[cfg(not(unix))]
         #[test]
         fn codex_state_lock_blocks_when_held() {
             let repo = fresh_repo();

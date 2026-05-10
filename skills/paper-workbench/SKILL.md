@@ -83,8 +83,18 @@ trigger_hints:
   - 藏到附录
   - paper workflow
   - paper workbench
+  - 精准修改
+  - 局部修改
+  - 只改一段
+  - 不要动结构
+  - edit_scope: surgical
+  - 大面积重构
+  - 整篇改版
+  - 结构性改版
+  - 故事线重写
+  - edit_scope: refactor
 metadata:
-  version: "1.4.0"
+  version: "1.5.0"
   platforms: [codex]
   tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
@@ -132,6 +142,24 @@ dimension mode.
   - literature corpus / related work only -> keep the work here as source-backed paper context until it narrows to writing or citation hygiene
   - notation consistency only -> use `notation sweep` under `$paper-reviewer`
 
+## Edit scope gate (mandatory before any manuscript edit)
+
+Any path that touches the manuscript (`$paper-writing`, `$paper-reviser`, or
+edits executed from this front door) must first fix **`edit_scope`** using
+[`references/edit-scope-gate.md`](references/edit-scope-gate.md):
+
+- **`surgical` (精准修改)** — default when the user has **not** clearly authorized
+  structural refactoring; bounded replacements only, no unsolicited section
+  cuts or cross-section narrative rewrites.
+- **`refactor` (大面积重构)** — only with explicit user opt-in or strong refactor
+  signals; allows the full honest-edit contract of `$paper-reviser`.
+
+If the user is vague (`润色`, `改好一点`, `优化表述`) or mixed signals appear,
+**ask one disambiguation question** (`surgical` vs `refactor`) before editing.
+
+Optional machine token on its own line: `edit_scope: surgical` or
+`edit_scope: refactor`.
+
 ## Default front-door behavior
 
 Pick one external mode first, then keep the rest internal:
@@ -167,7 +195,8 @@ separate "known blocker" from "uncertainty that needs lookup".
 - Do not give a long review taxonomy before the verdict; lead with verdict, blockers, evidence, and next edit target.
 - Do not say "needs more experiments" without naming the missing comparison, measurement, or failure case.
 - Do not let external research become a separate literature-review task unless the paper cannot be judged without a corpus.
-- Do not preserve every manuscript section by default; cut, narrow, move to appendix, or stop defending weak claims when that is the honest route.
+- When **edit_scope=refactor** (or whole-paper judgment explicitly accepts structural cuts), do not preserve weak sections by default; cut, narrow, move to appendix, or stop defending weak claims when that is the honest route.
+- When **edit_scope=surgical**, do not delete, merge, or relocate sections and do not run cross-section throughline rewrites unless the user listed that work in **scope_items** (see [`references/edit-scope-gate.md`](references/edit-scope-gate.md)).
 - Do not end at critique if the user asked to get the paper closer to submission; convert findings into ordered edits.
 - Do not present "top-tier" as a style problem. Treat it as a selective-venue
   acceptance problem: novelty, evidence, comparison fairness, venue fit, and
@@ -201,8 +230,8 @@ that failure behind better English.
 - target-journal ref corpus and story-norm extraction -> source-backed paper context here, then `$paper-writing`
 - external calibration during review -> keep the main owner here or in
   `$paper-reviewer`; keep full corpus / novelty sweeps inside this paper front door
-- findings-driven manuscript changes -> `$paper-reviser`
-- local prose rewrite after scope is frozen -> `$paper-writing`
+- findings-driven manuscript changes -> `$paper-reviser` (respect **`edit_scope`**)
+- local prose rewrite after scope is frozen -> `$paper-writing` (default **`surgical`** unless user escalates to **`refactor`**)
 - figures / tables / captions / rendered presentation -> `figure-table mode`
 - notation / abbreviations / formula references -> `notation sweep`
 - page/word budget -> `length budget mode`
@@ -272,6 +301,8 @@ In filesystem-backed work, the stable artifacts are:
 
 ## Hard rules
 
+- Do not apply manuscript edits without a resolved **`edit_scope`** (`surgical`
+  vs `refactor`; see [`references/edit-scope-gate.md`](references/edit-scope-gate.md))
 - Do not start with prose polish when the real problem is claim or evidence
 - Do not let ref learning turn into sentence copying or citation padding
 - Do not force the user to choose reviewer vs reviser before the route is clear

@@ -111,6 +111,8 @@ Allow bounded sidecars when at least one condition is true:
 
 For these allowed cases, the supervisor should spawn sidecars promptly and keep local ownership of integration and final verification.
 
+Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [`review-fix-verify-loop` 推理深度契约](../review-fix-verify-loop/references/reasoning-depth-contract.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
+
 Reject spawning with an explicit reason:
 
 - `small_task`

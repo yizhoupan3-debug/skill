@@ -337,48 +337,44 @@ fn audit_journal(
         }
 
         // R31-33: Advanced Refactoring Suggestions
-        if let Some(path) = manifest_path {
-            if let Ok(content) = std::fs::read_to_string(path) {
-                if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some((skills, idx_slug, idx_trigger_hints)) =
-                        manifest_skill_columns(&manifest)
-                    {
-                        let active_skills: HashSet<_> =
-                            filtered.iter().map(|e| e.final_skill.as_str()).collect();
+        if let Some(path) = manifest_path
+            && let Ok(content) = std::fs::read_to_string(path)
+            && let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some((skills, idx_slug, idx_trigger_hints)) =
+                manifest_skill_columns(&manifest)
+        {
+            let active_skills: HashSet<_> =
+                filtered.iter().map(|e| e.final_skill.as_str()).collect();
 
-                        for s in skills {
-                            let Some(name) = s.get(idx_slug).and_then(|value| value.as_str())
-                            else {
-                                continue;
-                            };
-                            let triggers = row_text(&s[idx_trigger_hints]);
+            for s in skills {
+                let Some(name) = s.get(idx_slug).and_then(|value| value.as_str()) else {
+                    continue;
+                };
+                let triggers = row_text(&s[idx_trigger_hints]);
 
-                            // R33: Pruning Suggestion (Zero usage)
-                            if !active_skills.contains(name) && total > 5 {
-                                repair_suggestions.push(format!("Pruning: Skill `{}` has zero usage in last {} days. Consider deleting.", name, days));
-                            }
+                // R33: Pruning Suggestion (Zero usage)
+                if !active_skills.contains(name) && total > 5 {
+                    repair_suggestions.push(format!("Pruning: Skill `{}` has zero usage in last {} days. Consider deleting.", name, days));
+                }
 
-                            for e in filtered
-                                .iter()
-                                .filter(|e| e.init == "none" || e.init == "general")
-                            {
-                                let score = calculate_jaccard(&e.task, &triggers);
-                                if score > 0.25 {
-                                    repair_suggestions.push(format!("Near-miss: Task '{}' likely belongs to `{}`, but trigger missed (Jaccard={:.2})", e.task, name, score));
-                                    let task_lower = e.task.to_lowercase();
-                                    let triggers_lower = triggers.to_lowercase();
-                                    let keywords: Vec<_> = task_lower
-                                        .split_whitespace()
-                                        .filter(|w| w.len() > 4 && !triggers_lower.contains(w))
-                                        .collect();
-                                    if !keywords.is_empty() {
-                                        repair_suggestions.push(format!(
-                                            "Learning: Consider adding triggers {:?} to `{}`",
-                                            keywords, name
-                                        ));
-                                    }
-                                }
-                            }
+                for e in filtered
+                    .iter()
+                    .filter(|e| e.init == "none" || e.init == "general")
+                {
+                    let score = calculate_jaccard(&e.task, &triggers);
+                    if score > 0.25 {
+                        repair_suggestions.push(format!("Near-miss: Task '{}' likely belongs to `{}`, but trigger missed (Jaccard={:.2})", e.task, name, score));
+                        let task_lower = e.task.to_lowercase();
+                        let triggers_lower = triggers.to_lowercase();
+                        let keywords: Vec<_> = task_lower
+                            .split_whitespace()
+                            .filter(|w| w.len() > 4 && !triggers_lower.contains(w))
+                            .collect();
+                        if !keywords.is_empty() {
+                            repair_suggestions.push(format!(
+                                "Learning: Consider adding triggers {:?} to `{}`",
+                                keywords, name
+                            ));
                         }
                     }
                 }
@@ -453,51 +449,46 @@ fn generate_manifest(
     let cutoff = Utc::now() - Duration::days(days);
 
     let mut static_scores: HashMap<String, f32> = HashMap::new();
-    if let Some(path) = scores_json {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
-                    for entry in skills {
-                        if let (Some(name), Some(total)) =
-                            (entry["name"].as_str(), entry["total"].as_f64())
-                        {
-                            static_scores.insert(name.to_string(), total as f32);
-                        }
-                    }
-                } else if let Some(skills) =
-                    payload.get("skills").and_then(|value| value.as_object())
+    if let Some(path) = scores_json
+        && let Ok(content) = std::fs::read_to_string(path)
+        && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content)
+    {
+        if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
+            for entry in skills {
+                if let (Some(name), Some(total)) =
+                    (entry["name"].as_str(), entry["total"].as_f64())
                 {
-                    for (name, entry) in skills {
-                        if let Some(score) = entry
-                            .get("static_score")
-                            .or_else(|| entry.get("dynamic_score"))
-                            .and_then(|value| value.as_f64())
-                        {
-                            static_scores.insert(name.clone(), score as f32);
-                        }
-                    }
-                } else if let Some(obj) = payload.as_object() {
-                    for (name, value) in obj {
-                        if let Some(score) = value.as_f64() {
-                            static_scores.insert(name.clone(), score as f32);
-                        }
-                    }
+                    static_scores.insert(name.to_string(), total as f32);
+                }
+            }
+        } else if let Some(skills) = payload.get("skills").and_then(|value| value.as_object()) {
+            for (name, entry) in skills {
+                if let Some(score) = entry
+                    .get("static_score")
+                    .or_else(|| entry.get("dynamic_score"))
+                    .and_then(|value| value.as_f64())
+                {
+                    static_scores.insert(name.clone(), score as f32);
+                }
+            }
+        } else if let Some(obj) = payload.as_object() {
+            for (name, value) in obj {
+                if let Some(score) = value.as_f64() {
+                    static_scores.insert(name.clone(), score as f32);
                 }
             }
         }
     }
 
     let mut all_skills = HashSet::new();
-    if let Some(path) = manifest_path {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
-                    for row in skills {
-                        if let Some(name) = row.get(0).and_then(|value| value.as_str()) {
-                            all_skills.insert(name.to_string());
-                        }
-                    }
-                }
+    if let Some(path) = manifest_path
+        && let Ok(content) = std::fs::read_to_string(path)
+        && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content)
+        && let Some(skills) = payload.get("skills").and_then(|value| value.as_array())
+    {
+        for row in skills {
+            if let Some(name) = row.get(0).and_then(|value| value.as_str()) {
+                all_skills.insert(name.to_string());
             }
         }
     }
@@ -666,11 +657,9 @@ fn sync_feedback(journal: PathBuf, feedback: PathBuf, dry_run: bool) -> anyhow::
     let mut seen = HashSet::new();
     if feedback.exists() {
         let reader = BufReader::new(File::open(&feedback)?);
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                if l.starts_with("|") {
-                    seen.insert(l);
-                }
+        for l in reader.lines().map_while(Result::ok) {
+            if l.starts_with("|") {
+                seen.insert(l);
             }
         }
     }
@@ -729,7 +718,7 @@ fn row_text(value: &serde_json::Value) -> String {
     }
 }
 
-fn row_terms<'a>(value: &'a serde_json::Value) -> HashSet<&'a str> {
+fn row_terms(value: &serde_json::Value) -> HashSet<&str> {
     match value {
         serde_json::Value::Array(items) => items.iter().filter_map(|item| item.as_str()).collect(),
         serde_json::Value::String(text) => text.split_whitespace().collect(),
