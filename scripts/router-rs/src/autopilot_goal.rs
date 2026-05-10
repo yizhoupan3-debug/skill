@@ -2,7 +2,10 @@
 //! 不替代 LLM 执行，但把「未完成不得停」写成可校验文件态并由 hook 注入跟进。
 
 use crate::framework_runtime::resolve_repo_root_arg;
-use crate::router_env_flags::{router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose};
+use crate::router_env_flags::{
+    router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose,
+    router_rs_operator_inject_globally_enabled,
+};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -15,7 +18,9 @@ pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
 const AUTOPILOT_DRIVE_HOOK_ENV: &str = "ROUTER_RS_AUTOPILOT_DRIVE_HOOK";
 
 fn autopilot_drive_hook_enabled() -> bool {
-    router_rs_env_enabled_default_true(AUTOPILOT_DRIVE_HOOK_ENV)
+    // P1-E: aggregate kill-switch first.
+    router_rs_operator_inject_globally_enabled()
+        && router_rs_env_enabled_default_true(AUTOPILOT_DRIVE_HOOK_ENV)
 }
 
 fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {

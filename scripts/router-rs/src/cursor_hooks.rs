@@ -372,13 +372,13 @@ fn narrow_review_prefix_re() -> &'static Regex {
 fn framework_entrypoint_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)([/$])(autopilot|team|gitx|loop)\b").expect("invalid regex")
+        Regex::new(r"(?i)(^|\s)/(autopilot|team|loop|gitx)\b").expect("invalid regex")
     })
 }
 
 fn autopilot_entrypoint_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)([/$])autopilot\b").expect("invalid regex"))
+    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/autopilot\b").expect("invalid regex"))
 }
 
 fn goal_contract_re() -> &'static Regex {
@@ -1013,12 +1013,12 @@ fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
 
 fn loop_line_clear_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)^\s*([/$])loop\s+clear\b").expect("invalid regex"))
+    RE.get_or_init(|| Regex::new(r"(?i)^\s*/loop\s+clear\b").expect("invalid regex"))
 }
 
 fn loop_line_next_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)^\s*([/$])loop\s+next\b").expect("invalid regex"))
+    RE.get_or_init(|| Regex::new(r"(?i)^\s*/loop\s+next\b").expect("invalid regex"))
 }
 
 /// 整段提示词在 strip 后仅含单行 `/loop clear|next` 时不视为 framework/delegation 入口。
@@ -1047,7 +1047,7 @@ fn is_autopilot_entrypoint_prompt(text: &str) -> bool {
     autopilot_entrypoint_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
-/// `/$team`、`/$gitx` 等框架入口仍视为委托/并行编排；**`/autopilot` 除外**（只走 goal 机）。
+/// `/$team` 等框架入口仍视为委托/并行编排；**`gitx` 仅认 `/gitx`**（不认 `$gitx`）；**`/autopilot` 除外**（只走 goal 机）。
 /// 修复：此前 `framework_entrypoint` 含 autopilot，导致 `delegation_required` 与 `goal_required` 叠乘，
 /// 与 autopilot 执行轮的门控语义冲突（现已拆分为仅 goal 路径跟 AG_FOLLOWUP）。
 fn framework_prompt_arms_delegation(text: &str) -> bool {
@@ -2349,15 +2349,43 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
     let _ = fs::remove_file(state_path(repo_root, event));
     let _ = fs::remove_file(state_lock_path(repo_root, event));
     remove_adversarial_loop(repo_root, event);
-    // 再按文件名前缀清扫整个 `.cursor/hook-state/`，与 `review-gate.sh` 的 router-缺失 fallback 行为对齐：
-    // SessionEnd 的 payload 不一定带与 beforeSubmit 一致的 `session_id` / `cwd`，单文件删法会让 stale 状态
-    // 跨会话泄漏（参见 AGENTS.md → Continuity → Cursor 段「sessionEnd 应清 hook-state 下 review gate 状态」）。
+    // 再按文件名前缀清扫整个 `.cursor/hook-state/`，**解决与** `review-gate.sh` router-缺失 fallback **同类的** stale
+    // 状态泄漏问题：SessionEnd 的 payload 不一定带与 beforeSubmit 一致的 `session_id` / `cwd`，单文件删法会让旧
+    // 会话状态跨会话泄漏。**清理范围不同**：fallback 是 `find -mindepth 1 -maxdepth 1 -exec rm -rf` 清空目录顶层；
+    // 本路径仅清扫本模块写入的已知前缀（review-subagent / adversarial-loop 主状态 + lock + 原子写入孤儿 tmp），
+    // 避免误伤其它 hook 共用目录时的状态文件。详见 AGENTS.md → Continuity → Cursor 段。
     sweep_review_gate_state_dir(repo_root);
+    // 最后回收本仓库 Cursor terminal 留下的 stale 子进程（cargo/python/实验脚本等）。
+    let report = terminate_stale_terminal_processes(repo_root);
+    if !cursor_hook_silent_by_env() {
+        if !report.killed.is_empty() {
+            eprintln!(
+                "router-rs SessionEnd: terminated {} stale terminal pid(s) {:?} (scanned={}, outside_repo={}, dead={})",
+                report.killed.len(),
+                report.killed,
+                report.scanned,
+                report.skipped_outside_repo,
+                report.skipped_dead,
+            );
+        }
+        if !report.failed.is_empty() {
+            eprintln!(
+                "router-rs SessionEnd: failed to terminate pid(s): {:?}",
+                report.failed
+            );
+        }
+    }
     json!({})
 }
 
-/// 清扫 `.cursor/hook-state/` 下所有由本模块写入的状态文件（review gate 主状态 + lock + adversarial-loop）。
-/// 不递归子目录、不删除其他前缀的文件，避免误伤未识别的 hook 状态。
+/// 清扫 `.cursor/hook-state/` 下所有由本模块写入的状态文件：
+/// 1. review gate 主状态：`review-subagent-<key>.json` / `.lock`；
+/// 2. adversarial-loop 主状态：`adversarial-loop-<key>.json`；
+/// 3. 原子写入孤儿（崩溃 / 异常退出残留）：
+///    - `save_state` 留下 `.tmp-<pid>-<micros>-review-subagent-<key>.json`；
+///    - `save_adversarial_loop` 留下 `.tmp-adv-loop-<pid>-<micros>`（无扩展名）。
+///
+/// 不递归子目录、不删除其它前缀的文件，避免误伤共用目录的其它 hook 状态。
 fn sweep_review_gate_state_dir(repo_root: &Path) {
     let dir = state_dir(repo_root);
     let entries = match fs::read_dir(&dir) {
@@ -2372,17 +2400,261 @@ fn sweep_review_gate_state_dir(repo_root: &Path) {
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        let owned = name.starts_with("review-subagent-") || name.starts_with("adversarial-loop-");
-        if !owned {
-            continue;
-        }
-        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-            continue;
-        };
-        if matches!(ext, "json" | "lock") {
+        if review_gate_state_file_owned_by_module(name) {
             let _ = fs::remove_file(&path);
         }
     }
+}
+
+/// 判断 `.cursor/hook-state/` 下的文件名是否由本模块写入。仅识别已知前缀以避免误伤
+/// 与本模块共用目录的其它 hook 状态；命名约定与 `state_path` / `state_lock_path` /
+/// `adversarial_loop_path` / `save_state` / `save_adversarial_loop` 保持一致。
+fn review_gate_state_file_owned_by_module(name: &str) -> bool {
+    // 主状态：扩展名约束 json|lock，避免误删用户放进来的同前缀其它扩展文件。
+    if name.starts_with("review-subagent-") || name.starts_with("adversarial-loop-") {
+        if let Some(ext) = std::path::Path::new(name)
+            .extension()
+            .and_then(|e| e.to_str())
+        {
+            return matches!(ext, "json" | "lock");
+        }
+        return false;
+    }
+    // 原子写入孤儿（崩溃残留）。`save_state` 的 tmp 形如
+    // `.tmp-<pid>-<micros>-review-subagent-<key>.json`，故用「以 `.tmp-` 起、且包含 `review-subagent-`」识别；
+    // `save_adversarial_loop` 的 tmp 形如 `.tmp-adv-loop-<pid>-<micros>`（无扩展名），故单独前缀识别。
+    if name.starts_with(".tmp-") && name.contains("review-subagent-") {
+        return true;
+    }
+    if name.starts_with(".tmp-adv-loop-") {
+        return true;
+    }
+    false
+}
+
+// --- SessionEnd: 清理本仓库 Cursor terminal 留下的 stale 子进程 ---
+//
+// 痛点：`run_terminal_cmd` 等 shell 工具发起的 `cargo test` / python 实验脚本，
+// 因工具超时被断开但子进程仍在跑（`block_until_ms: 0` 后台命令同理）。多个会话叠加
+// 内存与 CPU 越占越多。SessionEnd 时按 Cursor `terminals/<id>.txt` header 找出
+// 仍 active 且 cwd 在本仓库内的 PID，发 SIGTERM → 2s 兜底 SIGKILL（含进程组）。
+// 默认开启；`ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0|false|off|no` 关闭整个步骤。
+
+#[derive(Debug, Default, Clone)]
+struct StaleTerminalKillReport {
+    scanned: usize,
+    killed: Vec<u32>,
+    skipped_outside_repo: usize,
+    skipped_inactive: usize,
+    skipped_dead: usize,
+    failed: Vec<(u32, String)>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct TerminalHeader {
+    pid: Option<u32>,
+    cwd: Option<PathBuf>,
+    is_active: bool,
+}
+
+fn cursor_kill_stale_terminals_disabled_by_env() -> bool {
+    let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS") else {
+        return false;
+    };
+    let t = raw.trim().to_ascii_lowercase();
+    matches!(t.as_str(), "0" | "false" | "off" | "no")
+}
+
+/// terminals 目录定位优先级：
+/// 1. `CURSOR_TERMINALS_DIR`（显式覆盖，便于测试与定制）
+/// 2. `$HOME/.cursor/projects/<repo_root 绝对路径替换 / 为 - 去前导 ->/terminals/`
+fn resolve_cursor_terminals_dir(repo_root: &Path) -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("CURSOR_TERMINALS_DIR") {
+        let p = PathBuf::from(explicit);
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+    let home = std::env::var_os("HOME")?;
+    let abs = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    let abs_str = abs.to_str()?;
+    let trimmed = abs_str.trim_start_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mangled = trimmed.replace('/', "-");
+    let dir = PathBuf::from(home)
+        .join(".cursor")
+        .join("projects")
+        .join(mangled)
+        .join("terminals");
+    if dir.is_dir() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
+/// 解析 Cursor terminals/*.txt 头部 YAML-front-matter（首个 `---` ... `---` 区段）。
+/// 仅取关心的字段；缺失字段返回 `None`/默认值，调用方再做过滤。
+fn parse_terminal_header(text: &str) -> Option<TerminalHeader> {
+    let mut lines = text.lines();
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+    let mut header = TerminalHeader::default();
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            break;
+        }
+        let Some((key, val)) = trimmed.split_once(':') else {
+            continue;
+        };
+        let key = key.trim();
+        let val = val.trim().trim_matches('"').trim();
+        match key {
+            "pid" => header.pid = val.parse().ok(),
+            "cwd" => {
+                if !val.is_empty() {
+                    header.cwd = Some(PathBuf::from(val));
+                }
+            }
+            "running_for_ms" => header.is_active = !val.is_empty(),
+            _ => {}
+        }
+    }
+    Some(header)
+}
+
+#[cfg(unix)]
+fn process_pgid(pid: u32) -> Option<u32> {
+    let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
+    if pgid <= 0 {
+        None
+    } else {
+        Some(pgid as u32)
+    }
+}
+
+#[cfg(not(unix))]
+fn process_pgid(_pid: u32) -> Option<u32> {
+    None
+}
+
+#[cfg(unix)]
+fn signal_pid_or_pgrp(pid: u32, pgid: Option<u32>, signal: libc::c_int) {
+    let target = match pgid {
+        Some(g) => -(g as libc::pid_t),
+        None => pid as libc::pid_t,
+    };
+    unsafe {
+        let _ = libc::kill(target, signal);
+    }
+}
+
+/// SIGTERM → 最多等 2s → SIGKILL；优先按进程组信号，覆盖 `cargo test`/`python -m` 这类 fork 子进程的命令。
+#[cfg(unix)]
+fn terminate_pid(pid: u32) -> Result<(), String> {
+    let pgid = process_pgid(pid);
+    signal_pid_or_pgrp(pid, pgid, libc::SIGTERM);
+    for _ in 0..20 {
+        thread::sleep(Duration::from_millis(100));
+        if !is_process_alive(pid) {
+            return Ok(());
+        }
+    }
+    signal_pid_or_pgrp(pid, pgid, libc::SIGKILL);
+    thread::sleep(Duration::from_millis(50));
+    if is_process_alive(pid) {
+        Err(format!("SIGKILL did not reap pid={pid}"))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(unix))]
+fn terminate_pid(_pid: u32) -> Result<(), String> {
+    Err("non-unix terminate not implemented".into())
+}
+
+fn terminate_stale_terminal_processes(repo_root: &Path) -> StaleTerminalKillReport {
+    if cursor_kill_stale_terminals_disabled_by_env() {
+        return StaleTerminalKillReport::default();
+    }
+    let Some(terminals_dir) = resolve_cursor_terminals_dir(repo_root) else {
+        return StaleTerminalKillReport::default();
+    };
+    terminate_stale_terminal_processes_in_dir(repo_root, &terminals_dir)
+}
+
+/// 纯逻辑形式：调用方提供 terminals 目录（便于测试与显式覆盖路径）。不再读 env 开关。
+fn terminate_stale_terminal_processes_in_dir(
+    repo_root: &Path,
+    terminals_dir: &Path,
+) -> StaleTerminalKillReport {
+    let mut report = StaleTerminalKillReport::default();
+    let entries = match fs::read_dir(terminals_dir) {
+        Ok(e) => e,
+        Err(_) => return report,
+    };
+    let our_pid = std::process::id();
+    let abs_repo = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !name.ends_with(".txt") {
+            continue;
+        }
+        report.scanned += 1;
+        // header 在前 ~4KB 内，避免读整个 terminal 输出文件。
+        let mut buf = String::new();
+        if let Ok(file) = fs::File::open(&path) {
+            let _ = file.take(4096).read_to_string(&mut buf);
+        }
+        let Some(header) = parse_terminal_header(&buf) else {
+            continue;
+        };
+        if !header.is_active {
+            report.skipped_inactive += 1;
+            continue;
+        }
+        let Some(pid) = header.pid else {
+            continue;
+        };
+        if pid <= 1 || pid == our_pid {
+            continue;
+        }
+        // 范围过滤：cwd 必须落在本仓库内，避免误杀同机器其他项目的 terminal。
+        // 先于 is_process_alive：pid 已消失但仍带“外仓 cwd”的文件应记为 skipped_outside_repo，而非 skipped_dead。
+        let Some(cwd) = header.cwd.as_ref() else {
+            report.skipped_outside_repo += 1;
+            continue;
+        };
+        let cwd_canon = cwd.canonicalize().unwrap_or_else(|_| cwd.clone());
+        if !cwd_canon.starts_with(&abs_repo) {
+            report.skipped_outside_repo += 1;
+            continue;
+        }
+        if !is_process_alive(pid) {
+            report.skipped_dead += 1;
+            continue;
+        }
+        match terminate_pid(pid) {
+            Ok(()) => report.killed.push(pid),
+            Err(err) => report.failed.push((pid, err)),
+        }
+    }
+    report
 }
 
 fn dispatch_event(repo_root: &Path, event_name: &str, payload: &Value) -> Value {
@@ -3520,6 +3792,69 @@ mod tests {
         assert!(unrelated.exists(), "unrelated hook state must be preserved");
     }
 
+    /// SessionEnd sweep 必须回收 `save_state` / `save_adversarial_loop` 因崩溃残留的原子写入孤儿，
+    /// 避免长期累积消耗 `.cursor/hook-state/` 卫生（命名规则见 `save_state` / `save_adversarial_loop`）。
+    #[test]
+    fn session_end_sweeps_atomic_write_orphans() {
+        let repo = fresh_repo();
+        let dir = state_dir(&repo);
+        fs::create_dir_all(&dir).expect("mkdir state dir");
+
+        let primary_tmp = dir.join(".tmp-99999-12345-review-subagent-deadbeef.json");
+        let adv_tmp = dir.join(".tmp-adv-loop-99999-67890");
+        let other_tmp = dir.join(".tmp-99999-12345-other-hook.json");
+        fs::write(&primary_tmp, b"{}").expect("seed primary tmp");
+        fs::write(&adv_tmp, b"{}").expect("seed adv tmp");
+        fs::write(&other_tmp, b"{}").expect("seed other tmp");
+
+        let _ = dispatch_event(&repo, "sessionEnd", &json!({ "session_id": "any" }));
+
+        assert!(
+            !primary_tmp.exists(),
+            "review-subagent atomic-write tmp must be swept"
+        );
+        assert!(
+            !adv_tmp.exists(),
+            "adversarial-loop atomic-write tmp must be swept"
+        );
+        assert!(
+            other_tmp.exists(),
+            "unrelated tmp must be preserved (sweep is module-scoped)"
+        );
+    }
+
+    /// 文件名归属判断必须只接受本模块写入的命名（含原子写入孤儿前缀），其它名称一律排除。
+    #[test]
+    fn review_gate_state_file_owned_by_module_recognizes_known_names_only() {
+        // 主状态：仅认 json|lock 扩展。
+        assert!(review_gate_state_file_owned_by_module(
+            "review-subagent-abc.json"
+        ));
+        assert!(review_gate_state_file_owned_by_module(
+            "review-subagent-abc.lock"
+        ));
+        assert!(review_gate_state_file_owned_by_module(
+            "adversarial-loop-abc.json"
+        ));
+        assert!(!review_gate_state_file_owned_by_module(
+            "review-subagent-abc.bak"
+        ));
+        assert!(!review_gate_state_file_owned_by_module("review-subagent-"));
+        // 原子写入孤儿。
+        assert!(review_gate_state_file_owned_by_module(
+            ".tmp-1-2-review-subagent-abc.json"
+        ));
+        assert!(review_gate_state_file_owned_by_module(".tmp-adv-loop-1-2"));
+        // 未识别命名不应被清扫。
+        assert!(!review_gate_state_file_owned_by_module(
+            "other-hook-state.json"
+        ));
+        assert!(!review_gate_state_file_owned_by_module(
+            ".tmp-1-2-other-hook.json"
+        ));
+        assert!(!review_gate_state_file_owned_by_module(".tmp-random"));
+    }
+
     #[test]
     fn narrow_path_review_does_not_arm() {
         let repo = fresh_repo();
@@ -4196,5 +4531,209 @@ mod tests {
         let _ = dispatch_event(&repo, "preCompact", &payload);
         let after = fs::read_to_string(&path).expect("read after");
         assert_eq!(before, after);
+    }
+
+    // --- SessionEnd: stale terminal 子进程清理 ---
+
+    fn write_terminal_file(dir: &Path, id: &str, header: &str) -> PathBuf {
+        fs::create_dir_all(dir).expect("mkdir terminals");
+        let path = dir.join(format!("{id}.txt"));
+        fs::write(&path, header).expect("write terminal file");
+        path
+    }
+
+    #[test]
+    fn parse_terminal_header_extracts_pid_cwd_active() {
+        let txt = "---\npid: 12345\ncwd: \"/Users/joe/Documents/skill\"\ncommand: \"cargo test\"\nstarted_at: 2026-05-10T12:00:00Z\nrunning_for_ms: 295037   \n---\nbody...";
+        let h = parse_terminal_header(txt).expect("parsed");
+        assert_eq!(h.pid, Some(12345));
+        assert_eq!(
+            h.cwd.as_deref(),
+            Some(Path::new("/Users/joe/Documents/skill"))
+        );
+        assert!(h.is_active);
+    }
+
+    #[test]
+    fn parse_terminal_header_inactive_when_no_running_for_ms() {
+        let txt = "---\npid: 35455\ncwd: /Users/joe/Documents/skill\n---\n~/skill ❯";
+        let h = parse_terminal_header(txt).expect("parsed");
+        assert_eq!(h.pid, Some(35455));
+        assert!(!h.is_active);
+    }
+
+    #[test]
+    fn parse_terminal_header_rejects_non_yaml_block() {
+        assert!(parse_terminal_header("no front matter here").is_none());
+    }
+
+    #[test]
+    fn cursor_kill_stale_terminals_disabled_by_env_truthy_values_keep_enabled() {
+        let prev = std::env::var_os("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS");
+        std::env::remove_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS");
+        assert!(!cursor_kill_stale_terminals_disabled_by_env());
+        for v in ["", "1", "true", "yes", "on", "anything"] {
+            std::env::set_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS", v);
+            assert!(
+                !cursor_kill_stale_terminals_disabled_by_env(),
+                "value {v:?} should NOT disable"
+            );
+        }
+        for v in ["0", "false", "off", "no", "  FALSE  "] {
+            std::env::set_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS", v);
+            assert!(
+                cursor_kill_stale_terminals_disabled_by_env(),
+                "value {v:?} should disable"
+            );
+        }
+        match prev {
+            Some(v) => std::env::set_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS", v),
+            None => std::env::remove_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS"),
+        }
+    }
+
+    #[test]
+    fn terminate_in_dir_skips_when_terminals_dir_missing() {
+        let repo = fresh_repo();
+        let report = terminate_stale_terminal_processes_in_dir(&repo, &repo.join("missing"));
+        assert_eq!(report.scanned, 0);
+        assert!(report.killed.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminate_in_dir_skips_inactive_outside_and_dead_branches() {
+        use std::process::{Command, Stdio};
+        let repo = fresh_repo();
+        let term_dir = repo.join("__terminals");
+
+        // 1) inactive：header 中无 `running_for_ms`，PID 不重要（取一个被显式过滤的小值）。
+        write_terminal_file(
+            &term_dir,
+            "inactive",
+            &format!(
+                "---\npid: 1\ncwd: \"{}\"\ncommand: \"echo hi\"\n---\nbody",
+                repo.display()
+            ),
+        );
+
+        // 2) outside_repo：spawn 一个实际活着的 sleep，cwd 指向仓库外。
+        let mut alive_outside = Command::new("sleep")
+            .arg("60")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn outside sleep");
+        let outside_pid = alive_outside.id();
+        // 给子进程一点时间真正进入运行态。
+        thread::sleep(Duration::from_millis(50));
+        write_terminal_file(
+            &term_dir,
+            "outside",
+            &format!(
+                "---\npid: {outside_pid}\ncwd: /tmp/router-rs-stale-test-not-this-repo\nrunning_for_ms: 1000\n---\n"
+            ),
+        );
+
+        // 3) dead：spawn `true` 立即 wait，确保 PID 已被 reap；短窗口内 PID 不会被 OS 复用。
+        let mut quick = Command::new("true")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn true");
+        let dead_pid = quick.id();
+        quick.wait().expect("reap true");
+        // 等待 OS 把 PID 标记为 ESRCH（macOS/Linux 下 reap 后立刻就 dead，但留几次轮询兜底）。
+        for _ in 0..50 {
+            if !is_process_alive(dead_pid) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        write_terminal_file(
+            &term_dir,
+            "dead",
+            &format!(
+                "---\npid: {dead_pid}\ncwd: \"{}\"\nrunning_for_ms: 100\n---\n",
+                repo.display()
+            ),
+        );
+
+        let report = terminate_stale_terminal_processes_in_dir(&repo, &term_dir);
+        // outside 子进程必须仍活着——证明 cwd 范围过滤生效。
+        assert!(
+            is_process_alive(outside_pid),
+            "outside-repo child {outside_pid} must NOT be killed; report={report:?}"
+        );
+        assert!(
+            report.killed.is_empty(),
+            "no children inside repo were truly active: {:?}",
+            report.killed
+        );
+        assert!(report.failed.is_empty(), "{:?}", report.failed);
+        assert_eq!(report.scanned, 3);
+        assert_eq!(report.skipped_inactive, 1);
+        assert_eq!(report.skipped_outside_repo, 1);
+        // dead PID 在极少数 race 下可能被 OS 立刻复用（同 PPID 下另一进程），所以放宽断言。
+        assert!(report.skipped_dead <= 1);
+
+        // 收尾：杀掉 outside 子进程并 reap。
+        unsafe {
+            let _ = libc::kill(outside_pid as libc::pid_t, libc::SIGKILL);
+        }
+        let _ = alive_outside.wait();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminate_in_dir_kills_real_sleep_child_within_repo() {
+        use std::process::{Command, Stdio};
+
+        let repo = fresh_repo();
+        let term_dir = repo.join("__terminals");
+
+        let mut child = Command::new("sleep")
+            .arg("60")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        let pid = child.id();
+        // 给子进程一点时间真正进入运行态。
+        thread::sleep(Duration::from_millis(50));
+        assert!(is_process_alive(pid), "child must be alive before kill");
+
+        write_terminal_file(
+            &term_dir,
+            "alive",
+            &format!(
+                "---\npid: {pid}\ncwd: \"{}\"\ncommand: \"sleep 60\"\nrunning_for_ms: 500\n---\n",
+                repo.display()
+            ),
+        );
+
+        let report = terminate_stale_terminal_processes_in_dir(&repo, &term_dir);
+        assert_eq!(report.killed, vec![pid], "report={report:?}");
+        assert!(!is_process_alive(pid), "child must be reaped");
+        // 防 zombie：测试结束前 wait 一次（kill 之后会立即返回）。
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn handle_session_end_respects_kill_disable_env() {
+        // 走 dispatch_event 真实路径；只验证 env=0 时不会因 terminals 路径推导失败而 panic，
+        // 也不影响既有 `.cursor/hook-state` 清扫。
+        let repo = fresh_repo();
+        let payload = event("kill-disable-sess", "全面review这个仓库");
+        let _ = dispatch_event(&repo, "beforeSubmitPrompt", &payload);
+        let prev = std::env::var_os("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS");
+        std::env::set_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS", "0");
+        let out = dispatch_event(&repo, "sessionEnd", &payload);
+        assert_eq!(out, json!({}));
+        assert!(!state_path(&repo, &payload).exists(), "state still cleared");
+        match prev {
+            Some(v) => std::env::set_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS", v),
+            None => std::env::remove_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS"),
+        }
     }
 }

@@ -2,7 +2,10 @@
 
 use crate::autopilot_goal::read_active_task_id;
 use crate::framework_runtime::resolve_repo_root_arg;
-use crate::router_env_flags::{router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose};
+use crate::router_env_flags::{
+    router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose,
+    router_rs_operator_inject_globally_enabled,
+};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -121,7 +124,9 @@ fn cross_link_evidence(
 }
 
 fn rfv_loop_hook_enabled() -> bool {
-    router_rs_env_enabled_default_true(RFV_LOOP_HOOK_ENV)
+    // P1-E: aggregate kill-switch first.
+    router_rs_operator_inject_globally_enabled()
+        && router_rs_env_enabled_default_true(RFV_LOOP_HOOK_ENV)
 }
 
 fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
@@ -720,6 +725,115 @@ mod tests {
             None => std::env::remove_var("ROUTER_RS_GOAL_PROMPT_VERBOSE"),
         }
 
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// P0-A: invalid `verify_result` is rejected (not silently coerced).
+    #[test]
+    fn append_round_rejects_unknown_verify_result() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-vr-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/t-vr")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"t-vr"}"#,
+        )
+        .expect("active");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "t-vr",
+            "goal": "verify enum",
+            "max_rounds": 5u64,
+        }))
+        .expect("start");
+        let err = framework_rfv_loop(json!({
+            "repo_root": rr,
+            "operation": "append_round",
+            "round": 1u64,
+            "verify_result": "kinda passed",
+        }))
+        .expect_err("invalid verify_result must error");
+        assert!(
+            err.contains("verify_result must be one of"),
+            "unexpected error: {err}"
+        );
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// P1-B: PASS round with no successful EVIDENCE_INDEX rows surfaces `cross_check=no_evidence_window`.
+    #[test]
+    fn append_round_marks_pass_without_evidence() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-cl-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        let task_dir = repo.join("artifacts/current/t-cl");
+        fs::create_dir_all(&task_dir).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"t-cl"}"#,
+        )
+        .expect("active");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "t-cl",
+            "goal": "cross-link",
+            "max_rounds": 3u64,
+        }))
+        .expect("start");
+        // No EVIDENCE_INDEX yet → PASS should land with no_evidence_window.
+        let out = framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "verify_result": "PASS",
+        }))
+        .expect("append");
+        let rounds = out["rfv_loop_state"]["rounds"]
+            .as_array()
+            .expect("rounds array");
+        let r1 = &rounds[0];
+        assert_eq!(r1["cross_check"], json!("no_evidence_window"));
+        assert!(r1["evidence_refs"].as_array().expect("refs").is_empty());
+
+        // Now write a successful EVIDENCE row newer than the round timestamp and append round 2.
+        // Use a timestamp far in the future so it deterministically beats round 1's `at`.
+        fs::write(
+            task_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"recorded_at":"2099-12-31T23:59:59Z","exit_code":0,"success":true}]}"#,
+        )
+        .expect("evidence");
+        let out2 = framework_rfv_loop(json!({
+            "repo_root": rr,
+            "operation": "append_round",
+            "round": 2u64,
+            "verify_result": "PASS",
+        }))
+        .expect("append 2");
+        let rounds2 = out2["rfv_loop_state"]["rounds"]
+            .as_array()
+            .expect("rounds 2");
+        let r2 = &rounds2[1];
+        assert!(
+            r2.get("cross_check").is_none(),
+            "expected cross_check absent on PASS-with-evidence; round={r2}"
+        );
+        assert!(
+            !r2["evidence_refs"].as_array().expect("refs2").is_empty(),
+            "expected non-empty evidence_refs; round={r2}"
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
