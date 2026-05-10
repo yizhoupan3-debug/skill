@@ -18,8 +18,8 @@ use std::time::{Duration, Instant};
 const DEFAULT_MODEL: &str = "dall-e-3";
 const DEFAULT_RESPONSES_URL: &str = "https://api.openai.com/v1/images/generations";
 const DEFAULT_SIZE: &str = "1024x1024";
-const DEFAULT_QUALITY: &str = "standard";
-const DEFAULT_OUTPUT_FORMAT: &str = "url";
+const DEFAULT_QUALITY: &str = "auto";
+const DEFAULT_OUTPUT_FORMAT: &str = "png";
 const DEFAULT_OUTPUT_PATH: &str = "output/image-generated/output.png";
 const DEFAULT_DOWNSCALE_SUFFIX: &str = "-web";
 const DEFAULT_CONCURRENCY: usize = 5;
@@ -658,8 +658,7 @@ fn post_responses_request(payload: &Value) -> Result<Value> {
         .post(responses_url())
         .header("Accept", "application/json")
         .json(payload);
-    if let Ok(token) = std::env::var("OPENAI_API_KEY")
-    {
+    if let Ok(token) = std::env::var("OPENAI_API_KEY") {
         request = request.bearer_auth(token);
     }
     let response = request

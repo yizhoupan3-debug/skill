@@ -52,6 +52,9 @@ jobs:
       - name: Run browser MCP integration tests
         run: cargo test --test browser_mcp_scripts
 
+      - name: Run Rust CLI tools integration tests
+        run: cargo test --test rust_cli_tools
+
       - name: Run router-rs crate tests
         run: cargo test --manifest-path scripts/router-rs/Cargo.toml
 
