@@ -25,15 +25,12 @@
       "project_dir": "skills",
       "user_dir": "${CODEX_HOME}/skills",
       "source_dir": "skills"
-    },
-    "memory": {
-      "source_dir": "memory"
     }
   },
   "framework_commands": {
     "autopilot": {
       "canonical_owner": "autopilot",
-      "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
+      "skill_path": "skills/autopilot/SKILL.md",
       "reroute_when_ambiguous": "deepinterview",
       "reroute_when_root_cause_unknown": "deepinterview",
       "official_workflow": {
@@ -50,12 +47,17 @@
         "root-cause-first-when-unknown",
         "verification-evidence-required",
         "resume-and-recovery-required",
-        "converge-until-bounded-scope-clean"
+        "converge-until-bounded-scope-clean",
+        "horizon-slice-macro-goals-with-exit-criteria-each-slice",
+        "no-chat-turn-without-continuity-delta-when-task-active",
+        "prefer-autopilot-deep-when-external-claims-drive-the-critical-path"
       ],
       "local_adaptations": [
         "store execution state in rust-session-supervisor plus continuity artifacts",
         "store specs and plans in artifacts/current task-local bootstrap outputs",
-        "use deepinterview as the first-class clarification gate for vague requests"
+        "use deepinterview as the first-class clarification gate for vague requests",
+        "treat each turn as a bus cycle: read alias+continuity then mutate repo then refresh SESSION_SUMMARY and NEXT_ACTIONS",
+        "for goals larger than one context window: chain horizons; each horizon ends with explicit next_actions for cold resume"
       ],
       "autonomy_contract": {
         "auto_agent_orchestration": {
@@ -93,21 +95,44 @@
             "verification_pending",
             "completed"
           ],
+          "lifecycle_states_implementation": {
+            "owner": "host_agent_layer",
+            "rust_runtime_coverage": "job_lifecycle_only",
+            "status": "host_owned_no_rust_native_state_machine",
+            "rationale": "Rust runtime tracks worker/job lifecycle (queued/running/interrupted/...). The goal-level six-state machine listed above is owned by the host agent layer (codex/cursor LLM + hooks). Treat the list as a host-side contract, not a Rust enum."
+          },
           "control_surface": [
             "goal_start",
             "goal_pause",
             "goal_resume",
             "goal_clear"
           ],
+          "control_surface_implementation": {
+            "owner": "hybrid_host_plus_rust_persistence",
+            "rust_runtime_coverage": "goal_persistence_and_drive_hook",
+            "status": "rust_stdio_goal_store_plus_cursor_followup",
+            "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0."
+          },
           "never_stop_at_plan_only": true,
           "allow_network_research_for_unknowns": true,
           "require_source_citation_for_external_claims": true,
           "requires_checkpoint_log_each_loop": true,
           "pause_requires_explicit_resume": true,
+          "pause_requires_explicit_resume_scope": {
+            "applies_to": [
+              "goal_lifecycle_pause"
+            ],
+            "excludes": [
+              "rate_limit_resume_due",
+              "worker_session_resume"
+            ],
+            "rationale": "The 'no implicit resume' rule applies to user-initiated goal pauses only. Rust-side worker mechanisms such as rate-limit backoff resume (session_supervisor::resume_due) and worker takeover claims continue to operate automatically; they are bounded retries of an already-running goal, not new goal starts."
+          },
           "checkpoint_artifacts": [
             "SESSION_SUMMARY.md",
             "NEXT_ACTIONS.json",
-            "EVIDENCE_INDEX.json"
+            "EVIDENCE_INDEX.json",
+            "GOAL_STATE.json"
           ]
         }
       },
@@ -148,13 +173,45 @@
         "codex-cli": "/autopilot",
         "cursor": "/autopilot"
       },
+      "entrypoint_modes": {
+        "quick": {
+          "codex-cli": "/autopilot-quick",
+          "cursor": "/autopilot-quick"
+        },
+        "deep": {
+          "codex-cli": "/autopilot-deep",
+          "cursor": "/autopilot-deep"
+        }
+      },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
         "explicit_entrypoints": [
           "/autopilot",
-          "$autopilot"
+          "$autopilot",
+          "/autopilot-quick",
+          "$autopilot-quick",
+          "/autopilot-deep",
+          "$autopilot-deep",
+          "/autopilot quick",
+          "/autopilot deep"
         ],
         "implicit_route_policy": "never"
+      },
+      "research_contract": {
+        "quick": {
+          "target": "fast-check",
+          "default_output_style": "compact",
+          "max_rounds": 1
+        },
+        "deep": {
+          "target": "deep-research",
+          "default_output_style": "evidence-ledger",
+          "requires_multi_source_validation": true,
+          "minimum_independent_sources_per_major_claim": 2,
+          "requires_uncertainty_register": true,
+          "requires_counter_evidence": true,
+          "auto_continue_on_length_finish": true
+        }
       },
       "lineage": {
         "source": "repo-native",
@@ -228,8 +285,29 @@
         "description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."
       }
     },
+    "loop": {
+      "canonical_owner": "loop",
+      "skill_path": "skills/loop/SKILL.md",
+      "host_entrypoints": {
+        "codex-cli": "/loop",
+        "cursor": "/loop"
+      },
+      "interaction_invariants": {
+        "requires_explicit_entrypoint": true,
+        "explicit_entrypoints": [
+          "/loop",
+          "$loop"
+        ],
+        "implicit_route_policy": "never"
+      },
+      "lineage": {
+        "source": "repo-native",
+        "description": "Host-orchestrated adversarial review-fix passes with progressive rubric disclosure via router-rs Cursor hooks."
+      }
+    },
     "team": {
       "canonical_owner": "team",
+      "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
       "delegation_gate": "agent-swarm-orchestration",
       "auto_route_allowed": false,
       "route_mode": "team-orchestration",
@@ -429,7 +507,6 @@
       ],
       "capabilities": [
         "artifact_contract",
-        "memory_mounts",
         "mcp_servers",
         "workspace_bootstrap",
         "batch_execution",
@@ -467,14 +544,17 @@
           "relative": ".cursor/mcp.json"
         }
       ],
-      "session_supervisor_driver": "cursor_driver",
+      "session_supervisor_driver": "unsupported",
+      "session_supervisor_status": {
+        "supported": false,
+        "rationale": "Cursor host does not expose external tmux session management or auto-resume. session_supervisor.rs::build_driver_command rejects non-codex drivers with `unknown_driver`. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
+      },
       "resume_command_examples": [
         "在 Cursor 中继续当前会话",
         "在同一工作区重新打开 Agent 对话"
       ],
       "capabilities": [
         "artifact_contract",
-        "memory_mounts",
         "mcp_servers",
         "workspace_bootstrap",
         "interactive_agent_chat",

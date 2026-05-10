@@ -1,5 +1,68 @@
 {
+  "_comment": "Managed by router-rs. Regenerate with `router-rs codex sync --repo-root \"$PWD\"`.",
   "hooks": {
-    
-  }
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_BIN=\"\"; if [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$ROUTER_RS_BIN\" ]; then echo \"[codex-hook] router-rs binary missing; state update skipped\" >&2; exit 0; fi; \"$ROUTER_RS_BIN\" codex hook --event=PostToolUse --repo-root \"$CODEX_PROJECT_ROOT\"'",
+            "statusMessage": "Updating review/subagent gate state",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_BIN=\"\"; if [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$ROUTER_RS_BIN\" ]; then printf '%s\\n' '{{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Codex hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}}'; exit 1; fi; \"$ROUTER_RS_BIN\" codex hook --event=PreToolUse --repo-root \"$CODEX_PROJECT_ROOT\"'",
+            "statusMessage": "Checking generated-surface guard",
+            "timeout": 8,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_BIN=\"\"; if [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$ROUTER_RS_BIN\" ]; then echo \"[codex-hook] router-rs binary missing; state update skipped\" >&2; exit 0; fi; \"$ROUTER_RS_BIN\" codex hook --event=SessionStart --repo-root \"$CODEX_PROJECT_ROOT\"'",
+            "statusMessage": "Loading Codex workspace context",
+            "timeout": 3,
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|clear"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_BIN=\"\"; if [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$ROUTER_RS_BIN\" ]; then printf '%s\\n' '{{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Codex hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}}'; exit 1; fi; \"$ROUTER_RS_BIN\" codex hook --event=Stop --repo-root \"$CODEX_PROJECT_ROOT\"'",
+            "loop_limit": 3,
+            "statusMessage": "Enforcing review/subagent gate",
+            "timeout": 8,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_BIN=\"\"; if [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$ROUTER_RS_BIN\" ]; then printf '%s\\n' '{{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Codex hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}}'; exit 1; fi; \"$ROUTER_RS_BIN\" codex hook --event=UserPromptSubmit --repo-root \"$CODEX_PROJECT_ROOT\"'",
+            "statusMessage": "Checking review/subagent gate",
+            "timeout": 8,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "version": 1
 }

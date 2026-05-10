@@ -1,53 +1,32 @@
 {
   "version": 1,
-  "_comment": "Cursor review-subagent gate. Rust-backed via router-rs (`cursor hook --event=...`). Python implementation moved to .cursor/hooks/legacy/ as break-glass fallback. State machine details: see scripts/router-rs/src/cursor_hooks.rs.",
+  "_doc": "无 review/autopilot gate：session 简报、Rust 格式化与 postToolUse cargo check。router-rs 未参与 Cursor 钩子。",
   "hooks": {
-    "beforeSubmitPrompt": [
+    "sessionStart": [
       {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=beforeSubmitPrompt --repo-root \"$CURSOR_PROJECT_ROOT\"'",
+        "_doc": "TOKEN REDUCTION: compact project briefing (~300 tokens) at session start.",
+        "command": ".cursor/hooks/session-start.sh",
         "timeout": 5
-      }
-    ],
-    "subagentStart": [
-      {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=subagentStart --repo-root \"$CURSOR_PROJECT_ROOT\"'",
-        "timeout": 3
-      }
-    ],
-    "subagentStop": [
-      {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=subagentStop --repo-root \"$CURSOR_PROJECT_ROOT\"'",
-        "timeout": 3
       }
     ],
     "postToolUse": [
       {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=postToolUse --repo-root \"$CURSOR_PROJECT_ROOT\"'",
-        "timeout": 3
+        "_doc": "CODE QUALITY: cargo check on .rs writes.",
+        "command": ".cursor/hooks/rust-lint.sh",
+        "timeout": 45
       }
     ],
-    "afterAgentResponse": [
+    "afterFileEdit": [
       {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=afterAgentResponse --repo-root \"$CURSOR_PROJECT_ROOT\"'",
-        "timeout": 3
+        "_doc": "CODE QUALITY: rustfmt on .rs after agent edits.",
+        "command": ".cursor/hooks/rustfmt.sh",
+        "timeout": 10
       }
     ],
     "preCompact": [
       {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=preCompact --repo-root \"$CURSOR_PROJECT_ROOT\"'",
-        "timeout": 3
-      }
-    ],
-    "sessionEnd": [
-      {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=sessionEnd --repo-root \"$CURSOR_PROJECT_ROOT\"'",
-        "timeout": 3
-      }
-    ],
-    "stop": [
-      {
-        "command": "/usr/bin/env bash -lc 'CURSOR_PROJECT_ROOT=\"${CURSOR_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_LAUNCHER=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh\"; ROUTER_RS_MANIFEST=\"$CURSOR_PROJECT_ROOT/scripts/router-rs/Cargo.toml\"; if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then exit 0; fi; \"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" cursor hook --event=stop --repo-root \"$CURSOR_PROJECT_ROOT\"'",
-        "loop_limit": 3,
+        "_doc": "TOKEN AWARENESS: context window stats before compaction.",
+        "command": ".cursor/hooks/precompact-notice.sh",
         "timeout": 5
       }
     ]

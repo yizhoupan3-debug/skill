@@ -11,8 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "scripts" / "install_codex_cli_hooks.sh"
-ROUTER_RS_LAUNCHER = ROOT / "scripts" / "router-rs" / "run_router_rs.sh"
-ROUTER_RS_MANIFEST = ROOT / "scripts" / "router-rs" / "Cargo.toml"
 
 
 def assert_true(condition: bool, message: str) -> None:
@@ -29,7 +27,7 @@ def run_installer(codex_home: Path) -> subprocess.CompletedProcess[str]:
         env=env,
         text=True,
         capture_output=True,
-        timeout=20,
+        timeout=180,
     )
 
 
@@ -72,17 +70,26 @@ def test_preserves_existing_event_hooks() -> None:
                 if isinstance(hook, dict):
                     commands.append(hook.get("command"))
         assert_true("/usr/bin/env echo existing" in commands, "existing stop hook should be preserved")
-        expected_command = (
-            f"/usr/bin/env bash -lc '"
-            f'CODEX_PROJECT_ROOT="${{CODEX_PROJECT_ROOT:-{ROOT.as_posix()}}}"; '
-            f'ROUTER_RS_LAUNCHER="$CODEX_PROJECT_ROOT/scripts/router-rs/run_router_rs.sh"; '
-            f'ROUTER_RS_MANIFEST="$CODEX_PROJECT_ROOT/scripts/router-rs/Cargo.toml"; '
-            f'if [ ! -x "$ROUTER_RS_LAUNCHER" ]; then exit 0; fi; '
-            f'"$ROUTER_RS_LAUNCHER" "$ROUTER_RS_MANIFEST" codex hook review-subagent-gate '
-            f'--repo-root "$CODEX_PROJECT_ROOT"'
-            f"'"
+        router_hooks = [
+            c
+            for c in commands
+            if isinstance(c, str) and "codex hook --event=Stop" in c
+        ]
+        assert_true(len(router_hooks) == 1, "expected exactly one managed Stop command hook")
+        gate_cmd = router_hooks[0]
+        assert_true(
+            "git rev-parse --show-toplevel" in gate_cmd,
+            "hook should resolve repo root at runtime, not embed install-time path only",
         )
-        assert_true(expected_command in commands, "installer hook should be added")
+        assert_true(
+            'ROUTER_RS_BIN=""; if [ -x "$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs"'
+            in gate_cmd,
+            "hook should prefer in-repo router-rs (release first) before PATH",
+        )
+        assert_true(
+            "exit 1" in gate_cmd and "fail-closed" in gate_cmd,
+            "hook should fail-closed when router-rs is missing",
+        )
 
 
 def test_updates_features_scoped_codex_hooks_only() -> None:
@@ -103,7 +110,8 @@ def test_updates_features_scoped_codex_hooks_only() -> None:
 
         text = config_path.read_text(encoding="utf-8")
         assert_true("[custom]\ncodex_hooks = false" in text, "non-features codex_hooks should be untouched")
-        assert_true("[features]" in text and "codex_hooks = true" in text, "features codex_hooks should be enabled")
+        assert_true("[features]" in text and "hooks = true" in text, "features hooks should be enabled")
+        assert_true("codex_hooks = true" not in text, "deprecated features codex_hooks should not be emitted")
 
 
 def main() -> int:

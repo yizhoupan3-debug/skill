@@ -8,6 +8,8 @@ on:
       - 'scripts/**'
       - 'rust_tools/**'
       - 'tests/**'
+      - '.cursor/**'
+      - '.github/workflows/**'
       - 'AGENTS.md'
       - '.codex/**'
       - 'configs/codex/**'
@@ -18,6 +20,8 @@ on:
       - 'scripts/**'
       - 'rust_tools/**'
       - 'tests/**'
+      - '.cursor/**'
+      - '.github/workflows/**'
       - 'AGENTS.md'
       - '.codex/**'
       - 'configs/codex/**'
@@ -37,7 +41,6 @@ jobs:
           cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
             --skills-root skills \
             --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-            --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
             --apply
 
       - name: Run Rust policy tests
@@ -46,17 +49,26 @@ jobs:
       - name: Run host integration tests
         run: cargo test --test host_integration
 
+      - name: Run browser MCP integration tests
+        run: cargo test --test browser_mcp_scripts
+
       - name: Run router-rs crate tests
         run: cargo test --manifest-path scripts/router-rs/Cargo.toml
+
+      - name: Verify Cursor hooks wiring
+        run: bash scripts/verify_cursor_hooks.sh
+
+      - name: Run Codex hook installer tests
+        run: python3 .cursor/hook-tests/test_install_codex_cli_hooks.py
 
       - name: Check generated artifact drift
         run: |
           cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
             --skills-root skills \
             --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-            --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
             --apply
-          ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml \
+          cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+          ./scripts/router-rs/target/release/router-rs \
             framework host-integration generated-artifacts-status \
             --framework-root "$PWD" > generated-artifacts-status.json
           python - <<'PY'

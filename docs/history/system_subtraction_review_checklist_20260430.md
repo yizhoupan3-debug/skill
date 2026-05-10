@@ -29,10 +29,8 @@
 ## 2. 过度抽象层
 
 - [x] `profile -> codex_adapter -> host_adapter_payload` 过度抽象：Codex-only 时可以直接叫 `codex_profile` 或 `codex_host_payload`，不需要 adapter 叙事。
-- [x] `workspace_bootstrap.bridges.skills/memory` 过度抽象：当前只有 Codex skills 和 project memory，`bridge` 名称制造了“还有其他 host 需要投影”的错觉。
 - [x] `framework_native_aliases` 过度抽象：`autopilot`、`team`、`deepinterview` 实际是入口/模式，不应同时以 skill、alias、host entrypoint、runtime state machine 多重身份出现。
 - [x] `control_plane_contracts_json` 过度抽象：大量 contract descriptor 是自描述控制面，不在默认执行链路中产生直接价值。
-- [x] `runtime backend family parity` 过度抽象：filesystem/sqlite/memory parity 更适合测试或迁移工具，不应常驻默认 runtime。
 - [x] `framework_surface_policy + loadouts + tiers` 过度抽象：三份文件表达类似激活策略，建议压缩成一个 runtime-consumed policy 或降级为文档。
 - [x] `session_supervisor + framework_runtime + host_integration` 对 continuity/artifact 的职责重叠：都在描述状态、恢复、迁移或生命周期。
 
@@ -40,8 +38,6 @@
 
 - [x] `runtime_storage.rs` 的 sqlite legacy key 读取仍保留：`stable_key OR legacy_key`。
 - [x] `runtime_storage.rs` 的 `coerce_legacy_service_delegate_kind()` 仍保留旧 delegate 兼容。
-- [x] `host_integration.rs` 的 legacy artifact migration 仍保留：`PlanLegacyArtifactRoots`、`MigrateLegacyArtifactRoots`、`artifacts/memory_automation`、`tmp-*` 迁移。
-- [x] `framework_runtime.rs` 的 legacy memory archive 仍保留：`MEMORY_AUTO.md` 与 `sessions/` 迁移。
 - [x] `framework_runtime.rs` 的 supervisor fallback route 仍保留：trace 不匹配时回落到 supervisor controller 字段。
 - [x] `framework_profile.rs` 的 `compatibility_rules.python_may_continue_to_author = true` 与当前“Rust 真源，不恢复 Python”目标冲突。
 - [x] `codex_hooks.rs` 不再维护非 Codex 旧 entrypoint 清理面。
@@ -52,7 +48,7 @@
 ## 4. 可以合并的入口
 
 - [x] 合并 `--json`、`--route-json`、`--route-policy-json`、`--route-snapshot-json`、`--route-report-json`、`--route-resolution-json` 到 `router route|search|eval|report` 子命令。
-- [x] 合并 `--framework-runtime-snapshot-json`、`--framework-memory-recall-json`、`--framework-session-artifact-write-json`、`--framework-refresh-json`、`--framework-alias-json` 到 `router framework ...` 子命令。
+- [x] 合并 `--framework-runtime-snapshot-json`、`--framework-session-artifact-write-json`、`--framework-refresh-json`、`--framework-alias-json` 到 `router framework ...` 子命令。
 - [x] 合并 trace/checkpoint/attached-event flags 到 `router trace ...` 子命令。
 - [x] 合并 storage/backend/checkpoint-control-plane flags 到 `router storage ...` 子命令。
 - [x] 合并 `--host-integration <subcommand>` 与 `--sync-host-entrypoints-json`、`--codex-hook-projection-json`、`--codex-hook-command` 到 `router codex ...` 子命令。
@@ -64,7 +60,6 @@
 - [x] 删除默认路径中的 non-Codex 旧路径清理逻辑，只保留一次性迁移脚本或历史说明。
 - [x] 删除 `python_may_continue_to_author` 兼容声明，改成 `rust_only_authority = true`。
 - [x] 删除 sqlite legacy absolute-key fallback，若仍担心旧数据，先提供一次性 migration command。
-- [x] 删除 memory `MEMORY_AUTO.md`/`sessions` 自动 archive 主路径，改成显式 `router migrate legacy-memory`。
 - [x] 删除 `template_root` 参数，当前 `InstallNativeIntegration` 接收但不使用。
 - [x] 删除或隐藏 `profile_artifacts_json` 的 adapter 命名，Codex-only 下不再暴露 adapter artifact 叙事。
 - [x] 删除 `ROUTER_BIN_EXPLICIT`，当前 `start_browser_mcp.sh` 设置后未使用。

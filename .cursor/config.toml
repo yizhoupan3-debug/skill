@@ -1,0 +1,8 @@
+#:schema https://developers.openai.com/cursor/config-schema.json
+
+# Repo-local Cursor overlay for this repository.
+# Keep only repository-scoped settings here.
+# Machine-wide defaults belong in ~/.cursor/config.toml.
+
+[features]
+cursor_hooks = true

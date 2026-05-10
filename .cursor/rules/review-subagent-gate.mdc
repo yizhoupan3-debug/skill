@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Review Subagent Gate
 
+仅 Cursor：与 `AGENTS.md` **Execution Ladder** → **宿主优先级**（Codex / Cursor 分工）配对。
+
 Subagent is the default execution mode once this gate is triggered. Unless explicitly overridden, require independent subagent lanes before finalizing.
 
 ## Trigger intent

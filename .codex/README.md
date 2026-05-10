@@ -1,24 +1,19 @@
 # Codex Hooks Projection
 
-Codex hooks are **disabled for this repo by default**.
+Codex hooks are enabled for this repo and are managed by the Rust `router-rs` control plane.
 
-Project-local `.codex/hooks.json` intentionally contains **no active hooks**.
+Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.
 
-After running `scripts/install_codex_cli_hooks.sh`, `~/.codex/hooks.json` will include a codex-cli command hook that invokes the Rust `router-rs` review-subagent gate on `UserPromptSubmit`, `PostToolUse`, and `Stop`.
+`SessionStart` injects a compact workspace pointer, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` records lightweight evidence, and `Stop` enforces closeout gates. Durable cleanup should use explicit refresh commands rather than an extra end-of-session hook.
 
-The Rust hook commands remain available for explicit one-off audits.
+Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active.
 
-Use `scripts/install_codex_cli_hooks.sh` to install user-level hooks into `~/.codex/` for codex-cli only. The installer validates `python3` for config editing, enables `[features].codex_hooks = true` in `~/.codex/config.toml`, keeps existing hooks, and idempotently appends the review-subagent command hook without replacing unrelated handlers.
-
-Hook state paths are host-specific and transient:
-
-- Codex review-subagent gate state lives under `.codex/hook-state/`.
-- Cursor review-subagent gate state lives under `.cursor/hook-state/`.
+Use `scripts/install_codex_cli_hooks.sh` only when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.
 
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.
 
 Regenerate with:
 
 ```sh
-./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root "$PWD"
+router-rs codex sync --repo-root "$PWD"
 ```

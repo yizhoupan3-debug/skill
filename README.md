@@ -1,6 +1,6 @@
 # Codex + Cursor Skill System Handoff Guide
 
-这份仓库是一整套给 Codex 和 Cursor 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆下来，直接作为 Codex/Cursor 的工作目录使用。
+这份仓库是一整套给 Codex 和 Cursor 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆、验证，并按本机的 `CODEX_HOME` / `CURSOR_HOME` 或工作区路径启用；不要依赖某台机器的绝对路径。
 
 ## 这套系统包含什么
 
@@ -24,13 +24,10 @@ git grep -n -I -E "OPENAI_API_KEY|api_key|secret|token|password|smtp|cookie|auth
 
 建议不要分享这些本地状态文件或目录：
 
-- `.codex/memory/`
 - `.supervisor_state.json`
 - `artifacts/`
 - `output/`
 - `archives/`
-- `memory/*.db`
-- `memory/*.sqlite3`
 - 任何 `.env`、token、账号状态、运行日志
 
 当前 `.gitignore` 已经忽略了大部分临时目录和状态文件，但分享前仍建议再检查一次 `git status --short`。如果你只通过 GitHub 分享，Git 只会上传已经纳入版本控制的文件。
@@ -109,7 +106,7 @@ cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml
 cargo test --test policy_contracts
 ```
 
-如果上面都通过，说明 skill 编译器、路由产物和策略测试在她的 Windows 环境里可用。
+如果上面都通过，说明 skill 编译器、路由产物和策略测试在她的 Windows 环境里可用。需要启用 hook 时，还要先构建 `router-rs`，因为 Codex/Cursor hook 都通过这个 Rust 二进制执行。
 
 ## 在 Codex / Cursor 里使用
 
@@ -125,8 +122,8 @@ codex
 ### Codex 侧（仓库级）
 
 1. Codex 先读取根目录 `AGENTS.md`。
-2. Codex 再查 `skills/SKILL_ROUTING_RUNTIME.json`。
-3. 命中后只读取对应的 `skills/<name>/SKILL.md`。
+2. 仓库开发态先查 `skills/SKILL_ROUTING_RUNTIME.json`；全局安装态先查 `$CODEX_HOME/skills/SKILL_ROUTING_RUNTIME.json`。
+3. 命中后只读取 runtime 记录里的 `skill_path` 对应文件。
 4. 不要让 Codex 一次性预读整个 `skills/` 技能库。
 
 可以用这句话测试是否生效：
@@ -139,9 +136,9 @@ codex
 
 - Cursor 规则来自 `.cursor/rules/`，对当前工作区（本仓库根目录）生效。
 - Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
-- 本仓库 Cursor review hook 状态文件在 `.cursor/hook-state/`。
+- 本仓库默认不在 Cursor 侧启用 `router-rs` review gate；历史状态目录 `.cursor/hook-state/` 可能仍存在但不会被当前 `hooks.json` 写入。
 - 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
-- 策略强度差异：Codex CLI hook 走 fail-closed（可 `decision: block`）；Cursor `stop` hook 受宿主限制只能 soft gate（`followup_message`），但会持续升级提醒。
+- 策略强度差异：Codex CLI hook 仍可走 fail-closed（可 `decision: block`）；Cursor 侧当前无 stop/beforeSubmit 级 gate。
 - Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
 ## 日常更新方式
@@ -223,3 +220,43 @@ PowerShell 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` 续行。READ
 ### 可以只复制 `skills/` 吗？
 
 不推荐。`skills/` 是核心，但完整系统还包括 `AGENTS.md`、编译器、测试、CI 和维护约定。通过 GitHub 克隆整个仓库最稳。
+
+## Hook integration quickstart
+
+This repo ships a Rust router (`scripts/router-rs`) that powers Codex CLI hooks and optional continuity; **Cursor IDE hooks in this repo are intentionally gate-free** (format/lint/session helpers only).
+
+Hook/runtime policy is Rust-first: use `router-rs` as the authoritative startup path, and do not rely on a `.cursor/hooks/legacy/` fallback path.
+
+### Cursor
+
+In-repo at `.cursor/hooks.json`. Auto-loaded by Cursor IDE; no install step required. Hooks call `session-start.sh`, `rust-lint.sh` (postToolUse `cargo check` on `.rs` writes), `rustfmt.sh`, and `precompact-notice.sh` only—no `review-gate.sh`. Validate wiring with `bash scripts/verify_cursor_hooks.sh`.
+
+### Codex CLI
+
+User-level install:
+
+```bash
+bash scripts/install_codex_cli_hooks.sh
+```
+
+This builds `router-rs` if needed, then runs `router-rs codex install-hooks`. Idempotent. For advanced use:
+
+```bash
+cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+./scripts/router-rs/target/release/router-rs codex install-hooks --check
+```
+
+Global install (recommended once per machine):
+
+```bash
+cargo install --path scripts/router-rs --locked --force
+# or from an already-built binary:
+./scripts/router-rs/target/release/router-rs self install
+```
+
+### Cross-host CLI cheatsheet
+
+| Action | Cursor | Codex |
+|---|---|---|
+| Run review gate | `cursor hook --event=<event>` | `codex hook --event=<name>` (or positional) |
+| Install user-level hooks | (none; in-repo) | `codex install-hooks --apply` |

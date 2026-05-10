@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Review Subagent Gate (Prompt)",
+  "description": "Enforce review/subagent gate on prompt submission. Triggers router-rs codex hook to check if review or parallel delegation is requested, and injects additional context requiring subagent spawn or reject reason.",
+  "version": "1",
+  "when": {
+    "type": "promptSubmit"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Before proceeding, check if this request requires review or parallel delegation. If it matches patterns like \"review this PR\", \"深度审查\", \"并行实现\", or framework entrypoints (/autopilot, $team), you MUST either: 1) Spawn independent subagent lanes (using invoke_sub_agent tool with appropriate type like 'context-gatherer', 'general-task-execution'), OR 2) Explicitly state one reject reason: small_task, shared_context_heavy, write_scope_overlap, next_step_blocked, verification_missing, or token_overhead_dominates. Do not proceed with direct implementation without satisfying this gate."
+  }
+}

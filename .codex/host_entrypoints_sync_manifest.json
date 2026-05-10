@@ -8,7 +8,9 @@
     ]
   },
   "partial_sync": {
-    "json_files": [],
+    "json_files": [
+      ".codex/hooks.json"
+    ],
     "text_files": [
       "AGENTS.md"
     ]
@@ -16,12 +18,14 @@
   "schema_version": "host-entrypoints-sync-manifest-v1",
   "shared_system": {
     "host_entrypoints": {
-      "codex-cli": "AGENTS.md"
+      "codex-cli": "AGENTS.md",
+      "cursor": "AGENTS.md"
     },
     "policy": "host-specific-agent-policy-v1",
     "source_of_truth": "skills/",
     "supported_hosts": [
-      "codex-cli"
+      "codex-cli",
+      "cursor"
     ]
   }
 }
