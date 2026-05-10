@@ -1,8 +1,15 @@
 use super::*;
+use crate::integration_test_prelude::*;
+
+use serde_json::{json, Map, Value};
+
+use crate::cli::args::*;
+use crate::cli::runtime_ops::LiveExecuteResult;
 use crate::route::{
     evaluate_routing_cases, load_records_cached_for_stdio_with_default_runtime_path,
     load_routing_eval_cases, read_json, value_to_string,
 };
+use crate::route::{RouteDecision, SkillRecord};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::thread::{sleep, spawn};
@@ -249,6 +256,86 @@ impl GithubActionsHardUnsetCloseoutEnvGuard {
 }
 
 impl Drop for GithubActionsHardUnsetCloseoutEnvGuard {
+    fn drop(&mut self) {
+        match &self.prior_ci {
+            Some(v) => std::env::set_var("CI", v),
+            None => std::env::remove_var("CI"),
+        }
+        match &self.prior_github_actions {
+            Some(v) => std::env::set_var("GITHUB_ACTIONS", v),
+            None => std::env::remove_var("GITHUB_ACTIONS"),
+        }
+        match &self.prior_closeout {
+            Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
+            None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+        }
+    }
+}
+
+/// `CI=true` 且显式 `ROUTER_RS_CLOSEOUT_ENFORCEMENT=0`：程序化门禁关闭应优先于 CI 检测。
+struct CiWithCloseoutDisabledEnvGuard {
+    prior_ci: Option<String>,
+    prior_github_actions: Option<String>,
+    prior_closeout: Option<String>,
+}
+
+impl CiWithCloseoutDisabledEnvGuard {
+    fn new() -> Self {
+        let prior_ci = std::env::var("CI").ok();
+        let prior_github_actions = std::env::var("GITHUB_ACTIONS").ok();
+        let prior_closeout = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
+        std::env::set_var("CI", "true");
+        std::env::remove_var("GITHUB_ACTIONS");
+        std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "0");
+        Self {
+            prior_ci,
+            prior_github_actions,
+            prior_closeout,
+        }
+    }
+}
+
+impl Drop for CiWithCloseoutDisabledEnvGuard {
+    fn drop(&mut self) {
+        match &self.prior_ci {
+            Some(v) => std::env::set_var("CI", v),
+            None => std::env::remove_var("CI"),
+        }
+        match &self.prior_github_actions {
+            Some(v) => std::env::set_var("GITHUB_ACTIONS", v),
+            None => std::env::remove_var("GITHUB_ACTIONS"),
+        }
+        match &self.prior_closeout {
+            Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
+            None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+        }
+    }
+}
+
+/// 本地非 CI，但 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 设为空字符串：视为「已设置」且非软关断 token → 硬门禁。
+struct LocalNonCiEmptyCloseoutEnvGuard {
+    prior_ci: Option<String>,
+    prior_github_actions: Option<String>,
+    prior_closeout: Option<String>,
+}
+
+impl LocalNonCiEmptyCloseoutEnvGuard {
+    fn new() -> Self {
+        let prior_ci = std::env::var("CI").ok();
+        let prior_github_actions = std::env::var("GITHUB_ACTIONS").ok();
+        let prior_closeout = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
+        std::env::remove_var("CI");
+        std::env::remove_var("GITHUB_ACTIONS");
+        std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "");
+        Self {
+            prior_ci,
+            prior_github_actions,
+            prior_closeout,
+        }
+    }
+}
+
+impl Drop for LocalNonCiEmptyCloseoutEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
             Some(v) => std::env::set_var("CI", v),
@@ -530,6 +617,107 @@ fn framework_refresh_completed_task_uses_plain_closeout_wording() {
 }
 
 #[test]
+fn framework_refresh_includes_goal_state_attachment() {
+    let repo_root = temp_dir_path("framework-refresh-goal");
+    let task_id = "goal-task-refresh";
+    let task_root = repo_root.join("artifacts/current").join(task_id);
+    fs::create_dir_all(&task_root).expect("mkdir task");
+    fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir current");
+    fs::write(
+        repo_root.join("artifacts/current/active_task.json"),
+        format!(r#"{{"task_id":"{task_id}"}}"#),
+    )
+    .expect("active_task");
+    fs::write(
+        task_root.join("GOAL_STATE.json"),
+        r#"{
+            "schema_version": "router-rs-autopilot-goal-v1",
+            "goal": "Integration goal text",
+            "status": "running",
+            "drive_until_done": true,
+            "done_when": ["cargo test passes"],
+            "validation_commands": ["cargo test -q"],
+            "non_goals": [],
+            "checkpoints": [],
+            "updated_at": "2026-01-01T00:00:00Z"
+        }"#,
+    )
+    .expect("goal state");
+    let refresh = build_framework_refresh_payload(&repo_root, 6, false).expect("refresh");
+    let prompt = refresh["prompt"].as_str().expect("prompt");
+    assert!(
+        prompt.contains("Active goal") || prompt.contains("GOAL_STATE（router-rs"),
+        "goal section missing (compact vs verbose); prompt={prompt:?}"
+    );
+    assert!(prompt.contains("Integration goal text"));
+    assert!(prompt.contains("cargo test -q"));
+    assert_eq!(
+        refresh["goal_state"]["goal"],
+        json!("Integration goal text")
+    );
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn framework_refresh_goal_prompt_verbose_restores_long_section() {
+    let repo_root = temp_dir_path("framework-refresh-goal-verbose");
+    let task_id = "goal-task-verbose";
+    let task_root = repo_root.join("artifacts/current").join(task_id);
+    fs::create_dir_all(&task_root).expect("mkdir task");
+    fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir current");
+    fs::write(
+        repo_root.join("artifacts/current/active_task.json"),
+        format!(r#"{{"task_id":"{task_id}"}}"#),
+    )
+    .expect("active_task");
+    fs::write(
+        task_root.join("GOAL_STATE.json"),
+        r#"{
+            "schema_version": "router-rs-autopilot-goal-v1",
+            "goal": "Verbose fixture",
+            "status": "running",
+            "drive_until_done": true,
+            "done_when": ["pass"],
+            "validation_commands": ["cargo test -q"],
+            "non_goals": [],
+            "checkpoints": [],
+            "updated_at": "2026-01-01T00:00:00Z"
+        }"#,
+    )
+    .expect("goal state");
+    let prior = std::env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE").ok();
+    std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", "1");
+    let refresh = build_framework_refresh_payload(&repo_root, 6, false).expect("refresh");
+    let prompt = refresh["prompt"].as_str().expect("prompt");
+    assert!(
+        prompt.contains("GOAL_STATE（router-rs"),
+        "verbose env should restore long heading; prompt={prompt:?}"
+    );
+    match prior {
+        Some(v) => std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", v),
+        None => std::env::remove_var("ROUTER_RS_GOAL_PROMPT_VERBOSE"),
+    }
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn framework_refresh_payload_always_exports_goal_state_key() {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let refresh = build_framework_refresh_payload(&repo_root, 6, false).expect("refresh");
+    let keys: Vec<_> = refresh
+        .as_object()
+        .expect("refresh payload must be object")
+        .keys()
+        .cloned()
+        .collect();
+    assert!(
+        keys.contains(&"goal_state".to_string()),
+        "refresh JSON must include goal_state (null when no GOAL_STATE.json); keys={keys:?}"
+    );
+}
+
+#[test]
 fn framework_statusline_uses_rust_runtime_view() {
     let repo_root = temp_dir_path("framework-statusline");
     let task_id = "statusline-task-20260424120000";
@@ -763,7 +951,8 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         "session_id": "sess-post-tool-1",
         "tool_output": { "exit_code": 0 },
     });
-    framework_runtime::try_append_codex_post_tool_evidence(&repo_root, &event).expect("append");
+    crate::framework_runtime::try_append_codex_post_tool_evidence(&repo_root, &event)
+        .expect("append");
 
     let evidence_path = repo_root
         .join("artifacts/current/evidence-task")
@@ -774,6 +963,51 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
     let artifacts = evidence["artifacts"].as_array().expect("artifacts");
     assert_eq!(artifacts.len(), 1);
     assert_eq!(artifacts[0]["kind"], json!("codex_post_tool_verification"));
+    assert_eq!(artifacts[0]["exit_code"], json!(0));
+    assert_eq!(artifacts[0]["success"], json!(true));
+    assert!(artifacts[0]["command_preview"]
+        .as_str()
+        .unwrap()
+        .contains("cargo test"));
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
+    let repo_root = temp_dir_path("cursor-post-tool-evidence-append");
+    let output_dir = repo_root.join("artifacts").join("current");
+    let _ = write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "cursor-evidence-task",
+        "task": "Cursor shell evidence",
+        "phase": "implementation",
+        "status": "in_progress",
+        "summary": "seed continuity",
+        "focus": true,
+        "next_actions": ["Run tests"]
+    }))
+    .expect("seed artifacts");
+
+    let event = json!({
+        "tool_name": "run_terminal_cmd",
+        "tool_input": { "command": "cd scripts/router-rs && cargo test -q" },
+        "session_id": "sess-cursor-post-tool-1",
+        "tool_output": { "exit_code": 0 },
+    });
+    crate::framework_runtime::try_append_cursor_post_tool_evidence(&repo_root, &event)
+        .expect("append");
+
+    let evidence_path = repo_root
+        .join("artifacts/current/cursor-evidence-task")
+        .join("EVIDENCE_INDEX.json");
+    let evidence: Value =
+        serde_json::from_str(&fs::read_to_string(&evidence_path).expect("read evidence"))
+            .expect("parse evidence");
+    let artifacts = evidence["artifacts"].as_array().expect("artifacts");
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(artifacts[0]["kind"], json!("cursor_post_tool_verification"));
     assert_eq!(artifacts[0]["exit_code"], json!(0));
     assert_eq!(artifacts[0]["success"], json!(true));
     assert!(artifacts[0]["command_preview"]
@@ -879,7 +1113,8 @@ fn post_tool_evidence_no_ops_without_continuity_seed() {
         "tool_name": "Bash",
         "tool_input": { "command": "cargo test" },
     });
-    framework_runtime::try_append_codex_post_tool_evidence(&repo_root, &event).expect("noop");
+    crate::framework_runtime::try_append_codex_post_tool_evidence(&repo_root, &event)
+        .expect("noop");
     assert!(
         !repo_root
             .join("artifacts/current/EVIDENCE_INDEX.json")
@@ -951,7 +1186,7 @@ fn framework_session_artifact_write_rejects_stale_focus_update() {
     assert_eq!(first["task_id"], json!("cas-task"));
 
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
-    let stale_hash = framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
+    let stale_hash = crate::framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
     write_text_fixture(
         &focus_path,
         r#"{"task_id":"other-task","task":"Other task","updated_at":"2026-04-25T00:00:00+08:00"}"#,
@@ -1002,10 +1237,11 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
     let active_path = repo_root.join("artifacts/current/active_task.json");
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
     let supervisor_path = repo_root.join(".supervisor_state.json");
-    let active_hash = framework_runtime::hash_file_for_test(&active_path).expect("active hash");
-    let focus_hash = framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
+    let active_hash =
+        crate::framework_runtime::hash_file_for_test(&active_path).expect("active hash");
+    let focus_hash = crate::framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
     let supervisor_hash =
-        framework_runtime::hash_file_for_test(&supervisor_path).expect("supervisor hash");
+        crate::framework_runtime::hash_file_for_test(&supervisor_path).expect("supervisor hash");
 
     let second = write_framework_session_artifacts(json!({
         "repo_root": repo_root,
@@ -1027,7 +1263,13 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
             "schema_version": "closeout-record-v1",
             "task_id": "cas-roundtrip",
             "verification_status": "passed",
-            "summary": "Validated write."
+            "summary": "Validated write.",
+            "commands_run": [
+                {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0}
+            ],
+            "artifacts_checked": [
+                {"path": "README.md", "exists": true}
+            ]
         }
     }))
     .expect("roundtrip write");
@@ -1123,6 +1365,64 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_when_gith
     .expect_err(
         "missing closeout_record must block completion claim when GITHUB_ACTIONS without explicit env",
     );
+    assert!(
+        err.contains("closeout_record"),
+        "error must reference missing closeout_record, got: {err}"
+    );
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn framework_session_artifact_write_allows_completion_without_closeout_when_ci_and_closeout_env_off(
+) {
+    let _lock = closeout_enforcement_env_lock()
+        .lock()
+        .expect("closeout env lock poisoned");
+    let _ci_off = CiWithCloseoutDisabledEnvGuard::new();
+    let repo_root = temp_dir_path("framework-session-closeout-ci-with-env-off");
+    let output_dir = repo_root.join("artifacts").join("current");
+    let written = write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "co-ci-env-off",
+        "task": "CI but closeout enforcement off",
+        "phase": "validation",
+        "status": "completed",
+        "summary": "CI with ROUTER_RS_CLOSEOUT_ENFORCEMENT=0, no closeout_record",
+        "focus": true,
+        "next_actions": []
+    }))
+    .expect(
+        "completion write should succeed when CI but explicit closeout env disables enforcement",
+    );
+    assert!(
+        written.get("closeout_evaluation").is_none(),
+        "expected no closeout_evaluation when enforcement skipped, got: {written}"
+    );
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn framework_session_artifact_write_blocks_completion_without_closeout_when_closeout_env_empty_string(
+) {
+    let _lock = closeout_enforcement_env_lock()
+        .lock()
+        .expect("closeout env lock poisoned");
+    let _empty = LocalNonCiEmptyCloseoutEnvGuard::new();
+    let repo_root = temp_dir_path("framework-session-closeout-empty-env");
+    let output_dir = repo_root.join("artifacts").join("current");
+    let err = write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "co-empty-env",
+        "task": "Empty ROUTER_RS_CLOSEOUT_ENFORCEMENT",
+        "phase": "validation",
+        "status": "completed",
+        "summary": "non-CI with empty string closeout env",
+        "focus": true,
+        "next_actions": []
+    }))
+    .expect_err("empty ROUTER_RS_CLOSEOUT_ENFORCEMENT must not be treated as unset/local-soft");
     assert!(
         err.contains("closeout_record"),
         "error must reference missing closeout_record, got: {err}"
@@ -1283,7 +1583,7 @@ fn task_registry_normalization_dedupes_and_limits_old_tasks() {
         .to_string(),
     );
 
-    let changed = framework_runtime::write_framework_session_artifacts(json!({
+    let changed = crate::framework_runtime::write_framework_session_artifacts(json!({
         "repo_root": repo_root,
         "output_dir": current_root,
         "task_id": "focus-task",
@@ -1868,6 +2168,7 @@ fn stdio_framework_autopilot_goal_roundtrip() {
     assert!(response.ok, "{:?}", response.error);
     let body = response.payload.expect("payload");
     assert_eq!(body["ok"], json!(true));
+    assert_eq!(body["rfv_loop_superseded"], json!(false));
 
     let path = repo_root.join("artifacts/current/ag-stdio-task/GOAL_STATE.json");
     assert!(path.is_file(), "missing {}", path.display());
@@ -1909,6 +2210,8 @@ fn stdio_framework_rfv_loop_roundtrip() {
     let line = serde_json::to_string(&start).expect("serialize");
     let response = handle_stdio_json_line(&line);
     assert!(response.ok, "{:?}", response.error);
+    let body = response.payload.expect("payload");
+    assert_eq!(body["goal_state_cleared"], json!(false));
 
     let path = repo_root.join("artifacts/current/rfv-stdio-task/RFV_LOOP_STATE.json");
     assert!(path.is_file(), "missing {}", path.display());

@@ -2,9 +2,9 @@
 
 use crate::autopilot_goal::read_active_task_id;
 use crate::framework_runtime::resolve_repo_root_arg;
+use crate::router_env_flags::{router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,14 +14,114 @@ const MAX_ROUNDS_HARD_CAP: u64 = 1000;
 /// Cursor hook：`RFV_LOOP_CONTINUE` 跟进；设为 `0`/`false`/`off`/`no` 关闭。
 const RFV_LOOP_HOOK_ENV: &str = "ROUTER_RS_RFV_LOOP_HOOK";
 
-fn rfv_loop_hook_enabled() -> bool {
-    match env::var(RFV_LOOP_HOOK_ENV) {
-        Ok(value) => {
-            let token = value.trim().to_ascii_lowercase();
-            !(token == "0" || token == "false" || token == "off" || token == "no")
-        }
-        Err(_) => true,
+/// Allowed `verify_result` enum (uppercase); see `reasoning-depth-contract.md`.
+/// `append_round` rejects values outside this set so PASS/FAIL is auditable, not free-form.
+pub const ALLOWED_VERIFY_RESULTS: &[&str] = &["PASS", "FAIL", "SKIPPED", "UNKNOWN"];
+
+fn normalize_verify_result(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok("UNKNOWN".to_string());
     }
+    let upper = trimmed.to_ascii_uppercase();
+    if ALLOWED_VERIFY_RESULTS.iter().any(|s| *s == upper) {
+        return Ok(upper);
+    }
+    Err(format!(
+        "verify_result must be one of {ALLOWED_VERIFY_RESULTS:?} (case-insensitive), got {raw:?}"
+    ))
+}
+
+/// EVIDENCE_INDEX 行视为「成功验证」：`success==true` 或 `exit_code==0`。
+fn evidence_row_is_success(row: &Value) -> bool {
+    if row.get("success").and_then(Value::as_bool) == Some(true) {
+        return true;
+    }
+    matches!(row.get("exit_code").and_then(|v| v.as_i64()), Some(0))
+        || matches!(row.get("exit_code").and_then(|v| v.as_u64()), Some(0))
+}
+
+/// 读取同任务目录下的 `EVIDENCE_INDEX.json`；非法 / 缺失视为空。
+fn read_evidence_index_artifacts(repo_root: &Path, task_id: &str) -> Vec<Value> {
+    let path = repo_root
+        .join("artifacts/current")
+        .join(task_id)
+        .join("EVIDENCE_INDEX.json");
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(val) = serde_json::from_str::<Value>(&raw) else {
+        return Vec::new();
+    };
+    val.get("artifacts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// 取上一轮 `at`；若无上一轮则取 RFV state 的 `updated_at`；都无则返回 None。
+fn previous_round_window_start(state_obj: &Map<String, Value>) -> Option<String> {
+    let rounds = state_obj.get("rounds").and_then(Value::as_array)?;
+    if let Some(last) = rounds.last() {
+        if let Some(at) = last.get("at").and_then(Value::as_str) {
+            return Some(at.to_string());
+        }
+    }
+    state_obj
+        .get("updated_at")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// Cross-link 本轮 verify 与 EVIDENCE_INDEX 成功行：返回 `(refs, cross_check_label)`。
+/// `refs` 为 EVIDENCE artifacts 数组中的索引（u64）；`cross_check_label` 为可选标签：
+/// - `"no_evidence_window"`：claimed PASS 但窗口内无成功 evidence（**审计警告**，不阻断写入）
+/// - `"evidence_after_fail"`：claimed FAIL 但仍有成功 evidence（信息性，便于人工核对）
+/// - `None`：未声明 PASS/FAIL，或一致。
+fn cross_link_evidence(
+    repo_root: &Path,
+    task_id: &str,
+    state_obj: &Map<String, Value>,
+    verify_result: &str,
+) -> (Vec<Value>, Option<String>) {
+    let artifacts = read_evidence_index_artifacts(repo_root, task_id);
+    if artifacts.is_empty() {
+        let label = if verify_result == "PASS" {
+            Some("no_evidence_window".to_string())
+        } else {
+            None
+        };
+        return (Vec::new(), label);
+    }
+    let window_start = previous_round_window_start(state_obj);
+    let mut refs: Vec<Value> = Vec::new();
+    for (idx, row) in artifacts.iter().enumerate() {
+        if !evidence_row_is_success(row) {
+            continue;
+        }
+        let row_at = row
+            .get("recorded_at")
+            .or_else(|| row.get("at"))
+            .and_then(Value::as_str);
+        let in_window = match (&window_start, row_at) {
+            (Some(start), Some(at)) => at > start.as_str(),
+            (None, _) => true,
+            (Some(_), None) => true,
+        };
+        if in_window {
+            refs.push(json!(idx as u64));
+        }
+    }
+    let label = match verify_result {
+        "PASS" if refs.is_empty() => Some("no_evidence_window".to_string()),
+        "FAIL" if !refs.is_empty() => Some("evidence_after_fail".to_string()),
+        _ => None,
+    };
+    (refs, label)
+}
+
+fn rfv_loop_hook_enabled() -> bool {
+    router_rs_env_enabled_default_true(RFV_LOOP_HOOK_ENV)
 }
 
 fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
@@ -54,6 +154,38 @@ pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> PathBuf {
         .join("artifacts/current")
         .join(task_id)
         .join(RFV_LOOP_STATE_FILENAME)
+}
+
+/// Autopilot 在同 task 上 `start`/`upsert`/`resume` 时结束 RFV 的 `loop_status=active`（与 GOAL 互斥；保留文件并标记 `superseded`）。
+pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<bool, String> {
+    if task_id.trim().is_empty() {
+        return Ok(false);
+    }
+    let path = rfv_loop_state_path(repo_root, task_id);
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let mut state = read_rfv_loop_state(repo_root, Some(task_id))?
+        .ok_or_else(|| format!("RFV_LOOP_STATE missing at {}", path.display()))?;
+    let obj = state
+        .as_object_mut()
+        .ok_or_else(|| "RFV_LOOP_STATE root must be object".to_string())?;
+    let active = obj
+        .get("loop_status")
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.eq_ignore_ascii_case("active"));
+    if !active {
+        return Ok(false);
+    }
+    obj.insert("loop_status".to_string(), json!("superseded"));
+    obj.insert("superseded_by".to_string(), json!("autopilot_goal"));
+    obj.insert("updated_at".to_string(), json!(now_iso()));
+    write_atomic_json(&path, &state)?;
+    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, task_id);
+    Ok(true)
 }
 
 /// 供 Cursor hook / 工具读取当前任务的 RFV 账本（无覆盖则用 `active_task.json`）。
@@ -112,6 +244,20 @@ fn clamp_max_rounds(raw: u64) -> (u64, bool) {
 
 /// stdio：`framework_rfv_loop`
 pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
+    let operation = payload
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or("status")
+        .trim()
+        .to_ascii_lowercase();
+    if operation == "status" {
+        framework_rfv_loop_impl(payload)
+    } else {
+        crate::task_write_lock::apply_task_ledger_mutation(|| framework_rfv_loop_impl(payload))
+    }
+}
+
+fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
     let repo_root = payload
         .get("repo_root")
         .and_then(Value::as_str)
@@ -230,12 +376,18 @@ pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
             let path = rfv_loop_state_path(&repo_root, &task_id);
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
+            let goal_state_cleared =
+                crate::autopilot_goal::deactivate_goal_for_conflict_with_rfv(&repo_root, &task_id)?;
+            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                &repo_root, &task_id,
+            );
             Ok(json!({
                 "ok": true,
                 "operation": "start",
                 "task_id": task_id,
                 "rfv_loop_state_path": path.display().to_string(),
                 "rfv_loop_state": value,
+                "goal_state_cleared": goal_state_cleared,
                 "warning": if capped {
                     Some(format!(
                         "max_rounds requested {requested_max} exceeds hard cap {MAX_ROUNDS_HARD_CAP}; stored max_rounds={max_rounds}"
@@ -288,11 +440,11 @@ pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            let verify_result = payload
+            let raw_verify = payload
                 .get("verify_result")
                 .and_then(Value::as_str)
-                .unwrap_or("UNKNOWN")
-                .to_string();
+                .unwrap_or("UNKNOWN");
+            let verify_result = normalize_verify_result(raw_verify)?;
             let supervisor_decision = payload
                 .get("supervisor_decision")
                 .and_then(Value::as_str)
@@ -304,16 +456,32 @@ pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
                 .unwrap_or("")
                 .to_string();
 
-            let entry = json!({
-                "round": round_n,
-                "review_summary": review_summary,
-                "external_research_summary": external_research_summary,
-                "fix_summary": fix_summary,
-                "verify_result": verify_result,
-                "supervisor_decision": supervisor_decision,
-                "reason": reason,
-                "at": now_iso(),
-            });
+            // Cross-link this round's verify claim against EVIDENCE_INDEX successful rows
+            // recorded since the previous round (audit trail; not a hard block — supervisor
+            // still owns the call, but the discrepancy lands in `cross_check`).
+            let (evidence_refs, cross_check_label) =
+                cross_link_evidence(&repo_root, &task_id, obj, &verify_result);
+
+            let mut entry_map = serde_json::Map::new();
+            entry_map.insert("round".to_string(), json!(round_n));
+            entry_map.insert("review_summary".to_string(), json!(review_summary));
+            entry_map.insert(
+                "external_research_summary".to_string(),
+                json!(external_research_summary),
+            );
+            entry_map.insert("fix_summary".to_string(), json!(fix_summary));
+            entry_map.insert("verify_result".to_string(), json!(verify_result));
+            entry_map.insert(
+                "supervisor_decision".to_string(),
+                json!(supervisor_decision),
+            );
+            entry_map.insert("reason".to_string(), json!(reason));
+            entry_map.insert("at".to_string(), json!(now_iso()));
+            entry_map.insert("evidence_refs".to_string(), Value::Array(evidence_refs));
+            if let Some(label) = cross_check_label {
+                entry_map.insert("cross_check".to_string(), json!(label));
+            }
+            let entry = Value::Object(entry_map);
 
             let rounds = obj
                 .get_mut("rounds")
@@ -338,6 +506,9 @@ pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
             obj.insert("loop_status".to_string(), json!(loop_status));
 
             write_atomic_json(&path, &state)?;
+            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                &repo_root, &task_id,
+            );
             Ok(json!({
                 "ok": true,
                 "operation": "append_round",
@@ -360,17 +531,31 @@ fn rfv_loop_requests_continuation(state: &Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Cursor stop / beforeSubmit：`loop_status=active` 时提示继续下一轮 RFV。
-pub fn build_rfv_loop_followup_message(repo_root: &Path) -> Option<String> {
+fn rfv_followup_compact_line(text: &str, max_chars: usize) -> String {
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= max_chars {
+        return normalized;
+    }
+    let mut out = normalized
+        .chars()
+        .take(max_chars.saturating_sub(3))
+        .collect::<String>();
+    out.push_str("...");
+    out
+}
+
+/// 已解析的 `RFV_LOOP_STATE` 上构建 RFV 续跑提示（与 [`build_rfv_loop_followup_message`] 文案一致）。
+pub fn build_rfv_loop_followup_message_from_state(
+    repo_root: &Path,
+    task_id: &str,
+    state: &Value,
+) -> Option<String> {
     if !rfv_loop_hook_enabled() {
         return None;
     }
-    let state = read_rfv_loop_state(repo_root, None).ok()??;
-    if !rfv_loop_requests_continuation(&state) {
+    if !rfv_loop_requests_continuation(state) {
         return None;
     }
-    let task_id = read_active_task_id(repo_root)?;
-    let path = rfv_loop_state_path(repo_root, &task_id);
     let goal = state
         .get("goal")
         .and_then(Value::as_str)
@@ -384,45 +569,56 @@ pub fn build_rfv_loop_followup_message(repo_root: &Path) -> Option<String> {
         .get("allow_external_research")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    if router_rs_goal_prompt_verbose() {
+        let path = rfv_loop_state_path(repo_root, task_id);
+        let mut lines = vec![
+            "RFV_LOOP_CONTINUE: `RFV_LOOP_STATE.json` 显示多轮 review-fix-verify 仍在进行（`loop_status=active`）。".to_string(),
+            format!("Path: {}", path.display()),
+            format!("Goal: {}", goal),
+            format!("Progress: round {current} / max_rounds {max_r} (达到 stop_when 或 append_round close 后可结束)"),
+        ];
+        if ext {
+            lines.push(
+                "本任务允许外部调研：下一轮可并行 external research + internal review，再进入 fix / verify；每轮结束请 `framework_rfv_loop` append_round。"
+                    .to_string(),
+            );
+        } else {
+            lines.push(
+                "下一轮请按 review → fix → verify 顺序起独立 subagent，并在每轮末 `append_round` 落盘。"
+                    .to_string(),
+            );
+        }
+        let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
+        if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
+            lines.push(nudges.rfv_loop_continue_reasoning_depth);
+        }
+        return Some(lines.join("\n"));
+    }
+    let rel = format!("artifacts/current/{task_id}/RFV_LOOP_STATE.json");
+    let gshort = rfv_followup_compact_line(goal, 120);
+    let ext_note = if ext { " · ext ok" } else { "" };
     let mut lines = vec![
-        "RFV_LOOP_CONTINUE: `RFV_LOOP_STATE.json` 显示多轮 review-fix-verify 仍在进行（`loop_status=active`）。".to_string(),
-        format!("Path: {}", path.display()),
-        format!("Goal: {}", goal),
-        format!("Progress: round {current} / max_rounds {max_r} (达到 stop_when 或 append_round close 后可结束)"),
+        format!("RFV_LOOP_CONTINUE: active · r {current}/{max_r}{ext_note} · `{rel}`"),
+        format!("Goal: {gshort}"),
     ];
-    if ext {
-        lines.push(
-            "本任务允许外部调研：下一轮可并行 external research + internal review，再进入 fix / verify；每轮结束请 `framework_rfv_loop` append_round。"
-                .to_string(),
-        );
+    lines.push(if ext {
+        "Next: ext+review→fix→verify；轮末 `framework_rfv_loop` append_round。".to_string()
     } else {
-        lines.push(
-            "下一轮请按 review → fix → verify 顺序起独立 subagent，并在每轮末 `append_round` 落盘。"
-                .to_string(),
-        );
+        "Next: review→fix→verify；轮末 append_round。".to_string()
+    });
+    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
+    if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
+        lines.push(nudges.rfv_loop_continue_reasoning_depth);
     }
     Some(lines.join("\n"))
 }
 
-pub fn merge_rfv_loop_followup(repo_root: &Path, output: &mut Value) {
-    let Some(msg) = build_rfv_loop_followup_message(repo_root) else {
-        return;
-    };
-    if msg.is_empty() {
-        return;
-    }
-    match output.get_mut("followup_message") {
-        Some(Value::String(existing)) => {
-            if existing.contains("RFV_LOOP_CONTINUE") {
-                return;
-            }
-            existing.push_str("\n\n");
-            existing.push_str(&msg);
-        }
-        _ => {
-            output["followup_message"] = Value::String(msg);
-        }
-    }
+/// Cursor stop / beforeSubmit：`loop_status=active` 时提示继续下一轮 RFV。
+/// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 与 Goal / AUTOPILOT_DRIVE 共用同一 verbose 开关。
+pub fn build_rfv_loop_followup_message(repo_root: &Path) -> Option<String> {
+    let state = read_rfv_loop_state(repo_root, None).ok()??;
+    let task_id = read_active_task_id(repo_root)?;
+    build_rfv_loop_followup_message_from_state(repo_root, &task_id, &state)
 }
 
 /// preCompact 用的一行摘要（不分配大段 followup）。
@@ -437,7 +633,7 @@ pub fn rfv_loop_precompact_hint(repo_root: &Path) -> Option<String> {
         .unwrap_or(0);
     let max_r = state.get("max_rounds").and_then(Value::as_u64).unwrap_or(0);
     Some(format!(
-        "RFV_LOOP active: round {current}/{max_r}; see artifacts/current/<task>/RFV_LOOP_STATE.json"
+        "RFV active r{current}/{max_r} — `RFV_LOOP_STATE.json`"
     ))
 }
 
@@ -449,6 +645,7 @@ mod tests {
 
     #[test]
     fn rfv_start_append_roundtrip() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -502,6 +699,70 @@ mod tests {
 
         let msg = build_rfv_loop_followup_message(&repo).expect("rfv followup");
         assert!(msg.contains("RFV_LOOP_CONTINUE"));
+        assert!(
+            msg.contains("artifacts/current/") && msg.contains("RFV_LOOP_STATE.json"),
+            "compact followup should use relative path; msg={msg:?}"
+        );
+        assert!(
+            msg.contains("推理深度") && msg.contains("EVIDENCE_INDEX"),
+            "registry nudge should append; msg={msg:?}"
+        );
+
+        let prior = std::env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE").ok();
+        std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", "1");
+        let msg_v = build_rfv_loop_followup_message(&repo).expect("rfv verbose");
+        assert!(
+            msg_v.contains("loop_status=active"),
+            "verbose env should restore long RFV banner; msg={msg_v:?}"
+        );
+        match prior {
+            Some(v) => std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", v),
+            None => std::env::remove_var("ROUTER_RS_GOAL_PROMPT_VERBOSE"),
+        }
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// RFV 与 GOAL 同 task 互斥：RFV start 应删除已存在的 GOAL_STATE。
+    #[test]
+    fn rfv_start_clears_goal_same_task() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-rfv-mutex-rfv-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/rfv-mx")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"rfv-mx"}"#,
+        )
+        .expect("pointer");
+        let rr = repo.display().to_string();
+
+        crate::autopilot_goal::framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "rfv-mx",
+            "goal": "macro first",
+            "drive_until_done": true,
+        }))
+        .expect("goal start");
+        let gpath = crate::autopilot_goal::goal_state_path_for_task(&repo, "rfv-mx");
+        assert!(gpath.is_file());
+        assert!(crate::autopilot_goal::build_autopilot_drive_followup_message(&repo).is_some());
+
+        let out = framework_rfv_loop(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "rfv-mx",
+            "goal": "rfv mode",
+            "max_rounds": 2u64,
+        }))
+        .expect("rfv start");
+        assert_eq!(out["goal_state_cleared"], json!(true));
+        assert!(!gpath.is_file());
+        assert!(crate::autopilot_goal::build_autopilot_drive_followup_message(&repo).is_none());
 
         let _ = fs::remove_dir_all(&repo);
     }

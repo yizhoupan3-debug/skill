@@ -111,7 +111,7 @@
             "owner": "hybrid_host_plus_rust_persistence",
             "rust_runtime_coverage": "goal_persistence_and_drive_hook",
             "status": "rust_stdio_goal_store_plus_cursor_followup",
-            "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0."
+            "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block|clear) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit (including hook-state lock failure and ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE) so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0. Cursor review gate: `/autopilot` does not arm `delegation_required` (avoids RG_FOLLOWUP parallel-lane evidence stacked on goal); `/autopilot` prompts suppress `review_required` from review-findings-style wording; persisted `GOAL_STATE` marks pre-goal satisfied so execution continuation is not blocked by the pre-goal reviewer nag."
           },
           "never_stop_at_plan_only": true,
           "allow_network_research_for_unknowns": true,

@@ -160,8 +160,15 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
-    router_rs_json(&["codex", "sync", "--repo-root", repo_root.to_str().unwrap()]);
+    let sync_report =
+        router_rs_json(&["codex", "sync", "--repo-root", repo_root.to_str().unwrap()]);
     let manifest = read_json(&repo_root.join(".codex/host_entrypoints_sync_manifest.json"));
+    assert!(
+        sync_report["written"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty()),
+        "expected codex sync to write host entrypoints: {sync_report}"
+    );
     let manifest_text = manifest.to_string();
     assert!(!manifest_text.contains(".codex/skills/gitx"));
     assert!(!manifest_text.contains(".codex/skills/autopilot"));
@@ -178,11 +185,19 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["cursor"],
-        "AGENTS.md"
+        serde_json::json!(["AGENTS.md", ".cursor/rules/*.mdc"])
     );
     assert_eq!(
         manifest["shared_system"]["policy"],
         "host-specific-agent-policy-v1"
+    );
+    assert_eq!(
+        manifest["shared_system"]["routing_source_of_truth"],
+        "skills/"
+    );
+    assert_eq!(
+        manifest["shared_system"]["agent_policy_entrypoint"],
+        "AGENTS.md"
     );
     let codex_policy = read_text(&repo_root.join("AGENTS.md"));
     assert!(codex_policy.contains("bounded sidecar admission"));
@@ -191,9 +206,43 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         .as_array()
         .unwrap()
         .contains(&serde_json::json!("AGENTS.md")));
+    assert!(manifest["full_sync"]["text_files"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!(".codex/README.md")));
+    assert!(manifest["full_sync"]["json_files"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!(".codex/hooks.json")));
+    assert!(manifest["partial_sync"]["json_files"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!(
+            ".codex/host_entrypoints_sync_manifest.json"
+        )));
     assert!(!manifest_text.contains("retired_files"));
     assert!(!manifest_text.contains("retired_directories"));
     assert!(!manifest_text.contains("AGENT.md"));
+}
+
+#[test]
+fn codex_sync_preserves_existing_agents_policy_file() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(&repo_root).unwrap();
+    let policy = "custom policy from disk\nbounded sidecar admission\n同一轮并发启动\n";
+    std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
+
+    let sync_report =
+        router_rs_json(&["codex", "sync", "--repo-root", repo_root.to_str().unwrap()]);
+    assert!(
+        !sync_report["written"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("AGENTS.md")),
+        "codex sync must not overwrite an existing AGENTS.md: {sync_report}"
+    );
+    assert_eq!(read_text(&repo_root.join("AGENTS.md")), policy);
 }
 
 #[test]

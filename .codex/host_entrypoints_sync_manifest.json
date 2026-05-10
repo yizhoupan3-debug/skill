@@ -1,28 +1,36 @@
 {
   "full_sync": {
     "json_files": [
+      ".codex/hooks.json",
       ".codex/host_entrypoints_sync_manifest.json"
     ],
     "text_files": [
+      ".codex/README.md",
       "AGENTS.md"
     ]
   },
   "partial_sync": {
     "json_files": [
-      ".codex/hooks.json"
+      ".codex/hooks.json",
+      ".codex/host_entrypoints_sync_manifest.json"
     ],
     "text_files": [
+      ".codex/README.md",
       "AGENTS.md"
     ]
   },
   "schema_version": "host-entrypoints-sync-manifest-v1",
   "shared_system": {
+    "agent_policy_entrypoint": "AGENTS.md",
     "host_entrypoints": {
       "codex-cli": "AGENTS.md",
-      "cursor": "AGENTS.md"
+      "cursor": [
+        "AGENTS.md",
+        ".cursor/rules/*.mdc"
+      ]
     },
     "policy": "host-specific-agent-policy-v1",
-    "source_of_truth": "skills/",
+    "routing_source_of_truth": "skills/",
     "supported_hosts": [
       "codex-cli",
       "cursor"

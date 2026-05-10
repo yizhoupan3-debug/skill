@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local/framework/harness-operator-nudges-v1",
+  "title": "HARNESS_OPERATOR_NUDGES",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Must be harness-operator-nudges-v1 for this shape."
+    },
+    "nudges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rfv_loop_continue_reasoning_depth": {
+          "type": "string",
+          "description": "Appended to RFV_LOOP_CONTINUE (compact and verbose)."
+        },
+        "autopilot_drive_verbose_reasoning_depth": {
+          "type": "string",
+          "description": "Appended when ROUTER_RS_GOAL_PROMPT_VERBOSE is on."
+        },
+        "autopilot_drive_compact_reasoning_depth": {
+          "type": "string",
+          "description": "Appended in compact AUTOPILOT_DRIVE."
+        }
+      }
+    }
+  },
+  "required": ["schema_version", "nudges"]
+}

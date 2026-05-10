@@ -1,5 +1,7 @@
 # Codex Host Projection Contract
 
+Documentation index: [`README.md`](README.md) (this directory).
+
 ## Goal
 
 Codex CLI consumes one Rust-owned framework core. Host integration is a

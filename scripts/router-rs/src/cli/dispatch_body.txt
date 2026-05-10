@@ -1,0 +1,417 @@
+pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
+    match command {
+        RouterCommand::Route(command) => {
+            let records = load_records(command.runtime.as_deref(), command.manifest.as_deref())?;
+            let decision = route_task_with_manifest_fallback(
+                &records,
+                command.runtime.as_deref(),
+                command.manifest.as_deref(),
+                &command.query,
+                &command.session_id,
+                command.allow_overlay,
+                command.first_turn,
+            )?;
+            print_json_value(&decision)
+        }
+        RouterCommand::Search(command) => {
+            let manifest_path =
+                manifest_fallback_path(command.runtime.as_deref(), command.manifest.as_deref())?;
+            let records = if let Some(path) = manifest_path.as_deref() {
+                load_records_from_manifest(path)?
+            } else {
+                load_records(command.runtime.as_deref(), command.manifest.as_deref())?
+            };
+            let rows = search_skills(&records, &command.query, command.limit);
+            let payload = build_search_results_payload(&command.query, rows.clone());
+            if command.json {
+                return print_json_value(&payload);
+            }
+            print_search_results(&command.query, &payload, rows);
+            Ok(())
+        }
+        RouterCommand::Framework { command } => dispatch_framework_command(command),
+        RouterCommand::Codex { command } => dispatch_codex_command(command),
+        RouterCommand::Cursor { command } => dispatch_cursor_command(command),
+        RouterCommand::Trace { command } => dispatch_trace_command(command),
+        RouterCommand::Storage { command } => dispatch_storage_command(command),
+        RouterCommand::Browser { command } => dispatch_browser_command(command),
+        RouterCommand::Profile { command } => dispatch_profile_command(command),
+        RouterCommand::Migrate { command } => dispatch_migrate_command(command),
+        RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
+        RouterCommand::Closeout { command } => dispatch_closeout_command(command),
+        RouterCommand::Eval { command } => dispatch_eval_command(command),
+        RouterCommand::RouterSelf { command } => router_self::dispatch(command),
+    }
+}
+
+fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
+    match command {
+        FrameworkCommand::Snapshot(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&build_framework_runtime_snapshot_envelope(
+                &repo_root,
+                command.artifact_source_dir.as_deref(),
+                command.task_id.as_deref(),
+            )?)
+        }
+        FrameworkCommand::ContractSummary(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&build_framework_contract_summary_envelope(&repo_root)?)
+        }
+        FrameworkCommand::PromptCompression(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "framework prompt compression")?;
+            print_json_value(&build_framework_prompt_compression_envelope(payload)?)
+        }
+        FrameworkCommand::Refresh(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let refresh_payload =
+                build_framework_refresh_payload(&repo_root, command.max_lines, command.verbose)?;
+            let prompt = refresh_payload
+                .get("prompt")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "framework refresh payload is missing prompt".to_string())?;
+            let clipboard = copy_text_to_clipboard(prompt)?;
+            let mut refresh = refresh_payload
+                .as_object()
+                .cloned()
+                .ok_or_else(|| "framework refresh payload must be an object".to_string())?;
+            refresh.insert(
+                "confirmation".to_string(),
+                Value::String(FRAMEWORK_REFRESH_CONFIRMATION.to_string()),
+            );
+            refresh.insert("clipboard".to_string(), clipboard);
+            print_json_value(&json!({
+                "schema_version": FRAMEWORK_REFRESH_SCHEMA_VERSION,
+                "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
+                "refresh": Value::Object(refresh),
+            }))
+        }
+        FrameworkCommand::Statusline(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            println!("{}", build_framework_statusline(&repo_root)?);
+            Ok(())
+        }
+        FrameworkCommand::SessionArtifactWrite(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "framework session artifact write")?;
+            print_json_value(&write_framework_session_artifacts(payload)?)
+        }
+        FrameworkCommand::HookEvidenceAppend(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "framework hook evidence append")?;
+            print_json_value(&framework_hook_evidence_append(payload)?)
+        }
+        FrameworkCommand::Alias(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&build_framework_alias_envelope(
+                &repo_root,
+                &command.alias,
+                FrameworkAliasBuildOptions {
+                    max_lines: command.max_lines,
+                    compact: command.compact,
+                    host_id: command.host_id.as_deref(),
+                },
+            )?)
+        }
+        FrameworkCommand::TaskStateResolve(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let view = task_state::resolve_task_view(&repo_root, command.task_id.as_deref());
+            print_json_value(&view)
+        }
+        FrameworkCommand::TaskLedgerDispatch(command) => {
+            let envelope =
+                parse_json_input::<Value>(&command.input_json, "framework task ledger dispatch")?;
+            print_json_value(&task_command::dispatch_task_ledger_command_envelope(
+                envelope,
+            )?)
+        }
+        FrameworkCommand::TaskStateAggregateSync(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let task_id = command
+                .task_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .or_else(|| crate::autopilot_goal::read_active_task_id(&repo_root))
+                .ok_or_else(|| {
+                    "framework task-state-aggregate-sync requires --task-id or active_task.json"
+                        .to_string()
+                })?;
+            crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id)?;
+            print_json_value(&json!({
+                "ok": true,
+                "task_id": task_id,
+                "task_state_path": crate::task_state_aggregate::task_state_aggregate_path(&repo_root, &task_id).display().to_string(),
+            }))
+        }
+        FrameworkCommand::HostIntegration(command) => {
+            let payload = run_host_integration_from_args(&command.args)?;
+            print_json_value(&payload)
+        }
+        FrameworkCommand::Contracts => {
+            print_json_value(&build_control_plane_contract_descriptors())
+        }
+    }
+}
+
+fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
+    match command {
+        CodexCommand::HookProjection => print_json_value(&build_codex_hook_projection()),
+        CodexCommand::Sync(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&sync_host_entrypoints(&repo_root, true)?)
+        }
+        CodexCommand::Check(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            print_json_value(&sync_host_entrypoints(&repo_root, false)?)
+        }
+        CodexCommand::Hook(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let event_name = command
+                .event
+                .or(command.name)
+                .ok_or("hook event required")?;
+            if let Some(payload) = run_codex_audit_hook(&event_name, &repo_root)? {
+                print_json_value(&payload)?;
+            }
+            Ok(())
+        }
+        CodexCommand::HostIntegration(command) => {
+            let payload = run_host_integration_from_args(&command.args)?;
+            print_json_value(&payload)
+        }
+        CodexCommand::InstallHooks(command) => {
+            let resolved_codex_home = resolve_codex_home(command.codex_home.as_deref())?;
+            let mode = if command.check {
+                InstallMode::Check
+            } else {
+                InstallMode::Apply
+            };
+            let repo_root = command
+                .repo_root
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or(PathBuf::from(".")));
+            let payload = install_codex_cli_hooks(&resolved_codex_home, &repo_root, mode)?;
+            print_json_value(&payload)
+        }
+    }
+}
+
+fn dispatch_cursor_command(command: CursorCommand) -> Result<(), String> {
+    match command {
+        CursorCommand::Hook(command) => {
+            run_cursor_review_gate(&command.event, command.repo_root.as_deref())
+        }
+    }
+}
+
+fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
+    match command {
+        TraceCommand::RecordEvent(command) => {
+            let payload = parse_json_input::<TraceRecordEventRequestPayload>(
+                &command.input_json,
+                "trace record event",
+            )?;
+            print_json_value(&record_trace_event(payload)?)
+        }
+        TraceCommand::StreamReplay(command) => {
+            let payload = parse_json_input::<TraceStreamReplayRequestPayload>(
+                &command.input_json,
+                "trace stream replay",
+            )?;
+            print_json_value(&replay_trace_stream(payload)?)
+        }
+        TraceCommand::StreamInspect(command) => {
+            let payload = parse_json_input::<TraceStreamInspectRequestPayload>(
+                &command.input_json,
+                "trace stream inspect",
+            )?;
+            print_json_value(&inspect_trace_stream(payload)?)
+        }
+        TraceCommand::Compact(command) => {
+            let payload = parse_json_input::<TraceCompactRequestPayload>(
+                &command.input_json,
+                "trace compact",
+            )?;
+            print_json_value(&compact_trace_stream(payload)?)
+        }
+        TraceCommand::WriteCompactionDelta(command) => {
+            let payload = parse_json_input::<TraceCompactionDeltaWriteRequestPayload>(
+                &command.input_json,
+                "trace compaction delta write",
+            )?;
+            print_json_value(&write_trace_compaction_delta(payload)?)
+        }
+        TraceCommand::WriteMetadata(command) => {
+            let payload = parse_json_input::<TraceMetadataWriteRequestPayload>(
+                &command.input_json,
+                "trace metadata write",
+            )?;
+            print_json_value(&write_trace_metadata(payload)?)
+        }
+    }
+}
+
+fn dispatch_storage_command(command: StorageCommand) -> Result<(), String> {
+    match command {
+        StorageCommand::Runtime(command) => {
+            let payload = parse_json_input::<RuntimeStorageRequestPayload>(
+                &command.input_json,
+                "runtime storage",
+            )?;
+            print_json_value(&runtime_storage_operation(payload)?)
+        }
+        StorageCommand::CheckpointControlPlane(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "runtime checkpoint control plane")?;
+            print_json_value(&build_checkpoint_control_plane_compiler_payload(payload)?)
+        }
+        StorageCommand::BackendCatalog => {
+            print_json_value(&runtime_backend_family_catalog_payload())
+        }
+        StorageCommand::BackendParity(command) => {
+            print_json_value(&runtime_backend_family_parity_payload(
+                command.store.as_deref(),
+                command.checkpointer.as_deref(),
+                command.trace.as_deref(),
+                command.state.as_deref(),
+            )?)
+        }
+    }
+}
+
+fn dispatch_browser_command(command: BrowserCommand) -> Result<(), String> {
+    match command {
+        BrowserCommand::McpStdio(command) => run_browser_mcp_stdio_loop(
+            command.repo_root.as_deref(),
+            BrowserAttachConfig::from_cli_and_env(
+                command.runtime_attach_descriptor_path,
+                command.runtime_attach_artifact_path,
+                command.headless,
+            ),
+        ),
+        BrowserCommand::ResolveAttachArtifact(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let Some(path) =
+                resolve_browser_mcp_attach_artifact(&repo_root, command.search_root.as_deref())
+            else {
+                return Err("no browser-mcp runtime attach artifact candidates found".to_string());
+            };
+            println!("{path}");
+            Ok(())
+        }
+    }
+}
+
+fn dispatch_profile_command(command: ProfileCommand) -> Result<(), String> {
+    match command {
+        ProfileCommand::Emit(command) => {
+            let profile = load_framework_profile(&command.framework_profile)?;
+            print_json_value(&build_profile_bundle(&profile)?)
+        }
+        ProfileCommand::Artifacts(command) => {
+            let profile = load_framework_profile(&command.framework_profile)?;
+            print_json_value(&build_codex_artifact_bundle(&profile, command.full)?)
+        }
+    }
+}
+
+fn dispatch_migrate_command(command: MigrateCommand) -> Result<(), String> {
+    match command {
+        MigrateCommand::CurrentArtifactClutter(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let payload = run_host_integration_from_args(&[
+                "migrate-current-artifact-clutter".to_string(),
+                "--repo-root".to_string(),
+                repo_root.display().to_string(),
+                "--active-task-id".to_string(),
+                command.active_task_id,
+            ])?;
+            print_json_value(&payload)
+        }
+    }
+}
+
+fn dispatch_hook_policy_command(command: HookPolicyCommand) -> Result<(), String> {
+    match command {
+        HookPolicyCommand::Evaluate(command) => {
+            let payload = parse_json_input::<HookPolicyEvaluateRequest>(
+                &command.input_json,
+                "hook policy evaluate",
+            )?;
+            print_json_value(&evaluate_hook_policy(payload)?)
+        }
+        HookPolicyCommand::Contract => print_json_value(&hook_policy_contract()),
+    }
+}
+
+fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String> {
+    match command {
+        CloseoutCommand::Evaluate(args) => {
+            let raw =
+                match (args.input_json.as_deref(), args.record_path.as_deref()) {
+                    (Some(_), Some(_)) => return Err(
+                        "closeout evaluate: --input-json and --record-path are mutually exclusive"
+                            .to_string(),
+                    ),
+                    (Some(text), None) => text.to_string(),
+                    (None, Some(path)) => fs::read_to_string(path).map_err(|err| {
+                        format!(
+                            "closeout evaluate: failed to read record file {}: {err}",
+                            path.display()
+                        )
+                    })?,
+                    (None, None) => {
+                        return Err(
+                            "closeout evaluate: provide --input-json or --record-path".to_string()
+                        )
+                    }
+                };
+            let record_value: Value = serde_json::from_str(&raw)
+                .map_err(|err| format!("closeout evaluate: invalid JSON: {err}"))?;
+            let response = evaluate_closeout_record_value(record_value)?;
+            print_json_value(&response)
+        }
+        CloseoutCommand::Contract => print_json_value(&closeout_enforcement_contract()),
+    }
+}
+
+fn dispatch_eval_command(command: EvalCommand) -> Result<(), String> {
+    match command {
+        EvalCommand::Route(args) => {
+            let report = run_eval_route(
+                &args.cases,
+                args.runtime.as_deref(),
+                args.manifest.as_deref(),
+            )?;
+            print_json_value(&report)
+        }
+        EvalCommand::RouteContract => print_json_value(&eval_route_contract()),
+    }
+}
+
+fn print_search_results(query: &str, payload: &SearchResultsPayload, rows: Vec<MatchRow>) {
+    if payload.matches.is_empty() {
+        println!("No skills found matching: {}", query);
+        return;
+    }
+
+    println!("Found {} matches for '{}':", payload.matches.len(), query);
+    println!();
+    println!(
+        "{:<30} | {:<5} | {:<10} | {:<6} | Description",
+        "Skill", "Layer", "Gate", "Score"
+    );
+    println!("{}", "-".repeat(120));
+    for row in rows {
+        let mut description = row.description.clone();
+        if description.chars().count() > 60 {
+            description = description.chars().take(57).collect::<String>() + "...";
+        }
+        println!(
+            "{:<30} | {:<5} | {:<10} | {:<6.2} | {}",
+            row.slug, row.layer, row.gate, row.score, description
+        );
+    }
+}

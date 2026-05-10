@@ -53,7 +53,7 @@ trigger_hints:
   - 最严厉审稿
   - strict reviewer
 metadata:
-  version: "4.1.0"
+  version: "4.2.0"
   platforms: [codex]
   tags: [paper, manuscript, review, reviewer, submission, gate-chain, top-journal]
 framework_roles:
@@ -217,6 +217,13 @@ For normal interactive review, use this compressed order:
    anchors changed.
 7. Report only the actionable conclusion unless the user asks for the full
    protocol trace.
+
+## Revision handoff (user-facing)
+
+本技能**不**要求用户背诵 `edit_scope` 术语。若某条「下一步诚实动作」落地时会**动结构**
+（删并节、大段挪附录、全文压篇幅、跨节叙事重写、或必然牵动 abstract/intro/conclusion
+的 claim 调整），在可执行建议旁用**一句话**点明：改稿前需确认是否按**整稿结构性改版**
+执行，避免下游在默认 **精准修改** 语义下不敢做诚实删改，或反过来在未授权时大面积重写。
 
 In protocol mode, prefer `串行主链 + 并行 sidecar lane`:
 

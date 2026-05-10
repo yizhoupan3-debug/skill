@@ -5,8 +5,6 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::OnceLock;
-
 pub fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -99,20 +97,40 @@ where
 }
 
 fn router_rs_binary() -> Option<PathBuf> {
-    static ROUTER_BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
-    ROUTER_BIN.get_or_init(resolve_router_rs_binary).clone()
+    // 不使用 OnceLock：测试进程内各用例顺序不定，若首次解析落到陈旧
+    // `scripts/router-rs/target/**` 会污染后续用例。
+    resolve_router_rs_binary()
+}
+
+/// 与仓库根 `.cargo/config.toml` 的 `[build] target-dir` 对齐，避免误用陈旧的
+/// `scripts/router-rs/target/**/router-rs`（未继承 workspace target-dir 时的产物）。
+fn cargo_target_dir_from_config(root: &Path) -> Option<PathBuf> {
+    let path = root.join(".cargo/config.toml");
+    let content = fs::read_to_string(path).ok()?;
+    for raw in content.lines() {
+        let line = raw.split('#').next().unwrap_or("").trim();
+        if let Some(rest) = line.strip_prefix("target-dir") {
+            let mut rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == '=');
+            rest = rest.trim();
+            let val = rest
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .or_else(|| rest.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+                .unwrap_or(rest);
+            let p = PathBuf::from(val);
+            return Some(if p.is_absolute() { p } else { root.join(p) });
+        }
+    }
+    None
 }
 
 fn resolve_router_rs_binary() -> Option<PathBuf> {
     let root = project_root();
-    for candidate in [
-        root.join("scripts/router-rs/target/release/router-rs"),
-        root.join("scripts/router-rs/target/debug/router-rs"),
-        root.join("target/release/router-rs"),
-        root.join("target/debug/router-rs"),
-    ] {
-        if candidate.is_file() {
-            return Some(candidate);
+    if let Some(base) = cargo_target_dir_from_config(&root) {
+        for candidate in [base.join("release/router-rs"), base.join("debug/router-rs")] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from) {
@@ -126,6 +144,16 @@ fn resolve_router_rs_binary() -> Option<PathBuf> {
             if candidate.is_file() {
                 return Some(candidate);
             }
+        }
+    }
+    for candidate in [
+        root.join("scripts/router-rs/target/release/router-rs"),
+        root.join("scripts/router-rs/target/debug/router-rs"),
+        root.join("target/release/router-rs"),
+        root.join("target/debug/router-rs"),
+    ] {
+        if candidate.is_file() {
+            return Some(candidate);
         }
     }
     None
