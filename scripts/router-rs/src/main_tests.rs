@@ -646,6 +646,10 @@ fn framework_refresh_includes_goal_state_attachment() {
     let refresh = build_framework_refresh_payload(&repo_root, 6, false).expect("refresh");
     let prompt = refresh["prompt"].as_str().expect("prompt");
     assert!(
+        prompt.contains("深度信号") && prompt.contains("d0/3"),
+        "depth hint should surface in refresh prompt; prompt={prompt:?}"
+    );
+    assert!(
         prompt.contains("Active goal") || prompt.contains("GOAL_STATE（router-rs"),
         "goal section missing (compact vs verbose); prompt={prompt:?}"
     );
@@ -655,6 +659,7 @@ fn framework_refresh_includes_goal_state_attachment() {
         refresh["goal_state"]["goal"],
         json!("Integration goal text")
     );
+    assert_eq!(refresh["depth_compliance"]["depth_score"], json!(0));
 
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -714,6 +719,10 @@ fn framework_refresh_payload_always_exports_goal_state_key() {
     assert!(
         keys.contains(&"goal_state".to_string()),
         "refresh JSON must include goal_state (null when no GOAL_STATE.json); keys={keys:?}"
+    );
+    assert!(
+        keys.contains(&"depth_compliance".to_string()),
+        "refresh JSON must include depth_compliance; keys={keys:?}"
     );
 }
 
@@ -792,6 +801,10 @@ fn framework_statusline_uses_rust_runtime_view() {
     assert!(statusline.contains("route=autopilot+1"));
     assert!(statusline.contains("others=0"));
     assert!(statusline.contains("resumable=0"));
+    assert!(
+        statusline.contains("depth=d0 | "),
+        "statusline should surface depth rollup; got {statusline:?}"
+    );
     assert!(statusline.contains("git=nogit"));
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -2867,7 +2880,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         &records,
         Some(&runtime_path),
         None,
-        "$autopilot",
+        "/autopilot",
         "alias-autopilot",
         true,
         true,
@@ -2879,7 +2892,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         &records,
         Some(&runtime_path),
         None,
-        "$team",
+        "/team",
         "alias-team",
         true,
         true,
@@ -2891,7 +2904,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         &records,
         Some(&runtime_path),
         None,
-        "$deepinterview",
+        "/deepinterview",
         "alias-deepinterview",
         true,
         true,

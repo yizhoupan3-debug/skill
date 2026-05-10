@@ -262,6 +262,24 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
     }
 }
 
+/// One-line hint for `framework refresh` / Codex SessionStart digest (`Continuity digest` prompt).
+/// Omitted when no resolved `task_id` (idle). Keeps copy short for ~640-char caps.
+pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> {
+    let tid = view.task_id.as_deref()?.trim();
+    if tid.is_empty() {
+        return None;
+    }
+    let dc = view.depth_compliance.as_ref()?;
+    let mut out = format!("深度信号: d{}/3", dc.depth_score);
+    if dc.rfv_pass_without_evidence_count > 0 {
+        out.push_str(&format!(
+            " · PASS无对照证据={}",
+            dc.rfv_pass_without_evidence_count
+        ));
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,6 +309,7 @@ mod tests {
         assert_eq!(v.task_id, None);
         assert!(matches!(v.control_mode, TaskControlMode::Idle));
         assert!(!v.resolution_notes.is_empty());
+        assert!(depth_compliance_refresh_hint(&v).is_none());
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -328,9 +347,11 @@ mod tests {
         let v = resolve_task_view(&tmp, None);
         assert_eq!(v.task_id.as_deref(), Some(tid));
         assert!(matches!(v.control_mode, TaskControlMode::Autopilot));
-        let ev = v.evidence.expect("evidence");
+        let ev = v.evidence.as_ref().expect("evidence");
         assert!(!ev.evidence_rows_non_empty);
         assert!(!ev.has_successful_verification);
+        let hint = depth_compliance_refresh_hint(&v).expect("hint");
+        assert!(hint.contains("深度信号") && hint.contains("d0/3"));
         let _ = fs::remove_dir_all(&tmp);
     }
 
