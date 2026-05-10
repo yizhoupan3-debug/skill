@@ -12,6 +12,16 @@ Field wants [goal], but [specific bottleneck] prevents it under [scope]. Existin
 
 If any slot is missing, do not hide it with fluent prose. Mark it with `[VERIFY: ...]` or hand back to `$paper-reviewer` logic mode.
 
+For whole-manuscript work, reuse the canonical throughline in `../SKILL.md`:
+
+- `core_problem -> bottleneck -> paper_move -> decisive_evidence -> bounded_implication`
+
+Story checks:
+
+- every paragraph supports one link in the chain
+- if a paragraph supports no link, cut/move/compress it
+- if a stronger claim is needed than the chain allows, route to `$paper-reviewer`
+
 ## Storyline Diagnosis
 
 Before rewriting, classify the current manuscript problem:
@@ -50,12 +60,12 @@ Learn:
 - how much space accepted papers spend before stating the contribution
 - whether accepted papers foreground mechanism, application value, methodological novelty, or validation depth
 
-Do not learn by copying:
+Learn structure, not phrasing:
 
-- sentence templates with distinctive wording
-- unsupported novelty claims
-- citation clusters without reading support
-- hype level that the user's evidence cannot defend
+- avoid sentence templates with distinctive wording
+- keep novelty language aligned with demonstrated evidence
+- keep citation clusters tied to read support
+- keep rhetorical intensity aligned with evidence strength
 
 ## Story Angles
 
@@ -70,7 +80,12 @@ Pick one dominant angle:
 | Robustness/generalization | Paper tests under harder conditions | Needs fair comparison |
 | Practical deployment | Paper improves real-world usability | Needs cost, reliability, or workflow evidence |
 
-If two angles seem equally attractive, choose the one best supported by the current evidence, not the one that sounds more impressive.
+If two angles seem equally attractive, choose the one best supported by current evidence.
+
+Depth rule for top-tier narrative:
+
+- each key claim should include one mechanism cue ("why it works") and one boundary cue ("where it may fail")
+- if either cue is missing, mark `[VERIFY: mechanism]` or `[VERIFY: scope boundary]`
 
 ## Output Shapes
 

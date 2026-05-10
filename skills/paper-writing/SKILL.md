@@ -118,22 +118,35 @@ as a guardrail when the user wants 顶刊/顶会/top-tier writing.
 
 ## Top-tier Narrative Style
 
-When the user asks for stronger writing style, default to direct, high-agency,
-top-tier narrative rhythm while staying inside the claim ledger:
+When the user asks for stronger writing style, keep the prose contribution-first
+and evidence-led while staying inside the claim ledger:
 
-- Lead each paragraph with a clear move, not defensive framing.
-- Use affirmative, evidence-backed verbs instead of internal/process-heavy voice.
-- Keep limitation language precise but non-shrinking: disclose boundary without
-  burying the paper's central contribution.
-- Do not use negative posture as a default rhetorical style.
-- Avoid internal or self-protective phrasing that distracts from the scientific
-  throughline.
+- lead with contribution, then evidence, then bounded implication
+- keep wording reader-facing and science-facing, not process-facing
+- keep tone confident within evidence and explicit at scope boundaries
+- keep one manuscript throughline visible across abstract, introduction, results,
+  discussion, and conclusion
 
-Hard style bans unless explicitly requested:
+For multi-section rewrites, lock one canonical throughline (used by all
+paper-writing references):
 
-- "绕行" openings that delay the main point.
-- internal-tone wording focused on process or self-justification.
-- defensive over-hedging that weakens already-supported claims.
+```text
+core_problem -> bottleneck -> paper_move -> decisive_evidence -> bounded_implication
+```
+
+Alignment checks:
+
+- every rewritten section advances the same core move
+- no section introduces a competing headline contribution
+- each section closes with a handoff to the next reader question
+
+Canonical slot checks:
+
+- core_problem: names the field-level need being served
+- bottleneck: states the concrete blocker under scope
+- paper_move: states what this paper changes
+- decisive_evidence: points to the strongest proof unit (table/figure/theorem/analysis)
+- bounded_implication: states why it matters without exceeding evidence
 
 ## Workflow
 

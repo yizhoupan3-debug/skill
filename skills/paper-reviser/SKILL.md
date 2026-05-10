@@ -110,6 +110,14 @@ Default output should stay simple:
 2. whether the blocker is resolved, partially resolved, or still blocked
 3. whether the next step is more revision, re-review, or new evidence
 
+Default user-facing wording contract:
+
+- Prefer author-facing language: `revision done`, `remaining blocker`,
+  `next rewrite target`.
+- Keep protocol terms internal by default: `gate`, `backjump`, `lane`,
+  `manifest`.
+- Surface protocol terms only when the user asks for protocol artifacts.
+
 For 顶刊/顶会/top-tier revision, each edit batch should also name which selective
 venue risk it reduces: contribution clarity, closest-work separation, decisive
 evidence, claim ceiling, reproducibility, figure/table persuasiveness, or

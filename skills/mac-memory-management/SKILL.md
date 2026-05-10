@@ -14,6 +14,13 @@ trigger_hints:
   - memory
   - unified memory
   - oom
+  - 内存优化
+  - 内存压力
+  - 爆内存
+  - 速度优化
+  - 吞吐优化
+  - memory optimization
+  - performance tuning
 metadata:
   version: "1.2.0"
   platforms: [codex]
@@ -35,7 +42,7 @@ source: local
 
 # mac-memory-management
 
-This skill owns Mac-specific runtime optimization for ML workloads when unified memory, MPS behavior, DataLoader pressure, throughput limits, or device-path stability are the dominant constraint. It is the default Mac runtime owner for Apple Silicon training and inference loops; generic algorithmic rewrites still belong to `code-acceleration`.
+This skill owns Mac-specific runtime optimization for ML workloads when unified memory, MPS behavior, DataLoader pressure, throughput limits, or device-path stability are the dominant constraint. It is the default Mac runtime owner for Apple Silicon training and inference loops; once Mac runtime constraints are no longer dominant, generic rewrites return to the current implementation owner.
 
 ## When to use
 
@@ -97,12 +104,19 @@ This skill does not own:
 
 ## Required workflow
 
-1. Confirm the task shape:
+1. Run preflight and capture the minimum measurement fields:
+   - device path (`mps` or `cpu`)
+   - chip class
+   - batch size and accumulation policy
+   - worker count
+   - peak memory behavior or swap behavior
+   - throughput or latency over a short repeatable window
+2. Confirm the task shape:
    - object: Mac training/inference/data path under runtime pressure
    - action: stabilize, reduce memory, recover throughput, add fallback, prevent OOM
    - constraints: Apple Silicon model, unified memory budget, framework, target batch size
    - deliverable: code or config changes plus runtime guidance and verification
-2. Identify the dominant runtime limiter:
+3. Identify the dominant runtime limiter:
    - unstable MPS path or op coverage
    - model activations
    - batch size
@@ -111,11 +125,11 @@ This skill does not own:
    - retained tensors, logs, or prediction histories
    - host-device transfer and synchronization overhead
    - under-filled batches or poor stage overlap
-3. Stabilize the device path first:
+4. Stabilize the device path first:
    - verify `mps` with a smoke pass
    - compare against a controlled `cpu` fallback when MPS behavior is unstable
    - keep checkpoint load/save and tensor movement backend-neutral
-4. Apply the highest-signal runtime protections next:
+5. Apply the highest-signal runtime protections next:
    - reduce batch size
    - add bounded batch fallback
    - add gradient accumulation if needed
@@ -124,8 +138,8 @@ This skill does not own:
    - cap worker count and avoid unnecessary `pin_memory`
    - remove retained histories and oversized preprocessing caches
    - tune worker count, microbatching, and preprocessing placement for stable throughput
-5. Keep CPU fallback available when MPS memory behavior is unstable.
-6. Verify with a smoke run and a short benchmark before claiming the path is safe or fast.
+6. Keep CPU fallback available when MPS memory behavior is unstable.
+7. Verify with a smoke run and a short benchmark before claiming the path is safe or fast.
 
 ## Policy reference
 

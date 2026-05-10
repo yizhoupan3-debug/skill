@@ -32,11 +32,12 @@ Use this path unless the user explicitly asks for filesystem-backed gate
 artifacts or a multi-turn review protocol.
 
 1. **Verdict first**: `可投 / 大修后再投 / 不建议投 / 需要补关键证据`.
-2. **Claim map**: main claim, contribution bullets, decisive evidence, expected
-   reviewer attack.
+2. **Claim map**: main claim, contribution bullets, decisive evidence, and the
+   main decision pressure point.
 3. **External calibration**: closest prior work, must-have baselines, venue or
    article-type norm, citation currency.
-4. **Kill case**: the shortest honest rejection argument.
+4. **Primary decision risk**: the shortest evidence-based path by which
+   reviewers may judge the manuscript unready.
 5. **Fix routing**: new evidence, claim narrowing, appendix move, citation
    repair, visual/layout repair, or prose cleanup.
 
@@ -110,7 +111,7 @@ Quick routing map:
 
 - vague review asks such as "帮我审这篇 paper", "能不能投", or "投稿前把关" -> `full_chain`
 - explicit dimension asks such as claim, math, citations, appendix routing, front-door text, notation, figures, tables, language, or layout -> `single_gate`
-- hostile wording such as "最狠审稿人", "reject reviewer", or "对抗性找茬" -> same scope selection as above, plus `Hostile`
+- stress-test wording such as "最狠审稿人", "strict reviewer", or "对抗性找茬" -> same scope selection as above, plus `Stress-Test`
 
 ## Review-strength preservation
 
@@ -241,41 +242,87 @@ Failure signals:
 
 ### G7 Narrative Spine & Main-text Flow
 
-What must be true:
+What must be true (operational pass bar):
 
-- the main text reads as one clean narrative spine
-- ordering and length serve the surviving claim
+- every main-text paragraph is assigned exactly one role in
+  `narrative_spine_map` (`setup`, `method`, `evidence`, `limitation`,
+  `transition`, or `takeaway`)
+- every `evidence` paragraph is linked to at least one surviving `claim_id` in
+  `claim_ledger`
+- no adjacent paragraph pair has the same role unless explicitly justified as a
+  split continuation in `narrative_spine_map`
+- all paragraphs routed to appendix by G6 are absent from the main text in this
+  round
 
-Failure signals:
+Required check artifacts:
 
-- technically correct but unreadable flow
-- redundant detours that belong in appendix
-- pacing that blocks reviewer comprehension
+- `narrative_spine_map.md`: ordered list `p_id -> section -> role -> claim_id(s)`
+- `narrative_flow_breaks.md`: all detected breaks with `p_id`, break type, and
+  repair action
+- `main_vs_appendix_presence_check.md`: list of G6-routed items and whether they
+  still appear in main text (`yes/no`)
+
+Fail criteria (any one triggers fail and backjump to G6, or G3 if claim linkage breaks):
+
+- one or more main-text paragraphs have no role assignment
+- one or more `evidence` paragraphs have no linked surviving `claim_id`
+- unresolved flow breaks remain in `narrative_flow_breaks.md`
+- appendix-routed content still appears in main text
 
 ### G8 Front-door Text Gate
 
-What must be true:
+What must be true (operational pass bar):
 
-- title, abstract, introduction, and conclusion are the tightest surfaces in the paper
-- all four reflect the selected claim ceiling exactly
+- title, abstract, introduction, and conclusion are all enumerated as
+  `front_door_surface` objects
+- every claim sentence in those four surfaces is mapped to exactly one
+  surviving `claim_id` and `selected_claim_level`
+- zero claim sentences in front-door surfaces exceed `selected_claim_level`
+- conclusion introduces no new `claim_id` not already present in abstract or
+  introduction
 
-Failure signals:
+Required check artifacts:
 
-- abstract stronger than the evidence
-- conclusion revives a dropped claim
-- intro framing drifts from the target contract
+- `front_door_claim_matrix.md`: table
+  `surface -> sentence_id -> claim_id -> claim_level -> verdict(pass/fail)`
+- `front_door_overshoot_report.md`: every overshoot sentence with proposed
+  downgrade text
+- `front_door_new_claim_check.md`: conclusion-only claims and resolution status
+
+Fail criteria (any one triggers fail and backjump to G3):
+
+- any front-door claim sentence is unmapped to `claim_id`
+- any mapped sentence is above `selected_claim_level`
+- conclusion contains a new unresolved claim absent from abstract/introduction
+- matrix and checks are missing or incomplete
 
 ### G9 Mirror & Text Consistency
 
-What must be true:
+What must be true (operational pass bar):
 
-- all mirrored claim surfaces say the same surviving thing
-- captions and rebuttal text agree with the manuscript's current truth
+- all mirrored surfaces are explicitly enumerated (`abstract`, `contributions`,
+  `figure captions`, `table titles`, `limitations`, and any rebuttal carry-over
+  text)
+- each mirrored statement is mapped to one surviving `claim_id` and one evidence
+  anchor from `evidence_anchor_map`
+- all figure/table callouts in body text resolve to existing objects and match
+  caption claim scope
+- zero stale references remain to deleted/narrowed claims
 
-Failure signals:
+Required check artifacts:
 
-- one section still advertises a deleted or narrowed claim
-- figure or table callouts no longer match what survives
+- `mirror_surface_inventory.md`: list `surface -> unit_id -> text_span`
+- `mirror_claim_alignment.md`: table
+  `unit_id -> claim_id -> evidence_anchor -> status(pass/fail)`
+- `callout_caption_consistency.md`: table
+  `callout_id -> object_id -> caption_scope_match(pass/fail)`
+
+Fail criteria (any one triggers fail and backjump to G3 or G6 depending on root cause):
+
+- any mirrored statement is unmapped to surviving claim/evidence
+- any unit still advertises deleted or narrowed claim language
+- any callout/caption mismatch remains unresolved
+- required mirror artifacts are missing
 
 ### G10 Terminology / Notation / Symbol Consistency
 
@@ -344,24 +391,24 @@ Failure signals:
 - empty whitespace or clogged pages
 - single/double-column decisions work against narrative flow
 
-## Hostile overlay
+## Stress-Test overlay
 
-Use hostile mode only when explicitly requested.
+Use stress-test mode only when explicitly requested.
 
-Hostile mode adds:
+Stress-test mode adds:
 
-- a compact `Reject Case`
-- sharper counterfactual attacks on the current gate
+- a compact `Decision Risk Case`
+- sharper counterfactual challenge checks on the current gate
 - stronger pressure on fairness, venue bar, and self-sufficiency
 
-Hostile mode does not:
+Stress-test mode does not:
 
 - change gate order
 - skip G0
 - authorize fake certainty
-- erase the honest accept path
+- hide the honest accept path
 
-Hostile can apply on top of either `full_chain` or `single_gate`, but it still
+Stress-test can apply on top of either `full_chain` or `single_gate`, but it still
 does not authorize cross-gate drift.
 
 ## Gate file quality bar
@@ -377,7 +424,16 @@ Every generated `gate_r<M>.md` must:
 
 ## Output shape
 
-Primary response shape:
+Default user-facing response shape:
+
+1. readiness verdict
+2. top 3 readiness risks
+3. decisive evidence gaps
+4. external calibration deltas (only when used)
+5. next revision move
+6. optional `Decision Risk Case` only when explicitly requested
+
+Protocol response shape (only when protocol artifacts are requested):
 
 1. review scope
 2. current review round folder
@@ -386,6 +442,6 @@ Primary response shape:
 5. current gate judgment
 6. freeze/backjump state
 7. next gate file created
-8. hostile `Reject Case` only when requested
+8. stress-test `Decision Risk Case` only when requested
 
-Do not default back to the old severity-bucket report.
+Do not default to protocol state reporting unless explicitly requested.

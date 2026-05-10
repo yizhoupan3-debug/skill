@@ -13,20 +13,20 @@ A top-tier paper needs all six layers to survive at once:
 - Contribution right: the paper's move is important to that venue, not merely interesting to the authors.
 - Novelty separation: closest prior work is named, compared fairly, and the remaining gap still matters.
 - Evidence closure: main claims are backed by decisive experiments, proofs, analysis, or qualitative evidence appropriate to the field.
-- Reviewer attack resistance: the easiest reject case has been anticipated and either repaired, narrowed, or disclosed.
+- Review robustness: the strongest likely critique has been anticipated and addressed through evidence, scope calibration, or explicit limitation disclosure.
 - Manuscript surface quality: title, abstract, introduction, figures, tables, limitations, references, and layout all reflect the same supported claim.
 
 ## Non-Negotiable Checks
 
 - What is the single contribution reviewers should remember?
-- Which accepted papers are the nearest positive examples, and which rejected-style failure does this draft risk?
+- Which accepted papers are the nearest positive examples, and which readiness gap does this draft still carry?
 - What is the strongest prior method, dataset, theorem, baseline, or clinical/empirical comparator that a reviewer will expect?
 - Which result would still matter if the weakest supporting experiment were removed?
 - Where does the paper overclaim beyond evidence, novelty, or population scope?
-- What must be cut, moved to appendix, or downgraded so the remaining paper becomes harder to reject?
-- Is the paper reproducible or auditable enough for the target venue's norms?
+- What must be cut, moved to appendix, or downgraded so the remaining paper is clearer, better supported, and easier to validate?
+- Is the paper reproducible and transparent enough for the target venue's norms?
 
-## Claim Audit Addendum (Anti-Drift)
+## Claim Consistency Addendum (Anti-Drift)
 
 Use this addendum for multi-round revision and response-letter cycles:
 
@@ -35,7 +35,7 @@ Use this addendum for multi-round revision and response-letter cycles:
 - Run mirror-surface checks across abstract, intro, conclusion, captions, and rebuttal text.
 - Flag any wording that upgrades causality, generality, or superiority without a
   matching evidence-anchor update.
-- Reject "style-only" edits that dilute auditable experiment detail below the
+- Avoid style-only edits that dilute verifiable experiment detail below the
   minimum needed for independent scrutiny.
 
 Compact drift card:
@@ -45,7 +45,7 @@ claim_ledger_status:
 new_claim_ids:
 upgraded_claim_phrases:
 missing_evidence_anchor:
-auditability_loss_risk:
+consistency_loss_risk:
 ```
 
 ## Field-Specific Calibration
@@ -93,7 +93,7 @@ For top-tier readiness reviews, include this compact card:
 ```text
 target_bar:
 top_contribution:
-closest_reject_case:
+closest_decision_risk_case:
 missing_decisive_evidence:
 claim_ceiling:
 next_honest_move:

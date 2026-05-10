@@ -10,6 +10,16 @@ Given [field context], readers need to understand [gap/problem], so this section
 
 Use that path to decide what to keep, move, cut, or mark as missing. Do not write in the order the authors discovered things; write in the order a reader needs to understand and trust the claim.
 
+For full-manuscript rewrites, reuse the canonical throughline from `../SKILL.md`:
+
+- `core_problem -> bottleneck -> paper_move -> decisive_evidence -> bounded_implication`
+
+Section-level checks:
+
+- each section advances exactly one adjacent link in this chain
+- each section ends with a handoff to the next reader question
+- no section introduces a second headline contribution
+
 ## IMRaD Logic
 
 For empirical papers, keep the Introduction-Methods-Results-Discussion split clean:
@@ -39,6 +49,16 @@ Common failures:
 - content before context -> result appears before the reader knows what problem it answers
 - too many loose threads -> the paper feels like a list rather than an argument
 
+At section boundaries, use a one-sentence handoff that pulls the same main line
+forward:
+
+- Introduction -> Methods: "To resolve this bottleneck, we implement..."
+- Methods -> Results: "We evaluate this design under..."
+- Results -> Discussion: "These findings imply..."
+- Discussion -> Conclusion: "Under this scope, the paper establishes..."
+
+Avoid handoffs that start a new storyline unrelated to the central contribution.
+
 ## Abstract
 
 **Goal**: a self-standing miniature paper: background -> gap/objective -> method -> key result -> implication.
@@ -57,7 +77,7 @@ Common failures:
 - Prefer concrete numbers, effect sizes, uncertainty, or scope markers over vague "significant improvement"
 - Avoid abbreviations not universally known
 - Avoid mathematical symbols and dense notation unless indispensable to the claim
-- Do not cite references in the abstract (unless venue requires)
+- Keep the abstract citation-free unless the venue requires references there
 - First sentence = field-level context; avoid empty openers such as "In recent years..."
 - Last sentence = significance or broader implication
 - Make the abstract understandable to an informed reader outside the immediate subfield
@@ -97,11 +117,11 @@ For methods work:
 **Rules**:
 - End the introduction with explicit contributions; bullets are useful when venue/field conventions allow them
 - Each contribution must be verifiable in the experiments section
-- Do not oversell: match claim strength to evidence strength
+- Match claim strength to evidence strength
 - Avoid priority claims such as "the first" unless truly defensible and supported by the literature
 - For methods-heavy or engineering papers, make the final paragraph a roadmap of the remaining sections
 - The roadmap paragraph should describe section function, not repeat contribution claims
-- Do not turn the introduction into a chronological literature dump; every prior-work detail should help define the gap
+- Keep the introduction selective; each prior-work detail should help define the gap
 
 **Roadmap paragraph pattern**:
 
@@ -306,9 +326,19 @@ Small changes that accumulate into significantly clearer prose:
 ## Word Choice (Zachary Lipton)
 
 - **Be specific**: ❌ "performance" → ✅ "accuracy" or "latency" (say what you mean)
-- **Eliminate hedging**: Drop "may" and "can" unless genuinely uncertain
-- **Avoid incremental vocabulary**: ❌ "combine," "modify," "expand" → ✅ "develop," "propose," "introduce"
+- **Calibrate hedging**: Use "may/can/suggest" only when uncertainty is real; otherwise use bounded scope markers
+- **Match verbs to contribution posture**: choose among "introduce", "extend", "validate", "explain", "operationalize" based on evidence strength
 - **Delete intensifiers**: ❌ "provides *very* tight approximation" → ✅ "provides tight approximation"
+
+## Cadence QC (Top-tier Flow)
+
+Before finalizing a rewritten section, run this quick rhythm check:
+
+- sentence-length mix: avoid all-short or all-long sequences
+- paragraph-opening mix: rotate claim-led, evidence-led, and contrast-led openings
+- end-stress check: place one key idea near sentence end when emphasis matters
+- transition variety: mix contrast, cause, scope, and evidence connectors
+- repetition check: avoid repeating the same opener pattern for 3+ sentences
 
 ## Precision Over Brevity (Jacob Steinhardt)
 

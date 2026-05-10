@@ -22,7 +22,9 @@ QA, inspection, or rebuild work.
 - `ppt init <workdir>` creates `outline.json`, `deck.plan.json`, `assets/`, `rendered/`, `sources.md`, and `ppt.commands.json`.
 - `ppt outline <outline.yaml|outline.json> --output deck.plan.json --bootstrap --build` turns an outline into a Rust source plan and editable `.pptx`.
 - `ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --json` rebuilds and checks the default deliverable.
-- `ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json` fails the command when overflow, font, or inspector checks fail.
+- `ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json` is the delivery gate command.
+
+Canonical `default single-command gate` definition lives in `skills/slides/SKILL.md` (`CLI-first mode` section). This file only keeps command-surface notes and focused supplements.
 
 The reusable command manifest is generated into each deck workspace as
 `ppt.commands.json`; it is data for humans and agents, not a package wrapper or
@@ -31,12 +33,31 @@ a second runtime.
 ## QA Commands
 
 - `ppt extract-structure deck.pptx --output structure.json` inspects slide, shape, text, image, chart, table, and notes structure.
-- `ppt slides-test deck.pptx --fail-on-overflow` checks whether shapes leave the original slide canvas.
+- `ppt slides-test deck.pptx --fail-on-overflow --fail-on-overlap --fail-on-aesthetic` runs focused geometry/aesthetic checks.
+- `ppt slides-test deck.pptx --fail-on-any` is the simplest strict mode for this command.
 - `ppt render deck.pptx --output-dir rendered` renders slides to PNG evidence.
 - `ppt create-montage --input-dir rendered --output-file montage.png` builds a review sheet for long decks.
 - `ppt detect-fonts deck.pptx --json` checks authored and rendered font behavior.
 - `ppt qa deck.pptx --rendered-dir rendered --json` runs the combined Rust QA path.
-- `ppt qa deck.pptx --rendered-dir rendered --fail-on-issues --json` turns the combined QA result into a hard gate.
+- `ppt qa deck.pptx --rendered-dir rendered --fail-on-issues --json` turns the combined QA result into a hard gate. With `--json`, payload is emitted before non-zero exit so CI can parse failures.
+
+## Diagnostics用途
+
+- 仅在 strict gate 失败或需要定向审计时启用诊断链路。
+- `ppt qa ... --json`: 获取结构化失败原因，适合 CI/自动修复入口。
+- `ppt slides-test ... --fail-on-any`: 聚焦版面几何与审美相关问题定位。
+- `ppt detect-fonts ... --json`: 仅做字体可用性与替换风险排查。
+- `ppt office doctor ... --json` / `ppt render ...` / `ppt create-montage ...`: 补充包结构与可视证据，不替代默认门禁。
+
+## Strict Coverage
+
+In strict mode, the default gate effectively covers:
+
+- overflow
+- overlap
+- dense text overlap risk (aesthetic check)
+- font check
+- Rust inspector validation/issues
 
 ## Rust Office Inspection
 

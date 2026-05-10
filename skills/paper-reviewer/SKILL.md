@@ -51,7 +51,7 @@ trigger_hints:
   - 只审引用
   - 只审语言
   - 最严厉审稿
-  - reject reviewer
+  - strict reviewer
 metadata:
   version: "4.1.0"
   platforms: [codex]
@@ -109,7 +109,6 @@ Default posture:
 - The user wants the front door for a paper task -> use `$paper-workbench`
 - The user wants the paper changed now -> use `$paper-reviser`
 - The user wants only local wording polish -> use `$paper-writing`
-- The user wants only local wording polish -> use `$paper-writing`
 
 ## User-facing modes
 
@@ -128,11 +127,20 @@ For single-dimension checks, use
 Default output should be decision-first and short enough to act on:
 
 1. verdict: `可投 / 大修后再投 / 不建议投 / 需要补关键证据`
-2. top blockers: the few issues most likely to trigger rejection
+2. top blockers: the few issues most likely to block readiness
 3. evidence gap: what is missing, unfair, weakly controlled, or overclaimed
 4. external calibration: closest prior work / venue norm / baseline expectation
    only when external research was used
 5. next honest move: fix, cut, narrow, move to appendix, or stop defending
+
+Default user-facing wording contract:
+
+- Prefer author-facing language: `readiness`, `blocker`, `evidence gap`,
+  `revision move`.
+- Keep protocol language internal by default: `gate`, `backjump`, `freeze`,
+  `manifest`, `lane`.
+- Only surface protocol terms when the user explicitly asks for protocol
+  artifacts.
 
 For 顶刊/顶会/top-tier asks, also include the compact card from
 [`../paper-workbench/references/top-tier-paper-standard.md`](../paper-workbench/references/top-tier-paper-standard.md):
@@ -140,13 +148,14 @@ For 顶刊/顶会/top-tier asks, also include the compact card from
 ```text
 target_bar:
 top_contribution:
-closest_reject_case:
+closest_decision_risk_case:
 missing_decisive_evidence:
 claim_ceiling:
 next_honest_move:
 ```
 
-For multi-round review, include a short claim-lock addendum:
+For multi-round review, include a short claim-lock addendum only when the user
+explicitly requests protocol artifacts:
 
 ```text
 claim_ledger_updates:
@@ -156,7 +165,7 @@ drift_risk_surfaces:
 
 Use severity only as plain reviewer priority:
 
-- `A 致命`: likely reject unless repaired or narrowed
+- `A 关键`: unlikely to clear review without repair or narrowing
 - `B 需补`: fixable but needs data, analysis, baseline, citation, or proof
 - `C 表达/呈现`: wording, organization, figure/table, or layout issue after the
   claim boundary is safe
@@ -200,14 +209,14 @@ For normal interactive review, use this compressed order:
    evidence, figures/tables, baselines, and limitations.
 3. Run external calibration: closest prior work, expected baselines, recent
    norms, and venue fit.
-4. Make the kill decision: identify the shortest reviewer path to reject and
-   whether it is genuinely fatal.
+4. Identify the highest-priority decision risk: name the shortest evidence-based
+   reason reviewers may request major revision.
 5. Separate fix types: new evidence, claim narrowing, appendix routing,
    citation repair, figure/table/layout repair, or prose cleanup.
 6. Emit claim ledger updates when claim ceiling, scope markers, or evidence
    anchors changed.
 7. Report only the actionable conclusion unless the user asks for the full
-   audit trail.
+   protocol trace.
 
 In protocol mode, prefer `串行主链 + 并行 sidecar lane`:
 
@@ -224,7 +233,7 @@ disk:
 
 - For whole-paper review, use the protocol-backed full-chain flow
 - For explicit dimension review, inspect only that slice and do not silently expand scope
-- For whole-paper review, parallelize only bounded audit lanes under the current active gate
+- For whole-paper review, parallelize only bounded sidecar lanes under the current active gate
 - Use `logic mode` for claim, novelty, evidence, and experiment-depth subanalysis
 - Keep heavier external corpus or novelty sweeps inside the current paper
   workflow; do not force the user to switch skills for a normal reviewer lookup
@@ -245,4 +254,4 @@ disk:
 - If the strongest honest move is to cut, narrow, or move something to appendix, say so plainly
 - Do not blur whole-paper review and local text polish into one owner
 - Do not call a paper "top-tier ready" unless contribution, closest-work
-  separation, decisive evidence, and reviewer attack resistance all survive.
+  separation, decisive evidence, and reviewer-scrutiny robustness all hold.

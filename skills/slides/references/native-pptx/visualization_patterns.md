@@ -4,6 +4,12 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 
 ## Pattern Catalog
 
+Global gates:
+
+- Minimum body text size is 18pt for chart annotations, labels, and supporting copy.
+- If a visual needs more annotation than readable at 18pt, split into multiple slides instead of shrinking text.
+- `zh-layout-guard` applies to Chinese headings/captions: no 1-2 char orphan line endings; mixed-language tokens stay intact.
+
 ### 1. Timeline
 
 **When**: chronological events, project milestones, historical progression.
@@ -31,6 +37,7 @@ timelines and renders editable labels, panels, and notes.
 - 3-6 steps per slide
 - Use editable arrow shapes between nodes
 - Each node: icon/number + short label + 1-line description
+- Prefer **one** accent color for emphasis plus neutrals; avoid giving every node its own saturated fill or ring (reads as clip-art flowchart)
 - Keep spacing even and leave footer-safe space
 
 **Rust path**: model the steps in `deck.plan.json`, then let `ppt outline --build`
@@ -45,7 +52,7 @@ choose a flow layout or rebuild the page as editable shapes.
 **Structure**: two side-by-side panels with matching vertical structure.
 
 **Layout guide**:
-- Left panel (6.2 in wide) vs right panel (6.2 in wide) with 0.2 in gap
+- Left panel (5.48 in wide) vs right panel (5.48 in wide) with ~0.30 in gap
 - Shared title row at top
 - Matching bullet count and visual weight on both sides
 - Use contrasting accent colors for each side
@@ -66,6 +73,7 @@ structurally parallel so the Rust builder can preserve editable text.
 - One wide panel below with chart or detailed breakdown
 - Use a simple native chart or editable evidence panel for the main chart
 - Title + one-sentence insight above the chart
+- Restyle colors/axis/labels to avoid default Office chart appearance
 
 **Rust path**: encode `metrics` plus `chart`; avoid raster-only charts when
 collaborators need to edit the deck.
@@ -159,11 +167,24 @@ When choosing a pattern automatically, use these heuristics:
 Prefer editable primitives when the audience may revise the deck in PowerPoint.
 Use raster charts or screenshots only when they are evidence artifacts, not
 when they are the main editable argument.
+When comparison content grows beyond readable density, split into two slides
+instead of shrinking body text below 18pt.
+
+Theme rhythm requirement:
+
+- Do not keep one theme treatment for 3 consecutive slides.
+- For decks longer than 8 slides, include at least 2 hero pages, with at least 1 `dark-premium` hero and 1 `light-editorial` hero.
 
 ## Anti-Patterns
 
+- Multi-column dark panels each wrapped in a different bright border (catalog look)—unify stroke/fill tokens or lead one column visually
+- Primitive shape diagram on the same slide as a dominant photographic band without composition unity—choose diagram-led **or** photo-led layout per slide when possible
 - Equal-weight 6-card grid where nothing stands out
 - Chart pasted with default office colors
 - Timeline with 15 events crammed into one slide
 - Comparison where both sides have different structures
 - Dashboard where all numbers are the same size
+- Decorative line under title with no information role
+- Low-contrast gray text on chart-heavy slides
+- Text on top of chart/image without a solid readability protection layer
+- Whole-deck same-layout repetition with no role variation

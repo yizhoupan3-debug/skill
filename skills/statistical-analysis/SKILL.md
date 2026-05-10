@@ -35,7 +35,7 @@ source: local
 
 ---
 
-- **Dual-Dimension Audit (Pre: Test-Selection, Post: P-value/Effect-size Results)** → runtime verification gate
+- **Two-stage rigor check (test selection -> result interpretation)** for high-stakes analyses
 
 # Statistical Analysis
 
@@ -150,7 +150,7 @@ assumption check, or interpretation is settled.
 - Do not apply multiple tests without correction
 - Do not confuse statistical significance with practical importance
 - Always state assumptions and check them before running tests
-- **Superior Quality Audit**: For high-stakes statistical results, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
+- For high-stakes statistical results, run a dedicated rigor verification pass against [Superior Quality Bar](runtime verification criteria).
 - Report exact p-values (p = 0.037) not just threshold labels (p < 0.05)
 
 ## Cross-references
@@ -167,5 +167,5 @@ assumption check, or interpretation is settled.
 - "做一个 power analysis 看需要多少样本"
 - "回归模型的残差图怎么看"
 - "多重比较要怎么校正"
-- "强制进行统计分析深度审计 / 检查检验方法与效应量结果。"
-- "Use the runtime verification gate to audit this statistical analysis for rigor-fidelity idealism."
+- "强制进行统计分析深度复核 / 检查检验方法与效应量结果。"
+- "Run a dedicated rigor verification pass on this statistical analysis."
