@@ -22,7 +22,7 @@
 
 - **做什么**：为 Cursor **review** 路径固化「`.cursor/hook-state` phase + Stop 单行 `router-rs REVIEW_GATE`」所需的 **磁盘证据最小集**（含成功 / 失败对照），写入本 backlog 或链到 `docs/` 专节，避免团队口头约定。宿主契约：[host_adapter_contract.md](../host_adapter_contract.md)；执行叙事：[AGENTS.md](../../AGENTS.md) Host Boundaries / Execution Ladder。
 - **Done when**：存在 **1 份**可被新人按步骤复现的样例（目录树 + 关键文件片段 + 期望 hook 输出关键词）；与 `review_gate` 相关 Rust 测试或 `tests/host_integration.rs` 断言不冲突。
-- **Verify**：`rg -n 'REVIEW_GATE|review_gate' docs scripts/router-rs/src .cursor/hooks.json`；`cargo test --manifest-path scripts/router-rs/Cargo.toml -- host_integration`（若仓库已编该测试名；否则跑全量 `cargo test`）。
+- **Verify**：`rg -n 'REVIEW_GATE|review_gate' docs scripts/router-rs/src .cursor/hooks.json`；`cargo test --manifest-path scripts/router-rs/Cargo.toml`（全量；或改为显式过滤子串前先在 `tests/host_integration.rs` 内 `rg '#\[test\]'` 对齐测试名，避免 `-- host_integration` 与命名漂移）。
 
 ### P0-4：宿主漂移 — L4 hooks 与 **portable core** 对照表
 
@@ -46,11 +46,15 @@
 - **Done when**：开启硬门禁时的失败信息 **可定位到具体 gate 与缺失证据**；文档与 `task_state` / RFV 相关 Rust 行为一致。
 - **Verify**：`rg -n 'completion_gates|close_gates|DepthCompliance' scripts/router-rs/src docs/references/rfv-loop/reasoning-depth-contract.md`。
 
-### P1-3：**R9** 类长尾 — 多轮 RFV 「防无限 append」与显式 close 语义
+### P1-3：RFV 高轮次与显式 close — 防无限 `append_round` 与续跑噪声
 
-- **做什么**：为「高轮次 / 第 9 轮及以后」类场景定义 **显式 `append_round` close**、最大轮次或 `close_gates` 组合策略，避免账本无限增长与续跑噪声。参考：[harness_architecture.md §8 开关矩阵](../harness_architecture.md#8-开关取舍矩阵深度注入相关)、[rfv_loop_harness.md](../rfv_loop_harness.md)。
+- **做什么**：为 **高轮次** RFV 场景定义 **显式 `append_round` close**、`max_rounds` 耗尽语义或 `close_gates` 组合策略，避免账本无限增长与续跑噪声。参考：[harness_architecture.md §8 开关矩阵](../harness_architecture.md#8-开关取舍矩阵深度注入相关)、[rfv_loop_harness.md](../rfv_loop_harness.md)。
 - **Done when**：RFV 文档或 schema 中有一条 **可执行** 的「何时必须 close / pause」规则；必要时补 `router-rs` 警告或 metrics 钩子（若已有扩展点则复用）。
-- **Verify**：`rg -n 'append_round|close_gates|RFV_LOOP' scripts/router-rs/src docs/rfv_loop_harness.md`。
+- **Verify**：`rg -n 'append_round|close_gates|RFV_LOOP|max_rounds' scripts/router-rs/src docs/rfv_loop_harness.md`。
+
+#### 术语辨析：Closeout **R9**（与 RFV 轮次编号无关）
+
+- **R9** 在仓库内指 **CloseoutRecord** 与 **任务级 depth 策略**（如 `GOAL_STATE.completion_gates`）对齐的 **推迟规则**，见 [closeout_enforcement.rs](../../scripts/router-rs/src/closeout_enforcement.rs) 内 R9 注释与 [reasoning-depth-contract.md §Closeout R9](../references/rfv-loop/reasoning-depth-contract.md)。**不得**与「RFV 第 N 轮」混为一谈。现阶段替代路径：用 `completion_gates` / `close_gates` 在 GOAL complete / RFV close 上硬拦。
 
 ### P1-4：开关 **preset** — `ROUTER_RS_*` 组合写入文档与可选 shell 片段
 
@@ -98,6 +102,7 @@
 | **PR-B：Closeout 硬门禁与叙事对齐** | `scripts/router-rs/src/closeout_enforcement.rs`、`AGENTS.md`、`docs/closeout_enforcement.md` | CI/本地分层单一真源；减少误设空字符串 env。 |
 | **PR-C：REVIEW_GATE fixture + 文档样例** | `.cursor/hooks.json`（仅当契约变）、`tests/host_integration.rs`、`docs/host_adapter_contract.md`、`tests/fixtures/` | 可复现 review 证据链；利于 onboarding。 |
 | **PR-D：开关 preset + 外研 JSON schema 草案** | `scripts/router-rs/src/router_env_flags.rs`、`configs/framework/`、`docs/references/rfv-loop/reasoning-depth-contract.md` | 调试体验与长期配置面收敛；可与 PR-A/B 并行若文件不重叠。 |
+| **PR-E：Claude Code L4 薄壳** | [`.cursor/plans/harness_portable_core_claude_code.plan.md`](../../.cursor/plans/harness_portable_core_claude_code.plan.md)、`RUNTIME_REGISTRY`、`scripts/router-rs/src/claude_hooks.rs`（落地时）、[host_adapter_contract.md §3.1](../host_adapter_contract.md#31-可复制执行清单工程顺序) | 第三宿主与现有 Codex/Cursor **零默认行为变更**；与 portable core 复用同一 L2/L3。 |
 
 ---
 
