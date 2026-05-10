@@ -380,6 +380,134 @@
         "visual-review"
       ],
       "first_turn": true
+    },
+    {
+      "id": "team-explicit-alias-beats-delegation-gate",
+      "category": "explicit-framework-command",
+      "task": "$team 帮我组织 worker 协作",
+      "focus_skill": "team",
+      "expected_owner": "team",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "agent-swarm-orchestration"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "review-fix-verify-loop-explicit-alias",
+      "category": "explicit-loop-command",
+      "task": "/review-fix-verify-loop 跑三轮审查修复验证",
+      "focus_skill": "review-fix-verify-loop",
+      "expected_owner": "review-fix-verify-loop",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "agent-swarm-orchestration",
+        "skill-framework-developer"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "autopilot-deep-explicit-alias",
+      "category": "explicit-framework-command",
+      "task": "请用 $autopilot-deep 深度调研这个系统",
+      "focus_skill": "autopilot",
+      "expected_owner": "autopilot",
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "skill-framework-developer",
+        "deepinterview"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "route-001-ppt-deck",
+      "category": "should-trigger",
+      "task": "帮我做一个演示文稿，关于河川修复的",
+      "expected_owner": "slides",
+      "expected_overlay": null,
+      "expected_layer": "L3",
+      "notes": "PPT/slides request should route to slides skill"
+    },
+    {
+      "id": "route-002-pdf-document",
+      "category": "should-trigger",
+      "task": "把这个 PDF 里的表格提取出来",
+      "expected_owner": "pdf",
+      "expected_overlay": null,
+      "expected_layer": "L3",
+      "notes": "PDF artifact gate should route to pdf skill"
+    },
+    {
+      "id": "route-003-word-docx",
+      "category": "should-trigger",
+      "task": "帮我整理一个 Word 文档模板，并导出 docx",
+      "expected_owner": "doc",
+      "expected_overlay": null,
+      "expected_layer": "L3",
+      "notes": "Word/docx artifact gate should route to doc skill"
+    },
+    {
+      "id": "route-004-git-commit",
+      "category": "should-trigger",
+      "task": "/gitx 提交代码并推送到远端",
+      "expected_owner": "gitx",
+      "expected_overlay": null,
+      "expected_layer": "L0",
+      "notes": "Git operations via explicit /gitx entrypoint should route to gitx"
+    },
+    {
+      "id": "route-005-debug-bug",
+      "category": "should-trigger",
+      "task": "修这个 bug，先定位根因再改代码",
+      "expected_owner": "systematic-debugging",
+      "expected_overlay": null,
+      "expected_layer": "L0",
+      "notes": "Bug fix with root-cause-first should route to systematic-debugging (L0 evidence gate)"
+    },
+    {
+      "id": "route-006-ci-fix",
+      "category": "should-trigger",
+      "task": "GitHub Actions CI 挂了，帮我修一下",
+      "expected_owner": "gh-fix-ci",
+      "expected_overlay": null,
+      "expected_layer": "L0",
+      "notes": "CI failure should route to gh-fix-ci (L0)"
+    },
+    {
+      "id": "route-007-multi-agent",
+      "category": "should-trigger",
+      "task": "需要多 agent 并行处理这个跨模块任务",
+      "expected_owner": "agent-swarm-orchestration",
+      "expected_overlay": null,
+      "expected_layer": "L0",
+      "notes": "Multi-agent delegation should route to agent-swarm-orchestration gate"
+    },
+    {
+      "id": "route-008-latex-compile",
+      "category": "should-trigger",
+      "task": "LaTeX 编译太慢了，帮我加速",
+      "expected_owner": "latex-compile-acceleration",
+      "expected_overlay": null,
+      "expected_layer": "L4",
+      "notes": "LaTeX compile speed should route to latex-compile-acceleration (L4)"
+    },
+    {
+      "id": "route-009-paper-writing",
+      "category": "should-trigger",
+      "task": "帮我写论文的 related work 部分",
+      "expected_owner": "paper-writing",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "notes": "Paper writing should route to paper-writing (L2)"
+    },
+    {
+      "id": "route-010-visual-review",
+      "category": "should-trigger",
+      "task": "基于这组截图做 UI 审查，告诉我哪里有视觉问题",
+      "expected_owner": "visual-review",
+      "expected_overlay": null,
+      "expected_layer": "L3",
+      "notes": "Screenshot review should route to visual-review"
     }
   ]
 }

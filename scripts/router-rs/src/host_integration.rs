@@ -1,10 +1,9 @@
-use crate::framework_runtime::write_framework_session_artifacts;
-use chrono::{DateTime, FixedOffset, Local, NaiveDate};
+use crate::framework_runtime::is_framework_root;
+use chrono::Local;
 use clap::{Parser, Subcommand};
-use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -142,31 +141,11 @@ enum Commands {
         #[arg(long, default_value = "")]
         query: String,
         #[arg(long)]
-        memory_root: Option<PathBuf>,
-        #[arg(long)]
         artifact_source_dir: Option<PathBuf>,
         #[arg(long)]
         workspace: Option<String>,
         #[arg(long, default_value_t = 8)]
         top: usize,
-    },
-    RunMemoryAutomation {
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long)]
-        output_dir: Option<PathBuf>,
-        #[arg(long)]
-        memory_root: Option<PathBuf>,
-        #[arg(long)]
-        artifact_source_dir: Option<PathBuf>,
-        #[arg(long)]
-        workspace: Option<String>,
-        #[arg(long, default_value = "")]
-        query: String,
-        #[arg(long, default_value_t = 8)]
-        top: usize,
-        #[arg(long)]
-        apply_artifact_migrations: bool,
     },
     PlanCurrentArtifactClutter {
         #[arg(long)]
@@ -319,7 +298,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             repo_root,
             output_dir,
             query,
-            memory_root,
             artifact_source_dir,
             workspace,
             top,
@@ -327,29 +305,9 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             &repo_root,
             output_dir.as_deref(),
             &query,
-            memory_root.as_deref(),
             artifact_source_dir.as_deref(),
             workspace.as_deref(),
             top,
-        )?,
-        Commands::RunMemoryAutomation {
-            repo_root,
-            output_dir,
-            memory_root,
-            artifact_source_dir,
-            workspace,
-            query,
-            top,
-            apply_artifact_migrations,
-        } => run_memory_automation(
-            &repo_root,
-            output_dir.as_deref(),
-            memory_root.as_deref(),
-            artifact_source_dir.as_deref(),
-            workspace.as_deref(),
-            &query,
-            top,
-            apply_artifact_migrations,
         )?,
         Commands::PlanCurrentArtifactClutter {
             repo_root,
@@ -573,12 +531,6 @@ fn resolve_projection_roots(
     })
 }
 
-fn is_framework_root(path: &Path) -> bool {
-    path.join("configs/framework/RUNTIME_REGISTRY.json")
-        .is_file()
-        && path.join("scripts/router-rs/Cargo.toml").is_file()
-}
-
 fn nearest_marker_root(start: &Path, marker: &str) -> Option<PathBuf> {
     start
         .ancestors()
@@ -586,16 +538,20 @@ fn nearest_marker_root(start: &Path, marker: &str) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-fn runtime_registry_path(repo_root: &Path) -> PathBuf {
+fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, String> {
     let repo_candidate = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
     if repo_candidate.is_file() {
-        return repo_candidate;
+        return Ok(repo_candidate);
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../configs/framework/RUNTIME_REGISTRY.json")
+    Err(format!(
+        "Runtime registry not found at active workspace root: {}. Expected {}. Fix by opening the framework repo root as the active workspace or passing --framework-root <framework-repo-root>.",
+        repo_root.to_string_lossy(),
+        repo_candidate.to_string_lossy()
+    ))
 }
 
 fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
-    let path = runtime_registry_path(repo_root);
+    let path = runtime_registry_path(repo_root)?;
     let payload = fs::read_to_string(&path).map_err(|err| err.to_string())?;
     let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| err.to_string())?;
     let schema_version = parsed
@@ -717,7 +673,7 @@ fn generated_artifacts_status(
         validate_generated_artifact_entry(artifact)?;
         declared_paths.insert(artifact.path.clone());
         if executed_generators.insert(artifact.generator.clone()) {
-            run_generated_artifact_generator(&artifact.generator, &framework_root, &temp_root)?;
+            run_generated_artifact_generator(&artifact.generator, &framework_root, temp_root)?;
         }
         let checked_in_path = framework_root.join(&artifact.path);
         let regenerated_path = temp_root.join(&artifact.path);
@@ -1049,13 +1005,12 @@ fn generated_artifact_reverse_reference_candidates(
             &mut candidates,
         )?;
     }
-    for rel in ["AGENTS.md"] {
-        collect_generated_artifact_marker_files(
-            framework_root,
-            &framework_root.join(rel),
-            &mut candidates,
-        )?;
-    }
+    let rel = "AGENTS.md";
+    collect_generated_artifact_marker_files(
+        framework_root,
+        &framework_root.join(rel),
+        &mut candidates,
+    )?;
     collect_root_skill_generated_surfaces(framework_root, &mut candidates)?;
     Ok(candidates)
 }
@@ -1171,53 +1126,68 @@ fn validate_source_rel(source_rel: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn router_rs_crate_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../router-rs")
-}
-
-fn router_rs_self_launcher_candidates(repo_root: &Path) -> Vec<PathBuf> {
-    let repo_launcher = router_rs_launcher_command(repo_root);
-    let crate_launcher = router_rs_crate_root().join("run_router_rs.sh");
-    if repo_launcher == crate_launcher {
-        vec![repo_launcher]
-    } else {
-        vec![repo_launcher, crate_launcher]
+fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String> {
+    if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
+        let path = PathBuf::from(raw);
+        if path.is_file() {
+            return Ok(path);
+        }
     }
+    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
+        let base = PathBuf::from(td);
+        for candidate in [base.join("release/router-rs"), base.join("debug/router-rs")] {
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
+    let cur = std::env::current_exe().map_err(|err| err.to_string())?;
+    if cur
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "router-rs" || name.starts_with("router-rs"))
+    {
+        return Ok(cur);
+    }
+    let repo_root = normalize_path(repo_root)?;
+    for candidate in [
+        repo_root.join("target/release/router-rs"),
+        repo_root.join("target/debug/router-rs"),
+        repo_root.join("scripts/router-rs/target/release/router-rs"),
+        repo_root.join("scripts/router-rs/target/debug/router-rs"),
+    ] {
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    Err(format!(
+        "could not resolve router-rs executable for subprocess (try `cargo build --release --manifest-path scripts/router-rs/Cargo.toml`, `router-rs self install`, or set ROUTER_RS_BIN); repo_root={}",
+        repo_root.display()
+    ))
 }
 
 fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, String> {
-    let mut last_error = None;
-    for candidate in router_rs_self_launcher_candidates(repo_root) {
-        if !candidate.is_file() {
-            continue;
-        }
-        let manifest_path = candidate
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join("Cargo.toml");
-        let output = Command::new(&candidate)
-            .arg(&manifest_path)
-            .args(args)
-            .arg("--repo-root")
-            .arg(repo_root)
-            .output()
-            .map_err(|err| err.to_string())?;
-        if output.status.success() {
-            let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
-            return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if !stderr.is_empty() {
-            last_error = Some(stderr);
-        }
+    let exe = resolve_router_rs_executable(repo_root)?;
+    let output = Command::new(&exe)
+        .args(args)
+        .arg("--repo-root")
+        .arg(repo_root)
+        .output()
+        .map_err(|err| err.to_string())?;
+    if output.status.success() {
+        let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
+        return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
     }
-
-    Err(last_error.unwrap_or_else(|| {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
         format!(
-            "missing required router-rs launcher: {}",
-            router_rs_launcher_command(repo_root).to_string_lossy()
+            "router-rs subprocess failed (status {:?}); executable {}",
+            output.status,
+            exe.display()
         )
-    }))
+    } else {
+        stderr
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1377,9 +1347,7 @@ fn validate_cleanup_scope(
     for tool in tools {
         let explicit_home = match *tool {
             "codex" => command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some(),
-            "cursor" => {
-                command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some()
-            }
+            "cursor" => command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some(),
             _ => true,
         };
         if !explicit_home && command.home.is_none() {
@@ -1555,10 +1523,8 @@ fn install_cursor_projection(
     let target = cursor_entrypoint_target(roots, scope);
     let mut managed_files = vec![target.to_string_lossy().to_string()];
     let mut managed_key_paths: Vec<String> = Vec::new();
-    let mut changed = write_text_if_changed(
-        &target,
-        &render_cursor_framework_entrypoint(roots, scope),
-    )?;
+    let mut changed =
+        write_text_if_changed(&target, &render_cursor_framework_entrypoint(roots, scope))?;
     let mut mcp = json!({
         "managed": false,
         "path": cursor_mcp_config_path(roots).to_string_lossy(),
@@ -1665,7 +1631,8 @@ fn remove_cursor_projection(
 ) -> Result<Value, String> {
     let target = cursor_entrypoint_target(roots, scope);
     let manifest_path = projection_manifest_path(roots, "cursor", scope);
-    let manifest_ownership = projection_manifest_ownership(&manifest_path, "cursor", scope, &target)?;
+    let manifest_ownership =
+        projection_manifest_ownership(&manifest_path, "cursor", scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
         fs::remove_file(&target).map_err(|err| err.to_string())?;
@@ -1681,7 +1648,8 @@ fn remove_cursor_projection(
         false
     };
     let mcp_path = cursor_mcp_config_path(roots);
-    let mcp_matches_framework = cursor_mcp_server_matches_framework(roots, &mcp_path)?.unwrap_or(false);
+    let mcp_matches_framework =
+        cursor_mcp_server_matches_framework(roots, &mcp_path)?.unwrap_or(false);
     let mcp_managed = scope == "user"
         && (projection_manifest_manages_key_path(&manifest_path, cursor_mcp_server_key_path())?
             || mcp_matches_framework);
@@ -1702,7 +1670,8 @@ fn remove_cursor_projection(
     if mcp_skipped_user_owned {
         skipped_user_owned_paths.push(Value::String(mcp_path.to_string_lossy().into_owned()));
     }
-    let mut removed_paths = removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
+    let mut removed_paths =
+        removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
     append_mcp_path(&mut removed_paths, mcp_changed, &mcp_path);
     let mut would_remove_paths = removed_projection_paths(
         would_remove_projection,
@@ -2632,10 +2601,9 @@ fn build_default_bootstrap_payload(
     repo_root: &Path,
     output_dir: Option<&Path>,
     query: &str,
-    memory_root: Option<&Path>,
     artifact_source_dir: Option<&Path>,
     workspace_override: Option<&str>,
-    top: usize,
+    _top: usize,
 ) -> Result<Value, String> {
     let repo_root = repo_root
         .canonicalize()
@@ -2644,61 +2612,17 @@ fn build_default_bootstrap_payload(
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_bootstrap_output_dir(&repo_root));
     fs::create_dir_all(&resolved_output_dir).map_err(|err| err.to_string())?;
-    let mut memory_args = vec![
-        "framework".to_string(),
-        "memory-recall".to_string(),
-        query.to_string(),
-        "--mode".to_string(),
-        "active".to_string(),
-        "--limit".to_string(),
-        top.to_string(),
-    ];
-    if let Some(path) = memory_root {
-        memory_args.push("--memory-root".to_string());
-        memory_args.push(path.to_string_lossy().into_owned());
-    }
-    if let Some(path) = artifact_source_dir {
-        memory_args.push("--artifact-source-dir".to_string());
-        memory_args.push(path.to_string_lossy().into_owned());
-    }
-    let memory = run_router_rs_json(&repo_root, &memory_args)?;
-    let memory_recall = memory
-        .get("memory_recall")
-        .and_then(Value::as_object)
-        .ok_or_else(|| {
-            "router-rs memory recall payload missing memory_recall object".to_string()
-        })?;
-    let prompt_payload = memory_recall
-        .get("prompt_payload")
-        .cloned()
-        .ok_or_else(|| "router-rs memory recall payload missing prompt_payload".to_string())?;
-    let continuity_decision = prompt_payload
-        .get("continuity_decision")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
     let workspace = workspace_override
         .map(str::to_owned)
-        .or_else(|| {
-            prompt_payload
-                .get("workspace")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
         .unwrap_or_else(|| workspace_name_from_root(&repo_root));
     let created_at = current_local_timestamp();
-    let task_id = continuity_decision
-        .get("task_id")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| {
-            build_framework_task_id(if query.trim().is_empty() {
-                &workspace
-            } else {
-                query
-            })
-        });
+    let task_id = build_framework_task_id(if query.trim().is_empty() {
+        &workspace
+    } else {
+        query
+    });
+    let continuity_bootstrap =
+        build_default_continuity_bootstrap(&repo_root, artifact_source_dir, Some(&task_id))?;
     let runtime = json!({
         "skills": [],
         "count": 0,
@@ -2710,7 +2634,7 @@ fn build_default_bootstrap_payload(
     }));
     let payload = json!({
         "skills-export": runtime,
-        "memory-bootstrap": prompt_payload,
+        "continuity-bootstrap": continuity_bootstrap,
         "evolution-proposals": proposals,
         "bootstrap": {
             "query": query,
@@ -2718,15 +2642,6 @@ fn build_default_bootstrap_payload(
             "repo_root": repo_root.to_string_lossy(),
             "task_id": task_id,
             "created_at": created_at,
-            "source_task": continuity_decision.get("source_task").cloned().unwrap_or(Value::Null),
-            "query_matches_active_task": continuity_decision
-                .get("query_matches_active_task")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-            "ignored_root_continuity": continuity_decision
-                .get("ignored_root_continuity")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
         }
     });
     let task_output_dir = resolved_output_dir.join(&task_id);
@@ -2741,19 +2656,8 @@ fn build_default_bootstrap_payload(
             "output_dir": resolved_output_dir.to_string_lossy(),
             "task_output_dir": task_output_dir.to_string_lossy(),
             "repo_root": repo_root.to_string_lossy(),
-            "memory_root": memory_recall
-                .get("memory_root")
-                .and_then(Value::as_str)
-                .unwrap_or(""),
             "mirror_bootstrap_path": mirror_bootstrap_path.to_string_lossy(),
         },
-        "memory_items": memory_recall
-            .get("retrieval")
-            .and_then(Value::as_object)
-            .and_then(|retrieval| retrieval.get("items"))
-            .and_then(Value::as_array)
-            .map(|items| items.len())
-            .unwrap_or(0),
         "proposal_count": payload
             .get("evolution-proposals")
             .and_then(Value::as_object)
@@ -2764,756 +2668,25 @@ fn build_default_bootstrap_payload(
     }))
 }
 
-#[allow(clippy::too_many_arguments)]
-fn run_memory_automation(
+fn build_default_continuity_bootstrap(
     repo_root: &Path,
-    output_dir: Option<&Path>,
-    memory_root: Option<&Path>,
     artifact_source_dir: Option<&Path>,
-    workspace_override: Option<&str>,
-    query: &str,
-    top: usize,
-    apply_artifact_migrations: bool,
+    task_id: Option<&str>,
 ) -> Result<Value, String> {
-    let repo_root = normalize_path(repo_root)?;
-    let resolved_memory_root = memory_root
-        .map(normalize_path)
-        .transpose()?
-        .unwrap_or_else(|| repo_root.join("memory"));
-    let resolved_artifact_source_dir = artifact_source_dir.map(normalize_path).transpose()?;
-    let workspace = workspace_override
-        .map(str::to_owned)
-        .unwrap_or_else(|| workspace_name_from_root(&repo_root));
-
-    let continuity_seed = ensure_memory_automation_continuity(
-        &repo_root,
-        &resolved_memory_root,
-        &workspace,
-        query,
-        artifact_source_dir,
-    )?;
-
-    let mut runtime_args = vec!["framework".to_string(), "snapshot".to_string()];
-    if let Some(path) = resolved_artifact_source_dir.as_ref() {
-        runtime_args.push("--artifact-source-dir".to_string());
-        runtime_args.push(path.to_string_lossy().into_owned());
+    let mut args = vec!["framework".to_string(), "snapshot".to_string()];
+    if let Some(path) = artifact_source_dir {
+        args.push("--artifact-source-dir".to_string());
+        args.push(path.to_string_lossy().into_owned());
     }
-    let runtime_payload = run_router_rs_json(&repo_root, &runtime_args)?;
-    let runtime_snapshot = runtime_payload
-        .get("runtime_snapshot")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "router-rs runtime snapshot missing runtime_snapshot object".to_string())?;
-    let active_task_id = runtime_snapshot
-        .get("active_task_id")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-
-    let planned_current_artifact_migrations = if resolved_artifact_source_dir.is_some() {
-        Vec::new()
-    } else {
-        plan_current_artifact_clutter_migrations(&repo_root, &active_task_id)?
-    };
-    let moved_current_artifacts =
-        if apply_artifact_migrations && resolved_artifact_source_dir.is_none() {
-            migrate_current_artifact_clutter(&repo_root, &active_task_id)?
-        } else {
-            Vec::new()
-        };
-
-    let consolidation = build_memory_automation_consolidation(
-        &resolved_memory_root,
-        &workspace,
-        query,
-        &continuity_seed,
-    )?;
-    let changed_files = consolidation
-        .get("changed_files")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let archive = consolidation
-        .get("archive")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    let sqlite_result = consolidation
-        .get("sqlite_result")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-
-    let report = collect_storage_report(&default_codex_root(), top)?;
-    let retrieval = run_framework_memory_recall(
-        &repo_root,
-        query,
-        top,
-        "stable",
-        Some(&resolved_memory_root),
-        resolved_artifact_source_dir.as_deref(),
-    )?;
-    let continuity_health = inspect_continuity_health(&repo_root, &retrieval);
-    let continuity_audit = build_memory_automation_continuity_audit(&runtime_payload);
-
-    let generated_at = current_local_timestamp();
-    let run_id = build_framework_task_id(&format!("{workspace}-memory-automation"));
-    let resolved_output_dir = output_dir
-        .map(normalize_path)
-        .transpose()?
-        .unwrap_or_else(|| ops_memory_automation_root(&repo_root).join(&run_id));
-    fs::create_dir_all(&resolved_output_dir).map_err(|err| err.to_string())?;
-
-    let changed_file_list = changed_files
-        .iter()
-        .filter_map(Value::as_str)
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    let report_object = report
-        .as_object()
-        .ok_or_else(|| "storage report must be an object".to_string())?;
-    let sqlite_object = sqlite_result
-        .as_object()
-        .ok_or_else(|| "sqlite_result must be an object".to_string())?;
-    let continuity_audit_object = continuity_audit
-        .as_object()
-        .ok_or_else(|| "continuity_audit must be an object".to_string())?;
-    let archive_object = archive
-        .as_object()
-        .ok_or_else(|| "archive result must be an object".to_string())?;
-    let storage_root = default_codex_root();
-    let snapshot_md = render_memory_automation_snapshot(MemoryAutomationSnapshot {
-        workspace: &workspace,
-        generated_at: &generated_at,
-        memory_root: &resolved_memory_root,
-        storage_root: &storage_root,
-        report: report_object,
-        sqlite_result: sqlite_object,
-        continuity_audit: continuity_audit_object,
-        changed_files: &changed_file_list,
-        archive_result: archive_object,
-        planned_current_artifact_migrations: &planned_current_artifact_migrations,
-        apply_artifact_migrations,
-        continuity_health: &continuity_health,
-    });
-
-    write_json_if_changed(&resolved_output_dir.join("storage_audit.json"), &report)?;
-    write_text_if_changed(&resolved_output_dir.join("snapshot.md"), &snapshot_md)?;
-    write_json_if_changed(
-        &resolved_output_dir.join("snapshot.json"),
-        &json!({
-            "workspace": workspace,
-            "generated_at": generated_at,
-            "archive": archive,
-            "changed_files": changed_files,
-            "continuity_seed": continuity_seed,
-            "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
-            "moved_current_artifacts": moved_current_artifacts,
-            "retrieval": retrieval,
-            "continuity_health": continuity_health,
-            "continuity_audit": continuity_audit,
-            "apply_artifact_migrations": apply_artifact_migrations,
-        }),
-    )?;
-
-    let bootstrap = build_default_bootstrap_payload(
-        &repo_root,
-        None,
-        query,
-        Some(&resolved_memory_root),
-        resolved_artifact_source_dir.as_deref(),
-        Some(&workspace),
-        top,
-    )?;
-    let run_summary = json!({
-        "workspace": workspace,
-        "generated_at": generated_at,
-        "run_date": current_local_date(),
-        "run_id": run_id,
-        "sqlite_path": sqlite_result.get("db_path").cloned().unwrap_or(Value::Null),
-        "memory_root": resolved_memory_root.to_string_lossy(),
-        "output_dir": resolved_output_dir.to_string_lossy(),
-        "changed_files": changed_files,
-        "continuity_seed": continuity_seed,
-        "archive": archive,
-        "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
-        "moved_current_artifacts": moved_current_artifacts,
-        "apply_artifact_migrations": apply_artifact_migrations,
-        "sqlite_result": sqlite_result,
-        "storage_total_mib": report.get("total_mib").cloned().unwrap_or(Value::Null),
-        "top_storage_entries": report.get("top_entries").cloned().unwrap_or_else(|| json!([])),
-        "retrieval": retrieval,
-        "continuity_health": continuity_health,
-        "continuity_audit": continuity_audit,
-    });
-    write_json_if_changed(&resolved_output_dir.join("run_summary.json"), &run_summary)?;
-
+    if let Some(task_id) = task_id {
+        args.push("--task-id".to_string());
+        args.push(task_id.to_string());
+    }
+    let snapshot = run_router_rs_json(repo_root, &args)?;
     Ok(json!({
-        "workspace": workspace,
-        "memory_root": resolved_memory_root.to_string_lossy(),
-        "changed_files": changed_files,
-        "archive": archive,
-        "continuity_seed": continuity_seed,
-        "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
-        "moved_current_artifacts": moved_current_artifacts,
-        "apply_artifact_migrations": apply_artifact_migrations,
-        "report": report,
-        "sqlite_result": sqlite_result,
-        "retrieval": retrieval,
-        "continuity_health": continuity_health,
-        "continuity_audit": continuity_audit,
-        "bootstrap": bootstrap,
-        "output_dir": resolved_output_dir.to_string_lossy(),
-        "consolidation": consolidation,
-    }))
-}
-
-fn build_memory_automation_continuity_audit(runtime_payload: &Value) -> Value {
-    let runtime = runtime_payload
-        .get("runtime_snapshot")
-        .and_then(Value::as_object);
-    let continuity = runtime
-        .and_then(|runtime| runtime.get("continuity"))
-        .and_then(Value::as_object);
-    let missing_recovery_anchors = continuity
-        .and_then(|continuity| continuity.get("missing_recovery_anchors"))
-        .cloned()
-        .unwrap_or_else(|| json!([]));
-    let missing_control_plane_anchors = continuity
-        .and_then(|continuity| continuity.get("missing_control_plane_anchors"))
-        .cloned()
-        .or_else(|| {
-            runtime
-                .and_then(|runtime| runtime.get("control_plane_missing"))
-                .cloned()
-        })
-        .unwrap_or_else(|| json!([]));
-    let blockers = continuity
-        .and_then(|continuity| continuity.get("blockers"))
-        .cloned()
-        .unwrap_or_else(|| json!([]));
-    let continuity_state = continuity
-        .and_then(|continuity| continuity.get("state"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let can_resume = continuity
-        .and_then(|continuity| continuity.get("can_resume"))
-        .cloned()
-        .unwrap_or(Value::Bool(false));
-    let active_task_id = runtime
-        .and_then(|runtime| runtime.get("active_task_id"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let focus_task_id = runtime
-        .and_then(|runtime| runtime.get("focus_task_id"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let control_plane_present = runtime
-        .and_then(|runtime| runtime.get("control_plane_present"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let missing_recovery_count = missing_recovery_anchors
-        .as_array()
-        .map(Vec::len)
-        .unwrap_or(0);
-    let missing_control_count = missing_control_plane_anchors
-        .as_array()
-        .map(Vec::len)
-        .unwrap_or(0);
-    let blocker_count = blockers.as_array().map(Vec::len).unwrap_or(0);
-    let residual_blocker_count = missing_recovery_count + missing_control_count + blocker_count;
-    let can_resume_bool = can_resume.as_bool().unwrap_or(false);
-    let continuity_state_text = continuity_state.as_str().unwrap_or("");
-    let has_ready_anchors = residual_blocker_count == 0 && control_plane_present;
-    let status = if has_ready_anchors && can_resume_bool {
-        "ready_to_resume"
-    } else if has_ready_anchors && continuity_state_text == "completed" {
-        "closed_completed"
-    } else {
-        "blocked"
-    };
-
-    json!({
-        "ok": status == "ready_to_resume",
-        "status": status,
-        "continuity_state": continuity_state,
-        "can_resume": can_resume,
-        "active_task_id": active_task_id,
-        "focus_task_id": focus_task_id,
-        "control_plane_present": control_plane_present,
-        "missing_recovery_anchors": missing_recovery_anchors,
-        "missing_control_plane_anchors": missing_control_plane_anchors,
-        "blockers": blockers,
-        "residual_blocker_count": residual_blocker_count,
-    })
-}
-
-fn ensure_memory_automation_continuity(
-    repo_root: &Path,
-    memory_root: &Path,
-    workspace: &str,
-    query: &str,
-    artifact_source_dir: Option<&Path>,
-) -> Result<Value, String> {
-    if artifact_source_dir.is_some() {
-        return Ok(json!({
-            "attempted": false,
-            "status": "skipped-artifact-source-override",
-            "changed_paths": [],
-        }));
-    }
-    let task = if query.trim().is_empty() {
-        format!("{workspace} memory automation")
-    } else {
-        query.trim().to_string()
-    };
-    let task_id = safe_slug(&format!("{workspace}-{task}"));
-    let memory_root_label = memory_root.strip_prefix(repo_root).map_or_else(
-        |_| memory_root.display().to_string(),
-        |path| path.display().to_string(),
-    );
-    let sqlite_label = memory_root
-        .join("memory.sqlite3")
-        .strip_prefix(repo_root)
-        .map_or_else(
-            |_| memory_root.join("memory.sqlite3").display().to_string(),
-            |path| path.display().to_string(),
-        );
-    let payload = json!({
-        "repo_root": repo_root,
-        "output_dir": repo_root.join("artifacts").join("current"),
-        "task_id": task_id,
-        "task": task,
-        "phase": "memory_automation",
-        "status": "in_progress",
-        "summary": "Maintain the repo-local memory root, sqlite index, bootstrap bundle, and continuity control plane from the Rust host-integration entrypoint.",
-        "focus": true,
-        "next_actions": [
-            "Run memory automation through router-rs host-integration.",
-            "Verify memory.sqlite3 memory_items count and current continuity anchors.",
-            "Use run_summary.json as the closeout report for changed files, bootstrap, and blockers."
-        ],
-        "matched_skills": ["agent-memory", "skill-framework-developer"],
-        "execution_contract": {
-            "goal": "Keep memory automation usable as a restartable repo-local control loop.",
-            "acceptance_criteria": [
-                format!("repo-local memory root exists: {memory_root_label}"),
-                "memory.sqlite3 has a queryable memory_items table",
-                "artifacts/current pointers and task-scoped continuity artifacts exist",
-                ".supervisor_state.json points to the same active task"
-            ],
-            "evidence_required": [
-                "artifacts/ops/memory_automation/current/run_summary.json",
-                "artifacts/bootstrap/framework_default_bootstrap.json",
-                "artifacts/current/active_task.json",
-                sqlite_label
-            ]
-        },
-        "evidence": [
-            {
-                "kind": "run_summary",
-                "path": repo_root.join("artifacts").join("ops").join("memory_automation").join("current").join("run_summary.json").display().to_string()
-            }
-        ],
-        "continuity": {
-            "story_state": "active",
-            "resume_allowed": true,
-            "state_reason": "memory automation run materialized continuity anchors"
-        }
-    });
-    let response = write_framework_session_artifacts(payload)?;
-    Ok(json!({
-        "attempted": true,
-        "status": "materialized",
-        "task_id": response.get("task_id").cloned().unwrap_or(Value::Null),
-        "changed_paths": response
-            .get("changed_paths")
-            .cloned()
-            .unwrap_or_else(|| Value::Array(Vec::new())),
-    }))
-}
-
-fn inspect_continuity_health(repo_root: &Path, retrieval: &Value) -> Value {
-    let source_artifacts = retrieval
-        .get("diagnostics")
-        .and_then(|diagnostics| diagnostics.get("source_artifacts"));
-    let current_control = source_artifacts.and_then(|source| source.get("current_control"));
-    let root_anchor = source_artifacts.and_then(|source| source.get("root_anchor"));
-    let continuity = retrieval
-        .get("diagnostics")
-        .and_then(|diagnostics| diagnostics.get("continuity"));
-    let prompt_payload = retrieval.get("prompt_payload");
-    let active_task_id = continuity
-        .and_then(|value| value.get("active_task_id"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-
-    let mut anchors = Vec::new();
-    for key in ["active_task_pointer", "focus_task_pointer", "task_registry"] {
-        if let Some(path) = current_control
-            .and_then(|value| value.get(key))
-            .and_then(Value::as_str)
-            .filter(|path| !path.trim().is_empty())
-        {
-            anchors.push(anchor_status(key, path));
-        }
-    }
-    if let Some(path) = root_anchor
-        .and_then(|value| value.get("supervisor_state"))
-        .and_then(Value::as_str)
-        .filter(|path| !path.trim().is_empty())
-    {
-        anchors.push(anchor_status("supervisor_state", path));
-    }
-
-    let current_root = repo_root.join("artifacts").join("current");
-    anchors.push(anchor_status(
-        "current_root",
-        &current_root.to_string_lossy(),
-    ));
-
-    if !active_task_id.trim().is_empty() {
-        let task_root = current_root.join(active_task_id);
-        anchors.push(anchor_status(
-            "active_task_root",
-            &task_root.to_string_lossy(),
-        ));
-        for name in TASK_ALLOWED_ARTIFACT_NAMES {
-            if name == ".supervisor_state.json" {
-                continue;
-            }
-            let label = format!("active_task_{name}");
-            anchors.push(anchor_status(
-                &label,
-                &task_root.join(name).to_string_lossy(),
-            ));
-        }
-    }
-
-    let mut blockers = Vec::new();
-    for anchor in &anchors {
-        let Some(path) = anchor.get("path").and_then(Value::as_str) else {
-            continue;
-        };
-        let exists = anchor
-            .get("exists")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !exists {
-            let label = anchor
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or("anchor");
-            blockers.push(format!("{label} missing: {path}"));
-        }
-    }
-
-    if active_task_id.trim().is_empty() {
-        blockers.push("continuity active_task_id is empty".to_string());
-    }
-
-    for (label, value) in [
-        (
-            "prompt_payload.active_task.task_id",
-            prompt_payload
-                .and_then(|payload| payload.get("active_task"))
-                .and_then(|active_task| active_task.get("task_id")),
-        ),
-        (
-            "prompt_payload.active_task.task",
-            prompt_payload
-                .and_then(|payload| payload.get("active_task"))
-                .and_then(|active_task| active_task.get("task")),
-        ),
-    ] {
-        if value
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .trim()
-            .is_empty()
-        {
-            blockers.push(format!("{label} is empty"));
-        }
-    }
-
-    json!({
-        "ok": blockers.is_empty(),
-        "status": if blockers.is_empty() { "ok" } else { "blocked" },
-        "blockers": blockers,
-        "active_task_id": active_task_id,
-        "anchors": anchors,
-    })
-}
-
-fn anchor_status(label: &str, path: &str) -> Value {
-    let path_buf = PathBuf::from(path);
-    json!({
-        "label": label,
-        "path": path,
-        "exists": path_buf.exists(),
-        "is_file": path_buf.is_file(),
-        "is_dir": path_buf.is_dir(),
-    })
-}
-
-fn build_memory_automation_consolidation(
-    memory_root: &Path,
-    workspace: &str,
-    query: &str,
-    continuity_seed: &Value,
-) -> Result<Value, String> {
-    fs::create_dir_all(memory_root)
-        .map_err(|err| format!("create framework memory root failed: {err}"))?;
-    let memory_md = memory_root.join("MEMORY.md");
-    let existing_memory = read_text_if_exists(&memory_md)?;
-    let mut changed_files = match existing_memory {
-        Some(existing) if !existing.trim().is_empty() => Vec::new(),
-        _ => {
-            if write_text_if_changed(&memory_md, &default_memory_summary())? {
-                vec![Value::String(memory_md.display().to_string())]
-            } else {
-                Vec::new()
-            }
-        }
-    };
-    let sqlite_seed =
-        ensure_memory_automation_sqlite(memory_root, workspace, query, continuity_seed)?;
-    if sqlite_seed
-        .get("changed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        if let Some(path) = sqlite_seed.get("db_path").and_then(Value::as_str) {
-            changed_files.push(Value::String(path.to_string()));
-        }
-    }
-    let sqlite_result = inspect_memory_sqlite(memory_root)?;
-    Ok(json!({
-        "changed_files": changed_files,
-        "sqlite_seed": sqlite_seed,
-        "archive": {
-            "ok": true,
-            "status": "explicit-migration-only",
-            "archived_memory_item_count": 0,
-        },
-        "sqlite_result": sqlite_result,
-    }))
-}
-
-fn ensure_memory_automation_sqlite(
-    memory_root: &Path,
-    workspace: &str,
-    query: &str,
-    continuity_seed: &Value,
-) -> Result<Value, String> {
-    fs::create_dir_all(memory_root)
-        .map_err(|err| format!("create framework memory root failed: {err}"))?;
-    let db_path = memory_root.join("memory.sqlite3");
-    let conn = Connection::open(&db_path).map_err(|err| {
-        format!(
-            "open memory automation sqlite failed for {}: {err}",
-            db_path.display()
-        )
-    })?;
-    ensure_host_memory_items_table(&conn)?;
-    let now = current_local_timestamp();
-    let retired_expired_count = retire_expired_host_memory_items(&conn, &now)?;
-    let summary = format!(
-        "Rust memory automation is active for workspace {workspace}; query '{}'; continuity task {}.",
-        if query.trim().is_empty() {
-            "memory audit"
-        } else {
-            query.trim()
-        },
-        continuity_seed
-            .get("task_id")
-            .and_then(Value::as_str)
-            .unwrap_or("memory-automation")
-    );
-    let metadata_json = serde_json::to_string(&json!({
-        "schema_version": "memory-automation-seed-v1",
-        "authority": "rust-host-integration",
-        "continuity_seed": continuity_seed,
-    }))
-    .map_err(|err| format!("serialize memory automation metadata failed: {err}"))?;
-    let keywords_json = serde_json::to_string(&json!([
-        "memory",
-        "automation",
-        "continuity",
-        "bootstrap",
-        "sqlite"
-    ]))
-    .map_err(|err| format!("serialize memory automation keywords failed: {err}"))?;
-    let changed = conn
-        .execute(
-            "INSERT OR REPLACE INTO memory_items (
-                item_id, workspace, category, source, confidence, status, summary, notes,
-                evidence_json, metadata_json, keywords_json, expires_at, retired_at, created_at, updated_at
-            ) VALUES (
-                ?1, ?2, 'fact', 'run_memory_automation', 0.9, 'active', ?3, ?4,
-                ?5, ?6, ?7, '', '', COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?8), ?8
-            )",
-            rusqlite::params![
-                "memory-automation-control-loop",
-                workspace,
-                summary,
-                "Seed item created by run-memory-automation so memory recall has a durable sqlite-backed control-loop fact.",
-                "[]",
-                metadata_json,
-                keywords_json,
-                now,
-            ],
-        )
-        .map_err(|err| format!("seed memory automation sqlite item failed: {err}"))?;
-    Ok(json!({
-        "db_path": db_path.display().to_string(),
-        "item_id": "memory-automation-control-loop",
-        "changed": changed > 0,
-        "retired_expired_count": retired_expired_count,
-    }))
-}
-
-fn ensure_host_memory_items_table(conn: &Connection) -> Result<(), String> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS memory_items (
-            item_id TEXT PRIMARY KEY,
-            workspace TEXT NOT NULL,
-            category TEXT NOT NULL,
-            source TEXT NOT NULL,
-            confidence REAL NOT NULL DEFAULT 0.5,
-            status TEXT NOT NULL DEFAULT 'active',
-            summary TEXT NOT NULL,
-            notes TEXT NOT NULL DEFAULT '',
-            evidence_json TEXT NOT NULL DEFAULT '[]',
-            metadata_json TEXT NOT NULL DEFAULT '{}',
-            keywords_json TEXT NOT NULL DEFAULT '[]',
-            expires_at TEXT NOT NULL DEFAULT '',
-            retired_at TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-        [],
-    )
-    .map_err(|err| format!("create memory_items table failed: {err}"))?;
-    ensure_host_memory_items_column(conn, "expires_at", "TEXT NOT NULL DEFAULT ''")?;
-    ensure_host_memory_items_column(conn, "retired_at", "TEXT NOT NULL DEFAULT ''")?;
-    Ok(())
-}
-
-fn ensure_host_memory_items_column(
-    conn: &Connection,
-    name: &str,
-    definition: &str,
-) -> Result<(), String> {
-    if host_memory_table_columns(conn).contains(name) {
-        return Ok(());
-    }
-    conn.execute(
-        &format!("ALTER TABLE memory_items ADD COLUMN {name} {definition}"),
-        [],
-    )
-    .map_err(|err| format!("add memory_items.{name} column failed: {err}"))?;
-    Ok(())
-}
-
-fn host_memory_table_columns(conn: &Connection) -> HashSet<String> {
-    let Ok(mut stmt) = conn.prepare("PRAGMA table_info(memory_items)") else {
-        return HashSet::new();
-    };
-    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) else {
-        return HashSet::new();
-    };
-    rows.filter_map(Result::ok).collect()
-}
-
-fn retire_expired_host_memory_items(conn: &Connection, now: &str) -> Result<usize, String> {
-    let columns = host_memory_table_columns(conn);
-    if !columns.contains("expires_at") || !columns.contains("retired_at") {
-        return Ok(0);
-    }
-    let mut stmt = conn
-        .prepare(
-            "SELECT item_id, expires_at, metadata_json FROM memory_items WHERE status = 'active'",
-        )
-        .map_err(|err| format!("select memory expiration candidates failed: {err}"))?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })
-        .map_err(|err| format!("read memory expiration candidates failed: {err}"))?;
-    let now_dt = DateTime::parse_from_rfc3339(now).unwrap_or_else(|_| Local::now().fixed_offset());
-    let mut retired = 0usize;
-    for row in rows.filter_map(Result::ok) {
-        let expires_at = if row.1.trim().is_empty() {
-            host_memory_metadata_string(&row.2, "expires_at")
-                .or_else(|| host_memory_metadata_string(&row.2, "expires_on"))
-                .unwrap_or_default()
-        } else {
-            row.1
-        };
-        if !host_memory_expiry_has_passed(&expires_at, now_dt) {
-            continue;
-        }
-        retired += conn
-            .execute(
-                "UPDATE memory_items SET status = 'retired', retired_at = ?1, updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![now, row.0],
-            )
-            .map_err(|err| format!("retire expired memory item failed: {err}"))?;
-    }
-    Ok(retired)
-}
-
-fn host_memory_metadata_string(metadata_json: &str, key: &str) -> Option<String> {
-    let metadata = serde_json::from_str::<Value>(metadata_json.trim()).ok()?;
-    metadata
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
-fn host_memory_expiry_has_passed(value: &str, now: DateTime<FixedOffset>) -> bool {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-    if let Ok(expires_at) = DateTime::parse_from_rfc3339(trimmed) {
-        return expires_at <= now;
-    }
-    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
-        .map(|date| date < now.date_naive())
-        .unwrap_or(false)
-}
-
-fn default_memory_summary() -> String {
-    "# MEMORY\n\nProject-local memory is managed by the Rust framework runtime.\n".to_string()
-}
-
-fn inspect_memory_sqlite(memory_root: &Path) -> Result<Value, String> {
-    let db_path = memory_root.join("memory.sqlite3");
-    if !db_path.is_file() {
-        return Ok(json!({
-            "db_path": db_path.display().to_string(),
-            "exists": false,
-            "memory_items": 0,
-        }));
-    }
-    let conn = Connection::open(&db_path)
-        .map_err(|err| format!("open memory sqlite failed for {}: {err}", db_path.display()))?;
-    let memory_items = conn
-        .query_row(
-            "SELECT COUNT(*) FROM memory_items WHERE status = 'active'",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .unwrap_or(0);
-    Ok(json!({
-        "db_path": db_path.display().to_string(),
-        "exists": true,
-        "memory_items": memory_items,
+        "schema_version": "framework-continuity-bootstrap-v1",
+        "source": "framework-runtime-snapshot",
+        "snapshot": snapshot.get("runtime_snapshot").cloned().unwrap_or_else(|| json!({})),
     }))
 }
 
@@ -3537,24 +2710,6 @@ fn migration_plan_values(plans: &[MigrationPlan]) -> Value {
     )
 }
 
-fn current_local_date() -> String {
-    Local::now().format("%Y-%m-%d").to_string()
-}
-
-fn default_codex_root() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".codex")
-}
-
-fn ops_memory_automation_root(repo_root: &Path) -> PathBuf {
-    repo_root
-        .join("artifacts")
-        .join("ops")
-        .join("memory_automation")
-}
-
 fn evidence_artifact_root(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
     let root = repo_root.join("artifacts").join("evidence");
     task_id
@@ -3567,288 +2722,6 @@ fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf {
     run_id
         .map(|value| root.join(safe_slug(value)))
         .unwrap_or(root)
-}
-
-struct MemoryAutomationSnapshot<'a> {
-    workspace: &'a str,
-    generated_at: &'a str,
-    memory_root: &'a Path,
-    storage_root: &'a Path,
-    report: &'a Map<String, Value>,
-    sqlite_result: &'a Map<String, Value>,
-    continuity_audit: &'a Map<String, Value>,
-    changed_files: &'a [String],
-    archive_result: &'a Map<String, Value>,
-    planned_current_artifact_migrations: &'a [MigrationPlan],
-    apply_artifact_migrations: bool,
-    continuity_health: &'a Value,
-}
-
-fn render_memory_automation_snapshot(snapshot: MemoryAutomationSnapshot<'_>) -> String {
-    let MemoryAutomationSnapshot {
-        workspace,
-        generated_at,
-        memory_root,
-        storage_root,
-        report,
-        sqlite_result,
-        continuity_audit,
-        changed_files,
-        archive_result,
-        planned_current_artifact_migrations,
-        apply_artifact_migrations,
-        continuity_health,
-    } = snapshot;
-    let mut lines = vec![
-        "# CLI-common memory automation pipeline".to_string(),
-        "".to_string(),
-        format!("- workspace: {workspace}"),
-        format!("- generated_at: {generated_at}"),
-        format!("- memory_root: {}", memory_root.display()),
-        format!("- storage_root: {}", storage_root.display()),
-        format!(
-            "- total_mib: {}",
-            report
-                .get("total_mib")
-                .and_then(Value::as_f64)
-                .unwrap_or(0.0)
-        ),
-        format!("- memory_changed: {}", !changed_files.is_empty()),
-        format!(
-            "- sqlite_path: {}",
-            sqlite_result
-                .get("db_path")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-        ),
-        format!(
-            "- sqlite_memory_items: {}",
-            sqlite_result
-                .get("memory_items")
-                .and_then(Value::as_i64)
-                .unwrap_or(0)
-        ),
-        format!(
-            "- sqlite_exists: {}",
-            sqlite_result
-                .get("exists")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        ),
-        format!(
-            "- continuity_status: {}",
-            continuity_audit
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown")
-        ),
-        format!(
-            "- continuity_state: {}",
-            continuity_audit
-                .get("continuity_state")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown")
-        ),
-        format!(
-            "- continuity_residual_blockers: {}",
-            continuity_audit
-                .get("residual_blocker_count")
-                .and_then(Value::as_u64)
-                .unwrap_or(0)
-        ),
-        format!(
-            "- continuity_control_plane_present: {}",
-            continuity_audit
-                .get("control_plane_present")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        ),
-        format!(
-            "- archived_rows: {}",
-            archive_result
-                .get("archived_row_count")
-                .and_then(Value::as_i64)
-                .unwrap_or(0)
-        ),
-        format!(
-            "- archived_memory_items: {}",
-            archive_result
-                .get("archived_memory_item_count")
-                .and_then(Value::as_i64)
-                .unwrap_or(0)
-        ),
-        format!("- apply_artifact_migrations: {apply_artifact_migrations}"),
-        format!(
-            "- planned_current_artifact_migrations: {}",
-            planned_current_artifact_migrations.len()
-        ),
-        format!(
-            "- continuity_health: {}",
-            continuity_health
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown")
-        ),
-    ];
-    if changed_files.is_empty() {
-        lines.push("- changed_files: none".to_string());
-    } else {
-        lines.push("- changed_files:".to_string());
-        lines.extend(changed_files.iter().map(|path| format!("  - {path}")));
-    }
-    let missing_control_plane = continuity_audit
-        .get("missing_control_plane_anchors")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let missing_recovery = continuity_audit
-        .get("missing_recovery_anchors")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if !missing_control_plane.is_empty() || !missing_recovery.is_empty() {
-        lines.push("- residual_blockers:".to_string());
-        for item in missing_control_plane {
-            if let Some(name) = item.as_str() {
-                lines.push(format!("  - missing control-plane anchor: {name}"));
-            }
-        }
-        for item in missing_recovery {
-            if let Some(name) = item.as_str() {
-                lines.push(format!("  - missing recovery anchor: {name}"));
-            }
-        }
-    }
-    lines.push("".to_string());
-    lines.push("## continuity_health".to_string());
-    lines.push("".to_string());
-    let continuity_blockers = continuity_health
-        .get("blockers")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect::<Vec<_>>();
-    if continuity_blockers.is_empty() {
-        lines.push("- ok".to_string());
-    } else {
-        lines.extend(
-            continuity_blockers
-                .into_iter()
-                .map(|blocker| format!("- blocker: {blocker}")),
-        );
-    }
-    lines.push("".to_string());
-    lines.push("## recommendations".to_string());
-    lines.push("".to_string());
-    let recommendations = top_storage_recommendations(report);
-    if recommendations.is_empty() {
-        lines.push("- none".to_string());
-    } else {
-        lines.extend(recommendations.into_iter().map(|line| format!("- {line}")));
-    }
-    lines.join("\n") + "\n"
-}
-
-fn top_storage_recommendations(report: &Map<String, Value>) -> Vec<String> {
-    report
-        .get("top_entries")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .take(5)
-        .filter_map(|entry| entry.get("path").and_then(Value::as_str))
-        .filter_map(|path| {
-            if path.contains("__pycache__") {
-                Some(format!("consider pruning cache: {path}"))
-            } else if path.ends_with("logs_1.sqlite") || path.ends_with("logs_2.sqlite") {
-                Some(format!("rotate or compact trace database: {path}"))
-            } else if path.contains("/sessions/") && path.ends_with(".jsonl") {
-                Some(format!("archive or compress old session trace: {path}"))
-            } else if path.contains("/tmp/arg0/") {
-                Some(format!("clean stale tmp runtime wrappers: {path}"))
-            } else if path.ends_with(".sqlite3") {
-                Some(format!("monitor sqlite growth: {path}"))
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn run_framework_memory_recall(
-    repo_root: &Path,
-    query: &str,
-    top: usize,
-    mode: &str,
-    memory_root: Option<&Path>,
-    artifact_source_dir: Option<&Path>,
-) -> Result<Value, String> {
-    let mut args = vec![
-        "framework".to_string(),
-        "memory-recall".to_string(),
-        query.to_string(),
-        "--mode".to_string(),
-        mode.to_string(),
-        "--limit".to_string(),
-        top.to_string(),
-    ];
-    if let Some(path) = memory_root {
-        args.push("--memory-root".to_string());
-        args.push(path.to_string_lossy().into_owned());
-    }
-    if let Some(path) = artifact_source_dir {
-        args.push("--artifact-source-dir".to_string());
-        args.push(path.to_string_lossy().into_owned());
-    }
-    let payload = run_router_rs_json(repo_root, &args)?;
-    payload
-        .get("memory_recall")
-        .cloned()
-        .ok_or_else(|| "router-rs memory recall payload missing memory_recall object".to_string())
-}
-
-fn collect_storage_report(root: &Path, top: usize) -> Result<Value, String> {
-    let mut entries = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    let mut total_bytes = 0u64;
-    while let Some(path) = stack.pop() {
-        if !path.exists() {
-            continue;
-        }
-        for entry in fs::read_dir(&path).map_err(|err| err.to_string())? {
-            let entry = entry.map_err(|err| err.to_string())?;
-            let candidate = entry.path();
-            let metadata = entry.metadata().map_err(|err| err.to_string())?;
-            if metadata.is_dir() {
-                stack.push(candidate);
-            } else if metadata.is_file() {
-                total_bytes += metadata.len();
-                entries.push((metadata.len(), candidate));
-            }
-        }
-    }
-    entries.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
-    Ok(json!({
-        "root": root.to_string_lossy(),
-        "total_mib": round_mib(total_bytes),
-        "top_entries": entries
-            .into_iter()
-            .take(top)
-            .map(|(bytes, path)| {
-                json!({
-                    "path": path.to_string_lossy(),
-                    "bytes": bytes,
-                    "mib": round_mib(bytes),
-                })
-            })
-            .collect::<Vec<_>>(),
-    }))
-}
-
-fn round_mib(bytes: u64) -> f64 {
-    let mib = bytes as f64 / (1024.0 * 1024.0);
-    (mib * 1000.0).round() / 1000.0
 }
 
 fn move_path(source: &Path, destination: &Path) -> Result<String, String> {
@@ -3923,7 +2796,9 @@ fn destination_for_current_artifact(
             PathBuf::from(active_task_id).join(name)
         };
         return Some(
-            ops_memory_automation_root(repo_root)
+            repo_root
+                .join("artifacts")
+                .join("ops")
                 .join("archived-current")
                 .join(suffix),
         );
@@ -4007,14 +2882,18 @@ fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool
     payload
         .get("bootstrap")
         .and_then(Value::as_object)
-        .zip(payload.get("memory-bootstrap").and_then(Value::as_object))
+        .zip(
+            payload
+                .get("continuity-bootstrap")
+                .and_then(Value::as_object),
+        )
         .zip(payload.get("skills-export").and_then(Value::as_object))
         .zip(
             payload
                 .get("evolution-proposals")
                 .and_then(Value::as_object),
         )
-        .map(|(((bootstrap, _memory), skills), _proposals)| {
+        .map(|(((bootstrap, _continuity), skills), _proposals)| {
             bootstrap
                 .get("repo_root")
                 .and_then(Value::as_str)
@@ -4050,15 +2929,8 @@ fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Resu
         }));
     }
 
-    let parsed = build_default_bootstrap_payload(
-        repo_root,
-        Some(&resolved_output_dir),
-        "",
-        None,
-        None,
-        None,
-        8,
-    )?;
+    let parsed =
+        build_default_bootstrap_payload(repo_root, Some(&resolved_output_dir), "", None, None, 8)?;
     let output_dir_value = parsed
         .get("paths")
         .and_then(|value| value.get("output_dir"))
@@ -4095,7 +2967,6 @@ fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Resu
         "bootstrap_path": bootstrap_path_value,
         "mirror_bootstrap_path": mirror_bootstrap_value,
         "task_id": task_id_value,
-        "memory_items": parsed.get("memory_items").and_then(Value::as_u64),
         "proposal_count": parsed.get("proposal_count").and_then(Value::as_u64),
     }))
 }
@@ -4121,29 +2992,25 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
-    repo_root.join("scripts/router-rs/run_router_rs.sh")
-}
-
 fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
-    const CODEX_HOOKS_DISABLED_LINE: &str = "codex_hooks = false";
+    const HOOKS_DISABLED_LINE: &str = "hooks = false";
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
         let block = content[start..end].trim_end_matches('\n');
-        let mut has_codex_hooks = false;
+        let mut has_hooks = false;
         let mut updated_lines = Vec::new();
         for line in block.lines() {
-            if is_named_setting(line, "codex_hooks") {
-                if !has_codex_hooks {
-                    updated_lines.push(CODEX_HOOKS_DISABLED_LINE.to_string());
-                    has_codex_hooks = true;
+            if is_named_setting(line, "codex_hooks") || is_named_setting(line, "hooks") {
+                if !has_hooks {
+                    updated_lines.push(HOOKS_DISABLED_LINE.to_string());
+                    has_hooks = true;
                 }
             } else {
                 updated_lines.push(line.to_string());
             }
         }
-        if !has_codex_hooks {
-            updated_lines.push(CODEX_HOOKS_DISABLED_LINE.to_string());
+        if !has_hooks {
+            updated_lines.push(HOOKS_DISABLED_LINE.to_string());
         }
         let new_block = format!("{}\n", updated_lines.join("\n"));
         let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
@@ -4154,7 +3021,7 @@ fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
         updated.push_str("\n\n");
     }
     updated.push_str("[features]\n");
-    updated.push_str(CODEX_HOOKS_DISABLED_LINE);
+    updated.push_str(HOOKS_DISABLED_LINE);
     updated.push('\n');
     write_text_if_changed(config_path, &updated)
 }
@@ -4340,57 +3207,44 @@ mod tests {
     }
 
     #[test]
-    fn continuity_audit_marks_completed_tasks_closed_not_ready() {
-        let audit = build_memory_automation_continuity_audit(&json!({
-            "runtime_snapshot": {
-                "control_plane_present": true,
-                "active_task_id": "completed-task",
-                "focus_task_id": "completed-task",
-                "continuity": {
-                    "state": "completed",
-                    "can_resume": false,
-                    "missing_recovery_anchors": [],
-                    "missing_control_plane_anchors": [],
-                    "blockers": []
-                }
-            }
-        }));
+    fn runtime_registry_missing_in_repo_root_returns_actionable_error() {
+        let root = unique_test_root("runtime-registry-missing");
+        fs::create_dir_all(&root).unwrap();
 
-        assert_eq!(audit["ok"], json!(false));
-        assert_eq!(audit["status"], json!("closed_completed"));
-        assert_eq!(audit["residual_blocker_count"], json!(0));
+        let err =
+            load_runtime_registry_payload(&root).expect_err("expected missing registry error");
+        let expected_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
+        assert!(
+            err.contains(expected_registry.to_string_lossy().as_ref()),
+            "error should include expected repo-local registry path: {err}"
+        );
+        assert!(
+            err.contains("--framework-root"),
+            "error should suggest --framework-root fix path/flag: {err}"
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn retire_expired_host_memory_items_marks_items_retired() {
-        let root = unique_test_root("retire-expired-memory");
-        fs::create_dir_all(&root).unwrap();
-        let db_path = root.join("memory.sqlite3");
-        let conn = Connection::open(&db_path).unwrap();
-        ensure_host_memory_items_table(&conn).unwrap();
-        conn.execute(
-            "INSERT INTO memory_items (
-                item_id, workspace, category, source, confidence, status, summary, notes,
-                evidence_json, metadata_json, keywords_json, expires_at, retired_at, created_at, updated_at
-            ) VALUES (
-                'expired', 'skill', 'fact', 'test', 0.9, 'active', 'stale fact', '',
-                '[]', '{}', '[]', '2000-01-01', '', '2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z'
-            )",
-            [],
-        )
-        .unwrap();
+    fn runtime_registry_repo_root_registry_is_used() {
+        let root = unique_test_root("runtime-registry-repo-local");
+        let repo_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
+        write_test_file(
+            &repo_registry,
+            r#"{
+  "schema_version": "framework-runtime-registry-v1",
+  "runtime_profiles": []
+}"#,
+        );
 
-        let retired = retire_expired_host_memory_items(&conn, "2026-04-30T00:00:00+00:00").unwrap();
-        let status: String = conn
-            .query_row(
-                "SELECT status FROM memory_items WHERE item_id = 'expired'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let payload =
+            load_runtime_registry_payload(&root).expect("expected repo-local registry to load");
+        assert_eq!(
+            payload["schema_version"],
+            json!(RUNTIME_REGISTRY_SCHEMA_VERSION)
+        );
 
-        assert_eq!(retired, 1);
-        assert_eq!(status, "retired");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -4401,7 +3255,7 @@ mod tests {
         let destination = root.join("destination");
         write_test_file(&source.join("Cargo.toml"), "[package]\n");
         for skipped in [
-            ".codex/memory/cache.json",
+            ".codex/cache/cache.json",
             ".git/config",
             ".mypy_cache/state",
             ".opencode/state",

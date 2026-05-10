@@ -8,6 +8,7 @@
 | `agent-swarm-orchestration` | Active | P1 | L0 | gate | delegation | project | Decide whether work should stay local, use bounded sidecars, or escalate to team |
 | `algo-trading` | Active | P2 | L4 | owner | none | project | Design, analyze, and implement algorithmic trading strategies, backtests, execut |
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | Check whether a homework or course-project submission satisfies the stated requi |
+| `autopilot` | Active | P1 | L0 | owner | none | project | Repo-native `$autopilot` / `/autopilot`：goal-style 连续执行、地平线切片、continuity 硬接力； bo |
 | `citation-management` | Active | P2 | L1 | owner | none | project | Verify and format academic citations and bibliographies. |
 | `copywriting` | Active | P2 | L4 | owner | none | project | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `deepinterview` | Active | P2 | L1 | owner | none | project | Repo-native deepinterview workflow for evidence-first clarification and converge |
@@ -26,6 +27,7 @@
 | `infographic` | Active | P2 | L3 | owner | none | project | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `jupyter-notebook` | Active | P2 | L3 | owner | none | project | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `latex-compile-acceleration` | Active | P1 | L4 | owner | none | project | Speed up LaTeX compile and preview workflows |
+| `loop` | Active | P1 | L1 | owner | none | project | Host-orchestrated adversarial review-fix-verify rounds with progressive rubric d |
 | `mac-memory-management` | Active | P2 | L4 | owner | none | project | Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stab |
 | `math-derivation` | Active | P2 | L4 | owner | none | project | Execute rigorous mathematical derivations and proofs |
 | `openai-docs` | Active | P1 | L1 | gate | source | project | Use official OpenAI docs first for current OpenAI guidance |
@@ -37,6 +39,7 @@
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `refresh` | Active | P2 | L3 | owner | none | project | 使用 Rust refresh 命令生成并复制下一轮执行提示 |
+| `review-fix-verify-loop` | Active | P1 | L1 | owner | none | project | Orchestrate a configurable multi-round self-loop with independent subagents per  |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | Create, refactor, and review code-generated scientific figures for papers using  |
 | `screenshot` | Active | P2 | L3 | owner | none | project | Capture desktop or system screenshots including full screen, a specific app wind |
 | `sentry` | Active | P2 | L0 | gate | source | project | Inspect Sentry production errors and issue evidence read-only. |

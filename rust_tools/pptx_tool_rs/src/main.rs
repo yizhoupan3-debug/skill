@@ -182,6 +182,12 @@ struct SlidesTestArgs {
     pad_px: u32,
     #[arg(long, default_value_t = false)]
     fail_on_overflow: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_overlap: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_aesthetic: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_any: bool,
 }
 
 #[derive(Args)]
@@ -439,8 +445,18 @@ struct QaSummary {
     deck: String,
     render: QaRenderSummary,
     overflow_check: QaOverflowSummary,
+    overlap_check: QaOverflowSummary,
+    aesthetic_check: QaAestheticSummary,
     font_check: Value,
     inspector: Value,
+}
+
+#[derive(Debug, Serialize)]
+struct QaAestheticSummary {
+    ok: bool,
+    failing_slides: Vec<usize>,
+    stdout: String,
+    stderr: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -560,17 +576,20 @@ fn outline_command(args: OutlineArgs) -> Result<()> {
 
 fn qa_command(args: QaArgs) -> Result<()> {
     let payload = qa_summary(&args.deck, &args.rendered_dir)?;
-    if args.fail_on_issues && !payload.ok {
-        bail!("qa failed: overflow, font, or Rust inspector issue detected");
-    }
     emit_value(
-        serde_json::to_value(payload)?,
+        serde_json::to_value(&payload)?,
         if args.json {
             EmitFormat::Json
         } else {
             EmitFormat::Text
         },
-    )
+    )?;
+    if args.fail_on_issues && !payload.ok {
+        bail!(
+            "qa failed: overflow, overlap, aesthetic, font, or Rust inspector issue detected"
+        );
+    }
+    Ok(())
 }
 
 fn intake_command(args: IntakeArgs) -> Result<()> {
@@ -839,7 +858,8 @@ fn rust_command_manifest_value() -> Value {
         "commands": {
             "build": "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered",
             "render": "ppt render deck.pptx --output_dir rendered",
-            "check_overflow": "ppt slides-test deck.pptx",
+            "check_layout": "ppt slides-test deck.pptx --fail-on-any",
+            "check_overflow": "ppt slides-test deck.pptx --fail-on-any",
             "check_fonts": "ppt detect-fonts deck.pptx --json",
             "check_inspector": "ppt office doctor deck.pptx --json",
             "check_rust": "ppt qa deck.pptx --rendered-dir rendered --fail-on-issues --json",
@@ -1787,12 +1807,18 @@ fn slide_xml(
             &slide.subtitle,
             ShapeBox {
                 x: 0.96,
-                y: if slide.layout == "cover" { 3.2 } else { 1.28 },
+                y: if slide.layout == "cover" {
+                    3.2
+                } else if slide.layout == "closing" {
+                    3.52
+                } else {
+                    1.56
+                },
                 w: 6.7,
                 h: 0.38,
             },
             TextStyle {
-                size_pt: 13,
+                size_pt: 18,
                 color: palette.text_soft,
                 bold: false,
                 title_placeholder: false,
@@ -1817,7 +1843,7 @@ fn slide_xml(
                 h: 0.42,
             },
             TextStyle {
-                size_pt: 15,
+                size_pt: 18,
                 color: palette.text_soft,
                 bold: false,
                 title_placeholder: false,
@@ -1867,7 +1893,7 @@ fn notes_slide_xml(slide: &PptxSlideSpec, slide_no: usize) -> String {
                 h: 2.0
             },
             TextStyle {
-                size_pt: 12,
+                size_pt: 18,
                 color: "222222",
                 bold: false,
                 title_placeholder: false
@@ -1958,9 +1984,15 @@ fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
     let rendered_dir_path = expand_path(rendered_dir);
     let rendered = render_paths(&deck, &rendered_dir_path, 1600, 900)?;
     let overflow = slide_overflow_summary(&deck)?;
+    let overlap = slide_overlap_summary(&deck)?;
+    let aesthetic = slide_aesthetic_summary(&deck)?;
     let font_check = detect_fonts_payload(&deck)?;
     let inspector = office_doctor_value(&deck.display().to_string())?;
-    let ok = overflow.ok && font_check_ok(&font_check) && inspector_ok(&inspector);
+    let ok = overflow.ok
+        && overlap.ok
+        && aesthetic.ok
+        && font_check_ok(&font_check)
+        && inspector_ok(&inspector);
     Ok(QaSummary {
         ok,
         deck: deck.display().to_string(),
@@ -1973,6 +2005,8 @@ fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
                 .collect(),
         },
         overflow_check: overflow,
+        overlap_check: overlap,
+        aesthetic_check: aesthetic,
         font_check,
         inspector,
     })
@@ -1982,29 +2016,64 @@ fn strict_quality_gate(payload: &Value) -> Result<()> {
     if payload.pointer("/ok").and_then(Value::as_bool) == Some(false) {
         bail!("strict quality failed: combined QA status is false");
     }
-    if payload
+    let overflow_ok = payload
         .pointer("/overflow_check/ok")
         .and_then(Value::as_bool)
-        == Some(false)
-    {
+        .ok_or_else(|| anyhow!("strict quality failed: overflow check status missing"))?;
+    if !overflow_ok {
         bail!("strict quality failed: slide overflow detected");
     }
-    if payload.pointer("/font_check/ok").and_then(Value::as_bool) == Some(false) {
+    let overlap_ok = payload
+        .pointer("/overlap_check/ok")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| anyhow!("strict quality failed: overlap check status missing"))?;
+    if !overlap_ok {
+        bail!("strict quality failed: slide overlap detected");
+    }
+    let aesthetic_ok = payload
+        .pointer("/aesthetic_check/ok")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| anyhow!("strict quality failed: aesthetic check status missing"))?;
+    if !aesthetic_ok {
+        let failing = payload
+            .pointer("/aesthetic_check/failing_slides")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_u64)
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        if failing.is_empty() {
+            bail!("strict quality failed: aesthetic check reported dense text overlap risk");
+        }
+        bail!(
+            "strict quality failed: aesthetic check reported dense text overlap risk on slides {}",
+            failing
+        );
+    }
+    let font_ok = payload
+        .pointer("/font_check/ok")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| anyhow!("strict quality failed: font check status missing"))?;
+    if !font_ok {
         bail!("strict quality failed: font check reported issues");
     }
-    if payload
+    let inspector_validation_ok = payload
         .pointer("/inspector/validation/ok")
         .and_then(Value::as_bool)
-        == Some(false)
-    {
+        .ok_or_else(|| anyhow!("strict quality failed: inspector validation status missing"))?;
+    if !inspector_validation_ok {
         bail!("strict quality failed: Rust inspector validation failed");
     }
-    if payload
+    let inspector_issue_count = payload
         .pointer("/inspector/issues/count")
         .and_then(Value::as_u64)
-        .unwrap_or(0)
-        > 0
-    {
+        .ok_or_else(|| anyhow!("strict quality failed: inspector issue count missing"))?;
+    if inspector_issue_count > 0 {
         bail!("strict quality failed: Rust inspector reported deck issues");
     }
     Ok(())
@@ -2086,6 +2155,82 @@ fn slide_overflow_summary(input: &Path) -> Result<QaOverflowSummary> {
         ok: false,
         stdout: format!(
             "ERROR: Slides with content overflowing original canvas (1-based indexing): {}",
+            failing
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        stderr: String::new(),
+    })
+}
+
+fn slide_overlap_summary(input: &Path) -> Result<QaOverflowSummary> {
+    let bundle = ZipBundle::from_path(input)?;
+    let structure = extract_pptx_structure(&bundle, input, false, None)?;
+    let slides = structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing slides"))?;
+    let mut failing = Vec::new();
+    for slide in slides {
+        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
+        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
+            if has_text_bbox_overlap(elements) {
+                failing.push(index);
+            }
+        }
+    }
+    if failing.is_empty() {
+        return Ok(QaOverflowSummary {
+            ok: true,
+            stdout: "Test passed. No overlap detected.".to_string(),
+            stderr: String::new(),
+        });
+    }
+    Ok(QaOverflowSummary {
+        ok: false,
+        stdout: format!(
+            "ERROR: Slides with overlapping text shape bounding boxes (1-based indexing): {}",
+            failing
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        stderr: String::new(),
+    })
+}
+
+fn slide_aesthetic_summary(input: &Path) -> Result<QaAestheticSummary> {
+    let bundle = ZipBundle::from_path(input)?;
+    let structure = extract_pptx_structure(&bundle, input, false, None)?;
+    let slides = structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing slides"))?;
+    let mut failing = Vec::new();
+    for slide in slides {
+        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
+        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
+            if has_dense_text_overlap_risk(elements) {
+                failing.push(index);
+            }
+        }
+    }
+    if failing.is_empty() {
+        return Ok(QaAestheticSummary {
+            ok: true,
+            failing_slides: Vec::new(),
+            stdout: "Test passed. No dense text overlap risk detected.".to_string(),
+            stderr: String::new(),
+        });
+    }
+    Ok(QaAestheticSummary {
+        ok: false,
+        failing_slides: failing.clone(),
+        stdout: format!(
+            "ERROR: Dense text overlap risk detected (dense overlapping text cards) on slides (1-based indexing): {}",
             failing
                 .iter()
                 .map(|n| n.to_string())
@@ -2783,7 +2928,9 @@ fn slides_test_command(args: SlidesTestArgs) -> Result<()> {
         .get("slides")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("missing slides"))?;
-    let mut failing = Vec::new();
+    let mut overflow_failing = Vec::new();
+    let mut overlap_failing = Vec::new();
+    let mut aesthetic_failing = Vec::new();
     for slide in slides {
         let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
         let mut overflow = false;
@@ -2791,25 +2938,64 @@ fn slides_test_command(args: SlidesTestArgs) -> Result<()> {
             overflow = elements
                 .iter()
                 .any(|item| element_overflows(item, slide_w, slide_h));
+            if has_text_bbox_overlap(elements) {
+                overlap_failing.push(index);
+            }
+            if has_dense_text_overlap_risk(elements) {
+                aesthetic_failing.push(index);
+            }
         }
         if overflow {
-            failing.push(index);
+            overflow_failing.push(index);
         }
     }
-    if failing.is_empty() {
-        println!("Test passed. No overflow detected.");
+    if overflow_failing.is_empty() && overlap_failing.is_empty() && aesthetic_failing.is_empty() {
+        println!("Test passed. No overflow/overlap/aesthetic risks detected.");
         return Ok(());
     }
-    print!("ERROR: Slides with content overflowing original canvas (1-based indexing): ");
-    for (i, slide_no) in failing.iter().enumerate() {
-        if i > 0 {
-            print!(", ");
+    if !overflow_failing.is_empty() {
+        print!("ISSUE: Overflow detected on slides (1-based indexing): ");
+        for (i, slide_no) in overflow_failing.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", slide_no);
         }
-        print!("{}", slide_no);
+        println!();
     }
-    println!();
-    if args.fail_on_overflow {
+    if !overlap_failing.is_empty() {
+        print!("ISSUE: Overlap detected on slides (1-based indexing): ");
+        for (i, slide_no) in overlap_failing.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", slide_no);
+        }
+        println!();
+    }
+    if !aesthetic_failing.is_empty() {
+        print!("ISSUE: Dense text overlap risk detected on slides (1-based indexing): ");
+        for (i, slide_no) in aesthetic_failing.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", slide_no);
+        }
+        println!();
+    }
+    if args.fail_on_overflow && !overflow_failing.is_empty() {
         bail!("slides-test failed: content overflow detected");
+    }
+    if args.fail_on_overlap && !overlap_failing.is_empty() {
+        bail!("slides-test failed: content overlap detected");
+    }
+    if args.fail_on_aesthetic && !aesthetic_failing.is_empty() {
+        bail!("slides-test failed: dense text overlap risk detected");
+    }
+    if args.fail_on_any
+        && (!overflow_failing.is_empty() || !overlap_failing.is_empty() || !aesthetic_failing.is_empty())
+    {
+        bail!("slides-test failed: one or more checks reported issues");
     }
     Ok(())
 }
@@ -4023,6 +4209,82 @@ fn element_overflows(element: &Value, slide_w: f64, slide_h: f64) -> bool {
         .unwrap_or(false)
 }
 
+fn has_text_bbox_overlap(elements: &[Value]) -> bool {
+    let mut boxes = Vec::new();
+    for element in elements {
+        collect_text_boxes(element, &mut boxes);
+    }
+    for i in 0..boxes.len() {
+        for j in (i + 1)..boxes.len() {
+            if rects_overlap(&boxes[i], &boxes[j]) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn has_dense_text_overlap_risk(elements: &[Value]) -> bool {
+    let mut boxes = Vec::new();
+    for element in elements {
+        collect_text_boxes(element, &mut boxes);
+    }
+    if boxes.len() < 6 {
+        return false;
+    }
+    let mut overlap_pairs = 0usize;
+    for i in 0..boxes.len() {
+        for j in (i + 1)..boxes.len() {
+            if rects_overlap(&boxes[i], &boxes[j]) {
+                overlap_pairs += 1;
+            }
+        }
+    }
+    let pair_count = boxes.len() * (boxes.len() - 1) / 2;
+    let overlap_density = overlap_pairs as f64 / pair_count as f64;
+    overlap_density >= 0.20
+}
+
+fn collect_text_boxes(element: &Value, boxes: &mut Vec<(f64, f64, f64, f64)>) {
+    let full_text = element
+        .pointer("/text/fullText")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if !full_text.is_empty() {
+        let position = element.get("position");
+        let x = position
+            .and_then(|pos| pos.get("x"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        let y = position
+            .and_then(|pos| pos.get("y"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        let w = position
+            .and_then(|pos| pos.get("w"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        let h = position
+            .and_then(|pos| pos.get("h"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        if w > 0.0 && h > 0.0 {
+            boxes.push((x, y, x + w, y + h));
+        }
+    }
+    if let Some(children) = element.get("children").and_then(Value::as_array) {
+        for child in children {
+            collect_text_boxes(child, boxes);
+        }
+    }
+}
+
+fn rects_overlap(a: &(f64, f64, f64, f64), b: &(f64, f64, f64, f64)) -> bool {
+    let tol = 0.01;
+    a.0 < b.2 - tol && a.2 > b.0 + tol && a.1 < b.3 - tol && a.3 > b.1 + tol
+}
+
 fn extract_requested_fonts_by_slide(
     bundle: &ZipBundle,
 ) -> Result<BTreeMap<usize, BTreeSet<String>>> {
@@ -4260,6 +4522,8 @@ mod tests {
     fn strict_quality_gate_accepts_rust_inspector_and_rejects_overflow() {
         let clean = json!({
             "overflow_check": {"ok": true},
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
             "font_check": {"ok": true},
             "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
         });
@@ -4267,9 +4531,37 @@ mod tests {
 
         let overflow = json!({
             "overflow_check": {"ok": false},
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
             "font_check": {"ok": true},
             "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
         });
         assert!(strict_quality_gate(&overflow).is_err());
+
+        let overlap = json!({
+            "overflow_check": {"ok": true},
+            "overlap_check": {"ok": false},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        assert!(strict_quality_gate(&overlap).is_err());
+
+        let aesthetic = json!({
+            "overflow_check": {"ok": true},
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": false, "failing_slides": [2, 4]},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        assert!(strict_quality_gate(&aesthetic).is_err());
+
+        let missing_overflow_field = json!({
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        assert!(strict_quality_gate(&missing_overflow_field).is_err());
     }
 }

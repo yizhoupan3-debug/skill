@@ -1,8 +1,11 @@
+use crate::runtime_storage::acquire_runtime_path_lock;
 use chrono::{DateTime, Duration, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -727,13 +730,56 @@ fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), String>
         fs::create_dir_all(parent)
             .map_err(|err| format!("create supervisor state dir failed: {err}"))?;
     }
-    fs::write(
-        path,
-        serde_json::to_string_pretty(store)
-            .map_err(|err| format!("serialize supervisor store failed: {err}"))?
-            + "\n",
-    )
-    .map_err(|err| format!("write supervisor store failed: {err}"))?;
+    let payload = serde_json::to_string_pretty(store)
+        .map_err(|err| format!("serialize supervisor store failed: {err}"))?
+        + "\n";
+    // Cross-process advisory lock: align with runtime_storage so concurrent
+    // codex/cursor/test writers cannot clobber each other.
+    let _path_lock = acquire_runtime_path_lock(path)?;
+    // Atomic replace: write to sibling tmp, fsync, rename. Mirrors
+    // runtime_storage::filesystem_write_text_inner so the supervisor state
+    // file gets the same crash-consistency guarantees as background_state.
+    let parent = path.parent().ok_or_else(|| {
+        format!(
+            "supervisor state path {} has no parent directory",
+            path.display()
+        )
+    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("supervisor_state");
+    let tmp_path = parent.join(format!(".router-rs.{file_name}.{}.tmp", std::process::id()));
+    {
+        let mut tmp_file = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&tmp_path)
+            .map_err(|err| {
+                format!(
+                    "create supervisor state temp file {} failed: {err}",
+                    tmp_path.display()
+                )
+            })?;
+        tmp_file
+            .write_all(payload.as_bytes())
+            .and_then(|_| tmp_file.sync_all())
+            .map_err(|err| {
+                let _ = fs::remove_file(&tmp_path);
+                format!(
+                    "write supervisor state temp payload failed for {}: {err}",
+                    tmp_path.display()
+                )
+            })?;
+    }
+    fs::rename(&tmp_path, path).map_err(|err| {
+        let _ = fs::remove_file(&tmp_path);
+        format!(
+            "replace supervisor state failed for {}: {err}",
+            path.display()
+        )
+    })?;
     Ok(())
 }
 

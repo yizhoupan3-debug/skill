@@ -1,3 +1,4 @@
+use crate::runtime_storage::acquire_runtime_path_lock;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -808,16 +809,22 @@ fn append_text(path: &Path, payload: &str) -> Result<(), String> {
         fs::create_dir_all(parent)
             .map_err(|err| format!("create trace parent failed for {}: {err}", parent.display()))?;
     }
-    let _guard = trace_append_lock()
+    // Within-process serialization (cheap fast path).
+    let _proc_guard = trace_append_lock()
         .lock()
         .map_err(|_| "trace append lock poisoned".to_string())?;
+    // Cross-process serialization: prevents JSONL line interleaving when
+    // codex-cli, cursor and parallel test harnesses all tail the same trace.
+    let _path_lock = acquire_runtime_path_lock(path)?;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
         .map_err(|err| format!("open trace append failed for {}: {err}", path.display()))?;
     file.write_all(payload.as_bytes())
-        .map_err(|err| format!("append trace payload failed for {}: {err}", path.display()))
+        .map_err(|err| format!("append trace payload failed for {}: {err}", path.display()))?;
+    file.sync_data()
+        .map_err(|err| format!("sync trace payload failed for {}: {err}", path.display()))
 }
 
 fn trace_append_lock() -> &'static Mutex<()> {

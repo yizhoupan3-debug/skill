@@ -84,14 +84,13 @@ where
     S: AsRef<OsStr>,
 {
     let root = project_root();
-    let mut command = if let Some(router_bin) = router_rs_binary() {
-        Command::new(router_bin)
-    } else {
-        let router_root = root.join("scripts/router-rs");
-        let mut launcher = Command::new(router_root.join("run_router_rs.sh"));
-        launcher.arg(router_root.join("Cargo.toml"));
-        launcher
-    };
+    let router_bin = router_rs_binary().unwrap_or_else(|| {
+        panic!(
+            "router-rs binary not found; run `cargo build --release --manifest-path {}`",
+            root.join("scripts/router-rs/Cargo.toml").display()
+        )
+    });
+    let mut command = Command::new(router_bin);
     command.args(args).current_dir(root);
     if std::env::var_os("ROUTER_RS_COMPUTE_THREADS").is_none() {
         command.env("ROUTER_RS_COMPUTE_THREADS", "1");
@@ -105,9 +104,28 @@ fn router_rs_binary() -> Option<PathBuf> {
 }
 
 fn resolve_router_rs_binary() -> Option<PathBuf> {
+    let root = project_root();
+    for candidate in [
+        root.join("scripts/router-rs/target/release/router-rs"),
+        root.join("scripts/router-rs/target/debug/router-rs"),
+        root.join("target/release/router-rs"),
+        root.join("target/debug/router-rs"),
+    ] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from) {
         if path.is_file() {
             return Some(path);
+        }
+    }
+    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
+        let base = PathBuf::from(td);
+        for candidate in [base.join("release/router-rs"), base.join("debug/router-rs")] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     None

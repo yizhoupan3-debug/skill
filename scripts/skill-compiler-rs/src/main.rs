@@ -164,7 +164,8 @@ const RUNTIME_RESEARCH_WORKFLOW_SLUGS: &[&str] = &[
     "research-engineer",
     "research-workbench",
 ];
-const FALLBACK_FRAMEWORK_COMMANDS: &[&str] = &["autopilot", "deepinterview", "gitx", "team"];
+const FALLBACK_FRAMEWORK_COMMANDS: &[&str] =
+    &["autopilot", "deepinterview", "gitx", "loop", "team"];
 
 const DEFAULT_SURFACE_OWNERS: &[&str] = &[];
 const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
@@ -1101,7 +1102,7 @@ fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
         .get("skill_path")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .unwrap_or_else(|| format!("artifacts/codex-skill-surface/skills/{slug}/SKILL.md"));
+        .unwrap_or_else(|| format!("skills/{slug}/SKILL.md"));
     json!([
         slug,
         "L0",
@@ -1118,7 +1119,7 @@ fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
 fn fallback_framework_command_runtime_row(slug: &str) -> Value {
     let command = match slug {
         "autopilot" => json!({
-            "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
+            "skill_path": "skills/autopilot/SKILL.md",
             "interaction_invariants": {"explicit_entrypoints": ["/autopilot", "$autopilot"]},
             "lineage": {"description": "Run the local framework autopilot supervisor entrypoint."}
         }),
@@ -1133,7 +1134,7 @@ fn fallback_framework_command_runtime_row(slug: &str) -> Value {
             "lineage": {"description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."}
         }),
         "team" => json!({
-            "skill_path": "artifacts/codex-skill-surface/skills/team/SKILL.md",
+            "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
             "interaction_invariants": {"explicit_entrypoints": ["/team", "$team"]},
             "lineage": {"description": "Run the local framework team orchestration entrypoint."}
         }),
@@ -2687,7 +2688,10 @@ mod tests {
         );
         assert_eq!(
             bundle.runtime_explain["summary"]["selected_total_count"],
-            json!(bundle.runtime_index["skills"].as_array().map(Vec::len).unwrap_or(0))
+            json!(bundle.runtime_index["skills"]
+                .as_array()
+                .map(Vec::len)
+                .unwrap_or(0))
         );
         assert_eq!(
             bundle.runtime_explain["summary"]["selected_emitted_count"],
@@ -2704,7 +2708,10 @@ mod tests {
 
         assert_eq!(bundle.shadow_map["summary"]["sparse_mode"], json!(true));
         assert_eq!(bundle.shadow_map["summary"]["skill_total_count"], json!(3));
-        assert_eq!(bundle.shadow_map["summary"]["shadowed_skill_count"], json!(1));
+        assert_eq!(
+            bundle.shadow_map["summary"]["shadowed_skill_count"],
+            json!(1)
+        );
         assert!(bundle.shadow_map["skills"]
             .as_object()
             .expect("skills object")
@@ -2763,7 +2770,8 @@ mod tests {
             .any(|row| row.get(0) == Some(&json!("plan-to-code"))));
         assert_eq!(
             bundle.runtime_index["skills"].as_array().map(Vec::len),
-            Some(6)
+            Some(7),
+            "expected 2 hot gates + 5 framework_command rows (autopilot/deepinterview/gitx/loop/team)"
         );
         assert!(bundle.runtime_index["skills"]
             .as_array()
@@ -2785,6 +2793,11 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("team"))));
+        assert!(bundle.runtime_index["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("loop"))));
         assert!(!bundle.runtime_index["skills"]
             .as_array()
             .unwrap()

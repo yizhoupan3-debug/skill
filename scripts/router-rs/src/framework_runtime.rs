@@ -1,31 +1,42 @@
-use chrono::{DateTime, FixedOffset, Local, NaiveDate, SecondsFormat};
-use regex::Regex;
-use rusqlite::{params, Connection};
+use crate::closeout_enforcement::evaluate_closeout_record_value;
+use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::ops::Not;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 
+/// Status values that signal the caller is claiming the task is finished.
+/// When the status matches one of these **and** programmatic closeout enforcement
+/// is active, `write_framework_session_artifacts` requires a `closeout_record`
+/// and refuses the write if evaluation fails. When enforcement is off (see
+/// `closeout_enforcement_disabled_by_env`), completion writes proceed without
+/// that gate. Non-completion statuses skip parsing `closeout_record` on this
+/// path so in-progress checkpoints are not blocked by draft records.
+const CLOSEOUT_COMPLETION_STATUSES: &[&str] = &[
+    "completed",
+    "complete",
+    "done",
+    "finished",
+    "succeeded",
+    "passed",
+];
+
 pub const FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION: &str =
     "router-rs-framework-runtime-snapshot-v1";
 pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
     "router-rs-framework-contract-summary-v1";
-pub const FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION: &str = "router-rs-framework-memory-recall-v1";
 pub const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
 pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION: &str =
     "router-rs-framework-session-artifact-write-v1";
-pub const FRAMEWORK_MEMORY_POLICY_SCHEMA_VERSION: &str = "router-rs-framework-memory-policy-v1";
 pub const FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION: &str =
     "router-rs-framework-prompt-compression-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
 pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY: &str =
     "rust-framework-session-artifact-writer";
-pub const FRAMEWORK_MEMORY_POLICY_AUTHORITY: &str = "rust-framework-memory-policy";
 pub const FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY: &str = "rust-framework-prompt-policy";
 
 const CURRENT_ARTIFACT_DIR: &str = "current";
@@ -44,26 +55,6 @@ const TRACE_METADATA_SCHEMA_VERSION: &str = "trace-metadata-v2";
 const CONTINUITY_JOURNAL_SCHEMA_VERSION: &str = "continuity-journal-v1";
 const SUPERVISOR_STATE_SCHEMA_VERSION: &str = "supervisor-state-v2";
 const TASK_REGISTRY_SCHEMA_VERSION: &str = "task-registry-v1";
-const CONTINUITY_STATE_FILENAME: &str = "CONTINUITY_STATE.json";
-const STABLE_MEMORY_FILENAMES: &[&str] = &[
-    "MEMORY.md",
-    "preferences.md",
-    "decisions.md",
-    "lessons.md",
-    "runbooks.md",
-];
-const MEMORY_SQLITE_FILENAMES: &[&str] = &["memory.sqlite3", "memory.db", ".memory.sqlite3"];
-const FACT_EXTRACTION_PATTERNS: &[(&str, &str)] = &[
-    ("explicit_memory", "(?i)\\b(?:remember|记住)[:：]\\s*(.+)"),
-    (
-        "user_preference",
-        "(?i)\\b(?:i prefer|我(?:更)?喜欢|偏好)\\s+(.+)",
-    ),
-    ("project_decision", "(?i)\\b(?:decision|决定)[:：]\\s*(.+)"),
-];
-const GENERIC_QUERY_TOKENS: &[&str] = &[
-    "context", "current", "help", "latest", "memory", "project", "repo", "state", "status",
-];
 const TERMINAL_STORY_STATES: &[&str] = &[
     "completed",
     "finalized",
@@ -220,13 +211,32 @@ impl<'a> Default for FrameworkAliasBuildOptions<'a> {
     }
 }
 
+/// Skill framework 仓库根：`RUNTIME_REGISTRY` + `router-rs` 清单同时存在。
+/// 与 host 投影解析共用此判定，避免双份漂移。
+pub fn is_framework_root(path: &Path) -> bool {
+    path.join("configs/framework/RUNTIME_REGISTRY.json")
+        .is_file()
+        && path.join("scripts/router-rs/Cargo.toml").is_file()
+}
+
+/// CLI / 若干调用方常在 `scripts/router-rs/` 等子目录执行；continuity、`RUNTIME_REGISTRY`
+/// 与 `artifacts/current` 均以仓库根为真源，因此从 cwd 或传入路径向上探测 framework root。
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
     let base = if let Some(path) = repo_root {
         path.to_path_buf()
     } else {
         std::env::current_dir().map_err(|err| format!("resolve current directory failed: {err}"))?
     };
-    Ok(base.canonicalize().unwrap_or(base))
+    let normalized = base.canonicalize().unwrap_or(base);
+    if is_framework_root(&normalized) {
+        return Ok(normalized);
+    }
+    for ancestor in normalized.ancestors() {
+        if is_framework_root(ancestor) {
+            return Ok(ancestor.to_path_buf());
+        }
+    }
+    Ok(normalized)
 }
 
 pub fn build_framework_runtime_snapshot_envelope(
@@ -552,134 +562,6 @@ fn compact_contract_text(text: &str, max_chars: usize) -> String {
     compact
 }
 
-pub fn build_framework_memory_recall_envelope(
-    repo_root: &Path,
-    query: &str,
-    max_items: usize,
-    mode: &str,
-    memory_root_override: Option<&Path>,
-    artifact_root_override: Option<&Path>,
-    task_id_override: Option<&str>,
-) -> Result<Value, String> {
-    if !matches!(mode, "stable" | "active" | "history" | "debug") {
-        return Err(format!("Unsupported memory recall mode: {mode}"));
-    }
-    let snapshot = load_framework_runtime_view(repo_root, artifact_root_override, task_id_override);
-    let memory_root = resolve_framework_memory_root(repo_root, memory_root_override);
-    let (changed_files, consolidation_note) = inspect_framework_memory_seed_state(&memory_root)?;
-    let continuity = classify_runtime_continuity(&snapshot);
-    let task = value_text(continuity.get("task"));
-    let active_task = json!({
-        "task_id": snapshot.active_task_id.clone(),
-        "task": if task.is_empty() { Value::Null } else { Value::String(task.clone()) },
-        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
-    });
-    let query_matches_active_task = continuity.get("state").and_then(Value::as_str)
-        == Some("active")
-        && !task.is_empty()
-        && !is_generic_query(query)
-        && query_matches_task(query, &task);
-    let effective_continuity = if continuity.get("state").and_then(Value::as_str) == Some("active")
-        && !task.is_empty()
-        && !query_matches_active_task
-    {
-        build_query_mismatch_continuity(&continuity, &active_task)
-    } else {
-        continuity.clone()
-    };
-    let retrieval = render_framework_memory_context(
-        repo_root,
-        &snapshot,
-        &memory_root,
-        query,
-        max_items,
-        mode,
-    )?;
-    let sqlite_path = resolve_memory_sqlite_path(&memory_root)
-        .map(|path| path.display().to_string())
-        .unwrap_or_default();
-    let registered_tasks = snapshot.registered_tasks.clone();
-    let registered_task_count = registered_tasks
-        .get("task_count")
-        .and_then(Value::as_u64)
-        .or_else(|| {
-            registered_tasks
-                .get("tasks")
-                .and_then(Value::as_array)
-                .map(|tasks| tasks.len() as u64)
-        })
-        .unwrap_or(0);
-    let workspace_name = workspace_name_from_root(repo_root);
-    let bootstrap_task_id = if query_matches_active_task {
-        snapshot.active_task_id.clone().unwrap_or_default()
-    } else {
-        build_framework_task_id(if query.trim().is_empty() {
-            &workspace_name
-        } else {
-            query
-        })
-    };
-    let query_mismatch =
-        effective_continuity.get("state").and_then(Value::as_str) == Some("query-mismatch");
-    let prompt_active_task = if query_mismatch {
-        Value::Null
-    } else {
-        active_task.clone()
-    };
-    let prompt_active_task_id = if query_mismatch {
-        Value::Null
-    } else {
-        Value::String(snapshot.active_task_id.clone().unwrap_or_default())
-    };
-    let prompt_payload = json!({
-        "workspace": workspace_name,
-        "retrieval": compact_memory_retrieval_for_prompt(&retrieval, !query_mismatch),
-        "continuity": compact_continuity_for_prompt(&effective_continuity),
-        "active_task": prompt_active_task,
-        "registered_tasks": registered_tasks.clone(),
-        "continuity_decision": {
-            "query": query,
-            "query_matches_active_task": query_matches_active_task,
-            "ignored_root_continuity": effective_continuity.get("state").and_then(Value::as_str) == Some("query-mismatch"),
-            "task_id": bootstrap_task_id,
-            "source_task": if query_matches_active_task && !task.is_empty() { Value::String(task) } else { Value::Null },
-            "mode": mode,
-            "active_task_id": prompt_active_task_id,
-        },
-    });
-    let diagnostics = json!({
-        "retrieval": compact_memory_retrieval_diagnostics(&retrieval),
-        "continuity": {
-            "state": effective_continuity.get("state").cloned().unwrap_or(Value::Null),
-            "can_resume": effective_continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
-            "active_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
-            "registered_task_count": registered_task_count,
-        },
-        "source_artifacts": describe_continuity_layout(repo_root, &snapshot.artifact_base),
-    });
-    Ok(json!({
-        "schema_version": FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION,
-        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
-        "memory_recall": {
-            "ok": true,
-            "workspace": workspace_name_from_root(repo_root),
-            "using_project_local": true,
-            "memory_root": memory_root.display().to_string(),
-            "memory_layout": describe_project_local_memory_layout(&memory_root),
-            "consolidation_note": consolidation_note,
-            "changed_files": changed_files,
-            "sqlite": {
-                "path": sqlite_path,
-                "has_sqlite": !sqlite_path.is_empty(),
-                "has_memory_md": memory_root.join("MEMORY.md").is_file(),
-            },
-            "diagnostics": diagnostics,
-            "prompt_payload": prompt_payload,
-        }
-    }))
-}
-
 pub fn build_framework_refresh_payload(
     repo_root: &Path,
     max_lines: usize,
@@ -982,6 +864,12 @@ fn build_framework_alias_routing_hints(alias_name: &str, alias_record: &Value) -
         "autopilot" => json!({
             "reroute_when_ambiguous": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
             "reroute_when_root_cause_unknown": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
+            "entrypoint_modes": alias_value_at_path(alias_record, &["entrypoint_modes"])
+                .cloned()
+                .unwrap_or(Value::Null),
+            "research_contract": alias_value_at_path(alias_record, &["research_contract"])
+                .cloned()
+                .unwrap_or(Value::Null),
         }),
         "deepinterview" => json!({
             "review_lanes": alias_record_list(alias_record, &["review_lanes"]),
@@ -1039,7 +927,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             "canonical_owner": "autopilot",
             "reroute_when_ambiguous": "deepinterview",
             "reroute_when_root_cause_unknown": "deepinterview",
-            "skill_path": "artifacts/codex-skill-surface/skills/autopilot/SKILL.md",
+            "skill_path": "skills/autopilot/SKILL.md",
             "lineage": {
                 "source": "repo-native",
                 "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
@@ -1051,12 +939,17 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "root-cause-first-when-unknown",
                 "verification-evidence-required",
                 "resume-and-recovery-required",
-                "converge-until-bounded-scope-clean"
+                "converge-until-bounded-scope-clean",
+                "horizon-slice-macro-goals-with-exit-criteria-each-slice",
+                "no-chat-turn-without-continuity-delta-when-task-active",
+                "prefer-autopilot-deep-when-external-claims-drive-the-critical-path"
             ],
             "local_adaptations": [
                 "store execution state in rust-session-supervisor plus continuity artifacts",
                 "store specs and plans in artifacts/current task-local bootstrap outputs",
-                "use deepinterview as the first-class clarification gate for vague requests"
+                "use deepinterview as the first-class clarification gate for vague requests",
+                "treat each turn as a bus cycle: read alias+continuity then mutate repo then refresh SESSION_SUMMARY and NEXT_ACTIONS",
+                "for goals larger than one context window: chain horizons; each horizon ends with explicit next_actions for cold resume"
             ],
             "autonomy_contract": {
                 "auto_agent_orchestration": {
@@ -1094,12 +987,24 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                         "verification_pending",
                         "completed"
                     ],
+                    "lifecycle_states_implementation": {
+                        "owner": "host_agent_layer",
+                        "rust_runtime_coverage": "job_lifecycle_only",
+                        "status": "host_owned_no_rust_native_state_machine",
+                        "rationale": "Rust runtime tracks worker/job lifecycle (queued/running/interrupted/...). The goal-level six-state machine listed above is owned by the host agent layer (codex/cursor LLM + hooks). Treat the list as a host-side contract, not a Rust enum."
+                    },
                     "control_surface": [
                         "goal_start",
                         "goal_pause",
                         "goal_resume",
                         "goal_clear"
                     ],
+                    "control_surface_implementation": {
+                        "owner": "hybrid_host_plus_rust_persistence",
+                        "rust_runtime_coverage": "goal_persistence_and_drive_hook",
+                        "status": "rust_stdio_goal_store_plus_cursor_followup",
+                        "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0."
+                    },
                     "never_stop_at_plan_only": true,
                     "allow_network_research_for_unknowns": true,
                     "require_source_citation_for_external_claims": true,
@@ -1108,7 +1013,8 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                     "checkpoint_artifacts": [
                         "SESSION_SUMMARY.md",
                         "NEXT_ACTIONS.json",
-                        "EVIDENCE_INDEX.json"
+                        "EVIDENCE_INDEX.json",
+                        "GOAL_STATE.json"
                     ]
                 }
             },
@@ -1149,10 +1055,45 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "codex-cli": "/autopilot",
                 "cursor": "/autopilot"
             },
+            "entrypoint_modes": {
+                "quick": {
+                    "codex-cli": "/autopilot-quick",
+                    "cursor": "/autopilot-quick"
+                },
+                "deep": {
+                    "codex-cli": "/autopilot-deep",
+                    "cursor": "/autopilot-deep"
+                }
+            },
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/autopilot", "$autopilot"],
+                "explicit_entrypoints": [
+                    "/autopilot",
+                    "$autopilot",
+                    "/autopilot-quick",
+                    "$autopilot-quick",
+                    "/autopilot-deep",
+                    "$autopilot-deep",
+                    "/autopilot quick",
+                    "/autopilot deep"
+                ],
                 "implicit_route_policy": "never"
+            },
+            "research_contract": {
+                "quick": {
+                    "target": "fast-check",
+                    "default_output_style": "compact",
+                    "max_rounds": 1
+                },
+                "deep": {
+                    "target": "deep-research",
+                    "default_output_style": "evidence-ledger",
+                    "requires_multi_source_validation": true,
+                    "minimum_independent_sources_per_major_claim": 2,
+                    "requires_uncertainty_register": true,
+                    "requires_counter_evidence": true,
+                    "auto_continue_on_length_finish": true
+                }
             }
         })),
         "deepinterview" => Some(json!({
@@ -1233,7 +1174,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 ],
                 "fallback": "local-supervisor-queue"
             },
-            "skill_path": "artifacts/codex-skill-surface/skills/team/SKILL.md",
+            "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
             "lineage": {
                 "source": "repo-native",
                 "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
@@ -1380,9 +1321,9 @@ fn alias_skill_path(alias_name: &str, alias_record: &Value) -> String {
         return upstream_path;
     }
     match alias_name {
-        "autopilot" => "artifacts/codex-skill-surface/skills/autopilot/SKILL.md".to_string(),
+        "autopilot" => "skills/autopilot/SKILL.md".to_string(),
         "deepinterview" => "skills/deepinterview/SKILL.md".to_string(),
-        "team" => "artifacts/codex-skill-surface/skills/team/SKILL.md".to_string(),
+        "team" => "skills/agent-swarm-orchestration/SKILL.md".to_string(),
         _ => String::new(),
     }
 }
@@ -2028,12 +1969,17 @@ fn load_framework_runtime_view(
     artifact_root_override: Option<&Path>,
     task_id_override: Option<&str>,
 ) -> FrameworkRuntimeView {
+    let mut control_plane_parse_errors: Vec<String> = Vec::new();
     let artifact_base =
         artifact_root_override.map_or_else(|| repo_root.join("artifacts"), Path::to_path_buf);
     let mirror_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
     let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
     let supervisor_state = if supervisor_state_path.is_file() {
-        normalize_supervisor_state(&read_json_if_exists(&supervisor_state_path))
+        normalize_supervisor_state(&read_json_control_plane_field(
+            &supervisor_state_path,
+            ".supervisor_state.json",
+            &mut control_plane_parse_errors,
+        ))
     } else {
         Map::new()
     };
@@ -2043,10 +1989,22 @@ fn load_framework_runtime_view(
     let active_task_pointer_present = active_task_pointer_path.is_file();
     let focus_task_pointer_present = focus_task_pointer_path.is_file();
     let task_registry_present = task_registry_path.is_file();
-    let pointer = read_json_if_exists(&active_task_pointer_path);
-    let focus_pointer = read_json_if_exists(&focus_task_pointer_path);
+    let pointer = read_json_control_plane_field(
+        &active_task_pointer_path,
+        "active_task.json",
+        &mut control_plane_parse_errors,
+    );
+    let focus_pointer = read_json_control_plane_field(
+        &focus_task_pointer_path,
+        "focus_task.json",
+        &mut control_plane_parse_errors,
+    );
     let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
-        normalized_task_registry(&read_json_if_exists(&task_registry_path));
+        normalized_task_registry(&read_json_control_plane_field(
+            &task_registry_path,
+            "task_registry.json",
+            &mut control_plane_parse_errors,
+        ));
     let registry_task_ids_before_selection = known_task_ids.clone();
     let focus_task_id = {
         let direct = safe_slug(&value_text(focus_pointer.get("task_id")));
@@ -2058,7 +2016,8 @@ fn load_framework_runtime_view(
     };
     let supervisor_task_id = safe_slug(&value_text(supervisor_state.get("task_id")));
     let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
-    let mut control_plane_inconsistency_reasons = stable_line_items(vec![
+    let mut control_plane_inconsistency_reasons = control_plane_parse_errors;
+    control_plane_inconsistency_reasons.extend(stable_line_items(vec![
         if !supervisor_task_id.is_empty()
             && focus_task_id
                 .as_ref()
@@ -2092,7 +2051,7 @@ fn load_framework_runtime_view(
         } else {
             String::new()
         },
-    ]);
+    ]));
     let active_task_id = {
         let direct = safe_slug(task_id_override.unwrap_or(""));
         if direct.is_empty().not() {
@@ -2853,833 +2812,6 @@ fn render_framework_refresh_prompt(
     lines.join("\n") + "\n"
 }
 
-fn read_stable_memory_documents_from_root(memory_root: &Path) -> Vec<(String, String)> {
-    STABLE_MEMORY_FILENAMES
-        .iter()
-        .filter_map(|file_name| {
-            let text = read_text_if_exists(&memory_root.join(file_name));
-            if text.trim().is_empty() {
-                None
-            } else {
-                Some(((*file_name).to_string(), text))
-            }
-        })
-        .collect()
-}
-
-fn render_framework_memory_context(
-    repo_root: &Path,
-    snapshot: &FrameworkRuntimeView,
-    memory_root: &Path,
-    query: &str,
-    max_items: usize,
-    mode: &str,
-) -> Result<Value, String> {
-    let stable_documents = read_stable_memory_documents_from_root(memory_root);
-    let mut sections = collect_stable_memory_sections(&stable_documents, query, max_items);
-    let mut freshness = json!({
-        "state": "not-requested",
-        "active_task_allowed": false,
-        "reasons": [],
-    });
-    let mut active_task_included = false;
-    if matches!(mode, "active" | "history" | "debug") {
-        let (active_section, active_freshness) = build_active_task_memory_section(snapshot, query);
-        freshness = active_freshness;
-        if let Some(section) = active_section {
-            active_task_included = true;
-            sections.push(section);
-        }
-    }
-    if matches!(mode, "history" | "debug") {
-        sections.extend(collect_archive_sections(memory_root, query, max_items));
-    }
-    if matches!(mode, "stable" | "active" | "debug") {
-        let workspace_name = workspace_name_from_root(repo_root);
-        if let Some(sqlite_path) = resolve_memory_sqlite_path(memory_root) {
-            sections.extend(collect_sqlite_sections(
-                &workspace_name,
-                &sqlite_path,
-                query,
-                max_items,
-            ));
-        }
-    }
-    if mode == "debug" {
-        let state = build_continuity_debug_state(snapshot);
-        if !state.is_null() && state != Value::Object(Map::new()) {
-            if let Ok(text) = serde_json::to_string_pretty(&state) {
-                sections.push(("runtime/CONTINUITY_STATE.json".to_string(), text));
-            }
-        }
-    }
-    let items = sections
-        .iter()
-        .map(|(path, content)| json!({"path": path, "content": content}))
-        .collect::<Vec<_>>();
-    let blocks = sections
-        .iter()
-        .filter_map(|(path, content)| {
-            if content.trim().is_empty() {
-                None
-            } else {
-                Some(format!("## {path}\n{}", content.trim()))
-            }
-        })
-        .collect::<Vec<_>>();
-    Ok(json!({
-        "workspace": workspace_name_from_root(repo_root),
-        "topic": query,
-        "mode": mode,
-        "memory_root": memory_root.display().to_string(),
-        "sqlite_path": resolve_memory_sqlite_path(memory_root).map(|path| path.display().to_string()).unwrap_or_default(),
-        "items": items,
-        "context": blocks.join("\n\n").trim().to_string(),
-        "active_task_included": active_task_included,
-        "freshness": freshness,
-        "continuity_state": classify_runtime_continuity(snapshot).get("state").cloned().unwrap_or(Value::Null),
-        "active_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
-    }))
-}
-
-fn collect_stable_memory_sections(
-    stable_documents: &[(String, String)],
-    query: &str,
-    max_items: usize,
-) -> Vec<(String, String)> {
-    if query.trim().is_empty() {
-        return stable_documents
-            .iter()
-            .filter_map(|(name, text)| {
-                let compact = compact_memory_document_without_query(text, 2);
-                (!compact.is_empty()).then(|| (name.clone(), compact))
-            })
-            .take(max_items.max(1))
-            .collect();
-    }
-    let mut ranked = Vec::new();
-    for (name, text) in stable_documents {
-        for (headings, body) in extract_markdown_segments(text) {
-            let score = memory_segment_score(&headings, &body, query);
-            if score <= 0.0 {
-                continue;
-            }
-            ranked.push((score, name.clone(), render_memory_segment(&headings, &body)));
-        }
-    }
-    ranked.sort_by(|left, right| {
-        right
-            .0
-            .partial_cmp(&left.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| left.1.cmp(&right.1))
-            .then_with(|| left.2.cmp(&right.2))
-    });
-    let mut deduped = Vec::new();
-    let mut seen = HashSet::new();
-    for (_, name, content) in ranked {
-        let key = format!("{name}\n{content}");
-        if !seen.insert(key) {
-            continue;
-        }
-        deduped.push((name, content));
-        if deduped.len() >= max_items {
-            break;
-        }
-    }
-    if !deduped.is_empty() {
-        return deduped;
-    }
-    Vec::new()
-}
-
-fn compact_memory_document_without_query(text: &str, max_segments: usize) -> String {
-    let segments = extract_markdown_segments(text);
-    if !segments.is_empty() {
-        return segments
-            .into_iter()
-            .take(max_segments.max(1))
-            .map(|(headings, body)| render_memory_segment(&headings, &body))
-            .collect::<Vec<_>>()
-            .join("\n\n")
-            .trim()
-            .to_string();
-    }
-    text.lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .take(max_segments.max(1))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
-}
-
-fn build_active_task_memory_section(
-    snapshot: &FrameworkRuntimeView,
-    query: &str,
-) -> (Option<(String, String)>, Value) {
-    let continuity = classify_runtime_continuity(snapshot);
-    let mut freshness = evaluate_memory_freshness(snapshot);
-    let current = continuity
-        .get("current_execution")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    if current.is_empty() {
-        return (None, freshness);
-    }
-    if is_generic_query(query) {
-        freshness = json!({
-            "state": "generic-query",
-            "active_task_allowed": false,
-            "reasons": ["query is empty or generic"],
-            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        });
-        return (None, freshness);
-    }
-    let task = value_text(continuity.get("task"));
-    if task.is_empty() || !query_matches_task(query, &task) {
-        freshness = json!({
-            "state": "query-mismatch",
-            "active_task_allowed": false,
-            "reasons": ["query does not target the active task"],
-            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        });
-        return (None, freshness);
-    }
-    if !freshness
-        .get("active_task_allowed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return (None, freshness);
-    }
-    let mut lines = vec![
-        "# runtime:current_task".to_string(),
-        format!("- task: {}", value_text(current.get("task"))),
-        format!("- phase: {}", value_text(current.get("phase"))),
-        format!("- status: {}", value_text(current.get("status"))),
-    ];
-    let route = value_string_list(current.get("route"));
-    if !route.is_empty() {
-        lines.push(format!("- route: {}", join_lines(&route)));
-    }
-    let next_actions = value_string_list(current.get("next_actions"));
-    if !next_actions.is_empty() {
-        lines.push(format!("- next_actions: {}", join_lines(&next_actions)));
-    }
-    let blockers = value_string_list(current.get("blockers"));
-    if !blockers.is_empty() {
-        lines.push(format!("- blockers: {}", join_lines(&blockers)));
-    }
-    let scope = value_string_list(current.get("scope"));
-    if !scope.is_empty() {
-        lines.push(format!("- scope: {}", join_lines(&scope)));
-    }
-    (
-        Some(("runtime/current_task.md".to_string(), lines.join("\n"))),
-        freshness,
-    )
-}
-
-fn collect_archive_sections(
-    memory_root: &Path,
-    query: &str,
-    max_items: usize,
-) -> Vec<(String, String)> {
-    let archive_root = memory_root.join("archive");
-    if !archive_root.is_dir() {
-        return Vec::new();
-    }
-    let mut files = Vec::new();
-    walk_files(&archive_root, &mut files);
-    files.sort();
-    let mut sections = Vec::new();
-    for path in files {
-        let rel_path = path.strip_prefix(memory_root).map_or_else(
-            |_| path.display().to_string(),
-            |value| value.display().to_string(),
-        );
-        let text = if path.extension().and_then(|value| value.to_str()) == Some("json") {
-            let value = read_json_if_exists(&path);
-            serde_json::to_string_pretty(&value).unwrap_or_default()
-        } else {
-            read_text_if_exists(&path)
-        };
-        let filtered = if query.trim().is_empty() {
-            compact_memory_document_without_query(&text, 2)
-        } else {
-            let mut matches = extract_markdown_segments(&text)
-                .into_iter()
-                .filter_map(|(headings, body)| {
-                    let score = memory_segment_score(&headings, &body, query);
-                    (score > 0.0).then(|| (score, render_memory_segment(&headings, &body)))
-                })
-                .collect::<Vec<_>>();
-            matches.sort_by(|left, right| {
-                right
-                    .0
-                    .partial_cmp(&left.0)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            matches
-                .into_iter()
-                .take(max_items)
-                .map(|(_, content)| content)
-                .collect::<Vec<_>>()
-                .join("\n\n")
-                .trim()
-                .to_string()
-        };
-        if filtered.is_empty() {
-            continue;
-        }
-        sections.push((rel_path, filtered));
-        if sections.len() >= max_items {
-            break;
-        }
-    }
-    sections
-}
-
-fn collect_sqlite_sections(
-    workspace: &str,
-    sqlite_path: &Path,
-    query: &str,
-    max_items: usize,
-) -> Vec<(String, String)> {
-    let Ok(conn) = Connection::open(sqlite_path) else {
-        return Vec::new();
-    };
-    let mut sections = Vec::new();
-    let memory_items = list_sqlite_memory_items(&conn, workspace, query, max_items);
-    if !memory_items.is_empty() {
-        let mut lines = vec!["# sqlite:memory_items".to_string()];
-        for item in memory_items {
-            lines.push(format!(
-                "### {}",
-                item.get("summary")
-                    .cloned()
-                    .unwrap_or_else(|| "item".to_string())
-            ));
-            lines.push(format!(
-                "- source: {}",
-                item.get("source").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- category: {}",
-                item.get("category").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- status: {}",
-                item.get("status").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- summary: {}",
-                item.get("summary").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- notes: {}",
-                item.get("notes").cloned().unwrap_or_default()
-            ));
-            lines.push(String::new());
-        }
-        sections.push((
-            "sqlite/memory_items.md".to_string(),
-            lines.join("\n").trim().to_string(),
-        ));
-    }
-    sections
-}
-
-fn list_sqlite_memory_items(
-    conn: &Connection,
-    workspace: &str,
-    query: &str,
-    max_items: usize,
-) -> Vec<BTreeMap<String, String>> {
-    let columns = sqlite_table_columns(conn, "memory_items");
-    let expires_expr = if columns.contains("expires_at") {
-        "expires_at"
-    } else {
-        "'' AS expires_at"
-    };
-    let retired_expr = if columns.contains("retired_at") {
-        "retired_at"
-    } else {
-        "'' AS retired_at"
-    };
-    let base_sql = format!(
-        "SELECT summary, source, category, status, notes, metadata_json, keywords_json, {expires_expr}, {retired_expr} FROM memory_items WHERE workspace = ? AND status = 'active' ORDER BY updated_at DESC"
-    );
-    if query.trim().is_empty() {
-        let limit = max_items.max(1).saturating_mul(4);
-        return list_sqlite_rows(conn, &format!("{base_sql} LIMIT ?"), workspace, Some(limit))
-            .into_iter()
-            .filter(|row| !memory_item_is_expired(row))
-            .take(max_items)
-            .collect();
-    }
-    let rows = list_sqlite_rows(conn, &base_sql, workspace, None)
-        .into_iter()
-        .filter(|row| !memory_item_is_expired(row))
-        .collect::<Vec<_>>();
-    let mut ranked = rows
-        .into_iter()
-        .filter_map(|row| {
-            let searchable = format!(
-                "{} {} {} {} {} {} {}",
-                row.get("summary").cloned().unwrap_or_default(),
-                row.get("source").cloned().unwrap_or_default(),
-                row.get("category").cloned().unwrap_or_default(),
-                row.get("status").cloned().unwrap_or_default(),
-                row.get("notes").cloned().unwrap_or_default(),
-                row.get("keywords_json").cloned().unwrap_or_default(),
-                row.get("metadata_json").cloned().unwrap_or_default()
-            )
-            .to_lowercase();
-            if !topic_strong_match(query, &searchable) {
-                return None;
-            }
-            let score = query_tokens(query)
-                .into_iter()
-                .filter(|token| searchable.contains(token))
-                .count();
-            Some((score, row))
-        })
-        .collect::<Vec<_>>();
-    ranked.sort_by(|left, right| {
-        right
-            .0
-            .partial_cmp(&left.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    ranked
-        .into_iter()
-        .take(max_items)
-        .map(|(_, row)| row)
-        .collect()
-}
-
-fn sqlite_table_columns(conn: &Connection, table: &str) -> HashSet<String> {
-    let Ok(mut stmt) = conn.prepare(&format!("PRAGMA table_info({table})")) else {
-        return HashSet::new();
-    };
-    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(1)) else {
-        return HashSet::new();
-    };
-    rows.filter_map(Result::ok).collect()
-}
-
-fn list_sqlite_rows(
-    conn: &Connection,
-    sql: &str,
-    workspace: &str,
-    limit: Option<usize>,
-) -> Vec<BTreeMap<String, String>> {
-    let Ok(mut stmt) = conn.prepare(sql) else {
-        return Vec::new();
-    };
-    let column_names = stmt
-        .column_names()
-        .into_iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
-    let build_payload = |row: &rusqlite::Row<'_>| {
-        let mut payload = BTreeMap::new();
-        for (index, column_name) in column_names.iter().enumerate() {
-            let value = match row.get_ref(index) {
-                Ok(rusqlite::types::ValueRef::Integer(value)) => value.to_string(),
-                Ok(rusqlite::types::ValueRef::Real(value)) => value.to_string(),
-                Ok(rusqlite::types::ValueRef::Text(value)) => {
-                    String::from_utf8_lossy(value).to_string()
-                }
-                Ok(rusqlite::types::ValueRef::Null | rusqlite::types::ValueRef::Blob(_)) => {
-                    String::new()
-                }
-                Err(_) => String::new(),
-            };
-            payload.insert(column_name.clone(), value);
-        }
-        Ok(payload)
-    };
-    if let Some(limit) = limit {
-        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-        let Ok(rows) = stmt.query_map(params![workspace, limit], build_payload) else {
-            return Vec::new();
-        };
-        return rows.filter_map(Result::ok).collect();
-    }
-    let Ok(rows) = stmt.query_map(params![workspace], build_payload) else {
-        return Vec::new();
-    };
-    rows.filter_map(Result::ok).collect()
-}
-
-fn memory_item_is_expired(row: &BTreeMap<String, String>) -> bool {
-    let expires_at = row
-        .get("expires_at")
-        .cloned()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| memory_metadata_string(row.get("metadata_json"), "expires_at"))
-        .or_else(|| memory_metadata_string(row.get("metadata_json"), "expires_on"));
-    expires_at
-        .as_deref()
-        .is_some_and(|value| memory_expiry_has_passed(value, Local::now().fixed_offset()))
-}
-
-fn memory_metadata_string(metadata_json: Option<&String>, key: &str) -> Option<String> {
-    let metadata = serde_json::from_str::<Value>(metadata_json?.trim()).ok()?;
-    metadata
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
-fn memory_expiry_has_passed(value: &str, now: DateTime<FixedOffset>) -> bool {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-    if let Ok(expires_at) = DateTime::parse_from_rfc3339(trimmed) {
-        return expires_at <= now;
-    }
-    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
-        .map(|date| date < now.date_naive())
-        .unwrap_or(false)
-}
-
-fn build_continuity_debug_state(snapshot: &FrameworkRuntimeView) -> Value {
-    let continuity = classify_runtime_continuity(snapshot);
-    let state_path = snapshot.current_root.join(CONTINUITY_STATE_FILENAME);
-    let state = read_json_if_exists(&state_path);
-    let continuity_state = continuity
-        .get("state")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if matches!(continuity_state, "active" | "completed") {
-        return build_continuity_state(snapshot);
-    }
-    state
-}
-
-fn build_continuity_state(snapshot: &FrameworkRuntimeView) -> Value {
-    let continuity = classify_runtime_continuity(snapshot);
-    let source_updated_at = continuity
-        .get("continuity")
-        .and_then(Value::as_object)
-        .and_then(|inner| inner.get("last_updated_at"))
-        .and_then(Value::as_str)
-        .unwrap_or(&snapshot.collected_at)
-        .to_string();
-    json!({
-        "schema_version": "continuity-state-v1",
-        "source_task_id": snapshot.active_task_id.clone(),
-        "source_task": continuity.get("task").cloned().unwrap_or(Value::Null),
-        "source_phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-        "source_status": continuity.get("status").cloned().unwrap_or(Value::Null),
-        "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        "artifact_root": snapshot.current_root.display().to_string(),
-        "source_updated_at": source_updated_at,
-        "content_hash": build_continuity_source_hash(snapshot),
-        "last_refreshed_at": current_local_timestamp(),
-    })
-}
-
-fn evaluate_memory_freshness(snapshot: &FrameworkRuntimeView) -> Value {
-    let continuity = classify_runtime_continuity(snapshot);
-    let current = continuity
-        .get("current_execution")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    if continuity.get("state").and_then(Value::as_str) != Some("active") || current.is_empty() {
-        return json!({
-            "state": "blocked",
-            "active_task_allowed": false,
-            "reasons": ["current continuity is not active"],
-            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        });
-    }
-    json!({
-        "state": "fresh",
-        "active_task_allowed": true,
-        "reasons": [],
-        "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        "source_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
-    })
-}
-
-fn build_continuity_source_hash(snapshot: &FrameworkRuntimeView) -> String {
-    let payload = json!({
-        "active_task_id": snapshot.active_task_id.clone(),
-        "session_summary_text": snapshot.session_summary_text,
-        "next_actions": snapshot.next_actions,
-        "evidence_index": snapshot.evidence_index,
-        "trace_metadata": snapshot.trace_metadata,
-        "supervisor_state": snapshot.supervisor_state,
-    });
-    let encoded = serde_json::to_string(&payload).unwrap_or_default();
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    encoded.hash(&mut hasher);
-    format!("{:x}", hasher.finish())
-}
-
-pub(crate) fn resolve_framework_memory_root(
-    repo_root: &Path,
-    memory_root_override: Option<&Path>,
-) -> PathBuf {
-    if let Some(memory_root) = memory_root_override {
-        return memory_root.to_path_buf();
-    }
-    let project_memory_root = repo_root.join("memory");
-    if project_memory_root.is_dir() {
-        return project_memory_root;
-    }
-    repo_root.join(".codex").join("memory")
-}
-
-fn current_local_date() -> String {
-    Local::now().format("%Y-%m-%d").to_string()
-}
-
-fn move_to_archive(source: &Path, destination: &Path) -> Result<PathBuf, String> {
-    let mut target = destination.to_path_buf();
-    if target.exists() {
-        let suffix = current_local_timestamp().replace(':', "").replace('+', "_");
-        let stem = target
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or("archive");
-        let ext = target
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("");
-        let file_name = if ext.is_empty() {
-            format!("{stem}-{suffix}")
-        } else {
-            format!("{stem}-{suffix}.{ext}")
-        };
-        target = target.with_file_name(file_name);
-    }
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).map_err(|err| format!("create archive parent failed: {err}"))?;
-    }
-    fs::rename(source, &target).map_err(|err| format!("move archive surface failed: {err}"))?;
-    Ok(target)
-}
-
-pub(crate) fn archive_pre_cutover_memory_surfaces(memory_root: &Path) -> Result<Value, String> {
-    let archive_root = memory_root
-        .join("archive")
-        .join(format!("pre-cutover-{}", current_local_date()));
-    let mut moved = Vec::new();
-    let memory_auto = memory_root.join("MEMORY_AUTO.md");
-    if memory_auto.exists() {
-        moved.push(
-            move_to_archive(&memory_auto, &archive_root.join("MEMORY_AUTO.md"))?
-                .display()
-                .to_string(),
-        );
-    }
-    let sessions_dir = memory_root.join("sessions");
-    if sessions_dir.exists() {
-        moved.push(
-            move_to_archive(&sessions_dir, &archive_root.join("sessions"))?
-                .display()
-                .to_string(),
-        );
-    }
-    Ok(json!({
-        "schema_version": "router-rs-pre-cutover-memory-archive-v1",
-        "archive_root": archive_root.display().to_string(),
-        "moved": moved,
-    }))
-}
-
-fn inspect_framework_memory_seed_state(
-    memory_root: &Path,
-) -> Result<(Vec<String>, String), String> {
-    if !memory_root.exists() {
-        return Ok((
-            Vec::new(),
-            "memory workspace is missing; recall stayed read-only and did not seed defaults"
-                .to_string(),
-        ));
-    }
-    let memory_md_path = memory_root.join("MEMORY.md");
-    if memory_md_path.is_file() {
-        return Ok((Vec::new(), String::new()));
-    }
-    Ok((
-        Vec::new(),
-        "memory workspace has no MEMORY.md; recall stayed read-only and did not seed defaults"
-            .to_string(),
-    ))
-}
-
-fn describe_project_local_memory_layout(memory_root: &Path) -> Value {
-    let logical_root = memory_root.to_path_buf();
-    let physical_root = logical_root
-        .canonicalize()
-        .unwrap_or_else(|_| logical_root.clone());
-    json!({
-        "logical_root": logical_root.display().to_string(),
-        "physical_root": physical_root.display().to_string(),
-        "is_symlink": logical_root.is_symlink(),
-        "mapping_note": "Default project memory resolves to tracked memory/ when present; .codex/memory is a local symlink or explicit override only.",
-    })
-}
-
-fn describe_continuity_layout(repo_root: &Path, artifact_base: &Path) -> Value {
-    let current_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
-    json!({
-        "current_control": {
-            "template": current_root.join("<task_id>").display().to_string(),
-            "active_task_pointer": current_root.join(ACTIVE_TASK_POINTER_NAME).display().to_string(),
-            "focus_task_pointer": current_root.join(FOCUS_TASK_POINTER_NAME).display().to_string(),
-            "task_registry": current_root.join(TASK_REGISTRY_NAME).display().to_string(),
-        },
-        "root_anchor": {
-            "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
-        },
-        "artifact_lanes": {
-            "bootstrap": artifact_base.join("bootstrap").join("<task_id>").display().to_string(),
-            "ops_memory_automation": artifact_base.join("ops").join("memory_automation").join("<run_id>").display().to_string(),
-            "evidence": artifact_base.join("evidence").join("<task_id>").display().to_string(),
-            "scratch": artifact_base.join("scratch").join("<run_id>").display().to_string(),
-        },
-        "sync_responsibility": "Supervisor writes recovery artifacts only under artifacts/current/<task_id>/. The artifacts/current root keeps pointers and the task registry; repo root keeps only .supervisor_state.json as the host-neutral anchor.",
-    })
-}
-
-fn build_query_mismatch_continuity(continuity: &Value, active_task: &Value) -> Value {
-    json!({
-        "state": "query-mismatch",
-        "can_resume": false,
-        "task": Value::Null,
-        "phase": Value::Null,
-        "status": "isolated_bootstrap",
-        "route": [],
-        "next_actions": [],
-        "blockers": [],
-        "current_execution": Value::Null,
-        "recent_completed_execution": Value::Null,
-        "stale_reasons": [],
-        "terminal_reasons": [],
-        "inconsistency_reasons": [],
-        "recovery_hints": [
-            "Query does not match the active task; ignore live continuity and start from an isolated task scope."
-        ],
-        "continuity": {
-            "story_state": "query-mismatch",
-            "resume_allowed": false,
-            "last_updated_at": current_local_timestamp(),
-            "active_lease_expires_at": Value::Null,
-            "state_reason": "active task ignored because bootstrap query targets a different task",
-        },
-        "summary_fields": {},
-        "paths": continuity.get("paths").cloned().unwrap_or_else(|| json!({})),
-        "ignored_active_task": active_task,
-    })
-}
-
-fn compact_memory_retrieval_for_prompt(retrieval: &Value, include_active_task_id: bool) -> Value {
-    json!({
-        "mode": retrieval.get("mode").cloned().unwrap_or(Value::Null),
-        "memory_root": retrieval.get("memory_root").cloned().unwrap_or(Value::Null),
-        "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or(Value::Bool(false)),
-        "freshness": retrieval.get("freshness").cloned().unwrap_or_else(|| json!({})),
-        "continuity_state": retrieval.get("continuity_state").cloned().unwrap_or(Value::Null),
-        "active_task_id": if include_active_task_id { retrieval.get("active_task_id").cloned().unwrap_or(Value::Null) } else { Value::Null },
-        "items": retrieval
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .take(3)
-            .collect::<Vec<_>>(),
-    })
-}
-
-fn compact_memory_retrieval_diagnostics(retrieval: &Value) -> Value {
-    json!({
-        "mode": retrieval.get("mode").cloned().unwrap_or(Value::Null),
-        "topic": retrieval.get("topic").cloned().unwrap_or(Value::Null),
-        "item_count": retrieval
-            .get("items")
-            .and_then(Value::as_array)
-            .map(|items| items.len())
-            .unwrap_or(0),
-        "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or(Value::Bool(false)),
-        "freshness": retrieval.get("freshness").cloned().unwrap_or_else(|| json!({})),
-        "active_task_id": retrieval.get("active_task_id").cloned().unwrap_or(Value::Null),
-    })
-}
-
-fn compact_continuity_for_prompt(continuity: &Value) -> Value {
-    json!({
-        "state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        "task": continuity.get("task").cloned().unwrap_or(Value::Null),
-        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
-        "route": continuity.get("route").cloned().unwrap_or_else(|| json!([])),
-        "next_actions": continuity.get("next_actions").cloned().unwrap_or_else(|| json!([])),
-        "blockers": continuity.get("blockers").cloned().unwrap_or_else(|| json!([])),
-        "recovery_hints": continuity.get("recovery_hints").cloned().unwrap_or_else(|| json!([])),
-        "current_execution": continuity.get("current_execution").cloned().unwrap_or(Value::Null),
-        "recent_completed_execution": continuity.get("recent_completed_execution").cloned().unwrap_or(Value::Null),
-    })
-}
-
-pub fn build_framework_memory_policy_envelope(payload: Value) -> Result<Value, String> {
-    let limit = payload
-        .get("limit")
-        .and_then(Value::as_u64)
-        .and_then(|value| usize::try_from(value).ok());
-    let sources = memory_policy_conversation_sources(&payload);
-    let extracted = extract_memory_facts_from_sources(&sources, limit)?;
-    let persistence = persist_memory_policy_items_if_requested(&payload, &extracted)?;
-    Ok(json!({
-        "schema_version": FRAMEWORK_MEMORY_POLICY_SCHEMA_VERSION,
-        "authority": FRAMEWORK_MEMORY_POLICY_AUTHORITY,
-        "memory_policy": {
-            "ok": true,
-            "policy_owner": "rust",
-            "policy_kind": "deterministic-memory-extraction",
-            "source_count": sources.len(),
-            "fact_count": extracted.len(),
-            "pattern_set": FACT_EXTRACTION_PATTERNS
-                .iter()
-                .map(|(name, pattern)| json!({"name": name, "pattern": pattern}))
-                .collect::<Vec<_>>(),
-            "facts": extracted
-                .iter()
-                .map(|item| Value::String(item.fact.clone()))
-                .collect::<Vec<_>>(),
-            "persistence": persistence,
-            "items": extracted
-                .iter()
-                .map(|item| {
-                    json!({
-                        "fact": item.fact,
-                        "category": memory_category_for_pattern(&item.source_pattern),
-                        "source_pattern": item.source_pattern,
-                        "source_line": item.source_line,
-                        "source_role": item.source_role,
-                        "source_index": item.source_index,
-                        "confidence": item.confidence,
-                    })
-                })
-                .collect::<Vec<_>>(),
-        }
-    }))
-}
-
 pub fn build_framework_prompt_compression_envelope(payload: Value) -> Result<Value, String> {
     let prompt = value_text(payload.get("prompt").or_else(|| payload.get("text")));
     let token_budget = payload
@@ -3696,424 +2828,6 @@ pub fn build_framework_prompt_compression_envelope(payload: Value) -> Result<Val
         "authority": FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY,
         "compression": result,
     }))
-}
-
-#[derive(Debug, Clone)]
-struct ExtractedMemoryFact {
-    fact: String,
-    source_pattern: String,
-    source_line: usize,
-    source_role: Option<String>,
-    source_index: Option<usize>,
-    confidence: f64,
-}
-
-#[derive(Debug, Clone)]
-struct MemoryPolicyTextSource {
-    text: String,
-    role: Option<String>,
-    index: Option<usize>,
-}
-
-fn memory_policy_conversation_sources(payload: &Value) -> Vec<MemoryPolicyTextSource> {
-    if let Some(text) = payload
-        .get("conversation")
-        .or_else(|| payload.get("text"))
-        .and_then(Value::as_str)
-    {
-        return vec![MemoryPolicyTextSource {
-            text: text.to_string(),
-            role: None,
-            index: None,
-        }];
-    }
-    payload
-        .get("messages")
-        .and_then(Value::as_array)
-        .map(|messages| {
-            messages
-                .iter()
-                .enumerate()
-                .filter_map(|(index, message)| {
-                    if let Some(text) = message.as_str() {
-                        return Some(MemoryPolicyTextSource {
-                            text: text.to_string(),
-                            role: None,
-                            index: Some(index),
-                        });
-                    }
-                    let role = message
-                        .get("role")
-                        .and_then(Value::as_str)
-                        .map(|value| value.trim().to_lowercase())
-                        .filter(|value| !value.is_empty());
-                    if matches!(role.as_deref(), Some("assistant" | "tool" | "function")) {
-                        return None;
-                    }
-                    let text = memory_message_content_text(message.get("content"));
-                    (!text.trim().is_empty()).then_some(MemoryPolicyTextSource {
-                        text,
-                        role,
-                        index: Some(index),
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
-}
-
-fn memory_message_content_text(value: Option<&Value>) -> String {
-    match value {
-        Some(Value::String(text)) => text.clone(),
-        Some(Value::Array(parts)) => parts
-            .iter()
-            .filter_map(|part| {
-                if let Some(text) = part.as_str() {
-                    return Some(text.to_string());
-                }
-                part.get("text")
-                    .or_else(|| part.get("content"))
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
-        Some(other) => value_text(Some(other)),
-        None => String::new(),
-    }
-}
-
-fn extract_memory_facts_from_sources(
-    sources: &[MemoryPolicyTextSource],
-    limit: Option<usize>,
-) -> Result<Vec<ExtractedMemoryFact>, String> {
-    let compiled = FACT_EXTRACTION_PATTERNS
-        .iter()
-        .map(|(name, pattern)| {
-            Regex::new(pattern)
-                .map(|regex| ((*name).to_string(), regex))
-                .map_err(|err| format!("compile memory extraction pattern failed: {err}"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut facts = Vec::new();
-    let mut seen = HashSet::new();
-    for source in sources {
-        for (line_index, line) in source.text.lines().enumerate() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            for (name, regex) in &compiled {
-                let Some(captures) = regex.captures(trimmed) else {
-                    continue;
-                };
-                let Some(match_value) = captures.get(1) else {
-                    continue;
-                };
-                let fact = normalize_fact_text(match_value.as_str());
-                if fact.is_empty() {
-                    continue;
-                }
-                let dedupe_key = fact.to_lowercase();
-                if !seen.insert(dedupe_key) {
-                    continue;
-                }
-                facts.push(ExtractedMemoryFact {
-                    fact,
-                    source_pattern: name.clone(),
-                    source_line: line_index + 1,
-                    source_role: source.role.clone(),
-                    source_index: source.index,
-                    confidence: memory_confidence_for_pattern(name),
-                });
-                if limit.is_some_and(|max| facts.len() >= max) {
-                    return Ok(facts);
-                }
-            }
-        }
-    }
-    Ok(facts)
-}
-
-fn memory_category_for_pattern(pattern_name: &str) -> &'static str {
-    match pattern_name {
-        "user_preference" => "preference",
-        "project_decision" => "decision",
-        _ => "fact",
-    }
-}
-
-fn memory_confidence_for_pattern(pattern_name: &str) -> f64 {
-    match pattern_name {
-        "explicit_memory" | "project_decision" => 0.9,
-        "user_preference" => 0.85,
-        _ => 0.75,
-    }
-}
-
-fn persist_memory_policy_items_if_requested(
-    payload: &Value,
-    items: &[ExtractedMemoryFact],
-) -> Result<Value, String> {
-    let persist_requested = payload
-        .get("persist")
-        .or_else(|| payload.get("write"))
-        .or_else(|| payload.get("save"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    if !persist_requested {
-        return Ok(json!({
-            "requested": false,
-            "persisted": false,
-        }));
-    }
-    let memory_root = payload
-        .get("memory_root")
-        .and_then(Value::as_str)
-        .map(|value| PathBuf::from(value.trim()))
-        .filter(|path| !path.as_os_str().is_empty())
-        .ok_or_else(|| "framework memory policy persistence requires memory_root".to_string())?;
-    let workspace = payload
-        .get("workspace")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("workspace");
-    fs::create_dir_all(&memory_root)
-        .map_err(|err| format!("create memory policy root failed: {err}"))?;
-    let stable_journal = payload
-        .get("stable_journal")
-        .or_else(|| payload.get("write_stable_journal"))
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let expires_at = payload
-        .get("expires_at")
-        .or_else(|| payload.get("expires_on"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .unwrap_or_default();
-    let sqlite_path = memory_root.join("memory.sqlite3");
-    let conn = Connection::open(&sqlite_path)
-        .map_err(|err| format!("open memory policy sqlite failed: {err}"))?;
-    ensure_memory_items_table(&conn)?;
-    let now = current_local_timestamp();
-    let mut item_ids = Vec::new();
-    let mut changed_count = 0usize;
-    let mut journal_lines = Vec::new();
-    for item in items {
-        let item_id = memory_policy_item_id(workspace, &item.fact);
-        let evidence_json = serde_json::to_string(&json!([{
-            "source_pattern": item.source_pattern,
-            "source_line": item.source_line,
-            "source_role": item.source_role,
-            "source_index": item.source_index,
-        }]))
-        .map_err(|err| format!("serialize memory evidence failed: {err}"))?;
-        let metadata_json = serde_json::to_string(&json!({
-            "schema_version": FRAMEWORK_MEMORY_POLICY_SCHEMA_VERSION,
-            "authority": FRAMEWORK_MEMORY_POLICY_AUTHORITY,
-            "source_pattern": item.source_pattern,
-            "expires_at": expires_at,
-        }))
-        .map_err(|err| format!("serialize memory metadata failed: {err}"))?;
-        let keywords_json = serde_json::to_string(&query_tokens(&item.fact))
-            .map_err(|err| format!("serialize memory keywords failed: {err}"))?;
-        changed_count += conn
-            .execute(
-                "INSERT OR REPLACE INTO memory_items (
-                    item_id, workspace, category, source, confidence, status, summary, notes,
-                    evidence_json, metadata_json, keywords_json, expires_at, retired_at, created_at, updated_at
-                ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, 'active', ?6, '', ?7, ?8, ?9,
-                    ?10, '', COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?11),
-                    ?11
-                )",
-                params![
-                    item_id,
-                    workspace,
-                    memory_category_for_pattern(&item.source_pattern),
-                    "framework_memory_policy",
-                    item.confidence,
-                    item.fact,
-                    evidence_json,
-                    metadata_json,
-                    keywords_json,
-                    expires_at,
-                    now,
-                ],
-            )
-            .map_err(|err| format!("persist memory policy item failed: {err}"))?;
-        item_ids.push(item_id);
-        if matches!(
-            memory_category_for_pattern(&item.source_pattern),
-            "decision" | "preference"
-        ) {
-            journal_lines.push(format!(
-                "- [{}] {}",
-                memory_category_for_pattern(&item.source_pattern),
-                item.fact
-            ));
-        }
-    }
-    let journal_paths = if stable_journal && !journal_lines.is_empty() {
-        let mut paths = Vec::new();
-        let decisions = journal_lines
-            .iter()
-            .filter(|line| line.starts_with("- [decision]"))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !decisions.is_empty() {
-            let path = memory_root.join("decisions.md");
-            append_memory_policy_journal(
-                &path,
-                "# decisions\n",
-                "## Rust memory policy decisions",
-                &now,
-                &decisions,
-            )?;
-            paths.push(Value::String(path.display().to_string()));
-        }
-        let preferences = journal_lines
-            .iter()
-            .filter(|line| line.starts_with("- [preference]"))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !preferences.is_empty() {
-            let path = memory_root.join("preferences.md");
-            append_memory_policy_journal(
-                &path,
-                "# preferences\n",
-                "## Rust memory policy preferences",
-                &now,
-                &preferences,
-            )?;
-            paths.push(Value::String(path.display().to_string()));
-        }
-        Value::Array(paths)
-    } else {
-        Value::Array(Vec::new())
-    };
-    Ok(json!({
-        "requested": true,
-        "persisted": true,
-        "memory_root": memory_root.display().to_string(),
-        "sqlite_path": sqlite_path.display().to_string(),
-        "stable_journal_path": journal_paths.as_array().and_then(|paths| paths.first()).cloned().unwrap_or(Value::Null),
-        "stable_journal_paths": journal_paths,
-        "item_count": items.len(),
-        "changed_count": changed_count,
-        "item_ids": item_ids,
-    }))
-}
-
-fn append_memory_policy_journal(
-    path: &Path,
-    default_header: &str,
-    section_header: &str,
-    timestamp: &str,
-    lines: &[String],
-) -> Result<(), String> {
-    if lines.is_empty() {
-        return Ok(());
-    }
-    let mut existing = read_text_if_exists(path);
-    if existing.trim().is_empty() {
-        existing = default_header.to_string();
-    }
-    let existing_keys = existing
-        .lines()
-        .filter_map(|line| {
-            line.split_once(']')
-                .map(|(_, fact)| fact.trim().to_lowercase())
-        })
-        .collect::<HashSet<_>>();
-    let new_lines = lines
-        .iter()
-        .filter(|line| {
-            line.split_once(']')
-                .is_none_or(|(_, fact)| !existing_keys.contains(&fact.trim().to_lowercase()))
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    if new_lines.is_empty() {
-        return Ok(());
-    }
-    let mut output = existing.trim_end().to_string();
-    if !output.contains(section_header) {
-        output.push_str("\n\n");
-        output.push_str(section_header);
-        output.push('\n');
-    }
-    output.push_str("\n### ");
-    output.push_str(timestamp);
-    output.push('\n');
-    output.push_str(&new_lines.join("\n"));
-    output.push('\n');
-    write_text_if_changed(path, &output)?;
-    Ok(())
-}
-
-fn ensure_memory_items_table(conn: &Connection) -> Result<(), String> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS memory_items (
-            item_id TEXT PRIMARY KEY,
-            workspace TEXT NOT NULL,
-            category TEXT NOT NULL,
-            source TEXT NOT NULL,
-            confidence REAL NOT NULL DEFAULT 0.5,
-            status TEXT NOT NULL DEFAULT 'active',
-            summary TEXT NOT NULL,
-            notes TEXT NOT NULL DEFAULT '',
-            evidence_json TEXT NOT NULL DEFAULT '[]',
-            metadata_json TEXT NOT NULL DEFAULT '{}',
-            keywords_json TEXT NOT NULL DEFAULT '[]',
-            expires_at TEXT NOT NULL DEFAULT '',
-            retired_at TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-        [],
-    )
-    .map_err(|err| format!("create memory_items table failed: {err}"))?;
-    ensure_memory_items_column(conn, "expires_at", "TEXT NOT NULL DEFAULT ''")?;
-    ensure_memory_items_column(conn, "retired_at", "TEXT NOT NULL DEFAULT ''")?;
-    Ok(())
-}
-
-fn ensure_memory_items_column(
-    conn: &Connection,
-    name: &str,
-    definition: &str,
-) -> Result<(), String> {
-    if sqlite_table_columns(conn, "memory_items").contains(name) {
-        return Ok(());
-    }
-    conn.execute(
-        &format!("ALTER TABLE memory_items ADD COLUMN {name} {definition}"),
-        [],
-    )
-    .map_err(|err| format!("add memory_items.{name} column failed: {err}"))?;
-    Ok(())
-}
-
-fn memory_policy_item_id(workspace: &str, fact: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(workspace.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(fact.to_lowercase().as_bytes());
-    let digest = format!("{:x}", hasher.finalize());
-    format!("memory-policy-{}", &digest[..16])
-}
-
-fn normalize_fact_text(text: &str) -> String {
-    text.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .trim_matches(|ch: char| matches!(ch, '.' | ',' | ';' | '；' | '。' | '，'))
-        .trim()
-        .to_string()
 }
 
 fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value {
@@ -4229,288 +2943,6 @@ fn compression_payload(
     })
 }
 
-fn resolve_memory_sqlite_path(memory_root: &Path) -> Option<PathBuf> {
-    MEMORY_SQLITE_FILENAMES
-        .iter()
-        .map(|file_name| memory_root.join(file_name))
-        .find(|path| path.is_file())
-}
-
-fn build_framework_task_id(label: &str) -> String {
-    let stamp = current_local_timestamp()
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .collect::<String>();
-    let slug = safe_slug(label);
-    if stamp.is_empty() {
-        slug
-    } else {
-        let suffix = if stamp.len() > 14 {
-            &stamp[stamp.len() - 14..]
-        } else {
-            &stamp
-        };
-        format!("{slug}-{suffix}")
-    }
-}
-
-fn extract_markdown_segments(text: &str) -> Vec<(Vec<String>, String)> {
-    let mut segments = Vec::new();
-    let mut heading_stack: Vec<String> = Vec::new();
-    let mut paragraph: Vec<String> = Vec::new();
-    let flush_paragraph = |segments: &mut Vec<(Vec<String>, String)>,
-                           heading_stack: &Vec<String>,
-                           paragraph: &mut Vec<String>| {
-        if paragraph.is_empty() {
-            return;
-        }
-        let body = paragraph.join(" ").trim().to_string();
-        paragraph.clear();
-        if body.is_empty() {
-            return;
-        }
-        segments.push((heading_stack.clone(), body));
-    };
-    for raw_line in text.lines() {
-        let stripped = raw_line.trim();
-        if stripped.is_empty() {
-            flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
-            continue;
-        }
-        let heading_level = stripped.chars().take_while(|value| *value == '#').count();
-        if heading_level > 0 && stripped.chars().nth(heading_level) == Some(' ') {
-            flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
-            let title = stripped[heading_level + 1..].trim().to_string();
-            if heading_level == 1 {
-                heading_stack.clear();
-                continue;
-            }
-            let depth = heading_level.saturating_sub(2);
-            heading_stack.truncate(depth);
-            heading_stack.push(title);
-            continue;
-        }
-        if let Some(bullet) = coerce_bullet_line(stripped) {
-            flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
-            segments.push((heading_stack.clone(), bullet));
-            continue;
-        }
-        paragraph.push(stripped.to_string());
-    }
-    flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
-    segments
-}
-
-fn render_memory_segment(headings: &[String], body: &str) -> String {
-    if headings.is_empty() {
-        format!("- {body}")
-    } else {
-        format!("### {}\n- {body}", headings.join(" / "))
-    }
-}
-
-fn memory_segment_score(headings: &[String], body: &str, query: &str) -> f64 {
-    let tokens = query_tokens(query);
-    if tokens.is_empty() {
-        return 1.0;
-    }
-    let searchable = normalize_match_text(
-        &[headings.join(" "), body.to_string()]
-            .into_iter()
-            .filter(|value| !value.is_empty())
-            .collect::<Vec<_>>()
-            .join(" "),
-    );
-    if !topic_strong_match(query, &searchable) {
-        return 0.0;
-    }
-    let token_hits = usize_to_f64(
-        tokens
-            .iter()
-            .filter(|token| searchable.contains(*token))
-            .count(),
-    );
-    let exact_phrase = f64::from(searchable.contains(&normalize_match_text(query)));
-    let heading_blob = normalize_match_text(&headings.join(" "));
-    let heading_hits = usize_to_f64(
-        tokens
-            .iter()
-            .filter(|token| heading_blob.contains(*token))
-            .count(),
-    );
-    (exact_phrase * 100.0)
-        + (token_hits / usize_to_f64(tokens.len())) * 10.0
-        + heading_hits * 2.0
-        + token_hits
-}
-
-fn usize_to_f64(value: usize) -> f64 {
-    u32::try_from(value).map_or(f64::from(u32::MAX), f64::from)
-}
-
-fn query_tokens(query: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let mut seen = HashSet::new();
-    for part in query.split(|value: char| value.is_whitespace() || is_query_delimiter(value)) {
-        push_query_token_variants(part, &mut tokens, &mut seen);
-    }
-    tokens
-}
-
-fn push_query_token_variants(raw: &str, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
-    let trimmed = raw.trim_matches(is_query_delimiter).trim().to_lowercase();
-    if trimmed.is_empty() {
-        return;
-    }
-    push_query_token(&trimmed, tokens, seen);
-
-    let mut ascii_run = String::new();
-    let mut cjk_run = String::new();
-    for ch in trimmed.chars() {
-        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
-            flush_cjk_query_run(&mut cjk_run, tokens, seen);
-            ascii_run.push(ch);
-        } else if is_cjk_char(ch) {
-            flush_ascii_query_run(&mut ascii_run, tokens, seen);
-            cjk_run.push(ch);
-        } else {
-            flush_ascii_query_run(&mut ascii_run, tokens, seen);
-            flush_cjk_query_run(&mut cjk_run, tokens, seen);
-        }
-    }
-    flush_ascii_query_run(&mut ascii_run, tokens, seen);
-    flush_cjk_query_run(&mut cjk_run, tokens, seen);
-}
-
-fn push_query_token(token: &str, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
-    if token.is_empty() || !seen.insert(token.to_string()) {
-        return;
-    }
-    tokens.push(token.to_string());
-}
-
-fn flush_ascii_query_run(run: &mut String, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
-    if run.chars().count() >= 2 {
-        push_query_token(run, tokens, seen);
-    }
-    run.clear();
-}
-
-fn flush_cjk_query_run(run: &mut String, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
-    let chars = run.chars().collect::<Vec<_>>();
-    if chars.len() >= 2 {
-        for window in chars.windows(2) {
-            push_query_token(&window.iter().collect::<String>(), tokens, seen);
-        }
-    }
-    run.clear();
-}
-
-fn is_query_delimiter(ch: char) -> bool {
-    matches!(
-        ch,
-        ',' | '/'
-            | '|'
-            | ';'
-            | ':'
-            | '，'
-            | '。'
-            | '、'
-            | '；'
-            | '：'
-            | '！'
-            | '？'
-            | '!'
-            | '?'
-            | '('
-            | ')'
-            | '['
-            | ']'
-            | '{'
-            | '}'
-            | '<'
-            | '>'
-            | '"'
-            | '\''
-            | '`'
-    )
-}
-
-fn is_cjk_char(ch: char) -> bool {
-    ('\u{4e00}'..='\u{9fff}').contains(&ch)
-        || ('\u{3400}'..='\u{4dbf}').contains(&ch)
-        || ('\u{f900}'..='\u{faff}').contains(&ch)
-}
-
-fn normalize_match_text(text: &str) -> String {
-    text.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
-}
-
-fn topic_strong_match(query: &str, searchable: &str) -> bool {
-    let tokens = query_tokens(query);
-    if tokens.is_empty() {
-        return true;
-    }
-    let token_hits = tokens
-        .iter()
-        .filter(|token| searchable.contains(*token))
-        .count();
-    if token_hits == 0 {
-        return false;
-    }
-    let exact_phrase = searchable.contains(&normalize_match_text(query));
-    let required_hits = if tokens.len() <= 2 { tokens.len() } else { 2 };
-    exact_phrase || token_hits >= required_hits
-}
-
-fn is_generic_query(query: &str) -> bool {
-    let tokens = query_tokens(query);
-    if tokens.len() < 2 {
-        return true;
-    }
-    tokens.iter().all(|token| {
-        GENERIC_QUERY_TOKENS
-            .iter()
-            .any(|candidate| candidate == token)
-    })
-}
-
-fn query_matches_task(query: &str, task: &str) -> bool {
-    let query_tokens = query
-        .split_whitespace()
-        .map(|value| safe_slug(&value.to_lowercase()))
-        .filter(|value| !value.is_empty())
-        .collect::<HashSet<_>>();
-    let task_tokens = task
-        .split_whitespace()
-        .map(|value| safe_slug(&value.to_lowercase()))
-        .filter(|value| !value.is_empty())
-        .collect::<HashSet<_>>();
-    if query_tokens.is_empty() || task_tokens.is_empty() {
-        return false;
-    }
-    query_tokens.is_subset(&task_tokens)
-        || task_tokens.is_subset(&query_tokens)
-        || !query_tokens.is_disjoint(&task_tokens)
-}
-
-fn walk_files(root: &Path, output: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(root) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            walk_files(&path, output);
-        } else if path.is_file() {
-            output.push(path);
-        }
-    }
-}
-
 fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
     let existing = read_text_if_exists(path);
     if existing == content {
@@ -4520,8 +2952,32 @@ fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
         fs::create_dir_all(parent)
             .map_err(|err| format!("create parent directory failed: {err}"))?;
     }
-    fs::write(path, content).map_err(|err| format!("write text file failed: {err}"))?;
+    write_atomic_text(path, content)?;
     Ok(true)
+}
+
+fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create parent directory failed: {err}"))?;
+    }
+    let tmp_path = path.with_extension(format!(
+        "{}.tmp",
+        path.extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("txt")
+    ));
+    fs::write(&tmp_path, content)
+        .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
+    fs::rename(&tmp_path, path).map_err(|err| {
+        let _ = fs::remove_file(&tmp_path);
+        format!(
+            "rename temp file failed {} -> {}: {err}",
+            tmp_path.display(),
+            path.display()
+        )
+    })?;
+    Ok(())
 }
 
 fn session_artifact_write_lock() -> &'static Mutex<()> {
@@ -4571,26 +3027,6 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
             .map_err(|err| format!("serialize JSON payload failed: {err}"))?
     );
     write_text_if_changed(path, &serialized)
-}
-
-fn coerce_bullet_line(line: &str) -> Option<String> {
-    if let Some(value) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
-        let resolved = value.trim();
-        return (!resolved.is_empty()).then(|| resolved.to_string());
-    }
-    let mut seen_digit = false;
-    for (idx, ch) in line.char_indices() {
-        if ch.is_ascii_digit() {
-            seen_digit = true;
-            continue;
-        }
-        if seen_digit && (ch == '.' || ch == ')') {
-            let value = line[idx + 1..].trim();
-            return (!value.is_empty()).then(|| value.to_string());
-        }
-        break;
-    }
-    None
 }
 
 fn join_lines(values: &[String]) -> String {
@@ -4899,6 +3335,36 @@ fn read_json_if_exists(path: &Path) -> Value {
     }
 }
 
+fn read_json_strict(path: &Path) -> Result<Value, String> {
+    if !path.is_file() {
+        return Ok(Value::Object(Map::new()));
+    }
+    let text = fs::read_to_string(path)
+        .map_err(|err| format!("read json failed for {}: {err}", path.display()))?;
+    serde_json::from_str(&text)
+        .map_err(|err| format!("parse json failed for {}: {err}", path.display()))
+}
+
+fn read_json_control_plane_field(
+    path: &Path,
+    label: &str,
+    parse_errors: &mut Vec<String>,
+) -> Value {
+    if !path.is_file() {
+        return Value::Object(Map::new());
+    }
+    match read_json_strict(path) {
+        Ok(value) => value,
+        Err(err) => {
+            parse_errors.push(format!(
+                "invalid control-plane json ({label}, {}): {err}",
+                path.display()
+            ));
+            Value::Object(Map::new())
+        }
+    }
+}
+
 fn read_text_if_exists(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_default()
 }
@@ -5140,7 +3606,7 @@ fn write_task_registry_entry(
     mirror_root: &Path,
     entry: TaskRegistryEntry<'_>,
 ) -> Result<bool, String> {
-    let existing = read_json_if_exists(&mirror_root.join(TASK_REGISTRY_NAME));
+    let existing = read_json_strict(&mirror_root.join(TASK_REGISTRY_NAME))?;
     let focus_task = entry.focus_task_id.map_or_else(
         || safe_slug(&value_text(existing.get("focus_task_id"))),
         ToString::to_string,
@@ -5298,7 +3764,7 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         evidence_payload: &evidence_payload,
         trace_metadata_payload: &trace_metadata_payload,
         supervisor_state_payload: &supervisor_state_payload,
-        existing_journal: read_json_if_exists(&journal_path),
+        existing_journal: read_json_strict(&journal_path)?,
     });
     Ok(SessionArtifactWritePlan {
         task,
@@ -5487,15 +3953,415 @@ impl SessionArtifactWritePlan {
     }
 }
 
+fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
+    input.chars().take(max_chars).collect()
+}
+
+/// 构建自动连续性检查点载荷（非完成态 `status=in_progress`，用于 Codex Stop 等钩子）。
+///
+/// `task_line` 用作路由摘要标题；`summary_text` 写入 SESSION_SUMMARY 正文片段。
+pub fn build_automatic_continuity_checkpoint_payload(
+    repo_root: &Path,
+    task_line: &str,
+    summary_text: &str,
+) -> Value {
+    let output_dir = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
+    let task = if task_line.trim().is_empty() {
+        "session-checkpoint".to_string()
+    } else {
+        truncate_utf8_chars(task_line.trim(), 200)
+    };
+    let summary = if summary_text.trim().is_empty() {
+        "Automatic continuity checkpoint. No summary text was provided; refine in the next turn."
+            .to_string()
+    } else {
+        truncate_utf8_chars(summary_text.trim(), 8000)
+    };
+    json!({
+        "output_dir": output_dir.to_string_lossy(),
+        "repo_root": repo_root.to_string_lossy(),
+        "task": task,
+        "summary": summary,
+        "phase": "execution",
+        "status": "in_progress",
+        "focus": true,
+        "next_actions": [
+            "Open artifacts/current/SESSION_SUMMARY.md on the next session.",
+            "Optional: run `$refresh` or `router-rs framework refresh` for a compact handoff prompt.",
+        ],
+        "trace_metadata": {
+            "checkpoint_kind": "automatic_stop_hook",
+        }
+    })
+}
+
+const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
+
+fn continuity_post_tool_evidence_env_enabled() -> bool {
+    match std::env::var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") {
+        Ok(value) => {
+            let token = value.trim().to_ascii_lowercase();
+            !(token == "0" || token == "false" || token == "off" || token == "no")
+        }
+        Err(_) => true,
+    }
+}
+
+fn extract_codex_shell_command_preview(event: &Value) -> Option<String> {
+    let input = event.get("tool_input").and_then(Value::as_object)?;
+    let cmd = input
+        .get("command")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            input
+                .get("cmd")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })?;
+    Some(truncate_utf8_chars(cmd, 2000))
+}
+
+fn coerce_exit_code_value(value: Option<&Value>) -> Option<i64> {
+    let value = value?;
+    if let Some(n) = value.as_i64() {
+        return Some(n);
+    }
+    if let Some(n) = value.as_u64() {
+        return Some(n as i64);
+    }
+    if let Some(text) = value.as_str() {
+        return text.trim().parse::<i64>().ok();
+    }
+    None
+}
+
+/// 从 Codex `PostToolUse` 载荷中提取退出码（兼容嵌套 `tool_output` / JSON 字符串）。
+fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
+    let candidates: Vec<Option<&Value>> = vec![
+        event.get("exit_code"),
+        event.get("exitCode"),
+        event.get("tool_output").and_then(|v| v.get("exit_code")),
+        event.get("tool_output").and_then(|v| v.get("exitCode")),
+        event
+            .get("tool_output")
+            .and_then(|v| v.get("metadata"))
+            .and_then(|m| m.get("exit_code")),
+        event.get("result").and_then(|v| v.get("exit_code")),
+        event.get("response").and_then(|v| v.get("exit_code")),
+    ];
+    if let Some(to) = event.get("tool_output") {
+        if let Some(text) = to.as_str() {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                if let Some(code) = coerce_exit_code_value(parsed.get("exit_code")) {
+                    return Some(code);
+                }
+                if let Some(code) = coerce_exit_code_value(parsed.get("exitCode")) {
+                    return Some(code);
+                }
+            }
+        }
+    }
+    for candidate in candidates {
+        if let Some(code) = coerce_exit_code_value(candidate) {
+            return Some(code);
+        }
+    }
+    None
+}
+
+fn append_evidence_index_merged_row(
+    repo_root: &Path,
+    entry: Map<String, Value>,
+) -> Result<(), String> {
+    if !continuity_post_tool_evidence_env_enabled() {
+        return Ok(());
+    }
+    let _guard = session_artifact_write_lock()
+        .lock()
+        .map_err(|_| "framework session artifact write lock poisoned".to_string())?;
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
+    if !continuity_session_ready_for_evidence_append(&snapshot) {
+        return Ok(());
+    }
+
+    let evidence_path = snapshot.current_root.join(EVIDENCE_INDEX_FILENAME);
+    if let Some(parent) = evidence_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
+    }
+
+    let existing = read_json_strict(&evidence_path)?;
+    let mut rows: Vec<Map<String, Value>> = normalize_evidence_index(&existing);
+    rows.push(entry);
+    if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
+        let drain = rows.len() - MAX_POST_TOOL_EVIDENCE_ARTIFACTS;
+        rows.drain(0..drain);
+    }
+    let payload = json!({
+        "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
+        "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
+    });
+    write_json_if_changed(&evidence_path, &payload)?;
+    Ok(())
+}
+
+/// `framework hook-evidence-append`：供 Cursor hook 等外部进程写入一条验证记录。
+///
+/// JSON：`repo_root`（可选）、`command_preview`（必填）、`exit_code`（可选）、`source`（可选，默认 `external_hook`）。
+pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
+    let explicit = payload.get("repo_root").and_then(|v| {
+        let s = value_text(Some(v));
+        if s.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(s))
+        }
+    });
+    let repo_root = resolve_repo_root_arg(explicit.as_deref())?;
+    let preview = required_payload_text(&payload, "command_preview", "hook evidence append")?;
+    let preview_trim = preview.trim();
+    if preview_trim.is_empty() {
+        return Err("hook evidence append requires non-empty command_preview".to_string());
+    }
+    let source = defaulted_payload_text(&payload, "source", "external_hook");
+    let exit_code = payload
+        .get("exit_code")
+        .and_then(|v| coerce_exit_code_value(Some(v)));
+
+    let cursor_hook = source.trim().to_ascii_lowercase().starts_with("cursor_");
+    if !cursor_hook && !shell_command_looks_like_verification(preview_trim) {
+        return Ok(json!({
+            "ok": true,
+            "skipped": true,
+            "reason": "command_preview did not match verification heuristics",
+            "schema_version": "router-rs-hook-evidence-append-v1",
+            "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+        }));
+    }
+
+    let preview_store = truncate_utf8_chars(preview_trim, 2000);
+    let mut entry = Map::new();
+    entry.insert("kind".to_string(), json!("external_hook_verification"));
+    entry.insert("source".to_string(), json!(source.trim()));
+    entry.insert("command_preview".to_string(), json!(preview_store));
+    entry.insert("recorded_at".to_string(), json!(current_local_timestamp()));
+    if let Some(ec) = exit_code {
+        entry.insert("exit_code".to_string(), json!(ec));
+        entry.insert("success".to_string(), json!(ec == 0));
+    }
+    append_evidence_index_merged_row(&repo_root, entry)?;
+    Ok(json!({
+        "ok": true,
+        "skipped": false,
+        "schema_version": "router-rs-hook-evidence-append-v1",
+        "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+    }))
+}
+
+fn codex_tool_name_normalized(event: &Value) -> String {
+    event
+        .get("tool_name")
+        .or(event.get("tool"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+fn tool_name_is_shell_like(name: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    n == "bash"
+        || n == "shell"
+        || n.contains("terminal")
+        || n.contains("shell")
+        || n == "functions.run_terminal_cmd"
+        || n == "run_terminal_cmd"
+}
+
+fn shell_command_looks_like_verification(command: &str) -> bool {
+    let c = command.to_ascii_lowercase();
+    c.contains("cargo test")
+        || c.contains("cargo check")
+        || c.contains("cargo clippy")
+        || c.contains("cargo build")
+        || c.contains("cargo fmt")
+        || c.contains("pytest")
+        || c.contains("npm test")
+        || c.contains("pnpm test")
+        || c.contains("yarn test")
+        || c.contains("make test")
+        || c.contains("go test")
+        || c.contains("dotnet test")
+        || c.contains("maturin")
+        || c.contains("tox")
+        || c.contains("uv run")
+        || c.contains("just test")
+        || c.contains("just check")
+        || c.contains("vitest")
+        || c.contains("jest")
+        || c.contains("ruby test")
+        || c.contains("rake test")
+}
+
+fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView) -> bool {
+    if snapshot.active_task_pointer_present {
+        return true;
+    }
+    let summary_path = snapshot.current_root.join(SESSION_SUMMARY_FILENAME);
+    summary_path.is_file()
+}
+
+/// 在 Codex `PostToolUse` 中追加一条验证类命令到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
+///
+/// 仅在连续性已初始化（存在 `active_task.json` 或当前根的 `SESSION_SUMMARY.md`）且命令看起来像验证
+///（如包含 `cargo test` / `pytest` 等）时写入。可通过 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭。
+pub fn try_append_codex_post_tool_evidence(repo_root: &Path, event: &Value) -> Result<(), String> {
+    if !continuity_post_tool_evidence_env_enabled() {
+        return Ok(());
+    }
+    let tool_name = codex_tool_name_normalized(event);
+    if !tool_name_is_shell_like(&tool_name) {
+        return Ok(());
+    }
+    let Some(command_preview) = extract_codex_shell_command_preview(event) else {
+        return Ok(());
+    };
+    if !shell_command_looks_like_verification(&command_preview) {
+        return Ok(());
+    }
+
+    let session_id = event
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let exit_hint = extract_codex_tool_exit_hint(event);
+    let mut entry = Map::new();
+    entry.insert("kind".to_string(), json!("codex_post_tool_verification"));
+    entry.insert("tool_name".to_string(), json!(tool_name));
+    entry.insert("command_preview".to_string(), json!(command_preview));
+    entry.insert("recorded_at".to_string(), json!(current_local_timestamp()));
+    if !session_id.is_empty() {
+        entry.insert("session_id".to_string(), json!(session_id));
+    }
+    if let Some(ec) = exit_hint {
+        entry.insert("exit_code".to_string(), json!(ec));
+        entry.insert("success".to_string(), json!(ec == 0));
+    }
+    append_evidence_index_merged_row(repo_root, entry)?;
+    Ok(())
+}
+
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
     let _guard = session_artifact_write_lock()
         .lock()
         .map_err(|_| "framework session artifact write lock poisoned".to_string())?;
+    // Enforce closeout policy before artifact write when applicable.
+    // 完成态：硬门禁开启时须附带可通过 evaluate 的 `closeout_record`（见 enforce_closeout_for_session_payload）。
+    // 硬门禁：CI/GitHub Actions 下默认开启；本地未设置 ROUTER_RS_CLOSEOUT_ENFORCEMENT 时默认软；显式 `=0` 关闭硬门禁。
+    // 非完成态：`enforce_closeout_for_session_payload` 不解析附带 record（避免草稿误伤），需要时请单独 `closeout evaluate`。
+    let closeout_evaluation = enforce_closeout_for_session_payload(&payload)?;
     let mut plan = build_session_artifact_write_plan(&payload)?;
     write_primary_session_artifacts(&mut plan)?;
     write_optional_session_mirror(&mut plan)?;
     write_repo_session_focus(&mut plan)?;
-    Ok(plan.into_response())
+    let mut response = plan.into_response();
+    if let Some(eval) = closeout_evaluation {
+        if let Some(obj) = response.as_object_mut() {
+            obj.insert("closeout_evaluation".to_string(), eval);
+        }
+    }
+    Ok(response)
+}
+
+fn in_ci_like_environment() -> bool {
+    if std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true") {
+        return true;
+    }
+    match std::env::var("CI") {
+        Ok(v) => {
+            let t = v.trim().to_ascii_lowercase();
+            !t.is_empty() && !matches!(t.as_str(), "0" | "false" | "off" | "no")
+        }
+        Err(_) => false,
+    }
+}
+
+fn closeout_enforcement_disabled_by_env() -> bool {
+    match std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") {
+        Ok(v) => {
+            let t = v.trim().to_ascii_lowercase();
+            matches!(t.as_str(), "0" | "false" | "off" | "no")
+        }
+        // 未设置：本地个人场景默认软门禁；CI/GitHub Actions 默认硬门禁（团队/审计友好）。
+        Err(_) => !in_ci_like_environment(),
+    }
+}
+
+/// Apply closeout enforcement to a session-artifact write payload.
+///
+/// Returns:
+/// - `Ok(Some(eval))` when status claims completion and a valid record was
+///   provided that passes evaluation. The envelope is attached to the
+///   response so callers see the evidence summary alongside the write.
+/// - `Ok(None)` when status is not a completion claim. In that case
+///   any incidental `closeout_record` is intentionally **not** parsed —
+///   in-progress / planning / execution checkpoints often carry placeholder
+///   or partial records, and `deny_unknown_fields` plus strict R-rule
+///   evaluation would otherwise turn a benign in-progress write into a hard
+///   error. Pre-completion validation is the caller's responsibility (run
+///   `closeout evaluate` separately) so the artifact-write path stays
+///   resilient against in-progress draft records.
+/// - `Ok(None)` when status claims completion but programmatic enforcement is off:
+///   explicit `ROUTER_RS_CLOSEOUT_ENFORCEMENT`=`0`/`false`/`off`/`no`, **or** the variable is unset
+///   while not in CI/GitHub Actions（本地默认软；响应中不附带 `closeout_evaluation`）。
+///   团队/CI：未设置且检测到 `CI` 或 `GITHUB_ACTIONS` 时默认硬门禁。
+///   Note: `ROUTER_RS_CLOSEOUT_ENFORCEMENT` **set to empty string** is still “set” for this branch
+///   resolution — it does **not** receive the unset/local-soft treatment.
+/// - `Err(reason)` only when:
+///   - status claims completion but no `closeout_record` is provided, or
+///   - status claims completion and the provided record fails evaluation
+///     (`closeout_allowed=false` or parse error).
+fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>, String> {
+    let status_lower = value_text(payload.get("status")).to_ascii_lowercase();
+    let claims_completion = CLOSEOUT_COMPLETION_STATUSES
+        .iter()
+        .any(|allowed| *allowed == status_lower);
+    if !claims_completion {
+        return Ok(None);
+    }
+    if closeout_enforcement_disabled_by_env() {
+        return Ok(None);
+    }
+    let closeout_record = payload.get("closeout_record").cloned().ok_or_else(|| {
+        "framework session artifact write claims completion (status in {completed,done,passed,...}) but no closeout_record was provided. \
+         A closeout record is required so closeout_enforcement can verify completion evidence (verification_status, commands_run, artifacts_checked, summary). \
+         Re-issue the request with a closeout_record matching configs/framework/CLOSEOUT_RECORD_SCHEMA.json.".to_string()
+    })?;
+    let evaluation = evaluate_closeout_record_value(closeout_record)
+        .map_err(|err| format!("closeout enforcement failed: {err}"))?;
+    let allowed = evaluation
+        .get("closeout_allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !allowed {
+        let violations = evaluation
+            .get("violations")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+        let missing = evaluation
+            .get("missing_evidence")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+        return Err(format!(
+            "closeout_enforcement blocked completion: closeout_allowed=false. \
+             violations={violations} missing_evidence={missing}. \
+             Resolve violations or downgrade status before re-issuing the artifact write."
+        ));
+    }
+    Ok(Some(evaluation))
 }
 
 fn write_session_artifact_set(
@@ -5854,4 +4720,70 @@ fn looks_same_identity(left: &str, right: &str) -> bool {
     left_token == right_token
         || left_token.contains(&right_token)
         || right_token.contains(&left_token)
+}
+
+#[cfg(test)]
+mod resolve_repo_root_tests {
+    use super::resolve_repo_root_arg;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn resolve_repo_root_walks_up_from_scripts_router_rs_subdir() {
+        let tmp = std::env::temp_dir().join(format!(
+            "skill-fw-root-resolve-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(tmp.join("configs/framework")).unwrap();
+        fs::write(
+            tmp.join("configs/framework/RUNTIME_REGISTRY.json"),
+            r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{}}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(tmp.join("scripts/router-rs/src")).unwrap();
+        fs::write(
+            tmp.join("scripts/router-rs/Cargo.toml"),
+            "[package]\nname = \"router-rs\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+
+        let subdir = tmp.join("scripts/router-rs/src");
+        let resolved = resolve_repo_root_arg(Some(subdir.as_path())).unwrap();
+        let expect = tmp.canonicalize().unwrap_or_else(|_| tmp.clone());
+        assert_eq!(resolved, expect);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_repo_root_unchanged_when_no_framework_markers() {
+        let tmp = std::env::temp_dir().join(format!(
+            "skill-fw-no-marker-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&tmp).unwrap();
+        let resolved = resolve_repo_root_arg(Some(tmp.as_path())).unwrap();
+        let expect = tmp.canonicalize().unwrap_or_else(|_| tmp.clone());
+        assert_eq!(resolved, expect);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_repo_root_from_cargo_manifest_dir_matches_framework_root() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let resolved = resolve_repo_root_arg(Some(manifest_dir.as_path())).unwrap();
+        let expect = manifest_dir
+            .join("../..")
+            .canonicalize()
+            .expect("skill repo root should resolve");
+        assert_eq!(
+            resolved, expect,
+            "router-rs crate cwd must resolve to framework repo root for continuity/RUNTIME_REGISTRY"
+        );
+    }
 }

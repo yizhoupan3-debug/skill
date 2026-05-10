@@ -61,7 +61,6 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "typescript-pro",
     "vue",
     "web-platform-basics",
-    "agent-memory",
     "ai-research",
     "autoresearch",
     "chatgpt-apps",
@@ -77,7 +76,7 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "web-scraping",
 ];
 
-const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "team"];
+const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "loop", "team"];
 
 fn retired_runtime_owned_skill_slugs() -> HashSet<&'static str> {
     RETIRED_RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
@@ -171,10 +170,14 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
-        serde_json::json!(["codex-cli"])
+        serde_json::json!(["codex-cli", "cursor"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
+        "AGENTS.md"
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["cursor"],
         "AGENTS.md"
     );
     assert_eq!(
@@ -191,7 +194,6 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!manifest_text.contains("retired_files"));
     assert!(!manifest_text.contains("retired_directories"));
     assert!(!manifest_text.contains("AGENT.md"));
-    assert!(!manifest_text.contains(".codex/README.md"));
 }
 
 #[test]
@@ -862,6 +864,43 @@ fn framework_aliases_reference_manifest_skills() {
     }
 }
 
+/// 防止 framework 命令的 `skill_path` 再次指回仅存在于生成投影下的路径（裸 clone 会断链）。
+#[test]
+fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
+    let root = project_root();
+    let forbidden = [
+        "artifacts/codex-skill-surface/skills/autopilot/",
+        "artifacts/codex-skill-surface/skills/team/",
+    ];
+    for rel in [
+        "configs/framework/RUNTIME_REGISTRY.json",
+        "skills/SKILL_ROUTING_RUNTIME.json",
+        "skills/SKILL_PLUGIN_CATALOG.json",
+        "skills/SKILL_HEALTH_MANIFEST.json",
+    ] {
+        let text = read_text(&root.join(rel));
+        for needle in forbidden {
+            assert!(
+                !text.contains(needle),
+                "{rel} must not reference legacy surface path {needle:?}"
+            );
+        }
+    }
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let autopilot = &registry["framework_commands"]["autopilot"];
+    assert_eq!(
+        autopilot["skill_path"]
+            .as_str()
+            .expect("autopilot skill_path"),
+        "skills/autopilot/SKILL.md"
+    );
+    let team = &registry["framework_commands"]["team"];
+    assert_eq!(
+        team["skill_path"].as_str().expect("team skill_path"),
+        "skills/agent-swarm-orchestration/SKILL.md"
+    );
+}
+
 fn key_index(keys: &[serde_json::Value], name: &str) -> usize {
     keys.iter()
         .position(|key| key.as_str() == Some(name))
@@ -945,16 +984,33 @@ fn autoresearch_runtime_controller_stays_without_legacy_skill_entrypoint() {
 }
 
 #[test]
-fn installed_project_hooks_stay_disabled() {
+fn installed_project_hooks_are_router_rs_managed() {
     assert!(project_root().join(".codex/hooks.json").exists());
     assert!(!project_root().join(".codex/hooks").exists());
     let config = read_text(&project_root().join(".codex/config.toml"));
-    assert!(config.contains("codex_hooks = false"));
-    assert!(!config.contains("codex_hooks = true"));
+    assert!(config.contains("hooks = true"));
+    assert!(!config.contains("codex_hooks"));
     let hooks = read_json(&project_root().join(".codex/hooks.json"));
-    assert_eq!(hooks["hooks"].as_object().unwrap().len(), 0);
+    let hook_events = hooks["hooks"].as_object().unwrap();
+    for event in [
+        "SessionStart",
+        "PreToolUse",
+        "UserPromptSubmit",
+        "PostToolUse",
+        "Stop",
+    ] {
+        assert!(
+            hook_events.contains_key(event),
+            "missing Codex hook event: {event}"
+        );
+    }
+    let hook_text = hooks.to_string();
+    assert!(hook_text.contains("router-rs"));
+    assert!(hook_text.contains("codex hook --event="));
+    assert!(!hook_text.contains("scripts/codex_hook_entrypoint.sh"));
+    assert!(!hook_text.contains("sessionEnd"));
     let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
-    assert!(!manifest.to_string().contains(".codex/hooks.json"));
+    assert!(manifest.to_string().contains(".codex/hooks.json"));
 }
 
 #[test]
@@ -1023,18 +1079,8 @@ fn sync_skills_uses_router_rs_directly() {
 }
 
 #[test]
-fn memory_automation_lives_in_rust_host_integration() {
-    let source = read_text(&project_root().join("scripts/router-rs/src/host_integration.rs"));
-    assert!(source.contains("RunMemoryAutomation"));
-    assert!(source.contains("run_memory_automation("));
-}
-
-#[test]
-fn memory_and_prompt_policy_are_rust_owned() {
+fn prompt_policy_is_rust_owned() {
     let source = read_text(&project_root().join("scripts/router-rs/src/framework_runtime.rs"));
-    assert!(source.contains("FRAMEWORK_MEMORY_POLICY_AUTHORITY"));
-    assert!(source.contains("rust-framework-memory-policy"));
-    assert!(source.contains("build_framework_memory_policy_envelope"));
     assert!(source.contains("build_framework_prompt_compression_envelope"));
     assert!(source.contains("prompt_policy_owner"));
 }
@@ -1505,8 +1551,6 @@ fn allowed_python_control_plane_path(path: &Path) -> bool {
     let text = path.to_string_lossy();
     text == ".cursor/hook-tests/test_install_codex_cli_hooks.py"
         || text.starts_with(".cursor/hook-tests/tmp_")
-        || text.starts_with("skills/codex-hook-builder/assets/templates/")
-        || text.starts_with("skills/codex-hook-builder/scripts/")
 }
 
 fn collect_files_with_extension(root: &Path, extension: &str) -> Vec<PathBuf> {
@@ -1529,6 +1573,122 @@ fn markdown_text_under(roots: &[PathBuf]) -> String {
         });
     }
     chunks.join("\n")
+}
+
+#[test]
+fn closeout_record_schema_is_published() {
+    let path = project_root().join("configs/framework/CLOSEOUT_RECORD_SCHEMA.json");
+    assert!(
+        path.exists(),
+        "expected closeout record schema at {}",
+        path.display()
+    );
+    let schema = read_json(&path);
+    assert_eq!(schema["schema_version"], "closeout-record-v1");
+    let required = schema["required_fields"]
+        .as_array()
+        .expect("required_fields array");
+    for expected in [
+        "schema_version",
+        "task_id",
+        "verification_status",
+        "summary",
+    ] {
+        assert!(
+            required.iter().any(|v| v == expected),
+            "closeout schema missing required field: {expected}"
+        );
+    }
+    let rules = schema["enforcement_rules"]
+        .as_array()
+        .expect("enforcement_rules array");
+    for expected in [
+        "claimed_done_without_evidence",
+        "changed_files_without_command_or_risk",
+        "verification_passed_with_failed_command",
+        "verification_passed_with_missing_artifact",
+        "not_run_without_blockers_or_risks",
+    ] {
+        assert!(
+            rules
+                .iter()
+                .any(|rule| rule["id"].as_str() == Some(expected)),
+            "closeout schema missing enforcement rule: {expected}"
+        );
+    }
+}
+
+#[test]
+fn closeout_evaluate_blocks_unverified_completion_via_cli() {
+    let payload = serde_json::json!({
+        "schema_version": "closeout-record-v1",
+        "task_id": "policy-contract-1",
+        "summary": "已完成 deck rebuild",
+        "verification_status": "not_run",
+    });
+    let response = router_rs_json(&["closeout", "evaluate", "--input-json", &payload.to_string()]);
+    assert_eq!(response["closeout_allowed"], false);
+    let violations = response["violations"].as_array().expect("violations array");
+    assert!(violations
+        .iter()
+        .any(|v| v["rule"] == "claimed_done_without_evidence"));
+}
+
+#[test]
+fn closeout_evaluate_allows_clean_record_via_cli() {
+    let payload = serde_json::json!({
+        "schema_version": "closeout-record-v1",
+        "task_id": "policy-contract-2",
+        "summary": "Refactored builder; not yet executed",
+        "verification_status": "partial",
+        "changed_files": ["ppt/build_deck.py"],
+        "risks": ["did not run python build_deck.py because PIL missing"]
+    });
+    let response = router_rs_json(&["closeout", "evaluate", "--input-json", &payload.to_string()]);
+    assert_eq!(response["closeout_allowed"], true, "got {response:#?}");
+    assert_eq!(response["claimed_completion"], false);
+}
+
+#[test]
+fn closeout_contract_command_lists_rules() {
+    let response = router_rs_json(&["closeout", "contract"]);
+    assert_eq!(
+        response["record_schema_version"], "closeout-record-v1",
+        "got {response:#?}"
+    );
+    let rules = response["rules"].as_array().expect("rules array");
+    assert!(rules
+        .iter()
+        .any(|v| v == "verification_passed_with_missing_artifact"));
+}
+
+#[test]
+fn eval_route_cli_reports_metrics() {
+    let cases_path = project_root().join("tests/routing_eval_cases.json");
+    let cases_json = read_json(&cases_path);
+    let expected_total = cases_json["cases"]
+        .as_array()
+        .expect("routing eval cases array")
+        .len();
+    let response = router_rs_json(&["eval", "route", "--cases", &cases_path.to_string_lossy()]);
+    assert_eq!(
+        response["total_cases"].as_u64().expect("total_cases") as usize,
+        expected_total
+    );
+    assert!(response["route_accuracy"].as_f64().unwrap() > 0.0);
+    assert!(response["passed"].as_u64().unwrap() > 0);
+}
+
+#[test]
+fn eval_route_contract_cli_lists_metrics() {
+    let response = router_rs_json(&["eval", "route-contract"]);
+    assert_eq!(
+        response["schema_version"], "routing-eval-report-v1",
+        "got {response:#?}"
+    );
+    let metrics = response["metrics"].as_array().expect("metrics array");
+    assert!(metrics.iter().any(|v| v == "route_accuracy"));
+    assert!(metrics.iter().any(|v| v == "wrong_owner_rate"));
 }
 
 fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
