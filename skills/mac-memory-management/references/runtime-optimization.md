@@ -72,13 +72,13 @@ If stability is the blocker, record:
 - whether fallback was required
 - the first safe batch size or worker policy that passed
 
-## Escalation to generic acceleration
+## Escalation and ownership handoff
 
-Escalate to [`$code-acceleration`](../code-acceleration/SKILL.md) when:
+Hand work back to the current implementation owner when:
 
 - the Mac runtime is stable
 - the workload is still bottlenecked by serialization, Python overhead, data layout, or generic hot paths
 - a change is no longer primarily about Apple Silicon runtime policy
 
-At that point, treat this skill as the platform guardrail and `code-acceleration`
-as the generic performance companion.
+At that point, keep this skill as the Mac platform guardrail while the
+implementation owner handles generic performance rewrites.

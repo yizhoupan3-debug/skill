@@ -16,6 +16,14 @@ Move down this ladder only as far as the text needs:
 
 Do not spend the whole pass at level 6 if the problem is level 1-3.
 
+For whole-manuscript tightening, run one coherence pass before sentence polish:
+
+1. lock the canonical throughline from `../SKILL.md`
+   (`core_problem -> bottleneck -> paper_move -> decisive_evidence -> bounded_implication`)
+2. ensure each section has one job on that chain
+3. remove or relocate paragraphs that open a second headline story
+4. add section handoff lines that keep momentum
+
 ## Input Triage
 
 Extract these before writing:
@@ -141,15 +149,25 @@ Prefer:
 - short transitions that explain the logical relation, not generic connectors;
 - repeated key terms over synonym swapping when precision matters.
 
-Avoid:
-- empty openings: "In recent years", "With the rapid development of", "It is well known that";
-- hype: "revolutionary", "groundbreaking", "significantly enhances" without numbers;
-- throat-clearing: "It should be noted that", "It is worth mentioning";
-- vague AI-style summaries: "plays an important role", "has attracted much attention", "various factors";
-- unsupported priority claims: "first", "novel", "state-of-the-art" without evidence.
-- defensive scaffolding: "we admit that", "although our method is limited, we still";
-- internal/process phrasing: "in this revision we tried to", "the workflow here is to";
-- negative-leading discourse that hides the core contribution behind caveats.
+Prefer replacing weak patterns with stronger ones:
+- replace empty openings with concrete context in one clause;
+- replace hype words with measurable findings or bounded capability statements;
+- replace throat-clearing with direct logical transitions;
+- replace vague summaries with named variables, datasets, methods, or mechanisms;
+- replace unsupported priority words with contribution posture grounded in evidence;
+- replace defensive scaffolding with contribution-first plus explicit boundary cues;
+- replace process narration with manuscript-facing scientific statements.
+
+Exception rule:
+
+- these are defaults, not absolute bans; keep wording required for factual limitation disclosure, venue conventions, or precise reviewer-facing scope clarification.
+
+QC checks:
+
+- cadence: vary sentence lengths and paragraph openings; avoid repetitive transitions
+- unity: summarize the manuscript in one sentence without contradiction
+- mapping: each results block maps to one promised contribution
+- closure: discussion preserves scope while reinforcing the same main line
 
 ## Paragraph Repair Patterns
 

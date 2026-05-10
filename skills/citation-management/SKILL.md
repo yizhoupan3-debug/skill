@@ -68,7 +68,7 @@ citations verifiable, complete, deduplicated, and aligned with the manuscript.
 
 - For `.bib`: corrected BibTeX and a short unresolved list.
 - For reference lists: formatted references in the requested style.
-- For audits: issue table with severity, entry, problem, and fix.
+- For issue reviews: issue table with severity, entry, problem, and fix.
 - For manuscript consistency: missing-in-text and missing-in-reference lists.
 - For verification gaps: unresolved entries with the lookup source attempted.
 

@@ -39,8 +39,13 @@ trigger_hints:
 1. 运行：
 
 ```bash
-PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml framework refresh --repo-root "$PROJECT_DIR"
+PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+ROUTER_BIN="$(command -v router-rs 2>/dev/null || true)"
+if [ -z "$ROUTER_BIN" ]; then ROUTER_BIN="$PROJECT_DIR/scripts/router-rs/target/release/router-rs"; fi
+"$ROUTER_BIN" framework refresh --repo-root "$PROJECT_DIR"
 ```
+
+若命令失败，先在同一仓库执行：`cargo build --release --manifest-path "$PROJECT_DIR/scripts/router-rs/Cargo.toml"`，或使用 `router-rs self install` 写入 `~/.local/bin`。
 
 2. 然后严格回复：
 

@@ -31,18 +31,36 @@ Keep the contract actionable. A good deck plan should name the palette roles,
 font families, recurring slide components, and layout families clearly enough
 that the Rust builder can regenerate the deck without guessing.
 
-## Default Aesthetic
+## Theme System
 
-Prefer a black-luxury direction:
+Support two first-class themes. Choose one at deck start and keep it consistent
+across cover, content pages, section slides, and closing:
 
-- pure black or near-black stage as the base
-- a cover led by one large blurred background image
-- strong white typography and protected text zones
-- charcoal information panels instead of bright, noisy card farms
-- restrained electric-blue glow instead of loud gradients or many accent colors
-- image modules that feel built into the page structure rather than dropped on top
+### `dark-premium`
 
-Avoid seminar stiffness, default office chart palettes, random icon stickers, equal-weight card mosaics, generic keynote glassmorphism, and dark slides with weak unreadable text.
+- near-black or charcoal canvas with high-contrast type
+- protected text zones over imagery; softened/blurred imagery allowed
+- restrained accent highlights and low-noise panels
+- cinematic tone without sacrificing readability
+
+### `light-editorial`
+
+- white or warm-light canvas with strong typographic rhythm
+- clear sectioning via rules, panels, and spacing instead of heavy shadows
+- restrained dark text and one controlled accent family
+- editorial tone that stays clean under projector brightness
+
+Avoid seminar stiffness, default office chart palettes, random icon stickers,
+equal-weight card mosaics, generic glassmorphism, and low-contrast text in both
+themes.
+
+### Theme rhythm rule
+
+Apply `theme rhythm` with one hard constraint and one recommendation:
+
+- Never allow 3 consecutive slides with the same theme family treatment.
+- When deck length is greater than 8 slides, it is recommended to include at least 2 hero pages and cover both `dark-premium` and `light-editorial` hero treatments when narrative fit allows.
+- If rhythm quality is weak, split/retime section transitions before touching typography density.
 
 ## Cross-Platform Font Policy
 
@@ -61,11 +79,11 @@ Note:
 
 For a generic but high-quality PPTX deck, bias toward:
 
-- cover: blurred full-slide background image plus a dark information stack
-- content slides: black base plus 2-4 charcoal panels with clear hierarchy
-- section slides: short title stack, a dominant image or evidence band, and one supporting module group
-- image-data slides: one wide dark evidence surface plus a small number of metric chips
-- closing slide: same family as the cover, quieter and more cinematic than informational
+- cover: one focal visual + protected title stack, adapted to the selected theme
+- content slides: 2-4 structured zones with clear hierarchy and enough white space
+- section slides: short title stack, one dominant evidence module, one support module
+- image-data slides: one wide evidence surface plus a small number of metric chips
+- closing slide: same family as the cover, quieter and more conclusive than informational
 
 When the outline is dense, split slides by idea before shrinking text. A slightly
 longer deck with readable hierarchy is better than a compressed deck that only
@@ -79,8 +97,8 @@ works at editor zoom.
 - title is the hero
 - subtitle is short
 - metadata is compact and visibly secondary
-- cover image should already be softened before it reaches the slide
-- never let the background image compete with the title stack
+- if an image is used, soften/protect it before placing dense text
+- never let background treatment compete with the title stack
 - add one structural anchor: glow line, protected info slab, small focus card, or asymmetrical dark block
 
 ### Content Slide
@@ -89,6 +107,7 @@ works at editor zoom.
 - 2-4 information zones
 - one clear reading path
 - supporting labels should be quiet, not ornamental
+- typography and contrast must stay readable at normal projection distance
 
 ### Data Slide
 
@@ -102,6 +121,7 @@ works at editor zoom.
 - same family as the cover
 - one closing claim or prompt
 - do not end on an accidental leftover evidence slide
+- keep visual closure aligned with the chosen theme (`dark-premium` or `light-editorial`)
 
 ## Hierarchy
 
@@ -114,6 +134,11 @@ Use four levels only:
 
 If more levels appear, the slide usually becomes muddy.
 
+Body text floor:
+
+- Minimum body text is 18pt across normal content slides.
+- Density overload must be solved by slide splitting, hierarchy pruning, or appendix migration, never by shrinking below 18pt.
+
 Use the classic four layout relationships consistently:
 
 - contrast: clear difference between title, body, and annotation
@@ -125,11 +150,11 @@ Use the classic four layout relationships consistently:
 
 Preferred patterns:
 
-- full-slide blurred hero plus protected title stack
-- wide dark evidence band plus metric chips
+- full-slide or framed hero plus protected title stack
+- wide evidence band plus metric chips
 - left narrative stack plus right image surface
 - one dominant image plus one concise takeaway panel
-- dark panel grid with one clear visual focal point
+- panel grid with one clear visual focal point
 
 Use equal columns only when the content is genuinely balanced.
 
@@ -143,11 +168,11 @@ High-end slides do not simply "insert an image". They embed it into the composit
 
 Preferred image treatments:
 
-- full-slide cover background that has already been blurred or strongly softened
-- framed image panel with a controlled dark overlay
+- full-slide or framed cover background already blurred/softened when needed
+- framed image panel with a controlled protection overlay
 - image block that locks to the page edge while text sits on a protected solid zone
-- dark image band with stat pills or labels sitting inside the composition
-- one small sharp focus image over a blurred large background when the cover needs extra depth
+- image evidence band with stat pills or labels inside the composition
+- one small sharp focus image over a softened large background when the cover needs extra depth
 
 Text clarity rules:
 
@@ -168,12 +193,18 @@ Do not add a new bright color every time a slide feels weak.
 
 ## Anti-Patterns
 
+- rainbow accents on one slide: each column, node, or card gets a different bright outline, circle, or badge—prefer one lead accent and neutrals; signal sequence with weight, spacing, or a single muted secondary
+- diagram glued to photo: flat primitive shapes plus connectors sitting above or beside an unrelated full-bleed photo without shared grid, margin rhythm, or matched white balance—split into two slides or rebuild as one composed surface (hero image with protected caption slab, or diagram-only editorial canvas)
+- spreadsheet-on-slide: oversized table with colored header row and zebra fills but no clear headline takeaway or row hierarchy—editorial typesetting with one emphasized row/column, or move detail to appendix
+- decorative title underline/rule with no information function
+- low-contrast gray body text on dark/light surfaces
 - every card with the same weight
 - shadow on everything
 - title centered above a mostly empty slide
 - tiny text inside giant containers
 - multiple unrelated visual motifs in one deck
 - charts pasted in with their default palette
+- text on image without a solid readability protection layer
 - cover and closing slide looking like different templates
 - beautification before structure is clear
 - full-image slides with no visual focus or text placement logic
@@ -181,6 +212,15 @@ Do not add a new bright color every time a slide feels weak.
 - dark backgrounds with weak low-contrast text
 - raw unblurred cover images used directly behind dense text
 - dark decks that confuse "cinematic" with "hard to read"
+- whole-deck isomorphic layout repetition with no role variation
+
+## zh-layout-guard
+
+Use this guard for Chinese and mixed-language typography:
+
+- Do not allow Chinese title/subtitle lines ending with 1-2 orphan characters.
+- Keep mixed-language tokens unbroken (e.g., `A/B test`, `2026`, `15%`, citation keys).
+- Prefer Chinese title length around 8-18 Han characters; for longer titles, rewrite or insert semantic line breaks.
 
 ## Design Audit Verdicts
 

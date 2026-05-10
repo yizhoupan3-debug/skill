@@ -4,7 +4,7 @@
 
 - `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.codex/skills` 当成主路径前提。
 - system skill 放 `skills/.system/`。不要同时保留两份 live source。
-- `~/.codex/skills` 只是 Codex/App/CLI 共用的轻量安装面，指向 `artifacts/codex-skill-surface/skills`。这个投影由 Rust host integration 生成，只放热路由和显式命令入口；没有独立 `SKILL.md` 的框架命令（例如 `autopilot`、`team`）会投到 `skill-framework-developer`，不要在这里手写或修 skill。
+- `~/.codex/skills` 是 Codex/App/CLI 共用的轻量安装面；常与 host integration 生成的 `artifacts/codex-skill-surface/skills` 投影配套，用于 CLI 可见的薄别名。**框架命令的真源在仓库内**：例如 `autopilot` → `skills/autopilot/SKILL.md`，`team` 的 registry `skill_path` → `skills/agent-swarm-orchestration/SKILL.md`（见 `configs/framework/RUNTIME_REGISTRY.json` 与 `router-rs framework alias <name>`）。治理与路由边界仍见 `skills/skill-framework-developer/SKILL.md`，不要把该文件当成 `autopilot`/`team` 的正文替身；也不要在 `~/.codex/skills` 手修 canonical body。
 - 不再维护 skill health 分。路由真源只保留 source manifest、skill frontmatter、generated manifest/runtime，以及真实回归用例；不要新增健康快照或把健康分写回 schema。
 
 ## 新增 Skill 最小清单

@@ -22,11 +22,9 @@ trigger_hints:
   - shared agent memory
   - agent supervisor
   - multi-agent workflow
-  - $team
-  - /team
   - 多 agent 执行
 metadata:
-  version: "1.1.0"
+  version: "1.1.1"
   platforms: [codex]
   tags:
     - agent
@@ -68,7 +66,8 @@ metadata:
 - 用户要做任务路由、agent handoff、shared memory、consensus、quality gate
 - 用户要做 research swarm、support router、自动审查流水线
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
-- 用户显式调用 `$team` / `/team`，或明确要求 full team orchestration 而不是普通 bounded sidecars
+- 用户明确要求 full team orchestration 而不是普通 bounded sidecars；显式 `$team` / `/team` 入口只归 `team` 命令本身，不由本 gate 抢占
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：用 [`review-fix-verify-loop`](../review-fix-verify-loop/SKILL.md)（`$review-fix-verify-loop`）承载契约与模板；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”

@@ -68,6 +68,14 @@ This skill owns **experiment reproducibility management** for research.
 - Works with performance work when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs
 - Works with `$mac-memory-management` when reproducibility must account for Mac memory constraints and fallback behavior
 
+## User-facing output posture
+
+When this skill is co-invoked with paper review or writing lanes:
+
+- report only the reproducibility blocker that affects acceptance risk
+- provide the smallest executable fix next
+- avoid dumping full checklist text unless explicitly requested
+
 ## Reproducibility Layers
 
 ### Layer 1: Environment

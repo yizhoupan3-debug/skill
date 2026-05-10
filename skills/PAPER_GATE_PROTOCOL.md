@@ -9,8 +9,24 @@ front door is unified.
 
 Use this protocol only when disk-backed, repeatable, multi-turn review state is
 actually useful. For normal interactive paper review, keep the protocol
-internal and lead with verdict, blockers, external calibration, and next move.
+internal and lead with verdict, blockers, evidence gaps, and next revision move.
 Missing target venue should create a provisional review bar, not a hard stop.
+
+## User-facing response contract
+
+Unless the user explicitly requests protocol artifacts, do not expose:
+
+- gate ids or gate file names
+- freeze/backjump state
+- lane manifests or lane ids
+- round-folder progression details
+
+Default external response should stay compact:
+
+1. readiness verdict
+2. top 3 readiness risks
+3. decisive evidence gaps
+4. next revision move
 
 ## 1. Root Artifact Layout
 
@@ -176,6 +192,12 @@ Rules:
   be silently rewritten.
 - `Review Objects` should name stable `unit_type:unit_id` entries from the
   `object_map`.
+- For `G7`, the checklist must include and attach `narrative_spine_map.md`,
+  `narrative_flow_breaks.md`, and `main_vs_appendix_presence_check.md`.
+- For `G8`, the checklist must include and attach `front_door_claim_matrix.md`,
+  `front_door_overshoot_report.md`, and `front_door_new_claim_check.md`.
+- For `G9`, the checklist must include and attach `mirror_surface_inventory.md`,
+  `mirror_claim_alignment.md`, and `callout_caption_consistency.md`.
 
 ## 6. Freeze and Backjump Rules
 
@@ -366,7 +388,7 @@ The main thread may not:
 Default merge policy:
 
 - decision gates: merge evidence first, decide second
-- quality gates: merge local audit findings, run a claim-drift check against
+- quality gates: merge local quality findings, run a claim-drift check against
   `claim_ledger`, then emit one pass or backjump decision
 
 ## 12. Automation Wrapper Contract

@@ -4,19 +4,25 @@ Use this reference when selecting or auto-assigning slide layouts based on conte
 
 ## Standard Patterns
 
+Global guards for all patterns:
+
+- Minimum body text size is 18pt. If density exceeds readable limits, split slides; do not shrink body text.
+- Apply `zh-layout-guard`: avoid 1-2 Chinese orphan chars in title/subtitle lines and keep mixed-language tokens intact.
+- Apply `anti-ugly` blacklist: no decorative title underline, low-contrast gray text, equal-weight card farm, default Office chart palette, unprotected text on images, or whole-deck isomorphic layout repetition.
+
 ### `cover`
 **Trigger**: first slide or `type: "cover"` in outline.
-**Structure**: blurred full-slide background + dark overlay + title stack (title, subtitle, metadata) on left, optional focus image on right.
+**Structure**: theme-aligned focal background/surface + protected title stack (title, subtitle, metadata) on left, optional focus image on right.
 **Slot needs**: title (required), subtitle, presenter, date, coverImage.
 **Design intent**: create one memorable entry point, with title as the clear hero.
-**Quality gate**: focal image, protection layer, and title hierarchy are obvious; no busy image under unprotected text.
+**Quality gate**: focal treatment, protection layer, and title hierarchy are obvious; no busy image under unprotected text; style family matches chosen theme (`dark-premium` or `light-editorial`).
 
 ### `hero-image`
 **Trigger**: `hasImage: true && bulletCount <= 2`.
 **Structure**: dominant image (70%) + short text overlay or side panel (30%).
 **Slot needs**: image (required), title, caption.
 **Design intent**: let the image carry the emotional or evidentiary load.
-**Quality gate**: crop has a focal point; caption is attached to the image, not floating as decoration.
+**Quality gate**: crop has a focal point; caption is attached to the image, not floating as decoration; any overlaid text uses a solid protection layer.
 
 ### `image-text-split`
 **Trigger**: `hasImage: true && textLength > 100`.
@@ -65,14 +71,14 @@ Use this reference when selecting or auto-assigning slide layouts based on conte
 **Structure**: section title + 2-3 dark text panels with structured content.
 **Slot needs**: title, body text or structured bullets.
 **Design intent**: preserve a dense argument while still creating scan points.
-**Quality gate**: copy is pruned before font size is reduced; no wall-of-text panel.
+**Quality gate**: copy is pruned before font size is reduced; body text stays >=18pt; no wall-of-text panel; split page first when density rises.
 
 ### `closing`
 **Trigger**: last slide or `type: "closing"` in outline.
-**Structure**: blurred background (same as cover) + thank you / Q&A text + optional contact info.
+**Structure**: theme-matched closing surface (same family as cover) + thank you / Q&A text + optional contact info.
 **Slot needs**: closingText, optional contact.
 **Design intent**: echo the cover and leave one final thought.
-**Quality gate**: closing feels intentional, not a leftover title slide or unrelated template.
+**Quality gate**: closing feels intentional, not a leftover title slide or unrelated template; theme family remains consistent.
 
 ## Auto-Selection Rules
 
@@ -89,6 +95,11 @@ Use this reference when selecting or auto-assigning slide layouts based on conte
 
 When two rules match, choose the pattern that creates the clearest reading path,
 not the most decorative page.
+
+Theme rhythm guard:
+
+- Never use the same theme treatment for 3 consecutive slides.
+- For decks with more than 8 slides, schedule at least 2 hero pages in total, including at least 1 `dark-premium` hero and 1 `light-editorial` hero.
 
 ## Coordinate Quick Reference (16:9, inches)
 

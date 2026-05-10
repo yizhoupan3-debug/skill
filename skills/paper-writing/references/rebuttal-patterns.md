@@ -188,13 +188,19 @@ Use this compact structure for each comment:
 For disagreement:
 
 ```markdown
-**Response**: We appreciate this concern. We agree that [shared premise]. In our setting, however, [evidence-backed distinction]. To avoid ambiguity, we have revised [location] to clarify [scope].
+**Response**: We appreciate this concern. In our setting, [evidence-backed distinction]. We revised [location] to make this scope explicit and easier to verify.
 ```
+
+Response rhythm rule:
+
+- rotate opener intents across comments: acknowledge -> clarify -> action -> scope
+- alternate short and medium sentence lengths to avoid boilerplate cadence
+- end each response unit with reviewer-facing effect (for example, reproducibility, interpretability, or claim calibration improved)
 
 For infeasible requests:
 
 ```markdown
-**Response**: We agree that [requested item] would be valuable. We were unable to include it in the current revision because [specific constraint]. To address the concern, we [alternative action], and we now state this limitation in [location].
+**Response**: [Requested item] is valuable for the next phase. In this revision, the scope is [specific constraint]. To address the concern now, we [alternative action], and we make this scope explicit in [location].
 ```
 
 ## Tone Principles
@@ -207,10 +213,10 @@ For infeasible requests:
    - "We appreciate this suggestion and have…"
    - "We would like to clarify…"
    - "Thank you for pointing this out."
-5. **Avoid**:
-   - "We disagree" → "We would like to clarify…"
-   - "The reviewer misunderstood" → "We realize this was unclear and have revised…"
-   - "This is obvious" → [just explain it clearly]
+5. **Prefer these alternatives**:
+   - "We disagree" -> "We clarify the evidence basis as follows..."
+   - "The reviewer misunderstood" -> "We revised the manuscript to make this point explicit..."
+   - "This is obvious" -> "This follows from [specific evidence or definition]..."
 
 ## Claim-Safe Phrases
 
