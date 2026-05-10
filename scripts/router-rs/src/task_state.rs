@@ -72,6 +72,8 @@ pub struct DepthCompliance {
     pub rfv_skipped_round_count: u64,
     pub rfv_unknown_round_count: u64,
     pub rfv_pass_without_evidence_count: u64,
+    pub rfv_adversarial_round_count: u64,
+    pub rfv_falsification_test_count: u64,
     pub goal_checkpoint_count: u64,
     pub depth_score: u8,
 }
@@ -92,6 +94,16 @@ fn depth_compliance_from_disk(
     if let Some(r) = rfv {
         if let Some(rounds) = r.get("rounds").and_then(Value::as_array) {
             for round in rounds {
+                if round
+                    .get("adversarial_findings")
+                    .and_then(Value::as_array)
+                    .is_some_and(|a| !a.is_empty())
+                {
+                    c.rfv_adversarial_round_count += 1;
+                }
+                if let Some(arr) = round.get("falsification_tests").and_then(Value::as_array) {
+                    c.rfv_falsification_test_count += arr.len() as u64;
+                }
                 let vr = round
                     .get("verify_result")
                     .and_then(Value::as_str)
@@ -123,7 +135,9 @@ fn depth_compliance_from_disk(
     if evidence_ok {
         score += 1;
     }
-    if c.goal_checkpoint_count > 0 {
+    // Third point is "structured progress signal": goal checkpoints OR adversarial RFV round.
+    // This keeps the dN/3 scale stable while rewarding adversarial depth in pure RFV mode.
+    if c.goal_checkpoint_count > 0 || c.rfv_adversarial_round_count > 0 {
         score += 1;
     }
     c.depth_score = score;
@@ -262,7 +276,7 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
     }
 }
 
-/// One-line hint for `framework refresh` / Codex SessionStart digest (`Continuity digest` prompt).
+/// One-line hint for continuity digest / Codex SessionStart (`Continuity digest` prompt).
 /// Omitted when no resolved `task_id` (idle). Keeps copy short for ~640-char caps.
 pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> {
     let tid = view.task_id.as_deref()?.trim();
@@ -393,6 +407,50 @@ mod tests {
     }
 
     #[test]
+    fn depth_score_rewards_adversarial_rfv_without_goal_checkpoints() {
+        let tmp = unique_repo("adv");
+        let tid = "t-adv";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("RFV_LOOP_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "loop_status": "active",
+                "goal": "g",
+                "max_rounds": 3,
+                "current_round": 1,
+                "rounds": [{
+                    "round": 1,
+                    "verify_result": "PASS",
+                    "adversarial_findings": [{"id":"A1"}],
+                    "falsification_tests": [{"id":"T1"},{"id":"T2"}]
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            task_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[]}"#,
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        let dc = v.depth_compliance.expect("dc");
+        assert_eq!(dc.rfv_pass_round_count, 1);
+        assert_eq!(dc.rfv_adversarial_round_count, 1);
+        assert_eq!(dc.rfv_falsification_test_count, 2);
+        assert_eq!(dc.goal_checkpoint_count, 0);
+        assert_eq!(
+            dc.depth_score, 2,
+            "PASS (1) + adversarial (1) = 2, no evidence"
+        );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn override_wins_over_active() {
         let tmp = unique_repo("override");
         write_active(&tmp, "active-id");
@@ -413,6 +471,83 @@ mod tests {
         let v = resolve_task_view(&tmp, Some(other));
         assert_eq!(v.task_id.as_deref(), Some(other));
         assert!(matches!(v.control_mode, TaskControlMode::Idle));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    /// P1-A: depth_compliance aggregates RFV PASS rounds + EVIDENCE successful rows + checkpoints.
+    #[test]
+    fn depth_compliance_rolls_up_pass_evidence_and_checkpoints() {
+        let tmp = unique_repo("depth-compl");
+        let tid = "t-depth";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        // GOAL with one checkpoint.
+        fs::write(
+            task_dir.join("GOAL_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-autopilot-goal-v1",
+                "drive_until_done": true,
+                "status": "running",
+                "goal": "ship",
+                "non_goals": [],
+                "done_when": [],
+                "validation_commands": [],
+                "current_horizon": "",
+                "checkpoints": [{"note": "step 1"}],
+                "blocker": null,
+                "updated_at": "2026-01-01T00:00:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        // RFV with PASS round + UNKNOWN round + a no_evidence_window flag.
+        fs::write(
+            task_dir.join("RFV_LOOP_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "loop_status": "active",
+                "goal": "g",
+                "max_rounds": 5,
+                "current_round": 2,
+                "rounds": [
+                    {"round": 1, "verify_result": "PASS", "cross_check": "no_evidence_window"},
+                    {"round": 2, "verify_result": "UNKNOWN"}
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        // EVIDENCE with one successful row.
+        fs::write(
+            task_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"exit_code":0}]}"#,
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        let dc = v.depth_compliance.expect("depth_compliance present");
+        assert_eq!(dc.rfv_pass_round_count, 1);
+        assert_eq!(dc.rfv_unknown_round_count, 1);
+        assert_eq!(dc.rfv_pass_without_evidence_count, 1);
+        assert_eq!(dc.goal_checkpoint_count, 1);
+        // Score = 3 (pass + evidence_ok + checkpoint).
+        assert_eq!(dc.depth_score, 3);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    /// P1-A: empty state → score 0.
+    #[test]
+    fn depth_compliance_zero_when_nothing_recorded() {
+        let tmp = unique_repo("depth-zero");
+        write_active(&tmp, "t-zero");
+        let task_dir = tmp.join("artifacts/current/t-zero");
+        fs::create_dir_all(&task_dir).unwrap();
+        let v = resolve_task_view(&tmp, None);
+        let dc = v.depth_compliance.expect("depth_compliance present");
+        assert_eq!(dc.depth_score, 0);
+        assert_eq!(dc.rfv_pass_round_count, 0);
+        assert_eq!(dc.goal_checkpoint_count, 0);
         let _ = fs::remove_dir_all(&tmp);
     }
 

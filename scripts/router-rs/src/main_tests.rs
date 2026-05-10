@@ -162,11 +162,6 @@ where
     }
 }
 
-fn closeout_enforcement_env_lock() -> &'static Mutex<()> {
-    static CLOSEOUT_ENFORCEMENT_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    CLOSEOUT_ENFORCEMENT_ENV_LOCK.get_or_init(|| Mutex::new(()))
-}
-
 /// 测试进程内 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 为全局环境变量；并行测试会互相干扰，需串行。
 struct CloseoutStrictEnvGuard {
     prior: Option<String>,
@@ -463,7 +458,7 @@ fn stdio_request_dispatches_execute_payload() {
 }
 
 #[test]
-fn framework_refresh_copies_compact_prompt_to_configured_file() {
+fn continuity_digest_copies_compact_prompt_to_configured_file() {
     let repo_root = std::env::temp_dir().join(format!(
         "router-rs-refresh-fixture-{}",
         SystemTime::now()
@@ -522,13 +517,8 @@ fn framework_refresh_copies_compact_prompt_to_configured_file() {
     .expect("write supervisor state");
     let clipboard_path = repo_root.join("clipboard.txt");
     std::env::set_var("ROUTER_RS_CLIPBOARD_PATH", &clipboard_path);
-    let refresh =
-        build_framework_refresh_payload(&repo_root, 6, false).expect("build refresh payload");
-    let prompt = refresh
-        .get("prompt")
-        .and_then(Value::as_str)
-        .expect("refresh prompt");
-    let clipboard = copy_text_to_clipboard(prompt).expect("copy prompt");
+    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest prompt");
+    let clipboard = copy_text_to_clipboard(&prompt).expect("copy prompt");
     std::env::remove_var("ROUTER_RS_CLIPBOARD_PATH");
 
     let copied = fs::read_to_string(&clipboard_path).expect("read clipboard file");
@@ -543,7 +533,7 @@ fn framework_refresh_copies_compact_prompt_to_configured_file() {
 }
 
 #[test]
-fn framework_refresh_completed_task_uses_plain_closeout_wording() {
+fn continuity_digest_completed_task_uses_plain_closeout_wording() {
     let repo_root = std::env::temp_dir().join(format!(
         "router-rs-refresh-completed-fixture-{}",
         SystemTime::now()
@@ -595,12 +585,7 @@ fn framework_refresh_completed_task_uses_plain_closeout_wording() {
             }"#,
         )
         .expect("write supervisor state");
-    let refresh =
-        build_framework_refresh_payload(&repo_root, 6, false).expect("build refresh payload");
-    let prompt = refresh
-        .get("prompt")
-        .and_then(Value::as_str)
-        .expect("refresh prompt");
+    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest prompt");
 
     assert!(prompt.contains("最近一轮已经收尾："));
     assert!(prompt.contains("- bounded rerun"));
@@ -617,8 +602,8 @@ fn framework_refresh_completed_task_uses_plain_closeout_wording() {
 }
 
 #[test]
-fn framework_refresh_includes_goal_state_attachment() {
-    let repo_root = temp_dir_path("framework-refresh-goal");
+fn continuity_digest_includes_goal_state_attachment() {
+    let repo_root = temp_dir_path("autopilot-followup-goal-merge");
     let task_id = "goal-task-refresh";
     let task_root = repo_root.join("artifacts/current").join(task_id);
     fs::create_dir_all(&task_root).expect("mkdir task");
@@ -643,11 +628,10 @@ fn framework_refresh_includes_goal_state_attachment() {
         }"#,
     )
     .expect("goal state");
-    let refresh = build_framework_refresh_payload(&repo_root, 6, false).expect("refresh");
-    let prompt = refresh["prompt"].as_str().expect("prompt");
+    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
     assert!(
         prompt.contains("深度信号") && prompt.contains("d0/3"),
-        "depth hint should surface in refresh prompt; prompt={prompt:?}"
+        "depth hint should surface in digest prompt; prompt={prompt:?}"
     );
     assert!(
         prompt.contains("Active goal") || prompt.contains("GOAL_STATE（router-rs"),
@@ -655,18 +639,18 @@ fn framework_refresh_includes_goal_state_attachment() {
     );
     assert!(prompt.contains("Integration goal text"));
     assert!(prompt.contains("cargo test -q"));
+    let view = crate::task_state::resolve_task_view(&repo_root, None);
     assert_eq!(
-        refresh["goal_state"]["goal"],
-        json!("Integration goal text")
+        view.depth_compliance.as_ref().map(|d| d.depth_score),
+        Some(0)
     );
-    assert_eq!(refresh["depth_compliance"]["depth_score"], json!(0));
 
     let _ = fs::remove_dir_all(&repo_root);
 }
 
 #[test]
-fn framework_refresh_goal_prompt_verbose_restores_long_section() {
-    let repo_root = temp_dir_path("framework-refresh-goal-verbose");
+fn continuity_digest_goal_prompt_verbose_restores_long_section() {
+    let repo_root = temp_dir_path("autopilot-followup-goal-merge-verbose");
     let task_id = "goal-task-verbose";
     let task_root = repo_root.join("artifacts/current").join(task_id);
     fs::create_dir_all(&task_root).expect("mkdir task");
@@ -693,8 +677,7 @@ fn framework_refresh_goal_prompt_verbose_restores_long_section() {
     .expect("goal state");
     let prior = std::env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE").ok();
     std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", "1");
-    let refresh = build_framework_refresh_payload(&repo_root, 6, false).expect("refresh");
-    let prompt = refresh["prompt"].as_str().expect("prompt");
+    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
     assert!(
         prompt.contains("GOAL_STATE（router-rs"),
         "verbose env should restore long heading; prompt={prompt:?}"
@@ -707,22 +690,20 @@ fn framework_refresh_goal_prompt_verbose_restores_long_section() {
 }
 
 #[test]
-fn framework_refresh_payload_always_exports_goal_state_key() {
+fn continuity_digest_aligns_with_task_state_depth_rollup_on_repo_root() {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let refresh = build_framework_refresh_payload(&repo_root, 6, false).expect("refresh");
-    let keys: Vec<_> = refresh
-        .as_object()
-        .expect("refresh payload must be object")
-        .keys()
-        .cloned()
-        .collect();
+    let view = crate::task_state::resolve_task_view(&repo_root, None);
+    if let Some(ref dc) = view.depth_compliance {
+        let v = serde_json::to_value(dc).expect("depth rollup serializes");
+        assert!(
+            v.get("depth_score").is_some(),
+            "depth_compliance must include depth_score; got {v:?}"
+        );
+    }
+    let digest = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
     assert!(
-        keys.contains(&"goal_state".to_string()),
-        "refresh JSON must include goal_state (null when no GOAL_STATE.json); keys={keys:?}"
-    );
-    assert!(
-        keys.contains(&"depth_compliance".to_string()),
-        "refresh JSON must include depth_compliance; keys={keys:?}"
+        !digest.trim().is_empty(),
+        "continuity digest should be non-empty for skill repo root"
     );
 }
 
@@ -796,7 +777,7 @@ fn framework_statusline_uses_rust_runtime_view() {
     let statusline = build_framework_statusline(&repo_root).expect("build statusline");
 
     assert!(statusline.contains("task=Validate status line"));
-    assert!(statusline.contains("next=/refresh"));
+    assert!(statusline.contains("next=NEXT_ACTIONS"));
     assert!(statusline.contains("integration/in_progress"));
     assert!(statusline.contains("route=autopilot+1"));
     assert!(statusline.contains("others=0"));
@@ -1227,9 +1208,7 @@ fn framework_session_artifact_write_rejects_stale_focus_update() {
 
 #[test]
 fn framework_session_artifact_write_preserves_existing_roundtrip() {
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _strict = CloseoutStrictEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-cas-roundtrip");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1303,9 +1282,7 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
 
 #[test]
 fn framework_session_artifact_write_blocks_completion_without_closeout_record() {
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _strict = CloseoutStrictEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-missing");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1330,9 +1307,7 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_record() 
 
 #[test]
 fn framework_session_artifact_write_blocks_completion_without_closeout_when_ci_unsets_env() {
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _ci = CiHardUnsetCloseoutEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-ci-unset-env");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1358,9 +1333,7 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_when_ci_u
 #[test]
 fn framework_session_artifact_write_blocks_completion_without_closeout_when_github_actions_unsets_env(
 ) {
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _ga = GithubActionsHardUnsetCloseoutEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-gha-unset-env");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1388,9 +1361,7 @@ fn framework_session_artifact_write_blocks_completion_without_closeout_when_gith
 #[test]
 fn framework_session_artifact_write_allows_completion_without_closeout_when_ci_and_closeout_env_off(
 ) {
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _ci_off = CiWithCloseoutDisabledEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-ci-with-env-off");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1418,9 +1389,7 @@ fn framework_session_artifact_write_allows_completion_without_closeout_when_ci_a
 #[test]
 fn framework_session_artifact_write_blocks_completion_without_closeout_when_closeout_env_empty_string(
 ) {
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _empty = LocalNonCiEmptyCloseoutEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-empty-env");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1464,9 +1433,7 @@ fn framework_session_artifact_write_allows_completion_without_closeout_when_env_
         }
     }
 
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _guard = EnvCloseoutGuard::set("0");
     let repo_root = temp_dir_path("framework-session-closeout-env-off");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1527,9 +1494,7 @@ fn framework_session_artifact_write_in_progress_ignores_malformed_closeout_recor
 
 #[test]
 fn framework_session_artifact_write_blocks_completion_with_failed_command() {
-    let _lock = closeout_enforcement_env_lock()
-        .lock()
-        .expect("closeout env lock poisoned");
+    let _lock = crate::test_env_sync::process_env_lock();
     let _strict = CloseoutStrictEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-bad");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -2172,7 +2137,9 @@ fn stdio_framework_autopilot_goal_roundtrip() {
             "repo_root": rr,
             "operation": "start",
             "goal": "finish macro task",
-            "done_when": ["ci green"],
+            "non_goals": ["avoid scope creep"],
+            "done_when": ["ci green", "review checklist cleared"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true
         }
     });
@@ -2874,6 +2841,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
     assert!(records.iter().any(|record| record.slug == "autopilot"));
     assert!(records.iter().any(|record| record.slug == "deepinterview"));
     assert!(records.iter().any(|record| record.slug == "gitx"));
+    assert!(records.iter().any(|record| record.slug == "update"));
     assert!(records.iter().any(|record| record.slug == "team"));
 
     let autopilot = route_task_with_manifest_fallback(
@@ -2923,6 +2891,18 @@ fn framework_command_aliases_require_literal_entrypoints() {
     )
     .expect("route explicit gitx alias");
     assert_eq!(gitx.selected_skill, "gitx");
+
+    let update = route_task_with_manifest_fallback(
+        &records,
+        Some(&runtime_path),
+        None,
+        "/update",
+        "alias-update",
+        true,
+        true,
+    )
+    .expect("route explicit update alias");
+    assert_eq!(update.selected_skill, "update");
 
     let natural_language_team = route_task_with_manifest_fallback(
         &records,

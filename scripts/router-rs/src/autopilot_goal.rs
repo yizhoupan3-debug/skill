@@ -294,6 +294,15 @@ fn base_goal_object(
     m
 }
 
+fn count_nonempty_string_items(values: &[Value]) -> usize {
+    values
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .count()
+}
+
 fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
     payload
         .get(key)
@@ -398,11 +407,38 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
+            let non_goals = value_string_list(&payload, "non_goals");
+            let done_when = value_string_list(&payload, "done_when");
+            let validation_commands = value_string_list(&payload, "validation_commands");
+
+            // Institutional contract: when `drive_until_done` is true, a goal must not be "one-step done".
+            // Enforce a minimally deep goal contract at creation time.
+            if drive_until_done {
+                if count_nonempty_string_items(&non_goals) == 0 {
+                    return Err(
+                        "framework_autopilot_goal start requires non-empty non_goals (drive_until_done=true)"
+                            .to_string(),
+                    );
+                }
+                if count_nonempty_string_items(&done_when) < 2 {
+                    return Err(
+                        "framework_autopilot_goal start requires >=2 done_when items (drive_until_done=true)"
+                            .to_string(),
+                    );
+                }
+                if count_nonempty_string_items(&validation_commands) == 0 {
+                    return Err(
+                        "framework_autopilot_goal start requires non-empty validation_commands (drive_until_done=true)"
+                            .to_string(),
+                    );
+                }
+            }
+
             let mut obj = base_goal_object(
                 goal.to_string(),
-                value_string_list(&payload, "non_goals"),
-                value_string_list(&payload, "done_when"),
-                value_string_list(&payload, "validation_commands"),
+                non_goals,
+                done_when,
+                validation_commands,
                 drive_until_done,
                 payload
                     .get("current_horizon")
@@ -495,6 +531,68 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
         _ => Err(format!(
             "framework_autopilot_goal: unknown operation '{operation}'"
         )),
+    }
+}
+
+/// `RG_FOLLOWUP` / `RG FOLLOWUP` / `rg-followup` at line head (model often drops the underscore),
+/// only when the line also carries faux host keyvals — avoids stripping incidental prose.
+fn spoof_rg_followup_line_head_compact(lower: &str) -> bool {
+    if !(lower.contains("missing_parts=") || lower.contains("escalation=")) {
+        return false;
+    }
+    let compact_head: String = lower
+        .chars()
+        .take(160)
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    compact_head.to_ascii_lowercase().starts_with("rgfollowup")
+}
+
+/// Strip assistant-hallucinated or legacy **imitation** hook lines before they loop back via
+/// `additional_context`, `followup_message`, `SESSION_SUMMARY`, or merged paragraphs.
+///
+/// Keeps legitimate host injections that start with `router-rs` (e.g. `router-rs AG_FOLLOWUP …`).
+pub(crate) fn scrub_spoof_host_followup_lines(text: &str) -> String {
+    text.lines()
+        .filter(|line| {
+            let t = line.trim_start();
+            if t.is_empty() {
+                return true;
+            }
+            let lower = t.to_ascii_lowercase();
+            if lower.starts_with("router-rs") {
+                return true;
+            }
+            // Obsolete pasted imitation prefix ("rg" gate history); host never emits this leader.
+            if lower.starts_with("rg_followup") {
+                return false;
+            }
+            if spoof_rg_followup_line_head_compact(&lower) {
+                return false;
+            }
+            // Typical faux host line shape: TOKEN_FOLLOWUP + missing_parts= without `router-rs`.
+            if lower.contains("_followup") && lower.contains("missing_parts=") {
+                return false;
+            }
+            // Shape copied from old templates / anti-spoof drills (comma-free snake tail).
+            if lower.contains("missing_parts=independent_subagent") {
+                return false;
+            }
+            true
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Remove imitation lines from hook-visible string fields (best-effort, idempotent).
+pub(crate) fn scrub_followup_fields_in_hook_output(output: &mut Value) {
+    if let Some(Value::String(s)) = output.get_mut("followup_message") {
+        let n = scrub_spoof_host_followup_lines(s);
+        *s = n;
+    }
+    if let Some(Value::String(s)) = output.get_mut("additional_context") {
+        let n = scrub_spoof_host_followup_lines(s);
+        *s = n;
     }
 }
 
@@ -650,8 +748,9 @@ fn build_autopilot_drive_followup_verbose(
     );
     let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
     if !nudges.autopilot_drive_verbose_reasoning_depth.is_empty() {
-        lines.push(nudges.autopilot_drive_verbose_reasoning_depth);
+        lines.push(nudges.autopilot_drive_verbose_reasoning_depth.clone());
     }
+    crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
     lines.join("\n")
 }
 
@@ -693,8 +792,9 @@ pub fn build_autopilot_drive_followup_message_from_state(
     }
     let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
     if !nudges.autopilot_drive_compact_reasoning_depth.is_empty() {
-        lines.push(nudges.autopilot_drive_compact_reasoning_depth);
+        lines.push(nudges.autopilot_drive_compact_reasoning_depth.clone());
     }
+    crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
     lines.push("Done → `framework_autopilot_goal` operation=complete.".to_string());
     Some(lines.join("\n"))
 }
@@ -714,6 +814,7 @@ pub fn merge_hook_nudge_paragraph(
     paragraph_first_line_prefix: &str,
     use_followup_message: bool,
 ) {
+    let msg = scrub_spoof_host_followup_lines(msg);
     let field = if use_followup_message {
         "followup_message"
     } else {
@@ -721,19 +822,69 @@ pub fn merge_hook_nudge_paragraph(
     };
     match output.get_mut(field) {
         Some(Value::String(existing)) => {
-            let cleaned =
-                strip_followup_paragraphs_with_line_prefix(existing, paragraph_first_line_prefix);
+            let cleaned = scrub_spoof_host_followup_lines(
+                &strip_followup_paragraphs_with_line_prefix(existing, paragraph_first_line_prefix),
+            );
             *existing = if cleaned.is_empty() {
-                msg.to_string()
+                msg.clone()
             } else {
-                format!("{cleaned}\n\n{msg}")
+                scrub_spoof_host_followup_lines(&format!("{cleaned}\n\n{msg}"))
             };
         }
         _ => {
             if let Some(obj) = output.as_object_mut() {
-                obj.insert(field.to_string(), Value::String(msg.to_string()));
+                obj.insert(field.to_string(), Value::String(msg.clone()));
             }
         }
+    }
+}
+
+#[cfg(test)]
+fn scrub_concat_evils() -> (String, String) {
+    // Fragment so the imitation template never appears verbatim in workspace source.
+    let a = concat!("RG", "_FOLLOWUP");
+    let intro = concat!(
+        "missing",
+        "_parts=independent_",
+        "subagent_or_reject_",
+        "reason"
+    );
+    let spoof_line = format!("{a} {intro} escalation=loop");
+    let block = format!("lead\n\n{spoof_line}\ntrailer");
+    (spoof_line, block)
+}
+
+#[cfg(test)]
+mod spoof_scrub_tests {
+    use super::*;
+
+    #[test]
+    fn scrub_drops_rg_prefixed_and_faux_ag_style_lines() {
+        let (spoof_line, block) = scrub_concat_evils();
+        assert_eq!(scrub_spoof_host_followup_lines(&spoof_line), "");
+        let cleaned = scrub_spoof_host_followup_lines(&block);
+        assert!(!cleaned.contains("RG_FOLLOW"));
+        assert!(cleaned.contains("lead"));
+        assert!(cleaned.contains("trailer"));
+        assert!(
+            !scrub_spoof_host_followup_lines("router-rs AG_FOLLOWUP missing_parts=pg_pending")
+                .trim()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn scrub_drops_spaced_rg_followup_missing_parts_lines() {
+        let line =
+            "RG FOLLOWUP missing_parts=independent_subagent_or_reject_reason escalation=loop";
+        assert_eq!(scrub_spoof_host_followup_lines(line).trim(), "");
+    }
+
+    #[test]
+    fn scrub_drops_hyphenated_rg_followup_head() {
+        let line =
+            "RG-FOLLOWUP missing_parts=independent_subagent_or_reject_reason escalation=loop";
+        assert_eq!(scrub_spoof_host_followup_lines(line).trim(), "");
     }
 }
 
@@ -784,7 +935,7 @@ mod tests {
             "task_id": "my-task",
             "goal": "ship feature X",
             "non_goals": ["rewrite unrelated modules"],
-            "done_when": ["tests green"],
+            "done_when": ["tests green", "review checklist cleared"],
             "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
@@ -834,6 +985,9 @@ mod tests {
             "operation": "start",
             "task_id": "cl-task",
             "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
         .expect("start");
@@ -870,6 +1024,9 @@ mod tests {
             "operation": "start",
             "task_id": "rs-task",
             "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
         .expect("start");
@@ -932,7 +1089,7 @@ mod tests {
         fs::create_dir_all(repo.join("artifacts/current/fb-task")).expect("mkdir");
         fs::write(
             repo.join("artifacts/current/fb-task/GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"orphan pointer","status":"running","checkpoints":[{"note":"n"}],"done_when":["d"],"validation_commands":["cargo test"]}"#,
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"orphan pointer","status":"running","non_goals":["n"],"checkpoints":[{"note":"n"}],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
         )
         .expect("goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr read");
@@ -962,7 +1119,7 @@ mod tests {
         .expect("focus");
         fs::write(
             repo.join("artifacts/current/focus-only/GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"via focus","status":"running","checkpoints":[],"done_when":[],"validation_commands":["cargo test"]}"#,
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"via focus","status":"running","non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
         )
         .expect("goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr");
@@ -1015,7 +1172,7 @@ mod tests {
         fs::create_dir_all(repo.join("artifacts/current/ns/sub")).expect("mkdir");
         fs::write(
             repo.join("artifacts/current/ns/sub/GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"nested tid","status":"running","checkpoints":[],"done_when":[],"validation_commands":[]}"#,
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"nested tid","status":"running","non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr");
@@ -1046,6 +1203,9 @@ mod tests {
             "operation": "start",
             "task_id": "mg-task",
             "goal": "alpha",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
         .expect("start");
@@ -1058,6 +1218,9 @@ mod tests {
             "operation": "start",
             "task_id": "mg-task",
             "goal": "beta",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
         .expect("start2");
@@ -1110,6 +1273,9 @@ mod tests {
             "operation": "start",
             "task_id": "mx-task",
             "goal": "autopilot phase",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
         .expect("goal start");

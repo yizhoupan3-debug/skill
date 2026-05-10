@@ -23,27 +23,16 @@ trigger_hints:
   - 路由 review
   - routing framework
   - 边界重叠
-  - 减少 token 消耗
   - framework 自优化
-  - skill系统
-  - 行为驱动
-  - 多余入口
   - 不必要抽象
-  - 减法视角
-  - 第一性原理
   - runtime 轻量化
   - skill 核查
-  - skill 合并
   - skill 精简
   - 沉到 runtime
-  - 历史文件清理
   - 旧口径清理
   - contract 清理
   - 兼容层
   - 胶水层
-  - 减少入口
-  - 减入口
-  - 不损害功能
   - skill 维护
   - sync health checks
   - registry drift cleanup
@@ -54,11 +43,8 @@ trigger_hints:
   - validate skills
   - owner gate overlay
   - skill 不好用
-  - skill不好用
   - 持续优化 skill
   - 外部调研优化 skill
-  - 科研 skill 不好用
-  - 写作 skill 不好用
 framework_roles:
   - planner
   - gate
@@ -131,8 +117,8 @@ the request is about framework structure rather than one isolated file edit.
 
 ## Do not use
 
-- The task is **concrete single skill package creation/update** after the boundary is known → use [`$skill-creator`](/Users/joe/Documents/skill/skills/.system/skill-creator/SKILL.md)
-- The task is **new skill intake / install / relink / re-index** → use [`$skill-installer`](/Users/joe/Documents/skill/skills/.system/skill-installer/SKILL.md)
+- The task is **concrete single skill package creation/update** after the boundary is known → use [`$skill-creator`](../.system/skill-creator/SKILL.md)
+- The task is **new skill intake / install / relink / re-index** → use [`$skill-installer`](../.system/skill-installer/SKILL.md)
 
 ## Primary operating principle
 
@@ -143,6 +129,8 @@ This owner should behave like a **framework-control layer**:
 3. sink file-by-file wording churn into patches and sync outputs
 4. if runtime policy permits, sidecar bounded read-only framework inspection
 5. if spawning is blocked, preserve the same inspection slices in local-supervisor mode
+
+**与仓库 `AGENTS.md` 对齐（减法 / 第一性原理）**：先回答「只改变什么、明确不做什么、现有 owner 是谁」，再动路由或新增 skill；默认 **incumbent-first**、**detail 下沉 `references/`**，禁止用更多入口/抽象掩盖不确定。用户口头说「减法视角」「第一性原理」时，仍优先命中本 owner（长尾同义词见 [`references/trigger-hints-long.md`](references/trigger-hints-long.md)），但结论必须落在可验证的 registry/skill 改动上。
 
 ## Main-thread compression contract
 
@@ -158,7 +146,7 @@ The main thread should contain only:
 
 If bounded framework inspection benefits from parallelism and runtime policy permits:
 
-- route it through [`runtime delegation gate`](runtime policy)
+- route it through [`agent-swarm-orchestration` (delegation gate)](../agent-swarm-orchestration/SKILL.md)
 
 If runtime policy does **not** permit spawning:
 
@@ -199,18 +187,19 @@ Default to **incumbent-first** repair:
 ## Validation
 
 ```bash
-cd /Users/joe/Documents/skill
+cd "<repo-root>"
 cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --skills-root skills \
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
   --apply
 ```
 
-For local high-output runs, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) and prefer the corresponding `rtk ...` wrapper when raw output is not required.
+For local high-output runs, follow [`RTK.md`](../../RTK.md) and prefer the corresponding `rtk ...` wrapper when raw output is not required.
 
 ## References
 
 - [references/skill-maintenance-modes.md](references/skill-maintenance-modes.md)
+- [references/trigger-hints-long.md](references/trigger-hints-long.md)
 
 ## Quality bar
 
@@ -221,7 +210,7 @@ Before finishing, verify:
 - description carries real trigger phrasing users will say
 - optional examples live in `references/` instead of bloating `SKILL.md`
 - the framework is more precise, faster to scan, and cheaper to load than before
-- **Superior Quality Audit**: For framework-level redesigns, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
+- **Superior Quality Audit**: For framework-level redesigns, apply the runtime verification gate (see [`skills/SKILL_FRAMEWORK_PROTOCOLS.md`](../SKILL_FRAMEWORK_PROTOCOLS.md)) and verify against its “Superior Quality Bar / verification gate” criteria.
 
 ## Trigger examples
 - "强制进行 Codex 框架深度审计 / 检查路由策略与同步状态。"

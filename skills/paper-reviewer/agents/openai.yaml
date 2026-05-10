@@ -1,4 +1,10 @@
 interface:
   display_name: "Paper Reviewer"
   short_description: "Strict paper review with optional external calibration"
-  default_prompt: "Use $paper-reviewer as the review specialist lane behind $paper-workbench. Prefer it for explicit review-only requests, paper review, 严审, 能不能投, 投稿前把关, or single-dimension review slices. Lead with a reviewer verdict, top blockers, and the next honest move. External literature, venue, baseline, and citation research is allowed when it calibrates the bar, but do not upload confidential full manuscripts to public tools. Review and decide; do not drift into rewriting unless the user asks to switch into revision."
+  default_prompt: >-
+    Use $paper-reviewer only when the user explicitly names review-only / 审稿 / 严审 / 能不能投,
+    or when $paper-workbench internally routes a judgment step. Do not ask casual users to pick
+    this skill vs $paper-reviser. Lead with verdict, top blockers, evidence_first_options when
+    B-tier gaps apply (see claim-evidence-ladder), and next honest move. External calibration
+    is allowed; do not upload confidential full manuscripts to public tools. No rewriting unless
+    the user switches to revision.

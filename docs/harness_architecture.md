@@ -61,6 +61,7 @@
 - **语义归属**：L5 契约（`reasoning-depth-contract.md`、RFV skill）定义 **何为正确工作方式**。
 - **运行时归属**：L3 仅做 **轻量提醒**（可选、可关），**不得**用长文案替代 L1/L2。
 - **单一结论**：深度来自 **分工 + 可执行验证 + 落盘**；不是单模型 CoT。该结论 **只应在一处** 写长文，其余层 **链接或一行指针**。
+- **调研深度（外研加强）**：结构性外研输出、可复核检索轨迹、多视角真分离 — 见 `docs/references/rfv-loop/reasoning-depth-contract.md` §**提升调研深度的 harness 方向**（与 `lane-templates.md` 外研深度模式一致；**不以** L3 hook 长文案代替）。
 
 ---
 
@@ -70,7 +71,7 @@
 2. **新 env 开关** → 仅在 **跨用户可见噪音 / 合规** 需要时添加；优先收束到 `router_env_flags` + 文档表，**禁止**在随机模块读裸 `std::env::var`。
 3. **新验证启发式** → 必须 **可测**（单测含命令样例）；宁可 **少而准**，用 `hook-evidence-append` 补长尾。
 4. **新 operator 文案** → 默认进 **L5 文档**；注入宿主时以 **`configs/framework/HARNESS_OPERATOR_NUDGES.json`** 为真源（`router-rs` 启动时合并内置默认值）。Schema 不匹配会**回退到内置默认**（不再做部分合并）。**关闭全部此类注入**：`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`（与其它 `ROUTER_RS_*` 软关断语义一致）。Schema 说明见同目录 `HARNESS_OPERATOR_NUDGES_SCHEMA.json`。
-5. **同时关掉所有续跑/nudge** → `ROUTER_RS_OPERATOR_INJECT=0`（聚合关断；P1-E）。等价于同时设 `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` + `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` + `ROUTER_RS_RFV_LOOP_HOOK=0`，单变量更易调试。
+5. **同时关掉所有续跑/nudge + 可选论文对抗 hook** → `ROUTER_RS_OPERATOR_INJECT=0`（聚合关断；P1-E）。等价于同时设 `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` + `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` + `ROUTER_RS_RFV_LOOP_HOOK=0`，并在你已启用时还关掉 Cursor **`beforeSubmit`** 的 **`PAPER_ADVERSARIAL_HOOK`**（见 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），单变量更易调试。
 
 ---
 
@@ -78,10 +79,10 @@
 
 | 概念 | 主要落地 |
 |------|----------|
-| L4 | `.cursor/hooks.json`、`.cursor/hooks/*.sh`、Codex `hooks.json` |
+| L4 | `.cursor/hooks.json`（每条命令直指 `router-rs cursor hook`，无 shell shim）、Codex `hooks.json` |
 | L3 | `scripts/router-rs/src/{cursor_hooks,codex_hooks,framework_runtime,rfv_loop,autopilot_goal,task_state,task_state_aggregate,task_command,task_write_lock,harness_operator_nudges}.rs` |
 | L2 | `artifacts/current/`、`configs/framework/*SCHEMA*` |
-| L5 | `skills/**/SKILL.md`、`skills/review-fix-verify-loop/references/*` |
+| L5 | `skills/**/SKILL.md`、`docs/rfv_loop_harness.md`、`docs/references/rfv-loop/*`（含 [`math-reasoning-harness.md`](references/rfv-loop/math-reasoning-harness.md)；非热 skill 路由） |
 
 ---
 
@@ -102,14 +103,15 @@
 
 | 环境变量 | 默认 | 关闭后影响（其余面不变） |
 |---------|------|------------------------|
-| `ROUTER_RS_OPERATOR_INJECT` | 开 | **聚合关断**：以下三类**全部**消失 |
-| `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉 `HARNESS_OPERATOR_NUDGES.json` 注入的「推理深度」**配置句**；RFV/AUTOPILOT 续跑骨架仍在。**不**影响：`framework refresh` 主线 `prompt` 里的 **`深度信号: dN/3`**（`depth_compliance` rollup）与 GOAL 段落内硬编码的 **深度自检** 行（见 `framework_runtime::refresh_depth_self_check_lines`） |
+| `ROUTER_RS_OPERATOR_INJECT` | 开 | **聚合关断**：推理 nudge + AUTOPILOT_DRIVE + RFV_LOOP **及**（若启用）Cursor beforeSubmit **`PAPER_ADVERSARIAL_HOOK`** 全部消失 |
+| `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉 `HARNESS_OPERATOR_NUDGES.json` 注入的 operator 文案（含 **推理深度** 三键与可选 **`math_reasoning_harness_line`**）；RFV/AUTOPILOT 续跑骨架仍在。**不**影响：continuity digest 主线 `prompt` 里的 **`深度信号: dN/3`**（`depth_compliance` rollup）与 GOAL 段落内硬编码的 **深度自检** 行（见 `framework_runtime::continuity_digest`） |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | 整个 **AUTOPILOT_DRIVE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 整个 **RFV_LOOP_CONTINUE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_GOAL_PROMPT_VERBOSE` | 关（默认紧凑） | 仅切换 verbose/compact 模板；与「是否注入」无关 |
 | `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` | 关 | 改写入 `additional_context` vs `followup_message` |
-| `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | 输出层整段剥离（含 nudge）|
+| `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | 输出层整段剥离（含 nudge）；**例外**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup 会**保留**，避免静默丢失硬阻塞与合规提示|
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | 仅短路 review/delegation 门控；**续跑仍合并** |
+| `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | 关（**opt-in**：须显式 `1`/`true`/`yes`/`on`） | Cursor **`beforeSubmit`**：论文类用户提示合并 **`PAPER_ADVERSARIAL_HOOK`** 短段（强对抗审稿禁令摘要）；文案真源 **`configs/framework/PAPER_ADVERSARIAL_HOOK.txt`**；受 **`ROUTER_RS_OPERATOR_INJECT`** 总闸约束 |
 
 实现入口：所有开关均通过 [`router_env_flags`](../scripts/router-rs/src/router_env_flags.rs) 解析；新增分支或开关请加在该模块并在此表登记。
 
@@ -124,6 +126,6 @@
 | `claimed_passed_without_evidence` | `closeout_enforcement` R7（record 内自检） | `enforce_closeout_for_session_payload` 阻断 |
 | `claimed_passed_without_evidence_index_rows` | `closeout_enforcement` R8（context-aware；读 EVIDENCE_INDEX） | 同上 |
 | `goal_verify_or_block_seen` | `cursor_hooks::hydrate_goal_gate_from_disk`（已收紧：纯 has_goal_text 不够）| Stop AG_FOLLOWUP 决策 |
-| `depth_score ∈ {0..3}` | `task_state::DepthCompliance` | **`framework refresh` JSON 字段 `depth_compliance`**；**`prompt` 一行 `深度信号`**（经 Codex SessionStart digest）；**`framework statusline` 段 `depth=dN`**（`PASS` 无对照证据时后缀 `!`） |
+| `depth_score ∈ {0..3}` | `task_state::DepthCompliance` | **`task_state` / `ResolvedTaskView` 的 `depth_compliance`**；**digest `prompt` 一行 `深度信号`**（经 Codex SessionStart）；**`framework statusline` 段 `depth=dN`**（`PASS` 无对照证据时后缀 `!`） |
 
-详细深度契约（语义层）见 [`reasoning-depth-contract.md`](../skills/review-fix-verify-loop/references/reasoning-depth-contract.md)。
+详细深度契约（语义层）见 [`reasoning-depth-contract.md`](references/rfv-loop/reasoning-depth-contract.md)。

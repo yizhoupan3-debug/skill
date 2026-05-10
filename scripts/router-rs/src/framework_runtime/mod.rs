@@ -2,42 +2,52 @@ use crate::closeout_enforcement::{
     evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
     CloseoutEvidenceContext,
 };
-use crate::router_env_flags::{router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose};
+use crate::router_env_flags::router_rs_env_enabled_default_true;
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
-use std::ops::Not;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
+mod alias;
 mod constants;
+mod continuity_digest;
+mod prompt_compression;
 mod repo_roots;
+mod runtime_view;
+mod session_artifacts;
+mod statusline;
 mod types;
 
+pub use alias::build_framework_alias_envelope;
+// Used by `crate::framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION` consumers; not referenced in this module body.
+#[allow(unused_imports)]
+pub use constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
+// Retained for external callers.
+#[allow(unused_imports)]
+pub use constants::FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION;
 pub use constants::{
-    FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION,
-    FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY, FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
-    FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
+    FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
+    FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
 };
+pub use continuity_digest::build_framework_continuity_digest_prompt;
+pub use prompt_compression::build_framework_prompt_compression_envelope;
 pub use repo_roots::{is_framework_root, resolve_repo_root_arg};
+pub use session_artifacts::write_framework_session_artifacts;
+pub use statusline::build_framework_statusline;
 pub use types::FrameworkAliasBuildOptions;
 
 use constants::{
-    ACTIVE_TASK_POINTER_NAME, CLOSEOUT_COMPLETION_STATUSES, CONTINUITY_JOURNAL_FILENAME,
-    CONTINUITY_JOURNAL_SCHEMA_VERSION, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
+    CLOSEOUT_COMPLETION_STATUSES, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
     EVIDENCE_INDEX_SCHEMA_VERSION, FOCUS_TASK_POINTER_NAME, NEXT_ACTIONS_FILENAME,
-    NEXT_ACTIONS_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME, STALE_STORY_STATES,
-    SUPERVISOR_STATE_FILENAME, SUPERVISOR_STATE_SCHEMA_VERSION, TASK_REGISTRY_NAME,
-    TASK_REGISTRY_SCHEMA_VERSION, TERMINAL_PHASES, TERMINAL_STORY_STATES,
-    TERMINAL_VERIFICATION_STATUSES, TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
+    NEXT_ACTIONS_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
+    SUPERVISOR_STATE_SCHEMA_VERSION, TASK_REGISTRY_NAME, TASK_REGISTRY_SCHEMA_VERSION,
+    TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
 };
-use types::{
-    ArtifactPaths, ArtifactPayloads, ContinuityJournalInput, FrameworkRuntimeView,
-    SessionArtifactWritePlan, StaleContinuityInputs, SupervisorStateInput, TaskRegistryEntry,
-};
+use types::{ArtifactPaths, ArtifactPayloads, FrameworkRuntimeView, TaskRegistryEntry};
 
 pub fn build_framework_runtime_snapshot_envelope(
     repo_root: &Path,
@@ -362,2562 +372,35 @@ fn compact_contract_text(text: &str, max_chars: usize) -> String {
     compact
 }
 
-pub fn build_framework_refresh_payload(
-    repo_root: &Path,
-    max_lines: usize,
-    verbose: bool,
-) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root, None, None);
-    let continuity = classify_runtime_continuity(&snapshot);
-    let contract = supervisor_contract(&snapshot.supervisor_state);
-    let task_view = crate::task_state::resolve_task_view(repo_root, None);
-    let depth_compliance_json = task_view
-        .depth_compliance
-        .as_ref()
-        .and_then(|dc| serde_json::to_value(dc).ok())
-        .unwrap_or(Value::Null);
-    let mut prompt = render_framework_refresh_prompt(&continuity, &contract, max_lines);
-    if let Some(hint) = crate::task_state::depth_compliance_refresh_hint(&task_view) {
-        prompt.push_str("\n\n");
-        prompt.push_str(&hint);
-    }
-    let goal_state = crate::autopilot_goal::read_goal_state(repo_root, None)
-        .ok()
-        .flatten();
-    if let Some(ref g) = goal_state {
-        prompt.push_str("\n\n");
-        prompt.push_str(&format_goal_state_refresh_section(repo_root, g));
-    }
-    let debug = if verbose {
-        json!({
-            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-            "verification_status": continuity.get("verification_status").cloned().unwrap_or(Value::Null),
-            "missing_recovery_anchors": continuity
-                .get("missing_recovery_anchors")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(Vec::new())),
-            "recovery_hints": continuity
-                .get("recovery_hints")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(Vec::new())),
-            "paths": continuity.get("paths").cloned().unwrap_or(Value::Null),
-        })
-    } else {
-        Value::Null
-    };
-    Ok(json!({
-        "ok": true,
-        "workspace": workspace_name_from_root(repo_root),
-        "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        "task": continuity.get("task").cloned().unwrap_or(Value::Null),
-        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
-        "prompt": prompt,
-        "goal_state": goal_state.clone().unwrap_or(Value::Null),
-        "depth_compliance": depth_compliance_json,
-        "debug": debug,
-    }))
-}
-
-/// 把 `GOAL_STATE.json` 嵌进 `framework refresh` 提示，使 `$refresh` 与 Codex SessionStart digest 可见「可执行目标」而非仅有连续性摘要。
-/// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 使用冗长 checklist（完整字段始终在 JSON `goal_state`）。
-///
-/// P0-E + P1-D：refresh / SessionStart digest 的 GOAL 段落走 `HARNESS_OPERATOR_NUDGES.json`
-/// 真源（与 RFV/AUTOPILOT 续跑共用），并附带「深度自检」行（verbose 三条；compact 单行）。
-/// `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 仅去掉 JSON 配置的那句「推理深度」；**深度自检行仍在**。
-/// 另：`build_framework_refresh_payload` 在主线 `prompt` 中追加 `task_state::depth_compliance_refresh_hint`
-///（`depth_compliance` 同步写入 refresh JSON），不受该 env 影响。
-fn format_goal_state_refresh_section(repo_root: &Path, goal: &Value) -> String {
-    if router_rs_goal_prompt_verbose() {
-        format_goal_state_refresh_section_verbose(repo_root, goal)
-    } else {
-        format_goal_state_refresh_section_compact(repo_root, goal)
-    }
-}
-
-/// Verbose 版本（仅 GOAL_PROMPT_VERBOSE=1 时启用）：使用 RFV reasoning-depth contract 的完整三问。
-/// Compact 版本：单行；保留 SessionStart 640 字符上限友好。
-fn refresh_depth_self_check_lines(verbose: bool) -> Vec<String> {
-    if verbose {
-        vec![
-            "- 深度自检（reasoning-depth-contract）：".to_string(),
-            "  1) A 阶段是否 **并行** 仅含只读 lane（review + optional external）？".to_string(),
-            "  2) verify 是否对应明确 `verify_commands`，PASS/FAIL 有命令/日志而非「感觉通过」？"
-                .to_string(),
-            "  3) 本轮是否写入 RFV `append_round`（含 `verify_result`）或 EVIDENCE_INDEX 行？"
-                .to_string(),
-        ]
-    } else {
-        vec!["- 深度自检：并行只读→fix→verify；PASS 必有命令/exit；本轮落 EVIDENCE 或 append_round。".to_string()]
-    }
-}
-
-fn format_goal_state_refresh_section_verbose(repo_root: &Path, goal: &Value) -> String {
-    let g = value_text(goal.get("goal"));
-    let st = value_text(goal.get("status"));
-    let drive = goal
-        .get("drive_until_done")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let done = value_string_list(goal.get("done_when"));
-    let val = value_string_list(goal.get("validation_commands"));
-    let non = value_string_list(goal.get("non_goals"));
-    let horizon = value_text(goal.get("current_horizon"));
-    let mut lines: Vec<String> = Vec::new();
-    lines.push(
-        "## GOAL_STATE（router-rs 目标机；须据此推进直至 complete 或显式 pause/block）".to_string(),
-    );
-    lines.push(format!(
-        "- 目标: {}",
-        if g.is_empty() {
-            "（未填写）".to_string()
-        } else {
-            g
-        }
-    ));
-    lines.push(format!("- 状态: {} | drive_until_done: {}", st, drive));
-    if !horizon.is_empty() {
-        lines.push(format!("- 当前地平线: {}", horizon));
-    }
-    if !non.is_empty() {
-        lines.push(format!("- 非目标: {}", non.join("；")));
-    }
-    if !done.is_empty() {
-        lines.push(format!("- 验收 done_when: {}", done.join("；")));
-    }
-    if !val.is_empty() {
-        lines.push(format!("- 验证命令: {}", val.join("；")));
-    }
-    lines.push(
-        "- 下一跳: 实现 → 跑验证命令 → 更新 SESSION_SUMMARY/NEXT_ACTIONS；满足验收后 `stdio` op `framework_autopilot_goal` operation=complete。"
-            .to_string(),
-    );
-    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
-    if !nudges.autopilot_drive_verbose_reasoning_depth.is_empty() {
-        lines.push(format!(
-            "- {}",
-            nudges.autopilot_drive_verbose_reasoning_depth
-        ));
-    }
-    lines.extend(refresh_depth_self_check_lines(true));
-    lines.join("\n")
-}
-
-fn format_goal_state_refresh_section_compact(repo_root: &Path, goal: &Value) -> String {
-    let g = value_text(goal.get("goal"));
-    let st = value_text(goal.get("status"));
-    let drive = goal
-        .get("drive_until_done")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let done = value_string_list(goal.get("done_when"));
-    let val = value_string_list(goal.get("validation_commands"));
-    let horizon = value_text(goal.get("current_horizon"));
-    let goal_line = if g.is_empty() {
-        "（未填写）".to_string()
-    } else {
-        compact_contract_text(&g, 200)
-    };
-    let mut lines: Vec<String> = Vec::new();
-    lines.push("## Active goal（全文见 JSON `goal_state`）".to_string());
-    lines.push(format!(
-        "- {} · drive={} · {}",
-        if st.is_empty() {
-            "（状态未填）".to_string()
-        } else {
-            st
-        },
-        drive,
-        goal_line
-    ));
-    let mut bits: Vec<String> = Vec::new();
-    if !horizon.is_empty() {
-        bits.push(format!("horizon: {}", compact_contract_text(&horizon, 100)));
-    }
-    if !done.is_empty() {
-        bits.push(format!(
-            "done: {}",
-            compact_contract_text(&done.join(" · "), 160)
-        ));
-    }
-    if !val.is_empty() {
-        let head = val.first().map(|s| s.as_str()).unwrap_or("").to_string();
-        let extra = val.len().saturating_sub(1);
-        let cmd = if extra > 0 {
-            format!("`{}` (+{extra})", compact_contract_text(&head, 72))
-        } else {
-            format!("`{}`", compact_contract_text(&head, 90))
-        };
-        bits.push(format!("verify: {cmd}"));
-    }
-    if !bits.is_empty() {
-        lines.push(format!("- {}", bits.join(" · ")));
-    }
-    lines.push(
-        "- 收口: `framework_autopilot_goal` operation=complete（或 pause/block）。".to_string(),
-    );
-    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
-    if !nudges.autopilot_drive_compact_reasoning_depth.is_empty() {
-        lines.push(format!(
-            "- {}",
-            nudges.autopilot_drive_compact_reasoning_depth
-        ));
-    }
-    lines.extend(refresh_depth_self_check_lines(false));
-    lines.join("\n")
-}
-
-pub fn build_framework_statusline(repo_root: &Path) -> Result<String, String> {
-    let snapshot = load_framework_runtime_view(repo_root, None, None);
-    let continuity = classify_runtime_continuity(&snapshot);
-    let task_view = crate::task_state::resolve_task_view(repo_root, None);
-    let depth_status = task_view
-        .depth_compliance
-        .as_ref()
-        .and_then(|dc| {
-            let tid_ok = task_view
-                .task_id
-                .as_deref()
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false);
-            tid_ok.then_some(dc)
-        })
-        .map(|dc| {
-            let bang = if dc.rfv_pass_without_evidence_count > 0 {
-                "!"
-            } else {
-                ""
-            };
-            format!("depth=d{}{} | ", dc.depth_score, bang)
-        })
-        .unwrap_or_default();
-    let supervisor_state = &snapshot.supervisor_state;
-    let task = first_nonempty_text(&[
-        continuity.get("task"),
-        supervisor_state.get("task_summary"),
-        Some(&Value::String("none".to_string())),
-    ]);
-    let phase = first_nonempty_text(&[
-        continuity.get("phase"),
-        supervisor_state.get("active_phase"),
-        Some(&Value::String("idle".to_string())),
-    ]);
-    let status = first_nonempty_text(&[
-        continuity.get("status"),
-        Some(&Value::String("unknown".to_string())),
-    ]);
-    let route = statusline_route(&continuity);
-    let (git_state, branch) = git_statusline_state(repo_root);
-    let blockers = value_string_list(continuity.get("blockers"));
-    let next_actions = value_string_list(continuity.get("next_actions"));
-    let focus_task_id = snapshot.focus_task_id.clone().unwrap_or_default();
-    let other_known_count = snapshot
-        .known_task_ids
-        .iter()
-        .filter(|task_id| !task_id.is_empty() && **task_id != focus_task_id)
-        .count();
-    let other_recoverable_count = snapshot
-        .recoverable_task_ids
-        .iter()
-        .filter(|task_id| !task_id.is_empty() && **task_id != focus_task_id)
-        .count();
-    Ok(format!(
-        "{} | {} | {}/{} | task={} | route={} | nexts={} | blockers={} | others={} | resumable={} | {}git={}",
-        branch,
-        statusline_decision_hint(&blockers, &next_actions, &git_state, &status),
-        phase,
-        status,
-        short_statusline_text(&task, 24),
-        route,
-        next_actions.len(),
-        blockers.len(),
-        other_known_count,
-        other_recoverable_count,
-        depth_status,
-        git_state,
-    ))
-}
-
-fn first_nonempty_text(values: &[Option<&Value>]) -> String {
-    values
-        .iter()
-        .map(|value| value_text(*value))
-        .find(|value| !value.is_empty())
-        .unwrap_or_default()
-}
-
-fn statusline_route(continuity: &Value) -> String {
-    let skills = continuity
-        .get("route")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    match skills.len() {
-        0 => "none".to_string(),
-        1 => skills[0].clone(),
-        count => format!("{}+{}", skills[0], count - 1),
-    }
-}
-
-fn git_statusline_state(repo_root: &Path) -> (String, String) {
-    let output = Command::new("git")
-        .arg("status")
-        .arg("--porcelain")
-        .arg("--branch")
-        .arg("--untracked-files=no")
-        .current_dir(repo_root)
-        .output();
-    let Ok(output) = output else {
-        return ("nogit".to_string(), "nogit".to_string());
-    };
-    if !output.status.success() {
-        return ("nogit".to_string(), "nogit".to_string());
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut lines = stdout.lines();
-    let branch = lines
-        .next()
-        .and_then(|line| line.strip_prefix("## "))
-        .map(|line| line.split("...").next().unwrap_or(line).trim().to_string())
-        .filter(|line| !line.is_empty())
-        .unwrap_or_else(|| "unknown".to_string());
-    let changed = lines.any(|line| !line.trim().is_empty());
-    (if changed { "dirty" } else { "clean" }.to_string(), branch)
-}
-
-fn statusline_decision_hint(
-    blockers: &[String],
-    next_actions: &[String],
-    git_state: &str,
-    status: &str,
-) -> String {
-    if let Some(blocker) = blockers.iter().find(|item| !item.trim().is_empty()) {
-        return format!("blocked={}", short_statusline_text(blocker, 36));
-    }
-    if status == "completed" {
-        if let Some(action) = next_actions.iter().find(|item| !item.trim().is_empty()) {
-            return format!("next={}", short_statusline_text(action, 36));
-        }
-        if git_state == "dirty" {
-            return "next=review local changes".to_string();
-        }
-        return "next=pick task".to_string();
-    }
-    if next_actions.iter().any(|item| !item.trim().is_empty()) {
-        return "next=/refresh".to_string();
-    }
-    "next=run verification".to_string()
-}
-
-fn short_statusline_text(value: &str, limit: usize) -> String {
-    let text = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if text.len() <= limit {
-        text
-    } else if limit <= 3 {
-        text.chars().take(limit).collect()
-    } else {
-        format!("{}...", text.chars().take(limit - 3).collect::<String>())
-    }
-}
-
-fn string_or_null(value: String) -> Value {
-    if value.trim().is_empty() {
-        Value::Null
-    } else {
-        Value::String(value)
-    }
-}
-
-pub fn build_framework_alias_envelope(
-    repo_root: &Path,
-    alias_name: &str,
-    options: FrameworkAliasBuildOptions<'_>,
-) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root, None, None);
-    let continuity = classify_runtime_continuity(&snapshot);
-    let contract = supervisor_contract(&snapshot.supervisor_state);
-    let alias_record = load_framework_alias_record(repo_root, alias_name)?;
-    let host_entrypoint = resolve_alias_host_entrypoint(&alias_record, options.host_id);
-    let canonical_owner = alias_record_text(&alias_record, &["canonical_owner"]);
-    let lineage = alias_value_at_path(&alias_record, &["lineage"])
-        .cloned()
-        .unwrap_or(Value::Null);
-    let official_workflow = alias_value_at_path(&alias_record, &["official_workflow"])
-        .cloned()
-        .unwrap_or(Value::Null);
-    let skill_path = alias_skill_path(alias_name, &alias_record);
-    let implementation_bar = alias_record_list(&alias_record, &["implementation_bar"]);
-    let local_adaptations = alias_record_list(&alias_record, &["local_adaptations"]);
-    let interaction_invariants = alias_value_at_path(&alias_record, &["interaction_invariants"])
-        .cloned()
-        .unwrap_or(Value::Null);
-    let routing_hints = build_framework_alias_routing_hints(alias_name, &alias_record);
-    let entry_contract = build_framework_alias_entry_contract(
-        alias_name,
-        &alias_record,
-        &continuity,
-        &contract,
-        &skill_path,
-        options.max_lines,
-        options.compact,
-    );
-    let state_machine = build_framework_alias_state_machine(
-        alias_name,
-        &alias_record,
-        &continuity,
-        &skill_path,
-        options.max_lines,
-        options.compact,
-    );
-    let continuity_summary =
-        build_framework_alias_continuity_summary(&continuity, options.max_lines);
-    let alias_payload = if options.compact {
-        json!({
-            "ok": true,
-            "name": alias_name,
-            "host_entrypoint": string_or_null(host_entrypoint),
-            "canonical_owner": string_or_null(canonical_owner),
-            "routing_hints": routing_hints,
-            "interaction_invariants": interaction_invariants,
-            "continuity": continuity_summary,
-            "state_machine": state_machine,
-            "entry_contract": entry_contract,
-            "compact": true,
-        })
-    } else {
-        let entry_prompt = render_framework_alias_prompt(&entry_contract);
-        json!({
-            "ok": true,
-            "name": alias_name,
-            "workspace": workspace_name_from_root(repo_root),
-            "host_entrypoint": string_or_null(host_entrypoint),
-            "canonical_owner": string_or_null(canonical_owner),
-            "lineage": lineage,
-            "official_workflow": official_workflow,
-            "implementation_bar": implementation_bar,
-            "local_adaptations": local_adaptations,
-            "routing_hints": routing_hints,
-            "interaction_invariants": interaction_invariants,
-            "continuity": continuity_summary,
-            "state_machine": state_machine,
-            "entry_contract": entry_contract,
-            "optimization_hints": [
-                "prefer alias.state_machine and alias.entry_contract over opening full SKILL docs",
-                "prefer live continuity over long prose restatement",
-                "open SKILL.md only when the alias payload is insufficient"
-            ],
-            "entry_prompt": entry_prompt,
-            "entry_prompt_token_estimate": estimate_token_count(&entry_prompt),
-            "compact": false,
-        })
-    };
-    Ok(json!({
-        "schema_version": FRAMEWORK_ALIAS_SCHEMA_VERSION,
-        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
-        "alias": alias_payload
-    }))
-}
-
-fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) -> String {
-    let requested_host = host_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("codex-cli");
-    let host_entrypoints =
-        alias_value_at_path(alias_record, &["host_entrypoints"]).and_then(Value::as_object);
-    if let Some(entrypoint) = host_entrypoints
-        .and_then(|entrypoints| entrypoints.get(requested_host))
-        .and_then(Value::as_str)
-    {
-        return entrypoint.to_string();
-    }
-    for fallback_host in ["codex-cli", "cursor"] {
-        if let Some(entrypoint) = host_entrypoints
-            .and_then(|entrypoints| entrypoints.get(fallback_host))
-            .and_then(Value::as_str)
-        {
-            return entrypoint.to_string();
-        }
-    }
-    String::new()
-}
-
-fn build_framework_alias_routing_hints(alias_name: &str, alias_record: &Value) -> Value {
-    match alias_name {
-        "autopilot" => json!({
-            "reroute_when_ambiguous": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
-            "reroute_when_root_cause_unknown": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
-            "entrypoint_modes": alias_value_at_path(alias_record, &["entrypoint_modes"])
-                .cloned()
-                .unwrap_or(Value::Null),
-            "research_contract": alias_value_at_path(alias_record, &["research_contract"])
-                .cloned()
-                .unwrap_or(Value::Null),
-        }),
-        "deepinterview" => json!({
-            "review_lanes": alias_record_list(alias_record, &["review_lanes"]),
-        }),
-        "team" => json!({
-            "delegation_gate": alias_record_text(alias_record, &["delegation_gate"]),
-            "execution_owners": alias_record_list(alias_record, &["execution_owners"]),
-            "auto_route_allowed": alias_record_bool(alias_record, &["auto_route_allowed"]).unwrap_or(false),
-            "route_mode": alias_record_text(alias_record, &["route_mode"]),
-            "selection_signals": alias_value_at_path(alias_record, &["selection_signals"])
-                .cloned()
-                .unwrap_or(Value::Null),
-            "transition_states": alias_record_list(alias_record, &["official_workflow", "transition_states"]),
-            "worker_lifecycle": alias_record_list(alias_record, &["worker_lifecycle", "states"]),
-        }),
-        _ => Value::Null,
-    }
-}
-
-fn build_framework_alias_continuity_summary(continuity: &Value, max_lines: usize) -> Value {
-    json!({
-        "state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
-        "task": continuity.get("task").cloned().unwrap_or(Value::Null),
-        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
-        "next_actions": compact_alias_next_actions(continuity, max_lines),
-    })
-}
-
-fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Value, String> {
-    let registry_path = repo_root
-        .join("configs")
-        .join("framework")
-        .join("RUNTIME_REGISTRY.json");
-    if let Ok(raw) = fs::read_to_string(&registry_path) {
-        if let Ok(payload) = serde_json::from_str::<Value>(&raw) {
-            if let Some(record) = payload
-                .get("framework_commands")
-                .and_then(Value::as_object)
-                .and_then(|aliases| aliases.get(alias_name))
-                .cloned()
-            {
-                return Ok(record);
-            }
-        }
-    }
-    fallback_framework_alias_record(alias_name)
-        .ok_or_else(|| format!("Unknown framework alias: {alias_name}"))
-}
-
-fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
-    match alias_name {
-        "autopilot" => Some(json!({
-            "canonical_owner": "autopilot",
-            "reroute_when_ambiguous": "deepinterview",
-            "reroute_when_root_cause_unknown": "deepinterview",
-            "skill_path": "skills/autopilot/SKILL.md",
-            "lineage": {
-                "source": "repo-native",
-                "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
-            },
-            "official_workflow": {
-                "phases": ["expansion", "planning", "execution", "qa", "validation", "cleanup"]
-            },
-            "implementation_bar": [
-                "root-cause-first-when-unknown",
-                "verification-evidence-required",
-                "resume-and-recovery-required",
-                "converge-until-bounded-scope-clean",
-                "horizon-slice-macro-goals-with-exit-criteria-each-slice",
-                "no-chat-turn-without-continuity-delta-when-task-active",
-                "prefer-autopilot-deep-when-external-claims-drive-the-critical-path"
-            ],
-            "local_adaptations": [
-                "store execution state in rust-session-supervisor plus continuity artifacts",
-                "store specs and plans in artifacts/current task-local bootstrap outputs",
-                "use deepinterview as the first-class clarification gate for vague requests",
-                "treat each turn as a bus cycle: read alias+continuity then mutate repo then refresh SESSION_SUMMARY and NEXT_ACTIONS",
-                "for goals larger than one context window: chain horizons; each horizon ends with explicit next_actions for cold resume"
-            ],
-            "autonomy_contract": {
-                "auto_agent_orchestration": {
-                    "enabled": true,
-                    "default_mode": "bounded-sidecar-first",
-                    "spawn_policy": "admit-when-lanes-are-clear",
-                    "max_parallel_lanes": 3,
-                    "require_reject_reason_when_not_spawning": true,
-                    "reject_reasons": [
-                        "small_task",
-                        "shared_context_heavy",
-                        "write_scope_overlap",
-                        "next_step_blocked",
-                        "verification_missing",
-                        "token_overhead_dominates"
-                    ]
-                },
-                "goal_style_execution": {
-                    "enabled": true,
-                    "run_to_completion": "until-done-or-blocked",
-                    "requires_done_definition": true,
-                    "requires_non_goals_definition": true,
-                    "loop": [
-                        "plan",
-                        "implement",
-                        "verify",
-                        "repair",
-                        "closeout"
-                    ],
-                    "lifecycle_states": [
-                        "goal_defined",
-                        "running",
-                        "paused",
-                        "blocked",
-                        "verification_pending",
-                        "completed"
-                    ],
-                    "lifecycle_states_implementation": {
-                        "owner": "host_agent_layer",
-                        "rust_runtime_coverage": "job_lifecycle_only",
-                        "status": "host_owned_no_rust_native_state_machine",
-                        "rationale": "Rust runtime tracks worker/job lifecycle (queued/running/interrupted/...). The goal-level six-state machine listed above is owned by the host agent layer (codex/cursor LLM + hooks). Treat the list as a host-side contract, not a Rust enum."
-                    },
-                    "control_surface": [
-                        "goal_start",
-                        "goal_pause",
-                        "goal_resume",
-                        "goal_clear"
-                    ],
-                    "control_surface_implementation": {
-                        "owner": "hybrid_host_plus_rust_persistence",
-                        "rust_runtime_coverage": "goal_persistence_and_drive_hook",
-                        "status": "rust_stdio_goal_store_plus_cursor_followup",
-                        "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block|clear) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit (including hook-state lock failure and ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE) so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0."
-                    },
-                    "never_stop_at_plan_only": true,
-                    "allow_network_research_for_unknowns": true,
-                    "require_source_citation_for_external_claims": true,
-                    "requires_checkpoint_log_each_loop": true,
-                    "pause_requires_explicit_resume": true,
-                    "checkpoint_artifacts": [
-                        "SESSION_SUMMARY.md",
-                        "NEXT_ACTIONS.json",
-                        "EVIDENCE_INDEX.json",
-                        "GOAL_STATE.json"
-                    ]
-                }
-            },
-            "execution_owners": [
-                "autopilot",
-                "deepinterview"
-            ],
-            "decision_contract": {
-                "execute_when": [
-                    "task is concrete enough to implement",
-                    "acceptance criteria are already bounded",
-                    "next actions are specific enough to continue"
-                ],
-                "clarify_when": [
-                    "task is still ambiguous",
-                    "user intent would materially change the implementation"
-                ],
-                "debug_when": [
-                    "root cause is still unknown",
-                    "the same failure pattern repeats without a validated explanation"
-                ],
-                "resume_when": [
-                    "continuity state is active and recovery anchors are present"
-                ],
-                "refresh_when": [],
-                "repair_when": [
-                    "continuity state is inconsistent"
-                ],
-                "start_new_task_when": [
-                    "current continuity is completed and should stay historical"
-                ],
-                "verify_when": [
-                    "implementation changed but evidence is still missing",
-                    "verification status is not yet passed or completed"
-                ]
-            },
-            "host_entrypoints": {
-                "codex-cli": "/autopilot",
-                "cursor": "/autopilot"
-            },
-            "entrypoint_modes": {
-                "quick": {
-                    "codex-cli": "/autopilot-quick",
-                    "cursor": "/autopilot-quick"
-                },
-                "deep": {
-                    "codex-cli": "/autopilot-deep",
-                    "cursor": "/autopilot-deep"
-                }
-            },
-            "interaction_invariants": {
-                "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": [
-                    "/autopilot",
-                    "/autopilot-quick",
-                    "/autopilot-deep",
-                    "/autopilot quick",
-                    "/autopilot deep"
-                ],
-                "implicit_route_policy": "never"
-            },
-            "research_contract": {
-                "quick": {
-                    "target": "fast-check",
-                    "default_output_style": "compact",
-                    "max_rounds": 1
-                },
-                "deep": {
-                    "target": "deep-research",
-                    "default_output_style": "evidence-ledger",
-                    "requires_multi_source_validation": true,
-                    "minimum_independent_sources_per_major_claim": 2,
-                    "requires_uncertainty_register": true,
-                    "requires_counter_evidence": true,
-                    "auto_continue_on_length_finish": true
-                }
-            }
-        })),
-        "deepinterview" => Some(json!({
-            "canonical_owner": "deepinterview",
-            "skill_path": "skills/deepinterview/SKILL.md",
-            "lineage": {
-                "source": "repo-native",
-                "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review."
-            },
-            "official_workflow": {
-                "loop_rules": [
-                    "one-question-at-a-time",
-                    "target-weakest-clarity-dimension",
-                    "score-ambiguity-after-each-answer",
-                    "handoff-to-execution-only-below-threshold"
-                ]
-            },
-            "implementation_bar": [
-                "root-cause-first-when-unknown",
-                "findings-first-with-severity-order",
-                "verification-evidence-required",
-                "fix-verify-loop-until-bounded-scope-clean"
-            ],
-            "local_adaptations": [
-                "store interview progress in continuity artifacts and task-local bootstrap outputs",
-                "use live repo evidence first for brownfield clarification before asking the user",
-                "handoff into local autopilot and rust-session-supervisor after clarity is sufficient"
-            ],
-            "review_lanes": [
-                "deepinterview",
-                "visual-review",
-                "gh-address-comments",
-                "gh-fix-ci",
-                "sentry"
-            ],
-            "host_entrypoints": {
-                "codex-cli": "/deepinterview"
-            },
-            "interaction_invariants": {
-                "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/deepinterview"],
-                "implicit_route_policy": "never"
-            }
-        })),
-        "team" => Some(json!({
-            "canonical_owner": "team",
-            "delegation_gate": "agent-swarm-orchestration",
-            "auto_route_allowed": false,
-            "route_mode": "team-orchestration",
-            "selection_signals": {
-                "prefer_when": [
-                    "multi-phase execution needs explicit worker lifecycle management",
-                    "supervisor-owned continuity and lane-local outputs are required",
-                    "integration, qa, cleanup, or resume/recovery are first-class workflow phases"
-                ],
-                "avoid_when": [
-                    "task is a small tightly coupled local change",
-                    "bounded sidecars are enough and orchestration overhead would dominate",
-                    "the next supervisor step is blocked on the delegated result",
-                    "worker write scopes would overlap or require shared editing context"
-                ]
-            },
-            "spawn_admission_policy": {
-                "default": "deny",
-                "allow_when": [
-                    "read-heavy exploration can run independently",
-                    "independent hypotheses or domains can be investigated in parallel",
-                    "review or verification can run without blocking the supervisor",
-                    "write scopes are fully disjoint and lane-local"
-                ],
-                "reject_reasons": [
-                    "small_task",
-                    "shared_context_heavy",
-                    "write_scope_overlap",
-                    "next_step_blocked",
-                    "verification_missing",
-                    "token_overhead_dominates"
-                ],
-                "fallback": "local-supervisor-queue"
-            },
-            "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
-            "lineage": {
-                "source": "repo-native",
-                "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
-            },
-            "official_workflow": {
-                "phases": ["scoping", "delegation", "execution", "integration", "qa", "cleanup"],
-                "transition_states": [
-                    "delegation-planned",
-                    "spawn-pending",
-                    "spawn-blocked",
-                    "worker-output-ready",
-                    "integration-pending",
-                    "resume-required"
-                ],
-                "recovery_states": [
-                    "worker-failed-recoverable",
-                    "stale-continuity",
-                    "inconsistent-continuity"
-                ],
-                "terminal_states": ["cleanup-completed", "completed", "failed-terminal"]
-            },
-            "implementation_bar": [
-                "worker-boundaries-required",
-                "verification-evidence-required",
-                "resume-and-recovery-required",
-                "supervisor-owned-continuity"
-            ],
-            "local_adaptations": [
-                "store team state in rust-session-supervisor plus continuity artifacts",
-                "keep shared continuity supervisor-owned while workers emit lane-local outputs",
-                "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
-            ],
-            "execution_owners": [
-                "team",
-                "agent-swarm-orchestration",
-                "deepinterview"
-            ],
-            "supervisor_contract": {
-                "shared_continuity_owner": "supervisor",
-                "integration_owner": "supervisor",
-                "verification_owner": "supervisor",
-                "worker_write_scope": "lane-local-delta-only",
-                "resume_requires_recovery_anchor": true
-            },
-            "lane_contract": {
-                "required_fields": [
-                    "lane_id",
-                    "lane_owner",
-                    "goal",
-                    "bounded_scope",
-                    "forbidden_scope",
-                    "expected_output",
-                    "integration_status",
-                    "verification_status",
-                    "recovery_anchor"
-                ],
-                "integration_statuses": ["planned", "running", "output-ready", "integrated", "blocked"],
-                "verification_statuses": ["not-started", "pending", "passed", "failed"]
-            },
-            "worker_lifecycle": {
-                "states": [
-                    "planned",
-                    "spawn-pending",
-                    "running",
-                    "stalled",
-                    "failed-recoverable",
-                    "failed-terminal",
-                    "completed-unintegrated",
-                    "integrated"
-                ],
-                "resume_state": "failed-recoverable",
-                "fallback_mode": "local-supervisor-queue"
-            },
-            "recovery_contract": {
-                "continuity_states": ["active", "stale", "inconsistent"],
-                "requires_resume_judgment": [
-                    "spawn-blocked",
-                    "worker-failed-recoverable",
-                    "stale-continuity",
-                    "inconsistent-continuity"
-                ],
-                "required_artifacts": [
-                    "SESSION_SUMMARY.md",
-                    "NEXT_ACTIONS.json",
-                    "EVIDENCE_INDEX.json",
-                    "TRACE_METADATA.json",
-                    ".supervisor_state.json"
-                ]
-            },
-            "verification_contract": {
-                "integration_requires_local_judgment": true,
-                "verification_evidence_required_before_cleanup": true
-            },
-            "host_entrypoints": {
-                "codex-cli": "/team"
-            },
-            "interaction_invariants": {
-                "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/team"],
-                "implicit_route_policy": "never"
-            }
-        })),
-        _ => None,
-    }
-}
-
-fn alias_value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
-    let mut current = value;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    Some(current)
-}
-
-fn alias_record_text(value: &Value, path: &[&str]) -> String {
-    value_text(alias_value_at_path(value, path))
-}
-
-fn alias_record_list(value: &Value, path: &[&str]) -> Vec<String> {
-    alias_value_at_path(value, path)
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn alias_record_bool(value: &Value, path: &[&str]) -> Option<bool> {
-    alias_value_at_path(value, path).and_then(Value::as_bool)
-}
-
-fn alias_skill_path(alias_name: &str, alias_record: &Value) -> String {
-    let explicit_path = alias_record_text(alias_record, &["skill_path"]);
-    if !explicit_path.is_empty() {
-        return explicit_path;
-    }
-    let upstream_path =
-        alias_record_text(alias_record, &["upstream_source", "official_skill_path"]);
-    if !upstream_path.is_empty() {
-        return upstream_path;
-    }
-    match alias_name {
-        "autopilot" => "skills/autopilot/SKILL.md".to_string(),
-        "deepinterview" => "skills/deepinterview/SKILL.md".to_string(),
-        "team" => "skills/agent-swarm-orchestration/SKILL.md".to_string(),
-        _ => String::new(),
-    }
-}
-
-fn team_current_state(continuity: &Value) -> String {
-    let state = value_text(continuity.get("state"));
-    let phase = value_text(continuity.get("phase"));
-    let status = value_text(continuity.get("status"));
-
-    if state == "stale" {
-        return "stale-continuity".to_string();
-    }
-    if state == "inconsistent" {
-        return "inconsistent-continuity".to_string();
-    }
-    if status == "completed" {
-        return "cleanup-completed".to_string();
-    }
-    match phase.as_str() {
-        "delegation" => "delegation-planned".to_string(),
-        "execution" => "worker-running".to_string(),
-        "integration" => "integration-pending".to_string(),
-        "qa" => "qa-in-progress".to_string(),
-        "cleanup" => "cleanup-pending".to_string(),
-        _ if state == "active" => "scoping-active".to_string(),
-        _ => "fresh-entry".to_string(),
-    }
-}
-
-fn team_resume_action(current_state: &str) -> (&'static str, &'static str, &'static str) {
-    match current_state {
-        "stale-continuity" => (
-            "resume_requires_refresh",
-            "refresh_continuity_then_resume",
-            "refresh-continuity",
-        ),
-        "inconsistent-continuity" => (
-            "resume_requires_repair",
-            "repair_continuity_then_resume",
-            "repair-continuity",
-        ),
-        "delegation-planned" => (
-            "resume_team_delegation",
-            "review_worker_split_and_admit_or_fallback",
-            "continue-current-task",
-        ),
-        "worker-running" => (
-            "resume_team_execution",
-            "review_lane_progress_and_integrate_when_ready",
-            "continue-current-task",
-        ),
-        "integration-pending" => (
-            "resume_team_integration",
-            "integrate_lane_outputs_then_verify",
-            "continue-current-task",
-        ),
-        "qa-in-progress" => (
-            "resume_team_qa",
-            "verify_integrated_result_and_close_loop",
-            "continue-current-task",
-        ),
-        "cleanup-completed" => (
-            "resume_blocked_completed",
-            "start_new_task",
-            "start-new-task",
-        ),
-        _ => ("fresh_team_entry", "start_team_supervision", "fresh-start"),
-    }
-}
-
-fn compact_alias_next_actions(continuity: &Value, max_lines: usize) -> Vec<String> {
-    continuity
-        .get("next_actions")
-        .and_then(Value::as_array)
-        .map(|items| {
-            stable_line_items(
-                items
-                    .iter()
-                    .map(|item| value_text(Some(item)))
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .unwrap_or_default()
-        .into_iter()
-        .take(max_lines.clamp(1, 3))
-        .collect()
-}
-
-fn compact_alias_route_rules(route_rules: Vec<String>, compact: bool) -> Vec<String> {
-    let limit = if compact { 3 } else { route_rules.len() };
-    route_rules.into_iter().take(limit).collect()
-}
-
-fn compact_alias_guardrails(guardrails: Vec<String>, compact: bool) -> Vec<String> {
-    let limit = if compact { 2 } else { guardrails.len() };
-    guardrails.into_iter().take(limit).collect()
-}
-
-fn build_framework_alias_entry_contract(
-    alias_name: &str,
-    alias_record: &Value,
-    continuity: &Value,
-    contract: &Map<String, Value>,
-    skill_path: &str,
-    max_lines: usize,
-    compact: bool,
-) -> Value {
-    let task = value_text(continuity.get("task"));
-    let phase = value_text(continuity.get("phase"));
-    let status = value_text(continuity.get("status"));
-    let continuity_state = value_text(continuity.get("state"));
-    let next_actions = compact_alias_next_actions(continuity, max_lines);
-    let acceptance = value_string_list(contract.get("acceptance_criteria"))
-        .into_iter()
-        .take(max_lines.clamp(1, 2))
-        .collect::<Vec<_>>();
-    let implementation_bar = alias_record_list(alias_record, &["implementation_bar"]);
-    let decision_contract = if compact {
-        Value::Null
-    } else {
-        alias_value_at_path(alias_record, &["decision_contract"])
-            .cloned()
-            .unwrap_or(Value::Null)
-    };
-    let blockers = value_string_list(continuity.get("blockers"));
-    let verification_status = value_text(continuity.get("verification_status"));
-    let evidence_missing = continuity
-        .get("evidence_missing")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
-    let execution_ready = alias_name == "autopilot"
-        && continuity_state == "active"
-        && !task.is_empty()
-        && !next_actions.is_empty()
-        && missing_recovery_anchors.is_empty();
-    let needs_recovery =
-        alias_name == "autopilot" && matches!(continuity_state.as_str(), "stale" | "inconsistent");
-    let needs_verification = alias_name == "autopilot"
-        && evidence_missing
-        && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES);
-    let needs_debugging = alias_name == "autopilot"
-        && !blockers.is_empty()
-        && blockers.iter().any(|item| {
-            let lowered = item.to_ascii_lowercase();
-            lowered.contains("unknown")
-                || lowered.contains("root cause")
-                || lowered.contains("根因")
-                || lowered.contains("重复")
-        });
-    let needs_clarification = alias_name == "autopilot"
-        && continuity_state == "missing"
-        && task.is_empty()
-        && next_actions.is_empty();
-    let execution_readiness = if alias_name == "autopilot" {
-        if needs_recovery {
-            "needs_recovery"
-        } else if needs_verification {
-            "needs_verification"
-        } else if needs_debugging {
-            "needs_debugging"
-        } else if needs_clarification {
-            "needs_clarification"
-        } else if execution_ready {
-            "ready_to_execute"
-        } else {
-            "continue_autopilot"
-        }
-    } else {
-        "use-alias-default"
-    };
-    let mut route_rules = Vec::new();
-    let summary = match alias_name {
-        "autopilot" => {
-            let ambiguous = alias_record_text(alias_record, &["reroute_when_ambiguous"]);
-            let root_cause = alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]);
-            let owner = alias_record_text(alias_record, &["canonical_owner"]);
-            route_rules.push(format!("模糊需求 -> `{ambiguous}`"));
-            route_rules.push(format!("根因未知 -> `{root_cause}`"));
-            route_rules.push(format!("其他情况 -> `{owner}`"));
-            if evidence_missing {
-                route_rules
-                    .push("缺少验证证据 -> 先补 QA / Validation，再决定是否 closeout".to_string());
-            }
-            if !missing_recovery_anchors.is_empty() {
-                route_rules.push(format!(
-                    "恢复锚点缺失 -> 先补 {}",
-                    missing_recovery_anchors.join(", ")
-                ));
-            }
-            "进入 autopilot。本仓原生执行流启动，状态、恢复和续跑都走本地 Rust/continuity。"
-                .to_string()
-        }
-        "deepinterview" => {
-            let owner = alias_record_text(alias_record, &["canonical_owner"]);
-            let review_lanes = alias_record_list(alias_record, &["review_lanes"]);
-            route_rules.push(format!("主 owner -> `{owner}`"));
-            route_rules.push("每轮只问一个问题".to_string());
-            route_rules.push("先查仓库证据，再问用户".to_string());
-            route_rules.push("清晰度过线后 handoff 到 `autopilot`".to_string());
-            if !review_lanes.is_empty() {
-                route_rules.push(format!("review lanes -> {}", review_lanes.join(", ")));
-            }
-            "进入 deepinterview。本仓原生澄清流启动，访谈状态与 handoff 都走本地 Rust/continuity。"
-                .to_string()
-        }
-        "team" => {
-            let owner = alias_record_text(alias_record, &["canonical_owner"]);
-            let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
-            let execution_owners = alias_record_list(alias_record, &["execution_owners"]);
-            let transition_states =
-                alias_record_list(alias_record, &["official_workflow", "transition_states"]);
-            let recovery_states =
-                alias_record_list(alias_record, &["official_workflow", "recovery_states"]);
-            let lane_fields =
-                alias_record_list(alias_record, &["lane_contract", "required_fields"]);
-            let supervisor_write_scope =
-                alias_record_text(alias_record, &["supervisor_contract", "worker_write_scope"]);
-            let requires_recovery_anchor = alias_record_bool(
-                alias_record,
-                &["supervisor_contract", "resume_requires_recovery_anchor"],
-            )
-            .unwrap_or(false);
-            route_rules.push(format!("主 owner -> `{owner}`"));
-            route_rules.push(format!("team split gate -> `{delegation_gate}`"));
-            route_rules.push(format!("bounded subagent lane -> `{delegation_gate}`"));
-            route_rules.push("full orchestration route -> `team`".to_string());
-            route_rules.push(format!("worker write scope -> `{supervisor_write_scope}`"));
-            if requires_recovery_anchor {
-                route_rules.push("恢复续跑必须保留 recovery anchor".to_string());
-            }
-            if !execution_owners.is_empty() {
-                route_rules.push(format!(
-                    "execution lanes -> {}",
-                    execution_owners.join(", ")
-                ));
-            }
-            if !transition_states.is_empty() {
-                route_rules.push(format!(
-                    "transition states -> {}",
-                    transition_states.join(", ")
-                ));
-            }
-            if !recovery_states.is_empty() {
-                route_rules.push(format!("recovery states -> {}", recovery_states.join(", ")));
-            }
-            if !lane_fields.is_empty() {
-                route_rules.push(format!("lane contract -> {}", lane_fields.join(", ")));
-            }
-            "进入 team。本仓原生团队编排流启动，worker 生命周期、lane 合同、恢复和 continuity 都走本地 Rust/supervisor。"
-                .to_string()
-        }
-        _ => format!(
-            "进入 {alias_name}。优先使用本地 Rust/continuity alias 载荷，不要回退成长文说明。"
-        ),
-    };
-
-    let guardrails = compact_alias_guardrails(
-        implementation_bar
-            .into_iter()
-            .take(max_lines.clamp(1, 3))
-            .collect::<Vec<_>>(),
-        compact,
-    );
-    let route_rules = compact_alias_route_rules(route_rules, compact);
-    json!({
-        "summary": summary,
-        "context": {
-            "continuity_state": continuity_state,
-            "task": if task.is_empty() { Value::Null } else { Value::String(task) },
-            "phase": if phase.is_empty() { Value::Null } else { Value::String(phase) },
-            "status": if status.is_empty() { Value::Null } else { Value::String(status) },
-            "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status) },
-            "execution_readiness": Value::String(execution_readiness.to_string()),
-        },
-        "route_rules": route_rules,
-        "guardrails": guardrails,
-        "decision_contract": decision_contract,
-        "acceptance": acceptance,
-        "next_actions": next_actions,
-        "skill_fallback_path": if skill_path.is_empty() { Value::Null } else { Value::String(skill_path.to_string()) },
-    })
-}
-
-fn build_framework_alias_state_machine(
-    alias_name: &str,
-    alias_record: &Value,
-    continuity: &Value,
-    skill_path: &str,
-    max_lines: usize,
-    compact: bool,
-) -> Value {
-    let state = value_text(continuity.get("state"));
-    let task = value_text(continuity.get("task"));
-    let phase = value_text(continuity.get("phase"));
-    let status = value_text(continuity.get("status"));
-    let can_resume = continuity
-        .get("can_resume")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let evidence_missing = continuity
-        .get("evidence_missing")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let verification_status = value_text(continuity.get("verification_status"));
-    let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
-    let next_steps = compact_alias_next_actions(continuity, max_lines);
-    let recovery_hints = value_string_list(continuity.get("recovery_hints"))
-        .into_iter()
-        .take(max_lines.clamp(1, 2))
-        .collect::<Vec<_>>();
-    let required_anchors = continuity
-        .get("paths")
-        .and_then(Value::as_object)
-        .map(|paths| {
-            if compact {
-                stable_line_items(vec![
-                    path_anchor_label(paths.get("session_summary")),
-                    path_anchor_label(paths.get("next_actions")),
-                    path_anchor_label(paths.get("trace_metadata")),
-                    path_anchor_label(paths.get("supervisor_state")),
-                ])
-            } else {
-                stable_line_items(vec![
-                    value_text(paths.get("session_summary")),
-                    value_text(paths.get("next_actions")),
-                    value_text(paths.get("trace_metadata")),
-                    value_text(paths.get("supervisor_state")),
-                ])
-            }
-        })
-        .unwrap_or_default();
-    let (current_state, recommended_action, resume_mode, resume_reason) = if alias_name == "team" {
-        let current_state = team_current_state(continuity);
-        let (_resume_state, action, mode) = team_resume_action(&current_state);
-        let reason = match current_state.as_str() {
-            "delegation-planned" => {
-                "worker split exists but still needs supervisor admission or fallback"
-            }
-            "worker-running" => "active worker lanes require supervision before integration",
-            "integration-pending" => "lane outputs are ready but not yet integrated",
-            "qa-in-progress" => "integrated result still needs verification evidence",
-            "cleanup-completed" => {
-                "completed team execution should stay historical; start a new bounded task"
-            }
-            "stale-continuity" => "stale continuity cannot be resumed directly",
-            "inconsistent-continuity" => "continuity artifacts disagree and must be repaired first",
-            _ => "no active continuity is available; enter as a fresh team task",
-        };
-        (
-            current_state,
-            action.to_string(),
-            mode.to_string(),
-            reason.to_string(),
-        )
-    } else if alias_name == "autopilot" {
-        match state.as_str() {
-            "active"
-                if evidence_missing
-                    && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
-            {
-                (
-                    "resume_active_needs_verification".to_string(),
-                    "verify_before_done".to_string(),
-                    "continue-current-task".to_string(),
-                    "implementation is active but verification evidence is still missing"
-                        .to_string(),
-                )
-            }
-            "active" if !missing_recovery_anchors.is_empty() => (
-                "resume_active_missing_anchors".to_string(),
-                "repair_recovery_anchors_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "active continuity is missing required recovery anchors".to_string(),
-            ),
-            "active" => (
-                "resume_active".to_string(),
-                "resume_current_task".to_string(),
-                "continue-current-task".to_string(),
-                "live continuity is active".to_string(),
-            ),
-            "completed" => (
-                "resume_blocked_completed".to_string(),
-                "start_new_task".to_string(),
-                "start-new-task".to_string(),
-                "completed work should stay historical; start a new bounded task".to_string(),
-            ),
-            "stale" => (
-                "resume_requires_refresh".to_string(),
-                "refresh_continuity_then_resume".to_string(),
-                "refresh-continuity".to_string(),
-                "stale continuity cannot be resumed directly".to_string(),
-            ),
-            "inconsistent" => (
-                "resume_requires_repair".to_string(),
-                "repair_continuity_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "continuity artifacts disagree and must be repaired first".to_string(),
-            ),
-            _ => (
-                "fresh_entry".to_string(),
-                "start_execution".to_string(),
-                "fresh-start".to_string(),
-                "no active continuity is available; enter as a fresh task".to_string(),
-            ),
-        }
-    } else {
-        match state.as_str() {
-            "active" => (
-                "resume_active".to_string(),
-                if alias_name == "deepinterview" {
-                    "resume_interview".to_string()
-                } else {
-                    "resume_current_task".to_string()
-                },
-                "continue-current-task".to_string(),
-                "live continuity is active".to_string(),
-            ),
-            "completed" => (
-                "resume_blocked_completed".to_string(),
-                "start_new_task".to_string(),
-                "start-new-task".to_string(),
-                "completed work should stay historical; start a new bounded task".to_string(),
-            ),
-            "stale" => (
-                "resume_requires_refresh".to_string(),
-                "refresh_continuity_then_resume".to_string(),
-                "refresh-continuity".to_string(),
-                "stale continuity cannot be resumed directly".to_string(),
-            ),
-            "inconsistent" => (
-                "resume_requires_repair".to_string(),
-                "repair_continuity_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "continuity artifacts disagree and must be repaired first".to_string(),
-            ),
-            _ => (
-                "fresh_entry".to_string(),
-                if alias_name == "deepinterview" {
-                    "start_interview".to_string()
-                } else {
-                    "start_execution".to_string()
-                },
-                "fresh-start".to_string(),
-                "no active continuity is available; enter as a fresh task".to_string(),
-            ),
-        }
-    };
-    let handoff = match alias_name {
-        "autopilot" => json!({
-            "default_mode": "stay-in-autopilot",
-            "rules": [
-                {
-                    "when": "task is still ambiguous",
-                    "target": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
-                    "action": "handoff_for_clarification",
-                },
-                {
-                    "when": "root cause is still unknown",
-                    "target": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
-                    "action": "handoff_for_debugging",
-                }
-            ]
-        }),
-        "deepinterview" => json!({
-            "default_mode": "clarify-in-deepinterview",
-            "rules": [
-                {
-                    "when": "clarity is still below threshold",
-                    "target": "deepinterview",
-                    "action": "stay_and_ask_next_question",
-                },
-                {
-                    "when": "clarity is high enough to execute",
-                    "target": "autopilot",
-                    "action": "handoff_to_execution",
-                }
-            ]
-        }),
-        "team" => json!({
-            "default_mode": "supervise-team-locally",
-            "rules": [
-                {
-                    "when": "task is still a single-lane change",
-                    "target": "main-thread",
-                    "action": "keep_local_ownership",
-                },
-                {
-                    "when": "bounded sidecars improve throughput without full orchestration overhead",
-                    "target": alias_record_text(alias_record, &["delegation_gate"]),
-                    "action": "use_bounded_subagent_lane",
-                },
-                {
-                    "when": "worker lifecycle, integration, qa, or resume/recovery must stay supervisor-led",
-                    "target": "team",
-                    "action": "keep_team_orchestration",
-                },
-                {
-                    "when": "worker outputs are ready to merge",
-                    "target": "supervisor-verification",
-                    "action": "verify_and_close_loop",
-                }
-            ]
-        }),
-        _ => json!({
-            "default_mode": "stay-in-alias",
-            "rules": []
-        }),
-    };
-    let mut resume = Map::new();
-    resume.insert("allowed".to_string(), Value::Bool(can_resume));
-    resume.insert("mode".to_string(), Value::String(resume_mode.clone()));
-    if alias_name == "autopilot" {
-        resume.insert(
-            "missing_recovery_anchors".to_string(),
-            Value::Array(
-                missing_recovery_anchors
-                    .iter()
-                    .cloned()
-                    .map(Value::String)
-                    .collect(),
-            ),
-        );
-    }
-    resume.insert("reason".to_string(), Value::String(resume_reason.clone()));
-    if !compact {
-        resume.insert(
-            "task".to_string(),
-            if task.is_empty() {
-                Value::Null
-            } else {
-                Value::String(task)
-            },
-        );
-        resume.insert(
-            "phase".to_string(),
-            if phase.is_empty() {
-                Value::Null
-            } else {
-                Value::String(phase)
-            },
-        );
-        resume.insert(
-            "status".to_string(),
-            if status.is_empty() {
-                Value::Null
-            } else {
-                Value::String(status)
-            },
-        );
-    }
-    json!({
-        "schema_version": "framework-alias-state-machine-v1",
-        "current_state": current_state,
-        "recommended_action": recommended_action,
-        "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status) },
-        "evidence_missing": evidence_missing,
-        "resume": Value::Object(resume),
-        "handoff": handoff,
-        "next_steps": if state == "active" { next_steps } else { recovery_hints },
-        "required_anchors": required_anchors,
-        "skill_fallback_path": if skill_path.is_empty() { Value::Null } else { Value::String(skill_path.to_string()) },
-    })
-}
-
-fn path_anchor_label(path: Option<&Value>) -> String {
-    let text = value_text(path);
-    Path::new(&text)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .map(|value| value.trim_start_matches('.').to_ascii_uppercase())
-        .unwrap_or_default()
-}
-
-fn render_framework_alias_prompt(entry_contract: &Value) -> String {
-    let summary = value_text(entry_contract.get("summary"));
-    let context = entry_contract
-        .get("context")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let route_rules = value_string_list(entry_contract.get("route_rules"));
-    let guardrails = value_string_list(entry_contract.get("guardrails"));
-    let acceptance = value_string_list(entry_contract.get("acceptance"));
-    let next_actions = value_string_list(entry_contract.get("next_actions"));
-    let skill_path = value_text(entry_contract.get("skill_fallback_path"));
-    let mut lines = Vec::new();
-    if !summary.is_empty() {
-        lines.push(summary);
-    }
-    let task = value_text(context.get("task"));
-    let phase = value_text(context.get("phase"));
-    let status = value_text(context.get("status"));
-    if !task.is_empty() || !phase.is_empty() || !status.is_empty() {
-        lines.push(format!(
-            "当前：{} / {} / {}",
-            if task.is_empty() {
-                "未记录"
-            } else {
-                task.as_str()
-            },
-            if phase.is_empty() {
-                "未记录"
-            } else {
-                phase.as_str()
-            },
-            if status.is_empty() {
-                "未记录"
-            } else {
-                status.as_str()
-            },
-        ));
-    }
-    if !route_rules.is_empty() {
-        lines.push(format!("路由：{}", route_rules.join("；")));
-    }
-    if !guardrails.is_empty() {
-        lines.push(format!("硬约束：{}", guardrails.join("；")));
-    }
-    if !acceptance.is_empty() {
-        lines.push(format!("验收：{}", acceptance.join("；")));
-    }
-    if !next_actions.is_empty() {
-        lines.push(format!("下一步：{}", next_actions.join("；")));
-    }
-    if !skill_path.is_empty() {
-        lines.push(format!("不够再开 `{skill_path}`。"));
-    }
-    lines.join("\n")
-}
-
-fn estimate_token_count(text: &str) -> usize {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        0
-    } else {
-        (trimmed.chars().count() / 4).max(1)
-    }
-}
-
 fn load_framework_runtime_view(
     repo_root: &Path,
     artifact_root_override: Option<&Path>,
     task_id_override: Option<&str>,
 ) -> FrameworkRuntimeView {
-    let mut control_plane_parse_errors: Vec<String> = Vec::new();
-    let artifact_base =
-        artifact_root_override.map_or_else(|| repo_root.join("artifacts"), Path::to_path_buf);
-    let mirror_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
-    let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
-    let supervisor_state = if supervisor_state_path.is_file() {
-        normalize_supervisor_state(&read_json_control_plane_field(
-            &supervisor_state_path,
-            ".supervisor_state.json",
-            &mut control_plane_parse_errors,
-        ))
-    } else {
-        Map::new()
-    };
-    let active_task_pointer_path = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
-    let focus_task_pointer_path = mirror_root.join(FOCUS_TASK_POINTER_NAME);
-    let task_registry_path = mirror_root.join(TASK_REGISTRY_NAME);
-    let active_task_pointer_present = active_task_pointer_path.is_file();
-    let focus_task_pointer_present = focus_task_pointer_path.is_file();
-    let task_registry_present = task_registry_path.is_file();
-    let pointer = read_json_control_plane_field(
-        &active_task_pointer_path,
-        "active_task.json",
-        &mut control_plane_parse_errors,
-    );
-    let focus_pointer = read_json_control_plane_field(
-        &focus_task_pointer_path,
-        "focus_task.json",
-        &mut control_plane_parse_errors,
-    );
-    let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
-        normalized_task_registry(&read_json_control_plane_field(
-            &task_registry_path,
-            "task_registry.json",
-            &mut control_plane_parse_errors,
-        ));
-    let registry_task_ids_before_selection = known_task_ids.clone();
-    let focus_task_id = {
-        let direct = safe_slug(&value_text(focus_pointer.get("task_id")));
-        if direct.is_empty().not() {
-            Some(direct)
-        } else {
-            None
-        }
-    };
-    let supervisor_task_id = safe_slug(&value_text(supervisor_state.get("task_id")));
-    let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
-    let mut control_plane_inconsistency_reasons = control_plane_parse_errors;
-    control_plane_inconsistency_reasons.extend(stable_line_items(vec![
-        if !supervisor_task_id.is_empty()
-            && focus_task_id
-                .as_ref()
-                .is_some_and(|task_id| task_id != &supervisor_task_id)
-        {
-            format!(
-                "supervisor task_id '{supervisor_task_id}' disagrees with focus task pointer '{}'",
-                focus_task_id.clone().unwrap_or_default()
-            )
-        } else {
-            String::new()
-        },
-        if !supervisor_task_id.is_empty()
-            && !pointer_task_id.is_empty()
-            && supervisor_task_id != pointer_task_id
-        {
-            format!(
-                "supervisor task_id '{supervisor_task_id}' disagrees with active task pointer '{pointer_task_id}'"
-            )
-        } else {
-            String::new()
-        },
-        if focus_task_id
-            .as_ref()
-            .is_some_and(|task_id| !pointer_task_id.is_empty() && task_id != &pointer_task_id)
-        {
-            format!(
-                "focus task pointer '{}' disagrees with active task pointer '{pointer_task_id}'",
-                focus_task_id.clone().unwrap_or_default()
-            )
-        } else {
-            String::new()
-        },
-    ]));
-    let active_task_id = {
-        let direct = safe_slug(task_id_override.unwrap_or(""));
-        if direct.is_empty().not() {
-            Some(direct)
-        } else if let Some(focus_task_id) = focus_task_id.clone() {
-            Some(focus_task_id)
-        } else if pointer_task_id.is_empty().not() {
-            Some(pointer_task_id.clone())
-        } else {
-            supervisor_task_id
-                .is_empty()
-                .not()
-                .then_some(supervisor_task_id.clone())
-        }
-    };
-    if task_id_override.is_none() {
-        if let Some(task_id) = active_task_id.as_ref() {
-            if task_registry_present
-                && !registry_task_ids_before_selection
-                    .iter()
-                    .any(|existing| existing == task_id)
-            {
-                control_plane_inconsistency_reasons.push(format!(
-                    "selected task_id '{task_id}' is missing from task_registry.json"
-                ));
-            }
-        }
-    }
-    if let Some(task_id) = active_task_id.clone() {
-        if !known_task_ids.iter().any(|existing| existing == &task_id) {
-            known_task_ids.push(task_id.clone());
-        }
-        if supervisor_state
-            .get("continuity")
-            .and_then(Value::as_object)
-            .and_then(|continuity| value_bool_or_none(continuity.get("resume_allowed")))
-            == Some(true)
-            && !recoverable_task_ids
-                .iter()
-                .any(|existing| existing == &task_id)
-        {
-            recoverable_task_ids.push(task_id);
-        }
-    }
-    if let Some(task_id) = focus_task_id.clone() {
-        if !known_task_ids.iter().any(|existing| existing == &task_id) {
-            known_task_ids.push(task_id);
-        }
-    }
-    let task_root = active_task_id
-        .as_ref()
-        .map_or_else(|| mirror_root.clone(), |task_id| mirror_root.join(task_id));
-    let mirror_matches_selected = active_task_id
-        .as_ref()
-        .is_some_and(|task_id| task_id == &pointer_task_id);
-    let preferred_root = if task_root.exists() {
-        task_root.clone()
-    } else if active_task_id.is_none() || mirror_matches_selected {
-        mirror_root.clone()
-    } else {
-        task_root.clone()
-    };
-    let read_task_or_mirror = |file_name: &str| -> PathBuf {
-        let preferred = preferred_root.join(file_name);
-        if preferred.exists() {
-            return preferred;
-        }
-        let mirror = mirror_root.join(file_name);
-        if mirror.exists() {
-            return mirror;
-        }
-        preferred
-    };
-
-    FrameworkRuntimeView {
-        session_summary_text: read_text_if_exists(&read_task_or_mirror(SESSION_SUMMARY_FILENAME)),
-        next_actions: read_json_if_exists(&read_task_or_mirror(NEXT_ACTIONS_FILENAME)),
-        evidence_index: read_json_if_exists(&read_task_or_mirror(EVIDENCE_INDEX_FILENAME)),
-        trace_metadata: read_json_if_exists(&read_task_or_mirror(TRACE_METADATA_FILENAME)),
-        supervisor_state,
-        routing_runtime_version: load_routing_runtime_version(repo_root),
-        repo_root: repo_root.to_path_buf(),
-        artifact_base,
-        current_root: preferred_root,
-        mirror_root,
-        task_root,
-        active_task_pointer_present,
-        focus_task_pointer_present,
-        task_registry_present,
-        active_task_id,
-        focus_task_id,
-        control_plane_inconsistency_reasons,
-        known_task_ids,
-        recoverable_task_ids,
-        registered_tasks,
-        collected_at: current_local_timestamp(),
-    }
+    runtime_view::load_framework_runtime_view(repo_root, artifact_root_override, task_id_override)
 }
 
 fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
-    let summary = parse_session_summary(&snapshot.session_summary_text);
-    let supervisor = &snapshot.supervisor_state;
-    let verification = object_field(supervisor, "verification");
-    let continuity = object_field(supervisor, "continuity");
-    let contract = supervisor_contract(supervisor);
-    let trace_task = value_text(snapshot.trace_metadata.get("task"));
-    let summary_task = value_text(summary.get("task"));
-    let supervisor_task = first_nonempty(&[
-        value_text(supervisor.get("task_summary")),
-        value_text(supervisor.get("task_id")),
-    ]);
-    let task = first_nonempty(&[
-        summary_task.clone(),
-        trace_task.clone(),
-        supervisor_task.clone(),
-    ]);
-    let summary_phase = value_text(summary.get("phase"));
-    let supervisor_phase = value_text(supervisor.get("active_phase"));
-    let verification_status = value_text(verification.get("verification_status"));
-    let summary_status = value_text(summary.get("status"));
-    let story_state = value_text(continuity.get("story_state"));
-    let summary_terminal = is_terminal(&summary_phase, TERMINAL_PHASES)
-        || is_terminal(&summary_status, TERMINAL_VERIFICATION_STATUSES);
-    let supervisor_terminal = is_terminal(&supervisor_phase, TERMINAL_PHASES)
-        || is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES)
-        || is_terminal(&story_state, TERMINAL_STORY_STATES);
-    let supervisor_terminal_overrides_summary = supervisor_terminal
-        && !summary_terminal
-        && (summary_task.is_empty()
-            || supervisor_task.is_empty()
-            || looks_same_identity(&summary_task, &supervisor_task));
-    let phase = if supervisor_terminal_overrides_summary {
-        first_nonempty(&[supervisor_phase.clone(), summary_phase.clone()])
-    } else {
-        first_nonempty(&[summary_phase.clone(), supervisor_phase.clone()])
-    };
-    let status = if supervisor_terminal_overrides_summary {
-        first_nonempty(&[
-            verification_status.clone(),
-            story_state.clone(),
-            summary_status.clone(),
-        ])
-    } else {
-        first_nonempty(&[
-            summary_status.clone(),
-            verification_status.clone(),
-            story_state.clone(),
-        ])
-    };
-    let authoritative_status = if status.is_empty() {
-        synthesized_status(supervisor)
-    } else {
-        status.clone()
-    };
-    let next_actions = authoritative_next_actions(&snapshot.next_actions, supervisor);
-    let route = authoritative_route(
-        &snapshot.trace_metadata,
-        supervisor,
-        &task,
-        &authoritative_status,
-        snapshot.routing_runtime_version,
-    );
-    let blockers = supervisor
-        .get("blockers")
-        .and_then(Value::as_object)
-        .and_then(|blockers| blockers.get("open_blockers"))
-        .and_then(Value::as_array)
-        .map(|items| {
-            stable_line_items(
-                items
-                    .iter()
-                    .map(|item| value_text(Some(item)))
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .unwrap_or_default();
-    let scope = value_string_list(contract.get("scope"));
-    let forbidden_scope = value_string_list(contract.get("forbidden_scope"));
-    let acceptance_criteria = value_string_list(contract.get("acceptance_criteria"));
-    let evidence_required = value_string_list(contract.get("evidence_required"));
-    let evidence_count = normalize_evidence_index(&snapshot.evidence_index).len();
-    let evidence_missing =
-        evidence_count == 0 && (!evidence_required.is_empty() || !acceptance_criteria.is_empty());
-    let missing_recovery_anchors = stable_line_items(vec![
-        if snapshot.session_summary_text.trim().is_empty() {
-            "SESSION_SUMMARY".to_string()
-        } else {
-            String::new()
-        },
-        if object_has_any_signal(&snapshot.next_actions).not() {
-            "NEXT_ACTIONS".to_string()
-        } else {
-            String::new()
-        },
-        if object_has_any_signal(&snapshot.trace_metadata).not() {
-            "TRACE_METADATA".to_string()
-        } else {
-            String::new()
-        },
-        if supervisor.is_empty() {
-            "SUPERVISOR_STATE".to_string()
-        } else {
-            String::new()
-        },
-    ]);
-    let terminal_reasons = terminal_continuity_reasons(
-        &summary_phase,
-        &summary_status,
-        &supervisor_phase,
-        &verification_status,
-        &story_state,
-    );
-    let inconsistency_reasons = stable_line_items(vec![
-        if !summary_task.is_empty()
-            && !trace_task.is_empty()
-            && !looks_same_identity(&summary_task, &trace_task)
-        {
-            format!(
-                "session summary task '{summary_task}' disagrees with trace task '{trace_task}'"
-            )
-        } else {
-            String::new()
-        },
-        if summary_terminal
-            && !supervisor_terminal
-            && (!supervisor_phase.is_empty() || !verification_status.is_empty())
-        {
-            "session summary marks the task terminal while supervisor still looks active"
-                .to_string()
-        } else {
-            String::new()
-        },
-        if supervisor_terminal
-            && !summary_terminal
-            && (!summary_phase.is_empty() || !summary_status.is_empty())
-            && !supervisor_terminal_overrides_summary
-        {
-            "supervisor marks the task terminal while the session summary still looks active"
-                .to_string()
-        } else {
-            String::new()
-        },
-        if value_bool_or_none(continuity.get("resume_allowed")) == Some(true)
-            && !terminal_reasons.is_empty()
-        {
-            "continuity.resume_allowed=true conflicts with terminal lifecycle metadata".to_string()
-        } else {
-            String::new()
-        },
-        join_lines(&snapshot.control_plane_inconsistency_reasons),
-    ]);
-    let stale_reasons = stale_continuity_reasons(
-        StaleContinuityInputs {
-            continuity: &continuity,
-            story_state: &story_state,
-            task: &task,
-            supervisor_phase: &supervisor_phase,
-            verification_status: &verification_status,
-            next_actions: &next_actions,
-            session_summary_missing: snapshot.session_summary_text.trim().is_empty(),
-            terminal_reasons_empty: terminal_reasons.is_empty(),
-        },
-        Local::now().fixed_offset(),
-    );
-    let current_execution = json!({
-        "task": task,
-        "phase": phase,
-        "status": if status.is_empty() && (!task.is_empty() || !next_actions.is_empty() || !blockers.is_empty()) {
-            "in_progress".to_string()
-        } else {
-            status.clone()
-        },
-        "route": route,
-        "next_actions": next_actions,
-        "blockers": blockers,
-        "scope": scope,
-        "forbidden_scope": forbidden_scope,
-        "acceptance_criteria": acceptance_criteria,
-        "evidence_required": evidence_required,
-    });
-    let recent_completed_execution = json!({
-        "task": task,
-        "phase": if phase.is_empty() {
-            first_nonempty(&[story_state.clone(), supervisor_phase.clone()])
-        } else {
-            phase.clone()
-        },
-        "status": if status.is_empty() { "completed".to_string() } else { status.clone() },
-        "route": route,
-        "follow_up_notes": next_actions,
-        "terminal_reasons": terminal_reasons,
-    });
-    let has_any_runtime_signal = !snapshot.session_summary_text.trim().is_empty()
-        || object_has_any_signal(&snapshot.next_actions)
-        || object_has_any_signal(&snapshot.evidence_index)
-        || object_has_any_signal(&snapshot.trace_metadata)
-        || !supervisor.is_empty();
-    let missing_control_plane_anchors = missing_control_plane_anchors(snapshot);
-    let has_missing_control_plane_anchors = !missing_control_plane_anchors.is_empty();
-    let has_missing_recovery_anchors = !missing_recovery_anchors.is_empty();
-    let state = if !has_any_runtime_signal
-        || (task.is_empty() && (has_missing_recovery_anchors || has_missing_control_plane_anchors))
-    {
-        "missing"
-    } else if !inconsistency_reasons.is_empty() {
-        "inconsistent"
-    } else if !terminal_reasons.is_empty() {
-        "completed"
-    } else if has_missing_recovery_anchors || has_missing_control_plane_anchors {
-        "inconsistent"
-    } else if !stale_reasons.is_empty() {
-        "stale"
-    } else {
-        "active"
-    };
-    let can_resume = state == "active"
-        && !has_missing_recovery_anchors
-        && !has_missing_control_plane_anchors
-        && !task.is_empty();
-    let recovery_hints = match state {
-        "missing" => json!([
-            "Refresh SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity."
-        ]),
-        "completed" => json!([
-            "Keep this task only as recent-completed context; do not inject it as current execution.",
-            "Start a new standalone task before resuming related work."
-        ]),
-        "stale" => json!([
-            "Re-read the live continuity artifacts and rebuild a fresh active task before injecting execution context.",
-            "Do not continue from the stale snapshot without a new supervisor-owned continuity refresh."
-        ]),
-        "inconsistent" => json!([
-            "Reconcile SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, artifacts/current pointers, task_registry.json, and .supervisor_state.json before injecting continuity.",
-            "Treat the current snapshot as blocked until the supervisor rewrites a consistent continuity bundle."
-        ]),
-        _ => json!([]),
-    };
-    json!({
-        "state": state,
-        "can_resume": can_resume,
-        "task": task,
-        "phase": phase,
-        "status": status,
-        "route": route,
-        "next_actions": next_actions,
-        "blockers": blockers,
-        "evidence_count": evidence_count,
-        "evidence_missing": evidence_missing,
-        "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status.clone()) },
-        "missing_recovery_anchors": missing_recovery_anchors,
-        "missing_control_plane_anchors": missing_control_plane_anchors,
-        "current_execution": if state == "active" && !task.is_empty() { current_execution } else { Value::Null },
-        "recent_completed_execution": if state == "completed" && !task.is_empty() { recent_completed_execution } else { Value::Null },
-        "stale_reasons": stale_reasons,
-        "terminal_reasons": terminal_reasons,
-        "inconsistency_reasons": inconsistency_reasons,
-        "recovery_hints": recovery_hints,
-        "continuity": {
-            "story_state": nonempty_string(Some(&Value::String(story_state))),
-            "resume_allowed": value_bool_or_none(continuity.get("resume_allowed")),
-            "last_updated_at": nonempty_string(continuity.get("last_updated_at")),
-            "active_lease_expires_at": nonempty_string(continuity.get("active_lease_expires_at")),
-            "state_reason": nonempty_string(continuity.get("state_reason")),
-        },
-        "summary_fields": summary,
-        "paths": {
-            "session_summary": snapshot.current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
-            "task_root": snapshot.task_root.display().to_string(),
-            "current_pointer_root": snapshot.mirror_root.display().to_string(),
-            "supervisor_state": snapshot.repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
-        }
-    })
+    runtime_view::classify_runtime_continuity(snapshot)
 }
 
 fn missing_control_plane_anchors(snapshot: &FrameworkRuntimeView) -> Vec<String> {
-    stable_line_items(vec![
-        if snapshot.active_task_pointer_present {
-            String::new()
-        } else {
-            ACTIVE_TASK_POINTER_NAME.to_string()
-        },
-        if snapshot.focus_task_pointer_present {
-            String::new()
-        } else {
-            FOCUS_TASK_POINTER_NAME.to_string()
-        },
-        if snapshot.task_registry_present {
-            String::new()
-        } else {
-            TASK_REGISTRY_NAME.to_string()
-        },
-        if snapshot.supervisor_state.is_empty() {
-            SUPERVISOR_STATE_FILENAME.to_string()
-        } else {
-            String::new()
-        },
-    ])
-}
-
-fn object_field(map: &Map<String, Value>, key: &str) -> Map<String, Value> {
-    map.get(key)
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn terminal_continuity_reasons(
-    summary_phase: &str,
-    summary_status: &str,
-    supervisor_phase: &str,
-    verification_status: &str,
-    story_state: &str,
-) -> Vec<String> {
-    stable_line_items(vec![
-        terminal_reason("summary phase is terminal", summary_phase, TERMINAL_PHASES),
-        terminal_reason(
-            "summary status is terminal",
-            summary_status,
-            TERMINAL_VERIFICATION_STATUSES,
-        ),
-        terminal_reason(
-            "supervisor phase is terminal",
-            supervisor_phase,
-            TERMINAL_PHASES,
-        ),
-        terminal_reason(
-            "verification status is terminal",
-            verification_status,
-            TERMINAL_VERIFICATION_STATUSES,
-        ),
-        terminal_reason(
-            "continuity story_state is terminal",
-            story_state,
-            TERMINAL_STORY_STATES,
-        ),
-    ])
-}
-
-fn stale_continuity_reasons(
-    input: StaleContinuityInputs<'_>,
-    now: DateTime<FixedOffset>,
-) -> Vec<String> {
-    let resume_allowed = value_bool_or_none(input.continuity.get("resume_allowed"));
-    let state_reason = value_text(input.continuity.get("state_reason"));
-    stable_line_items(vec![
-        if is_terminal(input.story_state, STALE_STORY_STATES) {
-            format!("continuity story_state is stale: {}", input.story_state)
-        } else {
-            String::new()
-        },
-        if resume_allowed == Some(false) && input.terminal_reasons_empty {
-            "continuity explicitly disallows resume".to_string()
-        } else {
-            String::new()
-        },
-        match parse_iso_timestamp(input.continuity.get("active_lease_expires_at")) {
-            Some(expires_at) if expires_at < now => {
-                format!(
-                    "active lease expired at {}",
-                    value_text(input.continuity.get("active_lease_expires_at"))
-                )
-            }
-            _ => String::new(),
-        },
-        if input.session_summary_missing
-            && input.terminal_reasons_empty
-            && (!input.task.is_empty()
-                || !input.supervisor_phase.is_empty()
-                || !input.verification_status.is_empty()
-                || !input.next_actions.is_empty())
-        {
-            "session summary mirror is missing while supervisor still looks active".to_string()
-        } else {
-            String::new()
-        },
-        if !state_reason.is_empty()
-            && (is_terminal(input.story_state, STALE_STORY_STATES) || resume_allowed == Some(false))
-        {
-            format!("state reason: {state_reason}")
-        } else {
-            String::new()
-        },
-    ])
+    runtime_view::missing_control_plane_anchors(snapshot)
 }
 
 fn workspace_name_from_root(repo_root: &Path) -> String {
-    repo_root
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("workspace")
-        .to_string()
-}
-
-fn render_framework_refresh_prompt(
-    continuity: &Value,
-    contract: &Map<String, Value>,
-    max_lines: usize,
-) -> String {
-    let capped_max_lines = max_lines.clamp(2, 4);
-    let state = value_text(continuity.get("state"));
-    let task = value_text(continuity.get("task"));
-    let phase = value_text(continuity.get("phase"));
-    let status = {
-        let raw = value_text(continuity.get("status"));
-        if raw.is_empty() {
-            state.clone()
-        } else {
-            raw
-        }
-    };
-    let route = value_string_list(continuity.get("route"));
-    let paths_map = continuity
-        .get("paths")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let current = continuity
-        .get("current_execution")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let completed = continuity
-        .get("recent_completed_execution")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let recovery_hints = value_string_list(continuity.get("recovery_hints"));
-    let continuity_next_actions = value_string_list(continuity.get("next_actions"));
-    let continuity_blockers = value_string_list(continuity.get("blockers"));
-    let verification_status = value_text(continuity.get("verification_status"));
-    let effect_line = if state == "completed" {
-        if verification_status == "completed" {
-            "结果已经稳定，可以直接按已完成上下文来看。".to_string()
-        } else {
-            "这一轮已经收住，不用再把它当当前任务。".to_string()
-        }
-    } else {
-        String::new()
-    };
-    let remaining_tasks = if state == "active" && !current.is_empty() {
-        stable_line_items(
-            contract
-                .get("scope")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .chain(
-                    contract
-                        .get("acceptance_criteria")
-                        .and_then(Value::as_array)
-                        .into_iter()
-                        .flatten(),
-                )
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect(),
-        )
-    } else if state == "completed" && !completed.is_empty() {
-        stable_line_items(vec!["最近一轮已经收尾".to_string()])
-    } else if state == "inconsistent" {
-        value_string_list(continuity.get("inconsistency_reasons"))
-    } else {
-        recovery_hints.clone()
-    };
-    let next_steps = if state == "active" && !current.is_empty() {
-        let mut items = vec!["先核对恢复锚点和当前代码".to_string()];
-        items.extend(continuity_next_actions.clone());
-        stable_line_items(items)
-    } else if state == "completed" && !completed.is_empty() {
-        stable_line_items(vec![
-            "如果还要继续相关工作，先新开一个 standalone task".to_string()
-        ])
-    } else if state == "stale" {
-        let mut items = vec!["先重读锚点并重建上下文".to_string()];
-        if continuity_next_actions.is_empty() {
-            items.extend(recovery_hints.clone());
-        } else {
-            items.extend(continuity_next_actions.clone());
-        }
-        stable_line_items(items)
-    } else if state == "inconsistent" {
-        let mut items = vec!["先对齐摘要、轨迹和 supervisor".to_string()];
-        items.extend(recovery_hints.clone());
-        stable_line_items(items)
-    } else {
-        let mut items = vec!["先补齐缺失锚点并确认状态".to_string()];
-        if continuity_next_actions.is_empty() {
-            items.extend(recovery_hints.clone());
-        } else {
-            items.extend(continuity_next_actions.clone());
-        }
-        stable_line_items(items)
-    };
-    let blockers = if state == "completed" {
-        Vec::new()
-    } else {
-        continuity_blockers.clone()
-    };
-    let anchors = stable_line_items(vec![
-        value_text(paths_map.get("session_summary"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "SESSION_SUMMARY: {}",
-                    value_text(paths_map.get("session_summary"))
-                )
-            })
-            .unwrap_or_default(),
-        value_text(paths_map.get("next_actions"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "NEXT_ACTIONS: {}",
-                    value_text(paths_map.get("next_actions"))
-                )
-            })
-            .unwrap_or_default(),
-        value_text(paths_map.get("trace_metadata"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "TRACE_METADATA: {}",
-                    value_text(paths_map.get("trace_metadata"))
-                )
-            })
-            .unwrap_or_default(),
-        value_text(paths_map.get("supervisor_state"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "SUPERVISOR_STATE: {}",
-                    value_text(paths_map.get("supervisor_state"))
-                )
-            })
-            .unwrap_or_default(),
-    ]);
-
-    if state == "completed" && !completed.is_empty() {
-        let mut lines = vec!["最近一轮已经收尾：".to_string()];
-        lines.push(format!(
-            "- {}",
-            if task.is_empty() {
-                "上一轮任务已完成"
-            } else {
-                &task
-            }
-        ));
-        if !effect_line.is_empty() {
-            lines.push(format!("- {effect_line}"));
-        }
-        lines.extend(
-            next_steps
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|item| format!("- {item}")),
-        );
-        lines.push(String::new());
-        lines.push("先看这些恢复锚点：".to_string());
-        lines.extend(
-            anchors
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|anchor| format!("- {anchor}")),
-        );
-        return lines.join("\n") + "\n";
-    }
-
-    let mut lines = vec!["继续当前仓库，先看这些恢复锚点：".to_string()];
-    lines.extend(
-        anchors
-            .into_iter()
-            .take(capped_max_lines)
-            .map(|anchor| format!("- {anchor}")),
-    );
-    lines.push(String::new());
-    lines.push(format!(
-        "任务：{}",
-        if task.is_empty() { "未记录" } else { &task }
-    ));
-    lines.push(format!(
-        "状态：{}",
-        join_lines(&stable_line_items(vec![
-            if phase.is_empty() {
-                String::new()
-            } else {
-                phase.clone()
-            },
-            if status.is_empty() {
-                if state.is_empty() {
-                    "missing".to_string()
-                } else {
-                    state.clone()
-                }
-            } else {
-                status.clone()
-            },
-            if state.is_empty() {
-                String::new()
-            } else {
-                state.clone()
-            },
-        ]))
-    ));
-    if !route.is_empty() {
-        lines.push(format!("路由：{}", join_lines(&route)));
-    }
-    if !remaining_tasks.is_empty() {
-        lines.push(String::new());
-        lines.push("剩余：".to_string());
-        lines.extend(
-            remaining_tasks
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|item| format!("- {item}")),
-        );
-    }
-    if !next_steps.is_empty() {
-        lines.push(String::new());
-        lines.push("先做：".to_string());
-        lines.extend(
-            next_steps
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|item| format!("- {item}")),
-        );
-    }
-    if !blockers.is_empty() {
-        lines.push(String::new());
-        lines.push("阻塞：".to_string());
-        lines.extend(
-            blockers
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|item| format!("- {item}")),
-        );
-    }
-    lines.push(String::new());
-    lines.push("按既定串并行分工直接开始执行。".to_string());
-    lines.join("\n") + "\n"
-}
-
-pub fn build_framework_prompt_compression_envelope(payload: Value) -> Result<Value, String> {
-    let prompt = value_text(payload.get("prompt").or_else(|| payload.get("text")));
-    let token_budget = payload
-        .get("token_budget")
-        .or_else(|| payload.get("budget"))
-        .and_then(Value::as_u64)
-        .and_then(|value| usize::try_from(value).ok())
-        .ok_or_else(|| {
-            "framework prompt compression requires token_budget or budget".to_string()
-        })?;
-    let result = compress_prompt_with_rust_policy(&prompt, token_budget);
-    Ok(json!({
-        "schema_version": FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
-        "authority": FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY,
-        "compression": result,
-    }))
-}
-
-fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value {
-    let input_token_estimate = estimate_token_count(prompt);
-    if token_budget == 0 {
-        let output = "[omitted: token budget is zero]".to_string();
-        return compression_payload(
-            input_token_estimate,
-            estimate_token_count(&output),
-            &output,
-            "zero_budget",
-            true,
-            &["all".to_string()],
-        );
-    }
-    if input_token_estimate <= token_budget {
-        return compression_payload(
-            input_token_estimate,
-            input_token_estimate,
-            prompt,
-            "unchanged",
-            false,
-            &[],
-        );
-    }
-
-    let lines = prompt.lines().collect::<Vec<_>>();
-    let target_chars = token_budget.saturating_mul(4).max(1);
-    let (output, strategy, omitted_sections) = if lines.len() >= 6 {
-        let head = lines
-            .iter()
-            .take(3)
-            .map(|line| (*line).to_string())
-            .collect::<Vec<_>>();
-        let tail = lines
-            .iter()
-            .rev()
-            .take(2)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .map(|line| (*line).to_string())
-            .collect::<Vec<_>>();
-        let omitted = lines.len().saturating_sub(head.len() + tail.len());
-        (
-            [
-                head,
-                vec![format!("[omitted {omitted} middle lines]")],
-                tail,
-            ]
-            .concat()
-            .join("\n"),
-            "structured_head_tail".to_string(),
-            vec![format!("middle_lines:{omitted}")],
-        )
-    } else {
-        let mut truncated = prompt.chars().take(target_chars).collect::<String>();
-        truncated.push_str("\n[truncated tail]");
-        (
-            truncated,
-            "tail_truncation".to_string(),
-            vec!["tail".to_string()],
-        )
-    };
-    let bounded_output = enforce_prompt_budget(output, token_budget);
-    compression_payload(
-        input_token_estimate,
-        estimate_token_count(&bounded_output),
-        &bounded_output,
-        &strategy,
-        true,
-        &omitted_sections,
-    )
-}
-
-fn enforce_prompt_budget(output: String, token_budget: usize) -> String {
-    let max_chars = token_budget.saturating_mul(4).max(1);
-    if output.chars().count() <= max_chars {
-        return output;
-    }
-    let marker = "\n[truncated tail]";
-    if max_chars <= marker.chars().count() {
-        return "[truncated]".chars().take(max_chars).collect();
-    }
-    let keep = max_chars - marker.chars().count();
-    format!(
-        "{}{}",
-        output.chars().take(keep).collect::<String>(),
-        marker
-    )
-}
-
-fn compression_payload(
-    input_token_estimate: usize,
-    output_token_estimate: usize,
-    output: &str,
-    strategy: &str,
-    truncated: bool,
-    omitted_sections: &[String],
-) -> Value {
-    json!({
-        "schema_version": FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
-        "policy_owner": "rust",
-        "prompt_policy_owner": "rust",
-        "input_token_estimate": input_token_estimate,
-        "output_token_estimate": output_token_estimate,
-        "output": output,
-        "compressed_prompt": output,
-        "omitted_sections": omitted_sections,
-        "strategy": strategy,
-        "truncated": truncated,
-        "artifact_offload_decision": false,
-    })
+    runtime_view::workspace_name_from_root(repo_root)
 }
 
 fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
+    // Cross-process lock: some call sites are read-modify-write across processes.
+    // Note: callers that already hold the path lock must call the `_unlocked` variant
+    // to avoid re-locking the same file on platforms where `flock` is per-fd.
+    let _path_lock = crate::runtime_storage::acquire_runtime_path_lock(path)?;
+    write_text_if_changed_unlocked(path, content)
+}
+
+fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, String> {
     let existing = read_text_if_exists(path);
     if existing == content {
         return Ok(false);
@@ -2928,6 +411,32 @@ fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
     }
     write_atomic_text(path, content)?;
     Ok(true)
+}
+
+#[cfg(unix)]
+fn fsync_parent_dir(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    let dir = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_RDONLY)
+        .open(parent)
+        .map_err(|err| {
+            format!(
+                "open parent dir for fsync failed {}: {err}",
+                parent.display()
+            )
+        })?;
+    dir.sync_all()
+        .map_err(|err| format!("fsync parent dir failed for {}: {err}", parent.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn fsync_parent_dir(_path: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
@@ -2941,8 +450,17 @@ fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
             .and_then(|value| value.to_str())
             .unwrap_or("txt")
     ));
-    fs::write(&tmp_path, content)
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&tmp_path)
+        .map_err(|err| format!("open temp file failed for {}: {err}", tmp_path.display()))?;
+    file.write_all(content.as_bytes())
         .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
+    file.sync_all()
+        .map_err(|err| format!("fsync temp file failed for {}: {err}", tmp_path.display()))?;
+    drop(file);
     fs::rename(&tmp_path, path).map_err(|err| {
         let _ = fs::remove_file(&tmp_path);
         format!(
@@ -2951,42 +469,17 @@ fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
             path.display()
         )
     })?;
+    fsync_parent_dir(path)?;
     Ok(())
-}
-
-fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
-    match fs::read(path) {
-        Ok(bytes) => Ok(Some(sha256_hex(&bytes))),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(format!(
-            "read file hash failed for {}: {err}",
-            path.display()
-        )),
-    }
 }
 
 #[cfg(test)]
 pub(crate) fn hash_file_for_test(path: &Path) -> Result<String, String> {
-    current_file_hash(path)?.ok_or_else(|| format!("missing test file: {}", path.display()))
-}
-
-fn assert_expected_file_hash(
-    path: &Path,
-    expected_hash: Option<&str>,
-    label: &str,
-) -> Result<(), String> {
-    let Some(expected_hash) = expected_hash else {
-        return Ok(());
-    };
-    let current = current_file_hash(path)?;
-    if current.as_deref() == Some(expected_hash) {
-        return Ok(());
-    }
-    Err(format!(
-        "stale {label} update rejected for {}; expected hash {expected_hash}, current hash {}",
-        path.display(),
-        current.unwrap_or_else(|| "<missing>".to_string())
-    ))
+    let bytes =
+        fs::read(path).map_err(|err| format!("read file failed for {}: {err}", path.display()))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
@@ -2996,6 +489,15 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
             .map_err(|err| format!("serialize JSON payload failed: {err}"))?
     );
     write_text_if_changed(path, &serialized)
+}
+
+fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, String> {
+    let serialized = format!(
+        "{}\n",
+        serde_json::to_string_pretty(payload)
+            .map_err(|err| format!("serialize JSON payload failed: {err}"))?
+    );
+    write_text_if_changed_unlocked(path, &serialized)
 }
 
 fn join_lines(values: &[String]) -> String {
@@ -3011,300 +513,7 @@ fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
-fn render_session_summary(task: &str, phase: &str, status: &str, summary: &str) -> String {
-    [
-        "# SESSION_SUMMARY".to_string(),
-        String::new(),
-        format!("- task: {task}"),
-        format!("- phase: {phase}"),
-        format!("- status: {status}"),
-        String::new(),
-        "## Summary".to_string(),
-        if summary.trim().is_empty() {
-            "No summary provided.".to_string()
-        } else {
-            summary.trim().to_string()
-        },
-        String::new(),
-    ]
-    .join("\n")
-}
-
-fn build_next_actions_payload(actions: &[String]) -> Value {
-    json!({
-        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
-        "next_actions": actions,
-    })
-}
-
-fn build_evidence_index_payload(entries: &[Value]) -> Value {
-    json!({
-        "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
-        "artifacts": entries,
-    })
-}
-
-fn build_trace_metadata_payload(
-    task: &str,
-    phase: &str,
-    status: &str,
-    trace_metadata: Option<&Value>,
-    matched_skills: Option<&Value>,
-) -> Value {
-    let mut payload = trace_metadata
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    payload.insert(
-        "schema_version".to_string(),
-        Value::String(TRACE_METADATA_SCHEMA_VERSION.to_string()),
-    );
-    payload.insert("task".to_string(), Value::String(task.to_string()));
-    payload.insert("phase".to_string(), Value::String(phase.to_string()));
-    payload.insert(
-        "verification_status".to_string(),
-        Value::String(status.to_string()),
-    );
-    payload
-        .entry("updated_at".to_string())
-        .or_insert_with(|| Value::String(current_local_timestamp()));
-    if let Some(skills) = normalized_string_array(matched_skills)
-        .or_else(|| normalized_string_array(payload.get("matched_skills")))
-    {
-        payload.insert("matched_skills".to_string(), Value::Array(skills));
-    } else {
-        payload.insert("matched_skills".to_string(), Value::Array(Vec::new()));
-    }
-    Value::Object(payload)
-}
-
-fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Value {
-    let mut payload = input
-        .supervisor_state
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    payload.insert(
-        "schema_version".to_string(),
-        Value::String(SUPERVISOR_STATE_SCHEMA_VERSION.to_string()),
-    );
-    payload.insert(
-        "task_id".to_string(),
-        Value::String(input.task_id.to_string()),
-    );
-    payload.insert(
-        "task_summary".to_string(),
-        Value::String(input.task.to_string()),
-    );
-    payload.insert(
-        "active_phase".to_string(),
-        Value::String(input.phase.to_string()),
-    );
-    payload.insert(
-        "updated_at".to_string(),
-        Value::String(current_local_timestamp()),
-    );
-    if !input.summary.is_empty() {
-        payload.insert(
-            "last_summary".to_string(),
-            Value::String(input.summary.to_string()),
-        );
-    }
-    payload.insert(
-        "verification".to_string(),
-        normalized_verification(payload.get("verification"), input.status),
-    );
-    payload.insert(
-        "continuity".to_string(),
-        normalized_continuity(
-            input.continuity.or_else(|| payload.get("continuity")),
-            input.status,
-        ),
-    );
-    payload.insert(
-        "next_actions".to_string(),
-        input
-            .next_actions_payload
-            .get("next_actions")
-            .cloned()
-            .unwrap_or_else(|| Value::Array(Vec::new())),
-    );
-    payload.insert(
-        "evidence_count".to_string(),
-        Value::from(normalize_evidence_index(input.evidence_payload).len()),
-    );
-    if let Some(contract) = input
-        .execution_contract
-        .or_else(|| payload.get("execution_contract"))
-    {
-        payload.insert("execution_contract".to_string(), contract.clone());
-    }
-    payload.insert(
-        "blockers".to_string(),
-        normalized_blockers(input.blockers.or_else(|| payload.get("blockers"))),
-    );
-    payload.insert(
-        "trace_metadata".to_string(),
-        input.trace_metadata_payload.clone(),
-    );
-    payload.insert(
-        "artifact_refs".to_string(),
-        json!({
-            "task_root": input.artifact_dir.display().to_string(),
-            "session_summary": input.artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": input.artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": input.artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
-            "continuity_journal": input.artifact_dir.join(CONTINUITY_JOURNAL_FILENAME).display().to_string(),
-        }),
-    );
-    Value::Object(payload)
-}
-
-fn build_continuity_journal_payload(input: ContinuityJournalInput<'_>) -> Value {
-    let summary_sha = sha256_hex(input.summary_text.as_bytes());
-    let next_actions_sha = sha256_json(input.next_actions_payload);
-    let evidence_sha = sha256_json(input.evidence_payload);
-    let trace_sha = sha256_json(input.trace_metadata_payload);
-    let supervisor_sha = sha256_json(input.supervisor_state_payload);
-    let checkpoint_hash = sha256_hex(
-        [
-            summary_sha.as_str(),
-            next_actions_sha.as_str(),
-            evidence_sha.as_str(),
-            trace_sha.as_str(),
-            supervisor_sha.as_str(),
-        ]
-        .join(":")
-        .as_bytes(),
-    );
-    let checkpoint = json!({
-        "checkpoint_id": checkpoint_hash,
-        "task_id": input.task_id,
-        "task": input.task,
-        "phase": input.phase,
-        "status": input.status,
-        "created_at": current_local_timestamp(),
-        "artifact_hashes": {
-            "session_summary": summary_sha,
-            "next_actions": next_actions_sha,
-            "evidence_index": evidence_sha,
-            "trace_metadata": trace_sha,
-            "supervisor_state": supervisor_sha,
-        },
-        "artifact_refs": {
-            "task_root": input.artifact_dir.display().to_string(),
-            "session_summary": input.artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": input.artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": input.artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
-        }
-    });
-    let mut checkpoints = input
-        .existing_journal
-        .get("checkpoints")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|item| item.get("checkpoint_id").and_then(Value::as_str) != Some(&checkpoint_hash))
-        .collect::<Vec<_>>();
-    checkpoints.push(checkpoint);
-    while checkpoints.len() > 20 {
-        checkpoints.remove(0);
-    }
-    json!({
-        "schema_version": CONTINUITY_JOURNAL_SCHEMA_VERSION,
-        "task_id": input.task_id,
-        "task": input.task,
-        "latest_checkpoint_id": checkpoint_hash,
-        "checkpoint_count": checkpoints.len(),
-        "checkpoints": checkpoints,
-    })
-}
-
-fn sha256_json(value: &Value) -> String {
-    sha256_hex(
-        serde_json::to_string(value)
-            .unwrap_or_else(|_| "null".to_string())
-            .as_bytes(),
-    )
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
-}
-
-fn normalized_verification(existing: Option<&Value>, status: &str) -> Value {
-    let mut payload = existing
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    payload.insert(
-        "verification_status".to_string(),
-        Value::String(status.to_string()),
-    );
-    payload.insert(
-        "updated_at".to_string(),
-        Value::String(current_local_timestamp()),
-    );
-    Value::Object(payload)
-}
-
-fn normalized_continuity(existing: Option<&Value>, status: &str) -> Value {
-    let mut payload = existing
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let terminal = is_terminal(status, TERMINAL_VERIFICATION_STATUSES)
-        || is_terminal(status, TERMINAL_STORY_STATES);
-    payload.insert(
-        "story_state".to_string(),
-        Value::String(if terminal { "completed" } else { "active" }.to_string()),
-    );
-    payload.insert("resume_allowed".to_string(), Value::Bool(!terminal));
-    payload.insert(
-        "last_updated_at".to_string(),
-        Value::String(current_local_timestamp()),
-    );
-    Value::Object(payload)
-}
-
-fn normalized_blockers(existing: Option<&Value>) -> Value {
-    let Some(value) = existing else {
-        return json!({"open_blockers": []});
-    };
-    if value.is_object() {
-        return value.clone();
-    }
-    if let Some(items) = normalized_string_array(Some(value)) {
-        return json!({"open_blockers": items});
-    }
-    json!({"open_blockers": []})
-}
-
-fn normalized_string_array(value: Option<&Value>) -> Option<Vec<Value>> {
-    let values = value_string_list(value);
-    if values.is_empty() {
-        None
-    } else {
-        Some(values.into_iter().map(Value::String).collect())
-    }
-}
-
-fn read_json_if_exists(path: &Path) -> Value {
-    if !path.is_file() {
-        return Value::Object(Map::new());
-    }
-    match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| Value::Object(Map::new())),
-        Err(_) => Value::Object(Map::new()),
-    }
-}
-
-fn read_json_strict(path: &Path) -> Result<Value, String> {
+pub(crate) fn read_json_strict(path: &Path) -> Result<Value, String> {
     if !path.is_file() {
         return Ok(Value::Object(Map::new()));
     }
@@ -3314,6 +523,12 @@ fn read_json_strict(path: &Path) -> Result<Value, String> {
         .map_err(|err| format!("parse json failed for {}: {err}", path.display()))
 }
 
+#[allow(dead_code)]
+fn read_json_if_exists(path: &Path) -> Value {
+    runtime_view::read_json_if_exists(path)
+}
+
+#[allow(dead_code)]
 fn read_json_control_plane_field(
     path: &Path,
     label: &str,
@@ -3354,6 +569,7 @@ fn safe_slug(value: &str) -> String {
         .to_string()
 }
 
+#[allow(dead_code)]
 fn build_task_id(task: &str, created_at: Option<&str>) -> String {
     let stamp = created_at
         .unwrap_or(&current_local_timestamp())
@@ -3380,6 +596,29 @@ fn value_text(value: Option<&Value>) -> String {
         Some(Value::Bool(flag)) => flag.to_string(),
         Some(Value::Null) | None => String::new(),
         Some(other) => other.to_string(),
+    }
+}
+
+fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {
+    let Some(v) = payload.get(key) else {
+        return Err(format!("{context}: missing required field {key:?}"));
+    };
+    let s = value_text(Some(v));
+    if s.trim().is_empty() {
+        return Err(format!("{context}: required field {key:?} is empty"));
+    }
+    Ok(s)
+}
+
+fn defaulted_payload_text(payload: &Value, key: &str, fallback: &str) -> String {
+    let s = payload
+        .get(key)
+        .map(|v| value_text(Some(v)))
+        .unwrap_or_default();
+    if s.trim().is_empty() {
+        fallback.to_string()
+    } else {
+        s
     }
 }
 
@@ -3456,6 +695,7 @@ fn parse_session_summary(text: &str) -> Map<String, Value> {
     result
 }
 
+#[allow(dead_code)]
 fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>) {
     let focus_task_id = safe_slug(&value_text(payload.get("focus_task_id")));
     normalize_task_registry_rows(focus_task_id, registry_rows_from_payload(payload))
@@ -3555,6 +795,7 @@ fn registry_task_sort_key(row: &Value) -> String {
     ])
 }
 
+#[allow(dead_code)]
 fn write_focus_task_pointer(
     mirror_root: &Path,
     task_id: &str,
@@ -3571,6 +812,7 @@ fn write_focus_task_pointer(
     )
 }
 
+#[allow(dead_code)]
 fn write_task_registry_entry(
     mirror_root: &Path,
     entry: TaskRegistryEntry<'_>,
@@ -3624,305 +866,7 @@ fn write_task_registry_entry(
     write_json_if_changed(&mirror_root.join(TASK_REGISTRY_NAME), &compacted)
 }
 
-fn defaulted_payload_text(payload: &Value, key: &str, fallback: &str) -> String {
-    let value = value_text(payload.get(key));
-    if value.is_empty() {
-        fallback.to_string()
-    } else {
-        value
-    }
-}
-
-fn session_artifact_payloads(payload: &Value) -> (Vec<String>, Vec<Value>) {
-    let next_actions = payload
-        .get("next_actions")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|item| value_text(Some(&item)))
-        .filter(|item| !item.is_empty())
-        .collect::<Vec<_>>();
-    let evidence = payload
-        .get("evidence")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(Value::is_object)
-        .collect::<Vec<_>>();
-    (next_actions, evidence)
-}
-
-fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {
-    let value = value_text(payload.get(key));
-    if value.is_empty() {
-        Err(format!("{context} requires {key}"))
-    } else {
-        Ok(value)
-    }
-}
-
-fn resolve_session_task_id(payload: &Value, task: &str) -> String {
-    let direct = safe_slug(&value_text(payload.get("task_id")));
-    if direct.is_empty() {
-        build_task_id(task, None)
-    } else {
-        direct
-    }
-}
-
-fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactWritePlan, String> {
-    let output_dir = value_text(payload.get("output_dir"));
-    if output_dir.is_empty() {
-        return Err("framework session artifact writer requires output_dir".to_string());
-    }
-    let task = required_payload_text(payload, "task", "framework session artifact writer")?;
-    let phase = defaulted_payload_text(payload, "phase", "implementation");
-    let status = defaulted_payload_text(payload, "status", "in_progress");
-    let summary = value_text(payload.get("summary"));
-    let (next_actions, evidence) = session_artifact_payloads(payload);
-    let task_id = resolve_session_task_id(payload, &task);
-    let focus = value_bool_or_none(payload.get("focus")).unwrap_or(false);
-    let repo_root = value_text(payload.get("repo_root"));
-    let mirror_output_dir = value_text(payload.get("mirror_output_dir"));
-    let output_root = PathBuf::from(&output_dir);
-    let primary_dir = if payload.get("task_id").is_some() || !repo_root.is_empty() {
-        output_root.join(&task_id)
-    } else {
-        output_root.clone()
-    };
-    let summary_path = primary_dir.join(SESSION_SUMMARY_FILENAME);
-    let next_actions_path = primary_dir.join(NEXT_ACTIONS_FILENAME);
-    let evidence_path = primary_dir.join(EVIDENCE_INDEX_FILENAME);
-    let trace_metadata_path = primary_dir.join(TRACE_METADATA_FILENAME);
-    let journal_path = primary_dir.join(CONTINUITY_JOURNAL_FILENAME);
-    let summary_text = render_session_summary(&task, &phase, &status, &summary);
-    let next_actions_payload = build_next_actions_payload(&next_actions);
-    let evidence_payload = build_evidence_index_payload(&evidence);
-    let trace_metadata_payload = build_trace_metadata_payload(
-        &task,
-        &phase,
-        &status,
-        payload.get("trace_metadata"),
-        payload.get("matched_skills"),
-    );
-    let supervisor_state_payload = build_session_supervisor_state_payload(SupervisorStateInput {
-        task_id: &task_id,
-        task: &task,
-        phase: &phase,
-        status: &status,
-        summary: summary.trim(),
-        next_actions_payload: &next_actions_payload,
-        evidence_payload: &evidence_payload,
-        trace_metadata_payload: &trace_metadata_payload,
-        artifact_dir: &primary_dir,
-        supervisor_state: payload.get("supervisor_state"),
-        execution_contract: payload.get("execution_contract"),
-        blockers: payload.get("blockers"),
-        continuity: payload.get("continuity"),
-    });
-    let journal_payload = build_continuity_journal_payload(ContinuityJournalInput {
-        task_id: &task_id,
-        task: &task,
-        phase: &phase,
-        status: &status,
-        artifact_dir: &primary_dir,
-        summary_text: &summary_text,
-        next_actions_payload: &next_actions_payload,
-        evidence_payload: &evidence_payload,
-        trace_metadata_payload: &trace_metadata_payload,
-        supervisor_state_payload: &supervisor_state_payload,
-        existing_journal: read_json_strict(&journal_path)?,
-    });
-    Ok(SessionArtifactWritePlan {
-        task,
-        phase,
-        status,
-        summary,
-        task_id,
-        focus,
-        repo_root: (!repo_root.is_empty()).then(|| PathBuf::from(repo_root)),
-        mirror_output_dir: (!mirror_output_dir.is_empty())
-            .then(|| PathBuf::from(mirror_output_dir)),
-        summary_path,
-        next_actions_path,
-        evidence_path,
-        trace_metadata_path,
-        journal_path,
-        next_actions_payload,
-        evidence_payload,
-        trace_metadata_payload,
-        supervisor_state_payload,
-        journal_payload,
-        expected_active_task_hash: nonempty_string(payload.get("expected_active_task_hash")),
-        expected_focus_task_hash: nonempty_string(payload.get("expected_focus_task_hash")),
-        expected_supervisor_state_hash: nonempty_string(
-            payload.get("expected_supervisor_state_hash"),
-        ),
-        changed_paths: Vec::new(),
-    })
-}
-
-fn write_primary_session_artifacts(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
-    let summary_text = render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
-    let next_actions_payload = plan.next_actions_payload.clone();
-    let evidence_payload = plan.evidence_payload.clone();
-    let trace_metadata_payload = plan.trace_metadata_payload.clone();
-    let journal_payload = plan.journal_payload.clone();
-    write_session_artifact_set(
-        ArtifactPaths {
-            summary: &plan.summary_path,
-            next_actions: &plan.next_actions_path,
-            evidence: &plan.evidence_path,
-            trace_metadata: Some(&plan.trace_metadata_path),
-            journal: Some(&plan.journal_path),
-        },
-        ArtifactPayloads {
-            summary_text: &summary_text,
-            next_actions: &next_actions_payload,
-            evidence: &evidence_payload,
-            trace_metadata: &trace_metadata_payload,
-            journal: Some(&journal_payload),
-        },
-        &mut plan.changed_paths,
-    )
-}
-
-fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
-    if plan.focus {
-        let Some(mirror_root) = plan.mirror_output_dir.clone() else {
-            return Ok(());
-        };
-        let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
-        let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
-        let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
-        let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
-        let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
-        let summary_text =
-            render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
-        let next_actions_payload = plan.next_actions_payload.clone();
-        let evidence_payload = plan.evidence_payload.clone();
-        let trace_metadata_payload = plan.trace_metadata_payload.clone();
-        let journal_payload = plan.journal_payload.clone();
-        write_session_artifact_set(
-            ArtifactPaths {
-                summary: &mirror_summary,
-                next_actions: &mirror_next_actions,
-                evidence: &mirror_evidence,
-                trace_metadata: Some(&mirror_trace),
-                journal: Some(&mirror_journal),
-            },
-            ArtifactPayloads {
-                summary_text: &summary_text,
-                next_actions: &next_actions_payload,
-                evidence: &evidence_payload,
-                trace_metadata: &trace_metadata_payload,
-                journal: Some(&journal_payload),
-            },
-            &mut plan.changed_paths,
-        )?;
-    }
-    Ok(())
-}
-
-fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
-    let Some(repo_root) = plan.repo_root.clone() else {
-        return Ok(());
-    };
-    let mirror_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
-    let updated_at = current_local_timestamp();
-    if write_task_registry_entry(
-        &mirror_root,
-        TaskRegistryEntry {
-            task_id: &plan.task_id,
-            task: &plan.task,
-            phase: &plan.phase,
-            status: &plan.status,
-            resume_allowed: Some(!is_terminal(&plan.status, TERMINAL_VERIFICATION_STATUSES)),
-            updated_at: &updated_at,
-            focus_task_id: if plan.focus {
-                Some(plan.task_id.as_str())
-            } else {
-                None
-            },
-        },
-    )? {
-        plan.changed_paths
-            .push(mirror_root.join(TASK_REGISTRY_NAME).display().to_string());
-    }
-    if plan.focus {
-        write_focused_repo_mirrors(plan, &repo_root, &mirror_root, &updated_at)?;
-    }
-    Ok(())
-}
-
-fn write_focused_repo_mirrors(
-    plan: &mut SessionArtifactWritePlan,
-    repo_root: &Path,
-    mirror_root: &Path,
-    updated_at: &str,
-) -> Result<(), String> {
-    let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
-    assert_expected_file_hash(
-        &active_pointer,
-        plan.expected_active_task_hash.as_deref(),
-        "active task pointer",
-    )?;
-    if write_json_if_changed(
-        &active_pointer,
-        &json!({
-            "task_id": plan.task_id,
-            "task": plan.task,
-            "updated_at": updated_at,
-            "task_root": plan.summary_path.parent().map(|path| path.display().to_string()).unwrap_or_default(),
-            "session_summary": plan.summary_path.display().to_string(),
-            "next_actions": plan.next_actions_path.display().to_string(),
-            "evidence_index": plan.evidence_path.display().to_string(),
-            "trace_metadata": plan.trace_metadata_path.display().to_string(),
-            "continuity_journal": plan.journal_path.display().to_string(),
-        }),
-    )? {
-        plan.changed_paths
-            .push(active_pointer.display().to_string());
-    }
-    let focus_pointer = mirror_root.join(FOCUS_TASK_POINTER_NAME);
-    assert_expected_file_hash(
-        &focus_pointer,
-        plan.expected_focus_task_hash.as_deref(),
-        "focus task pointer",
-    )?;
-    if write_focus_task_pointer(mirror_root, &plan.task_id, &plan.task, updated_at)? {
-        plan.changed_paths.push(focus_pointer.display().to_string());
-    }
-    let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
-    assert_expected_file_hash(
-        &supervisor_state_path,
-        plan.expected_supervisor_state_hash.as_deref(),
-        "supervisor state",
-    )?;
-    if write_json_if_changed(&supervisor_state_path, &plan.supervisor_state_payload)? {
-        plan.changed_paths
-            .push(supervisor_state_path.display().to_string());
-    }
-    Ok(())
-}
-
-impl SessionArtifactWritePlan {
-    fn into_response(self) -> Value {
-        json!({
-            "schema_version": FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
-            "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-            "summary": self.summary_path.display().to_string(),
-            "next_actions": self.next_actions_path.display().to_string(),
-            "evidence": self.evidence_path.display().to_string(),
-            "task_id": self.task_id,
-            "changed_paths": self.changed_paths,
-        })
-    }
-}
-
-fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
+pub(crate) fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
     input.chars().take(max_chars).collect()
 }
 
@@ -3956,7 +900,7 @@ pub fn build_automatic_continuity_checkpoint_payload(
         "focus": true,
         "next_actions": [
             "Open artifacts/current/SESSION_SUMMARY.md on the next session.",
-            "Optional: run `$refresh` or `router-rs framework refresh` for a compact handoff prompt.",
+            "Optional: run `router-rs framework snapshot --repo-root <repo>` for a compact runtime read model.",
         ],
         "trace_metadata": {
             "checkpoint_kind": "automatic_stop_hook",
@@ -4070,6 +1014,9 @@ fn append_evidence_index_merged_row(
     if let Some(parent) = evidence_path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
     }
+    // Cross-process lock: evidence append is read-modify-write and must not lose updates
+    // when Cursor/Codex hooks (or parallel tests) race on the same task directory.
+    let _evidence_lock = crate::runtime_storage::acquire_runtime_path_lock(&evidence_path)?;
 
     let existing = read_json_strict(&evidence_path)?;
     let mut rows: Vec<Map<String, Value>> = normalize_evidence_index(&existing);
@@ -4082,7 +1029,7 @@ fn append_evidence_index_merged_row(
         "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
         "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
     });
-    write_json_if_changed(&evidence_path, &payload)?;
+    write_json_if_changed_unlocked(&evidence_path, &payload)?;
     if let Some(tid) = crate::autopilot_goal::read_active_task_id(repo_root) {
         if !tid.is_empty() {
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &tid);
@@ -4300,35 +1247,53 @@ pub fn try_append_cursor_post_tool_evidence(repo_root: &Path, event: &Value) -> 
     try_append_post_tool_shell_evidence(repo_root, event, "cursor_post_tool_verification")
 }
 
-pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
-    let _guard = crate::task_write_lock::task_ledger_write_lock()
-        .lock()
-        .map_err(|_| "task ledger write lock poisoned".to_string())?;
-    // Enforce closeout policy before artifact write when applicable.
-    // 完成态：硬门禁开启时须附带可通过 evaluate 的 `closeout_record`（见 enforce_closeout_for_session_payload）。
-    // 硬门禁：CI/GitHub Actions 下默认开启；本地未设置 ROUTER_RS_CLOSEOUT_ENFORCEMENT 时默认软；显式 `=0` 关闭硬门禁。
-    // 非完成态：`enforce_closeout_for_session_payload` 不解析附带 record（避免草稿误伤），需要时请单独 `closeout evaluate`。
-    let closeout_evaluation = enforce_closeout_for_session_payload(&payload)?;
-    let mut plan = build_session_artifact_write_plan(&payload)?;
-    let sync_repo = plan.repo_root.clone();
-    let sync_tid = plan.task_id.clone();
-    write_primary_session_artifacts(&mut plan)?;
-    write_optional_session_mirror(&mut plan)?;
-    write_repo_session_focus(&mut plan)?;
-    let mut response = plan.into_response();
-    if let Some(ref root) = sync_repo {
-        if let Ok(resolved) = resolve_repo_root_arg(Some(root.as_path())) {
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                &resolved, &sync_tid,
-            );
-        }
+/// Whether programmatic closeout enforcement is enabled in the current process.
+///
+/// - **Enabled** in CI / GitHub Actions by default.
+/// - **Disabled** locally when `ROUTER_RS_CLOSEOUT_ENFORCEMENT` is unset.
+/// - Explicitly disable with `ROUTER_RS_CLOSEOUT_ENFORCEMENT=0|false|off|no`.
+pub fn closeout_programmatic_enforcement_enabled() -> bool {
+    !closeout_enforcement_disabled_by_env()
+}
+
+/// Default location for a task's closeout record.
+pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> PathBuf {
+    repo_root
+        .join("artifacts")
+        .join("closeout")
+        .join(format!("{}.json", task_id.trim()))
+}
+
+/// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.
+pub fn evaluate_closeout_record_file_for_task(
+    repo_root: &Path,
+    task_id: &str,
+    record_path: &Path,
+) -> Result<Value, String> {
+    let tid = task_id.trim();
+    if tid.is_empty() {
+        return Err("task_id is empty".to_string());
     }
-    if let Some(eval) = closeout_evaluation {
-        if let Some(obj) = response.as_object_mut() {
-            obj.insert("closeout_evaluation".to_string(), eval);
-        }
-    }
-    Ok(response)
+    let text = std::fs::read_to_string(record_path).map_err(|err| {
+        format!(
+            "read closeout record failed ({}): {err}",
+            record_path.display()
+        )
+    })?;
+    let record: Value = serde_json::from_str(&text).map_err(|err| {
+        format!(
+            "parse closeout record JSON failed ({}): {err}",
+            record_path.display()
+        )
+    })?;
+    let (rows_non_empty, has_success) =
+        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(repo_root, tid);
+    let ctx = CloseoutEvidenceContext {
+        evidence_rows_non_empty: rows_non_empty,
+        has_successful_verification: has_success,
+    };
+    evaluate_closeout_record_value_with_context(record, &ctx)
+        .map_err(|err| format!("closeout record evaluation failed: {err}"))
 }
 
 fn in_ci_like_environment() -> bool {
@@ -4439,6 +1404,7 @@ fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>
     Ok(Some(evaluation))
 }
 
+#[allow(dead_code)]
 fn write_session_artifact_set(
     paths: ArtifactPaths<'_>,
     payloads: ArtifactPayloads<'_>,
@@ -4462,6 +1428,7 @@ fn write_session_artifact_set(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn write_json_artifact_if_changed(
     path: &Path,
     payload: &Value,
@@ -4491,6 +1458,7 @@ fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn normalize_next_actions(payload: &Value) -> Vec<String> {
     let actions = if payload.get("schema_version").and_then(Value::as_str)
         == Some(NEXT_ACTIONS_SCHEMA_VERSION)
@@ -4512,6 +1480,7 @@ fn normalize_next_actions(payload: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn normalize_trace_skills(payload: &Value) -> Vec<String> {
     let skills = if payload.get("schema_version").and_then(Value::as_str)
         == Some(TRACE_METADATA_SCHEMA_VERSION)
@@ -4533,6 +1502,7 @@ fn normalize_trace_skills(payload: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn coerce_next_action_line(value: &Value) -> String {
     if let Some(text) = value.as_str() {
         return text.trim().to_string();
@@ -4548,6 +1518,7 @@ fn coerce_next_action_line(value: &Value) -> String {
     value_text(Some(value))
 }
 
+#[allow(dead_code)]
 fn authoritative_next_actions(
     snapshot_payload: &Value,
     supervisor_state: &Map<String, Value>,
@@ -4571,6 +1542,7 @@ fn authoritative_next_actions(
     }
 }
 
+#[allow(dead_code)]
 fn fallback_route_from_supervisor(supervisor_state: &Map<String, Value>) -> Vec<String> {
     let controller = supervisor_state
         .get("controller")
@@ -4586,6 +1558,7 @@ fn fallback_route_from_supervisor(supervisor_state: &Map<String, Value>) -> Vec<
     ])
 }
 
+#[allow(dead_code)]
 fn trace_payload_identity_matches(
     payload: &Value,
     task: &str,
@@ -4617,6 +1590,7 @@ fn trace_payload_identity_matches(
     true
 }
 
+#[allow(dead_code)]
 fn authoritative_route(
     trace_payload: &Value,
     supervisor_state: &Map<String, Value>,
@@ -4634,6 +1608,7 @@ fn authoritative_route(
     fallback_route_from_supervisor(supervisor_state)
 }
 
+#[allow(dead_code)]
 fn normalize_supervisor_state(payload: &Value) -> Map<String, Value> {
     let source = payload.as_object().cloned().unwrap_or_default();
     let mut normalized = source.clone();
@@ -4721,6 +1696,7 @@ fn supervisor_contract(state: &Map<String, Value>) -> Map<String, Value> {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn parse_iso_timestamp(value: Option<&Value>) -> Option<DateTime<FixedOffset>> {
     let text = value_text(value);
     if text.is_empty() {
@@ -4734,14 +1710,16 @@ fn parse_iso_timestamp(value: Option<&Value>) -> Option<DateTime<FixedOffset>> {
     DateTime::parse_from_rfc3339(&normalized).ok()
 }
 
+#[allow(dead_code)]
 fn load_routing_runtime_version(repo_root: &Path) -> u64 {
     let runtime_path = repo_root.join("skills").join("SKILL_ROUTING_RUNTIME.json");
-    read_json_if_exists(&runtime_path)
+    runtime_view::read_json_if_exists(&runtime_path)
         .get("version")
         .and_then(Value::as_u64)
         .unwrap_or(1)
 }
 
+#[allow(dead_code)]
 fn synthesized_status(supervisor_state: &Map<String, Value>) -> String {
     let verification = supervisor_state
         .get("verification")
@@ -4761,6 +1739,7 @@ fn synthesized_status(supervisor_state: &Map<String, Value>) -> String {
     ])
 }
 
+#[allow(dead_code)]
 fn object_has_any_signal(value: &Value) -> bool {
     match value {
         Value::Null => false,
@@ -4771,6 +1750,7 @@ fn object_has_any_signal(value: &Value) -> bool {
     }
 }
 
+#[allow(dead_code)]
 fn terminal_reason(prefix: &str, value: &str, terminal_values: &[&str]) -> String {
     if is_terminal(value, terminal_values) {
         format!("{prefix}: {value}")
@@ -4786,6 +1766,7 @@ fn is_terminal(value: &str, terminal_values: &[&str]) -> bool {
         .any(|candidate| lowered == *candidate)
 }
 
+#[allow(dead_code)]
 fn looks_same_identity(left: &str, right: &str) -> bool {
     let left_token = safe_slug(&left.to_ascii_lowercase());
     let right_token = safe_slug(&right.to_ascii_lowercase());

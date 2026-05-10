@@ -23,7 +23,7 @@ trigger_hints:
   - html
   - data visualization
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   platforms: [codex]
   tags:
     - infographic
@@ -77,6 +77,13 @@ an HTML file rendered in-browser and optionally exported to PNG/PDF via screensh
 Rule of thumb: if the output should be **editable, text-selectable, and structured** → `infographic`. If the output should be an **AI-rendered raster image** → `image-generated`.
 
 ## Workflow
+
+### 0. Design contract (reuse / branding)
+
+Before HTML styling: if house style, brand kit, reusable palette, token-level consistency, or
+multi-page/long-form infographic identity matters → run **`$design-md` first**, then encode tokens
+via CSS variables. Skip when the deliverable is a one-off exploratory graphic (same heuristic as `$slides`
+Fast vs design handoff).
 
 ### 1. Content Analysis
 

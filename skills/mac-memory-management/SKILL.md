@@ -8,19 +8,18 @@ session_start: n/a
 user-invocable: false
 disable-model-invocation: true
 trigger_hints:
-  - mac
-  - apple silicon
-  - mps
-  - memory
-  - unified memory
-  - oom
-  - 内存优化
-  - 内存压力
-  - 爆内存
-  - 速度优化
-  - 吞吐优化
-  - memory optimization
-  - performance tuning
+  - apple silicon mps
+  - torch.mps
+  - unified memory pressure
+  - mac ml oom
+  - macos swap pressure
+  - mps oom
+  - mps throughput
+  - mac dataloader memory
+  - apple silicon training memory
+  - Apple Silicon 内存压力
+  - MPS 爆内存
+  - Mac 训练吞吐优化
 metadata:
   version: "1.2.0"
   platforms: [codex]
@@ -42,15 +41,15 @@ source: local
 
 # mac-memory-management
 
-This skill owns Mac-specific runtime optimization for ML workloads when unified memory, MPS behavior, DataLoader pressure, throughput limits, or device-path stability are the dominant constraint. It is the default Mac runtime owner for Apple Silicon training and inference loops; once Mac runtime constraints are no longer dominant, generic rewrites return to the current implementation owner.
+This fallback owner is a Mac-specific runtime guardrail for ML workloads when unified memory, MPS behavior, DataLoader pressure, throughput limits, or device-path stability are the dominant constraint. It should be checked by the current research or implementation owner when Apple Silicon runtime constraints dominate; once they no longer dominate, generic rewrites return to that owner.
 
 ## When to use
 
-- The task is to keep a Mac ML workload from running out of memory, stalling, or becoming unstable
-- The user mentions Apple Silicon, MPS, unified memory, OOM, memory spikes, or severe swap pressure
+- The task is to keep an Apple Silicon ML workload from running out of memory, stalling, or becoming unstable
+- The user mentions Apple Silicon, MPS, `torch.mps`, unified memory pressure, MPS OOM, memory spikes, or severe swap pressure in an ML workload
 - The main work is batch-size fallback, gradient checkpointing, gradient accumulation, memory-safe DataLoader settings, throughput tuning, or explicit `torch.mps` runtime management
 - The code must adapt to tight Mac memory budgets without pretending CUDA-style assumptions still apply
-- The workload is on Mac and the question is which runtime levers to pull first: device path, batch size, worker count, caching, retention, or fallback behavior
+- The workload is on Apple Silicon and the question is which runtime levers to pull first: device path, batch size, worker count, caching, retention, or fallback behavior
 - Best for requests like:
   - "Mac 上这个训练一直 OOM，帮我稳住"
   - "Apple Silicon 上怎么做内存管理"
@@ -63,6 +62,7 @@ This skill owns Mac-specific runtime optimization for ML workloads when unified 
 
 - The task is general model architecture, training strategy, or research engineering -> answer in the current research/implementation context
 - The task is generic code acceleration such as pandas -> polars, faster serializers, or hot-path rewrites with no Mac runtime constraint -> answer in the current implementation context
+- The task is generic memory reduction, leak hunting, or service performance tuning without Apple Silicon ML runtime constraints -> answer in the current implementation context
 - The task is experiment tracking, seeds, or reproducibility management -> use `$experiment-reproducibility`
 - The task is non-Mac hardware or CUDA-first stack tuning -> answer in the current research/implementation context
 - The task is broad training setup guidance that is not memory-specific -> answer in the current research/implementation context
@@ -70,14 +70,14 @@ This skill owns Mac-specific runtime optimization for ML workloads when unified 
 ## Task ownership and boundaries
 
 This skill owns:
-- Apple Silicon runtime policy for training, inference, eval, and preprocessing loops
-- unified-memory-aware execution policy on macOS
+- Apple Silicon runtime policy for training, inference, eval, and preprocessing loops under memory or MPS pressure
+- unified-memory-aware execution policy on macOS when the workload is ML runtime bound
 - MPS vs CPU fallback when memory pressure or runtime instability dominates
-- conservative batch sizing and gradient accumulation
-- gradient checkpointing and precision tradeoffs when they reduce peak memory
-- dataloader worker, caching, and preprocessing memory tradeoffs
+- conservative batch sizing and gradient accumulation when live activation size is the blocker
+- gradient checkpointing and precision tradeoffs when they reduce peak memory on the Mac path
+- dataloader worker, caching, and preprocessing memory tradeoffs under unified memory pressure
 - explicit `torch.mps` memory inspection and cleanup tactics
-- memory-safe validation, inference, logging, and checkpoint behavior
+- memory-safe validation, inference, logging, and checkpoint behavior for Apple Silicon runs
 - throughput tuning that is specific to Mac runtime shape: worker count, caching, host-device movement, microbatching, and stable device-path selection
 
 This skill does not own:
@@ -106,11 +106,15 @@ This skill does not own:
 
 1. Run preflight and capture the minimum measurement fields:
    - device path (`mps` or `cpu`)
-   - chip class
+   - macOS version
+   - Python and PyTorch versions
+   - chip class and unified memory capacity
+   - whether `torch.backends.mps.is_available()` is true
    - batch size and accumulation policy
    - worker count
-   - peak memory behavior or swap behavior
-   - throughput or latency over a short repeatable window
+   - precision policy and relevant runtime flags
+   - peak RSS, swap, or memory-pressure behavior, including the measurement source
+   - throughput or latency over a fixed short window with the same warmup and sample count before and after the change
 2. Confirm the task shape:
    - object: Mac training/inference/data path under runtime pressure
    - action: stabilize, reduce memory, recover throughput, add fallback, prevent OOM
@@ -140,6 +144,7 @@ This skill does not own:
    - tune worker count, microbatching, and preprocessing placement for stable throughput
 6. Keep CPU fallback available when MPS memory behavior is unstable.
 7. Verify with a smoke run and a short benchmark before claiming the path is safe or fast.
+8. When reporting a speed or memory win, state the benchmark window, statistic used, device path, batch policy, worker count, and peak-memory evidence.
 
 ## Policy reference
 
@@ -155,6 +160,7 @@ This skill does not own:
 - Do not keep full prediction histories when streaming metrics are enough.
 - Do not claim stability until a smoke run passes on the intended device path.
 - Do not claim a speed win unless the device path, batch policy, and benchmark window are stated.
+- Do not treat "Mac" or "memory optimization" alone as enough signal; this owner requires an Apple Silicon ML runtime constraint.
 - Do not treat mixed precision or checkpointing as free wins; verify peak-memory reduction against real throughput.
 
 ## Trigger examples
@@ -163,4 +169,4 @@ This skill does not own:
 - "MPS 一直 OOM，给我 batch fallback。"
 - "Mac 上这段训练为什么又慢又不稳？"
 - "帮我把 Apple Silicon 上的训练 runtime 调顺。"
-- "Use $mac-memory-management to harden this Mac training loop against memory spikes."
+- "请按 Apple Silicon / MPS runtime guardrail 检查这段训练 loop。"

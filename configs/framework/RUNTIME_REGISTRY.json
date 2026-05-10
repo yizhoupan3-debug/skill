@@ -64,7 +64,13 @@
           "enabled": true,
           "default_mode": "bounded-sidecar-first",
           "spawn_policy": "admit-when-lanes-are-clear",
-          "max_parallel_lanes": 3,
+          "max_parallel_lanes": 5,
+          "preferred_parallel_lanes": 3,
+          "join_policy": "fan-out-fan-in-with-disjoint-writes",
+          "user_visible_style": {
+            "prefer_compact_orchestration_prompts": true,
+            "avoid_subagent_process_narration": true
+          },
           "require_reject_reason_when_not_spawning": true,
           "reject_reasons": [
             "small_task",
@@ -111,7 +117,7 @@
             "owner": "hybrid_host_plus_rust_persistence",
             "rust_runtime_coverage": "goal_persistence_and_drive_hook",
             "status": "rust_stdio_goal_store_plus_cursor_followup",
-            "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block|clear) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit (including hook-state lock failure and ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE) so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0. Cursor review gate: `/autopilot` does not arm `delegation_required` (avoids RG_FOLLOWUP parallel-lane evidence stacked on goal); `/autopilot` prompts suppress `review_required` from review-findings-style wording; persisted `GOAL_STATE` marks pre-goal satisfied so execution continuation is not blocked by the pre-goal reviewer nag."
+            "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block|clear) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit (including hook-state lock failure and ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE) so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0. Cursor review gate: `/autopilot` does not arm `delegation_required` (avoids legacy incorrect review-followup parallel-lane evidence stacked on goal); `/autopilot` prompts suppress `review_required` from review-findings-style wording; persisted `GOAL_STATE` marks pre-goal satisfied so execution continuation is not blocked by the pre-goal reviewer nag."
           },
           "never_stop_at_plan_only": true,
           "allow_network_research_for_unknowns": true,
@@ -187,11 +193,8 @@
         "requires_explicit_entrypoint": true,
         "explicit_entrypoints": [
           "/autopilot",
-          "$autopilot",
           "/autopilot-quick",
-          "$autopilot-quick",
           "/autopilot-deep",
-          "$autopilot-deep",
           "/autopilot quick",
           "/autopilot deep"
         ],
@@ -254,8 +257,7 @@
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
         "explicit_entrypoints": [
-          "/deepinterview",
-          "$deepinterview"
+          "/deepinterview"
         ],
         "implicit_route_policy": "never"
       },
@@ -275,7 +277,6 @@
         "requires_explicit_entrypoint": true,
         "explicit_entrypoints": [
           "/gitx",
-          "$gitx",
           "gitx"
         ],
         "implicit_route_policy": "never"
@@ -285,24 +286,23 @@
         "description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."
       }
     },
-    "loop": {
-      "canonical_owner": "loop",
-      "skill_path": "skills/loop/SKILL.md",
+    "update": {
+      "canonical_owner": "update",
+      "skill_path": "skills/update/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/loop",
-        "cursor": "/loop"
+        "codex-cli": "/update",
+        "cursor": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
         "explicit_entrypoints": [
-          "/loop",
-          "$loop"
+          "/update"
         ],
         "implicit_route_policy": "never"
       },
       "lineage": {
         "source": "repo-native",
-        "description": "Host-orchestrated adversarial review-fix passes with progressive rubric disclosure via router-rs Cursor hooks."
+        "description": "One-shot codegen refresh plus full markdown/doc contract gates; optional ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS to re-install codex+cursor skill projections."
       }
     },
     "team": {
@@ -464,8 +464,7 @@
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
         "explicit_entrypoints": [
-          "/team",
-          "$team"
+          "/team"
         ],
         "implicit_route_policy": "never"
       },

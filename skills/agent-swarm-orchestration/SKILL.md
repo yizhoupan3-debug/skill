@@ -38,7 +38,7 @@ metadata:
 
 ## Overview
 
-这个 skill 是多 agent 的准入门：先判断任务是否应该留在主线程、使用 bounded sidecars，还是升级到 `$team` / `/team` 的完整生命周期编排。
+这个 skill 是多 agent 的准入门：先判断任务是否应该留在主线程、使用 bounded sidecars，还是升级到 `/team` 的完整生命周期编排。
 
 关注点包括：
 - spawn admission
@@ -66,8 +66,8 @@ metadata:
 - 用户要做任务路由、agent handoff、shared memory、consensus、quality gate
 - 用户要做 research swarm、support router、自动审查流水线
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
-- 用户明确要求 full team orchestration 而不是普通 bounded sidecars；显式 `$team` / `/team` 入口只归 `team` 命令本身，不由本 gate 抢占
-- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：用 [`review-fix-verify-loop`](../review-fix-verify-loop/SKILL.md)（`$review-fix-verify-loop`）承载契约与模板；本 gate 仍负责 spawn admission 与 reject reason
+- 用户明确要求 full team orchestration 而不是普通 bounded sidecars；显式 `/team` 入口只归 `team` 命令本身，不由本 gate 抢占
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板见 harness 参考 [`rfv_loop_harness.md`](../docs/rfv_loop_harness.md)（**非热 skill 路由**）；用户侧入口优先 [`loop`](../loop/SKILL.md)（`/loop`）或 `/autopilot` / `/team`；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”
@@ -111,7 +111,7 @@ Allow bounded sidecars when at least one condition is true:
 
 For these allowed cases, the supervisor should spawn sidecars promptly and keep local ownership of integration and final verification.
 
-Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [`review-fix-verify-loop` 推理深度契约](../review-fix-verify-loop/references/reasoning-depth-contract.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
+Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [推理深度契约](../docs/references/rfv-loop/reasoning-depth-contract.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
 
 Reject spawning with an explicit reason:
 
@@ -179,4 +179,4 @@ If the discussion touches current-session execution:
 
 For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).
 
-For explicit `$team` / `/team` alias handling, see [references/team-mode.md](./references/team-mode.md).
+For explicit `/team` alias handling, see [references/team-mode.md](./references/team-mode.md).

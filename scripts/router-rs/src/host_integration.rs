@@ -41,7 +41,8 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
-const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 4] = ["autopilot", "deepinterview", "gitx", "team"];
+const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 5] =
+    ["autopilot", "deepinterview", "gitx", "team", "update"];
 const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
@@ -489,6 +490,46 @@ fn resolve_artifact_root(
         return normalize_path(&PathBuf::from(path));
     }
     Ok(framework_root.join("artifacts"))
+}
+
+pub fn resolve_maint_roots(
+    framework_root: Option<&Path>,
+    artifact_root: Option<&Path>,
+) -> Result<(PathBuf, PathBuf), String> {
+    let framework_root = resolve_projection_framework_root(framework_root)?;
+    let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
+    Ok((framework_root, artifact_root))
+}
+
+pub(crate) fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
+    let manifest = framework_root.join("scripts/router-rs/Cargo.toml");
+    if !manifest.is_file() {
+        return None;
+    }
+    let output = std::process::Command::new("cargo")
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(&manifest)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let td = meta.get("target_directory")?.as_str()?;
+    let base = PathBuf::from(td);
+    for tail in ["debug/router-rs", "release/router-rs"] {
+        let candidate = base.join(tail);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn resolve_host_home(
@@ -2012,17 +2053,28 @@ fn remove_cursor_mcp_server(path: &Path) -> Result<bool, String> {
     Ok(changed)
 }
 
+fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
+    vec![
+        "browser".into(),
+        "mcp-stdio".into(),
+        "--repo-root".into(),
+        roots.framework_root.to_string_lossy().into_owned(),
+    ]
+}
+
 fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
-    json!({
-        "command": "bash",
-        "args": [
-            roots
-                .framework_root
-                .join("tools/browser-mcp/scripts/start_browser_mcp.sh")
-                .to_string_lossy()
-                .to_string()
-        ]
-    })
+    let args = cursor_mcp_browser_stdio_args(roots);
+    let exe = cargo_router_rs_executable(&roots.framework_root).or_else(|| which::which("router-rs").ok());
+    match exe {
+        Some(path) => json!({
+            "command": path.to_string_lossy().to_string(),
+            "args": args,
+        }),
+        None => json!({
+            "command": "router-rs",
+            "args": args,
+        }),
+    }
 }
 
 fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<bool, String> {
@@ -2054,29 +2106,28 @@ fn cursor_mcp_server_matches_framework(
     let Some(server) = actual else {
         return Ok(None);
     };
-    let expected_script = roots
-        .framework_root
-        .join("tools/browser-mcp/scripts/start_browser_mcp.sh");
-    let is_framework_server = server.get("command").and_then(Value::as_str) == Some("bash")
-        && server
-            .get("args")
-            .and_then(Value::as_array)
-            .and_then(|args| args.first())
-            .and_then(Value::as_str)
-            .map(PathBuf::from)
-            .map(|script_path| paths_match_framework_script(&script_path, &expected_script))
-            .transpose()?
-            .unwrap_or(false);
+    let expected_args = cursor_mcp_browser_stdio_args(roots);
+    let actual_args = server
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|args| {
+            args.iter()
+                .filter_map(|value| value.as_str().map(str::to_owned))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let command_ok = server
+        .get("command")
+        .and_then(Value::as_str)
+        .map(|cmd| {
+            if cmd == "router-rs" {
+                return true;
+            }
+            Path::new(cmd).file_name().and_then(|name| name.to_str()) == Some("router-rs")
+        })
+        .unwrap_or(false);
+    let is_framework_server = command_ok && actual_args == expected_args;
     Ok(Some(is_framework_server))
-}
-
-fn paths_match_framework_script(actual: &Path, expected: &Path) -> Result<bool, String> {
-    if let (Ok(actual_canonical), Ok(expected_canonical)) =
-        (fs::canonicalize(actual), fs::canonicalize(expected))
-    {
-        return Ok(actual_canonical == expected_canonical);
-    }
-    Ok(normalize_path(actual)? == normalize_path(expected)?)
 }
 
 fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
@@ -2217,7 +2268,7 @@ fn shared_codex_skill_surface(repo_root: &Path) -> PathBuf {
     repo_root.join(CODEX_SKILL_SURFACE_REL)
 }
 
-fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, String> {
+pub(crate) fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, String> {
     ensure_host_skill_surface(
         repo_root,
         &shared_codex_skill_surface,
@@ -2411,7 +2462,7 @@ fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Result<String
         .and_then(Value::as_str)
         .unwrap_or("skill-framework-developer");
     let host_entrypoints = command.get("host_entrypoints").and_then(Value::as_object);
-    let default_host_entrypoint = format!("${slug}");
+    let default_host_entrypoint = format!("/{slug}");
     let host_entrypoint = host_entrypoints
         .and_then(|entrypoints| entrypoints.get("codex-cli"))
         .and_then(Value::as_str)

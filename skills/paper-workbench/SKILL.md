@@ -18,8 +18,8 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: preferred
-user-invocable: false
-disable-model-invocation: true
+user-invocable: true
+disable-model-invocation: false
 trigger_hints:
   - 帮我审这篇 paper
   - 帮我审这篇论文
@@ -29,6 +29,14 @@ trigger_hints:
   - 整篇严审
   - 整篇 review
   - 科研优化
+  - 收窄修改范围
+  - 定点修改
+  - 补丁式修改
+  - 不要扩写
+  - "edit_scope: surgical"
+  - patch-level edit
+  - hunk only
+  - 不要随便动别的段
   - 顶刊顶会标准
   - 顶刊标准
   - 顶会标准
@@ -83,19 +91,14 @@ trigger_hints:
   - 藏到附录
   - paper workflow
   - paper workbench
-  - 精准修改
-  - 局部修改
-  - 只改一段
-  - 不要动结构
-  - edit_scope: surgical
-  - 大面积重构
-  - 整篇改版
-  - 结构性改版
-  - 故事线重写
-  - edit_scope: refactor
+  - 改了哪里逐条列出
+  - 学术用语规范
+  - 术语规范
+  - 不要生造概念
+  - 论文用语长期规范
 metadata:
-  version: "1.5.0"
-  platforms: [codex]
+  version: "1.11.0"
+  platforms: [codex, cursor]
   tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
   - orchestrator
@@ -117,9 +120,30 @@ source: local
 
 This skill is the one front door for paper work.
 
+## 强对抗审稿默认立场（硬性）
+
+一切审阅、返修、预判「能不能投」「顶刊是否能过」时，**不按友好读者模型**，而按**敌意审稿人 / 最坏合理解读（hostile but fair）**：专盯 **claim–evidence 缝、closest-work、复现与代码—正文对齐、推导跳步、统计与比较的公平性**。软球结论、只给情绪价值、或暗示「应该能过」而无逐条可关闭证据，视为**未执行本 skill**。
+
+与本立场冲突的捷径（降口径逃难、rebuttal-only、代码空诺、数学直觉化、`surgical` 全局乱改等）一律以 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 为硬闸。
+
+**Cursor 宿主（可选）**：在 shell/IDE 环境设 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` 时，`router-rs` 可在 **`beforeSubmit`** 合并短段 **`PAPER_ADVERSARIAL_HOOK`**（真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），与本 skill 同向加压；受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。见根 `AGENTS.md` 与 `docs/harness_architecture.md`。
+
 It exists so the user does not need to decide first whether the job is
 `$paper-reviewer`, `$paper-reviser`, `$paper-writing`, or a review/revision
 dimension mode.
+
+## Progressive disclosure（渐进披露）— 减入口、减抽象
+
+**第一性原理**：用户要的是「这篇稿子下一步怎么办」，不是背诵技能拓扑。
+
+- **L0（默认）**：只暴露本前门与用户可理解的结果（verdict / blockers / next move / edit_scope 若即将改稿）。**不要**要求用户在 `$paper-reviewer`、`$paper-reviser`、`$paper-writing` 之间先选一个；在对话内自行路由。
+- **L1**：用户已明确「只润色」「只审不改」「按 R1 改」或给出 `edit_scope` / `scope_items` 时，再收紧模式，仍不必展开全套维度名。
+- **L2（排障 / 强用户）**：用户**点名**某专科 skill 或某维度（logic / figure-table / notation）时，直接尊重；文档里的 lane map 供实现方用，不是菜单。
+- **L3（长程）**：多轮冻结 claim、并行 sidecar、`PAPER_GATE_PROTOCOL` 磁盘树 —— **仅当**任务真的需要跨会话状态时再物化；日常一轮交互不要默认铺协议。
+
+**减法**：专科 skill 多 ≠ 用户入口多。`disable-model-invocation` 的 paper 专科应视为 **内部能力切片**；入口计数按 **用户可见的一个前门** 算，否则「agent 太多」会反噬可用性。
+
+**全栈索引**（技能 × reference × L0–L3）：[`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md)。
 
 ## Use this when
 
@@ -149,8 +173,7 @@ edits executed from this front door) must first fix **`edit_scope`** using
 [`references/edit-scope-gate.md`](references/edit-scope-gate.md):
 
 - **`surgical` (精准修改)** — default when the user has **not** clearly authorized
-  structural refactoring; bounded replacements only, no unsolicited section
-  cuts or cross-section narrative rewrites.
+  structural refactoring; **仅**改 `scope_items` 锚定表面；**禁止**整篇/整节回贴式替换、全局术语统一、通读顺稿、以及对未点名段落的任何修改（无论用户是否粘贴了全文）。
 - **`refactor` (大面积重构)** — only with explicit user opt-in or strong refactor
   signals; allows the full honest-edit contract of `$paper-reviser`.
 
@@ -158,29 +181,20 @@ If the user is vague (`润色`, `改好一点`, `优化表述`) or mixed signals
 **ask one disambiguation question** (`surgical` vs `refactor`) before editing.
 
 Optional machine token on its own line: `edit_scope: surgical` or
-`edit_scope: refactor`.
+`edit_scope: refactor`。
+
+**精准修改硬约束**：`surgical` 下必须遵循
+[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 中的 **硬等级**、**防扩写**、**整篇回贴禁令**、**静默全局替换禁令**、**锚定三选一**、**改动上限**、**默认交付形态（hunk/逐条）**、**改前自检**。**凡**对 `scope_items` 外字句的改动即 **越权**，须撤回或升格 `refactor` / 补列条目；**不得**用「通读」「统一文风」「对齐 mirror」当借口。
 
 ## Default front-door behavior
 
-Pick one external mode first, then keep the rest internal:
+Default behavior is rule-based, not a user-facing mode menu:
 
-1. `整篇判断`
-2. `按意见改稿`
-3. `单维度会诊`
-4. `局部精修`
-5. `先学ref再写`
-
-Rules:
-
-- vague whole-paper asks default to `整篇判断`
-- top-tier / 顶刊顶会 asks default to `整篇判断` with the strict top-tier
-  acceptance bar, unless the user already provides accepted findings for direct
-  revision
-- review-driven revision asks default to `按意见改稿`
-- target-journal ref-first asks default to `先学ref再写`
-- explicit dimension asks use `单维度会诊`
-- local section rewrite with fixed claim boundary uses `局部精修`
-- workflow-quality complaints default to the nearest failed lane, then patch the handoff or routing case that would prevent the same failure next time
+- If the user asks a vague whole-paper question (能不能投/投稿前把关/整体推进): start with a strict verdict and top blockers, then route internally.
+- If the user provides reviewer comments or accepted findings and asks to change the paper now: revise, honoring `edit_scope`.
+- If the user explicitly names one dimension (claim/evidence, refs, figures, notation, language): run that slice only.
+- If the user explicitly asks to learn target-journal refs first: run the ref-first workflow under this front door.
+- If the user provides a bounded text block and says “只改表达不改 claim”: do local prose only after the claim boundary is frozen.
 
 Do not make the user switch skills just because the work naturally moves from
 judgment to revision.
@@ -197,12 +211,23 @@ separate "known blocker" from "uncertainty that needs lookup".
 - Do not let external research become a separate literature-review task unless the paper cannot be judged without a corpus.
 - When **edit_scope=refactor** (or whole-paper judgment explicitly accepts structural cuts), do not preserve weak sections by default; cut, narrow, move to appendix, or stop defending weak claims when that is the honest route.
 - When **edit_scope=surgical**, do not delete, merge, or relocate sections and do not run cross-section throughline rewrites unless the user listed that work in **scope_items** (see [`references/edit-scope-gate.md`](references/edit-scope-gate.md)).
+- When **edit_scope=surgical**, do not return a **whole-section or whole-document paste** as the primary deliverable if `scope_items` only names local spans—use **patches/hunks or excerpt-to-excerpt replacements** tied to `change_id` (same gate reference).
 - Do not end at critique if the user asked to get the paper closer to submission; convert findings into ordered edits.
 - Do not present "top-tier" as a style problem. Treat it as a selective-venue
   acceptance problem: novelty, evidence, comparison fairness, venue fit, and
   reproducibility must survive before prose polish matters.
 - Do not allow claim drift across rounds: every rewrite must stay inside the
   frozen claim ceiling unless the main decision lane explicitly reopens it.
+- Do not treat **claim downgrade / 缩口径** as the default fix when blockers
+  are **B 类需补**且存在合理的 **evidence-first** 路径；先列出最小补证据/补分析
+  选项，再讨论降主张（见 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)）。
+- **代码/实现质疑**不是「措辞问题」：禁止用泛泛公开承诺、`upon request`
+ 、或复述「我们相信实现正确」代替 **可核验复现锚**（环境与版本、最小命令、与算法叙述对齐）；细则见阶梯文 **§代码/实现质疑**。
+- **数学/推导质疑**不是「文风问题」：禁止用直觉句、Notation 洗牙或把 Wrong proof
+  悄悄收成「非正式叙述」来回避；必须 **补证明 / 定理勘误 / 反例收窄 / 或为 conjecture
+  并改 claim**；细则见阶梯文 **§数学/推导质疑**。
+- Keep this front door thin: if a rule needs more than one sentence, link the
+  owning reference instead of restating it here.
 
 ## Top-tier submission bar
 
@@ -246,6 +271,13 @@ as the compact workflow contract.
 
 For the compact lane map, use
 [`references/paper-lanes.md`](references/paper-lanes.md).
+
+For the user-phrase → lane reverse lookup (maintainer reference; not a
+user-facing menu), use
+[`references/user-phrases-to-lanes.md`](references/user-phrases-to-lanes.md).
+
+For the full manuscript stack map and progressive reading order, use
+[`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md).
 
 ## What this skill should deliver
 
@@ -294,10 +326,23 @@ target venue -> 20-ref corpus -> venue story norm -> our paper's story spine -> 
 
 In filesystem-backed work, the stable artifacts are:
 
-- `refs/ref_learning_brief.md`
+- `paper_ref/ref_learning_brief.md`
 - `paper_story/STORY_CARD.md`
 - `paper_story/SECTION_REWRITE_PLAN.md`
 - rewritten manuscript sections or patch notes
+
+## 审稿意见 / R&R：禁止逃避（硬约束）
+
+与前门 **Anti-bad-output**、[`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/research-language-norms.md`](references/research-language-norms.md) 叠加；**优先于**「少惹事、快过关」的模型默认。
+
+- **禁止「降 claim / 缩口径」当主手逃避**：在仍属 B 类可闭合、且存在合理 **evidence-first** 路径时，不得把本轮主策略做成「改弱提法 + 加长 limitation」却对证据结构不动（见阶梯文与后门 **Hard rules** 已有条目；本条是审稿场景的显式复述）。
+- **禁止「防御口径」顶替改稿**：不得用连环 hedge、冗长免责声明、叠叠乐的 `but/not/rather than`（辩论腔 prose）填满回复或正文，**代替**审稿人点名的对照/消融/协议澄清/图表修正/披露与复现条目。
+- **禁止 rebuttal-only**：意见客观要求手稿、图表、方法、统计或结构化补充材料变更时，**不得**只交 response letter；须并排交付可追溯的 **手稿改动（或等价 hunk/diff）** 与「意见 → 改动」映射。
+- **逐条关停**：每条审稿意见须有 **point_id → (manuscript_delta | 已落地的补证与分析 | `cannot_fix_because`）**之一；不得以「我们已经温和表述」「理解审稿人关切」等话述冒充关闭。
+- **默认正面硬修**：可先判可行性与优先级，但一旦进入改稿链路，应以 **repair**（补证、重写、重画、补强比较公平性）为第一默认，而非嘴上认错、手稿不动。
+- **代码/实现类意见（硬）**：审稿人追问复现性、复杂度、对齐伪代码 vs 源码、默认值/随机种子、潜在 bug——须交付 **可查证的复现与对齐物**（如版本化的 artifact、环境与入口命令、方法与正文/框图一致的对照），或 **修正文中的错误陈述**并说明影响。**禁止**用「将开源」「已向期刊说明」一类**不可立即核对**的承诺当关停件；若暂不发布，须提供 **minimal reproduction bundle**（或等价：独立伪代码补丁 + synthetic sanity + 审稿人可操作的最小脚本）并接受 `cannot_fix_because` 须极严格。
+- **数学/推导类意见（硬）**：质疑证明步骤、条件、常量/阶、可测性与交换极限等——须 **手写可检查的补证或勘误**（附录引理链、条件修正、反例后范围收窄），或显式把错误结论改为 **较弱但可证** 的表述并登记 claim。**禁止**仅做「更谦虚的 English」或把定理悄悄改成 prose 直觉而不声明 **推理变更**。
+- **双高危默认归类**：未见用户显式「只改文风」豁免时，将 **code-skeptic** 与 **math-skeptic** 类意见默认标为 **`repair` 主轴**（narrow 仅能附 `narrowing_is_primary_because` 走阶梯）。
 
 ## Hard rules
 
@@ -310,3 +355,9 @@ In filesystem-backed work, the stable artifacts are:
 - Do not turn a normal paper review into a process-heavy gate report; lead with
   verdict, blockers, external calibration, and next honest move
 - If the shortest honest path is cut, narrow, hide in appendix, or stop defending, say so plainly
+- Do not ship or polish prose that violates
+  [`references/research-language-norms.md`](references/research-language-norms.md)
+  unless the user explicitly waived that scope for the task
+- Do not close a revision round with **only** softer claims when findings say
+  the honest primary path is **new evidence or analysis**; align with
+  [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)

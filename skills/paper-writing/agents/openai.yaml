@@ -1,4 +1,10 @@
 interface:
   display_name: "Paper Writing"
   short_description: "Shape paper storytelling and polish bounded manuscript prose"
-  default_prompt: "Use $paper-writing for 科研讲故事, 论文故事线, 论文润色, SCI润色, manuscript editing, academic writing, rebuttal/response-letter prose, cover letters, or de-AI cleanup of a bounded academic-paper text block. When a target-journal ref corpus exists, learn its story architecture and claim tone without copying sentences. Keep the scientific boundary fixed, improve reader flow and claim calibration, adapt to the target venue when known, and mark missing facts with [VERIFY: ...] instead of inventing citations, results, or evidence."
+  default_prompt: >-
+    Use $paper-writing for bounded prose and storytelling when claim scope is fixed — often after
+    $paper-workbench freezes scope. Do not ask users to pick this as the first entry for vague
+    whole-paper tasks. Respect edit_scope (surgical vs refactor) and research-language-norms.
+    Do not wordsmith weaker claims to dodge closable evidence gaps (route back for claim decisions).
+    Mark missing facts with [VERIFY: ...]; never invent citations or results. When ref corpus exists,
+    learn architecture and tone without copying sentences.

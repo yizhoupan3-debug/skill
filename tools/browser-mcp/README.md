@@ -16,11 +16,9 @@ Codex or MCP live startup to execute the Node build.
 - **Stable element refs** — fingerprints prefer `data-testid` first; no DOM-ordinal dependency on dynamic pages
 - **Runtime diagnostics** — `browser_diagnostics` for self-inspection
 
-## Scripts
+## 启动（Rust-only）
 
-```bash
-/Users/joe/Documents/skill/tools/browser-mcp/scripts/start_browser_mcp.sh
-```
+不再提供 `start_browser_mcp.sh`：`router-rs browser mcp-stdio` 即为唯一 live stdio 入口；若需附加快照/attach 环境变量，请直接写入与下面「Startup options」一致的 CLI flags。
 
 ## Tools (16 total)
 
@@ -77,8 +75,6 @@ consume it directly for self-inspection:
 
 ```bash
 router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
-# or
-BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json ./tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
 
 `--runtime-attach-artifact-path` is the canonical Rust-first entrypoint for
@@ -101,6 +97,4 @@ through that same attach descriptor; replay results now include a lighter
 `replayContext` mirror so consumers can read attach provenance without
 re-parsing the full diagnostics block.
 
-The `start_browser_mcp.sh` script delegates directly to the Rust launcher and
-does not require the TypeScript build output, Node, or npm; MCP config can call
-the same Rust-owned launcher directly.
+Call `router-rs` (workspace `target-dir` 或 PATH) with `browser mcp-stdio` 与 `--repo-root` 即可；无需 TypeScript build、Node 或 npm。

@@ -319,6 +319,42 @@
       "first_turn": true
     },
     {
+      "id": "mac-memory-management-non-mac-memory-near-miss",
+      "category": "should-not-trigger",
+      "task": "优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "mac-memory-management"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "mac-memory-management-generic-code-acceleration-near-miss",
+      "category": "should-not-trigger",
+      "task": "把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "mac-memory-management"
+      ],
+      "first_turn": true
+    },
+    {
+      "id": "mac-memory-management-mac-non-ml-near-miss",
+      "category": "should-not-trigger",
+      "task": "MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "forbidden_owners": [
+        "mac-memory-management"
+      ],
+      "first_turn": true
+    },
+    {
       "id": "skill-framework-audit-merge-slim-runtime",
       "category": "should-trigger",
       "task": "全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime",
@@ -384,7 +420,7 @@
     {
       "id": "team-explicit-alias-beats-delegation-gate",
       "category": "explicit-framework-command",
-      "task": "$team 帮我组织 worker 协作",
+      "task": "/team 帮我组织 worker 协作",
       "focus_skill": "team",
       "expected_owner": "team",
       "expected_overlay": null,
@@ -394,11 +430,11 @@
       "first_turn": true
     },
     {
-      "id": "review-fix-verify-loop-explicit-alias",
+      "id": "loop-explicit-skill",
       "category": "explicit-loop-command",
-      "task": "/review-fix-verify-loop 跑三轮审查修复验证",
-      "focus_skill": "review-fix-verify-loop",
-      "expected_owner": "review-fix-verify-loop",
+      "task": "按 /loop 跑多轮对抗审查修复验证",
+      "focus_skill": "loop",
+      "expected_owner": "loop",
       "expected_overlay": null,
       "forbidden_owners": [
         "agent-swarm-orchestration",
@@ -409,7 +445,7 @@
     {
       "id": "autopilot-deep-explicit-alias",
       "category": "explicit-framework-command",
-      "task": "请用 $autopilot-deep 深度调研这个系统",
+      "task": "请用 /autopilot-deep 深度调研这个系统",
       "focus_skill": "autopilot",
       "expected_owner": "autopilot",
       "expected_overlay": null,
@@ -454,6 +490,15 @@
       "expected_overlay": null,
       "expected_layer": "L0",
       "notes": "Git operations via explicit /gitx entrypoint should route to gitx"
+    },
+    {
+      "id": "route-004b-update-codegen",
+      "category": "should-trigger",
+      "task": "/update",
+      "expected_owner": "update",
+      "expected_overlay": null,
+      "expected_layer": "L0",
+      "notes": "Explicit /update routes to tracked-codegen refresh workflow (framework command alias)"
     },
     {
       "id": "route-005-debug-bug",

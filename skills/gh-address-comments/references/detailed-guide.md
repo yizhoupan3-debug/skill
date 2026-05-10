@@ -18,7 +18,7 @@ This skill does not own:
 
 If the task shifts to adjacent skill territory, route to:
 - `$gh-fix-ci` for CI failures
-- `$gitx` for branch/push/rebase/publish work
+- `/gitx` for branch/push/rebase/publish work
 
 ## Required workflow
 

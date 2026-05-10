@@ -53,7 +53,7 @@ trigger_hints:
   - 最严厉审稿
   - strict reviewer
 metadata:
-  version: "4.2.0"
+  version: "4.5.0"
   platforms: [codex]
   tags: [paper, manuscript, review, reviewer, submission, gate-chain, top-journal]
 framework_roles:
@@ -81,6 +81,9 @@ alone.
 
 Default posture:
 
+- **adversarial readiness**: assume a **hostile but fair** reviewer who maximizes the
+  chance this work is rejected under the stated venue bar; do not soften verdicts
+  to be kind, and do not treat code/math doubts as tone issues
 - give a usable reviewer verdict first, not a process report
 - use external research when it helps judge novelty, baseline expectations,
   venue fit, or citation truth
@@ -93,6 +96,10 @@ Default posture:
   `$paper-workbench` before allowing language or layout issues to dominate
 - review before rewriting; switch to `$paper-reviser` only after findings are
   accepted or the user explicitly asks for edits
+- when evidence does not support the current claim level, default **not** to
+  "just narrow" — follow
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md):
+  surface **evidence_first_options** before treating downgrade as the primary move
 
 ## Use this when
 
@@ -122,6 +129,14 @@ Do not expose internal gate jargon unless the user explicitly asks for it.
 For single-dimension checks, use
 [`references/review-dimensions.md`](references/review-dimensions.md).
 
+For the **interactive 7-step compressed workflow**, follow the `Review workflow`
+section below. For the **full G0–G14 gate chain** used in protocol-backed
+multi-turn review, use
+[`references/review-rubric-playbook.md`](references/review-rubric-playbook.md).
+For machine-readable severity classification (used by reviser intake and
+cross-skill consistency), use
+[`references/severity-spec.md`](references/severity-spec.md).
+
 ## What this skill should deliver
 
 Default output should be decision-first and short enough to act on:
@@ -131,7 +146,9 @@ Default output should be decision-first and short enough to act on:
 3. evidence gap: what is missing, unfair, weakly controlled, or overclaimed
 4. external calibration: closest prior work / venue norm / baseline expectation
    only when external research was used
-5. next honest move: fix, cut, narrow, move to appendix, or stop defending
+5. next honest move: when blockers are B-tier closable, name the smallest
+   evidence/analysis repair options before recommending cut, narrow, appendix,
+   or abandonment; use protocol field names only when the user asks for artifacts.
 
 Default user-facing wording contract:
 
@@ -142,7 +159,7 @@ Default user-facing wording contract:
 - Only surface protocol terms when the user explicitly asks for protocol
   artifacts.
 
-For 顶刊/顶会/top-tier asks, also include the compact card from
+For 顶刊/顶会/top-tier asks, also cover the compact card from
 [`../paper-workbench/references/top-tier-paper-standard.md`](../paper-workbench/references/top-tier-paper-standard.md):
 
 ```text
@@ -151,6 +168,8 @@ top_contribution:
 closest_decision_risk_case:
 missing_decisive_evidence:
 claim_ceiling:
+evidence/analysis repair options:
+why narrowing is primary, if it is:
 next_honest_move:
 ```
 
@@ -163,8 +182,12 @@ new_or_removed_claim_ids:
 drift_risk_surfaces:
 ```
 
-Use severity only as plain reviewer priority:
+Use severity only as plain reviewer priority. Full machine-readable spec lives
+in [`references/severity-spec.md`](references/severity-spec.md):
 
+- `P0 一票否决`: data integrity, academic honesty, hard theoretical errors, or
+  plagiarism — the paper cannot proceed under any normal review path until the
+  issue is removed
 - `A 关键`: unlikely to clear review without repair or narrowing
 - `B 需补`: fixable but needs data, analysis, baseline, citation, or proof
 - `C 表达/呈现`: wording, organization, figure/table, or layout issue after the
@@ -211,11 +234,22 @@ For normal interactive review, use this compressed order:
    norms, and venue fit.
 4. Identify the highest-priority decision risk: name the shortest evidence-based
    reason reviewers may request major revision.
-5. Separate fix types: new evidence, claim narrowing, appendix routing,
-   citation repair, figure/table/layout repair, or prose cleanup.
+5. Separate fix types: **prioritize** new evidence / stronger analysis / fairer
+   comparisons before treating claim narrowing as the primary fix (see
+   [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md));
+   then appendix routing, citation repair, figure/table/layout repair, or prose
+   cleanup.
+   Treat **implementation–paper mismatches**, **unreproducible claims**, **complexity promises without anchors**, **proof gaps**, and **incorrect theorem conditions** as **repair-class** unless the ladder's narrowing conditions are met—not as "language tweaks".
 6. Emit claim ledger updates when claim ceiling, scope markers, or evidence
    anchors changed.
-7. Report only the actionable conclusion unless the user asks for the full
+7. Apply the language checks in
+   [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+   (undefined coinages, terminology density, repetition without new evidence,
+   defensive / internal tone, stacked `but` / `not` / `rather than`,
+   code identifiers or raw `.csv`/path pointers in place of prose tables/figures)
+   when reviewing language/readability or whole-paper readiness; surface as
+   actionable fixes, not generic "polish more".
+8. Report only the actionable conclusion unless the user asks for the full
    protocol trace.
 
 ## Revision handoff (user-facing)
@@ -231,10 +265,9 @@ In protocol mode, prefer `串行主链 + 并行 sidecar lane`:
 - spin up bounded sidecar lanes for citations, figures, tables, notation, layout, and mirror-surface checks
 - merge sidecar outputs locally before deciding pass, fail, or backjump
 
-Use the bundled scaffold helper when you need to materialize a parallel batch on
-disk:
-
-`python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py ...`
+If you need to materialize a parallel batch on disk, follow the lane manifest
+contract in [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md). Do not
+assume a scaffold script exists.
 
 ## Internal routing notes
 
@@ -258,7 +291,25 @@ disk:
   proceed provisionally and mark the uncertainty
 - Do not make the final answer a gate-progress report unless the user asked for
   protocol artifacts
-- If the strongest honest move is to cut, narrow, or move something to appendix, say so plainly
+- If the strongest honest move is to cut, narrow, or move something to appendix,
+  say so plainly **after** ruling in or ruling out **evidence_first** paths per
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md);
+  do not recommend narrow-as-default when plausible add-on evidence/analysis would
+  close a B-tier gap
 - Do not blur whole-paper review and local text polish into one owner
 - Do not call a paper "top-tier ready" unless contribution, closest-work
   separation, decisive evidence, and reviewer-scrutiny robustness all hold.
+- When the user pastes **external reviewer letters** or checklist-style comments:
+  every point must be classified into **repair / narrow / unrelated / unclear**
+  before recommending prose; **do not endorse** closures that are
+  **rebuttal-only**, **limitation-wall**, or **claim-softening-only** when the
+  point is prima facie closable via evidence, fairness, reproducibility, or
+  scoped manuscript edits ([`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md) §「审稿意见 / R&R」).
+- Skepticism about **code / implementation alignment** or **correctness /
+  reproducibility** must not be waved away with prose: flag as **repair** unless
+  the user proves an immovable blocker; insist on concrete next moves per
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md) §「代码/实现质疑」.
+- Skepticism about **proofs / derivations / theorem conditions** must not be
+  closed by hedging alone: classify as **repair** (补丁证明、勘误、收窄或可证降级)
+  per the same ladder §「数学/推导质疑」; explicitly reject closures that only
+  "sound more cautious" without fixing the inference chain.

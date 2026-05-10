@@ -1,9 +1,9 @@
 ---
 name: autopilot
 description: |
-  Repo-native `$autopilot` / `/autopilot`：goal-style 连续执行、地平线切片、continuity 硬接力；
+  Repo-native `/autopilot`：goal-style 连续执行、地平线切片、continuity 硬接力；
   bounded sidecar 并行（lane 清晰时），宏任务优先写满 `artifacts/current` 以便跨轮无隙推进。
-  Use only when the user explicitly invokes `$autopilot` or `/autopilot`.
+  Use only when the user explicitly invokes `/autopilot`.
 routing_layer: L0
 routing_owner: owner
 routing_gate: none
@@ -11,7 +11,6 @@ routing_priority: P1
 session_start: required
 user-invocable: true
 trigger_hints:
-  - $autopilot
   - /autopilot
   - /autopilot-quick
   - /autopilot-deep
@@ -74,7 +73,13 @@ router-rs framework alias autopilot
 - **Validation commands**：具体命令（如 `cargo test …`）；未跑则说明原因与风险。
 - **Checkpoint plan**：本轮要推进到的 checkpoint 名称 + 预计证据类型。
 
-Cursor 侧 hook 可能要求 **pre-goal 独立 reviewer subagent** 或 **单一 reject_reason token**；遵守宿主 gate，否则会被 `RG_FOLLOWUP` / `AG_FOLLOWUP` 打断。
+当输入源是「review 列出的一堆问题」且按 P0/P1/P2 分级时，`/autopilot` 的**默认**范围与验收是：
+
+- **默认 Scope**：修复 **全部** review 发现（P0+P1+P2…），直到清单清零或仅剩明确 blocker。
+- **默认 Done when**：清单全部关闭/修复，并且关键验证命令通过（至少覆盖会破坏主流程/CI 的部分）。
+- **例外**：只有当用户明确说“只修 P0/先修 P0”时，才允许把本轮 Horizon 或整体 Goal 限定为 P0-only。
+
+Cursor 侧 `router-rs` 可能要求 **pre-goal 独立 reviewer subagent**（在未落盘 `GOAL_STATE` 等条件下）或 **单行 reject_reason token** 供清门；遵守宿主 gate。真实 hook 短码以宿主注入为准（常见 **`AG_FOLLOWUP`**、**`AUTOPILOT_DRIVE`** 等）；**不要**在可见回复里自拟整段仿宿主的机读块或伪造 hook 版面。
 
 ## 5. 地平线 Horizon（宏任务核心）
 
@@ -100,8 +105,8 @@ Cursor 侧 hook 可能要求 **pre-goal 独立 reviewer subagent** 或 **单一 
 
 ## 7. 并行 lane（bounded sidecar）
 
-- 仅在 **写入范围不交叠、验证命令已定义** 时并行；registry 默认 **最多 3 条 lane**。
-- 拒不并行时必须在回复里给 **一个** reject_reason：`small_task` | `shared_context_heavy` | `write_scope_overlap` | `next_step_blocked` | `verification_missing` | `token_overhead_dominates`。
+- 仅在 **写入范围不交叠、验证命令已定义** 时并行；并行上限以 `configs/framework/RUNTIME_REGISTRY.json` 的 `autonomy_contract.auto_agent_orchestration` 为准（勿硬编码旧「3 条」叙述）。
+- 拒不并行时：内部选定 **一个** reject_reason；**面向用户**用业务语言说明阻塞与下一步。仅在宿主明确要求清门时，**单独一行**输出上述 token **之一**，不要展开拒因说明或自拟非宿主注入的续跑机读块。
 - 主线程负责：集成、共享决策、**最终整体验证**。
 
 ## 8. 研究与 `/autopilot-deep`
@@ -112,7 +117,7 @@ Cursor 侧 hook 可能要求 **pre-goal 独立 reviewer subagent** 或 **单一 
 ## 9. 宿主差异
 
 - **Codex CLI**：可选用 `rust-session-supervisor` / tmux worker 等长会话外壳（以仓库与 AGENTS 描述为准）。
-- **Cursor**：通常 **无** Codex 同款 tmux supervisor；长程依赖 **`artifacts/current` 接力**。`/autopilot` **不再**与 `/$team` 等入口叠乘「并行委托」门控：评审后修复轮应主要受 **goal** 与 **GOAL_STATE** 约束，而不是额外 `RG_FOLLOWUP` 要求先起并行 lane；若磁盘上已有 **`GOAL_STATE.json`**（`framework_autopilot_goal start`），beforeSubmit **不再强制** pre-goal reviewer subagent 提示。若已写入 **`GOAL_STATE.json` 且 `drive_until_done`**，Stop/提交时 hook 会注入 **AUTOPILOT_DRIVE** 续跑提示（见第 11 节）；关闭：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`。
+- **Cursor**：通常 **无** Codex 同款 tmux supervisor；长程依赖 **`artifacts/current` 接力**。`/autopilot` **不再**与 `/team` 等入口叠乘「并行委托」门控：评审后修复轮应主要受 **goal** 与 **`GOAL_STATE`** 约束；**不要**在可见回复里自拟非宿主注入的续跑机读长文。若磁盘上已有 **`GOAL_STATE.json`**（`framework_autopilot_goal start`），beforeSubmit **不再强制** pre-goal reviewer subagent 提示。若已写入 **`GOAL_STATE.json` 且 `drive_until_done`**，Stop/提交时 hook 会注入 **AUTOPILOT_DRIVE** 续跑提示（见第 11 节）；关闭：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`。
 
 ## 10. 收口与暂停
 
@@ -133,8 +138,10 @@ printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"repo_root":"'
 - 其它 `operation`：`status` | `checkpoint`（需 `note`）| `pause` | `resume` | `complete` | `block`（需 `blocker`）| `clear`（删除当前任务目录下 `GOAL_STATE.json`，停止续跑注入）。
 - **真完成**必须调用 `complete`，否则 Cursor 侧可能持续收到 **AUTOPILOT_DRIVE**。
 
-多轮 **review → fix → verify** 大轮次（含外部调研并行 lane）见 [`review-fix-verify-loop`](../review-fix-verify-loop/SKILL.md)，轮次账本使用 **`framework_rfv_loop`**（`RFV_LOOP_STATE.json`，与 `GOAL_STATE.json` 同任务目录）。
+多轮 **review → fix → verify** 大轮次（含外部调研并行 lane）的字段与 lane 契约见 harness 参考 [`rfv_loop_harness.md`](../docs/rfv_loop_harness.md)（**非热 skill 路由**）；用户侧对抗式渐进披露见 [`loop`](../loop/SKILL.md)。轮次账本使用 **`framework_rfv_loop`**（`RFV_LOOP_STATE.json`，与 `GOAL_STATE.json` 同任务目录）。
 
-**`router-rs framework refresh`**（及 Codex SessionStart digest 同源读模型）会在 **`prompt` 文本末尾拼接整段 `GOAL_STATE` 约束**，并在 JSON 里返回 **`goal_state`** 字段——目标从「纯文件」变成 **`$refresh` / 剪贴板接力里可直接执行的 checklist**。
+**推理深度真源**：分工 + 可执行验证 + 可审计链的具体契约见 [`reasoning-depth-contract.md`](../docs/references/rfv-loop/reasoning-depth-contract.md)。**数理 / STEM 题**另见 [`math-reasoning-harness.md`](../docs/references/rfv-loop/math-reasoning-harness.md)（witness、双轨脚本、符号 checker；续跑句见 `HARNESS_OPERATOR_NUDGES.json` 的 `math_reasoning_harness_line`）。Autopilot 同样适用——`Validation commands` 必须给出可执行命令；声称完成前必须有 `EVIDENCE_INDEX` 成功行或显式 blocker。
+
+**Codex SessionStart continuity digest**（`build_framework_continuity_digest_prompt`，与 `framework snapshot` / `contract-summary` 同源读模型）会在 **`prompt` 文本末尾拼接整段 `GOAL_STATE` 约束**、追加 `HARNESS_OPERATOR_NUDGES` 中的「推理深度」一句，并附带「**深度自检三问**」（来自 reasoning-depth-contract）——目标从「纯文件」变成 **会话注入里可直接执行的 checklist**；机器可读字段用 **`router-rs framework task-state-resolve`** 或读磁盘 `GOAL_STATE.json`。
 
 Canonical owner: `autopilot`.

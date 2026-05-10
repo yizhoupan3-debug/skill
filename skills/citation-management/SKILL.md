@@ -18,7 +18,7 @@ trigger_hints:
   - ACM
   - GB/T 7714
 metadata:
-  version: "2.2.0"
+  version: "2.3.1"
   platforms: [codex]
   tags: [citation, bibliography, bibtex, reference, doi, academic]
 risk: low
@@ -30,6 +30,8 @@ source: local
 
 This skill owns reference correctness and style consistency. It makes
 citations verifiable, complete, deduplicated, and aligned with the manuscript.
+
+Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md).
 
 ## When to Use
 
@@ -47,6 +49,12 @@ citations verifiable, complete, deduplicated, and aligned with the manuscript.
 
 ## Truth Rules
 
+- When manuscript context is available, keep citation keys and bibliography
+  titles aligned with the frozen terminology in
+  [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+  (preferred names for methods/datasets/metrics); do not introduce a second
+  naming system in `.bib` that conflicts with in-text terms unless the user
+  asked for a rename pass.
 - Never invent missing author, title, venue, year, DOI, PMID, or pages.
 - Mark unverifiable fields instead of guessing.
 - Preserve citation keys unless the user asks to rename them.

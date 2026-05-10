@@ -111,6 +111,9 @@ mod tests {
             "operation": "start",
             "task_id": "t-agg",
             "goal": "phase3 aggregate",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
             "drive_until_done": true,
         }))
         .expect("start");

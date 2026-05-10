@@ -1,0 +1,52 @@
+# 数理推理强度 harness（STEM）
+
+**语义层真源**：与 [推理深度契约](reasoning-depth-contract.md) 同层（L5）；**运行时**仍只认 **L1 可执行验证 + L2 证据落盘**，不把自然语言「像证明」当作通过标准。
+
+**编排入口**：多轮 RFV 见 [lane-templates.md](lane-templates.md) 中的数理专项 lane；Autopilot 须在 **Goal 契约**里写明 **双轨/脚本级** `validation_commands`。[`rfv_loop_harness.md`](../../rfv_loop_harness.md) 中的 `verify_commands` 与 **`EVIDENCE_INDEX`** 规则同样适用。
+
+---
+
+## A. 可检验中间对象（intermediate witnesses）
+
+把题目拆成若干 **可独立核对** 的小命题；通过标准是 **特例一致、极限相容、无明显矛盾**，不是「读起来顺」。
+
+| 机制 | 要求 |
+|------|------|
+| **量纲 / 退化极限 / 特例** | 在 handoff 或 `goal` 附件中列出 **Witness 清单**（例如 \(t\to 0\) 标度、对称性、边界情形应满足的阶或常数）。 |
+| **区间与误差** | 主结论须标明 **误差阶 \(O(\cdot)\)、显式区间或常数上界**，并标注 **每一步依赖的假设**（哪怕只能定性）。 |
+| **双轨对照** | **解析/代数轨** 与 **数值或枚举轨** 并行：数值轨须给 **固定种子、容差、对照协议**（Monte Carlo / brute-force 小范围）；`verify_commands` 中至少一条可复跑脚本。 |
+
+**Review 收窄**：本轮 reviewer 只做 **假设—结论逐项对照** + **与 witness 清单一致性**；不在本轮扩写完整证明散文。
+
+**Counterexample lane**（只读）：专门寻找与 witness 或主结论矛盾的实例；发现矛盾则 **FAIL**，写入 `review_summary` 并驱动 fix。
+
+---
+
+## B. 符号层 verifier（CAS / SMT / 证明助手）
+
+Harness **只认 checker 输出**（exit code + 约定 stdout/stderr），不认「写作风格像定理」。
+
+| 工具类 | 适用 | PASS 条件 |
+|--------|------|-----------|
+| **SymPy 等 CAS** | 恒等变形、求导、化简 | 脚本以 0 退出且输出与 golden 或自洽检查一致 |
+| **Z3 / SMT** | 小范围可行性、不变式 | 输出 `sat`/`unsat` 等与契约一致 |
+| **Lean / Coq** | 仅在团队已有模板与 CI 成本可接受时 | `lake build` / `coqc` 无 sorry |
+
+**升级顺序**：CAS → SMT → ITP；任一层给出 **显式反例** 即 **FAIL**，优先记入 `append_round` 与 `EVIDENCE_INDEX`（或 `hook-evidence-append`）。
+
+---
+
+## C. 挡「似是而非推导」
+
+| 机制 | 做法 |
+|------|------|
+| **逐步依赖图** | Fixer 交付 **编号步骤表**：每步 = 结论 + **引用的引理/步骤编号**。Reviewer **只攻击**「本步是否引入未证依赖」。 |
+| **反事实探针（数理 fuzz）** | 独立只读 lane 使用 **错误代入 / 错误极限顺序**；主答须 **拒错前提** 或推出矛盾。**盲从** → 本轮记 `probe_failed`，不得标为通过。 |
+
+---
+
+## 与非目标
+
+- 不在 L3/L4 实现自动定理证明；默认仍是 **小 checker + 强对照**。
+- 不新增第二套证据 schema；仍用 **`EVIDENCE_INDEX`** + **`append_round`**。
+- Operator 文案见 `configs/framework/HARNESS_OPERATOR_NUDGES.json` 中的 **`math_reasoning_harness_line`**（与 `ROUTER_RS_HARNESS_OPERATOR_NUDGES` 同闸）。

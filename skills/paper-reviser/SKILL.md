@@ -32,10 +32,10 @@ trigger_hints:
   - revise for top journal
   - 精准修改
   - 大面积重构
-  - edit_scope: surgical
-  - edit_scope: refactor
+  - "edit_scope: surgical"
+  - "edit_scope: refactor"
 metadata:
-  version: "3.3.0"
+  version: "3.5.5"
   platforms: [codex]
   tags: [paper, manuscript, revise, reviewer-comments, rebuttal, appendix-routing]
 framework_roles:
@@ -81,6 +81,11 @@ before applying edits:
 
 If the user did not declare scope, default to **`surgical`** until clarified.
 
+Under **`surgical`**, obey the **硬等级 / 防扩写 / 整篇回贴禁令 / 静默全局替换 / 锚定 / 改动上限 / 默认交付形态 / 交付清单 / 自检** contract in
+[`../paper-workbench/references/edit-scope-gate.md`](../paper-workbench/references/edit-scope-gate.md)
+— especially: no edits outside listed **`scope_items`**, no 「顺手」polish on neighbor
+paragraphs, no **global terminology or punctuation harmonization** without explicit scope rows, **单锚多改**必须通过多条 `scope_item` 或升格 `refactor`, and enumerated `change_id` + `original_excerpt` accountability. **禁止**在用户只授权局部时交出「润色后的整节/整稿」作为主要输出。
+
 ## Use this when
 
 - The user explicitly wants edits now, not the front door
@@ -108,6 +113,14 @@ Use one of only two external modes:
 Do not make the user speak in gate language unless they already are.
 
 ## Allowed edit decisions
+
+**Evidence-before-narrow default**: when findings say the blocker is closable with
+additional experiments, analysis, baselines, or decisive figures/tables, the
+primary batch is **`repair`** — follow
+[`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md).
+Use **`narrow` / `de-emphasize` / `delete`** as the main move only when that doc's
+primary-narrowing conditions apply, or the user explicitly chooses narrowing over
+new evidence.
 
 When the strongest honest path is not "repair everything", this skill may:
 
@@ -158,10 +171,20 @@ Keep the active blocker serial, and use sidecar lanes only for bounded slices
 such as citation fixes, figure/table cleanup, notation audit, mirror cleanup, or
 local prose edits after the claim boundary is frozen.
 
-Use the bundled scaffold helper when you need to materialize a parallel batch on
-disk:
+If you need to materialize a parallel batch on disk, follow the lane manifest
+contract in [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md). Do not
+assume a scaffold script exists.
 
-`python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py ...`
+## 审稿意见驱动时的硬契约（默认开启）
+
+当输入含 **程序化审稿条目、Major/Minor 列表或 point-by-point 要求**：
+
+- **每条须有关停物**：手稿 diff/hunk、`evidence_anchor_delta`、新增的图/表/附录编号，或显式 **`cannot_fix_because`**（硬阻塞）；禁止用「重写 limitation」「语气变软」「仅改摘要」作为主回应去吞 **repair 类** 意见。
+- **禁止逃避默认包**：**(a)** 静默降 claim 而无 [`claim-evidence-ladder`](../paper-workbench/references/claim-evidence-ladder.md) 许可理由；**(b)** Defense prose 加长代替补实验/对照/澄清；**(c)** 只做 rebuttal 字稿不交对手稿可追溯改动。
+- **`surgical`**：仍遵守防扩写，但「精准」≠「只糊弄文字」——若某条意见要求改图注、方法段或一张表，必须把该条写入 **`scope_items`** 并完成对应表面修改；不得借 surgical 只做 Abstract hedge。
+- **`refactor`**：允许大范围按意见重组，但若 findings 仍为 B 类可补，主批次仍以 **repair** 为主轴；narrow/delete/appendix 组合拳须有阶梯上的 **`narrowing_is_primary_because`**，不得只因改稿省事就缩口径。
+- **代码/实现类 point**：默认产出 **方法段或补充材料中的可执行复现说明** + **算法—源码对照**（或 tag 化 bundle），并修任何被证伪的复杂度/默认超参/确定性叙述；**禁止**把关停写成「将公开代码」单句 rebuttal。
+- **数学/推导类 point**：默认产出 **附录补证、定理勘误、或收窄后的正式陈述**（含公式编号变更说明）；**禁止**仅改直观 English 或把失败证明悄悄改成散文；若 `$math-derivation` 或论文逻辑门已参与，保持与 `claim_ledger` 一致。
 
 ## Internal routing notes
 
@@ -173,15 +196,43 @@ disk:
 
 For revision dimension modes, use
 [`references/revision-modes.md`](references/revision-modes.md).
+
+For rebuttal letter / point-by-point response patterns (the canonical templates
+live under `paper-writing` because the prose itself is local-rewrite-shaped),
+use
+[`../paper-writing/references/rebuttal-patterns.md`](../paper-writing/references/rebuttal-patterns.md)
+when the rebuttal must be tied to manuscript edits owned here.
 - Use `figure-table repair`, `$visual-review`, and `$pdf` for final figure, table, or layout changes
 - When multiple local cleanup surfaces are independent, run them as bounded sidecar lanes and merge locally before closing the gate
 
 ## Hard rules
 
+- Honor [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+  when edits touch naming, metrics, or repeated arguments; do not introduce
+  undefined compound coinages while repairing claims unless the decision lane
+  explicitly allows new definitional material; when stripping internal phrasing,
+  replace code identifiers and bare `.csv`/path result pointers with prose +
+  proper tables/figures or supplement numbering per that doc
 - Do not hide evidence that breaks a claim the paper still keeps
 - Do not use appendix moves as a substitute for an honest claim downgrade
 - Do not parallelize multiple gate-closing decisions at once
 - Do not expand a one-slice edit request into a full-paper rewrite
+- Under **`surgical`**, do not substitute **whole-file rewritten text** for
+  **`scope_items`-bounded work** unless the user explicitly escalates to
+  **`refactor`**; obey the gate doc's patch-first delivery rule
 - If a blocker needs new experiments, say so instead of polishing around it
+- Do not substitute **claim downgrade** or limitation prose for **runnable**
+  experiments or analyses when findings still classify the gap as closable that
+  way; see
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
 - Do not edit prose that changes claim level unless the claim decision lane
   explicitly approves and records the claim ledger delta
+- When reviewer comments are in scope: do not ship a revision round whose main
+  effect is softer claims + longer caveats while leaving the flagged evidence /
+  comparison / protocol gap untouched; honor
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
+  §「审稿意见 / R&R：逐条关停与逃逸红线」及 **§代码/实现质疑**、**§数学/推导质疑**
+- Code- or math-skeptic reviewer points are **not prose-only lanes**: closing a
+  round must include **checksumable artifacts** (proof deltas, reproducibility
+  anchors, corrected statements)—not vague release promises or informal rewrites
+  that leave the substantive doubt untouched

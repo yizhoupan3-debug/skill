@@ -160,12 +160,12 @@ const RUNTIME_RESEARCH_WORKFLOW_SLUGS: &[&str] = &[
     "ai-research",
     "autoresearch",
     "information-retrieval",
-    "literature-synthesis",
+    // `literature-synthesis` removed: ref-corpus work lives under `paper-workbench`; keep slug retired in policy tests.
     "research-engineer",
     "research-workbench",
 ];
 const FALLBACK_FRAMEWORK_COMMANDS: &[&str] =
-    &["autopilot", "deepinterview", "gitx", "loop", "team"];
+    &["autopilot", "deepinterview", "gitx", "team", "update"];
 
 const DEFAULT_SURFACE_OWNERS: &[&str] = &[];
 const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
@@ -1120,23 +1120,28 @@ fn fallback_framework_command_runtime_row(slug: &str) -> Value {
     let command = match slug {
         "autopilot" => json!({
             "skill_path": "skills/autopilot/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/autopilot", "$autopilot"]},
+            "interaction_invariants": {"explicit_entrypoints": ["/autopilot"]},
             "lineage": {"description": "Run the local framework autopilot supervisor entrypoint."}
         }),
         "deepinterview" => json!({
             "skill_path": "skills/deepinterview/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/deepinterview", "$deepinterview"]},
+            "interaction_invariants": {"explicit_entrypoints": ["/deepinterview"]},
             "lineage": {"description": "Run the local framework deepinterview entrypoint."}
         }),
         "gitx" => json!({
             "skill_path": "skills/gitx/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/gitx", "$gitx", "gitx"]},
+            "interaction_invariants": {"explicit_entrypoints": ["/gitx", "gitx"]},
             "lineage": {"description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."}
         }),
         "team" => json!({
             "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/team", "$team"]},
+            "interaction_invariants": {"explicit_entrypoints": ["/team"]},
             "lineage": {"description": "Run the local framework team orchestration entrypoint."}
+        }),
+        "update" => json!({
+            "skill_path": "skills/update/SKILL.md",
+            "interaction_invariants": {"explicit_entrypoints": ["/update"]},
+            "lineage": {"description": "Refresh tracked codegen: host projections, skill bundles, then contract tests."}
         }),
         _ => json!({}),
     };
@@ -2771,7 +2776,7 @@ mod tests {
         assert_eq!(
             bundle.runtime_index["skills"].as_array().map(Vec::len),
             Some(7),
-            "expected 2 hot gates + 5 framework_command rows (autopilot/deepinterview/gitx/loop/team)"
+            "expected 2 hot gates + 5 framework_command rows (autopilot/deepinterview/gitx/team/update)"
         );
         assert!(bundle.runtime_index["skills"]
             .as_array()
@@ -2797,7 +2802,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|row| row.get(0) == Some(&json!("loop"))));
+            .any(|row| row.get(0) == Some(&json!("update"))));
         assert!(!bundle.runtime_index["skills"]
             .as_array()
             .unwrap()

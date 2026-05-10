@@ -55,7 +55,7 @@ L1  citation-management, deepinterview, documentation-engineering,
 L2  gitx, paper-reviewer, paper-reviser, paper-workbench,
     paper-writing
 L3  design-md, diagramming, doc, experiment-reproducibility,
-    infographic, jupyter-notebook, pdf, refresh, screenshot,
+    infographic, jupyter-notebook, pdf, screenshot,
     slides, spreadsheets, tao-ci, visual-review
 L4  algo-trading, assignment-compliance,
     copywriting, email-template, financial-data-fetching,

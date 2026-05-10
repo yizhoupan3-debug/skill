@@ -19,9 +19,6 @@ pub const TRACE_DESCRIPTOR_AUTHORITY: &str = "rust-runtime-trace-descriptor";
 pub const CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION: &str =
     "router-rs-checkpoint-resume-manifest-v1";
 pub const CHECKPOINT_RESUME_MANIFEST_AUTHORITY: &str = "rust-runtime-checkpoint-manifest";
-pub const FRAMEWORK_REFRESH_SCHEMA_VERSION: &str = "router-rs-framework-refresh-v1";
-pub const FRAMEWORK_REFRESH_CONFIRMATION: &str =
-    "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。";
 pub const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-binding-write-v1";
 pub const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
 pub const CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION: &str = "router-rs-checkpoint-manifest-write-v1";

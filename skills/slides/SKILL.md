@@ -17,7 +17,7 @@ trigger_hints:
   - presentation
   - artifact tool
 metadata:
-  version: "2.6.2"
+  version: "2.7.0"
   platforms: [codex]
   tags: [powerpoint, ppt, pptx, slides, presentation, rust-ppt, proxy]
 risk: medium
@@ -72,6 +72,7 @@ Do not use this skill when:
 
 ## Non-negotiable contracts
 
+- Copy and layout follow **`AGENTS.md` → Coding First Principles**：先定 Goal/Non-goals/最小 owner，再写稿与排版；禁止用更多装饰或套话掩盖信息不足。结论型标题与证据句优先于「本页介绍…」式元叙述（见下方 Style contract 与 checklist）。
 - Treat `slides` as the canonical first check for generic PPT asks before narrower owners claim work.
 - If routing misses or the wrong owner opens, Re-run routing or consult the fallback manifest for that exact owner.
 - If the user explicitly names Markdown/HTML/Beamer source, reroute through router/fallback and open only that owner skill.
@@ -142,32 +143,17 @@ Fail-fast this lane when any hard readability or structure item below is detecte
 
 ## Design tokens and composition rules
 
-Use these defaults unless the user explicitly requests another style system.
-These are baseline quality requirements, not optional polish.
+**Normative typography, palette, spacing, elevation, shadows, and contrast belong in `DESIGN.md`**
+(`$design-md` YAML + sections). When a contract exists, follow it inside `deck.plan.json` authoring
+and QA instead of repeating those rules here.
 
-Grid and spacing:
+For **one-off decks** without `DESIGN.md`: stay restrained — about two families, one primary plus one accent
+plus neutrals, ~5–7% side margins, slide titles remain conclusion-first.
 
-- Use a 12-column grid with consistent horizontal anchors across slides in the same section.
-- Keep safe margins at 5-7% of slide width; avoid edge-hugging layouts.
-- Use an 8-point spacing scale (`8/16/24/32/48`) for block gaps and insets.
-- Keep at least 35% whitespace on content slides.
+**Evidence:** rendered PNG checks plus `$visual-review` accessibility expectations instead of WCAG literals in
+this skill.
 
-Type and hierarchy:
-
-- Keep at most three visual hierarchy levels per slide (primary, secondary, annotation).
-- Use no more than two font families and two to three font weights across the deck.
-- Keep body text at 18pt or above; key numbers and claims should be 30pt or above.
-- If content exceeds readable density, split pages or move detail to appendix instead of shrinking text.
-- Prefer conclusion-first headline sentences over topic labels.
-
-Color and tokens:
-
-- Use a constrained palette: one primary color, one accent color, and neutrals.
-- Keep categorical chart colors to eight or fewer by default (ten maximum when justified).
-- Enforce readable contrast: target WCAG-style thresholds (4.5:1 normal text, 3:1 large text).
-- Reuse visual tokens for radius, border, and shadow; avoid per-slide style drift.
-
-Chart, imagery, and motion:
+Slide-native visuals (presentation medium):
 
 - Remove chartjunk: no 3D chart effects, decorative gradients, or heavy shadows.
 - Highlight one data story per chart; de-emphasize non-primary series.

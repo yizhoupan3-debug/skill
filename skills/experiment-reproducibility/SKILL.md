@@ -26,7 +26,7 @@ trigger_hints:
   - DVC
   - MLflow tracking
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   platforms: [codex]
   tags:
     - reproducibility
@@ -63,10 +63,16 @@ This skill owns **experiment reproducibility management** for research.
 
 ## Cross-references
 
+- Manuscript workflow map: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - Project and experiment owners may use this skill as the rigor / reproducibility lane
 - Inner-loop research automation should route deep reproducibility requirements here
 - Works with performance work when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs
 - Works with `$mac-memory-management` when reproducibility must account for Mac memory constraints and fallback behavior
+- When invoked as a **gate-chain lane owner** (G2 / G5 / G14 reproducibility
+  checks under the manuscript protocol), follow the lane contract in
+  [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md); produce only the
+  gate-required reproducibility evidence and hand back to the protocol main
+  chain.
 
 ## User-facing output posture
 

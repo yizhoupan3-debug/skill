@@ -143,6 +143,11 @@ Do not block quick one-off UI/PPT tasks just to create a spec. If the user only
 needs immediate visual execution, route directly to the implementation or
 presentation artifact owner and optionally backfill `DESIGN.md` later.
 
+## Subtraction & first principles (design scope)
+
+- **第一性**：`DESIGN.md` 只承载「为了可复用视觉一致而必须冻结」的决策；其余留在实现 PR 或一次性说明里，避免契约膨胀。
+- **减法**：新增 `colors` / `components` 条目时，在同级写清 **Non-goals**（本周期不引入的变体）或显式标注「deprecated / 禁止再扩展」；能用既有 token 组合表达的，不新增语义色或第三套组件形态。
+
 ## Rules
 
 - Treat YAML token values as the source of truth; prose explains intent but

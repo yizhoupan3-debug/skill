@@ -12,7 +12,9 @@ mod execution_contract;
 mod framework_profile;
 mod framework_runtime;
 mod harness_operator_nudges;
+mod framework_maint;
 mod hook_policy;
+mod paper_adversarial_hook;
 mod host_integration;
 mod rfv_loop;
 mod route;
@@ -63,6 +65,9 @@ fn main() -> Result<(), String> {
     let args = cli::Cli::parse();
     cli::run(&args)
 }
+
+#[cfg(test)]
+mod test_env_sync;
 
 #[cfg(test)]
 #[path = "main_tests.rs"]

@@ -63,30 +63,6 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
                 parse_json_input::<Value>(&command.input_json, "framework prompt compression")?;
             print_json_value(&build_framework_prompt_compression_envelope(payload)?)
         }
-        FrameworkCommand::Refresh(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let refresh_payload =
-                build_framework_refresh_payload(&repo_root, command.max_lines, command.verbose)?;
-            let prompt = refresh_payload
-                .get("prompt")
-                .and_then(Value::as_str)
-                .ok_or_else(|| "framework refresh payload is missing prompt".to_string())?;
-            let clipboard = copy_text_to_clipboard(prompt)?;
-            let mut refresh = refresh_payload
-                .as_object()
-                .cloned()
-                .ok_or_else(|| "framework refresh payload must be an object".to_string())?;
-            refresh.insert(
-                "confirmation".to_string(),
-                Value::String(FRAMEWORK_REFRESH_CONFIRMATION.to_string()),
-            );
-            refresh.insert("clipboard".to_string(), clipboard);
-            print_json_value(&json!({
-                "schema_version": FRAMEWORK_REFRESH_SCHEMA_VERSION,
-                "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
-                "refresh": Value::Object(refresh),
-            }))
-        }
         FrameworkCommand::Statusline(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             println!("{}", build_framework_statusline(&repo_root)?);
@@ -146,6 +122,7 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
                 "task_state_path": crate::task_state_aggregate::task_state_aggregate_path(&repo_root, &task_id).display().to_string(),
             }))
         }
+        FrameworkCommand::Maint { command } => crate::framework_maint::dispatch(command),
         FrameworkCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
             print_json_value(&payload)

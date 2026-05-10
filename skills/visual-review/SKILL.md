@@ -12,10 +12,14 @@ trigger_hints:
   - review
   - screenshot
   - screenshot UI
-  - chart
+  - chart screenshot
+  - chart export
+  - exported chart
+  - 图表截图
+  - 图表导出
   - audit
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   platforms: [codex]
   tags: [visual, review, screenshot, screenshot-ui, chart, audit, accessibility, evidence]
 framework_roles:
@@ -110,9 +114,14 @@ When reviewing UI screenshots, actively check for:
 - **Text sizing** — Body text ≥14px, critical labels ≥12px at target viewing distance
 - **Color-only encoding** — Information must not rely solely on color differentiation
 
-## Premium Aesthetic Audit
+## Premium Aesthetic Audit (optional lens)
 
-When the goal is "WOW" factor or Premium quality, also check:
+Use **only** when the user asks for WOW / glossy marketing UI / exploratory visual polish —
+not when reviewing executive-minimal decks or `$slides` minimal-premium deliverables unless they
+explicitly want that lens.
+
+When active, additionally check:
+
 - **Color Harmony** — Do colors feel vibrant yet balanced? Use oklch perception.
 - **Shadow Subtlety** — Are shadows layered and soft (light mode) or deep yet noiseless (dark mode)?
 - **Bento Alignment** — Gaps between grid cells must be perfectly consistent (e.g., exactly 24px).

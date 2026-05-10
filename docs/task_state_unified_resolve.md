@@ -52,7 +52,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-a
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-ledger-dispatch --input-json '{"schema_version":"router-rs-task-ledger-command-envelope-v1","kind":"autopilot_goal","payload":{"repo_root":"'"$PWD"'","operation":"status"}}'
 ```
 
-输出 JSON，便于与 `framework refresh` / hook 日志对照。
+输出 JSON，便于与 `framework snapshot` / SessionStart digest / hook 日志对照。
 
 ---
 

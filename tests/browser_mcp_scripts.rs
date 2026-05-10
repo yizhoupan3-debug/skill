@@ -550,36 +550,6 @@ fn launcher_falls_back_to_plain_start_when_no_attach_input_exists() {
     );
 }
 
-#[test]
-fn launcher_never_falls_back_to_node_runtime() {
-    let tmp = tempdir().unwrap();
-    let repo_root = prepare_repo(tmp.path());
-    fs::remove_file(repo_root.join("scripts/router-rs/target/release/router-rs")).unwrap();
-    fs::write(
-        repo_root.join("scripts/router-rs/run_router_rs.sh"),
-        "#!/bin/sh\necho rust-launcher-only > \"$ROUTER_EXEC_LOG\"\nexit 7\n",
-    )
-    .unwrap();
-    make_executable(&repo_root.join("scripts/router-rs/run_router_rs.sh"));
-
-    let output_path = repo_root.join("launcher-output.txt");
-    let mut command =
-        Command::new(repo_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh"));
-    command
-        .current_dir(&repo_root)
-        .env_remove("BROWSER_MCP_ROUTER_RS_BIN")
-        .env("ROUTER_EXEC_LOG", &output_path);
-
-    let result = run(command);
-    assert_eq!(result.status.code(), Some(7));
-    assert_eq!(
-        fs::read_to_string(output_path).unwrap().trim(),
-        "rust-launcher-only"
-    );
-    let node_entrypoint = ["dist", "index.js"].join("/");
-    assert!(!String::from_utf8_lossy(&result.stderr).contains(&node_entrypoint));
-}
-
 fn run_resolver_cli(search_root: &std::path::Path) -> Output {
     let repo_root = project_root();
     run(router_rs_command([
@@ -602,21 +572,7 @@ fn sqlite_payload_locator(search_root: &std::path::Path, payload_key: &str) -> S
 
 fn prepare_repo(tmp_path: &std::path::Path) -> std::path::PathBuf {
     let repo_root = tmp_path.join("repo");
-    let script_root = repo_root.join("tools/browser-mcp/scripts");
-    fs::create_dir_all(&script_root).unwrap();
-    fs::copy(
-        project_root().join("tools/browser-mcp/scripts/start_browser_mcp.sh"),
-        script_root.join("start_browser_mcp.sh"),
-    )
-    .unwrap();
-    make_executable(&script_root.join("start_browser_mcp.sh"));
-    fs::create_dir_all(repo_root.join("scripts/router-rs")).unwrap();
-    fs::copy(
-        project_root().join("scripts/router-rs/run_router_rs.sh"),
-        repo_root.join("scripts/router-rs/run_router_rs.sh"),
-    )
-    .unwrap();
-    make_executable(&repo_root.join("scripts/router-rs/run_router_rs.sh"));
+    fs::create_dir_all(repo_root.join("scripts/router-rs/target/release")).unwrap();
     install_fake_router(&repo_root);
     for name in SOURCE_FILES {
         write_text(
@@ -638,23 +594,36 @@ fn run_launcher(
     envs: &[(&str, &str)],
     extra_args: &[&str],
 ) -> serde_json::Value {
-    let output_path = repo_root.join("fake-router-output.json");
-    let mut command =
-        Command::new(repo_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh"));
-    command
-        .current_dir(repo_root)
-        .env(
-            "BROWSER_MCP_ROUTER_RS_BIN",
-            repo_root
-                .join("scripts/router-rs/target/release/router-rs")
-                .display()
-                .to_string(),
-        )
-        .env(ROUTER_EXEC_LOG_ENV, &output_path)
-        .args(extra_args);
-    for (key, value) in envs {
-        command.env(key, value);
+    let mut args: Vec<String> = vec![
+        "browser".into(),
+        "mcp-stdio".into(),
+        "--repo-root".into(),
+        repo_root.display().to_string(),
+    ];
+    if let Some((_, p)) = envs
+        .iter()
+        .find(|(key, _)| *key == "BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH")
+    {
+        args.push("--runtime-attach-descriptor-path".into());
+        args.push((*p).into());
+    } else if let Some((_, p)) = envs
+        .iter()
+        .find(|(key, _)| *key == "BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH")
+    {
+        args.push("--runtime-attach-artifact-path".into());
+        args.push((*p).into());
     }
+    for arg in extra_args {
+        args.push((*arg).into());
+    }
+    let output_path = repo_root.join("fake-router-output.json");
+    let mut command = Command::new(
+        repo_root.join("scripts/router-rs/target/release/router-rs"),
+    );
+    command
+        .args(&args)
+        .current_dir(repo_root)
+        .env(ROUTER_EXEC_LOG_ENV, &output_path);
     common::assert_success(&run(command));
     read_json(&output_path)
 }

@@ -14,6 +14,7 @@
 
 | 主题 | 文档 |
 |------|------|
+| RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
 | Codex 宿主投影边界 | [host_adapter_contracts.md](host_adapter_contracts.md)，[.codex/README.md](../.codex/README.md) |
@@ -26,6 +27,6 @@
 
 ## 已淘汰叙述（清理边界）
 
-- **勿假设** `router-rs` 只存在于 `scripts/router-rs/target/release/`。根目录 `.cargo/config.toml` 可将 `target-dir` 指到 workspace 统一目录；解析以 `cargo metadata` 的 `target_directory` 为准，或直接使用 [`.cursor/hooks/resolve-router-rs.sh`](../.cursor/hooks/resolve-router-rs.sh)。  
-- **勿依赖** `.cursor/hooks/legacy/` 作为 hook 回退；以 [`.cursor/hooks.json`](../.cursor/hooks.json) 与当前 `review-gate.sh`、`post-tool-use.sh` 等脚本为准。  
+- **勿假设** `router-rs` 只存在于 `scripts/router-rs/target/release/`。根目录 `.cargo/config.toml` 可将 `target-dir` 指到 workspace 统一目录；解析以 `cargo metadata` 的 `target_directory` 为准（或 `cargo build` / `cargo run` 的输出路径）。
+- **勿依赖** 旧版 `.cursor/hooks/*.sh` 脚本链：steady-state 以 [`.cursor/hooks.json`](../.cursor/hooks.json) 为准，事件 stdin 由各条目中的 `router-rs cursor hook --event=...` 承接（校验：`router-rs framework maint verify-cursor-hooks`）。
 - **勿将** `docs/history/` 中的计划或清单当作当前契约；steady-state 仅认本索引列出的文档与 `configs/framework/*.json`。
