@@ -6,6 +6,15 @@
 
 本仓库「写 plan」= Cursor Plan Mode / CreatePlan + [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) + [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) + 可选 `router-rs` 中 `ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE` 与 `cursor_hooks` 检测。
 
+## 1b. 与仓库调研 / review 能力联动（补档）
+
+本合成稿初版以「契约摘录 + 宿主 URL」为主，未把 **可执行工作流** 写成与仓库技能的一一指针；以下与 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **调研范围（Research scope）与能力联动** 小节对齐，供 `plan_profile: research` / `execution` 起草时对照。
+
+- **六步 Workflow**：尤其第 1 步（调研 + review 先于结构化计划）、第 3 步（独立上下文 subagent 审 plan）与第 4 步（一轮修订）— 均在 `plan-mode` 正文；修订可复核证据见该 skill **弱例与强例** 中「审 plan 修订可复核」强例。
+- **Git 计划收口**：[`skills/gitx/SKILL.md`](../../skills/gitx/SKILL.md) 的 **`/gitx plan`**（与 **`/gitx`** 同契约）对应 `execution` 末条；closeout 与 **`git diff --stat`** 习惯见同 skill **强例**及 [`plan_review_findings_round1.md`](plan_review_findings_round1.md)。
+- **深度代码审**：对抗式 / 整 PR 级 review 路由 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（verdict、P0–P2 符号锚点与本仓库 **强例**一致）。
+- **审 plan 样例 findings**：[`plan_review_findings_round1.md`](plan_review_findings_round1.md) 演示独立 reviewer 对 execution plan 的只读 findings 形态。
+
 ## 2. 内部：契约硬条款、hook 默认、审 plan 弱项（int-audit）
 
 ### 2.1 契约硬条款（真源摘录）
