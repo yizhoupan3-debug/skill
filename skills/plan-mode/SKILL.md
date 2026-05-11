@@ -28,7 +28,7 @@ trigger_hints:
   - 纯调研
   - research-only plan
 metadata:
-  version: "1.4.0"
+  version: "1.5.0"
   platforms: [codex, cursor]
   tags: [plan, cursor-plan, workflow, gate, closeout]
 ---
@@ -118,11 +118,47 @@ metadata:
 
 **下游**：调研 profile 完成后，**另开**一份 **`plan_profile: execution`**（或缺省）计划写实现类 todos 与 **`/gitx plan`** 末条；避免同一文件混用「一半调研一半实现」。
 
+## 调研范围（Research scope）与能力联动
+
+与 **`plan_profile`**、零实现面声明**并列**：在 `overview` 中用**一句**标明调研是否触网，避免默认静默拉取外部资料或反过来只做网页摘要却未读仓库。
+
+### Overview 可加贴的调研范围句（复制用）
+
+**默认（仅仓库内只读）** — 不默认发起 WebSearch / WebFetch；本地证据以 `rg`、Read、`cargo test`/`clippy`（只读验收）、以及按需 **`router-rs framework snapshot`** / `contract-summary` 等为准：
+
+```text
+调研范围：仅仓库内只读（rg/读文件/仓库内命令与连续性工件）；不默认发起对外网络检索。
+```
+
+**用户明确要求「外部 / 网络 / 官方 cross-check」等（内部 + 外部并行）** — 仍须保留至少一条**仓库内**检索/读文件类 todo；外部仅限 **只读** 拉取（WebSearch、WebFetch、只读 MCP）；**§证据与范围** 须写清 URL、抓取日期或文档版本：
+
+```text
+调研范围：仓库内只读 + 外部只读（与仓库内检索并行）；外部来源须在 §证据与范围 列 URL 与日期/版本；禁止未经批准的网络写操作。
+```
+
+### 能力与工件联动表
+
+| 能力 | 适用 profile | 最小证据 | 指针 |
+|------|----------------|----------|------|
+| 本地代码与配置调研 | `research` / `execution`（起草前） | 路径级 `rg` 命中或 Read 锚点 | 见 **Workflow** 第 1 步 |
+| 连续性 / 框架只读视图 | 按需 | `router-rs framework snapshot` 或文档约定命令输出摘要 | `docs/harness_architecture.md`；勿在 plan 正文发明第二套账本 |
+| **独立上下文审 plan** | `research` / `execution` | findings 落盘（建议 `docs/plans/<topic>_findings*.md`）或对话内可定位的 findings 块 | **Workflow** 第 3 步 |
+| 对抗式 / 全切片 **深度代码审** | 用户要 hostile / security / 整 PR 级 review 时 | verdict + P0–P2 带路径与符号锚点 | [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) |
+| Cursor **review** 硬路径（宿主） | 深度 review 类任务 | 以仓库根 **`AGENTS.md`** → **Execution Ladder** 与 **`.cursor/hook-state`** 为准；清门只用宿主注入的 **`router-rs …`** 单行短码 | 不在 plan 正文自拟长段机读块 |
+| 调研收口 | `research` | `git status --porcelain` + 正文矩阵对照 | **Plan profile** 末条 |
+| Git 计划收口 | `execution`（或下游计划） | **`/gitx plan`**（与 **`/gitx`** 同契约） | [`skills/gitx/SKILL.md`](../gitx/SKILL.md) |
+
+**Build 与 goal（可选）**：若 Build 时带入 `.cursor/plans/*.plan.md` 且需与 **`/autopilot`** goal 门控对齐，见 **Continuity 与工件** 中 **`ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE`**（默认关闭，语义见 **`AGENTS.md`**）。
+
+### 宿主侧计划落盘（与协作）
+
+Cursor 官方说明：计划默认保存在**用户目录**，需 **「Save to workspace」** 才进入工作区以便版本管理与团队共享；内部 todo 与文件不同步等宿主/社区讨论，见 [`docs/plans/plan_writing_capability_research_synthesis.md`](../../docs/plans/plan_writing_capability_research_synthesis.md) §3。
+
 ## Workflow（六步）
 
-1. **调研 + review 先于计划**：在写结构化计划前，完成域内必要的深读、检索或代码定位；需要对抗性或跨模块 review 时按宿主规则拆 reviewer，再把结论**收敛进计划**，而不是反过来用计划代替证据。
+1. **调研 + review 先于计划**（见上节 **能力与工件联动表**「本地代码与配置调研」）：在写结构化计划前，完成域内必要的深读、检索或代码定位；需要对抗性或跨模块 review 时按宿主规则拆 reviewer，再把结论**收敛进计划**，而不是反过来用计划代替证据。
 2. **Todo 必须可验收**：每条 todo 在同一条可见文案里写全 **四元组**（见下文 **Todo 可执行性**）；**通过 Cursor CreatePlan 生成的 `.plan.md` 还须满足下文 CreatePlan 输出契约**。与 `skills/SKILL_FRAMEWORK_PROTOCOLS.md` 的 execution item / verification 思想对齐（不必冗长复制 schema）。
-3. **初稿后：独立上下文 subagent 审 plan**：第一轮计划草案完成后，用 **与主线程隔离的 reviewer subagent**（独立上下文；或宿主等价机制）只读计划与已有证据，输出 findings；主线程合并后再改计划正文。
+3. **初稿后：独立上下文 subagent 审 plan**（见 **调研范围与能力联动** 表中「审 plan」行）：第一轮计划草案完成后，用 **与主线程隔离的 reviewer subagent**（独立上下文；或宿主等价机制）只读计划与已有证据，输出 findings；主线程合并后再改计划正文。
 4. **一轮修订**：基于 reviewer findings **最多一轮**集中修订计划（合并冲突意见、删掉不可验证条目、补齐验证命令）；避免无尽「计划迭代」阻塞执行。
 5. **人工交接带 delta**：提交给用户审批时，附带 **相对上一版的 delta**（改了哪些验收标准、哪些 todo、哪些风险假设），而不是全文重贴。
 6. **收口（依 `plan_profile`）**：
@@ -163,6 +199,9 @@ Non-goals: <可选>
 
 - **弱**：`优化 registry 双轨`（无范围、无 Done、无 Verify）。
 - **强**：`从 RUNTIME_REGISTRY 移除 host_targets.entrypoint_files 并同步 fixture @ configs/framework/RUNTIME_REGISTRY.json, tests/common/mod.rs | Done: rg 在 configs/framework 与 tests 下无该键（例外在 § 单列）| Verify: cargo test --manifest-path scripts/router-rs/Cargo.toml`（仓库以实际约定命令为准）。
+- **强（execution 收口与 gitx 习惯对齐）**：末条或关联 closeout 文档中写明 **`git diff --stat`**（或一句「本次无代码 diff」）；`Verify` 在 **`/gitx plan`** 之外可附带 `git status --short --branch`，与 [`skills/gitx/SKILL.md`](../gitx/SKILL.md) 中实质性 diff 记录习惯一致。
+- **强（审 plan 修订可复核）**：Workflow 第 4 步前后，对**本计划文件**执行例如 `git diff .cursor/plans/<本计划>.plan.md | head -n 40`（路径按实际替换），或将等价 diff 摘要写入 closeout；避免仅用 `rg Finding` 而看不到计划正文是否已合并修订。
+- **强（深度 review 防空壳）**：若 todo 指向深度代码审，`Done` 须要求 P0–P2 中**至少一条**含具体**符号锚点**（函数名/常量名等）；`Verify` 用 `rg` 命中该符号之一。
 
 ### YAML 与正文对齐
 
@@ -212,5 +251,7 @@ Non-goals: <可选>
 
 - `skills/SKILL_FRAMEWORK_PROTOCOLS.md` — 讨论 → 规划 → 执行 → 验证 与最小 findings / execution / verification 形状。
 - `skills/gitx/SKILL.md` — `/gitx` / `/gitx plan` 收口与深度 review checklist。
+- `skills/code-review-deep/SKILL.md` — 对抗式/全切片深度代码审（review-only verdict 与符号锚点习惯与本 skill **强例**对齐）。
 - `docs/plans/plan_todo_checklist.md` — Todo 四元组与对齐的勾选短清单（与本节互补）。
+- `docs/plans/plan_review_findings_round1.md` — 独立 reviewer 对样例 execution plan 的 findings（可复核 Verify、closeout 与 `--stat` 等）。
 - `.cursor/rules/cursor-plan-output.mdc` — Cursor alwaysApply 下对 CreatePlan 产出的硬自检清单。
