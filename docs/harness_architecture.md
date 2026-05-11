@@ -103,6 +103,8 @@
 | L3 | `scripts/router-rs/src/{cursor_hooks,codex_hooks,hook_common,review_gate,framework_host_targets,framework_runtime,rfv_loop,autopilot_goal,task_state,task_state_aggregate,task_command,task_write_lock,harness_operator_nudges}.rs` |
 | L2 | `artifacts/current/`、`configs/framework/*SCHEMA*` |
 | L5 | `skills/**/SKILL.md`、`docs/rfv_loop_harness.md`、`docs/references/rfv-loop/*`（含 [`math-reasoning-harness.md`](references/rfv-loop/math-reasoning-harness.md)；非热 skill 路由） |
+| **Skill 路由中的宿主 id（`host_support.platforms`）** | `skills/<slug>/SKILL.md`（frontmatter）→ `cargo run … skill-compiler-rs --apply` → `skills/SKILL_ROUTING_RUNTIME.json`；值域与 `RUNTIME_REGISTRY.host_targets.supported` 对齐（见 [`host_adapter_contract.md`](host_adapter_contract.md) 维护表末行） |
+| 弱模型 / 上下文预算与注入审计 | [`plans/RESEARCH_harness_weak_model_top_tier.md`](plans/RESEARCH_harness_weak_model_top_tier.md)（调研合成），[`plans/context_token_audit_deep_dive.md`](plans/context_token_audit_deep_dive.md)（Codex cap / Cursor `merge_additional_context` 路径） |
 
 ---
 

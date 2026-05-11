@@ -1419,12 +1419,9 @@ fn validate_cleanup_scope(
         return Ok(());
     }
     for tool in tools {
-        let explicit_home = match tool.as_str() {
-            "codex" => command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some(),
-            "cursor" => command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some(),
-            "claude" => command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some(),
-            _ => true,
-        };
+        let explicit_home = projection_adapter(tool)
+            .map(|adapter| (adapter.explicit_home)(command))
+            .unwrap_or(true);
         if !explicit_home && command.home.is_none() {
             return Err(format!(
                 "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home/--cursor-home/--claude-home, --home, or the matching host HOME environment variable"
@@ -1473,18 +1470,13 @@ fn resolved_roots_payload(
 ) -> Result<Value, String> {
     let mut host_home_roots = serde_json::Map::new();
     for (host_id, tool) in pairs {
-        let path = match tool.as_str() {
-            "codex" => roots.codex_home_root.to_string_lossy(),
-            "cursor" => roots.cursor_home_root.to_string_lossy(),
-            "claude" => roots.claude_home_root.to_string_lossy(),
-            other => {
-                return Err(format!(
-                    "resolved_roots_payload: unsupported skills-install tool `{other}` \
-                     (extend host home mapping when adding hosts)"
-                ));
-            }
-        };
-        host_home_roots.insert(host_id.clone(), json!(path));
+        let adapter = projection_adapter(tool).ok_or_else(|| {
+            format!(
+                "resolved_roots_payload: unsupported skills-install tool `{tool}` \
+                 (extend host projection adapters when adding hosts)"
+            )
+        })?;
+        host_home_roots.insert(host_id.clone(), json!((adapter.home_root)(roots)));
     }
     Ok(json!({
         "framework_root": roots.framework_root.to_string_lossy(),
@@ -1500,13 +1492,12 @@ fn selected_projection_tools(
     default_all: bool,
 ) -> Result<Vec<String>, String> {
     if raw_tools.is_empty() && default_all {
-        return crate::framework_host_targets::skills_install_tools_ordered(framework_root);
+        return registry_projection_tools(framework_root);
     }
     let mut selected = Vec::new();
     for raw in raw_tools {
         if raw.trim().eq_ignore_ascii_case("all") {
-            for tool in crate::framework_host_targets::skills_install_tools_ordered(framework_root)?
-            {
+            for tool in registry_projection_tools(framework_root)? {
                 if !selected.contains(&tool) {
                     selected.push(tool);
                 }
@@ -1519,12 +1510,116 @@ fn selected_projection_tools(
         }
     }
     if selected.is_empty() {
-        return Err(
-            "projection command requires --to codex/--to cursor/--to claude or --to all"
-                .to_string(),
-        );
+        let known = projection_supported_tools_for_message(framework_root);
+        return Err(format!(
+            "projection command requires --to <tool> or --to all. Supported tools: {}",
+            known.join(", ")
+        ));
     }
     Ok(selected)
+}
+
+struct HostProjectionAdapter {
+    tool: &'static str,
+    host_id: &'static str,
+    aliases: &'static [&'static str],
+    install: fn(&ResolvedProjectionRoots, &str) -> Result<Value, String>,
+    status: fn(&ResolvedProjectionRoots) -> Result<Value, String>,
+    remove: fn(&ResolvedProjectionRoots, &str, bool) -> Result<Value, String>,
+    home_root: fn(&ResolvedProjectionRoots) -> String,
+    explicit_home: fn(&ProjectionCommand) -> bool,
+}
+
+const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
+    HostProjectionAdapter {
+        tool: "codex",
+        host_id: "codex-cli",
+        aliases: &["codex-cli"],
+        install: install_codex_projection,
+        status: codex_projection_status,
+        remove: remove_codex_projection,
+        home_root: codex_home_root_string,
+        explicit_home: codex_home_explicit,
+    },
+    HostProjectionAdapter {
+        tool: "cursor",
+        host_id: "cursor",
+        aliases: &[],
+        install: install_cursor_projection,
+        status: cursor_projection_status,
+        remove: remove_cursor_projection,
+        home_root: cursor_home_root_string,
+        explicit_home: cursor_home_explicit,
+    },
+    HostProjectionAdapter {
+        tool: "claude",
+        host_id: "claude-code",
+        aliases: &["claude-code"],
+        install: install_claude_projection,
+        status: claude_projection_status,
+        remove: remove_claude_projection,
+        home_root: claude_home_root_string,
+        explicit_home: claude_home_explicit,
+    },
+];
+
+fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
+    let normalized = tool.trim().to_lowercase();
+    HOST_PROJECTION_ADAPTERS
+        .iter()
+        .find(|adapter| adapter.tool == normalized)
+}
+
+fn projection_adapter_for_raw(raw: &str) -> Option<&'static HostProjectionAdapter> {
+    let normalized = raw.trim().to_lowercase();
+    HOST_PROJECTION_ADAPTERS.iter().find(|adapter| {
+        adapter.tool == normalized || adapter.aliases.iter().any(|alias| *alias == normalized)
+    })
+}
+
+fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
+    let pairs =
+        crate::framework_host_targets::host_id_and_skills_install_tool_pairs(framework_root)?;
+    let mut tools = Vec::new();
+    for (host_id, tool) in pairs {
+        let adapter = projection_adapter(&tool).ok_or_else(|| {
+            format!(
+                "RUNTIME_REGISTRY host {host_id:?} declares unsupported install_tool {tool:?}; extend host projection adapters"
+            )
+        })?;
+        if !tools.contains(&adapter.tool.to_string()) {
+            tools.push(adapter.tool.to_string());
+        }
+    }
+    validate_projection_adapters_against_registry(framework_root)?;
+    Ok(tools)
+}
+
+fn validate_projection_adapters_against_registry(framework_root: &Path) -> Result<(), String> {
+    let registry = crate::framework_host_targets::load_runtime_registry_json(framework_root)?;
+    let supported = crate::framework_host_targets::host_targets_supported_host_ids(&registry)?;
+    for adapter in HOST_PROJECTION_ADAPTERS {
+        if !supported.iter().any(|host_id| host_id == adapter.host_id) {
+            return Err(format!(
+                "host projection adapter `{}` declares host_id `{}` outside RUNTIME_REGISTRY.host_targets.supported",
+                adapter.tool, adapter.host_id
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn projection_alias_summary() -> String {
+    HOST_PROJECTION_ADAPTERS
+        .iter()
+        .flat_map(|adapter| {
+            adapter
+                .aliases
+                .iter()
+                .map(move |alias| format!("{alias} → {}", adapter.tool))
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn canonical_scope(scope: &str) -> Result<&'static str, String> {
@@ -1542,21 +1637,13 @@ fn install_projection_tool(
     tool: &str,
     scope: &str,
 ) -> Result<Value, String> {
-    match tool {
-        "codex" => install_codex_projection(roots, scope),
-        "cursor" => install_cursor_projection(roots, scope),
-        "claude" => install_claude_projection(roots, scope),
-        _ => Err(format!("Unsupported tool: {tool}")),
-    }
+    let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
+    (adapter.install)(roots, scope)
 }
 
 fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
-    match tool {
-        "codex" => codex_projection_status(roots),
-        "cursor" => cursor_projection_status(roots),
-        "claude" => claude_projection_status(roots),
-        _ => Err(format!("Unsupported tool: {tool}")),
-    }
+    let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
+    (adapter.status)(roots)
 }
 
 fn remove_projection_tool(
@@ -1565,12 +1652,32 @@ fn remove_projection_tool(
     scope: &str,
     dry_run: bool,
 ) -> Result<Value, String> {
-    match tool {
-        "codex" => remove_codex_projection(roots, scope, dry_run),
-        "cursor" => remove_cursor_projection(roots, scope, dry_run),
-        "claude" => remove_claude_projection(roots, scope, dry_run),
-        _ => Err(format!("Unsupported tool: {tool}")),
-    }
+    let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
+    (adapter.remove)(roots, scope, dry_run)
+}
+
+fn codex_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+    roots.codex_home_root.to_string_lossy().into_owned()
+}
+
+fn cursor_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+    roots.cursor_home_root.to_string_lossy().into_owned()
+}
+
+fn claude_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+    roots.claude_home_root.to_string_lossy().into_owned()
+}
+
+fn codex_home_explicit(command: &ProjectionCommand) -> bool {
+    command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some()
+}
+
+fn cursor_home_explicit(command: &ProjectionCommand) -> bool {
+    command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some()
+}
+
+fn claude_home_explicit(command: &ProjectionCommand) -> bool {
+    command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some()
 }
 
 fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
@@ -2444,25 +2551,27 @@ fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String
 }
 
 fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
-    match raw.trim().to_lowercase().as_str() {
-        "codex" | "codex-cli" => Ok("codex".to_string()),
-        "cursor" => Ok("cursor".to_string()),
-        "claude" | "claude-code" => Ok("claude".to_string()),
-        other => {
-            let known = crate::framework_host_targets::skills_install_tools_ordered(framework_root)
-                .unwrap_or_else(|_| {
-                    vec![
-                        "codex".to_string(),
-                        "cursor".to_string(),
-                        "claude".to_string(),
-                    ]
-                });
-            Err(format!(
-                "Unknown tool: {other}. Supported tools: {} (alias: codex-cli → codex)",
-                known.join(", ")
-            ))
-        }
+    if let Some(adapter) = projection_adapter_for_raw(raw) {
+        return Ok(adapter.tool.to_string());
     }
+    let known = projection_supported_tools_for_message(framework_root);
+    let aliases = projection_alias_summary();
+    Err(format!(
+        "Unknown tool: {}. Supported tools: {} (aliases: {})",
+        raw.trim().to_lowercase(),
+        known.join(", "),
+        aliases
+    ))
+}
+
+fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
+    registry_projection_tools(framework_root).unwrap_or_else(|_| {
+        vec![
+            "codex".to_string(),
+            "cursor".to_string(),
+            "claude".to_string(),
+        ]
+    })
 }
 
 fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
@@ -2573,6 +2682,7 @@ fn ensure_host_skill_surface(
         "system_skills_linked": include_system,
         "generated_at": current_local_timestamp(),
     });
+    changed |= ensure_codex_skill_surface_runtime(&repo_root, &surface_root, &desired)?;
     changed |= write_json_if_changed(&surface_root.join(manifest_name), &manifest)?;
 
     Ok(json!({
@@ -2587,6 +2697,63 @@ fn ensure_host_skill_surface(
 
 fn desired_codex_skill_surface_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
     desired_host_skill_surface_slugs(repo_root, true)
+}
+
+fn ensure_codex_skill_surface_runtime(
+    repo_root: &Path,
+    surface_root: &Path,
+    desired: &[String],
+) -> Result<bool, String> {
+    let runtime_path = shared_skills_source(repo_root)?.join("SKILL_ROUTING_RUNTIME.json");
+    let Some(content) = read_text_if_exists(&runtime_path)? else {
+        return Ok(false);
+    };
+    let mut runtime = serde_json::from_str::<Value>(&content)
+        .map_err(|err| format!("failed parsing {}: {err}", runtime_path.display()))?;
+    let desired_set = desired.iter().cloned().collect::<BTreeSet<_>>();
+    let mut surfaced_count = 0usize;
+
+    if let Some(skills) = runtime.get_mut("skills").and_then(Value::as_array_mut) {
+        let mut filtered = Vec::new();
+        for mut row in std::mem::take(skills) {
+            let Some(slug) = row
+                .as_array()
+                .and_then(|items| items.first())
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            else {
+                continue;
+            };
+            if desired_set.contains(&slug) {
+                if let Some(items) = row.as_array_mut() {
+                    let path = Value::String(codex_surface_skill_path(&slug));
+                    if items.len() >= 9 {
+                        items[8] = path;
+                    } else {
+                        items.push(path);
+                    }
+                }
+                filtered.push(row);
+            }
+        }
+        surfaced_count = surfaced_count.max(filtered.len());
+        *skills = filtered;
+    }
+
+    if let Some(scope) = runtime.get_mut("scope").and_then(Value::as_object_mut) {
+        scope.insert("kind".to_string(), json!("codex-skill-surface"));
+        scope.insert("hot_skill_count".to_string(), json!(surfaced_count));
+        scope.insert(
+            "source_runtime".to_string(),
+            json!("skills/SKILL_ROUTING_RUNTIME.json"),
+        );
+    }
+
+    write_json_if_changed(&surface_root.join("SKILL_ROUTING_RUNTIME.json"), &runtime)
+}
+
+fn codex_surface_skill_path(slug: &str) -> String {
+    format!("skills/{slug}/SKILL.md")
 }
 
 fn desired_host_skill_surface_slugs(
@@ -2765,31 +2932,7 @@ fn runtime_hot_skill_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
         .filter_map(Value::as_str)
         .map(str::to_owned)
         .collect();
-    let Some(records) = runtime.get("records").and_then(Value::as_array) else {
-        return Ok(from_skills);
-    };
-    let from_records: Vec<String> = records
-        .iter()
-        .filter_map(|record| {
-            record
-                .get("slug")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .collect();
-    if from_records.is_empty() {
-        return Ok(from_skills);
-    }
-    let mut sorted_records = from_records.clone();
-    let mut sorted_skills = from_skills.clone();
-    sorted_records.sort();
-    sorted_skills.sort();
-    if sorted_records != sorted_skills {
-        return Err(format!(
-            "SKILL_ROUTING_RUNTIME.json: `records[].slug` set and `skills` hot rows disagree when sorted.\nrecords={sorted_records:?}\nskills={sorted_skills:?}"
-        ));
-    }
-    Ok(from_records)
+    Ok(from_skills)
 }
 
 fn codex_skills_matches_source(target_path: &Path, source_path: &Path) -> Result<bool, String> {
@@ -3506,6 +3649,43 @@ mod tests {
     fn write_test_file(path: &Path, content: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
+    }
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+    }
+
+    #[test]
+    fn canonical_tool_name_reports_registry_supported_tools_and_aliases() {
+        let root = repo_root();
+
+        assert_eq!(canonical_tool_name("codex-cli", &root).unwrap(), "codex");
+        assert_eq!(canonical_tool_name("claude-code", &root).unwrap(), "claude");
+
+        let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
+        assert!(
+            err.contains("Supported tools: codex, cursor, claude"),
+            "{err}"
+        );
+        assert!(err.contains("codex-cli"), "{err}");
+        assert!(err.contains("claude-code"), "{err}");
+    }
+
+    #[test]
+    fn projection_adapters_are_aligned_with_runtime_registry() {
+        let root = repo_root();
+
+        validate_projection_adapters_against_registry(&root).unwrap();
+        assert_eq!(
+            registry_projection_tools(&root).unwrap(),
+            vec![
+                "codex".to_string(),
+                "cursor".to_string(),
+                "claude".to_string()
+            ]
+        );
     }
 
     #[test]

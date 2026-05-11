@@ -25,9 +25,9 @@
 
 | 区域 | 锚点 |
 |------|------|
-| 事件分发（stdin `hook_event_name` / `event`，小写匹配） | `run_codex_review_subagent_gate`：`sessionstart` / `userpromptsubmit` / `posttooluse` / `stop` → 对应 handler（[`codex_hooks.rs`](../../scripts/router-rs/src/codex_hooks.rs) 约 L972–L998） |
+| 事件分发（stdin `hook_event_name` / `event`，小写匹配） | `run_codex_lifecycle_context_hook`：`sessionstart` / `userpromptsubmit` / `posttooluse` / `stop` → 对应 handler；旧 `review-subagent-gate` 命令仅为兼容 alias（[`codex_hooks.rs`](../../scripts/router-rs/src/codex_hooks.rs)） |
 | CLI 入口 | `dispatch_codex_command` → `run_codex_audit_hook(event, repo_root)`（[`dispatch_body.txt`](../../scripts/router-rs/src/cli/dispatch_body.txt) 约 L148–L157） |
-| `codex hook` 子命令归一 | `canonical_codex_audit_command`：`PreToolUse` → `pre-tool-use`；其余生命周期事件 → `review-subagent-gate`（同文件约 L2120–L2144） |
+| `codex hook` 子命令归一 | `canonical_codex_audit_command`：`PreToolUse` → `pre-tool-use`；其余生命周期事件 → `lifecycle-context`；`review-subagent-gate` 仍被接受为旧 alias |
 | 项目 `hooks.json` 生成 | `build_codex_hook_manifest`：`INSTALL_EVENTS` 五事件、`timeout` 来自 `codex_hook_command_timeout_secs`，`SessionStart` 带 `matcher: "startup|resume|clear"`，`Stop` 带 `loop_limit: 3`（约 L1000–L1025） |
 | 用户 `config.toml` 特性合并 | `merge_features_codex_hooks`：强制 **`hooks = true`**，并将 `codex_hooks`/`hooks` 旧行替换为 canonical `hooks`（约 L1844–L1894） |
 | 安装校验 | `verify_codex_hooks`：要求 `hooks = true`，且 **不得**出现 deprecated 的 `codex_hooks` 字面量（[`framework_maint.rs`](../../scripts/router-rs/src/framework_maint.rs) 约 L194–L199） |
@@ -43,15 +43,15 @@
 | # | 官方出处 | 本仓库锚点 | integration test 契约 | 结论 | 风险 |
 |---|----------|------------|-------------------------|------|------|
 | 1 | Hooks 页 `[features]` 示例 `codex_hooks = true` | `merge_features_codex_hooks` 写入 `hooks = true`；`verify_codex_hooks` 拒绝配置含 `codex_hooks` | `shell_installer_e2e_writes_expected_files`：`hooks = true`，`!contains("codex_hooks")` | **文档滞后**：上游已有 `hooks` 作为 canonical 的迁移（GitHub [#20522](https://github.com/openai/codex/issues/20522)、commit `0d9a5d2` 类迁移）；**实现与现行 Codex 一致**，与 Hooks **示例页**不一致 | P1 文档易误导新用户；本仓库实现自洽 |
-| 2 | Hooks 页：事件含 `PermissionRequest` | `INSTALL_EVENTS` 无该事件；`run_codex_review_subagent_gate` 无分支 | 测试未要求 `PermissionRequest` | **能力缺口（有意）**：未接入企业/审批拦截面 | P2 若需对齐官方示例 Permission 策略需单独设计 |
+| 2 | Hooks 页：事件含 `PermissionRequest` | `INSTALL_EVENTS` 无该事件；`run_codex_lifecycle_context_hook` 无分支 | 测试未要求 `PermissionRequest` | **能力缺口（有意）**：未接入企业/审批拦截面 | P2 若需对齐官方示例 Permission 策略需单独设计 |
 | 3 | Matcher 表：`SessionStart` → `startup\|resume\|clear` | `build_codex_hook_manifest`：`"matcher": "startup\|resume\|clear"` | 生成的 `.codex/hooks.json` 与 manifest 测试可间接覆盖 | **一致** | 低 |
 | 4 | SessionStart 节：`source` 为 `startup` 或 `resume`（表格正文）；Matcher 表含 `clear` | 代码与 manifest 使用三值 matcher；digest 文案含 `source` | — | **官方页内细微不一致**（节内表 vs Matcher 表）；实现与 **Matcher 表**一致 | 低（文档编辑问题） |
 | 5 | PreToolUse：stdout JSON 可 `hookSpecificOutput.permissionDecision` 或旧式 `decision: block` | `block_codex_pre_tool_use` 等返回 `decision`/`reason` 及 `hookSpecificOutput`（grep `block_codex_pre_tool_use`） | 单元测试 `pre_tool_use_blocks_*` | **一致**（含旧式 block） | 低 |
-| 6 | Stop：须 JSON；`decision: block` 表 continuation | `handle_codex_stop` 返回 `decision: "block"` + `reason`（review gate） | 多个 `codex_hooks` 单测断言 `decision == block` | **语义一致**（continuation 模型） | 低 |
+| 6 | Stop：须 JSON；`decision: block` 表 continuation | `handle_codex_stop` 不执行 hard review gate；仅写 best-effort continuity checkpoint，schema 错误仍通过 lifecycle input error 返回 block | lifecycle 单测覆盖 Stop 不阻塞 review/delegation prompt | **有意差异**：Codex 不复制 Cursor REVIEW_GATE hard path | 低 |
 | 7 | Hooks 页：未展示 `loop_limit`；Stop 示例仅 `timeout` | `Stop` handler 对象含 **`loop_limit`: 3** | 未直接断言该键 | **未文档化/需 schema 核对**：可能为 Codex 扩展字段；建议对照 GitHub generated schema 或 PR（如 stop continuation 相关 [#14532](https://github.com/openai/codex/pull/14532)） | P2 |
 | 8 | 默认 `timeout` 省略为 600s | `codex_hook_command_timeout_secs`：SessionStart 3、PostToolUse 5、其余 8 | `shell_installer_e2e` 只检查事件名与 `codex hook --event=` | **一致**（显式短超时，避免挂死） | 低 |
 | 9 | PostToolUse 示例常带 `matcher: Bash` | 生成的 `PostToolUse` **无 matcher**（匹配所有工具） | 同左 | **更宽触发面**（有意：证据与 gate）；与官方示例窄化不同 | P2 性能/噪音；非兼容性错误 |
-| 10 | stdin：`hook_event_name` | `run_codex_review_subagent_gate` 接受 `hook_event_name` **或** `event`；`run_codex_audit_hook` 可注入 `hook_event_name`（L2037–L2043） | — | **一致或更宽** | 低 |
+| 10 | stdin：`hook_event_name` | `run_codex_lifecycle_context_hook` 接受 `hook_event_name` **或** `event`；`run_codex_audit_hook` 可注入 `hook_event_name` | — | **一致或更宽** | 低 |
 | 11 | SessionStart JSON：`hookSpecificOutput.additionalContext` | `handle_codex_session_start` → `codex_compact_contexts` + `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` | — | **一致** | 低 |
 | 12 | 多 handler 并发、互不阻塞 | 单事件单 command（router-rs 独占一条） | — | **不冲突**；未利用多 handler | 低 |
 | 13 | 项目 `.codex` 需 trusted 才加载项目 hooks | README 描述 Codex CLI / `codex sync`；代码侧不编码 trust | — | **宿主策略**；仓库文档应提醒 untrusted 模式下降级 | P3 运维认知 |

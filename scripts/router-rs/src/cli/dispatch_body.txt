@@ -139,11 +139,13 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
         CodexCommand::HookProjection => print_json_value(&build_codex_hook_projection()),
         CodexCommand::Sync(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            print_json_value(&sync_host_entrypoints(&repo_root, true)?)
+            let provider = codex_host_entrypoint_provider(&repo_root)?;
+            print_json_value(&sync_host_entrypoints(&repo_root, true, provider)?)
         }
         CodexCommand::Check(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            print_json_value(&sync_host_entrypoints(&repo_root, false)?)
+            let provider = codex_host_entrypoint_provider(&repo_root)?;
+            print_json_value(&sync_host_entrypoints(&repo_root, false, provider)?)
         }
         CodexCommand::Hook(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;

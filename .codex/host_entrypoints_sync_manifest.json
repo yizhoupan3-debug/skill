@@ -14,10 +14,7 @@
       ".codex/hooks.json",
       ".codex/host_entrypoints_sync_manifest.json"
     ],
-    "text_files": [
-      ".codex/README.md",
-      "AGENTS.md"
-    ]
+    "text_files": []
   },
   "schema_version": "host-entrypoints-sync-manifest-v1",
   "shared_system": {

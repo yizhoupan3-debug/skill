@@ -3,10 +3,8 @@ use crate::framework_runtime::{
     build_framework_contract_summary_envelope, try_append_post_tool_shell_evidence,
     write_framework_session_artifacts,
 };
-use crate::hook_common::{
-    has_delegation_override, has_override, has_review_override, is_parallel_delegation_prompt,
-    is_review_prompt, normalize_subagent_type, normalize_tool_name, saw_reject_reason,
-};
+use crate::hook_common::{normalize_subagent_type, normalize_tool_name};
+use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
 use crate::host_integration::ensure_codex_skill_surface;
 use crate::router_env_flags::router_rs_env_enabled_default_true;
 use chrono::Utc;
@@ -25,18 +23,20 @@ use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
-const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
+pub(crate) const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str =
+    ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str = "router-rs codex sync --repo-root \"$PWD\"";
-const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
-const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
-const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
-const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [CODEX_HOOKS_PATH];
+pub(crate) const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
+pub(crate) const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
+pub(crate) const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
+pub(crate) const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [CODEX_HOOKS_PATH];
 const PROTECTED_GENERATED_PATHS: [&str; 4] = [
     CODEX_AGENT_POLICY_PATH,
     CODEX_HOOKS_PATH,
@@ -78,11 +78,11 @@ const INSTALL_EVENTS: [&str; 5] = [
     "Stop",
 ];
 pub const ROUTER_RS_HOOK_PROJECTION_VERSION: &str = "v1.0.0";
-const INSTALL_STATUS_USER_PROMPT: &str = "Checking review/subagent gate";
+const INSTALL_STATUS_USER_PROMPT: &str = "Loading Codex turn context";
 const INSTALL_STATUS_SESSION_START: &str = "Loading Codex workspace context";
 const INSTALL_STATUS_PRE_TOOL: &str = "Checking generated-surface guard";
-const INSTALL_STATUS_POST_TOOL: &str = "Updating review/subagent gate state";
-const INSTALL_STATUS_STOP: &str = "Enforcing review/subagent gate";
+const INSTALL_STATUS_POST_TOOL: &str = "Recording Codex tool evidence";
+const INSTALL_STATUS_STOP: &str = "Writing Codex continuity checkpoint";
 const CODEX_ADDITIONAL_CONTEXT_MAX_CHARS: usize = 640;
 static ATOMIC_WRITE_NONCE: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
@@ -143,21 +143,9 @@ struct HooksMergeStat {
 }
 
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
-struct CodexReviewGateState {
+struct CodexLifecycleContextState {
     #[serde(default)]
     seq: i64,
-    #[serde(default)]
-    subagent_required: bool,
-    #[serde(default)]
-    review_required: bool,
-    #[serde(default)]
-    delegation_required: bool,
-    #[serde(default)]
-    review_override: bool,
-    #[serde(default)]
-    delegation_override: bool,
-    #[serde(default)]
-    reject_reason_seen: bool,
     #[serde(default)]
     review_subagent_seen: bool,
     #[serde(default)]
@@ -168,11 +156,9 @@ struct CodexReviewGateState {
     parallel_lane_seen: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     review_subagent_tool: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    prompt: Option<String>,
 }
 
-fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexReviewGateState) {
+fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexLifecycleContextState) {
     if state.review_subagent_seen
         && !state.generic_subagent_seen
         && !state.review_lane_seen
@@ -393,7 +379,7 @@ fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, String>
     Err("state_lock_timeout".to_string())
 }
 
-fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexReviewGateState>, String> {
+fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLifecycleContextState>, String> {
     let text = match fs::read_to_string(path) {
         Ok(value) => value,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -406,31 +392,20 @@ fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexReviewGateState
             .get("schema_version")
             .and_then(Value::as_i64)
             .is_some_and(|v| v == 1);
-        if schema_v1 {
-            if obj
-                .get("override")
-                .and_then(Value::as_bool)
-                .is_some_and(|v| v)
-            {
-                obj.entry("review_override".to_string())
-                    .or_insert(json!(true));
-                obj.entry("delegation_override".to_string())
-                    .or_insert(json!(true));
-            }
-            if obj
+        if schema_v1
+            && obj
                 .get("delegation_required")
                 .and_then(Value::as_bool)
                 .is_some_and(|v| v)
-                && !obj
-                    .get("review_subagent_seen")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-            {
-                obj.entry("seq".to_string()).or_insert(json!(1));
-            }
+            && !obj
+                .get("review_subagent_seen")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        {
+            obj.entry("seq".to_string()).or_insert(json!(1));
         }
     }
-    serde_json::from_value::<CodexReviewGateState>(value)
+    serde_json::from_value::<CodexLifecycleContextState>(value)
         .map(|mut parsed| {
             codex_merge_legacy_subagent_gate_evidence(&mut parsed);
             Some(parsed)
@@ -442,11 +417,11 @@ fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexReviewGateState
 fn codex_load_state(
     repo_root: &Path,
     event: &Value,
-) -> Result<Option<CodexReviewGateState>, String> {
+) -> Result<Option<CodexLifecycleContextState>, String> {
     codex_load_state_from_path(&codex_state_path(repo_root, event))
 }
 
-fn codex_save_state_to_path(state_path: &Path, state: &CodexReviewGateState) -> bool {
+fn codex_save_state_to_path(state_path: &Path, state: &CodexLifecycleContextState) -> bool {
     let directory = state_path
         .parent()
         .map(Path::to_path_buf)
@@ -574,7 +549,9 @@ fn prune_stale_hook_state_files(dir: &Path) {
 
 fn with_codex_state_lock<T, F>(repo_root: &Path, event: &Value, f: F) -> Result<T, String>
 where
-    F: FnOnce(Option<CodexReviewGateState>) -> Result<(Option<CodexReviewGateState>, T), String>,
+    F: FnOnce(
+        Option<CodexLifecycleContextState>,
+    ) -> Result<(Option<CodexLifecycleContextState>, T), String>,
 {
     let state_path = codex_state_path(repo_root, event);
     if let Some(parent) = state_path.parent() {
@@ -686,35 +663,12 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
 }
 
 fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
-    let text = codex_prompt_text(event);
-    // Per-turn reset is intentional: Stop resets state for clean turn boundary,
-    // UserPromptSubmit re-derives required-flags from prompt text. We carry
-    // over only `seq` (monotonic conversation counter for telemetry) so it
-    // doesn't roll back to 0 every turn, while still wiping per-turn evidence
-    // (`review_subagent_seen`, `review_subagent_tool`, etc.) that must be
-    // re-established within the new turn.
-    let mut state = CodexReviewGateState {
+    // Codex keeps sidecar policy in AGENTS.md and the model runtime, not in a
+    // hard Stop gate. This state is only telemetry for best-effort tool evidence.
+    let state = CodexLifecycleContextState {
         seq: 0,
-        ..CodexReviewGateState::default()
+        ..CodexLifecycleContextState::default()
     };
-
-    if is_review_prompt(&text) {
-        state.review_required = true;
-        state.subagent_required = true;
-        state.prompt = Some(text.chars().take(500).collect());
-    }
-    if is_parallel_delegation_prompt(&text) {
-        state.delegation_required = true;
-        state.subagent_required = true;
-        state.prompt = Some(text.chars().take(500).collect());
-    }
-    if has_override(&text) || has_review_override(&text) || has_delegation_override(&text) {
-        state.review_override = true;
-        state.delegation_override = true;
-    }
-    if saw_reject_reason(&text, &text) {
-        state.reject_reason_seen = true;
-    }
 
     let write_result = with_codex_state_lock(repo_root, event, |loaded| {
         let mut next = state.clone();
@@ -728,30 +682,13 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
     if write_result.is_err() {
         return Some(json!({
             "decision": "block",
-            "reason": "Review gate state could not be persisted under .codex/hook-state. Fail-closed to avoid silent policy bypass.",
+            "reason": "Codex hook state could not be persisted under .codex/hook-state.",
         }));
     }
 
     let mut contexts: Vec<String> = Vec::new();
-    if state.subagent_required && !state.review_override {
-        contexts.push(
-            "Subagent gate active: start a bounded subagent lane first, or explicitly record one reject reason (small_task/shared_context_heavy/write_scope_overlap/next_step_blocked/verification_missing/token_overhead_dominates).".to_string()
-        );
-    }
-    if state.review_required && !state.review_override {
-        contexts.push(
-            "Review gate active: launch independent reviewer lanes (e.g., security/architecture/regression) before concluding analysis, or record one reject reason.".to_string()
-        );
-    }
-    if state.delegation_required && !state.delegation_override {
-        contexts.push(
-            "Parallel request detected: split work into bounded lanes before integration, or record one reject reason.".to_string()
-        );
-    }
-    if !state.review_override && !state.delegation_override && !state.reject_reason_seen {
-        if let Some(warning) = codex_projection_drift_warning(repo_root) {
-            contexts.push(warning);
-        }
+    if let Some(warning) = codex_projection_drift_warning(repo_root) {
+        contexts.push(warning);
     }
 
     let additional_context = codex_compact_contexts(contexts);
@@ -802,17 +739,10 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
         Ok((Some(state), ()))
     }) {
         Ok(()) => None,
-        Err(err) if err == "state_missing" => Some(json!({
-            "decision": "block",
-            "reason": "Review gate state is missing under .codex/hook-state during PostToolUse subagent evidence update. Fail-closed to avoid inconsistent gating.",
-        })),
-        Err(err) => Some(json!({
-            "decision": "block",
-            "reason": format!(
-                "Review gate state is unreadable during PostToolUse subagent evidence update under .codex/hook-state ({}). Fail-closed to avoid silent policy bypass.",
-                err
-            ),
-        })),
+        Err(err) => {
+            eprintln!("[router-rs] codex subagent evidence update skipped (non-fatal): {err}");
+            None
+        }
     }
 }
 
@@ -829,86 +759,18 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         return None;
     }
 
-    let text = codex_prompt_text(event);
-    let inferred_overridden = has_override(&text)
-        || has_review_override(&text)
-        || has_delegation_override(&text)
-        || saw_reject_reason(&text, &text);
-    let inferred_required = !text.trim().is_empty() && !inferred_overridden;
-    match with_codex_state_lock(repo_root, event, |loaded| {
-        let state = match loaded {
-            Some(value) => value,
-            None => return Err("state_missing".to_string()),
-        };
-        if state.subagent_required
-            && !state.review_override
-            && !state.reject_reason_seen
-            && !state.generic_subagent_seen
-        {
-            return Ok((
-                None,
-                Some(json!({
-                    "decision": "block",
-                    "reason": "Default subagent policy is active, but no subagent was observed. Spawn a bounded subagent lane now, or explicitly record a reject reason (small_task/shared_context_heavy/write_scope_overlap/next_step_blocked/verification_missing/token_overhead_dominates).",
-                })),
-            ));
-        }
-        if state.review_required
-            && !state.review_override
-            && !state.reject_reason_seen
-            && !state.review_lane_seen
-        {
-            return Ok((
-                None,
-                Some(json!({
-                    "decision": "block",
-                    "reason": "Broad/deep review was requested, but no independent subagent review was observed. Spawn suitable reviewer sidecars now, or explicitly record why spawning is rejected.",
-                })),
-            ));
-        }
-        if state.delegation_required
-            && !state.delegation_override
-            && !state.reject_reason_seen
-            && !state.parallel_lane_seen
-        {
-            return Ok((
-                None,
-                Some(json!({
-                    "decision": "block",
-                    "reason": "Independent parallel lanes were requested, but no bounded subagent sidecar was observed. Spawn suitable sidecars before finalizing, or rerun with an explicit no-subagent override.",
-                })),
-            ));
-        }
-        let reset = CodexReviewGateState {
+    let reset_result = with_codex_state_lock(repo_root, event, |_loaded| {
+        let reset = CodexLifecycleContextState {
             seq: 0,
-            ..CodexReviewGateState::default()
+            ..CodexLifecycleContextState::default()
         };
-        Ok((Some(reset), None))
-    }) {
-        Ok(output) => {
-            if output.is_none() {
-                try_write_continuity_checkpoint_on_codex_stop(repo_root, event);
-            }
-            output
-        }
-        Err(err) if err == "state_missing" => {
-            let mut reason = "Review gate state is missing under .codex/hook-state. Fail-closed to avoid bypass when enforcement state is unavailable.".to_string();
-            if !inferred_required {
-                reason.push_str(" Stop payload had no review context; blocking conservatively.");
-            }
-            Some(json!({
-                "decision": "block",
-                "reason": reason,
-            }))
-        }
-        Err(io_error) => Some(json!({
-            "decision": "block",
-            "reason": format!(
-                "Review gate state is unreadable or unavailable under .codex/hook-state ({}). Fail-closed to avoid silent policy bypass.",
-                io_error
-            ),
-        })),
+        Ok((Some(reset), ()))
+    });
+    if let Err(err) = reset_result {
+        eprintln!("[router-rs] codex hook state reset skipped (non-fatal): {err}");
     }
+    try_write_continuity_checkpoint_on_codex_stop(repo_root, event);
+    None
 }
 
 fn continuity_stop_checkpoint_env_enabled() -> bool {
@@ -969,13 +831,13 @@ fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value
     }))
 }
 
-fn run_codex_review_subagent_gate(
+fn run_codex_lifecycle_context_hook(
     repo_root: &Path,
     payload: &Value,
 ) -> Result<Option<Value>, String> {
     if !payload.is_object() {
-        return Ok(Some(review_gate_input_error(
-            "Review gate input schema invalid: expected a JSON object payload.",
+        return Ok(Some(codex_lifecycle_input_error(
+            "Codex lifecycle hook input schema invalid: expected a JSON object payload.",
         )));
     }
     let event_name = payload
@@ -989,13 +851,21 @@ fn run_codex_review_subagent_gate(
         "userpromptsubmit" => handle_codex_userpromptsubmit(repo_root, payload),
         "posttooluse" => handle_codex_posttooluse(repo_root, payload),
         "stop" => handle_codex_stop(repo_root, payload),
-        "" => Some(review_gate_input_error(
-            "Review gate input schema invalid: missing hook_event_name/event.",
+        "" => Some(codex_lifecycle_input_error(
+            "Codex lifecycle hook input schema invalid: missing hook_event_name/event.",
         )),
-        other => Some(review_gate_input_error(&format!(
-            "Review gate input schema invalid: unsupported hook_event_name/event `{other}`.",
+        other => Some(codex_lifecycle_input_error(&format!(
+            "Codex lifecycle hook input schema invalid: unsupported hook_event_name/event `{other}`.",
         ))),
     })
+}
+
+#[cfg(test)]
+fn run_codex_review_subagent_gate(
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<Option<Value>, String> {
+    run_codex_lifecycle_context_hook(repo_root, payload)
 }
 pub fn build_codex_hook_manifest() -> Value {
     let mut hooks = serde_json::Map::new();
@@ -1025,114 +895,53 @@ pub fn build_codex_hook_manifest() -> Value {
     })
 }
 
-struct HostEntrypointSyncSection {
-    text_files: Vec<String>,
-    json_files: Vec<String>,
+fn protected_generated_paths() -> Vec<&'static str> {
+    PROTECTED_GENERATED_PATHS.to_vec()
 }
 
-fn host_entrypoint_partial_sync_section(
-    desired_files: &BTreeMap<String, Vec<u8>>,
-) -> HostEntrypointSyncSection {
-    let mut json_files = HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
-        .iter()
-        .map(|path| (*path).to_string())
-        .collect::<Vec<_>>();
-    json_files.push(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string());
-    HostEntrypointSyncSection {
-        text_files: desired_host_entrypoint_text_files(desired_files),
-        json_files,
-    }
+pub fn build_codex_hook_projection() -> Value {
+    json!({
+        "schema_version": "router-rs-codex-hook-projection-v1",
+        "authority": CODEX_HOOK_AUTHORITY,
+        "codex_agent_policy": build_codex_agent_policy(),
+        "codex_hooks_readme": build_codex_hooks_readme(),
+        "codex_hooks": build_codex_hook_manifest(),
+        "codex_audit_commands": {
+            "pre_tool_use": build_codex_hook_command("--event=PreToolUse"),
+            "contract_guard": build_codex_hook_command("contract-guard"),
+            "codex_lifecycle_context": build_codex_hook_command("lifecycle-context"),
+            "legacy_review_subagent_gate": build_codex_hook_command("review-subagent-gate"),
+        },
+    })
 }
 
-#[derive(Default)]
-struct SingleSyncReport {
-    written: Vec<String>,
-    would_write: Vec<String>,
-    unchanged: Vec<String>,
-    created_dirs: Vec<String>,
+pub(crate) fn build_codex_agent_policy() -> String {
+    include_str!("../../../AGENTS.md").to_string()
 }
 
-pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Value, String> {
-    let root = normalize_repo_root(repo_root)?;
-    let desired_files = collect_codex_host_sync_file_bytes(&root)?;
-    let partial_section = host_entrypoint_partial_sync_section(&desired_files);
-    let (matched_worktrees, skipped_worktrees) = discover_matching_worktrees(&root);
-    let mut report = json!({
-        "written": [],
-        "would_write": [],
-        "unchanged": [],
-        "created_dirs": [],
-        "synced_worktrees": [],
-        "skipped_worktrees": skipped_worktrees,
-    });
-    let full_text_files = desired_host_entrypoint_text_files(&desired_files);
-    let mut full_json_files = HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.to_vec();
-    full_json_files.push(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH);
-    let full_section = HostEntrypointSyncSection {
-        text_files: full_text_files
-            .into_iter()
-            .map(|path| path.to_string())
-            .collect(),
-        json_files: full_json_files
-            .into_iter()
-            .map(|path| path.to_string())
-            .collect(),
-    };
-    let mut targets = vec![root.clone()];
-    targets.extend(matched_worktrees);
-
-    for target_root in targets {
-        let section = if target_root == root {
-            &full_section
-        } else {
-            &partial_section
-        };
-        let single = match sync_host_entrypoints_single_root(
-            &desired_files,
-            &target_root,
-            &root,
-            apply,
-            section,
-        ) {
-            Ok(single) => single,
-            Err(err) if target_root != root => {
-                extend_report_array(
-                    &mut report,
-                    "skipped_worktrees",
-                    vec![format!("{} ({err})", target_root.to_string_lossy())],
-                )?;
-                continue;
-            }
-            Err(err) => return Err(err),
-        };
-        extend_report_array(&mut report, "written", single.written)?;
-        extend_report_array(&mut report, "would_write", single.would_write)?;
-        extend_report_array(&mut report, "unchanged", single.unchanged)?;
-        extend_report_array(&mut report, "created_dirs", single.created_dirs)?;
-        if target_root != root {
-            extend_report_array(
-                &mut report,
-                "synced_worktrees",
-                vec![target_root.to_string_lossy().into_owned()],
-            )?;
-        }
-    }
-
-    sort_report_array(&mut report, "written")?;
-    sort_report_array(&mut report, "would_write")?;
-    sort_report_array(&mut report, "unchanged")?;
-    sort_report_array(&mut report, "created_dirs")?;
-    sort_report_array(&mut report, "synced_worktrees")?;
-    sort_report_array(&mut report, "skipped_worktrees")?;
-    if apply {
-        ensure_codex_skill_surface(&root)?;
-    }
-    Ok(report)
+pub(crate) fn build_codex_hooks_readme() -> String {
+    "# Codex Hooks Projection\n\n\
+Codex hooks are enabled for this repo and are managed by the Rust `router-rs` control plane.\n\n\
+<!-- managed_by: router-rs codex sync -->\n\n\
+**Policy snapshot:** the `codex_agent_policy` payload embeds the repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` preserves an existing root `AGENTS.md` from disk and only uses the embedded copy to bootstrap a missing file; rebuild before sync when you need generated Codex payloads to carry policy edits (see `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**).\n\n\
+Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
+Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
+`SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` records best-effort subagent/tool telemetry and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Codex review/delegation policy is advisory in `AGENTS.md`; it is not enforced by a hard subagent gate. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
+Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active.\n\n\
+Use `router-rs framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
+Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
+Regenerate with:\n\n\
+```sh\n\
+cargo build --manifest-path scripts/router-rs/Cargo.toml\n\
+router-rs codex sync --repo-root \"$PWD\"\n\
+```\n\n\
+Steady-state documentation map (vs `docs/history/` archive): `docs/README.md`.\n"
+        .to_string()
 }
 
-fn collect_codex_host_sync_file_bytes(
+pub(crate) fn codex_host_entrypoint_provider(
     repo_root: &Path,
-) -> Result<BTreeMap<String, Vec<u8>>, String> {
+) -> Result<HostEntrypointPayloadProvider, String> {
     let mut files = BTreeMap::new();
     let policy_path = repo_root.join(CODEX_AGENT_POLICY_PATH);
     let policy = match fs::read(&policy_path) {
@@ -1156,264 +965,26 @@ fn collect_codex_host_sync_file_bytes(
         CODEX_HOOKS_README_PATH.to_string(),
         build_codex_hooks_readme().into_bytes(),
     );
-    files.insert(
-        HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
-        serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files, repo_root)?)?,
-    );
-    Ok(files)
+    Ok(HostEntrypointPayloadProvider {
+        files,
+        json_relative_paths: HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect(),
+        manifest_relative_path: HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
+        agent_policy_entrypoint: CODEX_AGENT_POLICY_PATH.to_string(),
+        after_apply: Some(codex_host_entrypoint_after_apply),
+    })
 }
 
-fn build_host_entrypoint_sync_manifest(
-    desired_files: &BTreeMap<String, Vec<u8>>,
-    repo_root: &Path,
-) -> Result<Value, String> {
-    let full_text_files = desired_host_entrypoint_text_files(desired_files);
-    let mut json_files = HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
-        .iter()
-        .map(|path| (*path).to_string())
-        .collect::<Vec<_>>();
-    json_files.push(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string());
-    let mut shared_system =
-        crate::framework_host_targets::sync_manifest_shared_system_block(repo_root)?;
-    if let Some(obj) = shared_system.as_object_mut() {
-        obj.insert(
-            "agent_policy_entrypoint".to_string(),
-            Value::String(CODEX_AGENT_POLICY_PATH.to_string()),
-        );
-    }
-    Ok(json!({
-        "schema_version": "host-entrypoints-sync-manifest-v1",
-        "shared_system": shared_system,
-        "full_sync": {
-            "text_files": full_text_files,
-            "json_files": json_files.clone(),
-        },
-        "partial_sync": {
-            "text_files": full_text_files,
-            "json_files": json_files,
-        },
-    }))
-}
-
-fn desired_host_entrypoint_text_files(desired_files: &BTreeMap<String, Vec<u8>>) -> Vec<String> {
-    desired_files
-        .keys()
-        .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
-        .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
-        .cloned()
-        .collect()
+fn codex_host_entrypoint_after_apply(repo_root: &Path) -> Result<Value, String> {
+    ensure_codex_skill_surface(repo_root)
 }
 
 fn serialize_pretty_json_bytes(payload: &Value) -> Result<Vec<u8>, String> {
     let mut bytes = serde_json::to_vec_pretty(payload).map_err(|err| err.to_string())?;
     bytes.push(b'\n');
     Ok(bytes)
-}
-
-fn sync_host_entrypoints_single_root(
-    desired_files: &BTreeMap<String, Vec<u8>>,
-    target_root: &Path,
-    report_root: &Path,
-    apply: bool,
-    section: &HostEntrypointSyncSection,
-) -> Result<SingleSyncReport, String> {
-    let mut report = SingleSyncReport::default();
-    for relative in section.text_files.iter().chain(section.json_files.iter()) {
-        let desired = desired_files
-            .get(relative)
-            .ok_or_else(|| format!("missing generated host-entrypoint payload for {}", relative))?;
-        sync_host_entrypoint_file(
-            desired,
-            relative,
-            target_root,
-            report_root,
-            apply,
-            &mut report,
-        )?;
-    }
-
-    Ok(report)
-}
-
-fn protected_generated_paths() -> Vec<&'static str> {
-    PROTECTED_GENERATED_PATHS.to_vec()
-}
-
-fn sync_host_entrypoint_file(
-    desired: &[u8],
-    relative: &str,
-    target_root: &Path,
-    report_root: &Path,
-    apply: bool,
-    report: &mut SingleSyncReport,
-) -> Result<(), String> {
-    let destination = target_root.join(relative);
-    let existing = fs::read(&destination).ok();
-    let changed = existing.as_deref() != Some(desired);
-    if changed && apply {
-        if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-        }
-        fs::write(&destination, desired).map_err(|err| err.to_string())?;
-    }
-    let bucket = if changed && apply {
-        &mut report.written
-    } else if changed {
-        &mut report.would_write
-    } else {
-        &mut report.unchanged
-    };
-    bucket.push(describe_host_entrypoint_path(
-        report_root,
-        target_root,
-        &destination,
-    ));
-    Ok(())
-}
-
-fn extend_report_array(report: &mut Value, key: &str, items: Vec<String>) -> Result<(), String> {
-    let array = report
-        .get_mut(key)
-        .and_then(Value::as_array_mut)
-        .ok_or_else(|| format!("host-entrypoint sync report missing {key} array"))?;
-    array.extend(items.into_iter().map(Value::String));
-    Ok(())
-}
-
-fn sort_report_array(report: &mut Value, key: &str) -> Result<(), String> {
-    let array = report
-        .get_mut(key)
-        .and_then(Value::as_array_mut)
-        .ok_or_else(|| format!("host-entrypoint sync report missing {key} array"))?;
-    let mut values = array
-        .iter()
-        .filter_map(Value::as_str)
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    values.sort();
-    *array = values.into_iter().map(Value::String).collect();
-    Ok(())
-}
-
-fn normalize_repo_root(path: &Path) -> Result<PathBuf, String> {
-    if path.is_absolute() {
-        Ok(path.to_path_buf())
-    } else {
-        Ok(env::current_dir()
-            .map_err(|err| err.to_string())?
-            .join(path))
-    }
-}
-
-fn discover_matching_worktrees(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
-    let worktree_listing = read_git_stdout(root, &["worktree", "list", "--porcelain"]);
-    if worktree_listing.is_none() {
-        return (Vec::new(), Vec::new());
-    }
-
-    let mut current: BTreeMap<String, String> = BTreeMap::new();
-    let mut worktrees = Vec::new();
-    for raw_line in worktree_listing.unwrap_or_default().lines() {
-        let line = raw_line.trim();
-        if line.is_empty() {
-            if !current.is_empty() {
-                worktrees.push(current);
-                current = BTreeMap::new();
-            }
-            continue;
-        }
-        let mut parts = line.splitn(2, ' ');
-        let key = parts.next().unwrap_or_default().to_string();
-        let value = parts.next().unwrap_or_default().to_string();
-        current.insert(key, value);
-    }
-    if !current.is_empty() {
-        worktrees.push(current);
-    }
-
-    let mut matches = Vec::new();
-    let mut skipped = Vec::new();
-    for entry in worktrees {
-        let Some(worktree_path) = entry.get("worktree") else {
-            continue;
-        };
-        let candidate = normalize_repo_root(Path::new(worktree_path))
-            .unwrap_or_else(|_| PathBuf::from(worktree_path));
-        if candidate == root {
-            continue;
-        }
-        if !candidate.exists() {
-            skipped.push(format!("{} (missing)", candidate.to_string_lossy()));
-            continue;
-        }
-        matches.push(candidate);
-    }
-    (matches, skipped)
-}
-
-fn read_git_stdout(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8(output.stdout).ok()
-}
-
-fn describe_host_entrypoint_path(report_root: &Path, target_root: &Path, path: &Path) -> String {
-    if let Ok(relative) = path.strip_prefix(report_root) {
-        return relative.to_string_lossy().into_owned();
-    }
-    if let Ok(relative) = path.strip_prefix(target_root) {
-        return format!(
-            "{}::{}",
-            target_root.to_string_lossy(),
-            relative.to_string_lossy()
-        );
-    }
-    path.to_string_lossy().into_owned()
-}
-
-pub fn build_codex_hook_projection() -> Value {
-    json!({
-        "schema_version": "router-rs-codex-hook-projection-v1",
-        "authority": CODEX_HOOK_AUTHORITY,
-        "codex_agent_policy": build_codex_agent_policy(),
-        "codex_hooks_readme": build_codex_hooks_readme(),
-        "codex_hooks": build_codex_hook_manifest(),
-        "codex_audit_commands": {
-            "pre_tool_use": build_codex_hook_command("--event=PreToolUse"),
-            "contract_guard": build_codex_hook_command("contract-guard"),
-            "review_subagent_gate": build_codex_hook_command("review-subagent-gate"),
-        },
-    })
-}
-
-fn build_codex_agent_policy() -> String {
-    include_str!("../../../AGENTS.md").to_string()
-}
-
-fn build_codex_hooks_readme() -> String {
-    "# Codex Hooks Projection\n\n\
-Codex hooks are enabled for this repo and are managed by the Rust `router-rs` control plane.\n\n\
-<!-- managed_by: router-rs codex sync -->\n\n\
-**Policy snapshot:** the `codex_agent_policy` payload embeds the repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` preserves an existing root `AGENTS.md` from disk and only uses the embedded copy to bootstrap a missing file; rebuild before sync when you need generated Codex payloads to carry policy edits (see `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**).\n\n\
-Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
-`SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` updates review gate state for subagent tools and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` enforces review gates then (when unblocked) writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
-Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active.\n\n\
-Use `router-rs framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
-Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
-Regenerate with:\n\n\
-```sh\n\
-cargo build --manifest-path scripts/router-rs/Cargo.toml\n\
-router-rs codex sync --repo-root \"$PWD\"\n\
-```\n\n\
-Steady-state documentation map (vs `docs/history/` archive): `docs/README.md`.\n"
-        .to_string()
 }
 
 fn build_hook_binary_preamble(
@@ -2027,9 +1598,9 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
     let canonical = canonical_codex_audit_command(command)?;
     let mut payload = match read_stdin_payload() {
         Ok(payload) => payload,
-        Err(err) if canonical == "review-subagent-gate" => {
-            return Ok(Some(review_gate_input_error(&format!(
-                "Review gate input JSON invalid: {err}",
+        Err(err) if canonical == "lifecycle-context" => {
+            return Ok(Some(codex_lifecycle_input_error(&format!(
+                "Codex lifecycle hook input JSON invalid: {err}",
             ))));
         }
         Err(err) => return Err(err),
@@ -2045,7 +1616,7 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
     match canonical {
         "pre-tool-use" => run_codex_pre_tool_use(repo_root, &payload),
         "contract-guard" => run_codex_contract_guard(repo_root, &payload),
-        "review-subagent-gate" => run_codex_review_subagent_gate(repo_root, &payload),
+        "lifecycle-context" => run_codex_lifecycle_context_hook(repo_root, &payload),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
 }
@@ -2122,12 +1693,12 @@ fn canonical_codex_audit_command(command: &str) -> Result<&'static str, String> 
         if event_name == "PreToolUse" {
             return Ok("pre-tool-use");
         }
-        return Ok("review-subagent-gate");
+        return Ok("lifecycle-context");
     }
     match command {
         "pre-tool-use" => Ok("pre-tool-use"),
         "contract-guard" => Ok("contract-guard"),
-        "review-subagent-gate" => Ok("review-subagent-gate"),
+        "lifecycle-context" | "review-subagent-gate" => Ok("lifecycle-context"),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
 }
@@ -2305,13 +1876,13 @@ fn read_stdin_payload() -> Result<Value, String> {
     serde_json::from_str::<Value>(trimmed).map_err(|err| format!("stdin_json_invalid: {err}"))
 }
 
-fn review_gate_input_error(message: &str) -> Value {
+fn codex_lifecycle_input_error(message: &str) -> Value {
     json!({
         "decision": "block",
         "message": message,
         "reason": message,
         "hookSpecificOutput": {
-            "hookEventName": "ReviewSubagentGate",
+            "hookEventName": "CodexLifecycleContext",
             "permissionDecision": "deny",
             "permissionDecisionReason": message,
         },
@@ -2557,7 +2128,6 @@ mod tests {
     use serde_json::json;
     use std::fs;
     use std::path::Path;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn protected_generated_paths_match_lexical_variants() {
@@ -2640,52 +2210,6 @@ mod tests {
         assert!(run_pre_tool_use(Path::new("."), &payload)
             .unwrap()
             .is_none());
-    }
-
-    #[test]
-    fn sync_host_entrypoints_reports_would_write_in_dry_run() {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("router-rs-codex-hooks-{stamp}"));
-        fs::create_dir_all(&root).unwrap();
-        fs::create_dir_all(root.join(".codex")).unwrap();
-        fs::write(root.join("AGENTS.md"), "stale").unwrap();
-        fs::write(
-            root.join(".codex/host_entrypoints_sync_manifest.json"),
-            "{}",
-        )
-        .unwrap();
-        let registry_dir = root.join("configs/framework");
-        fs::create_dir_all(&registry_dir).unwrap();
-        let registry_json = registry_dir.join("RUNTIME_REGISTRY.json");
-        fs::write(
-            &registry_json,
-            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","cursor"],"metadata":{"codex-cli":{"install_tool":"codex","host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]}}}}"#,
-        )
-        .unwrap();
-        assert!(
-            registry_json.is_file(),
-            "fixture RUNTIME_REGISTRY.json missing at {}",
-            registry_json.display()
-        );
-
-        let report = sync_host_entrypoints(&root, false).unwrap();
-        let would_write = report
-            .get("would_write")
-            .and_then(Value::as_array)
-            .unwrap()
-            .len();
-        let written = report
-            .get("written")
-            .and_then(Value::as_array)
-            .unwrap()
-            .len();
-        assert!(would_write > 0);
-        assert_eq!(written, 0);
-
-        fs::remove_dir_all(&root).unwrap();
     }
 
     mod install_codex_cli_hooks_tests {
@@ -3098,16 +2622,25 @@ mod tests {
         }
     }
 
-    mod review_gate_tests {
+    mod lifecycle_context_tests {
         use super::*;
         use serde_json::json;
         use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::{Mutex, OnceLock};
 
         static SEQ: AtomicU64 = AtomicU64::new(0);
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+        fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+            ENV_LOCK
+                .get_or_init(|| Mutex::new(()))
+                .lock()
+                .expect("env test lock poisoned")
+        }
 
         fn fresh_repo() -> std::path::PathBuf {
             let dir = std::env::temp_dir().join(format!(
-                "codex-review-gate-test-{}-{}",
+                "codex-lifecycle-context-test-{}-{}",
                 std::process::id(),
                 SEQ.fetch_add(1, Ordering::SeqCst)
             ));
@@ -3116,7 +2649,7 @@ mod tests {
         }
 
         #[test]
-        fn user_prompt_submit_review_emits_additional_context() {
+        fn user_prompt_submit_review_does_not_emit_subagent_gate_context() {
             let repo = fresh_repo();
             let payload = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3126,15 +2659,16 @@ mod tests {
             });
             let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
             let ctx = out
-                .and_then(|v| v.get("hookSpecificOutput").cloned())
-                .unwrap()
-                .get("additionalContext")
-                .and_then(Value::as_str)
-                .unwrap()
-                .to_string();
-            assert!(ctx.contains("Subagent gate active:"));
-            assert!(ctx.contains("Review gate active:"));
-            assert!(ctx.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
+                .as_ref()
+                .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
+                .unwrap_or_default();
+            assert!(!ctx.contains("Subagent gate active:"));
+            assert!(!ctx.contains("Review gate active:"));
+            if !ctx.is_empty() {
+                assert!(ctx.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
+            }
+            let state = codex_load_state(&repo, &payload).unwrap().unwrap();
+            assert_eq!(state.seq, 1);
         }
 
         #[test]
@@ -3152,8 +2686,7 @@ mod tests {
 
         #[test]
         fn additional_context_is_deduped_and_capped() {
-            let duplicate =
-                "Subagent gate active: start a bounded subagent lane first.".to_string();
+            let duplicate = "Codex workspace context: one".to_string();
             let long_line = "x".repeat(CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
             let ctx = codex_compact_contexts(vec![
                 duplicate.clone(),
@@ -3163,11 +2696,7 @@ mod tests {
             ])
             .unwrap();
             assert!(ctx.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
-            assert_eq!(
-                ctx.matches("Subagent gate active: start a bounded subagent lane first.")
-                    .count(),
-                1
-            );
+            assert_eq!(ctx.matches("Codex workspace context: one").count(), 1);
         }
 
         #[test]
@@ -3261,7 +2790,7 @@ mod tests {
         }
 
         #[test]
-        fn delegation_stop_remains_blocked_when_only_explore_subagent_observed() {
+        fn delegation_stop_does_not_block_when_only_explore_subagent_observed() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3284,10 +2813,8 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop)
-                .unwrap()
-                .unwrap();
-            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none());
         }
 
         #[test]
@@ -3307,6 +2834,39 @@ mod tests {
                 "expected multiple lines before ellipsis when budget allows: {ctx:?}"
             );
             assert!(ctx.len() <= 256);
+        }
+
+        /// Multi-segment `codex_compact_contexts` join order is preserved when the
+        /// combined string is truncated (SessionStart budget). Complements
+        /// `additional_context_truncates_on_newline_preference_under_small_budget`
+        /// (single blob + newline preference inside one segment).
+        #[test]
+        fn codex_compact_contexts_preserves_join_order_under_small_budget() {
+            std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
+            let part1 = "CODEX_JOIN_ORDER_MARK_FIRST:alpha";
+            let part2 = "CODEX_JOIN_ORDER_MARK_SECOND:beta";
+            let part3 = format!("CODEX_JOIN_ORDER_MARK_TAIL:{}", "Z".repeat(280));
+            let ctx = codex_compact_contexts(vec![part1.to_string(), part2.to_string(), part3])
+                .expect("expected combined contexts");
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
+            assert!(ctx.len() <= 256, "len={}", ctx.len());
+            assert!(ctx.ends_with("..."));
+            assert!(
+                ctx.contains("CODEX_JOIN_ORDER_MARK_FIRST"),
+                "first joined segment should survive truncation: {ctx:?}"
+            );
+            assert!(
+                ctx.contains("CODEX_JOIN_ORDER_MARK_SECOND"),
+                "second joined segment should appear before tail is cut: {ctx:?}"
+            );
+            let pos_first = ctx.find("CODEX_JOIN_ORDER_MARK_FIRST").expect("first mark");
+            let pos_second = ctx
+                .find("CODEX_JOIN_ORDER_MARK_SECOND")
+                .expect("second mark");
+            assert!(
+                pos_first < pos_second,
+                "join order should be preserved in truncated output: {ctx:?}"
+            );
         }
 
         #[test]
@@ -3344,7 +2904,7 @@ mod tests {
         }
 
         #[test]
-        fn post_tool_use_without_state_fails_closed() {
+        fn post_tool_use_without_state_is_non_fatal() {
             let repo = fresh_repo();
             let post = json!({
                 "hook_event_name":"PostToolUse",
@@ -3353,19 +2913,12 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore"}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post)
-                .unwrap()
-                .unwrap();
-            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
-            let reason = out
-                .get("reason")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            assert!(reason.contains("missing"));
+            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            assert!(out.is_none());
         }
 
         #[test]
-        fn post_tool_use_with_invalid_state_fails_closed() {
+        fn post_tool_use_with_invalid_state_is_non_fatal() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3383,19 +2936,12 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore"}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post)
-                .unwrap()
-                .unwrap();
-            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
-            let reason = out
-                .get("reason")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            assert!(reason.contains("state_json_invalid"));
+            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            assert!(out.is_none());
         }
 
         #[test]
-        fn stop_without_state_blocks_when_required() {
+        fn stop_without_state_does_not_block_when_required() {
             let repo = fresh_repo();
             let payload = json!({
                 "hook_event_name":"Stop",
@@ -3403,14 +2949,12 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload)
-                .unwrap()
-                .unwrap();
-            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            assert!(out.is_none());
         }
 
         #[test]
-        fn stop_without_state_still_blocks_when_no_text() {
+        fn stop_without_state_does_not_block_when_no_text() {
             let repo = fresh_repo();
             let payload = json!({
                 "hook_event_name":"Stop",
@@ -3418,15 +2962,12 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":""
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload)
-                .unwrap()
-                .unwrap();
-            let reason = out.get("reason").and_then(Value::as_str).unwrap();
-            assert!(reason.contains("Stop payload had no review context"));
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            assert!(out.is_none());
         }
 
         #[test]
-        fn stop_with_review_required_no_subagent_blocks() {
+        fn stop_with_review_prompt_no_subagent_does_not_block() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3441,14 +2982,12 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop)
-                .unwrap()
-                .unwrap();
-            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none());
         }
 
         #[test]
-        fn stop_with_delegation_required_blocks() {
+        fn stop_with_delegation_prompt_does_not_block() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3463,10 +3002,8 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop)
-                .unwrap()
-                .unwrap();
-            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none());
         }
 
         #[test]
@@ -3527,7 +3064,7 @@ mod tests {
                 "prompt":"普通提问"
             });
             let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
-            // After P0-A fix: a plain prompt no longer sets subagent_required,
+            // Plain prompts no longer arm a hard subagent gate,
             // so the hook may return None (no context to emit). If context IS
             // emitted for other reasons, it must not contain a drift warning.
             let ctx = out
@@ -3569,27 +3106,7 @@ mod tests {
         }
 
         #[test]
-        fn each_codex_reject_reason_token_is_accepted() {
-            for token in [
-                "small_task",
-                "shared_context_heavy",
-                "write_scope_overlap",
-                "next_step_blocked",
-                "verification_missing",
-                "token_overhead_dominates",
-            ] {
-                let text = format!("全面review，但reject reason: {token}");
-                assert!(saw_reject_reason(&text, &text));
-                let inferred_overridden = has_override(&text)
-                    || has_review_override(&text)
-                    || has_delegation_override(&text)
-                    || saw_reject_reason(&text, &text);
-                assert!(inferred_overridden);
-            }
-        }
-
-        #[test]
-        fn v1_migration_preserves_override_flag() {
+        fn v1_migration_ignores_removed_override_flag() {
             let repo = fresh_repo();
             let event = json!({"session_id":"v1-override"});
             let state_path = codex_state_path(&repo, &event);
@@ -3599,12 +3116,11 @@ mod tests {
             )
             .unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
-            assert!(state.review_override);
-            assert!(state.delegation_override);
+            assert_eq!(state.seq, 0);
         }
 
         #[test]
-        fn v1_migration_preserves_reject_reason_flag() {
+        fn v1_migration_ignores_removed_reject_reason_flag() {
             let repo = fresh_repo();
             let event = json!({"session_id":"v1-reject"});
             let state_path = codex_state_path(&repo, &event);
@@ -3614,7 +3130,7 @@ mod tests {
             )
             .unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
-            assert!(state.reject_reason_seen);
+            assert_eq!(state.seq, 0);
         }
 
         #[test]
@@ -3633,6 +3149,8 @@ mod tests {
 
         #[test]
         fn codex_session_key_fallback_is_invocation_scoped_without_identifiers() {
+            let _guard = env_lock();
+            std::env::remove_var("CODEX_SESSION_ID");
             let event = json!({});
             let a = codex_session_key(&event);
             let b = codex_session_key(&event);
@@ -3643,6 +3161,8 @@ mod tests {
 
         #[test]
         fn codex_session_key_ignores_cwd_without_identifiers() {
+            let _guard = env_lock();
+            std::env::remove_var("CODEX_SESSION_ID");
             let event = json!({"cwd":"/tmp/shared-worktree"});
             let key = codex_session_key(&event);
             let cwd_hash = {
@@ -3833,9 +3353,8 @@ mod tests {
             assert_eq!(state.seq, 2000);
         }
 
-        // P0-A: subagent_required conditional tests
         #[test]
-        fn userpromptsubmit_simple_prompt_does_not_set_subagent_required() {
+        fn userpromptsubmit_simple_prompt_records_only_telemetry() {
             let repo = fresh_repo();
             let event = json!({
                 "hook_event_name": "UserPromptSubmit",
@@ -3845,18 +3364,12 @@ mod tests {
             });
             let _ = run_codex_review_subagent_gate(&repo, &event).unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
-            assert!(
-                !state.subagent_required,
-                "simple prompt should not set subagent_required"
-            );
-            assert!(
-                !state.review_required,
-                "simple prompt should not set review_required"
-            );
+            assert_eq!(state.seq, 1);
+            assert!(!state.review_subagent_seen);
         }
 
         #[test]
-        fn userpromptsubmit_review_prompt_sets_subagent_and_review_required() {
+        fn userpromptsubmit_review_prompt_records_only_telemetry() {
             let repo = fresh_repo();
             let event = json!({
                 "hook_event_name": "UserPromptSubmit",
@@ -3866,14 +3379,8 @@ mod tests {
             });
             let _ = run_codex_review_subagent_gate(&repo, &event).unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
-            assert!(
-                state.subagent_required,
-                "review prompt should set subagent_required"
-            );
-            assert!(
-                state.review_required,
-                "review prompt should set review_required"
-            );
+            assert_eq!(state.seq, 1);
+            assert!(!state.review_subagent_seen);
         }
 
         // P0-B: protected prefix tests
@@ -3901,6 +3408,7 @@ mod tests {
         // P1-B: CODEX_SESSION_ID env var fallback test
         #[test]
         fn codex_session_key_uses_codex_session_id_env_when_no_event_fields() {
+            let _guard = env_lock();
             // Use a unique env-var value to avoid cross-test pollution.
             let unique_id = format!(
                 "test-stable-{}-{}",
@@ -3908,10 +3416,6 @@ mod tests {
                 SEQ.fetch_add(1, Ordering::SeqCst)
             );
             let event = json!({});
-            // We must set and clear the env var in the same thread.
-            // Note: Rust test runner is multi-threaded; this test relies on the
-            // env var being visible only within this call stack, which is
-            // sufficient given Sha256 determinism on the same raw input.
             std::env::set_var("CODEX_SESSION_ID", &unique_id);
             let a = codex_session_key(&event);
             let b = codex_session_key(&event);

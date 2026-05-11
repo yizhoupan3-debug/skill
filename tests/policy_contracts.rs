@@ -4,6 +4,8 @@ use common::{
     assert_success, cargo_manifest_command, json_from_output, project_root, read_json, read_text,
     router_rs_json, run, seed_framework_markers,
 };
+use serde_json::{Map, Value};
+use skill_compiler::host_platforms;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -135,6 +137,35 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
 }
 
 #[test]
+fn plan_mode_keeps_review_optional_and_review_only() {
+    let plan_mode = read_text(&project_root().join("skills/plan-mode/SKILL.md"));
+    for forbidden in [
+        "调研 + review 先于计划",
+        "初稿后：独立上下文 subagent 审 plan",
+    ] {
+        assert!(
+            !plan_mode.contains(forbidden),
+            "plan-mode must not make review a default plan step: {forbidden}"
+        );
+    }
+    for marker in [
+        "仅当用户明确要求 review plan / 审计划",
+        "只找问题，不改代码",
+    ] {
+        assert!(plan_mode.contains(marker), "missing marker: {marker}");
+    }
+
+    let review_gate = read_text(&project_root().join(".cursor/rules/review-subagent-gate.mdc"));
+    for marker in [
+        "review-only 边界",
+        "只输出 findings / risks / missing tests",
+        "不改代码",
+    ] {
+        assert!(review_gate.contains(marker), "missing marker: {marker}");
+    }
+}
+
+#[test]
 fn readme_does_not_revive_cursor_hook_shell_shims_in_cursor_section() {
     let readme = read_text(&project_root().join("README.md"));
     for forbidden in [
@@ -158,16 +189,21 @@ fn update_skill_exposes_explicit_entrypoint_like_gitx() {
     for marker in [
         "name: update",
         "推荐显式写法：`/update`",
-        "registry 更新",
-        "router-rs framework maint refresh-host-projections",
-        "skill-compiler-rs/Cargo.toml",
+        "document refresh",
+        "git tracking audit",
+        "stale/dead inventory",
+        "cleanup + verification",
+        "科研文档是一等维护对象",
+        "git 跟踪面",
+        "死代码",
+        "旧文档",
+        "router-rs framework maint update-audit",
         "policy_contracts",
         "router-rs framework maint update-one-shot",
         "documentation_contracts",
         "tracked_markdown_utf8_contract",
-        "cargo test",
-        "ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS",
-        "ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS",
+        "generated-artifacts-status",
+        "不直接删除：无法证明废弃的科研资料",
     ] {
         assert!(content.contains(marker), "missing marker: {marker}");
     }
@@ -187,6 +223,33 @@ fn update_skill_exposes_explicit_entrypoint_like_gitx() {
             .any(|e| e == "/update"),
         "expected /update explicit entrypoint: {entrypoints:?}"
     );
+    let description = update["lineage"]["description"]
+        .as_str()
+        .expect("update lineage description");
+    assert!(
+        description.contains("Refresh key docs, git tracking, and stale/dead repo surfaces"),
+        "update description should describe repo knowledge/hygiene maintenance: {description}"
+    );
+    let trigger_hints = update["trigger_hints"]
+        .as_array()
+        .expect("update trigger_hints");
+    for hint in [
+        "更新关键文档",
+        "科研文档更新",
+        "git 跟踪文件",
+        "死代码清理",
+        "旧文档清理",
+        "stale files",
+        "dead code",
+    ] {
+        assert!(
+            trigger_hints
+                .iter()
+                .filter_map(|v| v.as_str())
+                .any(|v| v == hint),
+            "missing update trigger hint: {hint}"
+        );
+    }
 }
 
 #[test]
@@ -249,7 +312,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
-        serde_json::json!(["codex-cli", "cursor"])
+        serde_json::json!(["codex-cli", "codex-app", "cursor", "claude-code"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
@@ -258,6 +321,14 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["cursor"],
         serde_json::json!(["AGENTS.md", ".cursor/rules/*.mdc"])
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["codex-app"],
+        "AGENTS.md"
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["claude-code"],
+        serde_json::json!(["AGENTS.md", ".claude/rules/framework.md"])
     );
     assert_eq!(
         manifest["shared_system"]["policy"],
@@ -292,6 +363,10 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         .contains(&serde_json::json!(
             ".codex/host_entrypoints_sync_manifest.json"
         )));
+    assert_eq!(
+        manifest["partial_sync"]["text_files"],
+        serde_json::json!([])
+    );
     assert!(!manifest_text.contains("retired_files"));
     assert!(!manifest_text.contains("retired_directories"));
     assert!(!manifest_text.contains("AGENT.md"));
@@ -779,6 +854,122 @@ fn runtime_plugin_records_are_available_without_breaking_v3_rows() {
     );
 }
 
+fn parse_skill_md_frontmatter_map(path: &Path) -> Map<String, Value> {
+    let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let rest = text
+        .strip_prefix("---")
+        .unwrap_or_else(|| panic!("{}: missing opening ---", path.display()));
+    let rest = rest.trim_start_matches(['\n', '\r']);
+    let end = rest
+        .find("\n---\n")
+        .or_else(|| rest.find("\r\n---\r\n"))
+        .or_else(|| rest.find("\n---\r\n"))
+        .unwrap_or_else(|| panic!("{}: missing closing ---", path.display()));
+    let yaml_txt = &rest[..end];
+    let yaml_val: serde_yaml::Value =
+        serde_yaml::from_str(yaml_txt).unwrap_or_else(|e| panic!("{}: yaml: {e}", path.display()));
+    serde_json::to_value(yaml_val)
+        .expect("yaml to json")
+        .as_object()
+        .expect("frontmatter must be a mapping")
+        .clone()
+}
+
+fn value_string_list(value: Option<&Value>) -> Vec<String> {
+    match value {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::String(s)) => vec![s.clone()],
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect(),
+        Some(other) => other
+            .as_str()
+            .map(|s| vec![s.to_string()])
+            .unwrap_or_default(),
+    }
+}
+
+fn raw_platforms_from_skill_frontmatter(meta: &Map<String, Value>) -> Vec<String> {
+    let mut raw = value_string_list(meta.get("platforms"));
+    if raw.is_empty() {
+        if let Some(Value::Object(inner)) = meta.get("metadata") {
+            raw = value_string_list(inner.get("platforms"));
+        }
+    }
+    raw
+}
+
+#[test]
+fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
+    let root = project_root();
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let allowed: HashSet<String> = registry["host_targets"]["supported"]
+        .as_array()
+        .expect("host_targets.supported")
+        .iter()
+        .map(|v| v.as_str().expect("host id").to_string())
+        .collect();
+    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
+    for record in runtime["records"].as_array().expect("runtime records") {
+        let slug = record["slug"].as_str().expect("slug");
+        let platforms = record["plugin"]["host_support"]["platforms"]
+            .as_array()
+            .expect("host_support.platforms");
+        for p in platforms {
+            let id = p.as_str().expect("platform string");
+            assert!(
+                allowed.contains(id),
+                "{slug}: platform `{id}` not in RUNTIME_REGISTRY.host_targets.supported"
+            );
+        }
+        let kind = record["plugin"]["kind"].as_str().expect("plugin.kind");
+        if kind != "skill" {
+            continue;
+        }
+        let skill_path = root.join(record["skill_path"].as_str().expect("skill_path"));
+        let meta = parse_skill_md_frontmatter_map(&skill_path);
+        let raw = raw_platforms_from_skill_frontmatter(&meta);
+        let normalized = host_platforms::normalize_skill_host_platforms(&raw)
+            .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
+        let from_runtime: Vec<String> = platforms
+            .iter()
+            .map(|v| v.as_str().expect("platform").to_string())
+            .collect();
+        assert_eq!(
+            normalized,
+            from_runtime,
+            "host_support.platforms drift for slug={slug} path={}",
+            skill_path.display()
+        );
+    }
+}
+
+#[test]
+fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
+    let root = project_root();
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let allowed: HashSet<String> = registry["host_targets"]["supported"]
+        .as_array()
+        .expect("host_targets.supported")
+        .iter()
+        .map(|v| v.as_str().expect("host id").to_string())
+        .collect();
+
+    let normalized = host_platforms::normalize_skill_host_platforms(&[
+        "codex".to_string(),
+        "cursor".to_string(),
+        "claude".to_string(),
+    ])
+    .expect("stock aliases should normalize");
+    let normalized_set: HashSet<String> = normalized.into_iter().collect();
+
+    assert_eq!(
+        normalized_set, allowed,
+        "host_platforms alias coverage must stay aligned with RUNTIME_REGISTRY.host_targets.supported"
+    );
+}
+
 #[test]
 fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
@@ -1194,8 +1385,23 @@ fn install_skills_uses_rust_only_entrypoints() {
 #[test]
 fn sync_skills_uses_router_rs_directly() {
     assert!(!project_root().join("scripts/sync_skills.py").exists());
-    let source = read_text(&project_root().join("scripts/router-rs/src/codex_hooks.rs"));
-    assert!(source.contains("sync_host_entrypoints"));
+    let sync_source =
+        read_text(&project_root().join("scripts/router-rs/src/host_entrypoint_sync.rs"));
+    assert!(sync_source.contains("sync_host_entrypoints"));
+    assert!(sync_source.contains("HostEntrypointPayloadProvider"));
+    for forbidden in [
+        "crate::codex_hooks",
+        "build_codex_",
+        "ensure_codex_skill_surface",
+    ] {
+        assert!(
+            !sync_source.contains(forbidden),
+            "host_entrypoint_sync must stay provider-based and host-neutral: {forbidden}"
+        );
+    }
+    let codex_source = read_text(&project_root().join("scripts/router-rs/src/codex_hooks.rs"));
+    assert!(codex_source.contains("codex_host_entrypoint_provider"));
+    assert!(codex_source.contains("HostEntrypointPayloadProvider"));
 }
 
 #[test]

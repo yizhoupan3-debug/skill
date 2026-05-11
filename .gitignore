@@ -37,6 +37,8 @@ output/
 .cursor/hook-state/
 .cursor/.framework-projection.json
 .cursor/rules/framework.mdc
+.claude/.framework-projection.json
+.claude/rules/framework.md
 .local/
 archives/artifact-history/
 artifacts/current/

@@ -111,12 +111,12 @@
 
 | # | 问题 | 建议 owner |
 |---|------|------------|
-| 1 | `close_gates` 是否应在 max_rounds 自动 closed 路径执行？契约与 `rfv_loop.rs` 矛盾。 | `doc` + `router-rs` |
-| 2 | PostTool 是否应增加窄扩展（如 `z3 `、`lean `、`sympy`）以避免数理 verify 漏记？ | `router-rs` |
+| 1 | **已关闭。** `close_gates` 在 **`max_rounds` 耗尽自动 closed** 与显式 close 两路径均校验（**Option B**）；契约见 `reasoning-depth-contract` L30，实现见 `rfv_loop.rs`，决议见 [`ADR_rfv_close_gates_max_rounds`](ADR_rfv_close_gates_max_rounds.md)。原表「与实现矛盾」为历史措辞。 | `doc` + `router-rs`（归档） |
+| 2 | **已解决。** PostTool 窄域子串（如 `z3`/`lean`/`sympy` 等）已在 `framework_runtime::shell_command_looks_like_verification` 落地 + 单测矩阵；**残余**长尾 `python path/verify.py`（路径无关键字）仍可能漏记 → §3.2 / `hook-evidence-append`。 | `router-rs`（残余长尾） |
 | 3 | `深度信号` 是否应受 `ROUTER_RS_HARNESS_OPERATOR_NUDGES` 统一闸断（Breaking 风险）？ | `doc` / 产品 |
 | 4 | R9（closeout 与 depth 策略对齐）推迟后，是否用文档指针替代 `closeout_enforcement` 内注释扩散？ | `router-rs` |
 | 5 | 外研 `contradiction_sweep` 条数与 claims 的 strict 规则，是否需在 `DepthCompliance` 中单列计数（现依赖 strict_ok 轮次）？ | `router-rs` |
-| 6 | Codex SessionStart 640 字符截断下，数理+检索+nudge 同时开启时的优先级策略是否需固化测试？ | `router-rs` |
+| 6 | **部分落地。** `codex_compact_contexts` 多段 merge 后再截断的 **前缀 / join 顺序** 已有回归：`codex_hooks::tests::codex_compact_contexts_preserves_join_order_under_small_budget`（`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX=256`）。**未**覆盖全量 SessionStart 上 digest+nudge+goal 合成截断优先级 fixture。 | `router-rs` |
 | 7 | 多宿主（Claude Code）与 Cursor 对 PostTool 事件形状差异，是否影响证据窗 `cross_link` 公平性？ | `router-rs` |
 | 8 | `external_research_strict` 默认 true 迁移后，旧账本「宽松 blob」混跑策略文档是否足够显眼？ | `doc` |
 
@@ -143,7 +143,7 @@
 | **#3** digest `深度信号` 与 `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | **文档脚注**：`docs/harness_architecture.md` §8 表下脚注 — 当前 **不**随 nudge 闸断；Breaking 另议。 |
 | **#4** R9 注释扩散 | `closeout_enforcement.rs` R9 注释已加 ADR / 契约指针。 |
 | **#5** `contradiction_sweep` 单列计数 | **推迟**：`DepthCompliance` 仍以 `rfv_external_strict_ok_round_count` 等聚合为主；单列 sweep 条数需 product 再定。 |
-| **#6** SessionStart 640 截断优先级 | **推迟**：需固化 fixture + 截断边界用例；未纳入本轮。 |
+| **#6** SessionStart 640 截断优先级 | **部分落地**：`codex_compact_contexts` 多段 join + `truncate_codex_additional_context` 前缀顺序见单测 `codex_compact_contexts_preserves_join_order_under_small_budget`；全 digest+nudge+goal 合成路径仍待专门 fixture（若需再开 execution）。 |
 | **#7** 多宿主 PostTool | 见上 **§6** 简表。 |
 | **#8** strict 默认迁移显眼度 | **`docs/rfv_loop_harness.md`** 增补 **`external_research_strict` 迁移** 小节。 |
 
@@ -196,3 +196,15 @@ rg "completion_gates|math_reasoning_harness" scripts/router-rs/src/autopilot_goa
 ```
 
 （可选）`cargo test --manifest-path scripts/router-rs/Cargo.toml rfv_start_append_roundtrip -- --nocapture` 用于本地回归单测；本调研未强制全量 `cargo test`。
+
+---
+
+## 11. 执行收尾（计划「Harness执行收尾上架」）
+
+| 项 | 结果 |
+|----|------|
+| ADR / 契约与实现对照 | 已通过 `rg` 核对 `reasoning-depth-contract.md` 与 [ADR_rfv_close_gates_max_rounds.md](ADR_rfv_close_gates_max_rounds.md) 一致（Option B）。 |
+| Codex `AGENTS.md` 同步 | `AGENTS.md` 有未提交改动时已执行：`cargo build --release --manifest-path scripts/router-rs/Cargo.toml` + `/tmp/skill-cargo-target/release/router-rs codex sync --repo-root "$PWD"`（exit 0）。 |
+| `cargo test`（router-rs 全量） | **515 passed**（约 24–26s）。 |
+| `docs/README.md` 索引 | 已在「按主题」RFV 行链到 ADR（`plans/ADR_rfv_close_gates_max_rounds.md`）。 |
+| `/gitx plan` | **须在 Cursor 宿主人工执行**（见 `skills/gitx/SKILL.md`）；本段替代不了 Git 提交/推送。 |

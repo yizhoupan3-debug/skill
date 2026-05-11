@@ -2,6 +2,8 @@
 
 **主副本**：`.cursor/plans/harness_host_round2.plan.md`（含 YAML todos）。本文件为 **协作镜像**：正文与清单与主副本对齐；执行状态以主副本或 PR 描述为准。
 
+**状态校准（2026-05-12）**：本文件保留 Round 2 历史计划语境；Claude Code 后续已进入 `host_targets.supported` 闭集并具备 `claude_hooks.rs` / project projection。下文“第三宿主未立项 / P3 跳过”只描述 Round 2 当时边界，不再代表当前宿主集合。
+
 ---
 
 ## 北极星（一句话）
@@ -14,7 +16,7 @@
 
 | 做 | 不做 |
 |----|------|
-| 删字段、加断言、文档钉死权威字段 | 无第三宿主证据就大改 `dispatch` / 合并两大 hook 文件 |
+| 删字段、加断言、文档钉死权威字段 | 在无证据时大改 `dispatch` / 合并两大 hook 文件 |
 | 重复逻辑可计量再抽 | trait 森林、插件 ABI、「万能宿主」 |
 
 **选型提示（评审结论）**：维护者不止一人时，**优先删键（本仓库 P0 已选 A）或机读一致**；仅文档标注仍可能误导后续编辑 registry 的人。
@@ -91,7 +93,7 @@
 
 ## P3 说明
 
-**第三宿主 PoC 未立项 — P3 跳过。**
+**Round 2 当时第三宿主 PoC 未立项 — P3 跳过。当前 Claude Code 支持以后续实现与 `RUNTIME_REGISTRY` 为准。**
 
 ---
 

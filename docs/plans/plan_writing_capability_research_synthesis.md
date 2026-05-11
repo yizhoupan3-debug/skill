@@ -14,6 +14,7 @@
 - **Git 计划收口**：[`skills/gitx/SKILL.md`](../../skills/gitx/SKILL.md) 的 **`/gitx plan`**（与 **`/gitx`** 同契约）对应 `execution` 末条；closeout 与 **`git diff --stat`** 习惯见同 skill **强例**及 [`plan_review_findings_round1.md`](plan_review_findings_round1.md)。
 - **深度代码审**：对抗式 / 整 PR 级 review 路由 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（verdict、P0–P2 符号锚点与本仓库 **强例**一致）。
 - **审 plan 样例 findings**：[`plan_review_findings_round1.md`](plan_review_findings_round1.md) 演示独立 reviewer 对 execution plan 的只读 findings 形态。
+- **research→execution 第一性与继承面**（减法式交接、外部准入上限）：[`RESEARCH_plan_execution_handoff_first_principles.md`](RESEARCH_plan_execution_handoff_first_principles.md)；执行侧模板见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **执行计划继承面（research→execution）**。
 
 ## 2. 内部：契约硬条款、hook 默认、审 plan 弱项（int-audit）
 

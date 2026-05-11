@@ -3,6 +3,10 @@ name = "skill-compiler-rs"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "skill_compiler"
+path = "src/lib.rs"
+
 [dependencies]
 clap = { version = "4.5.38", features = ["derive"] }
 regex = "1.11.1"

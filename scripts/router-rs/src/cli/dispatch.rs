@@ -17,8 +17,8 @@ use crate::browser_mcp::{
 use crate::claude_hooks::run_claude_hook_cli;
 use crate::closeout_enforcement::{closeout_enforcement_contract, evaluate_closeout_record_value};
 use crate::codex_hooks::{
-    build_codex_hook_projection, install_codex_cli_hooks, resolve_codex_home, run_codex_audit_hook,
-    sync_host_entrypoints, InstallMode,
+    build_codex_hook_projection, codex_host_entrypoint_provider, install_codex_cli_hooks,
+    resolve_codex_home, run_codex_audit_hook, InstallMode,
 };
 use crate::eval_route::{eval_route_contract, run_eval_route};
 use crate::framework_profile::{
@@ -32,6 +32,7 @@ use crate::framework_runtime::{
     write_framework_session_artifacts, FrameworkAliasBuildOptions,
 };
 use crate::hook_policy::{evaluate_hook_policy, hook_policy_contract, HookPolicyEvaluateRequest};
+use crate::host_entrypoint_sync::sync_host_entrypoints;
 use crate::host_integration::run_host_integration_from_args;
 use crate::review_gate::run_review_gate;
 use crate::route::{

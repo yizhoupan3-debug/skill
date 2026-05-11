@@ -92,12 +92,14 @@ pub(crate) struct SearchCommand {
 
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum MaintSubcommand {
-    /// Rebuild router-rs, `codex sync`, Cursor framework install, verify Cursor hooks.
+    /// Rebuild router-rs, `codex sync`, non-Codex framework installs, verify projections.
     RefreshHostProjections(MaintRootsArgs),
     VerifyCursorHooks(MaintRepoArgs),
     VerifyCodexHooks(MaintRepoArgs),
     /// Refresh → skill-compiler --apply → cargo test → generated-artifacts-status (optional host publish).
     UpdateOneShot(MaintRootsArgs),
+    /// Dry-run `/update` repository knowledge/hygiene audit; prints JSON and does not delete files.
+    UpdateAudit(UpdateAuditArgs),
     /// Delete every `target/` tree under the repo (skips `.git/`).
     CleanRustTargets(MaintRepoArgs),
     /// Print `export CODEX_HOME=…` / `CURSOR_HOME=…` for repo-local session homes.
@@ -115,6 +117,14 @@ pub(crate) struct MaintRootsArgs {
 
 #[derive(Args, Debug, Clone)]
 pub(crate) struct MaintRepoArgs {
+    #[arg(long)]
+    pub(crate) framework_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct UpdateAuditArgs {
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
     #[arg(long)]
     pub(crate) framework_root: Option<PathBuf>,
 }

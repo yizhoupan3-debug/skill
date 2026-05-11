@@ -330,8 +330,18 @@
       },
       "lineage": {
         "source": "repo-native",
-        "description": "One-shot codegen refresh plus full markdown/doc contract gates; optional ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS to re-install codex+cursor skill projections."
-      }
+        "description": "Refresh key docs, git tracking, and stale/dead repo surfaces; includes framework generated-artifact checks when applicable."
+      },
+      "trigger_hints": [
+        "/update",
+        "更新关键文档",
+        "科研文档更新",
+        "git 跟踪文件",
+        "死代码清理",
+        "旧文档清理",
+        "stale files",
+        "dead code"
+      ]
     },
     "team": {
       "canonical_owner": "team",

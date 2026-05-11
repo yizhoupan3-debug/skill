@@ -22,7 +22,7 @@ It is the contract source of truth for:
 
 ## Harness architecture (control plane)
 
-Upper-level layering for hooks, continuity artifacts, and evidence flows lives in [`harness_architecture.md`](harness_architecture.md) (L1–L5 model, extension rules). **Closed-set host ids** and install/sync alignment with manifests: `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` (see [`host_adapter_contract.md`](host_adapter_contract.md)). Operator nudge strings for RFV / Autopilot hooks are loaded from `configs/framework/HARNESS_OPERATOR_NUDGES.json` (`harness_operator_nudges`); disable with `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`. Rust contracts below remain the implementation authority.
+Upper-level layering for hooks, continuity artifacts, and evidence flows lives in [`harness_architecture.md`](harness_architecture.md) (L1–L5 model, extension rules). **Closed-set host ids** and install/sync alignment with manifests: `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` (see [`host_adapter_contract.md`](host_adapter_contract.md)). Operator nudge strings for RFV / Autopilot hooks are loaded from `configs/framework/HARNESS_OPERATOR_NUDGES.json` (`harness_operator_nudges`); disable with `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`. **Cursor review-routing regexes** ship as **`include_str!("…/REVIEW_ROUTING_SIGNALS.json")`** in `review_routing_signals.rs` (build-time snapshot; changing the JSON on disk alone does not change hook behavior until `router-rs` is rebuilt). Rust contracts below remain the implementation authority.
 
 ## Current Boundary
 
@@ -33,7 +33,7 @@ Rust owns the default runtime and contract path.
 - Rust stdio `execute` operation owns the live/dry-run execution response contract.
 - `router-rs framework snapshot`, `contract-summary`, `session-artifact-write`, `hook-evidence-append`, and `prompt-compression` own framework runtime read/write/policy surfaces. Cursor `PostToolUse` may append `cursor_post_tool_verification` rows (terminal tools + verification-shaped commands) alongside Codex `codex_post_tool_verification` and `rust-lint`’s `cursor_rust_lint` hook evidence.
 - Stdio op `framework_hook_evidence_append` mirrors `router-rs framework hook-evidence-append --input-json …` for scripted callers appending rows to `EVIDENCE_INDEX.json` under continuity (same payload shape as the CLI).
-- `router-rs codex sync` owns repo host-entrypoint materialization.
+- `router-rs codex sync` remains the compatibility CLI for repo host-entrypoint materialization; internally, `host_entrypoint_sync` is the shared sync engine and `codex_hooks` supplies the `codex provider` for `.codex/hooks.json`, `AGENTS.md` bootstrap, and Codex skill surface refresh. Full sync applies to the current root; matched sibling worktrees receive JSON hook/manifest updates only, so local policy text entrypoints are not overwritten across worktrees.
 - `router-rs framework host-integration ...` owns native install/status/remove, bootstrap, projection, and related host integration flows. `router-rs codex host-integration ...` is a thin compatibility alias only.
 
 ## Current Status Ledger
@@ -41,10 +41,12 @@ Rust owns the default runtime and contract path.
 ### 当前真源
 
 - Routing authority is Rust.
+- **`skills/SKILL_ROUTING_RUNTIME.json`**（及同伴 `SKILL_*.json`）中 **`records[].plugin.host_support.platforms`** 由 **`scripts/skill-compiler-rs`** 从各 **`skills/<slug>/SKILL.md`** 的 `platforms` / `metadata.platforms` 生成并归一到闭集宿主 id；**不要**手改 JSON 作为宿主列表真源。契约测试：`tests/policy_contracts.rs` 的 **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`**。
 - Live execution and dry-run preview use Rust stdio.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, storage, and `background`.
 - Framework snapshot, contract summary, session artifact writing, hook evidence append (CLI + stdio), and prompt policy use direct `router-rs` surfaces.
-- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the **closed-set supported host projections** are defined by **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (install-skills/tool spellings derive from `framework_host_targets` in router-rs). Older docs and onboarding examples sometimes mention only `codex-cli` and `cursor`; **that is not an alternate host-id enumeration**—the authoritative closed-set ids are **only** whatever appears under `host_targets.supported` in the checked-in registry JSON.
+- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the **closed-set supported hosts** are defined by **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (install-skills/tool spellings derive from `framework_host_targets` in router-rs). `host_projections` is the profile/projection payload set, `framework_commands.*.host_entrypoints` is the explicit command-entrypoint set, and `records[].plugin.host_support.platforms` is the skill-body support set. Older docs and onboarding examples sometimes mention only `codex-cli` and `cursor`; **that is not an alternate host-id enumeration**—the authoritative closed-set ids are **only** whatever appears under `host_targets.supported` in the checked-in registry JSON.
+- `HostProjectionAdapter` remains the thin Rust adapter table for projection install/status/remove side effects; the registry still owns the closed host ids and install-tool spellings.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.
 - SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains the safe default storage.
@@ -77,8 +79,8 @@ Rust owns the default runtime and contract path.
 ## Host Projection Invariants
 
 - The shared framework core is the profile authority; host projections are closed-set and explicit.
-- Supported host projections are **exactly** the ids enumerated under **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (not a hard-coded second source in contract prose—read the JSON; do not infer the closed set from profile-bundle layout alone).
-- **Profile bundle vs host registry:** `build_profile_bundle` (`scripts/router-rs/src/framework_profile.rs`) currently inserts **`codex-cli` only** into `host_payloads` alongside the Codex profile artifacts. That Codex-first bundle is **orthogonal** to `host_targets.supported`, which also governs install/sync entrypoints for hosts such as `cursor`, `codex-app`, and `claude-code` via `host_integration` and hook adapters.
+- Supported hosts are **exactly** the ids enumerated under **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`**. `host_projections` is a narrower generated payload/projection set and must not be read as a second closed-set host registry.
+- **Profile bundle vs host registry:** `build_profile_bundle` (`scripts/router-rs/src/framework_profile.rs`) derives `host_payloads` from `RUNTIME_REGISTRY.host_projections` while preserving legacy `codex_profile` / `full_codex_profile` artifacts for Codex consumers. `codex-app` may be present in `host_targets.supported` and skill `host_support.platforms` without a separate `host_projections` payload or framework-command entrypoint; that is a projection-family distinction, not a second host registry.
 - `codex_profile` is the Codex projection artifact and may carry Codex-private payload fields.
 - Generated host projections are disposable install targets and must remain thin bootstrap pointers to the Rust core.
 - `framework host-integration remove` removes only framework-owned projection files and manifest-recorded settings keys; user-authored files and unrelated settings are preserved.
