@@ -42,7 +42,7 @@
 | CLI 入口 | `router-rs codex hook …`（`dispatch_codex_command` → `run_codex_audit_hook`） | `router-rs cursor hook …`（`dispatch_cursor_command` → `run_review_gate`） | `scripts/router-rs/src/cli/dispatch_body.txt` L137–L184 |
 | stdin 归一化后核心 | 生命周期事件进入 `run_codex_lifecycle_context_hook` → `handle_codex_session_start` / `handle_codex_posttooluse` / `handle_codex_stop` 等；`review-subagent-gate` 仅为兼容 alias | `dispatch_cursor_hook_event` 按事件名分发 `handle_session_start`、`handle_before_submit`、`handle_stop`、`handle_post_tool_use` 等 | `scripts/router-rs/src/codex_hooks.rs`（grep `SessionStart`/`run_codex_lifecycle_context_hook`）；`scripts/router-rs/src/cursor_hooks.rs` `dispatch_cursor_hook_event` |
 | Review 门磁盘状态 | 无 Codex hard REVIEW_GATE；`.codex/hook-state` 只保留 transient lifecycle/tool telemetry | `.cursor/hook-state` | `docs/harness_architecture.md` §2.1；`docs/host_adapter_contract.md` §2 Cursor 行 |
-| 出站提示字段 | Codex 响应 JSON / `additionalContext` 等（以各 handler 为准） | `additional_context` / `followup_message`（`ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` 切换） | `docs/harness_architecture.md` §3.2；`scripts/router-rs/src/router_env_flags.rs` `router_rs_cursor_hook_chat_followup_enabled` |
+| 出站提示字段 | Codex 响应 JSON / `additionalContext` 等（以各 handler 为准） | `additional_context` / `followup_message`（`retired followup-channel toggle` 切换） | `docs/harness_architecture.md` §3.2；`scripts/router-rs/src/router_env_flags.rs` `router_rs_cursor_hook_chat_followup_enabled` |
 | AGENTS.md | 磁盘为编辑真源；Codex 可用**编译期嵌入**快照，需 `cargo build` + `codex sync` 刷新 | Cursor 框架规则由 `framework install --to cursor` 渲染 `.cursor/rules/framework.mdc`，**不经** `codex sync` | `AGENTS.md` 权威分层表；`AGENTS.md`「Codex：`AGENTS.md` 构建快照」 |
 
 ### 闭集宿主 id（`RUNTIME_REGISTRY.json` 真源）

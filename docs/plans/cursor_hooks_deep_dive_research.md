@@ -12,7 +12,7 @@ title: Cursor Hook 深度调研报告
 ## 0. 摘要（TL;DR）
 
 - 本仓 `.cursor/hooks.json` 把 **11 个** Cursor 事件 100% 转发给 `router-rs cursor hook --event=<EventName>`，事件名由 router-rs 在 `dispatch_cursor_hook_event` 中 trim + lowercase 后分发到 12 个 `handle_*` 函数（其中 `beforesubmitprompt` 与 `userpromptsubmit` 走同一分支）。详见 **D1**。
-- 出站 JSON 字段在本仓主要使用 5 个键：`continue` / `permission` / `user_message` / `followup_message` / `additional_context`；续跑/门控类提示**默认**写入 `additional_context`，仅 `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP=1` 等情况改写 `followup_message`。详见 **D2** 与 `router_env_flags.rs`。
+- 出站 JSON 字段在本仓主要使用 5 个键：`continue` / `permission` / `user_message` / `followup_message` / `additional_context`；续跑/门控类提示**默认**写入 `additional_context`，仅 `retired followup-channel toggle=1` 等情况改写 `followup_message`。详见 **D2** 与 `router_env_flags.rs`。
 - review/subagent 门控状态机以 `.cursor/hook-state/review-subagent-<session_key>.json` 为唯一持久层；`phase` 0→1→2→3 由 `beforeSubmit`（点燃 `review_required`）→ `subagentStart`/`PostToolUse`（armed 时 phase=2）→ `subagentStop`（armed 且 phase≥2 时 phase=3）推进；`Stop` 仅消费这份状态决定是否注入 `router-rs REVIEW_GATE / AG_FOLLOWUP / CLOSEOUT_FOLLOWUP`。详见 **D3**。
 - 与官方 `create-hook` SKILL 的契约差异：本仓**未使用** `preToolUse / postToolUseFailure / beforeMCPExecution / afterMCPExecution / beforeReadFile / afterAgentThought / Tab*` 等事件；`afterAgentResponse` 在 `dispatch_cursor_hook_event` 已有 handler **但未在** `.cursor/hooks.json` 绑定（看似 dead-binding 的活分支）；`beforeSubmitPrompt` / `stop` / `preCompact` 出站字段 cheat-sheet 未明确列出，本仓视为 **未验证假设**。**D4 头号缺口**。
 
@@ -148,7 +148,7 @@ title: Cursor Hook 深度调研报告
 | `permission` (`"allow"` / `"deny"` / `"ask"`) | `handle_before_shell_execution`（`allow`）、`subagent_limit_denial`（`deny`，由 `subagentStart`/PostTool 触发）、`strip_cursor_hook_user_visible_nags` 例外保留 | 与官方一致 | shell 默认 allow；subagent 超并发上限 deny |
 | `user_message` | `handle_pre_compact`（上下文用量横幅）、`subagent_limit_denial`（拒绝原因） | 面向用户 | preCompact 总是注入；subagent 拒绝时附带 |
 | `agent_message` | 仓库未主动产出（仅由 `strip_cursor_hook_user_visible_nags` 保留通道） | 面向模型 | 当前实现未使用 |
-| `followup_message` | `handle_stop`（REVIEW_GATE / AG_FOLLOWUP / CLOSEOUT_FOLLOWUP / hook-state lock 失败 / `paper_adversarial_hook`）、`handle_before_submit`（pre-goal 文案在 chat 模式下）、`handle_subagent_stop`（间接由 strip 例外保留）、应急 review gate disabled 路径的 closeout | 让模型在下一轮继续 | 默认**不**用此字段；`ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP=1`/`true`/`yes`/`on` 时改写它 |
+| `followup_message` | `handle_stop`（REVIEW_GATE / AG_FOLLOWUP / CLOSEOUT_FOLLOWUP / hook-state lock 失败 / `paper_adversarial_hook`）、`handle_before_submit`（pre-goal 文案在 chat 模式下）、`handle_subagent_stop`（间接由 strip 例外保留）、应急 review gate disabled 路径的 closeout | 让模型在下一轮继续 | 默认**不**用此字段；`retired followup-channel toggle=1`/`true`/`yes`/`on` 时改写它 |
 | `additional_context` | `handle_session_start`（项目 briefing）、`handle_post_tool_use`（rust-lint 输出）、`handle_pre_compact`（门控快照）、`merge_continuity_followups`（AUTOPILOT_DRIVE / RFV_LOOP_CONTINUE 续跑块默认目标） | 注入上下文给模型而不在主对话区暴露 | 默认续跑/门控写这里 |
 | `updated_input` / `updated_mcp_tool_output` | 仓库未使用 | 改写工具输入/输出 | preToolUse / postToolUse(MCP) 才有意义；当前 hooks.json 不绑定 |
 
@@ -161,12 +161,12 @@ title: Cursor Hook 深度调研报告
 | `ROUTER_RS_OPERATOR_INJECT` | 开 | beforeSubmit / Stop / 续跑链路、harness operator nudges、`PAPER_ADVERSARIAL_HOOK`（若启用） | **聚合关断**：续跑块与 nudge 全部消失，仅留硬阻塞 / 合规类提示 | `router_env_flags.rs` L84–95；`docs/harness_architecture.md` §8 L126 |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | Stop 等的 AUTOPILOT_DRIVE 段 | 续跑块整体消失 | `autopilot_goal.rs` L18 `AUTOPILOT_DRIVE_HOOK_ENV`；harness §8 L128 |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | Stop 等的 RFV_LOOP_CONTINUE 段 | 续跑块整体消失 | `rfv_loop.rs` L20 `RFV_LOOP_HOOK_ENV`；harness §8 L129 |
-| `ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT` | **关**（opt-in） | beforeSubmit 上是否合并 AUTOPILOT_DRIVE | 仅在显式开时 beforeSubmit 输出含 AUTOPILOT_DRIVE 段 | `router_env_flags.rs` L25–27、L131 |
-| `ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT` | **关**（opt-in） | beforeSubmit 上是否合并 RFV_LOOP_CONTINUE | 同上 | `router_env_flags.rs` L30–32、L132 |
+| `retired beforeSubmit AUTOPILOT_DRIVE opt-in` | **关**（opt-in） | beforeSubmit 上是否合并 AUTOPILOT_DRIVE | 仅在显式开时 beforeSubmit 输出含 AUTOPILOT_DRIVE 段 | `router_env_flags.rs` L25–27、L131 |
+| `retired beforeSubmit RFV opt-in` | **关**（opt-in） | beforeSubmit 上是否合并 RFV_LOOP_CONTINUE | 同上 | `router_env_flags.rs` L30–32、L132 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | **关**（opt-in） | beforeSubmit 的 `/autopilot` **pre-goal** 段与计数放行 | 关时 pre-goal 段不注入；不影响磁盘 `GOAL_STATE` 收口门控 | `router_env_flags.rs` L35–37、L133 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | unset → 默认 **8**；`0`/`false`/`off`/`no` 关闭自动放行 | `maybe_autopilot_pre_goal_nag_cap_release` | 达到上限时自动 `pre_goal_review_satisfied=true` 并注入"已达上限"放行文案 | `cursor_hooks.rs` L1770–L1820 |
-| `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` | 关 | 所有续跑/门控注入位置 | 关：写 `additional_context`；开：写 `followup_message` | `router_env_flags.rs` L41–49 |
-| `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | 所有 handler 出站（`strip_cursor_hook_user_visible_nags` / `apply_cursor_hook_output_policy`） | 整段剥离续跑/nudge；**例外保留**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup | `cursor_hooks.rs` L1837–L1864；harness §8 L135 |
+| `retired followup-channel toggle` | 关 | 所有续跑/门控注入位置 | 关：写 `additional_context`；开：写 `followup_message` | `router_env_flags.rs` L41–49 |
+| `retired silent-mode branch` | 关 | 所有 handler 出站（`strip_cursor_hook_user_visible_nags` / `apply_cursor_hook_output_policy`） | 整段剥离续跑/nudge；**例外保留**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup | `cursor_hooks.rs` L1837–L1864；harness §8 L135 |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | `dispatch_cursor_hook_event` 切到应急表 | 仅短路 review/delegation 门控；续跑仍合并；Stop 仍触发 closeout | `cursor_hooks.rs` L1828–L1835、L3799；harness §8 L136 |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | **关**（opt-in） | beforeSubmit 论文类提示合并对抗短段 | 开且命中启发式时 followup/additional_context 含 `PAPER_ADVERSARIAL_HOOK` 段；受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束 | `paper_adversarial_hook.rs` L6/L17；harness §8 L137 |
 | `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | unset → 与运行时 `MAX_CONCURRENT_SUBAGENTS_LIMIT` 契约一致；`0` 关闭计数限流 | subagentStart | 超限时返回 `permission:"deny" + user_message`（包含建议关闭限流的文案） | `cursor_hooks.rs` L1865–L1892、L1924–L1934 |
@@ -179,11 +179,11 @@ title: Cursor Hook 深度调研报告
 | `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | 开 | PostToolUse `try_append_post_tool_shell_evidence` | 关闭后 PostToolUse 不再追加 `EVIDENCE_INDEX.json` | `framework_runtime/mod.rs` L916、harness §8 |
 | `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | 开（Codex 路径） | Codex Stop 自动 in-progress checkpoint | Cursor Stop 与该开关无直接交互；列出避免误读 | `codex_hooks.rs` L915 |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | `harness_operator_nudges` 模块 | 关闭 RFV/Autopilot 续跑里来自 JSON 的 nudge 句；不影响 digest 主线 `深度信号` 行 | `harness_operator_nudges.rs` L4/L14；harness §8 L127 |
-| `ROUTER_RS_GOAL_PROMPT_VERBOSE` | 关（紧凑） | autopilot / rfv / pre-goal 文案 | 切换 verbose vs compact 模板；与"是否注入"无关 | `router_env_flags.rs` L52–60；harness §8 L130 |
+| `retired verbose followup mode` | 关（紧凑） | autopilot / rfv / pre-goal 文案 | 切换 verbose vs compact 模板；与"是否注入"无关 | `router_env_flags.rs` L52–60；harness §8 L130 |
 | `ROUTER_RS_DEPTH_SCORE_MODE` | `legacy` | `DepthCompliance` 第三分公式 | `strict` 时把 falsification_tests / 外研 strict 通过轮次计入第三分 | `router_env_flags.rs` L106–111；harness §8 L138 |
 | `ROUTER_RS_CLOSEOUT_ENFORCEMENT` | 本地 unset → 软；CI 或显式非关闭值 → 硬 | `closeout_followup_for_completion_claim` | 决定 Stop 时声明完成但缺 closeout 是否注入 `CLOSEOUT_FOLLOWUP` | `cursor_hooks.rs` L227–L256；AGENTS.md "个人使用 / Closeout" |
 
-> **rg 证据**：以上键名可用 `rg -n 'ROUTER_RS_CURSOR|ROUTER_RS_AUTOPILOT|ROUTER_RS_RFV|ROUTER_RS_HOOK_SILENT|ROUTER_RS_OPERATOR_INJECT|ROUTER_RS_CONTINUITY|ROUTER_RS_CLOSEOUT|ROUTER_RS_HARNESS_OPERATOR_NUDGES|ROUTER_RS_DEPTH_SCORE_MODE|ROUTER_RS_GOAL_PROMPT_VERBOSE' scripts/router-rs/src docs/` 复核（输出指向上表所列文件/行）。
+> **rg 证据**：以上键名可用 `rg -n 'ROUTER_RS_CURSOR|ROUTER_RS_AUTOPILOT|ROUTER_RS_RFV|ROUTER_RS_HOOK_SILENT|ROUTER_RS_OPERATOR_INJECT|ROUTER_RS_CONTINUITY|ROUTER_RS_CLOSEOUT|ROUTER_RS_HARNESS_OPERATOR_NUDGES|ROUTER_RS_DEPTH_SCORE_MODE|retired verbose followup mode' scripts/router-rs/src docs/` 复核（输出指向上表所列文件/行）。
 
 ---
 
@@ -262,7 +262,7 @@ stateDiagram-v2
 ### 6.4 文字流程（按事件时序）
 
 1. **SessionStart**：写 `session-terminals-<key>.json` baseline；注入 briefing；不触动 review state（只 lazy 创建）。
-2. **BeforeSubmitPrompt**：取 `prompt_text` + `hook_event_signal_text` → 检查 review / delegation / autopilot / override / reject_reason → 写 `review-subagent-<key>.json`（`save_state`）→ 仅在 pre_goal 缺失且 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` 显式开启时合并 pre-goal 段；按 `ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT` / `ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT` 合并续跑（默认关闭，跳过）；按 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` 合并论文对抗段。
+2. **BeforeSubmitPrompt**：取 `prompt_text` + `hook_event_signal_text` → 检查 review / delegation / autopilot / override / reject_reason → 写 `review-subagent-<key>.json`（`save_state`）→ 仅在 pre_goal 缺失且 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` 显式开启时合并 pre-goal 段；按 `retired beforeSubmit AUTOPILOT_DRIVE opt-in` / `retired beforeSubmit RFV opt-in` 合并续跑（默认关闭，跳过）；按 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` 合并论文对抗段。
 3. **SubagentStart / PostToolUse**：在 review armed 时 `bump_phase(2)`；在 goal 需要 pre-goal 时若是 independent_fork 子代理 lane，把 `pre_goal_review_satisfied=true`。
 4. **AfterAgentResponse**（仅当 hooks.json 已绑定时生效）：扫信号文本写 `goal_contract_seen / goal_progress_seen / goal_verify_or_block_seen / reject_reason_seen`。当前 hooks.json 未绑定，此采集只能依赖 Stop 再扫一次响应文本。
 5. **SubagentStop**：在 review armed 且 phase≥2 时 `bump_phase(3)`。
@@ -369,7 +369,7 @@ rg -n 'dispatch_cursor_hook_event|"sessionstart"|"beforesubmitprompt"|"userpromp
 rg -n '^fn handle_' scripts/router-rs/src/cursor_hooks.rs
 
 # 3. ROUTER_RS_* 开关命中
-rg -n 'ROUTER_RS_CURSOR|ROUTER_RS_AUTOPILOT|ROUTER_RS_RFV|ROUTER_RS_HOOK_SILENT|ROUTER_RS_OPERATOR_INJECT|ROUTER_RS_CONTINUITY|ROUTER_RS_CLOSEOUT|ROUTER_RS_HARNESS_OPERATOR_NUDGES|ROUTER_RS_DEPTH_SCORE_MODE|ROUTER_RS_GOAL_PROMPT_VERBOSE' \
+rg -n 'ROUTER_RS_CURSOR|ROUTER_RS_AUTOPILOT|ROUTER_RS_RFV|ROUTER_RS_HOOK_SILENT|ROUTER_RS_OPERATOR_INJECT|ROUTER_RS_CONTINUITY|ROUTER_RS_CLOSEOUT|ROUTER_RS_HARNESS_OPERATOR_NUDGES|ROUTER_RS_DEPTH_SCORE_MODE|retired verbose followup mode' \
   scripts/router-rs/src docs/
 
 # 4. 状态文件命名约定

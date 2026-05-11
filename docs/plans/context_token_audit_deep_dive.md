@@ -16,7 +16,7 @@
 | **SessionStart digest 行数上界** | 未写 | `continuity_digest.rs`：`max_lines` 经 `clamp(2, 4)` 限制；与传入参数（如 Codex 用 `4`）共同约束基线正文长度 |
 | **PostTool → 磁盘证据膨胀** | 提到 EVIDENCE 条数现象 | `framework_runtime/mod.rs`：`MAX_POST_TOOL_EVIDENCE_ARTIFACTS = 120`，超出 **drain 头部**；`command_preview` 截断 **2000** UTF-8 字符；关断：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` |
 | **大段 JSON 调试刮取** | 未提 | `cursor_hooks.rs`：`HOOK_JSON_STRING_SCRAPE_CAP = 2 * 1024 * 1024`（2MiB 级字符串拼接预算，属极端排障路径） |
-| **续跑文案 verbose** | 仅 env 名 | `router_env_flags::router_rs_goal_prompt_verbose()` 同时影响 digest 内 Goal 段落、`build_autopilot_drive_followup_*`、`build_rfv_loop_followup_*`（及 pre-goal 路径，见各文件注释） |
+| **续跑文案 verbose** | 仅 env 名 | `router_env_flags::retired verbose followup helper` 同时影响 digest 内 Goal 段落、`build_autopilot_drive_followup_*`、`build_rfv_loop_followup_*`（及 pre-goal 路径，见各文件注释） |
 | **operator 文案与 digest 硬编码行** | harness §8 有表 | `continuity_digest.rs`：`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` **不**去掉深度自检行；`depth_compliance_refresh_hint` 仍追加到 digest |
 | **账本 → 门控读盘（非整段注入）** | 注册表/Goal 不一致已记 | `cursor_hooks.rs` `hydrate_goal_gate_from_disk`：读 `GOAL_STATE` + `EVIDENCE_INDEX` **布尔/摘要**补全门控，与「把整份 EVIDENCE 贴进 prompt」不同；但若 **agent 或用户** `read_file` 全文件仍属 Tier0 误用 |
 
@@ -26,7 +26,7 @@
 
 | 维度 | Codex | Cursor |
 |------|-------|--------|
-| **主要注入字段** | `hookSpecificOutput.additionalContext`（JSON 字符串） | `additional_context` 与/或 `followup_message`（由 `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` 决定续跑类段落写哪字段） |
+| **主要注入字段** | `hookSpecificOutput.additionalContext`（JSON 字符串） | `additional_context` 与/或 `followup_message`（由 `retired followup-channel toggle` 决定续跑类段落写哪字段） |
 | **合并策略** | `codex_compact_contexts`：段落 trim 后 **按全文小写 key 去重**，再 `join("\n")` | `merge_additional_context`：**直接 `\n\n` 追加**，整段再经 `scrub_spoof_host_followup_lines`；**无**总字符 cap |
 | **硬 cap** | 默认 **640** 字符；`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` 覆盖（256–8192）；超长在 **换行边界**截断 + `...` | 无统一 cap；错误输出路径 `MAX_ERROR_LINES = 20`（`truncate_lines`）；另有 `truncate_utf8_chars_local` 用于部分片段（如 goal 预览） |
 | **续跑段落刷新** | N/A（表结构不同） | `merge_hook_nudge_paragraph`：按段落首行前缀 **strip 再 append**（`AUTOPILOT_DRIVE` / `RFV_LOOP_CONTINUE` 等），减少重复堆叠 |
@@ -42,7 +42,7 @@
 
 ## 3. Continuity digest / Goal / RFV 与开关交叉
 
-| 文案块 | `ROUTER_RS_GOAL_PROMPT_VERBOSE` | `ROUTER_RS_OPERATOR_INJECT` | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` |
+| 文案块 | `retired verbose followup mode` | `ROUTER_RS_OPERATOR_INJECT` | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` |
 |--------|--------------------------------|-----------------------------|--------------------------------------|
 | digest 基线 + `depth_compliance_refresh_hint` | 否（hint 独立） | 不拦截 digest 主线 | 不拦截 depth rollup 行（harness §8 已写明） |
 | digest 内 **Goal 段落**（`format_goal_state_digest_section_*`） | **是**（compact vs verbose 模板） | 不直接关 digest | **是**（去掉 JSON 内 nudge 行；**深度自检行仍保留**） |
@@ -87,7 +87,7 @@
 | `ROUTER_RS_UPDATE_*` | `framework_maint.rs` | `/update` 维护流 |
 | `ROUTER_RS_OPERATOR_INJECT`（测试锁） | `harness_operator_nudges.rs` / `paper_adversarial_hook.rs` | 测试与论文 hook 读取 |
 | `ROUTER_RS_DEPTH_SCORE_MODE` | `task_state.rs` | digest / statusline 深度 rollup |
-| `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` | `autopilot_goal.rs`（测试） | 与 `router_env_flags` 定义一致，测试里保存/恢复 |
+| `retired followup-channel toggle` | `autopilot_goal.rs`（测试） | 与 `router_env_flags` 定义一致，测试里保存/恢复 |
 
 **建议**：新增 `ROUTER_RS_*` 时优先进 `router_env_flags` + `docs/harness_architecture.md` §8（与仓库扩展规则一致）。
 
@@ -103,8 +103,8 @@
 | H2 | 静态误用 | `skills/SKILL_ROUTING_RUNTIME.json` | 路由热文件 | ~63KB | **勿整文件进对话**；`jq` 取单条 `records[]` |
 | H3 | L5 注入 | `configs/framework/HARNESS_OPERATOR_NUDGES.json` | 开 | 每续跑段 +N 行 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`；总闸 `ROUTER_RS_OPERATOR_INJECT=0` |
 | H4 | L5 可选 | `configs/framework/PAPER_ADVERSARIAL_HOOK.txt` | opt-in | beforeSubmit 短文 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` + 总闸 |
-| H5 | digest | `continuity_digest` + SessionStart | 有连续性即有 | 基线 clamp **2–4** 行 + Goal 段 + depth hint | `ROUTER_RS_GOAL_PROMPT_VERBOSE`；`HARNESS_OPERATOR_NUDGES` |
-| H6 | 续跑 | `autopilot_goal` / `rfv_loop` followup | drive/active 时 | compact 已较短；verbose 明显变长 | `ROUTER_RS_GOAL_PROMPT_VERBOSE`；`ROUTER_RS_AUTOPILOT_DRIVE_HOOK` / `ROUTER_RS_RFV_LOOP_HOOK`；beforeSubmit opt-in 两变量 |
+| H5 | digest | `continuity_digest` + SessionStart | 有连续性即有 | 基线 clamp **2–4** 行 + Goal 段 + depth hint | `retired verbose followup mode`；`HARNESS_OPERATOR_NUDGES` |
+| H6 | 续跑 | `autopilot_goal` / `rfv_loop` followup | drive/active 时 | compact 已较短；verbose 明显变长 | `retired verbose followup mode`；`ROUTER_RS_AUTOPILOT_DRIVE_HOOK` / `ROUTER_RS_RFV_LOOP_HOOK`；beforeSubmit opt-in 两变量 |
 | H7 | 磁盘 | `EVIDENCE_INDEX.json` | PostTool 默认追加 | **最多 120** 行 × preview≤2000 字符/行量级 | `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`；归档任务目录 |
 | H8 | Cursor 合并 | `merge_additional_context` | 各相位多次调用 | **无总 cap**（与 H6 叠加） | 依赖 SILENT、段落 strip；长期需观察是否需产品级 cap |
 | H9 | 状态不一致 | `task_registry` vs `GOAL_STATE`（基线已记） | 视工作流 | 心智噪声 / 误续跑 **非**直接 token，但增加 followup 触发概率 | `complete` / `clear` + 对齐 registry |
@@ -113,7 +113,7 @@
 
 - **P0（优先核实）**：Cursor `additional_context` **无界追加**假设是否在长任务中成立；若成立，属于宿主适配层产品债。
 - **P1**：`EVIDENCE_INDEX` 满 120 后仍被 **整文件** 读入模型上下文的路径（agent 习惯 / 工具误用）。
-- **P2**：`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 与 `HARNESS_OPERATOR_NUDGES` 全开时的 **文案乘法**（digest + Stop + beforeSubmit opt-in）。
+- **P2**：`retired verbose followup mode=1` 与 `HARNESS_OPERATOR_NUDGES` 全开时的 **文案乘法**（digest + Stop + beforeSubmit opt-in）。
 
 ### 6.3 「异常」可观测判据（自查用）
 

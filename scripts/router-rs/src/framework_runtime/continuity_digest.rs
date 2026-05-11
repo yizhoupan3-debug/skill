@@ -7,7 +7,6 @@ use super::{
     classify_runtime_continuity, compact_contract_text, join_lines, load_framework_runtime_view,
     stable_line_items, supervisor_contract, value_string_list, value_text,
 };
-use crate::router_env_flags::router_rs_goal_prompt_verbose;
 
 /// 生成连续性摘要正文（含 depth 提示与可选 GOAL 段落）；不含剪贴板或 envelope。
 pub fn build_framework_continuity_digest_prompt(
@@ -35,93 +34,13 @@ pub fn build_framework_continuity_digest_prompt(
 }
 
 /// 把 `GOAL_STATE.json` 嵌进 digest，使 SessionStart 等可见「可执行目标」而非仅有连续性摘要。
-/// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 使用冗长 checklist。
+/// GOAL 段落统一使用紧凑模板。
 ///
 /// GOAL 段落走 `HARNESS_OPERATOR_NUDGES.json` 真源（与 RFV/AUTOPILOT 续跑共用），含可选 **`math_reasoning_harness_line`** / **`retrieval_trace_harness_line`**，并附带「深度自检」行。
 /// `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 仅去掉 JSON 配置的 operator 文案；**深度自检行仍在**。
 /// 另：digest 主线在 `build_framework_continuity_digest_prompt` 中追加 `task_state::depth_compliance_refresh_hint`。
 fn format_goal_state_digest_section(repo_root: &Path, goal: &Value) -> String {
-    if router_rs_goal_prompt_verbose() {
-        format_goal_state_digest_section_verbose(repo_root, goal)
-    } else {
-        format_goal_state_digest_section_compact(repo_root, goal)
-    }
-}
-
-/// Verbose 版本（仅 GOAL_PROMPT_VERBOSE=1 时启用）：使用 RFV reasoning-depth contract 的完整三问。
-/// Compact 版本：单行；保留 SessionStart 注入体的默认长度友好（参见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`）。
-fn digest_depth_self_check_lines(verbose: bool) -> Vec<String> {
-    if verbose {
-        vec![
-            "- 深度自检（reasoning-depth-contract）：".to_string(),
-            "  1) 是否先定分工与汇合点（谁查证、谁实现、谁验证；写入范围不打架）？".to_string(),
-            "  2) verify 是否有明确命令/证据（PASS/FAIL 有日志/exit_code，而不是“感觉”）？"
-                .to_string(),
-            "  3) 本轮是否落证据（EVIDENCE_INDEX 或 RFV append_round）便于回放？".to_string(),
-        ]
-    } else {
-        vec![
-            "- 深度自检：先定分工/汇合点 → 并行查证 → 收敛改动 → 跑验证并留证据（EVIDENCE/RFV）。"
-                .to_string(),
-        ]
-    }
-}
-
-fn format_goal_state_digest_section_verbose(repo_root: &Path, goal: &Value) -> String {
-    let g = value_text(goal.get("goal"));
-    let st = value_text(goal.get("status"));
-    let drive = goal
-        .get("drive_until_done")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let done = value_string_list(goal.get("done_when"));
-    let val = value_string_list(goal.get("validation_commands"));
-    let non = value_string_list(goal.get("non_goals"));
-    let horizon = value_text(goal.get("current_horizon"));
-    let mut lines: Vec<String> = Vec::new();
-    lines.push(
-        "## GOAL_STATE（router-rs 目标机；须据此推进直至 complete 或显式 pause/block）".to_string(),
-    );
-    lines.push(format!(
-        "- 目标: {}",
-        if g.is_empty() {
-            "（未填写）".to_string()
-        } else {
-            g
-        }
-    ));
-    lines.push(format!("- 状态: {} | drive_until_done: {}", st, drive));
-    if !horizon.is_empty() {
-        lines.push(format!("- 当前地平线: {}", horizon));
-    }
-    if !non.is_empty() {
-        lines.push(format!("- 非目标: {}", non.join("；")));
-    }
-    if !done.is_empty() {
-        lines.push(format!("- 验收 done_when: {}", done.join("；")));
-    }
-    if !val.is_empty() {
-        lines.push(format!("- 验证命令: {}", val.join("；")));
-    }
-    lines.push(
-        "- 下一跳: 实现 → 跑验证命令 → 更新 SESSION_SUMMARY/NEXT_ACTIONS；满足验收后 `stdio` op `framework_autopilot_goal` operation=complete。"
-            .to_string(),
-    );
-    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
-    if !nudges.autopilot_drive_verbose_reasoning_depth.is_empty() {
-        lines.push(format!(
-            "- {}",
-            nudges.autopilot_drive_verbose_reasoning_depth
-        ));
-    }
-    if !nudges.math_reasoning_harness_line.trim().is_empty() {
-        lines.push(format!("- {}", nudges.math_reasoning_harness_line.trim()));
-    }
-    if !nudges.retrieval_trace_harness_line.trim().is_empty() {
-        lines.push(format!("- {}", nudges.retrieval_trace_harness_line.trim()));
-    }
-    lines.extend(digest_depth_self_check_lines(true));
-    lines.join("\n")
+    format_goal_state_digest_section_compact(repo_root, goal)
 }
 
 fn format_goal_state_digest_section_compact(repo_root: &Path, goal: &Value) -> String {
@@ -190,7 +109,10 @@ fn format_goal_state_digest_section_compact(repo_root: &Path, goal: &Value) -> S
     if !nudges.retrieval_trace_harness_line.trim().is_empty() {
         lines.push(format!("- {}", nudges.retrieval_trace_harness_line.trim()));
     }
-    lines.extend(digest_depth_self_check_lines(false));
+    lines.push(
+        "- 深度自检：先定分工/汇合点 → 并行查证 → 收敛改动 → 跑验证并留证据（EVIDENCE/RFV）。"
+            .to_string(),
+    );
     lines.join("\n")
 }
 
@@ -448,30 +370,33 @@ fn render_continuity_digest_prompt_base(
 
 #[cfg(test)]
 mod digest_depth_self_check_tests {
-    use super::digest_depth_self_check_lines;
+    use super::format_goal_state_digest_section;
+    use serde_json::json;
+    use std::path::Path;
 
     #[test]
-    fn verbose_lists_numbered_self_check() {
-        let lines = digest_depth_self_check_lines(true);
-        let joined = lines.join("\n");
-        assert!(
-            joined.contains("1)"),
-            "expected numbered checklist; got {joined:?}"
+    fn compact_goal_section_keeps_single_line_self_check() {
+        let joined = format_goal_state_digest_section(
+            Path::new("."),
+            &json!({
+                "goal": "ship",
+                "status": "running",
+                "drive_until_done": true,
+                "done_when": ["tests green"],
+                "validation_commands": ["cargo test -q"]
+            }),
         );
         assert!(
-            joined.contains("EVIDENCE_INDEX") || joined.contains("append_round"),
+            joined.contains("深度自检"),
+            "expected self-check line; got {joined:?}"
+        );
+        assert!(
+            joined.contains("EVIDENCE") || joined.contains("RFV"),
             "expected evidence anchor; got {joined:?}"
         );
-    }
-
-    #[test]
-    fn compact_single_line_self_check() {
-        let lines = digest_depth_self_check_lines(false);
-        assert_eq!(lines.len(), 1);
         assert!(
-            lines[0].contains("深度自检"),
-            "unexpected compact line: {:?}",
-            lines[0]
+            !joined.contains("1)"),
+            "compact template should not emit numbered verbose checklist; got {joined:?}"
         );
     }
 }

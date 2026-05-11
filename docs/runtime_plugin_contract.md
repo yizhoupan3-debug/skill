@@ -15,8 +15,7 @@ Documentation index: [`README.md`](README.md) (this directory).
 - Plugin records are declarations, not executable code.
 - Unknown capability classes must fail closed.
 - New plugin fields must be additive or versioned.
-- Legacy `SKILL_ROUTING_RUNTIME.json` row consumers remain supported while
-  vNext consumers migrate to named `records`.
+- `SKILL_ROUTING_RUNTIME.json` stays a minimal hot index; plugin and explain metadata stay cold.
 
 ## Plugin ABI
 
@@ -47,20 +46,25 @@ declarations:
 - `selection_reason`: why the skill is or is not in the hot runtime.
 
 The generated source of truth is `skills/SKILL_ROUTING_METADATA.json`.
-The current router consumes declarative `negative_triggers` from runtime records
-and the sidecar metadata file, then applies them through the existing
-do-not-use penalty path.
+The router consumes declarative `negative_triggers` from the metadata sidecar,
+not from hot runtime payload duplication.
 
-## Runtime vNext Projection
+## Hot Runtime Projection
 
-`skills/SKILL_ROUTING_RUNTIME.json` keeps the existing `version = 3` row shape
-for compatibility and adds named `records` for plugin-ready consumers.
+`skills/SKILL_ROUTING_RUNTIME.json` is the hot routing index only. It keeps:
 
-This lets the runtime migrate in three safe steps:
+- `version`
+- `schema_version`
+- `scope`
+- `keys`
+- `skills`
 
-1. Keep legacy `keys` and `skills` rows as the canonical live input.
-2. Add named records and validate them against the plugin catalog.
-3. Move strict consumers to records after route parity is proven by evals.
+It must not carry `records`, plugin ABI payloads, projection metadata, explain
+data, or migration prose. Those belong in the cold generated catalogs:
+
+- `skills/SKILL_PLUGIN_CATALOG.json`
+- `skills/SKILL_ROUTING_METADATA.json`
+- `skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`
 
 ## Health Loop
 

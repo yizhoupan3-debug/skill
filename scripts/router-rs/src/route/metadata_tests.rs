@@ -28,8 +28,12 @@ mod route_metadata_tests {
     }
 
     #[test]
-    fn runtime_records_apply_declarative_negative_triggers() {
+    fn runtime_sidecar_applies_declarative_negative_triggers() {
         let path = temp_route_path("runtime-records");
+        let metadata_path = path
+            .parent()
+            .expect("runtime parent")
+            .join("SKILL_ROUTING_METADATA.json");
         fs::write(
             &path,
             serde_json::to_string(&json!({
@@ -45,17 +49,23 @@ mod route_metadata_tests {
                     ["sample"],
                     "P1",
                     "skills/sample-skill/SKILL.md"
-                ]],
-                "records": [{
-                    "slug": "sample-skill",
-                    "routing_metadata": {
-                        "negative_triggers": ["blocked route"]
-                    }
-                }]
+                ]]
             }))
             .expect("serialize runtime"),
         )
         .expect("write runtime");
+        fs::write(
+            &metadata_path,
+            serde_json::to_string(&json!({
+                "skills": {
+                    "sample-skill": {
+                        "negative_triggers": ["blocked route"]
+                    }
+                }
+            }))
+            .expect("serialize metadata"),
+        )
+        .expect("write metadata");
 
         let records = load_records_from_runtime(&path).expect("load runtime");
         let record = records
@@ -66,43 +76,7 @@ mod route_metadata_tests {
         assert!(record.do_not_use_tokens.contains("route"));
 
         fs::remove_file(path).expect("cleanup runtime");
-    }
-
-    #[test]
-    fn runtime_named_records_load_without_legacy_skill_rows() {
-        let path = temp_route_path("named-records-only");
-        fs::write(
-            &path,
-            serde_json::to_string(&json!({
-                "version": 3,
-                "records": [{
-                    "slug": "sample-skill",
-                    "layer": "L1",
-                    "owner": "owner",
-                    "gate": "none",
-                    "session_start": "n/a",
-                    "summary": "Sample skill",
-                    "trigger_hints": ["sample"],
-                    "priority": "P1",
-                    "skill_path": "skills/sample-skill/SKILL.md",
-                    "routing_metadata": {
-                        "negative_triggers": ["named blocked"]
-                    }
-                }]
-            }))
-            .expect("serialize runtime"),
-        )
-        .expect("write runtime");
-
-        let records = load_records_from_runtime(&path).expect("load runtime");
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].slug, "sample-skill");
-        assert_eq!(records[0].priority, "P1");
-        assert!(records[0].trigger_hints.contains(&"sample".to_string()));
-        assert!(records[0].do_not_use_tokens.contains("named"));
-        assert!(records[0].do_not_use_tokens.contains("blocked"));
-
-        fs::remove_file(path).expect("cleanup runtime");
+        fs::remove_file(metadata_path).expect("cleanup metadata");
     }
 
     #[test]
@@ -361,7 +335,7 @@ mod route_metadata_tests {
         let loaded = load_records(None, Some(&manifest_path)).expect("load records");
         assert!(
             loaded.iter().any(|record| record.slug == "autopilot"),
-            "default runtime records should be preferred when available"
+            "default runtime hot index should be preferred when available"
         );
         assert!(
             loaded.iter().all(|record| record.slug != "manifest-owner"),

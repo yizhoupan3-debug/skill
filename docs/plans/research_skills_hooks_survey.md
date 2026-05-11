@@ -50,8 +50,8 @@
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | **opt-in**（须 `1`/`true`/`yes`/`on`） | `paper_adversarial_hook.rs`：`cursor_paper_adversarial_hook_requested()` = 总闸 **且** `router_rs_env_enabled_default_false(ENV_HOOK)`；`beforeSubmit` 合并前缀行 `**PAPER_ADVERSARIAL_HOOK**` |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 关断仅影响 `HARNESS_OPERATOR_NUDGES.json` 注入 | 与 `PAPER_ADVERSARIAL_HOOK` 独立（§8 表） |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` / `ROUTER_RS_RFV_LOOP_HOOK` | 控制 Stop 续跑块 | 论文 workflow 可与 goal/RFV 并行，但语义层手稿门控仍见 `RESEARCH_PAPER_STACK` RFV vs PAPER_GATE |
-| `ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT` / `ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT` | opt-in | 仅 Cursor `beforeSubmit` 合并对应续跑 |
-| `ROUTER_RS_CURSOR_HOOK_SILENT` | 整段剥离例外 | 含 `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` 等字样的 followup **保留**（`docs/harness_architecture.md` §8） |
+| `retired beforeSubmit AUTOPILOT_DRIVE opt-in` / `retired beforeSubmit RFV opt-in` | opt-in | 仅 Cursor `beforeSubmit` 合并对应续跑 |
+| `retired silent-mode branch` | 整段剥离例外 | 含 `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` 等字样的 followup **保留**（`docs/harness_architecture.md` §8） |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 短路 review 门控 | 注释写明续跑仍合并（同表） |
 
 **文案真源**：`configs/framework/PAPER_ADVERSARIAL_HOOK.txt`；缺失时 `include_str!` 内置同文（`paper_adversarial_hook.rs` 注释）。

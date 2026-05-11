@@ -233,7 +233,7 @@ fn runtime_plugin_contract_freezes_plugin_abi_and_health_loop() {
         "skills/SKILL_ROUTING_METADATA.json",
         "skills/SKILL_HEALTH_MANIFEST.json",
         "configs/framework/RUNTIME_PROVIDER_REGISTRY.json",
-        "adds named `records` for plugin-ready consumers",
+        "SKILL_ROUTING_RUNTIME.json` stays a minimal hot index",
     ] {
         assert!(
             text.contains(required_phrase),

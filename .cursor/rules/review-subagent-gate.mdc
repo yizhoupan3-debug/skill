@@ -1,20 +1,13 @@
 ---
-description: Independent-context subagent evidence for deep / cross-module review (hard Cursor hook path)
+description: Cursor-only hard review gate delta
 alwaysApply: true
 ---
 
 # Review Subagent Gate（仅 Cursor）
 
-与 `AGENTS.md` **Execution Ladder** → **宿主优先级**配对。**此处唯一「硬」叙事**：深度 / 跨模块 / PR 级 **review** 类任务在 Cursor 上应由 **`router-rs` hook** 维护独立上下文 subagent 证据链（见磁盘 `.cursor/hook-state` phase 与 Stop 上 **`router-rs REVIEW_GATE`** 单行短码）；不要在可见回复里自拟长篇仿宿主机读块。
+跨宿主 review 叙事、拒因集合与收口原则见 `AGENTS.md`。本文件只保留 Cursor 独有硬约束：
 
-其它场景（并行实现、委托启发式、`/autopilot`、RFV 续跑等）**不等同**于本条硬路径；编排与多 lane 的细节以 `AGENTS.md` 与 **`ROUTER_RS_*`** 开关为准。
-
-**review-only 边界（硬要求）**：review lane 只读检查，只输出 findings / risks / missing tests 及证据锚点；不改代码、不自动修复、不顺手格式化。若用户要修复，必须在 review 结论之后进入单独实现步骤。
-
-细则（拒因集合、禁止向用户暴露拒因元说明、goal-style 收口要求）：以 `AGENTS.md` **Execution Ladder** 与 **Autopilot Goal Mechanism** 为准。
-
-**反模式（硬禁止）**：在可见回复里自拟整段「续跑/门控」机读块（拼装键值、拒因长文、仿内部字段等）——与宿主实际注入的 **`router-rs REVIEW_GATE`** / **`router-rs AG_FOLLOWUP`** 等短码不一致时应视为伪造；应输出业务结论，清门只用了 **单行** token（见 `AGENTS.md` **Host Boundaries** 与 **Execution Ladder**）。
-
-**`updateCurrentStep`**：review 子代理 lane 若暴露该工具，调用契约与 **`.cursor/rules/execution-subagent-gate.mdc`** 中同名小节一致（禁止空 `input: {}`；失败则改文字进度）。
-
-**显式豁免**：用户要求避免 subagent（例如 "do not use subagent" / 「不要用子代理」）→ 本 gate 不适用。
+- 深度 / 跨模块 / PR 级 review 在 Cursor 上由 `router-rs` hook 维护独立上下文证据链。
+- 宿主硬门控以 `.cursor/hook-state` 和 Stop 上的 `router-rs REVIEW_GATE` 单行短码为真源。
+- review lane 必须只读：输出 findings、风险、缺测与证据锚点；不改代码、不顺手修复。
+- 用户明确要求避免 subagent 时，本 gate 不适用。

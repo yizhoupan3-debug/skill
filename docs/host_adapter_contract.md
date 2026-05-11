@@ -29,7 +29,7 @@
 `host_targets.supported` 是全局闭集宿主 id；
 `host_projections` 是当前可生成 profile / install projection payload 的宿主集合；
 `framework_commands.*.host_entrypoints` 是显式命令入口覆盖集合；
-`records[].plugin.host_support.platforms` 是 skill body 可用宿主集合。`codex-app` 可以出现在 skill host support 中，即使 framework command 显式入口只列 `codex-cli`；这表示同一 Codex 投影族的消费面不同，不是 drift。
+`skills/SKILL_PLUGIN_CATALOG.json` 中 `skills.<slug>.host_support.platforms` 是 skill body 可用宿主集合。`codex-app` 可以出现在 skill host support 中，即使 framework command 显式入口只列 `codex-cli`；这表示同一 Codex 投影族的消费面不同，不是 drift。
 
 | 维护面 | 不变量（共享） | 变量（宿主元数据 / 薄适配） | grep anchor |
 |--------|----------------|-----------------------------|-------------|
@@ -38,7 +38,7 @@
 | 宿主安装/入口 | 闭集宿主 id 来自 `host_targets.supported`，缺元数据 fail-closed | `host_targets.metadata.<host>.install_tool` 与 `host_entrypoints` | `host_id_and_skills_install_tool_pairs_from_registry` |
 | L4 / L5 边界 | L4 只做 argv/stdin/超时/路径转发；L5 只承载 skill 契约与可读叙事 | `.cursor/rules/*.mdc`、Codex `AGENTS.md` 投影形状不同 | `host_entrypoints_sync_manifest` |
 | `${CODEX_HOME}/skills` | 表示 Codex 用户级 skill 投影根；仓库开发态优先 `skills/` | 仅 Codex install/sync 使用该 HOME 语义，Cursor 不复用 | `workspace_bootstrap_defaults.skills.user_dir` |
-| **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；运行 **`skill-compiler-rs --apply`** 再生成 `skills/SKILL_ROUTING_RUNTIME.json` 等 | `records[].plugin.host_support.platforms` **必须**为 `RUNTIME_REGISTRY.host_targets.supported` 闭集 id（`codex-cli` / `codex-app` / `cursor` / `claude-code`）；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由编译器归一 | `normalize_skill_host_platforms`（`scripts/skill-compiler-rs`）；`tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`** |
+| **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；运行 **`skill-compiler-rs --apply`** 再生成 `skills/SKILL_PLUGIN_CATALOG.json` 等 | `SKILL_PLUGIN_CATALOG.json` 中 `skills.<slug>.host_support.platforms` **必须**为 `RUNTIME_REGISTRY.host_targets.supported` 闭集 id（`codex-cli` / `codex-app` / `cursor` / `claude-code`）；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由编译器归一 | `normalize_skill_host_platforms`（`scripts/skill-compiler-rs`）；`tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`** |
 
 单行指针：五层模型见 [`harness_architecture.md`](harness_architecture.md)；Rust API / CLI 契约见 [`rust_contracts.md`](rust_contracts.md)；跨宿主语言、路由与执行协议见仓库根 [`../AGENTS.md`](../AGENTS.md)。
 

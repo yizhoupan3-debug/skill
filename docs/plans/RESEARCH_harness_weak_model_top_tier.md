@@ -38,14 +38,14 @@
 1. **Codex**：合并后整段 `additionalContext` 被 **硬截断**（换行优先 + `...`），弱模型可能 **读不到** 续跑/Goal 尾部 → 丢步骤或重复问状态。证据：`codex_hooks.rs` `truncate_codex_additional_context`。
 2. **Cursor**：**无合并总 cap**，弱模型反受 **噪声膨胀** 影响（长会话多路径 `merge_additional_context`）。证据：`cursor_hooks.rs` L1435–1446。
 3. **闸断认知负荷**：`ROUTER_RS_OPERATOR_INJECT=0` 关续跑，但 digest 仍可有 **深度 rollup 行**（与 harness §8 一致），弱模型易 **误判「已关深度」**。证据：`docs/harness_architecture.md` §8 脚注。
-4. **verbose 续跑**：`ROUTER_RS_GOAL_PROMPT_VERBOSE` 放大 Goal/RFV followup 与 digest Goal 段；弱模型 token 预算更紧。证据：TOKEN §1 表。
+4. **verbose 续跑**：`retired verbose followup mode` 放大 Goal/RFV followup 与 digest Goal 段；弱模型 token 预算更紧。证据：TOKEN §1 表。
 5. **误用 Tier0**：若 agent `read_file` 整份 `EVIDENCE_INDEX`，与 hook「摘要注入」设计相悖，弱模型更易上下文爆炸。证据：TOKEN §1「账本 → 门控读盘」脚注。
 
 **≥5 条可操作缓解（配置/流程，非本调研代码改动）**
 
 1. Codex：按需调高 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`（仍受 clamp），并接受 **线性成本**。
-2. 关冗长注入：`ROUTER_RS_GOAL_PROMPT_VERBOSE=0`（默认紧凑）、关 `ROUTER_RS_OPERATOR_INJECT` 或分项关 RFV/AUTOPILOT drive。
-3. Cursor 长会话：启用 `ROUTER_RS_CURSOR_HOOK_SILENT=1` 前确认 **不**误剥 `REVIEW_GATE` / `AG_FOLLOWUP` 等（见 harness §8 例外）。
+2. 关冗长注入：`retired verbose followup mode=0`（默认紧凑）、关 `ROUTER_RS_OPERATOR_INJECT` 或分项关 RFV/AUTOPILOT drive。
+3. Cursor 长会话：启用 `retired silent-mode branch=1` 前确认 **不**误剥 `REVIEW_GATE` / `AG_FOLLOWUP` 等（见 harness §8 例外）。
 4. 验证命令：避免「隐形」脚本路径；对长尾 verify 使用 **显式** `hook-evidence-append` 或命令串包含已覆盖子串（DEPTH §3.2）。
 5. 弱模型主线程：缩小 **单轮目标**、多写 `GOAL_STATE` checkpoint，依赖 **地平线切片** 而非单轮吞上下文（`AGENTS.md` Autopilot 宏任务段）。
 
