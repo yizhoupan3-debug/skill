@@ -26,7 +26,7 @@ trigger_hints:
   - 需要多少样本量
   - power analysis
 metadata:
-  version: "1.0.1"
+  version: "1.0.2"
   platforms: [codex]
   tags:
     - statistics
@@ -47,6 +47,12 @@ source: local
 
 This skill owns **statistical method selection, execution, and interpretation** for research.
 
+## Causal claims, identification, and prereg
+
+- **先识别、后 p 值**：因果语言（「导致」「政策含义」「机制」）需要 **识别策略**（RCT、IV、DiD/RD、前后对照设计等）与 **可反驳假设**；不要仅用回归系数 + 显著性顶替因果叙事。
+- **预注册与偏离**：主终点、主对比、分析计划与事后偏离的记录义务见 [`references/causal-prereg.md`](references/causal-prereg.md) 与 [`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)。
+- **探索性分析**：子群、机制、多终点扫描须标明 exploratory，并避免与 confirmatory 同一多重比较叙事混写。
+
 ## When to use
 
 - The user needs to choose the right statistical test for their data
@@ -66,11 +72,9 @@ This skill owns **statistical method selection, execution, and interpretation** 
 - The task is paper writing → use `$paper-writing` (but may co-invoke for results sections)
 - The task is about paper-level scientific logic or claims-vs-evidence alignment → use `$paper-reviewer` logic mode (which may route statistical questions here)
 
-## Cross-references
+## References
 
-- Current research/project owners may use this skill as the statistics / uncertainty lane
-- `$paper-reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
-- `$paper-reviewer` Tier-1 statistical rigor checks may route here for detailed analysis
+- Causal DAG、IV/DiD 假设模板与预注册边界：[`references/causal-prereg.md`](references/causal-prereg.md)
 
 ### Comparing Groups
 
@@ -161,6 +165,7 @@ assumption check, or interpretation is settled.
 
 ## Cross-references
 
+- Current research/project owners may use this skill as the statistics / uncertainty lane
 - `$paper-reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
 - `$paper-reviewer` Tier-1 statistical rigor checks may route here
 - `$experiment-reproducibility` routes result validation statistics here

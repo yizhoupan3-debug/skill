@@ -59,6 +59,23 @@ pub(crate) fn evaluate_routing_cases(
             true,
             case.first_turn,
         )?;
+        if let Some(expected) = case.expected_layer.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty())
+        {
+            if decision.layer != *expected {
+                return Err(format!(
+                    "routing-eval case id={:?}: expected_layer {expected:?} != actual {:?}",
+                    case.id, decision.layer
+                ));
+            }
+        }
+        if let Some(ref expected_ctx) = case.route_context {
+            if &decision.route_context != expected_ctx {
+                return Err(format!(
+                    "routing-eval case id={:?}: route_context mismatch: actual={:?} expected={expected_ctx:?}",
+                    case.id, decision.route_context
+                ));
+            }
+        }
         let selected_owner = decision.selected_skill.clone();
         let selected_overlay = decision.overlay_skill.clone();
 

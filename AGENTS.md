@@ -13,7 +13,7 @@
 | skill 命中路径与 trigger | `skills/SKILL_ROUTING_RUNTIME.json`（及 runtime 声明的 fallback manifest）；勿用 slug 猜路径 |
 | 框架命令 / CLI 注册 | `configs/framework/RUNTIME_REGISTRY.json`（与相关生成、校验流程） |
 | 程序化 schema（如 closeout record） | `configs/framework/*.json` 与 `router-rs` 中对应校验（常需同改并有测试） |
-| hook 实际注入、拦截行为 | 各宿主 `hooks.json` + `router-rs`（`cursor_hooks.rs` / `codex_hooks.rs` 等） |
+| hook 实际注入、拦截行为 | 各宿主 `hooks.json` + `router-rs`（`cursor_hooks.rs` / `codex_hooks.rs` / `claude_hooks.rs` 等） |
 
 ### 文档地图（契约与分层）
 
@@ -55,14 +55,21 @@ router-rs codex sync --repo-root "$PWD"
 ## 个人使用（最小操作面）
 
 - **路由**：只保留 `skills/SKILL_ROUTING_RUNTIME.json` 为热入口；按需打开命中项的 `skill_path`。不必为了日常使用读完 `framework_profile` 全字段或整份 `configs/framework/`。
-- **连续性降噪（可选）**：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭 PostTool 向 `EVIDENCE_INDEX` 的追加；`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0` 关闭 Codex `Stop` 自动检查点写入。Cursor 注入跟进：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` 关闭 `GOAL_STATE` 续跑提示；`ROUTER_RS_RFV_LOOP_HOOK=0` 关闭 `RFV_LOOP_STATE` 多轮 RFV 提示。**论文强对抗审稿（可选）**：`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1`/`true`/`yes`/`on` 时，在满足启发式的用户 **`beforeSubmit`** 上合并一段 **`PAPER_ADVERSARIAL_HOOK`**（hostile / worst-case 审稿姿态 + **软逃逸禁令**：禁止仅降口径 / 堆 limitation / rebuttal-only / 代码空诺 / 数学直觉化；文案真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`，由 `include_str!` 在编译期嵌入同一份内容作为缺失文件回落）；总闸与同表其它 operator 注入一致：`ROUTER_RS_OPERATOR_INJECT=0` 时也关闭该段。Goal 在 **Codex SessionStart continuity digest**、**AUTOPILOT_DRIVE**、**RFV_LOOP_CONTINUE**、pre-goal 提示中默认**紧凑**；需要旧版长文案时设 `ROUTER_RS_GOAL_PROMPT_VERBOSE=1`（`true`/`yes`/`on` 亦可），完整字段仍以磁盘 `GOAL_STATE.json` / 账本文件为准。
+- **连续性降噪（可选）**：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭 PostTool 向 `EVIDENCE_INDEX` 的追加；`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0` 关闭 Codex `Stop` 自动检查点写入。Cursor 注入跟进：`ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` 关闭 `GOAL_STATE` 续跑提示；`ROUTER_RS_RFV_LOOP_HOOK=0` 关闭 `RFV_LOOP_STATE` 多轮 RFV 提示。**论文强对抗审稿（可选）**：`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1`/`true`/`yes`/`on` 时，在满足启发式的用户 **`beforeSubmit`** 上合并一段 **`PAPER_ADVERSARIAL_HOOK`**（hostile / worst-case 审稿姿态 + **软逃逸禁令**：禁止仅降口径 / 堆 limitation / rebuttal-only / 代码空诺 / 数学直觉化；文案真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`，由 `include_str!` 在编译期嵌入同一份内容作为缺失文件回落）；总闸与同表其它 operator 注入一致：`ROUTER_RS_OPERATOR_INJECT=0` 时也关闭该段。
+- **Goal 紧凑文案的两条独立投影**（避免混读）：
+  - **Codex SessionStart continuity digest**：在 Codex `SessionStart` 上由 hook 内嵌进 `additional_context`，**不是** Cursor 短码；预算受 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` 约束（**有效区间 256–8192，默认 640**，超出区间会被 clamp 到边界）。
+  - **Cursor 短码（仅 Cursor 宿主注入）**：`AUTOPILOT_DRIVE`、`RFV_LOOP_CONTINUE`、pre-goal 提示由 Cursor hook 在对应事件上以 `router-rs …` 起头的**单行**短码注入，Codex `Stop` **不**产出同名短码。
+  - 两条路径默认都使用 Goal 紧凑文案；需要旧版长文案时设 `ROUTER_RS_GOAL_PROMPT_VERBOSE=1`（`true`/`yes`/`on` 亦可），完整字段仍以磁盘 `GOAL_STATE.json` / 账本文件为准。
 - **Cursor SessionEnd 终端回收（可选）**：默认在对话结束时仅向本会话 shell 账本登记的 Cursor terminal 发终止信号；`ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0`/`false`/`off`/`no` 关闭该步骤；若需恢复旧行为（按仓库 cwd 扫描**所有**仍 active 的集成终端）设 `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy`（或 `all`/`repo`/`repo-wide`）。
 - **完成态 closeout**：程序化门禁分层——**本地且未设置 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 且非 CI** → **软**（完成态可不附带 `closeout_record`）；**检测到 CI/GitHub Actions**，或变量 **已设置** 且 trim 后 **不是** `0`/`false`/`off`/`no`（含 **空字符串**、`1`、`true`、`yes` 等任意其它取值）→ **硬**，须提供能通过 harness 的 record。**`export ROUTER_RS_CLOSEOUT_ENFORCEMENT=`（空字符串）≠「未设置」**，通常仍走硬路径。显式关闭程序化硬门禁：`ROUTER_RS_CLOSEOUT_ENFORCEMENT=0`（`0`/`false`/`off`/`no`）。软规范仍见下文 **Closeout**。
 - **Autopilot pre-goal（Cursor，opt-in）**：默认关闭；需要 beforeSubmit 侧「独立 fork pre-goal」提示与计数放行时设 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1`**。若开启后仍卡：**单独一行** `small_task` 可清门；自动放行次数由 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES`** 控制（ unset 默认 **8**；设为 **`0`**/`false`/`off`/`no` 关闭自动放行）。Stop 上 goal 收口仍可能给出 **`router-rs AG_FOLLOWUP`**（与 pre-goal 注入独立）。
+- **Cursor 官方 Plan → Build 与 `/autopilot` goal 门控对齐（opt-in）**：Cursor 无独立「Plan Build」hook；若希望在 **CreatePlan** 产物路径 **`.cursor/plans/*.plan.md`** 出现在 **beforeSubmit** 载荷（典型：点 **Build** 带入计划引用）时**视同**已走 **`/autopilot`** 以拉起 **`goal_required`** 等门控，设 **`ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE=1`**（`true`/`yes`/`on` 亦可）。不自动执行 shell；与 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`** 可叠加以便在 Build 首条即收到 pre-goal 提示。
+- **深度硬门禁（opt-in）**：`GOAL_STATE.completion_gates`（`complete`）、`RFV_LOOP_STATE.close_gates`（显式 `append_round` close）默认关闭；与 `DepthCompliance` / digest 的 advisory 分工见 `docs/references/rfv-loop/reasoning-depth-contract.md` 与 `docs/harness_architecture.md` §4/§8（含 **`ROUTER_RS_DEPTH_SCORE_MODE`**）。
 
 ## Skill Routing
 
 - 第一入口是当前生效 skill root 下的 `skills/SKILL_ROUTING_RUNTIME.json`。
+- 产品/IDE 内「Autopilot」文案通常不等同于本仓库 `skills/autopilot` 的 `/autopilot` harness；以该 skill 与 `docs/harness_architecture.md` 为准。
 - 命中 skill 后，只读 runtime 记录里的 `skill_path` 对应文件；这就是合规读取 skill，不等于禁止使用 skill。
 - 不要用 slug 猜路径；`skill_path` 按当前生效 skill root 解析。
 - runtime 未命中且确需继续路由时，才查 runtime 声明的 fallback manifest。
@@ -81,6 +88,7 @@ router-rs codex sync --repo-root "$PWD"
 
 - `AGENTS.md` 负责跨宿主通用执行协议；Cursor hook 行为由相应宿主自己的 hook 配置定义。
 - **Cursor（`router-rs cursor hook`）机读续跑/门控短码的真源示例**：`**AG_FOLLOWUP**`（Stop 上对未满足 autopilot goal 时由宿主注入 **`router-rs AG_FOLLOWUP`** 起头的单行短码）、`**REVIEW_GATE**`（Stop 上对未满足 review 子代理证据链时 **`router-rs REVIEW_GATE`**）、`**AUTOPILOT_DRIVE**`、`**RFV_LOOP_CONTINUE**`、`**CLOSEOUT_FOLLOWUP**` 等（以实际 `followup_message` / `additional_context` 为准）。**不要**在可见回复中自拟多段仿宿主的长篇机读排版；若某段看起来像 hook 却从未由宿主注入 **`router-rs …`** 起头的单行，应视为**非真源**。（已废止的双字母+FOLLOWUP 前缀与自拟「键值对式」仿真机读同样不是宿主注入。）确需清门仍只用 **单独一行**拒因 token（见 **Execution Ladder**）。
+- **Cursor 子代理 `updateCurrentStep`**：宿主侧工具，**禁止**空 `input: {}`；须带 `current_step` 或收尾用的 `final_summary` / `completed_subtitle`（见 **`.cursor/rules/execution-subagent-gate.mdc`** 同名小节）。工具异常时改用文字汇报进度，不阻塞主交付。
 - Codex 全局安装后的 skill 路由真源是 `$CODEX_HOME/skills/SKILL_ROUTING_RUNTIME.json`；仓库开发态的路由真源是 `skills/SKILL_ROUTING_RUNTIME.json`。
 - 发生「路由策略」问题先查 `skills/` runtime；发生「hook 触发/拦截」问题先查对应宿主的 hooks 配置。
 

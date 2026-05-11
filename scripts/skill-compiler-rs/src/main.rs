@@ -177,6 +177,8 @@ const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
     "experiment-reproducibility",
     "statistical-analysis",
     "scientific-figure-plotting",
+    "math-derivation",
+    "tikz-paper-figure",
 ];
 const IMPLEMENTATION_LOADOUT_OWNERS: &[&str] = &["systematic-debugging"];
 const AUDIT_LOADOUT_OWNERS: &[&str] = &[
@@ -1325,7 +1327,7 @@ fn build_framework_command_plugin_record(slug: &str, row: &[Value]) -> Value {
             "approval_required": false
         },
         "host_support": {
-            "platforms": ["codex-cli", "codex-app"],
+            "platforms": ["codex-cli", "codex-app", "cursor", "claude-code"],
             "projection": "explicit-entrypoint"
         },
         "test_fixtures": {

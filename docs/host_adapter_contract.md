@@ -8,6 +8,8 @@
 
 **相关契约**（英文实现侧叙事）：[`rust_contracts.md`](rust_contracts.md)。
 
+**手稿技能（paper-workbench 栈）**：论文前门与专科 lane 的可读契约以仓库 `skills/` 下对应 `SKILL.md` 与 reference 为内容真源；**安装与宿主投影**不以某一 IDE 为专属——闭集宿主列表与安装工具名以 **`configs/framework/RUNTIME_REGISTRY.json`** 为准，落地到 Cursor/Codex 等工作区时使用 **`router-rs framework install --to <host>`**（实现见 `host_integration.rs`）。技能栈索引见 [`../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md)。
+
 ## 快速路径（我要接新宿主）
 
 - **先读**：[`harness_architecture.md`](harness_architecture.md) **§5**（扩展规则）与 **§6**（文件映射），再读本文件 **[§3.1](#31-可复制执行清单工程顺序)** 工程清单与下文 **§0**（维护地图）。
@@ -32,6 +34,10 @@
 | `${CODEX_HOME}/skills` | 表示 Codex 用户级 skill 投影根；仓库开发态优先 `skills/` | 仅 Codex install/sync 使用该 HOME 语义，Cursor 不复用 | `workspace_bootstrap_defaults.skills.user_dir` |
 
 单行指针：五层模型见 [`harness_architecture.md`](harness_architecture.md)；Rust API / CLI 契约见 [`rust_contracts.md`](rust_contracts.md)；跨宿主语言、路由与执行协议见仓库根 [`../AGENTS.md`](../AGENTS.md)。
+
+**闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**（`claude_hooks.rs`），投影安装 **`router-rs framework install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。
+
+**单行指针**：跨 Cursor 工作区接入步骤见仓库根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）；操作核对清单见 [`docs/plans/cursor_cross_workspace_operator_checklist.md`](plans/cursor_cross_workspace_operator_checklist.md)。
 
 ---
 
@@ -68,6 +74,13 @@
 | Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`（及策略合并字段，见运行时） |
 | 续跑类合并 | Same | `cursor_hooks.rs` + `autopilot_goal` / `rfv_loop` | `additional_context` / `followup_message`（宿主 JSON 出站字段） |
 
+### Claude Code（`router-rs claude hook`）
+
+| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
+|--------|----------|----------------|-----------------|
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/hook_state.json`（会话 touch 状态）；出站 Claude hook JSON |
+| 投影规则文件 | `router-rs framework install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/.framework-projection.json`（project scope） |
+
 **统一原则**：宿主配置中的命令应保持 **短命 + 超时**；语义在 Rust，不在宿主脚本里分支业务规则。
 
 ---
@@ -80,8 +93,9 @@
 |------|----------|
 | Cursor hook 语义与出站 JSON | `scripts/router-rs/src/cursor_hooks.rs` |
 | Codex hook 语义、`sync_host_entrypoints` 等 | `scripts/router-rs/src/codex_hooks.rs` |
+| Claude Code hook 语义（stdin JSON） | `scripts/router-rs/src/claude_hooks.rs` |
 | `framework host-integration install`、投影 manifest、入口模板 | `scripts/router-rs/src/host_integration.rs` |
-| CLI 子命令注册与 `framework`/`cursor`/`codex` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及生成片段 `cli/dispatch_body.txt` 若适用） |
+| CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
 | 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入） |
 | 闭集宿主 id 与 `install_tool` / `host_entrypoints` | `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 与 `host_targets.metadata` |
 

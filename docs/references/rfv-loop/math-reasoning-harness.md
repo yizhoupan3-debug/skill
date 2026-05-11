@@ -32,7 +32,9 @@ Harness **只认 checker 输出**（exit code + 约定 stdout/stderr），不认
 | **Z3 / SMT** | 小范围可行性、不变式 | 输出 `sat`/`unsat` 等与契约一致 |
 | **Lean / Coq** | 仅在团队已有模板与 CI 成本可接受时 | `lake build` / `coqc` 无 sorry |
 
-**升级顺序**：CAS → SMT → ITP；任一层给出 **显式反例** 即 **FAIL**，优先记入 `append_round` 与 `EVIDENCE_INDEX`（或 `hook-evidence-append`）。
+**升级顺序**：CAS → SMT → ITP；任一层给出 **显式反例** 即 **FAIL**，优先记入 `append_round` 与 `EVIDENCE_INDEX`。
+
+**证据落盘两条路径**（与 [`rfv_loop_harness.md`](../../rfv_loop_harness.md) 一致）：宿主 **`PostTool`** 在启发式命中时自动追加一行到 `EVIDENCE_INDEX`（`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` 未关、连续性就绪）；**`framework hook-evidence-append`** 供长尾命令显式记账（非 `cursor_*` 来源时仍走同一验证启发式，含 SymPy / Z3 / Lean / Coq 等 **窄子串**，见 `router-rs` `framework_runtime`）。数理脚本请避免仅写裸 `python` 作为唯一可识别串。
 
 ---
 

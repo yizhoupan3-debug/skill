@@ -34,6 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cursor bootstrap + workspace hooks template sanity
+        run: |
+          bash -n scripts/cursor-bootstrap-framework.sh
+          python3 -m json.tool configs/framework/cursor-hooks.workspace-template.json > /dev/null
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Compile skill registry

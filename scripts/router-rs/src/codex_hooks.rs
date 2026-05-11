@@ -43,7 +43,8 @@ const PROTECTED_GENERATED_PATHS: [&str; 4] = [
     CODEX_HOOKS_README_PATH,
     HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
 ];
-const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
+const PROTECTED_GENERATED_PREFIXES: [&str; 2] =
+    ["skills/SKILL_", "configs/framework/RUNTIME_REGISTRY.json"];
 const CODEX_REVIEW_SUBAGENT_TOOL_NAMES: [&str; 6] = [
     "task",
     "functions.task",
@@ -89,6 +90,44 @@ thread_local! {
     static FORCE_ATOMIC_WRITE_FAIL: Cell<bool> = const { Cell::new(false) };
 }
 
+fn codex_hook_command_timeout_secs(event: &str) -> u64 {
+    match event {
+        "SessionStart" => 3,
+        "PostToolUse" => 5,
+        _ => 8,
+    }
+}
+
+fn codex_additional_context_max_chars() -> usize {
+    const MIN: usize = 256;
+    const MAX: usize = 8192;
+    std::env::var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .map(|n| n.clamp(MIN, MAX))
+        .unwrap_or(CODEX_ADDITIONAL_CONTEXT_MAX_CHARS)
+}
+
+fn truncate_codex_additional_context(combined: &str, max_chars: usize) -> String {
+    if combined.len() <= max_chars {
+        return combined.to_string();
+    }
+    let budget = max_chars.saturating_sub(3);
+    let mut cut = budget.min(combined.len());
+    while cut > 0 && !combined.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    if let Some(pos) = combined[..cut].rfind('\n') {
+        if pos > 0 {
+            cut = pos;
+        }
+    }
+    while cut > 0 && !combined.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}{}", &combined[..cut], "...")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstallMode {
     Apply,
@@ -121,10 +160,28 @@ struct CodexReviewGateState {
     reject_reason_seen: bool,
     #[serde(default)]
     review_subagent_seen: bool,
+    #[serde(default)]
+    generic_subagent_seen: bool,
+    #[serde(default)]
+    review_lane_seen: bool,
+    #[serde(default)]
+    parallel_lane_seen: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     review_subagent_tool: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prompt: Option<String>,
+}
+
+fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexReviewGateState) {
+    if state.review_subagent_seen
+        && !state.generic_subagent_seen
+        && !state.review_lane_seen
+        && !state.parallel_lane_seen
+    {
+        state.generic_subagent_seen = true;
+        state.review_lane_seen = true;
+        state.parallel_lane_seen = true;
+    }
 }
 
 fn codex_state_dir(repo_root: &Path) -> PathBuf {
@@ -168,6 +225,11 @@ fn codex_session_key(event: &Value) -> String {
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(str::to_owned)
+        .or_else(|| {
+            std::env::var("CODEX_SESSION_ID")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
         .unwrap_or_else(|| {
             let now_ns = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -369,7 +431,10 @@ fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexReviewGateState
         }
     }
     serde_json::from_value::<CodexReviewGateState>(value)
-        .map(Some)
+        .map(|mut parsed| {
+            codex_merge_legacy_subagent_gate_evidence(&mut parsed);
+            Some(parsed)
+        })
         .map_err(|_| "state_json_invalid".to_string())
 }
 
@@ -446,6 +511,67 @@ fn codex_save_state_to_path(state_path: &Path, state: &CodexReviewGateState) -> 
     true
 }
 
+fn prune_stale_hook_state_files(dir: &Path) {
+    const MAX_FILES: usize = 50;
+    const MAX_AGE_SECS: u64 = 7 * 24 * 3600;
+
+    let entries: Vec<_> = match fs::read_dir(dir) {
+        Ok(it) => it
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name();
+                let s = name.to_string_lossy();
+                s.starts_with("review-subagent-") && s.ends_with(".json")
+            })
+            .collect(),
+        Err(_) => return,
+    };
+
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let mut with_mtime: Vec<(u64, PathBuf)> = entries
+        .iter()
+        .filter_map(|e| {
+            let mtime = e
+                .metadata()
+                .ok()?
+                .modified()
+                .ok()?
+                .duration_since(UNIX_EPOCH)
+                .ok()?
+                .as_secs();
+            Some((mtime, e.path()))
+        })
+        .collect();
+    with_mtime.sort_by_key(|(mtime, _)| *mtime);
+
+    let mut to_remove: Vec<PathBuf> = with_mtime
+        .iter()
+        .filter(|(mtime, _)| now_secs.saturating_sub(*mtime) > MAX_AGE_SECS)
+        .map(|(_, p)| p.clone())
+        .collect();
+
+    let to_remove_set: std::collections::HashSet<_> = to_remove.iter().cloned().collect();
+    let remaining: Vec<_> = with_mtime
+        .iter()
+        .filter(|(_, p)| !to_remove_set.contains(p))
+        .collect();
+
+    if remaining.len() > MAX_FILES {
+        let excess = remaining.len() - MAX_FILES;
+        for (_, path) in remaining.iter().take(excess) {
+            to_remove.push(path.clone());
+        }
+    }
+
+    for path in to_remove {
+        let _ = fs::remove_file(&path);
+    }
+}
+
 fn with_codex_state_lock<T, F>(repo_root: &Path, event: &Value, f: F) -> Result<T, String>
 where
     F: FnOnce(Option<CodexReviewGateState>) -> Result<(Option<CodexReviewGateState>, T), String>,
@@ -453,6 +579,7 @@ where
     let state_path = codex_state_path(repo_root, event);
     if let Some(parent) = state_path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("state_dir_create_failed: {err}"))?;
+        prune_stale_hook_state_files(parent);
     }
     let _guard = acquire_codex_state_lock(&state_path)?;
     let loaded = codex_load_state_from_path(&state_path)?;
@@ -494,25 +621,44 @@ fn codex_tool_input(event: &Value) -> Value {
         .unwrap_or_else(|| json!({}))
 }
 
-fn saw_subagent_codex(tool_name: &str, tool_input: &Value) -> bool {
+fn saw_subagent_codex(tool_name: &str, _tool_input: &Value) -> bool {
     let name = normalize_tool_name(Some(tool_name));
-    if !CODEX_REVIEW_SUBAGENT_TOOL_NAMES.contains(&name.as_str()) {
-        return false;
-    }
-    codex_subagent_type_evidence(tool_input)
+    CODEX_REVIEW_SUBAGENT_TOOL_NAMES.contains(&name.as_str())
 }
 
-fn codex_subagent_type_evidence(tool_input: &Value) -> bool {
+fn codex_recognized_subagent_kind(tool_input: &Value) -> Option<String> {
     let typed_fields = [
         tool_input.get("subagent_type").and_then(Value::as_str),
         tool_input.get("agent_type").and_then(Value::as_str),
         tool_input.get("agentType").and_then(Value::as_str),
         tool_input.get("type").and_then(Value::as_str),
     ];
-    typed_fields.iter().any(|field| {
-        let normalized = normalize_subagent_type(*field);
-        CODEX_REVIEW_SUBAGENT_TYPES.contains(&normalized.as_str())
-    })
+    typed_fields
+        .into_iter()
+        .map(|field| normalize_subagent_type(field))
+        .find(|normalized| CODEX_REVIEW_SUBAGENT_TYPES.contains(&normalized.as_str()))
+}
+
+fn codex_subagent_lane_bits_from_kind(kind: Option<&str>) -> (bool, bool) {
+    let Some(k) = kind else {
+        return (false, false);
+    };
+    let review_lane = matches!(
+        k,
+        "explore"
+            | "explorer"
+            | "general-purpose"
+            | "generalpurpose"
+            | "ci-investigator"
+            | "ciinvestigator"
+            | "cursor-guide"
+            | "cursorguide"
+            | "best-of-n-runner"
+            | "bestofnrunner"
+            | "default"
+    );
+    let parallel_lane = matches!(k, "worker" | "shell" | "browser-use" | "browseruse");
+    (review_lane, parallel_lane)
 }
 
 fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
@@ -532,15 +678,11 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
         return None;
     }
     let combined = unique.join("\n");
-    if combined.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS {
+    let max_chars = codex_additional_context_max_chars();
+    if combined.len() <= max_chars {
         return Some(combined);
     }
-    let mut truncated: String = combined
-        .chars()
-        .take(CODEX_ADDITIONAL_CONTEXT_MAX_CHARS.saturating_sub(3))
-        .collect();
-    truncated.push_str("...");
-    Some(truncated)
+    Some(truncate_codex_additional_context(&combined, max_chars))
 }
 
 fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
@@ -553,16 +695,17 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
     // re-established within the new turn.
     let mut state = CodexReviewGateState {
         seq: 0,
-        subagent_required: true,
         ..CodexReviewGateState::default()
     };
 
     if is_review_prompt(&text) {
         state.review_required = true;
+        state.subagent_required = true;
         state.prompt = Some(text.chars().take(500).collect());
     }
     if is_parallel_delegation_prompt(&text) {
         state.delegation_required = true;
+        state.subagent_required = true;
         state.prompt = Some(text.chars().take(500).collect());
     }
     if has_override(&text) || has_review_override(&text) || has_delegation_override(&text) {
@@ -640,16 +783,22 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
             Some(value) => value,
             None => return Err("state_missing".to_string()),
         };
-        state.review_subagent_seen = true;
-        state.review_subagent_tool = tool_input
-            .get("subagent_type")
-            .or(tool_input.get("agent_type"))
-            .or(tool_input.get("agentType"))
-            .or(tool_input.get("type"))
-            .and_then(Value::as_str)
-            .map(|s| normalize_subagent_type(Some(s)))
+        state.generic_subagent_seen = true;
+        let recognized = codex_recognized_subagent_kind(&tool_input);
+        let tool_label = recognized
+            .as_ref()
             .map(|kind| format!("{tool_name}#{kind}"))
-            .or(Some(tool_name.clone()));
+            .unwrap_or_else(|| format!("{tool_name}#untyped"));
+        state.review_subagent_tool = Some(tool_label);
+        let (review_lane, parallel_lane) =
+            codex_subagent_lane_bits_from_kind(recognized.as_deref());
+        if review_lane {
+            state.review_lane_seen = true;
+        }
+        if parallel_lane {
+            state.parallel_lane_seen = true;
+        }
+        state.review_subagent_seen = true;
         Ok((Some(state), ()))
     }) {
         Ok(()) => None,
@@ -674,6 +823,9 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         .and_then(Value::as_bool)
         .unwrap_or(false)
     {
+        // Codex-internal stop hook replays: gate enforcement is skipped, but continuity checkpoint
+        // is still best-effort (same non-blocking posture as an unblocked Stop).
+        try_write_continuity_checkpoint_on_codex_stop(repo_root, event);
         return None;
     }
 
@@ -691,7 +843,7 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         if state.subagent_required
             && !state.review_override
             && !state.reject_reason_seen
-            && !state.review_subagent_seen
+            && !state.generic_subagent_seen
         {
             return Ok((
                 None,
@@ -704,7 +856,7 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         if state.review_required
             && !state.review_override
             && !state.reject_reason_seen
-            && !state.review_subagent_seen
+            && !state.review_lane_seen
         {
             return Ok((
                 None,
@@ -717,7 +869,7 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         if state.delegation_required
             && !state.delegation_override
             && !state.reject_reason_seen
-            && !state.review_subagent_seen
+            && !state.parallel_lane_seen
         {
             return Ok((
                 None,
@@ -794,7 +946,8 @@ fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value
             repo_root.display()
         ),
     ];
-    // Keep digest compact: SessionStart additionalContext is capped (~640 chars) by codex_compact_contexts.
+    // Keep digest compact: SessionStart additionalContext is capped via `codex_compact_contexts`
+    // (`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`, default ~640 chars).
     if let Ok(prompt) = build_framework_continuity_digest_prompt(repo_root, 4) {
         if !prompt.trim().is_empty() {
             contexts.push(format!("Continuity digest:\n{}", prompt.trim()));
@@ -847,11 +1000,7 @@ fn run_codex_review_subagent_gate(
 pub fn build_codex_hook_manifest() -> Value {
     let mut hooks = serde_json::Map::new();
     for event in INSTALL_EVENTS {
-        let timeout = match event {
-            "SessionStart" => 3,
-            "PostToolUse" => 5,
-            _ => 8,
-        };
+        let timeout = codex_hook_command_timeout_secs(event);
         let mut hook = json!({
             "type": "command",
             "command": build_project_hook_command(event),
@@ -1814,7 +1963,7 @@ fn merge_hooks_json(
                 "hooks": [{
                     "type": "command",
                     "command": hook_command,
-                    "timeout": 10,
+                    "timeout": codex_hook_command_timeout_secs(event),
                     "statusMessage": hook_event_status_message(event),
                 }]
             }));
@@ -3042,11 +3191,14 @@ mod tests {
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
+            assert!(state.generic_subagent_seen);
+            assert!(state.review_lane_seen);
+            assert!(!state.parallel_lane_seen);
             assert_eq!(state.review_subagent_tool.as_deref(), Some("Task#explore"));
         }
 
         #[test]
-        fn post_tool_use_without_subagent_type_does_not_mark_seen() {
+        fn post_tool_use_without_subagent_type_marks_generic_and_untyped_label() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3065,16 +3217,96 @@ mod tests {
             let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
-            assert!(!state.review_subagent_seen);
-            assert!(state.review_subagent_tool.is_none());
+            assert!(state.generic_subagent_seen);
+            assert!(state.review_subagent_seen);
+            assert_eq!(state.review_subagent_tool.as_deref(), Some("Task#untyped"));
+            assert!(!state.review_lane_seen);
+            assert!(!state.parallel_lane_seen);
         }
 
         #[test]
-        fn saw_subagent_codex_requires_typed_evidence() {
-            assert!(!saw_subagent_codex(
+        fn saw_subagent_codex_accepts_whitelisted_tool_without_recognized_type() {
+            assert!(saw_subagent_codex(
                 "Task",
                 &json!({"prompt":"missing type"})
             ));
+        }
+
+        #[test]
+        fn delegation_stop_unblocks_after_worker_subagent() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-6c",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"前端后端测试并行推进"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-6c",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"worker"}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-6c",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none());
+        }
+
+        #[test]
+        fn delegation_stop_remains_blocked_when_only_explore_subagent_observed() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-6b",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"前端后端测试并行推进"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-6b",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"explore"}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-6b",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop)
+                .unwrap()
+                .unwrap();
+            assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
+        }
+
+        #[test]
+        fn additional_context_truncates_on_newline_preference_under_small_budget() {
+            // codex_additional_context_max_chars clamps to [256, 8192]; use the
+            // floor so the assertions exercise the real budget rather than a
+            // value that the clamp silently rewrites.
+            std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
+            let line1 = format!("{}{}", "A".repeat(24), ": L1");
+            let line2 = format!("{}{}", "C".repeat(24), ": L2");
+            let line3 = "B".repeat(240);
+            let ctx = codex_compact_contexts(vec![format!("{line1}\n{line2}\n{line3}")]).unwrap();
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
+            assert!(ctx.ends_with("..."));
+            assert!(
+                ctx.matches('\n').count() >= 1,
+                "expected multiple lines before ellipsis when budget allows: {ctx:?}"
+            );
+            assert!(ctx.len() <= 256);
         }
 
         #[test]
@@ -3104,8 +3336,8 @@ mod tests {
         }
 
         #[test]
-        fn saw_subagent_codex_rejects_unknown_type() {
-            assert!(!saw_subagent_codex(
+        fn saw_subagent_codex_accepts_whitelisted_tool_even_when_type_unrecognized() {
+            assert!(saw_subagent_codex(
                 "Task",
                 &json!({"subagent_type":"random-thing"})
             ));
@@ -3294,11 +3526,13 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"普通提问"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload)
-                .unwrap()
-                .unwrap();
-            let ctx = out["hookSpecificOutput"]["additionalContext"]
-                .as_str()
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            // After P0-A fix: a plain prompt no longer sets subagent_required,
+            // so the hook may return None (no context to emit). If context IS
+            // emitted for other reasons, it must not contain a drift warning.
+            let ctx = out
+                .as_ref()
+                .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
                 .unwrap_or_default()
                 .to_string();
             assert!(!ctx.contains("hook projection drift detected"));
@@ -3457,6 +3691,9 @@ mod tests {
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
+            assert!(state.generic_subagent_seen);
+            assert!(state.review_lane_seen);
+            assert!(!state.parallel_lane_seen);
             assert_eq!(state.review_subagent_tool.as_deref(), Some("Task#explore"));
         }
 
@@ -3594,6 +3831,123 @@ mod tests {
             t2.join().unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
             assert_eq!(state.seq, 2000);
+        }
+
+        // P0-A: subagent_required conditional tests
+        #[test]
+        fn userpromptsubmit_simple_prompt_does_not_set_subagent_required() {
+            let repo = fresh_repo();
+            let event = json!({
+                "hook_event_name": "UserPromptSubmit",
+                "session_id": "test-p0a-simple",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt": "just a simple question about coding"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &event).unwrap();
+            let state = codex_load_state(&repo, &event).unwrap().unwrap();
+            assert!(
+                !state.subagent_required,
+                "simple prompt should not set subagent_required"
+            );
+            assert!(
+                !state.review_required,
+                "simple prompt should not set review_required"
+            );
+        }
+
+        #[test]
+        fn userpromptsubmit_review_prompt_sets_subagent_and_review_required() {
+            let repo = fresh_repo();
+            let event = json!({
+                "hook_event_name": "UserPromptSubmit",
+                "session_id": "test-p0a-review",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt": "please do a deep code review of this module"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &event).unwrap();
+            let state = codex_load_state(&repo, &event).unwrap().unwrap();
+            assert!(
+                state.subagent_required,
+                "review prompt should set subagent_required"
+            );
+            assert!(
+                state.review_required,
+                "review prompt should set review_required"
+            );
+        }
+
+        // P0-B: protected prefix tests
+        #[test]
+        fn protected_prefixes_cover_skill_files_and_registry() {
+            assert!(
+                classify_protected_generated_path("skills/SKILL_ROUTING_RUNTIME.json").is_some(),
+                "SKILL_ROUTING_RUNTIME.json should be protected"
+            );
+            assert!(
+                classify_protected_generated_path("skills/SKILL_MANIFEST.json").is_some(),
+                "SKILL_MANIFEST.json should be protected"
+            );
+            assert!(
+                classify_protected_generated_path("configs/framework/RUNTIME_REGISTRY.json")
+                    .is_some(),
+                "RUNTIME_REGISTRY.json should be protected"
+            );
+            assert!(
+                classify_protected_generated_path("skills/other_file.json").is_none(),
+                "non-SKILL_ prefixed file should not be protected"
+            );
+        }
+
+        // P1-B: CODEX_SESSION_ID env var fallback test
+        #[test]
+        fn codex_session_key_uses_codex_session_id_env_when_no_event_fields() {
+            // Use a unique env-var value to avoid cross-test pollution.
+            let unique_id = format!(
+                "test-stable-{}-{}",
+                std::process::id(),
+                SEQ.fetch_add(1, Ordering::SeqCst)
+            );
+            let event = json!({});
+            // We must set and clear the env var in the same thread.
+            // Note: Rust test runner is multi-threaded; this test relies on the
+            // env var being visible only within this call stack, which is
+            // sufficient given Sha256 determinism on the same raw input.
+            std::env::set_var("CODEX_SESSION_ID", &unique_id);
+            let a = codex_session_key(&event);
+            let b = codex_session_key(&event);
+            std::env::remove_var("CODEX_SESSION_ID");
+            assert_eq!(a, b, "env var fallback should produce a stable key");
+            assert!(
+                a.chars().all(|c| c.is_ascii_hexdigit()),
+                "key should be hex"
+            );
+            assert_eq!(a.len(), 32, "key should be 32 hex chars");
+        }
+
+        // P1-C: prune_stale_hook_state_files test
+        #[test]
+        fn prune_removes_excess_files_over_limit() {
+            let repo = fresh_repo();
+            let state_dir = repo.join(".codex/hook-state");
+            // Create 60 fake review-subagent JSON files
+            for i in 0..60u64 {
+                let name = format!("review-subagent-{:032x}.json", i);
+                fs::write(state_dir.join(&name), "{}").unwrap();
+            }
+            prune_stale_hook_state_files(&state_dir);
+            let count = fs::read_dir(&state_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    let n = e.file_name();
+                    let s = n.to_string_lossy();
+                    s.starts_with("review-subagent-") && s.ends_with(".json")
+                })
+                .count();
+            assert!(
+                count <= 50,
+                "after pruning, at most 50 files should remain, got {count}"
+            );
         }
     }
 }

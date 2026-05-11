@@ -13,4 +13,6 @@ alwaysApply: true
 
 **反模式（硬禁止）**：在可见回复里自拟整段仿宿主的机读续跑块（**像**工单键值、内部字段名、长段「升级」叙事等）——与当前 **Cursor hook 真源**不一致；见 `AGENTS.md` **Host Boundaries**。清门只用了 **单行** token。
 
+**`updateCurrentStep`（Cursor 子代理 / Multitask 内置）**：该工具**不接受**空载荷 `input: {}`，否则会触发参数校验或 JSON 解析失败。用法：**进行中**必须传非空 `current_step` 字符串，例如 `{"current_step": "正在读取 host_integration.rs"}`；**收尾**传 `final_summary` 与 `completed_subtitle`（均为非空字符串）。若工具仍报错：**不要再反复空调或重试同一空载荷**；改为在可见回复里用普通文字汇报进度/完成态，避免阻塞主交付。
+
 **显式豁免**：用户要求不使用 subagent（例如 "do not use subagent" / 「不要用子代理」）→ 不适用上述默认。

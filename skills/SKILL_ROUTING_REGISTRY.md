@@ -37,7 +37,7 @@
 | `paper-workbench` | Active | P2 | L2 | owner | none | project | Unified front door for paper work. Use when the user has a manuscript-level task |
 | `paper-writing` | Active | P2 | L2 | owner | none | project | Write, restructure, or polish bounded academic-paper prose after the claim/evide |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | Handle layout-aware PDF reading, editing, repair, and review. |
-| `plan-mode` | Active | P2 | L1 | owner | none | project | Cursor Plan / 策划文档闸门 owner：先调研与 review，再产出可验收 todo 与修订闭环，最后用 `/gitx plan` 对照计划收口 |
+| `plan-mode` | Active | P2 | L1 | owner | none | project | Cursor Plan / 策划文档闸门 owner：先调研与 review，再产出可验收 todo 与修订闭环；`plan_profile: executio |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | Create, refactor, and review code-generated scientific figures for papers using  |

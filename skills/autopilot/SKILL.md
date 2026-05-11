@@ -8,7 +8,7 @@ routing_layer: L0
 routing_owner: owner
 routing_gate: none
 routing_priority: P1
-session_start: required
+session_start: n/a
 user-invocable: true
 trigger_hints:
   - /autopilot
@@ -44,6 +44,14 @@ router-rs framework alias autopilot
 - 优先使用返回体里的 `state_machine`、`entry_contract`、`continuity`；不要重复展开整份 SKILL 长文，除非投影不足。
 - Registry 真源：`configs/framework/RUNTIME_REGISTRY.json` → `framework_commands.autopilot`。
 - 跨框架总政策：`skills/skill-framework-developer/SKILL.md`（若存在）。
+
+### 1.1 与 Cursor / IDE 文案区分 + 前置条件
+
+- **IDE / 产品内的「Autopilot」≠ 本仓库的 `/autopilot` harness**：除非本仓库的 **L4** hook 管线（含 **`router-rs`**）已按宿主装好并生效；否则不要把两者当成同一套能力。
+- **分层指针**：L5 连续性文档见 [`docs/harness_architecture.md`](../../docs/harness_architecture.md)；Cursor 侧 hook 挂载见仓库根 **`.cursor/hooks.json`**（与 L4/L3/L2 职责分界以该文档为准，此处不重复全文）。
+- **本地链自检（verify-local-chain）**：
+  - `.cursor/hooks.json` 存在且指向可用的 **`router-rs`**（通常为 release 构建产物）。
+  - `artifacts/current/` 对本会话可写（continuity / goal 写入所需）。
 
 ## 2. 「一口气」= 连续推进，不是单轮魔法
 

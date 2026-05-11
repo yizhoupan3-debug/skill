@@ -53,7 +53,7 @@ pub(super) fn normalize_text(text: &str) -> String {
         .join(" ")
 }
 
-pub(super) fn tokenize_query(text: &str) -> Vec<String> {
+pub(crate) fn tokenize_query(text: &str) -> Vec<String> {
     let mut seen = HashSet::new();
     let lowered = normalize_text(text);
     let mut tokens = Vec::new();

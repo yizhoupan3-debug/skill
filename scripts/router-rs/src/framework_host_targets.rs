@@ -187,13 +187,13 @@ mod tests {
         let root = repo_root();
         let pairs = host_id_and_skills_install_tool_pairs(&root).expect("pairs");
         assert!(
-            pairs.len() >= 2,
-            "expected at least codex-cli and cursor from stock registry"
+            pairs.len() >= 3,
+            "expected at least codex-cli, cursor, claude-code from stock registry"
         );
         let reg = load_runtime_registry_json(&root).expect("registry");
         for (host_id, tool) in pairs {
             assert!(
-                matches!(tool.as_str(), "codex" | "cursor"),
+                matches!(tool.as_str(), "codex" | "cursor" | "claude"),
                 "unexpected mapping {host_id} -> {tool}"
             );
             host_entrypoints_value_for_id(&reg, &host_id).unwrap();

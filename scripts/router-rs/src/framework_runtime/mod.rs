@@ -3,7 +3,7 @@ use crate::closeout_enforcement::{
     CloseoutEvidenceContext,
 };
 use crate::router_env_flags::router_rs_env_enabled_default_true;
-use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
+use chrono::{Local, SecondsFormat};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -44,12 +44,10 @@ pub use types::FrameworkAliasBuildOptions;
 
 use constants::{
     CLOSEOUT_COMPLETION_STATUSES, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
-    EVIDENCE_INDEX_SCHEMA_VERSION, FOCUS_TASK_POINTER_NAME, NEXT_ACTIONS_FILENAME,
-    NEXT_ACTIONS_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
-    SUPERVISOR_STATE_SCHEMA_VERSION, TASK_REGISTRY_NAME, TASK_REGISTRY_SCHEMA_VERSION,
-    TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
+    EVIDENCE_INDEX_SCHEMA_VERSION, NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME,
+    SUPERVISOR_STATE_FILENAME, TASK_REGISTRY_SCHEMA_VERSION, TRACE_METADATA_FILENAME,
 };
-use types::{ArtifactPaths, ArtifactPayloads, FrameworkRuntimeView, TaskRegistryEntry};
+use types::FrameworkRuntimeView;
 
 pub fn build_framework_runtime_snapshot_envelope(
     repo_root: &Path,
@@ -394,14 +392,6 @@ fn workspace_name_from_root(repo_root: &Path) -> String {
     runtime_view::workspace_name_from_root(repo_root)
 }
 
-fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
-    // Cross-process lock: some call sites are read-modify-write across processes.
-    // Note: callers that already hold the path lock must call the `_unlocked` variant
-    // to avoid re-locking the same file on platforms where `flock` is per-fd.
-    let _path_lock = crate::runtime_storage::acquire_runtime_path_lock(path)?;
-    write_text_if_changed_unlocked(path, content)
-}
-
 fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, String> {
     let existing = read_text_if_exists(path);
     if existing == content {
@@ -484,15 +474,6 @@ pub(crate) fn hash_file_for_test(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
-    let serialized = format!(
-        "{}\n",
-        serde_json::to_string_pretty(payload)
-            .map_err(|err| format!("serialize JSON payload failed: {err}"))?
-    );
-    write_text_if_changed(path, &serialized)
-}
-
 fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, String> {
     let serialized = format!(
         "{}\n",
@@ -525,32 +506,6 @@ pub(crate) fn read_json_strict(path: &Path) -> Result<Value, String> {
         .map_err(|err| format!("parse json failed for {}: {err}", path.display()))
 }
 
-#[allow(dead_code)]
-fn read_json_if_exists(path: &Path) -> Value {
-    runtime_view::read_json_if_exists(path)
-}
-
-#[allow(dead_code)]
-fn read_json_control_plane_field(
-    path: &Path,
-    label: &str,
-    parse_errors: &mut Vec<String>,
-) -> Value {
-    if !path.is_file() {
-        return Value::Object(Map::new());
-    }
-    match read_json_strict(path) {
-        Ok(value) => value,
-        Err(err) => {
-            parse_errors.push(format!(
-                "invalid control-plane json ({label}, {}): {err}",
-                path.display()
-            ));
-            Value::Object(Map::new())
-        }
-    }
-}
-
 fn read_text_if_exists(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_default()
 }
@@ -569,26 +524,6 @@ fn safe_slug(value: &str) -> String {
     }
     slug.trim_matches(|ch| matches!(ch, '.' | '_' | '-'))
         .to_string()
-}
-
-#[allow(dead_code)]
-fn build_task_id(task: &str, created_at: Option<&str>) -> String {
-    let stamp = created_at
-        .unwrap_or(&current_local_timestamp())
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .collect::<String>();
-    let slug = safe_slug(task);
-    if stamp.is_empty() {
-        slug
-    } else {
-        let suffix = if stamp.len() > 14 {
-            &stamp[stamp.len() - 14..]
-        } else {
-            &stamp
-        };
-        format!("{slug}-{suffix}")
-    }
 }
 
 fn value_text(value: Option<&Value>) -> String {
@@ -697,12 +632,6 @@ fn parse_session_summary(text: &str) -> Map<String, Value> {
     result
 }
 
-#[allow(dead_code)]
-fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>) {
-    let focus_task_id = safe_slug(&value_text(payload.get("focus_task_id")));
-    normalize_task_registry_rows(focus_task_id, registry_rows_from_payload(payload))
-}
-
 fn registry_rows_from_payload(payload: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
     if let Some(items) = payload.get("tasks").and_then(Value::as_array) {
@@ -795,77 +724,6 @@ fn registry_task_sort_key(row: &Value) -> String {
         value_text(row.get("updated_at")),
         value_text(row.get("task_id")),
     ])
-}
-
-#[allow(dead_code)]
-fn write_focus_task_pointer(
-    mirror_root: &Path,
-    task_id: &str,
-    task: &str,
-    updated_at: &str,
-) -> Result<bool, String> {
-    write_json_if_changed(
-        &mirror_root.join(FOCUS_TASK_POINTER_NAME),
-        &json!({
-            "task_id": task_id,
-            "task": task,
-            "updated_at": updated_at,
-        }),
-    )
-}
-
-#[allow(dead_code)]
-fn write_task_registry_entry(
-    mirror_root: &Path,
-    entry: TaskRegistryEntry<'_>,
-) -> Result<bool, String> {
-    let existing = read_json_strict(&mirror_root.join(TASK_REGISTRY_NAME))?;
-    let focus_task = entry.focus_task_id.map_or_else(
-        || safe_slug(&value_text(existing.get("focus_task_id"))),
-        ToString::to_string,
-    );
-    let mut rows = registry_rows_from_payload(&existing);
-    let mut replaced = false;
-    for row in &mut rows {
-        let Some(map) = row.as_object_mut() else {
-            continue;
-        };
-        if safe_slug(&value_text(map.get("task_id"))) != entry.task_id {
-            continue;
-        }
-        map.insert(
-            "task_id".to_string(),
-            Value::String(entry.task_id.to_string()),
-        );
-        map.insert("task".to_string(), Value::String(entry.task.to_string()));
-        map.insert(
-            "updated_at".to_string(),
-            Value::String(entry.updated_at.to_string()),
-        );
-        map.insert(
-            "status".to_string(),
-            Value::String(entry.status.to_string()),
-        );
-        map.insert("phase".to_string(), Value::String(entry.phase.to_string()));
-        map.insert(
-            "resume_allowed".to_string(),
-            entry.resume_allowed.map_or(Value::Null, Value::Bool),
-        );
-        replaced = true;
-        break;
-    }
-    if !replaced {
-        rows.push(json!({
-            "task_id": entry.task_id,
-            "task": entry.task,
-            "updated_at": entry.updated_at,
-            "status": entry.status,
-            "phase": entry.phase,
-            "resume_allowed": entry.resume_allowed,
-        }));
-    }
-    let compacted = normalize_task_registry_rows(focus_task, rows).0;
-    write_json_if_changed(&mirror_root.join(TASK_REGISTRY_NAME), &compacted)
 }
 
 pub(crate) fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
@@ -1179,6 +1037,59 @@ fn shell_command_looks_like_verification(command: &str) -> bool {
         || c.contains("./verify.sh")
         || c.contains("task test")
         || c.contains("task check")
+        // Formal / math toolchains (narrow tokens; avoid bare `python` as the only signal).
+        || c.contains("sympy")
+        || c.contains(" z3 ")
+        || c.starts_with("z3 ")
+        || c.contains("\tz3 ")
+        || c.contains(" z3\t")
+        || c.contains("lean4")
+        || c.contains(" lean ")
+        || c.trim_start().starts_with("lean ")
+        || c.contains("coqc")
+        || c.contains("coqchk")
+        || c.contains("lake build")
+        || c.contains("lake test")
+        || c.contains("lake check")
+        || c.contains("lake exe")
+        || c.contains("isabelle build")
+}
+
+#[cfg(test)]
+mod shell_command_verification_heuristic_tests {
+    use super::shell_command_looks_like_verification;
+
+    #[test]
+    fn matrix_math_formal_and_build_tools() {
+        assert!(shell_command_looks_like_verification(
+            "python -c \"import sympy; print(sympy.simplify(1))\""
+        ));
+        assert!(shell_command_looks_like_verification("z3 /tmp/proof.smt2"));
+        assert!(shell_command_looks_like_verification("  z3  /tmp/x.smt2"));
+        assert!(shell_command_looks_like_verification("lean --version"));
+        assert!(shell_command_looks_like_verification(
+            "lake build && lake test"
+        ));
+        assert!(shell_command_looks_like_verification(
+            "coqc -Q theories Foo.v"
+        ));
+        assert!(shell_command_looks_like_verification(
+            "coqchk -silent Foo.vo"
+        ));
+        assert!(shell_command_looks_like_verification("isabelle build -D ."));
+        assert!(shell_command_looks_like_verification("cargo test -q"));
+        assert!(shell_command_looks_like_verification("pytest -q"));
+    }
+
+    #[test]
+    fn matrix_rejects_bare_python_and_random_strings() {
+        assert!(!shell_command_looks_like_verification("python foo.py"));
+        assert!(!shell_command_looks_like_verification(
+            "python -c \"print(1)\""
+        ));
+        assert!(!shell_command_looks_like_verification("echo hello"));
+        assert!(!shell_command_looks_like_verification("leaning tower")); // not `lean ` token
+    }
 }
 
 fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView) -> bool {
@@ -1391,42 +1302,6 @@ fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>
     Ok(Some(evaluation))
 }
 
-#[allow(dead_code)]
-fn write_session_artifact_set(
-    paths: ArtifactPaths<'_>,
-    payloads: ArtifactPayloads<'_>,
-    changed_paths: &mut Vec<String>,
-) -> Result<(), String> {
-    if write_text_if_changed(paths.summary, payloads.summary_text)? {
-        changed_paths.push(paths.summary.display().to_string());
-    }
-    if write_json_if_changed(paths.next_actions, payloads.next_actions)? {
-        changed_paths.push(paths.next_actions.display().to_string());
-    }
-    if write_json_if_changed(paths.evidence, payloads.evidence)? {
-        changed_paths.push(paths.evidence.display().to_string());
-    }
-    if let Some(path) = paths.trace_metadata {
-        write_json_artifact_if_changed(path, payloads.trace_metadata, changed_paths)?;
-    }
-    if let (Some(path), Some(payload)) = (paths.journal, payloads.journal) {
-        write_json_artifact_if_changed(path, payload, changed_paths)?;
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn write_json_artifact_if_changed(
-    path: &Path,
-    payload: &Value,
-    changed_paths: &mut Vec<String>,
-) -> Result<(), String> {
-    if write_json_if_changed(path, payload)? {
-        changed_paths.push(path.display().to_string());
-    }
-    Ok(())
-}
-
 fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
     let items = if payload.get("schema_version").and_then(Value::as_str)
         == Some(EVIDENCE_INDEX_SCHEMA_VERSION)
@@ -1445,236 +1320,6 @@ fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
         .unwrap_or_default()
 }
 
-#[allow(dead_code)]
-fn normalize_next_actions(payload: &Value) -> Vec<String> {
-    let actions = if payload.get("schema_version").and_then(Value::as_str)
-        == Some(NEXT_ACTIONS_SCHEMA_VERSION)
-    {
-        payload.get("next_actions")
-    } else {
-        payload
-            .get("next_actions")
-            .or_else(|| payload.get("actions"))
-    };
-    actions
-        .and_then(Value::as_array)
-        .map(|rows| {
-            rows.iter()
-                .map(coerce_next_action_line)
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-#[allow(dead_code)]
-fn normalize_trace_skills(payload: &Value) -> Vec<String> {
-    let skills = if payload.get("schema_version").and_then(Value::as_str)
-        == Some(TRACE_METADATA_SCHEMA_VERSION)
-    {
-        payload.get("matched_skills")
-    } else {
-        payload
-            .get("matched_skills")
-            .or_else(|| payload.get("skills"))
-    };
-    skills
-        .and_then(Value::as_array)
-        .map(|rows| {
-            rows.iter()
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-#[allow(dead_code)]
-fn coerce_next_action_line(value: &Value) -> String {
-    if let Some(text) = value.as_str() {
-        return text.trim().to_string();
-    }
-    if let Some(map) = value.as_object() {
-        for key in ["title", "summary", "action", "label", "details"] {
-            let text = value_text(map.get(key));
-            if !text.is_empty() {
-                return text;
-            }
-        }
-    }
-    value_text(Some(value))
-}
-
-#[allow(dead_code)]
-fn authoritative_next_actions(
-    snapshot_payload: &Value,
-    supervisor_state: &Map<String, Value>,
-) -> Vec<String> {
-    let supervisor_actions = supervisor_state
-        .get("next_actions")
-        .and_then(Value::as_array)
-        .map(|rows| {
-            stable_line_items(
-                rows.iter()
-                    .map(coerce_next_action_line)
-                    .filter(|item| !item.is_empty())
-                    .collect(),
-            )
-        })
-        .unwrap_or_default();
-    if supervisor_actions.is_empty() {
-        normalize_next_actions(snapshot_payload)
-    } else {
-        supervisor_actions
-    }
-}
-
-#[allow(dead_code)]
-fn fallback_route_from_supervisor(supervisor_state: &Map<String, Value>) -> Vec<String> {
-    let controller = supervisor_state
-        .get("controller")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    stable_line_items(vec![
-        value_text(controller.get("gate")),
-        value_text(controller.get("primary_owner")),
-        value_text(controller.get("overlay")),
-        value_text(controller.get("owner_lane")),
-        value_text(supervisor_state.get("primary_owner")),
-    ])
-}
-
-#[allow(dead_code)]
-fn trace_payload_identity_matches(
-    payload: &Value,
-    task: &str,
-    status: &str,
-    current_routing_runtime_version: u64,
-) -> bool {
-    if !payload.is_object() {
-        return false;
-    }
-    let payload_task = value_text(payload.get("task"));
-    if payload_task.is_empty() && !normalize_trace_skills(payload).is_empty() {
-        return true;
-    }
-    let payload_status = value_text(payload.get("verification_status"));
-    if !looks_same_identity(&payload_task, task) {
-        return false;
-    }
-    if !payload_status.is_empty() && payload_status != status {
-        return false;
-    }
-    if let Some(version) = payload
-        .get("routing_runtime_version")
-        .and_then(Value::as_u64)
-    {
-        if version != current_routing_runtime_version {
-            return false;
-        }
-    }
-    true
-}
-
-#[allow(dead_code)]
-fn authoritative_route(
-    trace_payload: &Value,
-    supervisor_state: &Map<String, Value>,
-    task: &str,
-    status: &str,
-    current_routing_runtime_version: u64,
-) -> Vec<String> {
-    if trace_payload_identity_matches(trace_payload, task, status, current_routing_runtime_version)
-    {
-        let route = normalize_trace_skills(trace_payload);
-        if !route.is_empty() {
-            return route;
-        }
-    }
-    fallback_route_from_supervisor(supervisor_state)
-}
-
-#[allow(dead_code)]
-fn normalize_supervisor_state(payload: &Value) -> Map<String, Value> {
-    let source = payload.as_object().cloned().unwrap_or_default();
-    let mut normalized = source.clone();
-    normalized.insert(
-        "schema_version".to_string(),
-        Value::String(SUPERVISOR_STATE_SCHEMA_VERSION.to_string()),
-    );
-
-    let delegation = source
-        .get("delegation")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_else(|| {
-            let mut map = Map::new();
-            for key in [
-                "delegation_plan_created",
-                "spawn_attempted",
-                "spawn_block_reason",
-                "fallback_mode",
-                "delegated_sidecars",
-            ] {
-                if let Some(value) = source.get(key) {
-                    map.insert(key.to_string(), value.clone());
-                }
-            }
-            map
-        });
-    normalized.insert("delegation".to_string(), Value::Object(delegation));
-
-    let verification = source
-        .get("verification")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_else(|| {
-            let mut map = Map::new();
-            for key in ["verification_status", "last_verification_summary"] {
-                if let Some(value) = source.get(key) {
-                    map.insert(key.to_string(), value.clone());
-                }
-            }
-            map
-        });
-    normalized.insert("verification".to_string(), Value::Object(verification));
-
-    let mut continuity = source
-        .get("continuity")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    for key in [
-        "story_state",
-        "resume_allowed",
-        "last_updated_at",
-        "active_lease_expires_at",
-        "state_reason",
-    ] {
-        if !continuity.contains_key(key) {
-            if let Some(value) = source.get(key) {
-                continuity.insert(key.to_string(), value.clone());
-            }
-        }
-    }
-    normalized.insert("continuity".to_string(), Value::Object(continuity));
-
-    let blockers = source
-        .get("blockers")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_else(|| {
-            let mut map = Map::new();
-            if let Some(value) = source.get("open_blockers") {
-                map.insert("open_blockers".to_string(), value.clone());
-            }
-            map
-        });
-    normalized.insert("blockers".to_string(), Value::Object(blockers));
-    normalized
-}
-
 fn supervisor_contract(state: &Map<String, Value>) -> Map<String, Value> {
     state
         .get("execution_contract")
@@ -1683,86 +1328,11 @@ fn supervisor_contract(state: &Map<String, Value>) -> Map<String, Value> {
         .unwrap_or_default()
 }
 
-#[allow(dead_code)]
-fn parse_iso_timestamp(value: Option<&Value>) -> Option<DateTime<FixedOffset>> {
-    let text = value_text(value);
-    if text.is_empty() {
-        return None;
-    }
-    let normalized = if text.ends_with('Z') {
-        format!("{}+00:00", &text[..text.len() - 1])
-    } else {
-        text
-    };
-    DateTime::parse_from_rfc3339(&normalized).ok()
-}
-
-#[allow(dead_code)]
-fn load_routing_runtime_version(repo_root: &Path) -> u64 {
-    let runtime_path = repo_root.join("skills").join("SKILL_ROUTING_RUNTIME.json");
-    runtime_view::read_json_if_exists(&runtime_path)
-        .get("version")
-        .and_then(Value::as_u64)
-        .unwrap_or(1)
-}
-
-#[allow(dead_code)]
-fn synthesized_status(supervisor_state: &Map<String, Value>) -> String {
-    let verification = supervisor_state
-        .get("verification")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let continuity = supervisor_state
-        .get("continuity")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    first_nonempty(&[
-        value_text(verification.get("verification_status")),
-        value_text(continuity.get("story_state")),
-        value_text(supervisor_state.get("active_phase")),
-        "in_progress".to_string(),
-    ])
-}
-
-#[allow(dead_code)]
-fn object_has_any_signal(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Object(map) => !map.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::String(text) => !text.trim().is_empty(),
-        _ => true,
-    }
-}
-
-#[allow(dead_code)]
-fn terminal_reason(prefix: &str, value: &str, terminal_values: &[&str]) -> String {
-    if is_terminal(value, terminal_values) {
-        format!("{prefix}: {value}")
-    } else {
-        String::new()
-    }
-}
-
 fn is_terminal(value: &str, terminal_values: &[&str]) -> bool {
     let lowered = value.trim().to_ascii_lowercase();
     terminal_values
         .iter()
         .any(|candidate| lowered == *candidate)
-}
-
-#[allow(dead_code)]
-fn looks_same_identity(left: &str, right: &str) -> bool {
-    let left_token = safe_slug(&left.to_ascii_lowercase());
-    let right_token = safe_slug(&right.to_ascii_lowercase());
-    if left_token.is_empty() || right_token.is_empty() {
-        return true;
-    }
-    left_token == right_token
-        || left_token.contains(&right_token)
-        || right_token.contains(&left_token)
 }
 
 #[cfg(test)]

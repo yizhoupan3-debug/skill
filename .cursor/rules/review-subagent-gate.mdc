@@ -13,4 +13,6 @@ alwaysApply: true
 
 **反模式（硬禁止）**：在可见回复里自拟整段「续跑/门控」机读块（拼装键值、拒因长文、仿内部字段等）——与宿主实际注入的 **`router-rs REVIEW_GATE`** / **`router-rs AG_FOLLOWUP`** 等短码不一致时应视为伪造；应输出业务结论，清门只用了 **单行** token（见 `AGENTS.md` **Host Boundaries** 与 **Execution Ladder**）。
 
+**`updateCurrentStep`**：review 子代理 lane 若暴露该工具，调用契约与 **`.cursor/rules/execution-subagent-gate.mdc`** 中同名小节一致（禁止空 `input: {}`；失败则改文字进度）。
+
 **显式豁免**：用户要求避免 subagent（例如 "do not use subagent" / 「不要用子代理」）→ 本 gate 不适用。

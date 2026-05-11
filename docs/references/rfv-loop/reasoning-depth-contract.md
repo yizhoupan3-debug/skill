@@ -18,6 +18,48 @@
 - [ ] **verify** 是否对应明确 `verify_commands`，且 **PASS/FAIL** 有命令/日志而非「感觉通过」？
 - [ ] 本轮是否写入 **`append_round`**（含 `verify_result`）？
 
+## 可程序化硬门禁（`completion_gates` / `close_gates`）
+
+与 **advisory rollup**（`DepthCompliance` / `resolve_task_view` 的 `depth_score`、continuity digest 一行「深度信号」）分工如下：
+
+| 维度 | advisory rollup | 硬门禁（opt-in） |
+|------|-----------------|------------------|
+| **默认** | 总是计算、供 digest / statusline 展示 | **默认关闭**；仅当账本中显式写入 gate 对象且 `enabled` 非 `false` 时生效 |
+| **真源** | `task_state::depth_compliance_aggregate` → `ResolvedTaskView.depth_compliance` | 同一条聚合链：**不**在 hook bash 复制第二套深度算法 |
+| **GOAL** | `depth_score` 等字段仅提示 | `GOAL_STATE.completion_gates`：在 `framework_autopilot_goal` **`operation=complete`** 路径校验；失败返回 **Err**、**不写** `status=completed` |
+| **RFV** | 同上 | `RFV_LOOP_STATE.close_gates`：在写入前对「收口轮」预览态跑同一套 `depth_compliance_aggregate` 校验；触发于 **supervisor 显式 `close`/`closed`**，以及 **`max_rounds` 耗尽**（`append_round` 上 `round_n >= max_rounds` 且非 `block`，账本将记 `loop_status=closed`）的自动收口；失败 **Err**、**不写**本轮（磁盘轮次保持追加前状态） |
+| **SKIPPED** | 计数进 rollup | 若 `require_last_round_verify_pass` 等约束开启，**显式 close** 或 **`max_rounds` 耗尽自动 closed** 仍可能被拒（由你 opt-in） |
+
+### `completion_gates`（`GOAL_STATE.json`）
+
+可选对象；缺省或 `null` → 关闭。字段（均为可选布尔/数值，语义以 Rust 为准）：
+
+| 字段 | 含义 |
+|------|------|
+| `enabled` | 缺省 `true`（对象存在时）；显式 `false` 则整段关闭 |
+| `min_depth_score` | `0..=3`，要求 `DepthCompliance.depth_score`（受 `ROUTER_RS_DEPTH_SCORE_MODE` 影响）≥ 该值 |
+| `require_successful_evidence_row` | 要求 `EVIDENCE_INDEX` 至少一条成功行（与 rollup `has_successful_verification` 对齐） |
+| `min_goal_checkpoints` | 要求 `GOAL_STATE.checkpoints` 数组长度 ≥ 该值 |
+| `block_on_rfv_pass_without_evidence` | 若 `rfv_pass_without_evidence_count>0` 则拒绝 complete（与 RFV `cross_check` / rollup 对齐） |
+
+### `close_gates`（`RFV_LOOP_STATE.json`）
+
+可选对象；缺省或 `null` → 关闭。
+
+| 字段 | 含义 |
+|------|------|
+| `enabled` | 同 GOAL |
+| `require_last_round_verify_pass` | 收口轮 `verify_result` 必须为 **`PASS`**（`SKIPPED` 显式 close 可被拦下） |
+| `min_depth_score` | 对 **预览态** RFV 状态（含本轮拟追加轮次）跑同一套 `depth_compliance_aggregate` 再比阈值 |
+| `block_on_rfv_pass_without_evidence` | 与 rollup `rfv_pass_without_evidence_count` 对齐 |
+| `require_external_research_object_when_strict_on_close` | 当 `allow_external_research` 且 `external_research_strict` 时，要求收口轮带 **结构化** `external_research` 对象（结构化/strict 形状仍走既有 `append_round` 校验） |
+
+### Closeout **R9**（可选）
+
+将 closeout 记录与「某 `task_id` 上声明的 depth 策略」对齐的 **R9** 规则当前 **明确推迟**：`CloseoutRecord` 为 `deny_unknown_fields` 封闭 schema，引入任务级策略需全链路 schema + 解析任务指针；现阶段用 **`completion_gates` / `close_gates`** 在 GOAL complete / RFV close 上硬拦即可。参见 `closeout_enforcement.rs` 内 R9 注释。
+
+---
+
 ## 反模式
 
 - 用外研长文代替 verifier 跑命令。

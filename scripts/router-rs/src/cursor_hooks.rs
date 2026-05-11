@@ -1078,6 +1078,30 @@ fn is_autopilot_entrypoint_prompt(text: &str) -> bool {
     autopilot_entrypoint_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
+/// CreatePlan 默认目录下的 `.plan.md`（`ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE` 开启时用于对齐 `/autopilot` goal 门控）。
+fn workspace_cursor_plan_file_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        // Match CreatePlan default layout; avoid heavy character-class escaping in raw strings.
+        Regex::new(r"(?i)\.cursor/plans/[^\s]+\.plan\.md")
+            .expect("invalid workspace_cursor_plan_file regex")
+    })
+}
+
+fn has_workspace_cursor_plan_file_reference(text: &str) -> bool {
+    workspace_cursor_plan_file_re().is_match(text)
+}
+
+/// `/autopilot` 字面入口，或在 opt-in 下命中官方 Plan 文件路径（含嵌在 hook JSON 其它字段中的引用）。
+fn is_autopilot_goal_entry_prompt(prompt: &str, signal_text: &str) -> bool {
+    is_autopilot_entrypoint_prompt(prompt)
+        || (crate::router_env_flags::router_rs_cursor_plan_build_autopilot_goal_gate_enabled()
+            && (has_workspace_cursor_plan_file_reference(signal_text)
+                || has_workspace_cursor_plan_file_reference(&strip_quoted_or_codeblock_or_url(
+                    prompt,
+                ))))
+}
+
 /// `/team` 等框架入口仍视为委托/并行编排；**框架命令仅认 `/` 前缀**；**`/autopilot` 除外**（只走 goal 机）。
 /// 修复：此前 `framework_entrypoint` 含 autopilot，导致 `delegation_required` 与 `goal_required` 叠乘，
 /// 与 autopilot 执行轮的门控语义冲突（现已拆分为仅 goal 路径跟 AG_FOLLOWUP）。
@@ -2107,14 +2131,16 @@ fn state_lock_degraded_followup() -> &'static str {
     "router-rs：hook-state 锁不可用，本闸门控降级。收口前须见独立 subagent lane，或在助手输出中写明拒因。"
 }
 
-fn lock_failure_followup_for_before_submit(prompt: &str) -> (bool, String) {
-    let review = is_review_prompt(prompt);
-    let autopilot_entrypoint = is_autopilot_entrypoint_prompt(prompt);
+fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
+    let text = prompt_text(event);
+    let signal_text = hook_event_signal_text(event, &text, "");
+    let review = is_review_prompt(&text);
+    let autopilot_entrypoint = is_autopilot_goal_entry_prompt(&text, &signal_text);
     let review_arms = review && !autopilot_entrypoint;
     let delegation =
-        is_parallel_delegation_prompt(prompt) || framework_prompt_arms_delegation(prompt);
+        is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let overridden =
-        has_review_override(prompt) || has_delegation_override(prompt) || has_override(prompt);
+        has_review_override(&text) || has_delegation_override(&text) || has_override(&text);
 
     let strong_constraint = (review_arms || delegation || autopilot_entrypoint) && !overridden;
     if strong_constraint {
@@ -2136,7 +2162,7 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
     let response_text = agent_response_text(event);
     let signal_text = hook_event_signal_text(event, &text, &response_text);
     let review = is_review_prompt(&text);
-    let autopilot_entrypoint = is_autopilot_entrypoint_prompt(&text);
+    let autopilot_entrypoint = is_autopilot_goal_entry_prompt(&text, &signal_text);
     let review_arms = review && !autopilot_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
@@ -2156,8 +2182,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let frame = crate::task_state::resolve_cursor_continuity_frame(repo_root);
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
-        let text = prompt_text(event);
-        let (allow_continue, followup) = lock_failure_followup_for_before_submit(&text);
+        let (allow_continue, followup) = lock_failure_followup_for_before_submit(event);
         let chat = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
         let mut out = json!({ "continue": allow_continue });
         if !allow_continue || chat {
@@ -2177,7 +2202,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let text = prompt_text(event);
     let signal_text = hook_event_signal_text(event, &text, "");
     let review = is_review_prompt(&text);
-    let autopilot_entrypoint = is_autopilot_entrypoint_prompt(&text);
+    let autopilot_entrypoint = is_autopilot_goal_entry_prompt(&text, &signal_text);
     let review_arms_for_gate = review && !autopilot_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
@@ -3025,33 +3050,6 @@ fn truncate_utf8_chars_local(input: &str, max_chars: usize) -> String {
         out.truncate(out.len().saturating_sub(3));
         out.push_str("...");
     }
-    out
-}
-
-#[allow(dead_code)]
-fn read_json_strict(path: &Path) -> Result<Value, String> {
-    if !path.is_file() {
-        return Ok(Value::Object(serde_json::Map::new()));
-    }
-    let text = fs::read_to_string(path)
-        .map_err(|err| format!("read json failed for {}: {err}", path.display()))?;
-    serde_json::from_str(&text)
-        .map_err(|err| format!("parse json failed for {}: {err}", path.display()))
-}
-
-#[allow(dead_code)]
-fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
-    }
-    if input.chars().count() <= max_chars {
-        return input.to_string();
-    }
-    let mut out = input
-        .chars()
-        .take(max_chars.saturating_sub(3))
-        .collect::<String>();
-    out.push_str("...");
     out
 }
 
@@ -4102,6 +4100,44 @@ mod tests {
             "autopilot execution turn must not re-arm review from findings wording"
         );
         assert!(state.goal_required);
+    }
+
+    #[test]
+    fn cursor_plan_build_path_arms_goal_when_opt_in_env() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev = env::var_os("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE");
+        env::remove_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE");
+        let repo = fresh_repo();
+        let cwd = repo.display().to_string();
+        let plan_ref = format!("{cwd}/.cursor/plans/feature.plan.md");
+        let payload_off = json!({
+            "session_id": "plan-build-off",
+            "cwd": cwd,
+            "prompt": format!("Implement {plan_ref}"),
+        });
+        let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload_off);
+        let st_off = load_state_for(&repo, "plan-build-off");
+        assert!(
+            !st_off.goal_required,
+            "without ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE, plan path must not arm goal_required"
+        );
+
+        env::set_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE", "1");
+        let payload_on = json!({
+            "session_id": "plan-build-on",
+            "cwd": cwd,
+            "prompt": format!("Ship {plan_ref}"),
+        });
+        let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload_on);
+        let st_on = load_state_for(&repo, "plan-build-on");
+        assert!(
+            st_on.goal_required,
+            "with opt-in env, .cursor/plans/*.plan.md reference must arm goal like /autopilot"
+        );
+        match prev {
+            Some(v) => env::set_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE", v),
+            None => env::remove_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE"),
+        }
     }
 
     #[test]

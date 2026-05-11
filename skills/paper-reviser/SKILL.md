@@ -35,7 +35,7 @@ trigger_hints:
   - "edit_scope: surgical"
   - "edit_scope: refactor"
 metadata:
-  version: "3.5.5"
+  version: "3.6.0"
   platforms: [codex]
   tags: [paper, manuscript, revise, reviewer-comments, rebuttal, appendix-routing]
 framework_roles:
@@ -134,6 +134,11 @@ When the strongest honest path is not "repair everything", this skill may:
 These are not edge cases. They are part of the normal contract.
 
 ## What this skill should deliver
+
+**Before describing edits**，先做 **`tone_audit`**（四句 checklist，对齐
+[`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+**§3**，与 `$paper-writing` Output Defaults 同一映射：(a) 内部口径、(b) 防御口径、(c)
+负面对比骨架、(d) `but` / `not` / `rather than` 堆叠。**若本 batch 仅改结构、图表管线或排版而未触及中英文句子**，不写四项检视，改为显式一行 **`本 batch 未触达用语层`** 并说明范围（例如仅 Fig.3 重排 / 附录搬家）。
 
 Default output should stay simple:
 

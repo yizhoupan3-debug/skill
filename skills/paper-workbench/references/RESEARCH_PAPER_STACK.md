@@ -28,6 +28,7 @@
 | **L1** | 证据与主张不匹配 | [`claim-evidence-ladder.md`](claim-evidence-ladder.md)（先补证据再缩口径） |
 | **L1** | 落笔 / 语言问题 | [`research-language-norms.md`](research-language-norms.md) |
 | **L2** | 顶刊/顶会栏 | [`top-tier-paper-standard.md`](top-tier-paper-standard.md) |
+| **L2** | Claim card + 章节 handoff | [`../../paper-writing/references/claim-spine-and-section-contract.md`](../../paper-writing/references/claim-spine-and-section-contract.md) |
 | **L2** | 先学 ref 再写 | [`ref-first-writing-workflow.md`](ref-first-writing-workflow.md) |
 | **L2** | Lane 语义速查 | [`paper-lanes.md`](paper-lanes.md) |
 | **L2** | 用户话术 → lane 最小对照 | [`user-phrases-to-lanes.md`](user-phrases-to-lanes.md) |
@@ -46,6 +47,23 @@
 
 - **不存在** `skills/literature-synthesis/`：目标期刊语料与 `ref_learning_brief` 在 **`$paper-workbench` 内**完成，见 [`ref-first-writing-workflow.md`](ref-first-writing-workflow.md)。
 - `literature-synthesis` slug 在仓库政策中视为 **retired**（勿复活目录）；编译器侧勿再当作 runtime workflow slug。
+
+## 科研纪录与仓库连续性
+
+长周期科研与改稿应把**可冷启动叙事**落在仓库里，而不是只留在对话里：
+
+- **框架连续性目录**：[`artifacts/current/`](../../../artifacts/current/) 下的 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`（及同层相关指针）是跨会话接力的机器可读真源；分层与开关以 [`docs/harness_architecture.md`](../../../docs/harness_architecture.md) 为准。
+- **手稿主张帐本**：`paper_story/CLAIM_LEDGER.md`（与 `EVIDENCE_ANCHOR_MAP` 等）冻结 claim 天花板与证据锚；主张—证据纪律只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
+- **阴性结果**：与阳性结果同等记录（失败条件、为何仍信息量足够、是否影响 claim 收窄）；避免「只写成功路径」造成不可复核的故事线。
+- **计划 vs 实际**：预注册/分析计划与事后偏离须在方法或补充材料中可追踪；执行面契约与验收形状见 [`skills/SKILL_FRAMEWORK_PROTOCOLS.md`](../../SKILL_FRAMEWORK_PROTOCOLS.md)（与 harness 文档互补，不重复第二真源）。
+- **可复现实验最低纪录**：环境、数据标识、软件 pin、主分析 vs 探索性分析的边界，见 [`../../experiment-reproducibility/references/research-record-minimum.md`](../../experiment-reproducibility/references/research-record-minimum.md)。
+
+## 宿主与专科入口（真源一段）
+
+手稿专科（`paper-workbench` / `paper-writing` / `paper-reviser` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：同一套 `SKILL.md` 与 reference 由 **`configs/framework/RUNTIME_REGISTRY.json`** 注册的技能安装与投影管线分发；把 Cursor / Codex / 其它闭集宿主的规则装到工作区时，以重建后的 **`router-rs framework install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`../../../docs/host_adapter_contract.md`](../../../docs/host_adapter_contract.md)。
+
+- **`$paper-workbench`**：在 **Codex 与 Cursor** 上均为**用户可显式 invocation 的前门**（`user-invocable`，宿主以各环境 `SKILL.md` / 路由为准）。
+- **`$paper-writing` / `$paper-reviewer` / `$paper-reviser`**：保持 **`disable-model-invocation: true`** 与既有 Codex 元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、改稿、润色 lane）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。
 
 ## 可选工具
 

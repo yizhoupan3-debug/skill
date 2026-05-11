@@ -362,6 +362,110 @@ fn normalize_verify_result(raw: &str) -> Result<String, String> {
     ))
 }
 
+/// Optional hard gates on RFV **收口轮**预览（`append_round`）：supervisor 显式 **`close`/`closed`**，
+/// 或 **`max_rounds` 耗尽**（`round_n >= max_rounds` 且非 block）自动记 `closed` 时同样校验。
+#[derive(Debug, Clone)]
+struct RfvCloseGates {
+    enabled: bool,
+    require_last_round_verify_pass: bool,
+    min_depth_score: Option<u8>,
+    block_on_rfv_pass_without_evidence: bool,
+    require_external_research_object_when_strict_on_close: bool,
+}
+
+fn parse_close_gates(state: &Map<String, Value>) -> Option<RfvCloseGates> {
+    let raw = state.get("close_gates")?;
+    if raw.is_null() {
+        return None;
+    }
+    let o = raw.as_object()?;
+    Some(RfvCloseGates {
+        enabled: o.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+        require_last_round_verify_pass: o
+            .get("require_last_round_verify_pass")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        min_depth_score: o
+            .get("min_depth_score")
+            .and_then(Value::as_u64)
+            .map(|u| u.min(3) as u8),
+        block_on_rfv_pass_without_evidence: o
+            .get("block_on_rfv_pass_without_evidence")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        require_external_research_object_when_strict_on_close: o
+            .get("require_external_research_object_when_strict_on_close")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    })
+}
+
+fn enforce_rfv_close_gates(
+    repo_root: &Path,
+    task_id: &str,
+    preview_rfv: &Map<String, Value>,
+    closing_round: &Map<String, Value>,
+    gates: &RfvCloseGates,
+) -> Result<(), String> {
+    if !gates.enabled {
+        return Ok(());
+    }
+    if gates.require_last_round_verify_pass {
+        let vr = closing_round
+            .get("verify_result")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if vr != "PASS" {
+            return Err(format!(
+                "RFV close_gates: require_last_round_verify_pass but verify_result={vr:?}"
+            ));
+        }
+    }
+    let allow_external = preview_rfv
+        .get("allow_external_research")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let strict_task = external_research_strict_from_loaded_state(preview_rfv);
+    if gates.require_external_research_object_when_strict_on_close && allow_external && strict_task
+    {
+        let has_obj = closing_round
+            .get("external_research")
+            .is_some_and(|v| !v.is_null() && v.is_object());
+        if !has_obj {
+            return Err(
+                "RFV close_gates: require_external_research_object_when_strict_on_close but closing round has no structured external_research object"
+                    .to_string(),
+            );
+        }
+    }
+    let (_, evidence_ok) =
+        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(repo_root, task_id);
+    let goal_opt = crate::autopilot_goal::read_goal_state(repo_root, Some(task_id))
+        .ok()
+        .flatten();
+    let preview_val = Value::Object(preview_rfv.clone());
+    let dc = crate::task_state::depth_compliance_aggregate(
+        goal_opt.as_ref(),
+        Some(&preview_val),
+        evidence_ok,
+    );
+    if let Some(min) = gates.min_depth_score {
+        if dc.depth_score < min {
+            return Err(format!(
+                "RFV close_gates: depth_score={} < min_depth_score={}",
+                dc.depth_score, min
+            ));
+        }
+    }
+    if gates.block_on_rfv_pass_without_evidence && dc.rfv_pass_without_evidence_count > 0 {
+        return Err(format!(
+            "RFV close_gates: block_on_rfv_pass_without_evidence but rfv_pass_without_evidence_count={}",
+            dc.rfv_pass_without_evidence_count
+        ));
+    }
+    Ok(())
+}
+
 /// EVIDENCE_INDEX 行视为「成功验证」：`success==true` 或 `exit_code==0`。
 fn evidence_row_is_success(row: &Value) -> bool {
     if row.get("success").and_then(Value::as_bool) == Some(true) {
@@ -676,10 +780,22 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 .get("parallel_external_with_review")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
-            let prefer_structured_external = payload
-                .get("prefer_structured_external_research")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
+            // When external research is allowed, default structured blob preference to true so
+            // strict-mode validators and struct-hint nudges align; explicit `false` still wins.
+            // When `allow_external_research` is false, keep legacy default `false` unless the
+            // caller explicitly sets a bool (tests / forward-compat).
+            let prefer_structured_external = if allow_external {
+                match payload.get("prefer_structured_external_research") {
+                    None => true,
+                    Some(v) if v.is_null() => true,
+                    Some(v) => v.as_bool().unwrap_or(false),
+                }
+            } else {
+                payload
+                    .get("prefer_structured_external_research")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            };
             let external_research_strict = payload
                 .get("external_research_strict")
                 .and_then(Value::as_bool)
@@ -733,6 +849,11 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             if let Some(extra) = payload.get("metadata").cloned() {
                 obj.insert("metadata".to_string(), extra);
             }
+            if let Some(cg) = payload.get("close_gates") {
+                if !cg.is_null() {
+                    obj.insert("close_gates".to_string(), cg.clone());
+                }
+            }
 
             let path = rfv_loop_state_path(&repo_root, &task_id);
             let value = Value::Object(obj);
@@ -785,6 +906,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             if round_n > max_rounds {
                 return Err(format!("round {round_n} exceeds max_rounds {max_rounds}"));
             }
+
+            let close_gates_cfg = parse_close_gates(obj);
 
             let review_summary = payload
                 .get("review_summary")
@@ -875,6 +998,55 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 }
             }
             let entry = Value::Object(entry_map);
+
+            let supervisor_closes = matches!(supervisor_decision.as_str(), "close" | "closed");
+            if supervisor_closes {
+                if let Some(ref g) = close_gates_cfg {
+                    let mut preview_map = obj.clone();
+                    {
+                        let pr = preview_map
+                            .get_mut("rounds")
+                            .and_then(|r| r.as_array_mut())
+                            .ok_or_else(|| "RFV_LOOP_STATE.rounds missing".to_string())?;
+                        pr.push(entry.clone());
+                    }
+                    let closing = preview_map
+                        .get("rounds")
+                        .and_then(|r| r.as_array())
+                        .and_then(|a| a.last())
+                        .and_then(|v| v.as_object())
+                        .ok_or_else(|| {
+                            "RFV close_gates: internal error resolving closing round".to_string()
+                        })?;
+                    enforce_rfv_close_gates(&repo_root, &task_id, &preview_map, closing, g)?;
+                }
+            }
+
+            let closes_due_to_round_cap = !supervisor_closes
+                && !matches!(supervisor_decision.as_str(), "block" | "blocked")
+                && round_n >= max_rounds;
+            if closes_due_to_round_cap {
+                if let Some(ref g) = close_gates_cfg {
+                    let mut preview_map = obj.clone();
+                    {
+                        let pr = preview_map
+                            .get_mut("rounds")
+                            .and_then(|r| r.as_array_mut())
+                            .ok_or_else(|| "RFV_LOOP_STATE.rounds missing".to_string())?;
+                        pr.push(entry.clone());
+                    }
+                    let closing = preview_map
+                        .get("rounds")
+                        .and_then(|r| r.as_array())
+                        .and_then(|a| a.last())
+                        .and_then(|v| v.as_object())
+                        .ok_or_else(|| {
+                            "RFV close_gates: internal error resolving closing round (max_rounds)"
+                                .to_string()
+                        })?;
+                    enforce_rfv_close_gates(&repo_root, &task_id, &preview_map, closing, g)?;
+                }
+            }
 
             let rounds = obj
                 .get_mut("rounds")
@@ -1857,6 +2029,197 @@ mod tests {
             st["rfv_loop_state"]["external_research_strict"],
             json!(true)
         );
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn rfv_start_defaults_prefer_structured_when_allow_external() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-prefdef-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/extdef")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"extdef"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "extdef",
+            "goal": "g",
+            "max_rounds": 2u64,
+            "allow_external_research": true,
+        }))
+        .expect("start");
+        let st =
+            framework_rfv_loop(json!({"repo_root": rr, "operation": "status"})).expect("status");
+        assert_eq!(
+            st["rfv_loop_state"]["prefer_structured_external_research"],
+            json!(true)
+        );
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn append_round_close_gates_reject_skipped_when_require_pass() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-closegate-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/cg-task")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"cg-task"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "cg-task",
+            "goal": "g",
+            "max_rounds": 3u64,
+            "close_gates": {
+                "enabled": true,
+                "require_last_round_verify_pass": true
+            }
+        }))
+        .expect("start");
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "review_summary": "r",
+            "fix_summary": "f",
+            "verify_result": "PASS",
+            "supervisor_decision": "continue",
+        }))
+        .expect("r1");
+        let err = framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 2u64,
+            "review_summary": "r",
+            "fix_summary": "f",
+            "verify_result": "SKIPPED",
+            "supervisor_decision": "close",
+        }))
+        .expect_err("close with SKIPPED should fail gates");
+        assert!(
+            err.contains("close_gates") && err.contains("verify_result"),
+            "err={err}"
+        );
+        let st =
+            framework_rfv_loop(json!({"repo_root": rr, "operation": "status"})).expect("status");
+        assert_eq!(
+            st["rfv_loop_state"]["rounds"].as_array().map(|a| a.len()),
+            Some(1)
+        );
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// `close_gates` 在 **`max_rounds` 耗尽**（非显式 close）路径与显式 close 一致：仍校验收口轮。
+    #[test]
+    fn append_round_close_gates_enforced_on_max_rounds_cap() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-capgate-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/cap-g")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"cap-g"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "cap-g",
+            "goal": "g",
+            "max_rounds": 2u64,
+            "close_gates": {
+                "enabled": true,
+                "require_last_round_verify_pass": true
+            }
+        }))
+        .expect("start");
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "verify_result": "PASS",
+            "supervisor_decision": "continue",
+        }))
+        .expect("r1");
+        let err = framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 2u64,
+            "verify_result": "SKIPPED",
+            "supervisor_decision": "continue",
+        }))
+        .expect_err("max_rounds cap close must still enforce verify_pass gate");
+        assert!(
+            err.contains("close_gates") && err.contains("verify_result"),
+            "unexpected err: {err}"
+        );
+        let st =
+            framework_rfv_loop(json!({"repo_root": rr, "operation": "status"})).expect("status");
+        assert_eq!(
+            st["rfv_loop_state"]["rounds"].as_array().map(|a| a.len()),
+            Some(1)
+        );
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn append_round_max_rounds_cap_passes_close_gates_when_verify_pass() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-capgate-ok-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/cap-ok")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"cap-ok"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "cap-ok",
+            "goal": "g",
+            "max_rounds": 1u64,
+            "close_gates": {
+                "enabled": true,
+                "require_last_round_verify_pass": true
+            }
+        }))
+        .expect("start");
+        let out = framework_rfv_loop(json!({
+            "repo_root": rr.clone(),
+            "operation": "append_round",
+            "round": 1u64,
+            "verify_result": "PASS",
+            "supervisor_decision": "continue",
+        }))
+        .expect("single round hits cap");
+        let gs = out["rfv_loop_state"].as_object().expect("obj");
+        assert_eq!(gs.get("loop_status"), Some(&json!("closed")));
+        assert_eq!(gs["rounds"].as_array().map(|a| a.len()), Some(1));
         let _ = fs::remove_dir_all(&repo);
     }
 }

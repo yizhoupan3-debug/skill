@@ -141,7 +141,7 @@ pub(crate) struct RouteDecision {
     pub(crate) route_snapshot: RouteDecisionSnapshotPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct RouteContextPayload {
     pub(crate) execution_protocol: String,
     pub(crate) verification_required: bool,
@@ -217,6 +217,7 @@ pub(crate) struct RouteSnapshotEnvelopePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg(test)]
 pub(crate) struct RoutingEvalCasePayload {
     pub(crate) id: Option<Value>,
@@ -229,9 +230,19 @@ pub(crate) struct RoutingEvalCasePayload {
     pub(crate) focus_skill: Option<String>,
     #[serde(default)]
     pub(crate) forbidden_owners: Vec<String>,
+    /// When set, `evaluate_routing_cases` fails if `RouteDecision.layer` differs.
+    #[serde(default)]
+    pub(crate) expected_layer: Option<String>,
+    /// When set, must match `RouteDecision.route_context` exactly.
+    #[serde(default)]
+    pub(crate) route_context: Option<RouteContextPayload>,
+    /// Human-only fixture commentary; ignored by eval harness.
+    #[serde(default)]
+    pub(crate) notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg(test)]
 pub(crate) struct RoutingEvalCasesPayload {
     pub(crate) schema_version: String,

@@ -733,7 +733,11 @@ pub(crate) fn score_route_candidate<'a>(
     }
 }
 
-pub(crate) fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
+pub(crate) fn pick_owner<'a>(
+    candidates: Vec<RouteCandidate<'a>>,
+    query_text: &str,
+    query_token_list: &[String],
+) -> RouteCandidate<'a> {
     let mut owner_candidates = candidates
         .iter()
         .filter(|candidate| can_be_primary_owner(candidate.record))
@@ -754,7 +758,9 @@ pub(crate) fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandid
     if let Some(mut top_gate) = top_gate
         .as_ref()
         .filter(|candidate| {
-            candidate.record.slug == "agent-swarm-orchestration" && candidate.score >= 60.0
+            candidate.record.slug == "agent-swarm-orchestration"
+                && candidate.score >= 60.0
+                && !has_cursor_plan_mode_owner_context(query_text, query_token_list)
         })
         .cloned()
     {

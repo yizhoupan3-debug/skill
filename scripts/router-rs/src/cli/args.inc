@@ -18,6 +18,10 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: CursorCommand,
     },
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeCommand,
+    },
     Trace {
         #[command(subcommand)]
         command: TraceCommand,
@@ -161,6 +165,11 @@ pub(crate) enum CodexCommand {
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum CursorCommand {
     Hook(CursorHookCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum ClaudeCommand {
+    Hook(ClaudeHookCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -322,6 +331,14 @@ pub(crate) struct CodexHookCommand {
 
 #[derive(Args, Debug, Clone)]
 pub(crate) struct CursorHookCommand {
+    #[arg(long)]
+    pub(crate) event: String,
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct ClaudeHookCommand {
     #[arg(long)]
     pub(crate) event: String,
     #[arg(long)]
