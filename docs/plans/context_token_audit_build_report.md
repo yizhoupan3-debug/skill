@@ -8,7 +8,7 @@
 
 ## 1. 环境变量矩阵（对照 `docs/harness_architecture.md` §8）
 
-**结论**：`printenv | grep -E '^ROUTER_'` **未检出任何** `ROUTER_` / `ROUTER_RS_*` 覆写 → **unset → defaults**（与 §8 表中「默认」列一致：如 `ROUTER_RS_OPERATOR_INJECT` 默认开、`ROUTER_RS_GOAL_PROMPT_VERBOSE` 默认关/紧凑等）。
+**结论**：`printenv | grep -E '^ROUTER_'` **未检出任何** `ROUTER_` / `ROUTER_RS_*` 覆写 → **unset → defaults**（与 §8 表中「默认」列一致：如 `ROUTER_RS_OPERATOR_INJECT` 默认开、`retired verbose followup mode` 默认关/紧凑等）。
 
 | 变量名 | 本机值 | §8 关闭后影响摘要 | 功能减损等级（plan §0） |
 |--------|--------|-------------------|-------------------------|
@@ -64,7 +64,7 @@
 - `AGENTS.md` 由 Cursor **alwaysApply** 注入，体积最大；改策略前想清楚是否真需扩写。
 - `SKILL_ROUTING_RUNTIME.json` **不应**每轮整文件读入对话；路由命中后只读对应 `skill_path`（可用 `jq` 取单条 `records[]`）。
 - 任务切换后及时 **`complete` / `clear` Goal**、对齐 `active_task`，避免误续跑（Tier 0）。
-- 勿默认打开 `ROUTER_RS_GOAL_PROMPT_VERBOSE`；保持 beforeSubmit 侧双续跑 opt-in 关闭，除非明确需要（Tier 0）。
+- 勿默认打开 `retired verbose followup mode`；保持 beforeSubmit 侧双续跑 opt-in 关闭，除非明确需要（Tier 0）。
 - 大 `EVIDENCE_INDEX`：按需归档或收窄 PostTool 采样，避免把整份 JSON 反复贴进模型上下文。
 - Review/合规相关开关（如 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`）勿为省 token 随意关。
 - 需要总闸静音排障时再考虑 `ROUTER_RS_OPERATOR_INJECT=0`，日常优先账本与窄读（Tier 0）。

@@ -436,6 +436,25 @@ fn collect_runtime_skill_paths(value: &Value) -> BTreeSet<String> {
 fn collect_runtime_skill_paths_inner(value: &Value, paths: &mut BTreeSet<String>) {
     match value {
         Value::Object(map) => {
+            if let (Some(keys), Some(skills)) = (
+                map.get("keys").and_then(Value::as_array),
+                map.get("skills").and_then(Value::as_array),
+            ) {
+                let skill_path_idx = keys
+                    .iter()
+                    .position(|key| key.as_str() == Some("skill_path"));
+                if let Some(idx) = skill_path_idx {
+                    for row in skills {
+                        if let Some(path) = row
+                            .as_array()
+                            .and_then(|cols| cols.get(idx))
+                            .and_then(Value::as_str)
+                        {
+                            paths.insert(path.to_string());
+                        }
+                    }
+                }
+            }
             for (key, child) in map {
                 if key == "skill_path" {
                     if let Some(path) = child.as_str() {
@@ -1050,7 +1069,7 @@ mod tests {
         let runtime = root.join("skills/SKILL_ROUTING_RUNTIME.json");
         write(
             &runtime,
-            r#"{"records":[{"slug":"x","skill_path":"skills/missing/SKILL.md"}]}"#,
+            r#"{"keys":["slug","layer","owner","gate","session_start","summary","trigger_hints","priority","skill_path"],"skills":[["x","L0","owner","none","n/a","x",[],"P1","skills/missing/SKILL.md"]]}"#,
         );
         let err = verify_runtime_skill_paths(&root, &runtime, "test runtime").unwrap_err();
         assert!(err.contains("missing skill_path"), "{err}");
@@ -1062,7 +1081,7 @@ mod tests {
         let runtime = root.join("skills/SKILL_ROUTING_RUNTIME.json");
         write(
             &runtime,
-            r#"{"records":[{"slug":"x","skill_path":"artifacts/codex-skill-surface/skills/x/SKILL.md"}]}"#,
+            r#"{"keys":["slug","layer","owner","gate","session_start","summary","trigger_hints","priority","skill_path"],"skills":[["x","L0","owner","none","n/a","x",[],"P1","artifacts/codex-skill-surface/skills/x/SKILL.md"]]}"#,
         );
         let err = verify_runtime_skill_paths(&root, &runtime, "test runtime").unwrap_err();
         assert!(

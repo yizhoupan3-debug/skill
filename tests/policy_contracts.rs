@@ -157,8 +157,8 @@ fn plan_mode_keeps_review_optional_and_review_only() {
 
     let review_gate = read_text(&project_root().join(".cursor/rules/review-subagent-gate.mdc"));
     for marker in [
-        "review-only 边界",
-        "只输出 findings / risks / missing tests",
+        "review lane 必须只读",
+        "输出 findings、风险、缺测与证据锚点",
         "不改代码",
     ] {
         assert!(review_gate.contains(marker), "missing marker: {marker}");
@@ -344,7 +344,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     );
     let codex_policy = read_text(&repo_root.join("AGENTS.md"));
     assert!(codex_policy.contains("bounded sidecar admission"));
-    assert!(codex_policy.contains("同一轮并发启动"));
+    assert!(codex_policy.contains("主线程始终负责上下文判断"));
     assert!(manifest["full_sync"]["text_files"]
         .as_array()
         .unwrap()
@@ -740,30 +740,24 @@ fn generated_approval_policy_is_sparse() {
 }
 
 #[test]
-fn runtime_protocol_uses_behavior_driven_public_names() {
+fn runtime_hot_index_is_minimal() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
-    let checklist = runtime["checklist"]
-        .as_array()
-        .expect("runtime checklist")
-        .iter()
-        .map(|item| item.as_str().expect("checklist item"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    for marker in ["讨论:", "规划:", "执行:", "验证:"] {
-        assert!(
-            checklist.contains(marker),
-            "missing protocol marker: {marker}"
-        );
-    }
-    for stale in ["规范:", "计划:", "实施:"] {
-        assert!(
-            !checklist.contains(stale),
-            "stale protocol marker leaked: {stale}"
-        );
-    }
-    assert!(checklist.contains(
-        "Completion pressure changes route context only; it must not change selected owner."
-    ));
+    let runtime_obj = runtime.as_object().expect("runtime object");
+    let keys = runtime_obj.keys().cloned().collect::<HashSet<_>>();
+    assert_eq!(
+        keys,
+        HashSet::from([
+            "version".to_string(),
+            "schema_version".to_string(),
+            "scope".to_string(),
+            "keys".to_string(),
+            "skills".to_string(),
+        ])
+    );
+    assert!(runtime.get("checklist").is_none());
+    assert!(runtime.get("records").is_none());
+    assert!(runtime.get("plugin_abi_version").is_none());
+    assert!(runtime.get("vnext").is_none());
 }
 
 #[test]
@@ -831,25 +825,24 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
 }
 
 #[test]
-fn runtime_plugin_records_are_available_without_breaking_v3_rows() {
+fn runtime_hot_index_stays_separate_from_plugin_and_routing_catalogs() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
+    let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
     assert_eq!(runtime["version"], 3);
     assert_eq!(runtime["schema_version"], "skill-routing-runtime-v3");
-    assert_eq!(runtime["plugin_abi_version"], "skill-plugin-abi-v1");
-    assert_eq!(
-        runtime["vnext"]["plugin_catalog_ref"],
-        "skills/SKILL_PLUGIN_CATALOG.json"
-    );
-    let records = runtime["records"].as_array().expect("runtime records");
     let rows = runtime["skills"].as_array().expect("runtime rows");
-    assert_eq!(records.len(), rows.len());
-    let framework_record = records
+    let framework_row = rows
         .iter()
-        .find(|record| record["slug"] == "skill-framework-developer")
-        .expect("skill-framework-developer runtime record");
-    assert_eq!(framework_record["plugin"]["kind"], "skill");
+        .find(|record| record[0] == "skill-framework-developer")
+        .expect("skill-framework-developer runtime row");
+    assert_eq!(framework_row[0], "skill-framework-developer");
     assert_eq!(
-        framework_record["routing_metadata"]["selection_reason"],
+        plugin_catalog["skills"]["skill-framework-developer"]["kind"],
+        "skill"
+    );
+    assert_eq!(
+        routing_metadata["skills"]["skill-framework-developer"]["selection_reason"],
         "allowlisted first-turn owner"
     );
 }
@@ -910,10 +903,12 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
         .iter()
         .map(|v| v.as_str().expect("host id").to_string())
         .collect();
-    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
-    for record in runtime["records"].as_array().expect("runtime records") {
-        let slug = record["slug"].as_str().expect("slug");
-        let platforms = record["plugin"]["host_support"]["platforms"]
+    let plugin_catalog = read_json(&root.join("skills/SKILL_PLUGIN_CATALOG.json"));
+    for (slug, record) in plugin_catalog["skills"]
+        .as_object()
+        .expect("plugin catalog skills")
+    {
+        let platforms = record["host_support"]["platforms"]
             .as_array()
             .expect("host_support.platforms");
         for p in platforms {
@@ -923,7 +918,7 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
                 "{slug}: platform `{id}` not in RUNTIME_REGISTRY.host_targets.supported"
             );
         }
-        let kind = record["plugin"]["kind"].as_str().expect("plugin.kind");
+        let kind = record["kind"].as_str().expect("plugin.kind");
         if kind != "skill" {
             continue;
         }
@@ -932,13 +927,13 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
         let raw = raw_platforms_from_skill_frontmatter(&meta);
         let normalized = host_platforms::normalize_skill_host_platforms(&raw)
             .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
-        let from_runtime: Vec<String> = platforms
+        let from_catalog: Vec<String> = platforms
             .iter()
             .map(|v| v.as_str().expect("platform").to_string())
             .collect();
         assert_eq!(
             normalized,
-            from_runtime,
+            from_catalog,
             "host_support.platforms drift for slug={slug} path={}",
             skill_path.display()
         );

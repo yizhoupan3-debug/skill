@@ -3,8 +3,8 @@
 use crate::autopilot_goal::read_active_task_id;
 use crate::framework_runtime::resolve_repo_root_arg;
 use crate::router_env_flags::{
-    router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose,
-    router_rs_operator_inject_globally_enabled, router_rs_rfv_external_struct_hint_enabled,
+    router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
+    router_rs_rfv_external_struct_hint_enabled,
 };
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -1162,34 +1162,6 @@ pub fn build_rfv_loop_followup_message_from_state(
         .get("allow_external_research")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if router_rs_goal_prompt_verbose() {
-        let path = rfv_loop_state_path(repo_root, task_id);
-        let mut lines = vec![
-            "RFV_LOOP_CONTINUE: `RFV_LOOP_STATE.json` 显示多轮 review-fix-verify 仍在进行（`loop_status=active`）。".to_string(),
-            format!("Path: {}", path.display()),
-            format!("Goal: {}", goal),
-            format!("Progress: round {current} / max_rounds {max_r} (达到 stop_when 或 append_round close 后可结束)"),
-        ];
-        if ext {
-            lines.push(
-                "本任务允许外部调研：下一轮可并行 external research + internal review，再进入 fix / verify；每轮结束请 `framework_rfv_loop` append_round。"
-                    .to_string(),
-            );
-        } else {
-            lines.push(
-                "下一轮请按 review → fix → verify 顺序起独立 subagent，并在每轮末 `append_round` 落盘。"
-                    .to_string(),
-            );
-        }
-        let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
-        if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
-            lines.push(nudges.rfv_loop_continue_reasoning_depth.clone());
-        }
-        crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
-        crate::harness_operator_nudges::push_retrieval_trace_line(&mut lines, &nudges);
-        append_rfv_external_struct_hint_if_applicable(&mut lines, state, &nudges);
-        return Some(lines.join("\n"));
-    }
     let rel = format!("artifacts/current/{task_id}/RFV_LOOP_STATE.json");
     let gshort = rfv_followup_compact_line(goal, 120);
     let ext_note = if ext { " · ext ok" } else { "" };
@@ -1212,8 +1184,7 @@ pub fn build_rfv_loop_followup_message_from_state(
     Some(lines.join("\n"))
 }
 
-/// Cursor stop / beforeSubmit：`loop_status=active` 时提示继续下一轮 RFV。
-/// 默认紧凑；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 与 Goal / AUTOPILOT_DRIVE 共用同一 verbose 开关。
+/// Cursor 必要事件：`loop_status=active` 时提示继续下一轮 RFV。
 pub fn build_rfv_loop_followup_message(repo_root: &Path) -> Option<String> {
     let state = read_rfv_loop_state(repo_root, None).ok()??;
     let task_id = read_active_task_id(repo_root)?;
@@ -1329,18 +1300,6 @@ mod tests {
             msg.contains("数理") && msg.contains("检索"),
             "math + retrieval harness lines from repo HARNESS_OPERATOR_NUDGES.json; msg={msg:?}"
         );
-
-        let prior = std::env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE").ok();
-        std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", "1");
-        let msg_v = build_rfv_loop_followup_message(&repo).expect("rfv verbose");
-        assert!(
-            msg_v.contains("loop_status=active"),
-            "verbose env should restore long RFV banner; msg={msg_v:?}"
-        );
-        match prior {
-            Some(v) => std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", v),
-            None => std::env::remove_var("ROUTER_RS_GOAL_PROMPT_VERBOSE"),
-        }
 
         let _ = fs::remove_dir_all(&repo);
     }

@@ -24,8 +24,6 @@ use std::cell::Cell;
 thread_local! {
     /// 并行单测下替代进程级 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`，避免 env 竞态。
     static TEST_CURSOR_REVIEW_GATE_DISABLE: Cell<Option<bool>> = const { Cell::new(None) };
-    /// 并行单测下替代进程级 `ROUTER_RS_CURSOR_HOOK_SILENT`，避免本机环境污染断言。
-    static TEST_CURSOR_HOOK_SILENT: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
 /// 与运行时「subagent 并发上限契约」对齐（`runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT`）；可用 `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` 调低或设为 `0` 关闭计数限流。
@@ -40,11 +38,6 @@ const SHELL_TERMINAL_TIME_MATCH_SLACK_MS: u64 = 10_000;
 #[cfg(test)]
 pub(crate) fn set_test_review_gate_disable_override(v: Option<bool>) {
     TEST_CURSOR_REVIEW_GATE_DISABLE.with(|c| c.set(v));
-}
-
-#[cfg(test)]
-pub(crate) fn set_test_cursor_hook_silent_override(v: Option<bool>) {
-    TEST_CURSOR_HOOK_SILENT.with(|c| c.set(v));
 }
 
 /// 与 `.cursor/hook-state` 锁无关：只读合并 continuity 续跑，避免门控降级或应急短路时 goal/RFV 静默消失。
@@ -87,7 +80,7 @@ fn merge_autopilot_drive_followup_with_frame(
         output,
         &msg,
         "AUTOPILOT_DRIVE",
-        crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled(),
+        false,
     );
 }
 
@@ -121,83 +114,16 @@ fn merge_rfv_loop_followup_with_frame(
         output,
         &msg,
         "RFV_LOOP_CONTINUE",
-        crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled(),
+        false,
     );
 }
 
-/// beforeSubmit：若 Goal 与 RFV 同时续跑，合并为一段「## 续跑」减少碎片标题；仅其一则保持原样。
-const CONTINUITY_BEFORE_SUBMIT_HEADING: &str = "## 续跑（beforeSubmit）";
-
-fn build_merged_continuity_block_for_before_submit(
-    repo_root: &Path,
-    frame: &crate::task_state::CursorContinuityFrame,
-) -> Option<String> {
-    let want_ap = crate::router_env_flags::router_rs_autopilot_drive_before_submit_enabled();
-    let want_rfv = crate::router_env_flags::router_rs_rfv_loop_before_submit_enabled();
-    if !want_ap && !want_rfv {
-        return None;
-    }
-    let a = if want_ap {
-        build_autopilot_drive_followup_using_frame(repo_root, frame)
-    } else {
-        None
-    };
-    let b = if want_rfv {
-        build_rfv_loop_followup_using_frame(repo_root, frame)
-    } else {
-        None
-    };
-    match (a, b) {
-        (None, None) => None,
-        (Some(x), None) => Some(x),
-        (None, Some(y)) => Some(y),
-        (Some(x), Some(y)) => Some(format!("{CONTINUITY_BEFORE_SUBMIT_HEADING}\n\n{x}\n\n{y}")),
-    }
-}
-
-fn strip_before_submit_continuity_paragraphs(text: &str) -> String {
-    let mut s = text.to_string();
-    for prefix in ["AUTOPILOT_DRIVE", "RFV_LOOP_CONTINUE", "## 续跑"] {
-        s = crate::autopilot_goal::strip_followup_paragraphs_with_line_prefix(&s, prefix);
-    }
-    s
-}
-
 fn merge_continuity_followups_before_submit(
-    repo_root: &Path,
-    output: &mut Value,
-    frame: &crate::task_state::CursorContinuityFrame,
+    _repo_root: &Path,
+    _output: &mut Value,
+    _frame: &crate::task_state::CursorContinuityFrame,
 ) {
-    let Some(msg) = build_merged_continuity_block_for_before_submit(repo_root, frame) else {
-        return;
-    };
-    let use_followup = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-    let field = if use_followup {
-        "followup_message"
-    } else {
-        "additional_context"
-    };
-    let msg = crate::autopilot_goal::scrub_spoof_host_followup_lines(&msg);
-    match output.get_mut(field) {
-        Some(Value::String(existing)) => {
-            let cleaned = crate::autopilot_goal::scrub_spoof_host_followup_lines(
-                &strip_before_submit_continuity_paragraphs(existing),
-            );
-            let merged = if cleaned.is_empty() {
-                msg
-            } else {
-                crate::autopilot_goal::scrub_spoof_host_followup_lines(&format!(
-                    "{cleaned}\n\n{msg}"
-                ))
-            };
-            *existing = merged;
-        }
-        _ => {
-            if let Some(obj) = output.as_object_mut() {
-                obj.insert(field.to_string(), Value::String(msg));
-            }
-        }
-    }
+    // beforeSubmit 侧的 Goal/RFV 续跑注入已退役；续跑只保留在必要事件的单一路径。
 }
 
 fn completion_claimed_in_text(text: &str) -> bool {
@@ -1078,28 +1004,10 @@ fn is_autopilot_entrypoint_prompt(text: &str) -> bool {
     autopilot_entrypoint_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
-/// CreatePlan 默认目录下的 `.plan.md`（`ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE` 开启时用于对齐 `/autopilot` goal 门控）。
-fn workspace_cursor_plan_file_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        // Match CreatePlan default layout; avoid heavy character-class escaping in raw strings.
-        Regex::new(r"(?i)\.cursor/plans/[^\s]+\.plan\.md")
-            .expect("invalid workspace_cursor_plan_file regex")
-    })
-}
-
-fn has_workspace_cursor_plan_file_reference(text: &str) -> bool {
-    workspace_cursor_plan_file_re().is_match(text)
-}
-
-/// `/autopilot` 字面入口，或在 opt-in 下命中官方 Plan 文件路径（含嵌在 hook JSON 其它字段中的引用）。
+/// `/autopilot` 是唯一会拉起 goal 门控的框架入口。
 fn is_autopilot_goal_entry_prompt(prompt: &str, signal_text: &str) -> bool {
+    let _ = signal_text;
     is_autopilot_entrypoint_prompt(prompt)
-        || (crate::router_env_flags::router_rs_cursor_plan_build_autopilot_goal_gate_enabled()
-            && (has_workspace_cursor_plan_file_reference(signal_text)
-                || has_workspace_cursor_plan_file_reference(&strip_quoted_or_codeblock_or_url(
-                    prompt,
-                ))))
 }
 
 /// `/team` 等框架入口仍视为委托/并行编排；**框架命令仅认 `/` 前缀**；**`/autopilot` 除外**（只走 goal 机）。
@@ -1778,15 +1686,8 @@ fn bump_phase(state: &mut ReviewGateState, target: u32) {
 }
 
 fn autopilot_pre_goal_followup_message() -> String {
-    if crate::router_env_flags::router_rs_goal_prompt_verbose() {
-        "Autopilot (/autopilot): establish a compact Goal contract (Goal / Non-goals / Done when / Validation / checkpoints) before large execution.\n\
-Parallel lanes + evidence indexing are **recommended** when scope warrants—not a hard requirement on this path.\n\
-To treat the remainder as a single-thread task: output **one** reject-reason token alone on one line (small_task, …); never spoof host `router-rs …` continuation lines."
-            .to_string()
-    } else {
-        "Autopilot (/autopilot)：先写清 Goal 契约与验证口径；需要时再并行分工与证据索引（建议，非硬门槛）。确为小任务请**单独一行**拒因 token（如 small_task），不要自拟仿宿主 `router-rs …` 续跑行。"
-            .to_string()
-    }
+    "Autopilot (/autopilot)：先写清 Goal 契约与验证口径；需要时再并行分工与证据索引（建议，非硬门槛）。确为小任务请**单独一行**拒因 token（如 small_task），不要自拟仿宿主 `router-rs …` 续跑行。"
+        .to_string()
 }
 
 /// 连续 pre-goal 提示上限：beforeSubmit 每轮在仍缺 pre-goal 时累加计数，达到后自动 `pre_goal_review_satisfied=true`，避免卡死。
@@ -1856,29 +1757,6 @@ fn cursor_review_gate_disabled_by_env() -> bool {
     };
     let t = raw.trim().to_ascii_lowercase();
     !matches!(t.as_str(), "" | "0" | "false" | "off" | "no")
-}
-
-/// Cursor hook **静默**：不向宿主注入 `followup_message` / `additional_context`（多 agent 门控、PreCompact 摘要、AUTOPILOT_DRIVE、RFV 等合并文案一律剥离）。
-/// unset 或 trim 后为 `0`/`false`/`off`/`no` 时不启用；其它非空取值启用（与 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 语义一致）。
-/// **例外**：含合规短码的片段仍保留（见 `apply_cursor_hook_output_policy`：`AG_FOLLOWUP` / `REVIEW_GATE` / `CLOSEOUT_FOLLOWUP` 等）。
-/// 状态机仍会读写 `.cursor/hook-state`；仅压制对模型的可见提示。
-fn cursor_hook_silent_by_env() -> bool {
-    #[cfg(test)]
-    {
-        if let Some(v) = TEST_CURSOR_HOOK_SILENT.with(|c| c.get()) {
-            return v;
-        }
-        // 单测默认忽略进程环境，避免开发机设置污染断言。
-        false
-    }
-    #[cfg(not(test))]
-    {
-        let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_HOOK_SILENT") else {
-            return false;
-        };
-        let t = raw.trim().to_ascii_lowercase();
-        !matches!(t.as_str(), "" | "0" | "false" | "off" | "no")
-    }
 }
 
 /// `subagentStart` 只能拒绝/提示，不能主动关闭既有 subagent；这里用活跃数避免继续堆积。
@@ -1957,36 +1835,7 @@ fn subagent_limit_denial(active: u32, limit: u32) -> Value {
 }
 
 pub(crate) fn apply_cursor_hook_output_policy(output: &mut Value) {
-    if !cursor_hook_silent_by_env() {
-        return;
-    }
-    // Even in SILENT mode, keep **hard-stop / compliance** followups visible so the user
-    // doesn't silently lose critical instructions (closeout enforcement, goal gate, lock failures).
-    let keep_visible = {
-        let blob = output
-            .get("followup_message")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string()
-            + "\n"
-            + output
-                .get("additional_context")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-        blob.contains("CLOSEOUT_FOLLOWUP")
-            || blob.contains("AG_FOLLOWUP")
-            || blob.contains("REVIEW_GATE")
-            || blob.contains("PAPER_ADVERSARIAL_HOOK")
-            || blob.contains("pre-goal 提示已达上限")
-            || blob.contains("hook-state 锁不可用")
-    };
-    if keep_visible {
-        return;
-    }
-    if let Some(obj) = output.as_object_mut() {
-        obj.remove("followup_message");
-        obj.remove("additional_context");
-    }
+    let _ = output;
 }
 
 /// 应急关闭门控时仍执行 PostToolUse/Subagent 状态更新，但不对模型注入门控类提示（与 SILENT 剥离字段一致）。
@@ -2183,14 +2032,12 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         let (allow_continue, followup) = lock_failure_followup_for_before_submit(event);
-        let chat = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
         let mut out = json!({ "continue": allow_continue });
-        if !allow_continue || chat {
+        if !allow_continue {
             out["followup_message"] = Value::String(followup);
         } else {
             merge_additional_context(&mut out, &followup);
         }
-        merge_continuity_followups_before_submit(repo_root, &mut out, &frame);
         return out;
     }
     let mut state = load_state(repo_root, event)
@@ -2242,50 +2089,26 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
             && !state.pre_goal_review_satisfied
             && !is_overridden(&state)
             && !state.reject_reason_seen;
-    let chat = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
     let mut output = json!({ "continue": true });
-    let mut followup_parts: Vec<String> = Vec::new();
     if needs_autopilot_pre_goal {
         // 仅计入总 follow-up 次数；不要把 goal_followup_count 算进去，否则首次 stop 会误判成「非首条」而跳过完整 goal 提示。
         state.followup_count += 1;
         let pre = autopilot_pre_goal_followup_message();
-        if chat {
-            followup_parts.push(pre);
-        } else {
-            crate::autopilot_goal::merge_hook_nudge_paragraph(
-                &mut output,
-                &pre,
-                "Autopilot (/autopilot)",
-                false,
-            );
-        }
+        crate::autopilot_goal::merge_hook_nudge_paragraph(
+            &mut output,
+            &pre,
+            "Autopilot (/autopilot)",
+            false,
+        );
     }
-    if chat && !followup_parts.is_empty() {
-        output["followup_message"] = Value::String(followup_parts.join("\n\n"));
-    }
-    // beforeSubmit：Goal+RFV 双活跃时合并为一段「续跑」，减少重复机读标题。
-    merge_continuity_followups_before_submit(repo_root, &mut output, &frame);
     if let Some(note) = pre_goal_auto_release_note {
-        if chat {
-            let existing = output
-                .get("followup_message")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let merged = if existing.trim().is_empty() {
-                note.to_string()
-            } else {
-                format!("{existing}\n\n{note}")
-            };
-            output["followup_message"] = Value::String(merged);
-        } else {
-            merge_additional_context(&mut output, note);
-        }
+        merge_additional_context(&mut output, note);
     }
     crate::paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(
         repo_root,
         &mut output,
         &text,
-        chat,
+        false,
     );
     let persisted_after_followup = if needs_autopilot_pre_goal {
         save_state(repo_root, event, &mut state)
@@ -2295,16 +2118,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     release_state_lock(&mut lock);
     if !persisted || !persisted_after_followup {
         let warning = "router-rs：hook-state 未能持久化，review/委托门控本回合可能降级。";
-        if chat {
-            let merged = output
-                .get("followup_message")
-                .and_then(Value::as_str)
-                .map(|s| format!("{s} {warning}"))
-                .unwrap_or_else(|| warning.to_string());
-            output["followup_message"] = Value::String(merged.trim().to_string());
-        } else {
-            merge_additional_context(&mut output, warning);
-        }
+        merge_additional_context(&mut output, warning);
     }
     output
 }
@@ -2701,14 +2515,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         let msg = lock_failure_followup_for_stop(event);
-        let chat = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-        let mut out = if chat {
-            json!({ "followup_message": msg })
-        } else {
-            let mut o = json!({});
-            merge_additional_context(&mut o, &msg);
-            o
-        };
+        let mut out = json!({ "followup_message": msg });
         merge_continuity_followups(repo_root, &mut out, &frame);
         return out;
     }
@@ -2723,48 +2530,20 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         if let Some(tid) = crate::autopilot_goal::read_active_task_id(repo_root) {
             match closeout_followup_for_completion_claim(repo_root, &tid) {
                 Ok(Some(msg)) => {
-                    let chat =
-                        crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-                    if chat {
-                        let mut out = json!({ "followup_message": msg });
-                        merge_continuity_followups(repo_root, &mut out, &frame);
-                        release_state_lock(&mut lock);
-                        return out;
-                    }
-                    let mut o = json!({});
-                    crate::autopilot_goal::merge_hook_nudge_paragraph(
-                        &mut o,
-                        &msg,
-                        "CLOSEOUT_FOLLOWUP",
-                        false,
-                    );
-                    merge_continuity_followups(repo_root, &mut o, &frame);
+                    let mut out = json!({ "followup_message": msg });
+                    merge_continuity_followups(repo_root, &mut out, &frame);
                     release_state_lock(&mut lock);
-                    return o;
+                    return out;
                 }
                 Ok(None) => {}
                 Err(err) => {
                     let msg = format!(
                         "CLOSEOUT_FOLLOWUP task_id={tid} reason=evaluator_error error={err}"
                     );
-                    let chat =
-                        crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-                    if chat {
-                        let mut out = json!({ "followup_message": msg });
-                        merge_continuity_followups(repo_root, &mut out, &frame);
-                        release_state_lock(&mut lock);
-                        return out;
-                    }
-                    let mut o = json!({});
-                    crate::autopilot_goal::merge_hook_nudge_paragraph(
-                        &mut o,
-                        &msg,
-                        "CLOSEOUT_FOLLOWUP",
-                        false,
-                    );
-                    merge_continuity_followups(repo_root, &mut o, &frame);
+                    let mut out = json!({ "followup_message": msg });
+                    merge_continuity_followups(repo_root, &mut out, &frame);
                     release_state_lock(&mut lock);
-                    return o;
+                    return out;
                 }
             }
         }
@@ -2775,14 +2554,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             let msg = format!(
                 "router-rs：hook-state 不可读（{io_error}），门控降级。请检查权限与 JSON。"
             );
-            let chat = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-            if chat {
-                json!({ "followup_message": msg })
-            } else {
-                let mut o = json!({});
-                merge_additional_context(&mut o, &msg);
-                o
-            }
+            json!({ "followup_message": msg })
         }
         Ok(Some(mut state)) => {
             state.delegation_required = false;
@@ -2821,20 +2593,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                         Ok(Some(msg)) => {
                             state.followup_count += 1;
                             let _ = save_state(repo_root, event, &mut state);
-                            let chat =
-                                crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-                            if chat {
-                                closeout_output = Some(json!({ "followup_message": msg }));
-                            } else {
-                                let mut o = json!({});
-                                crate::autopilot_goal::merge_hook_nudge_paragraph(
-                                    &mut o,
-                                    &msg,
-                                    "CLOSEOUT_FOLLOWUP",
-                                    false,
-                                );
-                                closeout_output = Some(o);
-                            }
+                            closeout_output = Some(json!({ "followup_message": msg }));
                         }
                         Ok(None) => {}
                         Err(err) => {
@@ -2843,20 +2602,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                             let msg = format!(
                                 "CLOSEOUT_FOLLOWUP task_id={tid} reason=evaluator_error error={err}"
                             );
-                            let chat =
-                                crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-                            if chat {
-                                closeout_output = Some(json!({ "followup_message": msg }));
-                            } else {
-                                let mut o = json!({});
-                                crate::autopilot_goal::merge_hook_nudge_paragraph(
-                                    &mut o,
-                                    &msg,
-                                    "CLOSEOUT_FOLLOWUP",
-                                    false,
-                                );
-                                closeout_output = Some(o);
-                            }
+                            closeout_output = Some(json!({ "followup_message": msg }));
                         }
                     }
                 }
@@ -2869,38 +2615,14 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 state.review_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
                 let message = review_stop_followup_line(&state);
-                let chat = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-                if chat {
-                    json!({ "followup_message": message })
-                } else {
-                    let mut o = json!({});
-                    crate::autopilot_goal::merge_hook_nudge_paragraph(
-                        &mut o,
-                        &message,
-                        "REVIEW_GATE",
-                        false,
-                    );
-                    o
-                }
+                json!({ "followup_message": message })
             } else if !goal_is_satisfied(&state) {
                 state.followup_count += 1;
                 state.goal_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
                 // Stop 只给短码，避免把整段 Autopilot 契约说明塞进会话收尾（细则见 beforeSubmit / AGENTS）。
                 let message = goal_stop_followup_line(&state);
-                let chat = crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled();
-                if chat {
-                    json!({ "followup_message": message })
-                } else {
-                    let mut o = json!({});
-                    crate::autopilot_goal::merge_hook_nudge_paragraph(
-                        &mut o,
-                        &message,
-                        "AG_FOLLOWUP",
-                        false,
-                    );
-                    o
-                }
+                json!({ "followup_message": message })
             } else {
                 // Do not clear gate state on Stop for sessions that still track goal/review:
                 // the next Stop should still enforce the same requirements until satisfied/overridden.
@@ -3053,79 +2775,108 @@ fn truncate_utf8_chars_local(input: &str, max_chars: usize) -> String {
     out
 }
 
+const CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS: usize = 1200;
+
+fn truncate_cursor_sessionstart_context(text: &str) -> String {
+    if text.len() <= CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS {
+        return text.to_string();
+    }
+    let budget = CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS.saturating_sub(3);
+    let mut cut = budget.min(text.len());
+    while cut > 0 && !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    if let Some(pos) = text[..cut].rfind('\n') {
+        let trimmed = text[..pos].trim_end();
+        if !trimmed.is_empty() {
+            return format!("{trimmed}...");
+        }
+    }
+    format!("{}...", text[..cut].trim_end())
+}
+
+fn compact_cursor_sessionstart_context(parts: Vec<String>) -> Option<String> {
+    let joined = parts
+        .into_iter()
+        .filter(|part| !part.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    if joined.trim().is_empty() {
+        None
+    } else {
+        Some(truncate_cursor_sessionstart_context(&joined))
+    }
+}
+
 fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     maybe_init_session_terminal_ledger(repo_root, event);
-    let mut continuity_block = String::new();
+    let mut sections = vec![format!(
+        "Repo: {} · routing=skills/SKILL_ROUTING_RUNTIME.json",
+        repo_root.display()
+    )];
     let summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
     if summary_path.is_file() {
-        if let Some(head) = read_file_head_lines(&summary_path, 36) {
-            continuity_block.push_str("\n\n## Continuity (artifacts/current/SESSION_SUMMARY.md)\n");
-            continuity_block.push_str(&head);
-            continuity_block.push('\n');
+        if let Some(head) = read_file_head_lines(&summary_path, 12) {
+            let head = head.trim();
+            if !head.is_empty() {
+                sections.push(format!(
+                    "## Continuity\n{}",
+                    truncate_utf8_chars_local(head, 700)
+                ));
+            }
         }
     }
 
-    let mut long_task_block = String::new();
-    if !cursor_hook_silent_by_env() {
-        let active_task = repo_root.join("artifacts/current/active_task.json");
-        if active_task.is_file() {
-            if let Some(v) = read_json_value_strict(&active_task) {
-                if let Some(tid) = v.get("task_id").and_then(Value::as_str) {
-                    if !tid.trim().is_empty() && tid.trim() != "null" {
-                        let gs = repo_root
-                            .join("artifacts/current")
-                            .join(tid)
-                            .join("GOAL_STATE.json");
-                        let rv = repo_root
-                            .join("artifacts/current")
-                            .join(tid)
-                            .join("RFV_LOOP_STATE.json");
-                        if gs.is_file() {
-                            if let Some(gv) = read_json_value_strict(&gs) {
-                                let status =
-                                    gv.get("status").and_then(Value::as_str).unwrap_or("?");
-                                let drive = gv
-                                    .get("drive_until_done")
-                                    .and_then(Value::as_bool)
-                                    .unwrap_or(false);
-                                let goal = gv.get("goal").and_then(Value::as_str).unwrap_or("-");
-                                let goal_trunc = truncate_utf8_chars_local(goal, 120);
-                                long_task_block.push_str(&format!(
-                                    "\n## Goal（`artifacts/current/{tid}/GOAL_STATE.json`）\n- {status} · drive={drive} · {goal_trunc}\n"
-                                ));
-                            }
+    let active_task = repo_root.join("artifacts/current/active_task.json");
+    if active_task.is_file() {
+        if let Some(v) = read_json_value_strict(&active_task) {
+            if let Some(tid) = v.get("task_id").and_then(Value::as_str) {
+                if !tid.trim().is_empty() && tid.trim() != "null" {
+                    let gs = repo_root
+                        .join("artifacts/current")
+                        .join(tid)
+                        .join("GOAL_STATE.json");
+                    let rv = repo_root
+                        .join("artifacts/current")
+                        .join(tid)
+                        .join("RFV_LOOP_STATE.json");
+                    if gs.is_file() {
+                        if let Some(gv) = read_json_value_strict(&gs) {
+                            let status = gv.get("status").and_then(Value::as_str).unwrap_or("?");
+                            let drive = gv
+                                .get("drive_until_done")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false);
+                            let goal = gv.get("goal").and_then(Value::as_str).unwrap_or("-");
+                            sections.push(format!(
+                                "Goal: {status} · drive={drive} · {}",
+                                truncate_utf8_chars_local(goal, 140)
+                            ));
                         }
-                        if rv.is_file() {
-                            if let Some(rvj) = read_json_value_strict(&rv) {
-                                let loop_status = rvj
-                                    .get("loop_status")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("?");
-                                let cur = rvj
-                                    .get("current_round")
-                                    .and_then(Value::as_i64)
-                                    .unwrap_or(0);
-                                let max =
-                                    rvj.get("max_rounds").and_then(Value::as_i64).unwrap_or(0);
-                                let goal = rvj.get("goal").and_then(Value::as_str).unwrap_or("-");
-                                let goal_trunc = truncate_utf8_chars_local(goal, 80);
-                                long_task_block.push_str(&format!(
-                                    "\n## RFV（`artifacts/current/{tid}/RFV_LOOP_STATE.json`）\n- {loop_status} · round {cur}/{max} · {goal_trunc}\n"
-                                ));
-                            }
+                    }
+                    if rv.is_file() {
+                        if let Some(rvj) = read_json_value_strict(&rv) {
+                            let loop_status = rvj
+                                .get("loop_status")
+                                .and_then(Value::as_str)
+                                .unwrap_or("?");
+                            let cur = rvj
+                                .get("current_round")
+                                .and_then(Value::as_i64)
+                                .unwrap_or(0);
+                            let max = rvj.get("max_rounds").and_then(Value::as_i64).unwrap_or(0);
+                            let goal = rvj.get("goal").and_then(Value::as_str).unwrap_or("-");
+                            sections.push(format!(
+                                "RFV: {loop_status} · round {cur}/{max} · {}",
+                                truncate_utf8_chars_local(goal, 100)
+                            ));
                         }
                     }
                 }
             }
         }
     }
-
-    let ctx = format!(
-        "## Skill Repo — Quick Reference\n\n**Root:** {root}\n**Stack:** Rust (scripts/router-rs/), bash scripts, TOML/JSON config\n\n**Build & test:**\n- `cd scripts/router-rs && cargo build --release`\n- `cd scripts/router-rs && cargo test`\n- `cd scripts/router-rs && cargo clippy -- -D warnings`\n\n**Key paths:**\n- `scripts/router-rs/src/` — Rust hook router (cursor_hooks.rs, route.rs, …)\n- `skills/SKILL_ROUTING_RUNTIME.json` — skill routing truth source (use this, not skills/ dir)\n- `.cursor/hooks.json` — Cursor hook config\n- `AGENTS.md` — agent execution policy\n- `artifacts/current/` — continuity checkpoints (SESSION_SUMMARY, NEXT_ACTIONS, …)\n\n**Conventions:**\n- Rust: clippy-clean, rustfmt-formatted, no bare `unwrap()` in library paths\n- Skills: always route via SKILL_ROUTING_RUNTIME.json; never pre-read the full skills/ dir\n- JSON: 2-space indent\n- Git commits: only when user explicitly asks\n\n**Tool cost hierarchy (cheapest first):**\nShell → Glob → Grep → Read → StrReplace/Write → SemanticSearch → MCP{continuity}{long_task}\n",
-        root = repo_root.display(),
-        continuity = continuity_block,
-        long_task = long_task_block
-    );
+    let ctx = compact_cursor_sessionstart_context(sections).unwrap_or_default();
     json!({ "additional_context": ctx })
 }
 
@@ -3320,24 +3071,22 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
     };
     // 默认仅回收本会话 shell 账本登记的 terminal；`ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy` 等恢复全仓 stale 扫描。
     let report = terminate_stale_terminal_processes(repo_root, owned_filter);
-    if !cursor_hook_silent_by_env() {
-        if !report.killed.is_empty() {
-            eprintln!(
-                "router-rs SessionEnd: terminated {} stale terminal pid(s) {:?} (scanned={}, outside_repo={}, dead={}, not_owned={})",
-                report.killed.len(),
-                report.killed,
-                report.scanned,
-                report.skipped_outside_repo,
-                report.skipped_dead,
-                report.skipped_not_owned,
-            );
-        }
-        if !report.failed.is_empty() {
-            eprintln!(
-                "router-rs SessionEnd: failed to terminate pid(s): {:?}",
-                report.failed
-            );
-        }
+    if !report.killed.is_empty() {
+        eprintln!(
+            "router-rs SessionEnd: terminated {} stale terminal pid(s) {:?} (scanned={}, outside_repo={}, dead={}, not_owned={})",
+            report.killed.len(),
+            report.killed,
+            report.scanned,
+            report.skipped_outside_repo,
+            report.skipped_dead,
+            report.skipped_not_owned,
+        );
+    }
+    if !report.failed.is_empty() {
+        eprintln!(
+            "router-rs SessionEnd: failed to terminate pid(s): {:?}",
+            report.failed
+        );
     }
     json!({})
 }
@@ -4103,41 +3852,21 @@ mod tests {
     }
 
     #[test]
-    fn cursor_plan_build_path_arms_goal_when_opt_in_env() {
-        let _env = crate::test_env_sync::process_env_lock();
-        let prev = env::var_os("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE");
-        env::remove_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE");
+    fn cursor_plan_build_path_does_not_arm_goal() {
         let repo = fresh_repo();
         let cwd = repo.display().to_string();
         let plan_ref = format!("{cwd}/.cursor/plans/feature.plan.md");
-        let payload_off = json!({
-            "session_id": "plan-build-off",
+        let payload = json!({
+            "session_id": "plan-build",
             "cwd": cwd,
             "prompt": format!("Implement {plan_ref}"),
         });
-        let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload_off);
-        let st_off = load_state_for(&repo, "plan-build-off");
+        let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+        let st_off = load_state_for(&repo, "plan-build");
         assert!(
             !st_off.goal_required,
-            "without ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE, plan path must not arm goal_required"
+            "plan path alone must not arm goal_required"
         );
-
-        env::set_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE", "1");
-        let payload_on = json!({
-            "session_id": "plan-build-on",
-            "cwd": cwd,
-            "prompt": format!("Ship {plan_ref}"),
-        });
-        let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload_on);
-        let st_on = load_state_for(&repo, "plan-build-on");
-        assert!(
-            st_on.goal_required,
-            "with opt-in env, .cursor/plans/*.plan.md reference must arm goal like /autopilot"
-        );
-        match prev {
-            Some(v) => env::set_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE", v),
-            None => env::remove_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE"),
-        }
     }
 
     #[test]
@@ -4552,6 +4281,11 @@ mod tests {
             r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"hand-written without status","non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal json");
+        fs::write(
+            repo.join("artifacts/current/t-nost/EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"cargo test -q","exit_code":0,"success":true}]}"#,
+        )
+        .expect("evidence");
         let _ = dispatch_cursor_hook_event(
             &repo,
             "beforeSubmitPrompt",
@@ -4792,12 +4526,7 @@ mod tests {
     }
 
     #[test]
-    fn before_submit_merges_goal_and_rfv_when_both_on_disk() {
-        let _env = crate::test_env_sync::process_env_lock();
-        let prev_ap = env::var_os("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT");
-        let prev_rfv = env::var_os("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT");
-        env::set_var("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT", "1");
-        env::set_var("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT", "1");
+    fn before_submit_does_not_merge_goal_or_rfv_continuity() {
         let repo = fresh_repo();
         let tid = "merge-both";
         fs::create_dir_all(repo.join("artifacts/current").join(tid)).expect("mkdir");
@@ -4825,22 +4554,9 @@ mod tests {
         let out =
             dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event("merge-t", "hello"));
         let msg = hook_user_visible_blob(&out);
-        assert!(msg.contains("## 续跑（beforeSubmit）"), "{msg}");
-        assert!(msg.contains("AUTOPILOT_DRIVE"), "{msg}");
-        assert!(msg.contains("RFV_LOOP_CONTINUE"), "{msg}");
-        assert_eq!(
-            msg.matches("## 续跑").count(),
-            1,
-            "expected single merged heading; msg={msg}"
-        );
-        match prev_ap {
-            Some(v) => env::set_var("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT", v),
-            None => env::remove_var("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT"),
-        }
-        match prev_rfv {
-            Some(v) => env::set_var("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT", v),
-            None => env::remove_var("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT"),
-        }
+        assert!(!msg.contains("AUTOPILOT_DRIVE"), "{msg}");
+        assert!(!msg.contains("RFV_LOOP_CONTINUE"), "{msg}");
+        assert!(!msg.contains("## 续跑"), "{msg}");
     }
 
     #[test]
@@ -4871,26 +4587,17 @@ mod tests {
         let blob = hook_user_visible_blob(&out);
         assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
 
-        let prev_silent = env::var_os("ROUTER_RS_CURSOR_HOOK_SILENT");
-        set_test_cursor_hook_silent_override(Some(true));
         apply_cursor_hook_output_policy(&mut out);
-        set_test_cursor_hook_silent_override(None);
-        match prev_silent {
-            Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_SILENT", v),
-            None => env::remove_var("ROUTER_RS_CURSOR_HOOK_SILENT"),
-        }
-        assert!(out.get("followup_message").is_none());
-        assert!(out.get("additional_context").is_none());
+        let preserved = hook_user_visible_blob(&out);
+        assert!(preserved.contains("AUTOPILOT_DRIVE"), "{preserved}");
     }
 
     #[test]
-    fn cursor_hook_silent_policy_keeps_review_gate_line() {
+    fn cursor_hook_output_policy_is_noop_for_hard_gate_lines() {
         let mut out = json!({
             "followup_message": "router-rs REVIEW_GATE incomplete phase=0 need=subagent"
         });
-        set_test_cursor_hook_silent_override(Some(true));
         apply_cursor_hook_output_policy(&mut out);
-        set_test_cursor_hook_silent_override(None);
         assert_eq!(
             out["followup_message"],
             json!("router-rs REVIEW_GATE incomplete phase=0 need=subagent")
@@ -4926,31 +4633,21 @@ mod tests {
     }
 
     #[test]
-    fn cursor_hook_silent_policy_respects_env() {
-        let prev = env::var_os("ROUTER_RS_CURSOR_HOOK_SILENT");
-
-        env::remove_var("ROUTER_RS_CURSOR_HOOK_SILENT");
+    fn cursor_hook_output_policy_is_noop() {
         let mut keep = json!({ "followup_message": "keep" });
-        set_test_cursor_hook_silent_override(Some(false));
         apply_cursor_hook_output_policy(&mut keep);
-        set_test_cursor_hook_silent_override(None);
         assert_eq!(keep["followup_message"], json!("keep"));
 
-        env::set_var("ROUTER_RS_CURSOR_HOOK_SILENT", "1");
         let mut strip = json!({
             "continue": false,
             "followup_message": "nag",
             "additional_context": "ctx"
         });
-        set_test_cursor_hook_silent_override(Some(true));
         apply_cursor_hook_output_policy(&mut strip);
-        set_test_cursor_hook_silent_override(None);
-        assert_eq!(strip, json!({ "continue": false }));
-
-        match prev {
-            Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_SILENT", v),
-            None => env::remove_var("ROUTER_RS_CURSOR_HOOK_SILENT"),
-        }
+        assert_eq!(
+            strip,
+            json!({ "continue": false, "followup_message": "nag", "additional_context": "ctx" })
+        );
     }
 
     #[test]

@@ -1,85 +1,55 @@
-//! `ROUTER_RS_*` 连续性/续跑类开关：未设置视为启用；仅当值为 `0`/`false`/`off`/`no`（trim + ASCII 小写）时关闭。
+//! `ROUTER_RS_*` 连续性/续跑类开关：保留真正改变行为边界的少量闸门。
 //!
-//! **`ROUTER_RS_HARNESS_OPERATOR_NUDGES`**：关闭 RFV / Autopilot 中由 `HARNESS_OPERATOR_NUDGES.json` 注入的 operator 文案（默认开启）。实现见 `harness_operator_nudges`。
-//! **`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`**：当 RFV active 且 `prefer_structured_external_research` 等条件满足时，在续跑文末追加单行「并入 external_research」提示；设为 `0`/`false`/`off`/`no` 关闭（默认启用）。
+//! 当前仍由环境变量驱动的开关：
+//! - `ROUTER_RS_OPERATOR_INJECT`
+//! - `ROUTER_RS_HARNESS_OPERATOR_NUDGES`
+//! - `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`
+//! - `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`
+//! - `ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT`
+//! - `ROUTER_RS_DEPTH_SCORE_MODE`
 //!
-//! **`ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT`** / **`ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT`**：仅控制 Cursor **`beforeSubmit`** 是否合并 **AUTOPILOT_DRIVE** / **RFV_LOOP_CONTINUE** 续跑块；**默认关闭**（`1`/`true`/`yes`/`on` 显式开启）。**Stop** 等路径仍由 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` / `ROUTER_RS_RFV_LOOP_HOOK` 等既有开关决定。
-//!
-//! **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`**：是否启用 `/autopilot` **pre-goal** 注入（beforeSubmit 侧）；**默认关闭**（显式 opt-in）。不影响磁盘 `GOAL_STATE` 收口门控；严格宏任务工作流可手动打开。
-//!
-//! **`ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE`**：Cursor **CreatePlan** 落盘的 **`.cursor/plans/*.plan.md`** 路径出现在 **`beforeSubmit` stdin JSON 全树或用户提示**中时（典型：官方 Plan 点 **Build** 带入计划引用），**视同**已走 **`/autopilot` 入口**以拉起 **goal 门控**（`goal_required` 等，与 `is_autopilot_entrypoint_prompt` 对齐）。**默认关闭**；`1`/`true`/`yes`/`on` 开启。不会替你执行 shell 或 `router-rs framework_autopilot_goal`；Goal 契约仍须按 `skills/autopilot/SKILL.md` 在宿主内发布。
-//!
-//! **`ROUTER_RS_DEPTH_SCORE_MODE`**：未设置或 `legacy`（trim，ASCII 大小写不敏感）→ 使用既有 `depth_score` 三档公式；设为 **`strict`** 时第三分在「checkpoint / 对抗轮」之外，还把 **非零 falsification_tests 计数** 与（任务 `external_research_strict` 为真时的）**strict 外研通过轮次**计入第三分条件。见 `docs/harness_architecture.md` §8。
-//!
-//! **`ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT`**：opt-in（默认关）。为 `1`/`true`/`yes`/`on` 时，`hook_common::is_review_prompt` 在已命中 `REVIEW_ROUTING_SIGNALS` 正则且 **`has_paper_context`** 为真、且**无**「强代码/PR 锚点」时返回 **false**，以降低手稿话术误触 Cursor **`REVIEW_GATE`**；与 **`ROUTER_RS_OPERATOR_INJECT`** 无包含关系。
+//! 已退役的文案/投影分叉开关在代码层固定为关闭，不再暴露环境变量入口。
 
 use std::env;
 
 const ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT_ENV: &str =
     "ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT";
-
 const ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT_ENV: &str = "ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT";
 const ROUTER_RS_DEPTH_SCORE_MODE_ENV: &str = "ROUTER_RS_DEPTH_SCORE_MODE";
-
-const CURSOR_HOOK_CHAT_FOLLOWUP_ENV: &str = "ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP";
-
-const ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT_ENV: &str = "ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT";
-const ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT_ENV: &str = "ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT";
 const ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV: &str =
     "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
 
-const ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE_ENV: &str =
-    "ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE";
-
-/// Cursor **`beforeSubmit`**：合并 **AUTOPILOT_DRIVE** 续跑块；未设置或关闭 token → **不合并**（默认安静）。
+/// beforeSubmit 续跑注入已退役；续跑只保留在必要事件的单一路径。
 pub fn router_rs_autopilot_drive_before_submit_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT_ENV)
+    false
 }
 
-/// Cursor **`beforeSubmit`**：合并 **RFV_LOOP_CONTINUE** 续跑块；未设置或关闭 token → **不合并**（默认安静）。
+/// beforeSubmit 续跑注入已退役；续跑只保留在必要事件的单一路径。
 pub fn router_rs_rfv_loop_before_submit_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT_ENV)
+    false
 }
 
-/// `/autopilot` **pre-goal**（beforeSubmit 长段提示与计数放行）；未设置 → **关闭**；仅 `1`/`true`/`yes`/`on` 开启。
+/// `/autopilot` **pre-goal** 仍保持显式 opt-in。
 pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV)
 }
 
-/// Cursor Plan **Build** 首条：出现官方 **`.cursor/plans/*.plan.md`** 引用时视同 **`/autopilot`** 拉起 goal 门控；未设置 → **关闭**。
+/// Cursor Plan Build 对齐 `/autopilot` goal 门控已退役。
 pub fn router_rs_cursor_plan_build_autopilot_goal_gate_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE_ENV)
+    false
 }
 
-/// **`REVIEW_GATE`** 启发式：手稿语境下跳过「review 提示」判定（**默认关闭**；仅 `1`/`true`/`yes`/`on` 开启）。实现见 `hook_common::is_review_prompt`。
+/// **`REVIEW_GATE`** 启发式：手稿语境下跳过「review 提示」判定（默认关闭）。
 pub fn router_rs_review_gate_suppress_on_manuscript_context_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT_ENV)
 }
 
-/// Cursor：`followup_message` 常以跟贴形式出现在主对话区。**默认**（未设置或 `0`/`false`/`off`/`no`）将续跑类提示写入 **`additional_context`**，减少对用户可见对话流的干扰。
-/// `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP=1`/`true`/`yes`/`on` 时改回写入 `followup_message`。
+/// hook 输出位置固定：硬门控短码进 `followup_message`，advisory 提示进 `additional_context`。
 pub fn router_rs_cursor_hook_chat_followup_enabled() -> bool {
-    match env::var(CURSOR_HOOK_CHAT_FOLLOWUP_ENV) {
-        Ok(value) => {
-            let token = value.trim().to_ascii_lowercase();
-            matches!(token.as_str(), "1" | "true" | "yes" | "on")
-        }
-        Err(_) => false,
-    }
+    false
 }
 
-/// `ROUTER_RS_GOAL_PROMPT_VERBOSE`：为 `1`/`true`/`yes`/`on`（trim + ASCII 小写）时，continuity digest 的 Goal 段落、**AUTOPILOT_DRIVE**、**RFV_LOOP_CONTINUE**、以及 `/autopilot` **pre-goal** 提示使用冗长版；**默认紧凑**。
-pub fn router_rs_goal_prompt_verbose() -> bool {
-    match env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE") {
-        Ok(value) => {
-            let token = value.trim().to_ascii_lowercase();
-            matches!(token.as_str(), "1" | "true" | "yes" | "on")
-        }
-        Err(_) => false,
-    }
-}
-
-/// 与 `autopilot_drive_hook_enabled` 等历史实现一致：空字符串经 trim 后仍为 `""`，不属于关闭词 → 仍为启用。
+/// 与历史实现一致：空字符串经 trim 后不属于关闭词，仍视为启用。
 pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
     match env::var(var_name) {
         Ok(value) => {
@@ -90,7 +60,7 @@ pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
     }
 }
 
-/// 未设置视为**关闭**；仅 `1`/`true`/`yes`/`on`（trim + ASCII 小写）时开启。（用于 opt-in 类钩子，如论文强对抗审稿 beforeSubmit。）
+/// 未设置视为关闭；仅 `1`/`true`/`yes`/`on` 时开启。
 pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
     match env::var(var_name) {
         Ok(value) => {
@@ -101,28 +71,18 @@ pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
     }
 }
 
-/// `ROUTER_RS_OPERATOR_INJECT`：跨切片**聚合关断**（P1-E）。
-///
-/// 当此变量为 `0`/`false`/`off`/`no` 时，下列四类「面向模型的 operator 注入」**全部**视为关闭：
-/// - `HARNESS_OPERATOR_NUDGES`（推理深度等 nudge 句）
-/// - `AUTOPILOT_DRIVE_HOOK`（Cursor **Stop** 等的 GOAL 续跑块；**beforeSubmit** 另见 `ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT`）
-/// - `RFV_LOOP_HOOK`（Cursor **Stop** 等的 RFV 续跑块；**beforeSubmit** 另见 `ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT`）
-/// - **`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` 已启用时**：Cursor **`beforeSubmit`** 的 **`PAPER_ADVERSARIAL_HOOK`** 短文（论文强对抗审稿提示）
-///
-/// 细粒度变量仍可单独关掉某一类；本变量是「一键关全部续跑/nudge」的总闸。**默认开启**。
+/// `ROUTER_RS_OPERATOR_INJECT`：聚合关断 advisory 注入；硬门控短码不受此开关影响。
 pub fn router_rs_operator_inject_globally_enabled() -> bool {
     router_rs_env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
 }
 
-/// P1：`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`。默认与其它 `ROUTER_RS_*` 软关语义一致：**未设置 = 启用**；
-/// **`ROUTER_RS_OPERATOR_INJECT`** 总闸仍为 off 时，`build_rfv_loop_followup_message_from_state` 整体不产出续跑，
-/// 本条不会单独生效。
+/// `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`：仅影响 RFV advisory struct hint。
 pub fn router_rs_rfv_external_struct_hint_enabled() -> bool {
     router_rs_operator_inject_globally_enabled()
         && router_rs_env_enabled_default_true(ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT_ENV)
 }
 
-/// `ROUTER_RS_DEPTH_SCORE_MODE=strict`（trim，ASCII 大小写不敏感）时启用 `DepthCompliance.depth_score` 的 **strict** 第三分公式；未设置或其它取值 → **legacy**（与历史行为一致）。
+/// `ROUTER_RS_DEPTH_SCORE_MODE=strict` 时启用 strict 第三分公式。
 pub fn router_rs_depth_score_mode_strict() -> bool {
     match env::var(ROUTER_RS_DEPTH_SCORE_MODE_ENV) {
         Ok(value) => value.trim().eq_ignore_ascii_case("strict"),
@@ -145,7 +105,7 @@ mod tests {
     }
 
     #[test]
-    fn unset_means_enabled() {
+    fn unset_means_enabled_for_default_true() {
         let _g = lock_env();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_UNSET";
         env::remove_var(key);
@@ -153,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_false_off_no_disable() {
+    fn zero_false_off_no_disable_default_true() {
         let _g = lock_env();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_TOKENS";
         for v in ["0", "false", "off", "no", "FALSE", " Off "] {
@@ -167,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn other_values_enable() {
+    fn other_values_enable_default_true() {
         let _g = lock_env();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_OTHER";
         env::set_var(key, "1");
@@ -178,74 +138,11 @@ mod tests {
     }
 
     #[test]
-    fn cursor_hook_chat_followup_only_explicit_opt_in() {
-        let _g = lock_env();
-        let key = super::CURSOR_HOOK_CHAT_FOLLOWUP_ENV;
-        let prev = env::var(key).ok();
-        env::remove_var(key);
-        assert!(!super::router_rs_cursor_hook_chat_followup_enabled());
-        for v in ["1", "true", "yes", "on", " TRUE "] {
-            env::set_var(key, v);
-            assert!(
-                super::router_rs_cursor_hook_chat_followup_enabled(),
-                "{v:?}"
-            );
-        }
-        for v in ["0", "false", "", "maybe"] {
-            env::set_var(key, v);
-            assert!(
-                !super::router_rs_cursor_hook_chat_followup_enabled(),
-                "{v:?}"
-            );
-        }
-        match prev {
-            Some(v) => env::set_var(key, v),
-            None => env::remove_var(key),
-        }
-    }
-
-    #[test]
-    fn goal_prompt_verbose_only_explicit_tokens() {
-        let _g = lock_env();
-        let key = "ROUTER_RS_GOAL_PROMPT_VERBOSE";
-        let prev = env::var(key).ok();
-        env::remove_var(key);
-        assert!(!super::router_rs_goal_prompt_verbose());
-        for v in ["1", "true", "yes", "on", " TRUE ", "On"] {
-            env::set_var(key, v);
-            assert!(super::router_rs_goal_prompt_verbose(), "{v:?}");
-        }
-        for v in ["0", "false", "", "maybe"] {
-            env::set_var(key, v);
-            assert!(!super::router_rs_goal_prompt_verbose(), "{v:?}");
-        }
-        match prev {
-            Some(v) => env::set_var(key, v),
-            None => env::remove_var(key),
-        }
-    }
-
-    #[test]
-    fn before_submit_continuity_envs_default_off() {
-        let _g = lock_env();
-        let prev_ap = env::var_os("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT");
-        let prev_rfv = env::var_os("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT");
-        env::remove_var("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT");
-        env::remove_var("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT");
+    fn retired_toggle_functions_are_hard_off() {
         assert!(!super::router_rs_autopilot_drive_before_submit_enabled());
         assert!(!super::router_rs_rfv_loop_before_submit_enabled());
-        env::set_var("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT", "1");
-        env::set_var("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT", "on");
-        assert!(super::router_rs_autopilot_drive_before_submit_enabled());
-        assert!(super::router_rs_rfv_loop_before_submit_enabled());
-        match prev_ap {
-            Some(v) => env::set_var("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT", v),
-            None => env::remove_var("ROUTER_RS_AUTOPILOT_DRIVE_BEFORE_SUBMIT"),
-        }
-        match prev_rfv {
-            Some(v) => env::set_var("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT", v),
-            None => env::remove_var("ROUTER_RS_RFV_LOOP_BEFORE_SUBMIT"),
-        }
+        assert!(!super::router_rs_cursor_plan_build_autopilot_goal_gate_enabled());
+        assert!(!super::router_rs_cursor_hook_chat_followup_enabled());
     }
 
     #[test]
@@ -263,16 +160,17 @@ mod tests {
     }
 
     #[test]
-    fn plan_build_autopilot_goal_gate_opt_in_only() {
+    fn review_gate_manuscript_suppress_is_opt_in() {
         let _g = lock_env();
-        let prev = env::var_os("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE");
-        env::remove_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE");
-        assert!(!super::router_rs_cursor_plan_build_autopilot_goal_gate_enabled());
-        env::set_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE", "on");
-        assert!(super::router_rs_cursor_plan_build_autopilot_goal_gate_enabled());
+        let key = ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT_ENV;
+        let prev = env::var_os(key);
+        env::remove_var(key);
+        assert!(!super::router_rs_review_gate_suppress_on_manuscript_context_enabled());
+        env::set_var(key, "on");
+        assert!(super::router_rs_review_gate_suppress_on_manuscript_context_enabled());
         match prev {
-            Some(v) => env::set_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE", v),
-            None => env::remove_var("ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE"),
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
         }
     }
 

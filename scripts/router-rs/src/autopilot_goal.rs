@@ -3,8 +3,7 @@
 
 use crate::framework_runtime::resolve_repo_root_arg;
 use crate::router_env_flags::{
-    router_rs_env_enabled_default_true, router_rs_goal_prompt_verbose,
-    router_rs_operator_inject_globally_enabled,
+    router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
 };
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -750,37 +749,7 @@ fn compact_goal_one_line(text: &str, max_chars: usize) -> String {
     out
 }
 
-fn build_autopilot_drive_followup_verbose(
-    repo_root: &Path,
-    task_id: &str,
-    goal: &str,
-    horizon: &str,
-) -> String {
-    let path = goal_state_path_for_task(repo_root, task_id);
-    let mut lines = vec![
-        "AUTOPILOT_DRIVE: 目标尚未进入完成/暂停/阻塞终态，`drive_until_done` 仍为真且 `status=running`。".to_string(),
-        format!("GOAL_STATE: {}", path.display()),
-        format!("Goal: {}", goal),
-    ];
-    if !horizon.is_empty() {
-        lines.push(format!("Current horizon: {}", horizon));
-    }
-    lines.push(
-        "继续执行：推进实现与验证，更新 SESSION_SUMMARY / NEXT_ACTIONS；满足 Done when 后运行 \
-         `router-rs --stdio-json` 发送 op `framework_autopilot_goal` operation=complete。"
-            .to_string(),
-    );
-    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
-    if !nudges.autopilot_drive_verbose_reasoning_depth.is_empty() {
-        lines.push(nudges.autopilot_drive_verbose_reasoning_depth.clone());
-    }
-    crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
-    crate::harness_operator_nudges::push_retrieval_trace_line(&mut lines, &nudges);
-    lines.join("\n")
-}
-
-/// Cursor stop / beforeSubmit：若 goal 仍在 drive 且 running，生成续跑提示（已解析的 `GOAL_STATE`）。
-/// 默认极短；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 恢复冗长版。
+/// Cursor 必要事件：若 goal 仍在 drive 且 running，生成紧凑续跑提示（已解析的 `GOAL_STATE`）。
 pub fn build_autopilot_drive_followup_message_from_state(
     repo_root: &Path,
     task_id: &str,
@@ -800,11 +769,6 @@ pub fn build_autopilot_drive_followup_message_from_state(
         .get("current_horizon")
         .and_then(Value::as_str)
         .unwrap_or("");
-    if router_rs_goal_prompt_verbose() {
-        return Some(build_autopilot_drive_followup_verbose(
-            repo_root, task_id, goal, horizon,
-        ));
-    }
     let st = state.get("status").and_then(Value::as_str).unwrap_or("?");
     let rel = format!("artifacts/current/{task_id}/GOAL_STATE.json");
     let goal_short = compact_goal_one_line(goal, 140);
@@ -825,8 +789,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
     Some(lines.join("\n"))
 }
 
-/// Cursor stop / beforeSubmit：若 goal 仍在 drive 且 running，生成续跑提示。
-/// 默认极短，避免每轮提交淹没用户主关注；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 恢复冗长版。
+/// Cursor 必要事件：若 goal 仍在 drive 且 running，生成紧凑续跑提示。
 pub fn build_autopilot_drive_followup_message(repo_root: &Path) -> Option<String> {
     let (state, task_id) = read_goal_state_for_hydration(repo_root).ok()??;
     build_autopilot_drive_followup_message_from_state(repo_root, &task_id, &state)
@@ -913,7 +876,7 @@ mod spoof_scrub_tests {
     }
 }
 
-/// 合并进 hook JSON；已有同前缀段落时先剥离再追加（默认写入 `additional_context`，见 `router_rs_cursor_hook_chat_followup_enabled`）。
+/// 合并进 hook JSON；已有同前缀段落时先剥离再追加（默认写入 `additional_context`）。
 /// Cursor `review-gate` 路径使用带 `CursorContinuityFrame` 的合并；本函数仅单测覆盖无 frame 的合并行为。
 #[cfg(test)]
 pub(crate) fn merge_autopilot_drive_followup(repo_root: &Path, output: &mut Value) {
@@ -927,7 +890,7 @@ pub(crate) fn merge_autopilot_drive_followup(repo_root: &Path, output: &mut Valu
         output,
         &msg,
         "AUTOPILOT_DRIVE",
-        crate::router_env_flags::router_rs_cursor_hook_chat_followup_enabled(),
+        false,
     );
 }
 
@@ -1208,8 +1171,6 @@ mod tests {
 
     #[test]
     fn merge_autopilot_drive_followup_refreshes_when_goal_text_changes() {
-        let prev_chat = std::env::var("ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP").ok();
-        std::env::set_var("ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP", "1");
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1236,7 +1197,7 @@ mod tests {
         .expect("start");
         let mut out = json!({});
         merge_autopilot_drive_followup(&repo, &mut out);
-        let fm = out["followup_message"].as_str().expect("fm");
+        let fm = out["additional_context"].as_str().expect("fm");
         assert!(fm.contains("alpha"));
         framework_autopilot_goal(json!({
             "repo_root": rr,
@@ -1250,7 +1211,7 @@ mod tests {
         }))
         .expect("start2");
         merge_autopilot_drive_followup(&repo, &mut out);
-        let fm2 = out["followup_message"].as_str().expect("fm2");
+        let fm2 = out["additional_context"].as_str().expect("fm2");
         assert!(
             fm2.contains("beta"),
             "expected refreshed goal in followup: {fm2}"
@@ -1260,10 +1221,6 @@ mod tests {
             "stale goal text should be stripped: {fm2}"
         );
         let _ = fs::remove_dir_all(&repo);
-        match prev_chat {
-            Some(v) => std::env::set_var("ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP", v),
-            None => std::env::remove_var("ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP"),
-        }
     }
 
     /// GOAL 与 RFV 同 task 互斥：autopilot start 应将活跃 RFV 标为 superseded。

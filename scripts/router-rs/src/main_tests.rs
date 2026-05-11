@@ -634,8 +634,8 @@ fn continuity_digest_includes_goal_state_attachment() {
         "depth hint should surface in digest prompt; prompt={prompt:?}"
     );
     assert!(
-        prompt.contains("Active goal") || prompt.contains("GOAL_STATE（router-rs"),
-        "goal section missing (compact vs verbose); prompt={prompt:?}"
+        prompt.contains("Active goal"),
+        "goal section missing; prompt={prompt:?}"
     );
     assert!(prompt.contains("Integration goal text"));
     assert!(prompt.contains("cargo test -q"));
@@ -649,7 +649,7 @@ fn continuity_digest_includes_goal_state_attachment() {
 }
 
 #[test]
-fn continuity_digest_goal_prompt_verbose_restores_long_section() {
+fn continuity_digest_goal_prompt_uses_compact_section() {
     let repo_root = temp_dir_path("autopilot-followup-goal-merge-verbose");
     let task_id = "goal-task-verbose";
     let task_root = repo_root.join("artifacts/current").join(task_id);
@@ -675,17 +675,11 @@ fn continuity_digest_goal_prompt_verbose_restores_long_section() {
         }"#,
     )
     .expect("goal state");
-    let prior = std::env::var("ROUTER_RS_GOAL_PROMPT_VERBOSE").ok();
-    std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", "1");
     let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
     assert!(
-        prompt.contains("GOAL_STATE（router-rs"),
-        "verbose env should restore long heading; prompt={prompt:?}"
+        prompt.contains("## Active goal"),
+        "digest should stay compact; prompt={prompt:?}"
     );
-    match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_GOAL_PROMPT_VERBOSE", v),
-        None => std::env::remove_var("ROUTER_RS_GOAL_PROMPT_VERBOSE"),
-    }
     let _ = fs::remove_dir_all(&repo_root);
 }
 

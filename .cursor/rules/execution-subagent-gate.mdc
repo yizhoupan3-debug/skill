@@ -1,18 +1,15 @@
 ---
-description: Suggest intelligent execution lane split for implementation tasks
+description: Cursor-only execution delta for subagent admission
 alwaysApply: true
 ---
 
 # Execution Subagent Gate（仅 Cursor）
 
-跨宿主基线与叙事见 `AGENTS.md` → **Execution Ladder** → **宿主优先级**。**本文件与 `AGENTS.md` 一起构成 Cursor 执行面叙事**：对可分解的实现类工作，**建议**（默认倾向）使用独立 subagent lanes；主线程保留架构决策、集成与最终验证。
+跨宿主基线、默认执行方式、拒因集合、`/autopilot` 与 closeout 一律以仓库根 `AGENTS.md` 为准。
 
-执行偏好：对“明显可并行”的实现任务，倾向**一开始就并发拆 lane**（而不是先串行探索），并遵循 `AGENTS.md` 中更新后的默认并行度（通常 3-5 lanes；必要时可到 6-8）。
+本文件只补 Cursor 独有差异：
 
-细则（触发画像、lane 契约、拒因集合、禁止向用户暴露拒因元说明、`/autopilot` goal-style 连续性、closeout）：一律以 `AGENTS.md` 同章及 **Autopilot Goal Mechanism**、**Closeout** 为准。
-
-**反模式（硬禁止）**：在可见回复里自拟整段仿宿主的机读续跑块（**像**工单键值、内部字段名、长段「升级」叙事等）——与当前 **Cursor hook 真源**不一致；见 `AGENTS.md` **Host Boundaries**。清门只用了 **单行** token。
-
-**`updateCurrentStep`（Cursor 子代理 / Multitask 内置）**：该工具**不接受**空载荷 `input: {}`，否则会触发参数校验或 JSON 解析失败。用法：**进行中**必须传非空 `current_step` 字符串，例如 `{"current_step": "正在读取 host_integration.rs"}`；**收尾**传 `final_summary` 与 `completed_subtitle`（均为非空字符串）。若工具仍报错：**不要再反复空调或重试同一空载荷**；改为在可见回复里用普通文字汇报进度/完成态，避免阻塞主交付。
-
-**显式豁免**：用户要求不使用 subagent（例如 "do not use subagent" / 「不要用子代理」）→ 不适用上述默认。
+- Cursor 工作区里，可分解实现任务默认倾向并行 lane；主线程仍负责共享决策、集成与最终验证。
+- 不要在可见回复里自拟长篇仿宿主机读块；Cursor 真源只认宿主实际注入的短码。
+- `updateCurrentStep` 不接受空载荷；进行中传非空 `current_step`，收尾传非空 `final_summary` / `completed_subtitle`。
+- 用户明确要求“不用子代理”时，本 gate 不适用。

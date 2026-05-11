@@ -5,7 +5,7 @@
 
 **落地跟进（执行面，非本调研正文改写义务）**：`host_support.platforms` 已与 `RUNTIME_REGISTRY.host_targets.supported` 对齐并由 `skill-compiler-rs` 归一；见 `scripts/skill-compiler-rs/src/host_platforms.rs` 与 `tests/policy_contracts.rs` 中 **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`**。
 
-**状态校准（2026-05-12）**：本文件保留当时只读调研记录；下文若仍出现 `host_support.platforms` 未闭环 / open gap 的表述，按本段视为**已解决的历史发现**。当前仍开放的是：`host_targets.supported`、`host_projections`、`framework_commands.*.host_entrypoints`、`records[].plugin.host_support.platforms` 四个集合的语义需在执行面持续保持清晰；profile payload 已改为从 `host_projections` 派生，同时保留 Codex 兼容输出。
+**状态校准（2026-05-12）**：本文件保留当时只读调研记录；下文若仍出现 `host_support.platforms` 未闭环 / open gap 的表述，按本段视为**已解决的历史发现**。当前仍开放的是：`host_targets.supported`、`host_projections`、`framework_commands.*.host_entrypoints`、`SKILL_PLUGIN_CATALOG skills.<slug>.host_support.platforms` 四个集合的语义需在执行面持续保持清晰；profile payload 已改为从 `host_projections` 派生，同时保留 Codex 兼容输出。
 
 ---
 
@@ -15,7 +15,7 @@
 - **路由热真源**：`skills/SKILL_ROUTING_RUNTIME.json`（`scope.kind=hot`，`hot_skill_count=25`，`fallback_manifest=skills/SKILL_MANIFEST.json`，`full_skill_count=51`）。`vnext` 指针聚合到 `SKILL_HEALTH_MANIFEST` / `SKILL_PLUGIN_CATALOG` / `SKILL_ROUTING_METADATA` / `SKILL_ROUTING_RUNTIME_EXPLAIN.json`。
 - **编译器派生面**：`configs/framework/GENERATED_ARTIFACTS.json` 将多数 `skills/SKILL_*.json`、`SKILL_ROUTING_REGISTRY.md` 等标为 **skill-compiler-rs** 生成；`AGENTS.md` 与 `.codex/host_entrypoints_sync_manifest.json` 标为 **`router-rs codex sync`** 生成——这是 **策略/入口同步** 与 **路由编译** 两条不同流水线。
 - **Codex 特化残留（预期内）**：`host_projections.codex-cli.session_supervisor_driver=codex_driver`；`$CODEX_HOME/skills` 仅 Codex 安装语义（`host_adapter_contract.md` 表）；`.codex/hooks.json` 为 bash 定位 `router-rs` 后调用 `codex hook`（较 Cursor 直接 argv 更厚，但仍以 L3 为语义核）。
-- **`records[].plugin.host_support.platforms` 在 Rust 路由树中未检索到消费点**（`scripts/router-rs/src` 下对 `host_support` / `platforms` 字段无匹配）；**open gap**：若存在宿主过滤，可能在 **未检入的宿主侧** 或 **未来插件 ABI**；当前更似 **catalog/文档/安装投影元数据**。
+- **`SKILL_PLUGIN_CATALOG skills.<slug>.host_support.platforms` 在 Rust 路由树中未检索到消费点**（`scripts/router-rs/src` 下对 `host_support` / `platforms` 字段无匹配）；**open gap**：若存在宿主过滤，可能在 **未检入的宿主侧** 或 **未来插件 ABI**；当前更似 **catalog/文档/安装投影元数据**。
 
 ---
 

@@ -4,7 +4,7 @@
 
 ## 1. 调研范围与架构（与计划 §1 对齐）
 
-本仓库「写 plan」= Cursor Plan Mode / CreatePlan + [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) + [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) + 可选 `router-rs` 中 `ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE` 与 `cursor_hooks` 检测。
+本仓库「写 plan」= Cursor Plan Mode / CreatePlan + [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) + [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) + 可选 `router-rs` 中 `retired Plan-Build goal gate` 与 `cursor_hooks` 检测。
 
 ## 1b. 与仓库调研 / review 能力联动（补档）
 
@@ -29,7 +29,7 @@
 
 ### 2.2 Hook：Plan → Build 与 autopilot goal 对齐（默认关闭）
 
-- 环境变量 `ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE`：beforeSubmit 全树或用户提示中出现 `.cursor/plans/*.plan.md` 时**视同** `/autopilot` 拉起 goal 门控；**默认关闭**；不自动执行 shell（见 `router_env_flags.rs` 模块注释）。
+- 环境变量 `retired Plan-Build goal gate`：beforeSubmit 全树或用户提示中出现 `.cursor/plans/*.plan.md` 时**视同** `/autopilot` 拉起 goal 门控；**默认关闭**；不自动执行 shell（见 `router_env_flags.rs` 模块注释）。
 
 ### 2.3 审 plan 样例 findings（`plan_review_findings_round1.md`）
 
@@ -82,7 +82,7 @@ rg -n "CreatePlan|plan_profile|gitx|Finding" docs/plans/plan_review_findings_rou
 | 模型 / CreatePlan 习惯 | 阶段名式 todo、缺 Verify | **A** 规则 + 最小 frontmatter 模板 + 强例 | 低 |
 | 宿主产品边界 | 默认不在 repo、内部 todo 漂移 | **B** Save to workspace、workdocs 镜像、文档化 env | 中 |
 | 仓库契约未自动强制 | hook 不修补 YAML | **A** 人工自检；可选 **C** 校验脚本/CI | 低→高 |
-| Plan→执行门控可选且默认关 | Build 不必然触发 goal | **B** 显式开启 `ROUTER_RS_CURSOR_PLAN_BUILD_AUTOPILOT_GOAL_GATE` | 中 |
+| Plan→执行门控可选且默认关 | Build 不必然触发 goal | **B** 显式开启 `retired Plan-Build goal gate` | 中 |
 | Verify 可伪造 / 证据不足 | `rg Finding` 不绑计划文件 diff | **A** 将 round1 建议写入 skill 强例（`git diff` 计划路径、closeout 含 `--stat`） | 低 |
 | 宿主演进 / 版本 bug | plan.md 创建失败 | **D** 跟踪 Cursor 发行说明与论坛；本仓库不冒充已复现 | — |
 
