@@ -102,7 +102,7 @@ sequenceDiagram
 
 | 面 | 内容 | 依据 |
 |----|------|------|
-| **`RUNTIME_REGISTRY.json`** | `host_targets.supported` + `metadata.<id>.install_tool` + `host_entrypoints`；`framework_commands` 与 autopilot/gitx/team 等契约 | `configs/framework/RUNTIME_REGISTRY.json`；`docs/host_adapter_contract.md` §0、§3.1 |
+| **`RUNTIME_REGISTRY.json`** | `host_targets.supported` + `metadata.<id>.install_tool` + `host_entrypoints`；`framework_commands` 与 autopilot/gitx/deepinterview/update 等契约；历史 `/team` 已退场，worker 协作回到 `agent-swarm-orchestration` gate | `configs/framework/RUNTIME_REGISTRY.json`；`docs/host_adapter_contract.md` §0、§3.1 |
 | **`framework_host_targets.rs`** | 从注册表 fail-closed 加载；`skills_install_tool_for_host_id` 等 | `scripts/router-rs/src/framework_host_targets.rs` L1–65 |
 | **`ROUTER_RS_*`** | 默认 true/false 语义、聚合关断 `ROUTER_RS_OPERATOR_INJECT`、beforeSubmit opt-in 等 | `scripts/router-rs/src/router_env_flags.rs`；`docs/harness_architecture.md` §8 矩阵；`AGENTS.md` 个人使用 |
 | **Operator 文案** | `configs/framework/HARNESS_OPERATOR_NUDGES.json`（`schema_version`: `harness-operator-nudges-v1`）；关断 `ROUTER_RS_HARNESS_OPERATOR_NUDGES` / 总闸 `ROUTER_RS_OPERATOR_INJECT` | `configs/framework/HARNESS_OPERATOR_NUDGES.json`；`docs/harness_architecture.md` §5 规则 4–5、§8 |

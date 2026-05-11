@@ -29,8 +29,9 @@ pub(crate) use records::{
     load_inline_records, load_records, load_records_cached_for_stdio, load_records_from_manifest,
 };
 pub(crate) use routing::{
-    build_route_snapshot, build_search_results_payload, literal_framework_alias_decision,
-    route_task, search_skills, should_accept_manifest_fallback, should_retry_with_manifest,
+    build_route_snapshot, build_search_results_payload, filter_records_for_host,
+    literal_framework_alias_decision, route_task, search_skills, should_accept_manifest_fallback,
+    should_retry_with_manifest,
 };
 #[cfg(test)]
 pub(crate) use signals::has_parallel_review_candidate_context;

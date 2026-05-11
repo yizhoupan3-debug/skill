@@ -81,6 +81,31 @@
   },
   "enforcement_rules": [
     {
+      "id": "schema_version_mismatch",
+      "description": "schema_version is missing, empty, or does not match closeout-record-v1.",
+      "severity": "block"
+    },
+    {
+      "id": "task_id_missing",
+      "description": "task_id is empty or whitespace-only.",
+      "severity": "block"
+    },
+    {
+      "id": "summary_missing",
+      "description": "summary is empty or whitespace-only.",
+      "severity": "block"
+    },
+    {
+      "id": "verification_status_missing",
+      "description": "verification_status is empty or missing.",
+      "severity": "block"
+    },
+    {
+      "id": "verification_status_invalid",
+      "description": "verification_status is not one of passed, failed, partial, or not_run.",
+      "severity": "block"
+    },
+    {
       "id": "claimed_done_without_evidence",
       "description": "Summary asserts completion (done/finished/completed/passed/通过/完成/已完成) but verification_status is not_run and no risks/blockers are declared.",
       "severity": "block"
@@ -96,6 +121,11 @@
       "severity": "block"
     },
     {
+      "id": "invalid_command_evidence",
+      "description": "commands_run contains a row without a non-empty command or integer exit_code.",
+      "severity": "block"
+    },
+    {
       "id": "verification_passed_with_missing_artifact",
       "description": "verification_status=passed but at least one artifact in artifacts_checked has exists=false.",
       "severity": "block"
@@ -106,8 +136,23 @@
       "severity": "block"
     },
     {
-      "id": "summary_missing",
-      "description": "summary is empty or whitespace-only.",
+      "id": "claimed_done_with_failed_verification",
+      "description": "Summary claims completion but verification_status=failed.",
+      "severity": "block"
+    },
+    {
+      "id": "claimed_passed_without_evidence",
+      "description": "verification_status=passed and summary claims completion without command or artifact evidence in the record.",
+      "severity": "block"
+    },
+    {
+      "id": "claimed_passed_without_evidence_index_rows",
+      "description": "Context-aware evaluation found no successful task-level verification evidence for a record claiming passed completion.",
+      "severity": "block"
+    },
+    {
+      "id": "task_id_context_mismatch",
+      "description": "Context-aware evaluation found that record.task_id does not match the requested task id.",
       "severity": "block"
     }
   ],

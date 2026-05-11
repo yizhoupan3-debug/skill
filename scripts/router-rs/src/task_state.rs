@@ -20,7 +20,7 @@ pub const RESOLVED_TASK_VIEW_SCHEMA_VERSION: &str = "router-rs-resolved-task-vie
 /// Single disk snapshot for Cursor **beforeSubmit** / **stop** continuity + gate hydrate.
 ///
 /// - `pointer_view`：`resolve_task_view`（override 无 → active → focus），供续跑合并时与 `active_task` 对齐缓存。
-/// - `hydration_goal`：与 `read_goal_state_for_hydration` 一致（含 orphan 扫盘），供 `AG_FOLLOWUP` hydrate。
+/// - `hydration_goal`：与 `read_goal_state_for_hydration` 一致（active → focus；不扫 orphan），供 `AG_FOLLOWUP` hydrate。
 #[derive(Debug, Clone)]
 pub struct CursorContinuityFrame {
     pub pointer_view: ResolvedTaskView,
@@ -880,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn continuity_frame_hydration_finds_orphan_goal_without_active_pointer() {
+    fn continuity_frame_hydration_ignores_orphan_goal_without_active_pointer() {
         let tmp = unique_repo("orphan-hydr");
         let tid = "t-orph";
         let task_dir = tmp.join("artifacts/current").join(tid);
@@ -892,9 +892,10 @@ mod tests {
         .unwrap();
         let frame = resolve_cursor_continuity_frame(&tmp);
         assert!(frame.pointer_view.task_id.is_none());
-        let (g, id) = frame.hydration_goal.expect("hydration");
-        assert_eq!(id, tid);
-        assert_eq!(g.get("goal").and_then(Value::as_str), Some("orphan"));
+        assert!(
+            frame.hydration_goal.is_none(),
+            "orphan goal must not hydrate current task"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 }

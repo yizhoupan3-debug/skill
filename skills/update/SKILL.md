@@ -83,10 +83,10 @@ network_access: local
 
 ## Rust audit entrypoint
 
-`update-audit` 是 dry-run 清单入口，只读审计，不删除、不改文件：
+`update-audit` 是 dry-run 清单入口，只读审计，不删除、不改文件。**在框架仓内优先使用源码入口**；只有当 `router-rs framework --help` 已显示 `maint` 时，才直接用已安装二进制：
 
 ```bash
-router-rs framework maint update-audit
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-audit
 ```
 
 它输出 JSON，至少包含：
@@ -101,7 +101,7 @@ router-rs framework maint update-audit
 仓库外 cwd 时建议显式传目标仓库根；该仓库只需是 git repo，不要求是 skill framework checkout：
 
 ```bash
-router-rs framework maint update-audit --repo-root /abs/path/to/repo
+cargo run --manifest-path /abs/path/to/framework-repo/scripts/router-rs/Cargo.toml -- framework maint update-audit --repo-root /abs/path/to/repo
 ```
 
 `--framework-root` 仍作为旧脚本兼容别名保留，但不再代表 audit 只能跑在 framework 仓库。
@@ -113,7 +113,7 @@ router-rs framework maint update-audit --repo-root /abs/path/to/repo
 完整框架一条龙仍可运行：
 
 ```bash
-router-rs framework maint update-one-shot
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
 等价于：`refresh-host-projections` → `skill-compiler-rs --apply` → 默认离线契约测试 → `skill-compiler-rs` crate tests → `generated-artifacts-status` OK → 可选 host skill publish。
@@ -134,13 +134,13 @@ cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml
 可选外网套件：
 
 ```bash
-ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1 router-rs framework maint update-one-shot
+ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
 可选全局宿主投影：
 
 ```bash
-ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 router-rs framework maint update-one-shot
+ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
 ## 删除策略

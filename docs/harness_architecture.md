@@ -27,7 +27,7 @@ L1  Executable verification and exit codes
 ### 2.1 SessionStart
 
 - Codex / Cursor SessionStart 只允许注入动态活信息。
-- 允许内容：active task 连续性摘要、`GOAL_STATE` 单行头、`RFV_LOOP_STATE` 单行头、必要时的一行 repo 指针。
+- 允许内容：`GOAL_STATE` / `RFV_LOOP_STATE` 单行头、active task 连续性摘要、必要时的一行 repo 指针；优先级也按此顺序截断。
 - 禁止内容：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 之类静态说明。
 - Cursor `SessionStart` 采用固定紧凑模板和固定预算；超预算时统一截断，不再提供 verbose 模式或额外预算开关。
 
@@ -55,6 +55,22 @@ L1  Executable verification and exit codes
 - hook 只记录证据，不替模型“编造验证通过”。
 - 长尾命令通过显式 append 或更窄启发式补齐。
 
+### 3.1.1 轨迹与 step 恢复流
+
+`TRACE_EVENTS.jsonl` 是轨迹诊断流，复用 `trace_runtime record-event`，用于记录
+`task_id / owner / gate / overlay / horizon / phase / tool_or_lane / status /
+failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
+`EVIDENCE_INDEX`：前者解释过程，后者支撑验证。
+
+`STEP_LEDGER.jsonl` 是 task-scoped 长任务 step 恢复流，由
+`router-rs framework step-ledger` 追加；`TASK_STATE.json` 只投影摘要
+（条数、状态计数、最新 step/ref），不把整份 ledger 注入模型上下文。
+
+统一 failure taxonomy 的机器可读表在
+`configs/framework/HARNESS_FAILURE_TAXONOMY.json`；behavioral eval fixture 表在
+`configs/framework/HARNESS_BEHAVIORAL_EVAL_CASES.json`。这些配置只描述评估与分类，
+不成为第二套路由、证据或 closeout 真源。
+
 ### 3.2 续跑与门控流
 
 磁盘状态
@@ -76,6 +92,11 @@ L1  Executable verification and exit codes
 - lock failure、degraded mode、pre-goal 等提示应压缩为单行或极短段，最多附一个动作提示。
 - 禁止把长策略解释混进 runtime 提示；长解释只留在本文件和相关契约文档。
 
+### 4.1 Claude `claude hook` 与 Cursor stdin 误接
+
+`router-rs claude hook` 若误收到 Cursor hook 的 stdin，仅在 JSON **顶层**同时满足：**非空字符串** `cursor_version`、**数组** `workspace_roots` 时整段静默（`suppressOutput`），避免把 Claude 管道接到 Cursor 事件流。  
+**不**再对嵌套字段里的 `/.cursor/` 等路径做子串匹配：否则合法 Claude 载荷（例如编辑 `.cursor/` 下文件）会被误判为 Cursor 而旁路门禁。实现见 [`scripts/router-rs/src/claude_hooks.rs`](../scripts/router-rs/src/claude_hooks.rs)（`payload_looks_like_cursor_hook_stdin`）。
+
 ## 5. 开关面
 
 只保留真正改变行为边界的少量开关；文案分叉和投影位置分叉不再保留。
@@ -86,11 +107,12 @@ L1  Executable verification and exit codes
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅关闭 operator nudge 文案；不改 gate 逻辑 |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | 关闭 Stop 等必要事件上的 `AUTOPILOT_DRIVE` advisory |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 关闭必要事件上的 `RFV_LOOP_CONTINUE` advisory |
+| `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | 关 | Cursor beforeSubmit 中显式开启论文/手稿强对抗审稿短段 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | 关 | 显式开启 Cursor `/autopilot` pre-goal beforeSubmit 提示 |
-| `ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT` | 关 | 手稿语境下抑制 review gate 误触发 |
 | `ROUTER_RS_CLOSEOUT_ENFORCEMENT` | 本地软、CI 硬 | 控制 closeout record 是否程序化硬门禁 |
 | `ROUTER_RS_DEPTH_SCORE_MODE` | `legacy` | `strict` 时启用更严格 depth 第三分公式 |
 | `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` | 640，clamp 256–8192 | 仅 Codex SessionStart 的字符预算 |
+| `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | 关 | 为真时关闭 Claude Code `CLAUDE_REVIEW_GATE`（含 UserPromptSubmit review 提示）；与 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 对称。可选：在项目根 `.claude/router-rs-hook.env` 写 `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1`（由安装的 Claude hook command 包装自动加载；重装/合并 hook 后以 `scripts/router-rs` 的 Claude settings 投影为准） |
 
 已退役的文案分叉、beforeSubmit 双续跑、聊天区投影切换、静默例外模式、Plan→Build goal 门控开关都不再支持；相关变量已从活跃代码与主真源文档移除。
 
@@ -114,7 +136,7 @@ L1  Executable verification and exit codes
 |------|----------|
 | L4 hooks | `.cursor/hooks.json`、`.codex/hooks.json`、各宿主 hook 配置 |
 | L3 control plane | `scripts/router-rs/src/{cursor_hooks,codex_hooks,claude_hooks,autopilot_goal,rfv_loop,framework_runtime,task_state,host_integration}.rs` |
-| L2 continuity | `artifacts/current/`、`configs/framework/*SCHEMA*` |
+| L2 continuity | `artifacts/current/`、`TRACE_EVENTS.jsonl`、`STEP_LEDGER.jsonl`、`configs/framework/*SCHEMA*` |
 | Skill 热路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | Skill 冷元数据 | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json` |
 | Host registry | `configs/framework/RUNTIME_REGISTRY.json` |

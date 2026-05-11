@@ -11,7 +11,7 @@
 
 ## 0. 执行摘要
 
-- **文档层 SSOT 叙事已存在**：`docs/harness_architecture.md` 五层模型、`docs/host_adapter_contract.md` North-star、`docs/host_adapter_contracts.md` Codex 投影边界，与「L2/L3 共享、L4 薄转发、宿主元数据在 `RUNTIME_REGISTRY`」一致。
+- **文档层 SSOT 叙事已存在**：`docs/harness_architecture.md` 五层模型、`docs/host_adapter_contract.md` North-star 与 Codex/Cursor/Claude 投影边界，与「L2/L3 共享、L4 薄转发、宿主元数据在 `RUNTIME_REGISTRY`」一致。
 - **路由热真源**：`skills/SKILL_ROUTING_RUNTIME.json`（`scope.kind=hot`，`hot_skill_count=25`，`fallback_manifest=skills/SKILL_MANIFEST.json`，`full_skill_count=51`）。`vnext` 指针聚合到 `SKILL_HEALTH_MANIFEST` / `SKILL_PLUGIN_CATALOG` / `SKILL_ROUTING_METADATA` / `SKILL_ROUTING_RUNTIME_EXPLAIN.json`。
 - **编译器派生面**：`configs/framework/GENERATED_ARTIFACTS.json` 将多数 `skills/SKILL_*.json`、`SKILL_ROUTING_REGISTRY.md` 等标为 **skill-compiler-rs** 生成；`AGENTS.md` 与 `.codex/host_entrypoints_sync_manifest.json` 标为 **`router-rs codex sync`** 生成——这是 **策略/入口同步** 与 **路由编译** 两条不同流水线。
 - **Codex 特化残留（预期内）**：`host_projections.codex-cli.session_supervisor_driver=codex_driver`；`$CODEX_HOME/skills` 仅 Codex 安装语义（`host_adapter_contract.md` 表）；`.codex/hooks.json` 为 bash 定位 `router-rs` 后调用 `codex hook`（较 Cursor 直接 argv 更厚，但仍以 L3 为语义核）。
@@ -28,7 +28,7 @@
 | 路由 / 注册 | `skills/SKILL_ROUTING_RUNTIME.json`、`configs/framework/RUNTIME_REGISTRY.json`、`skills/SKILL_MANIFEST.json`（fallback） | `$CODEX_HOME/skills/` 下 **投影后的** 路由副本（安装产物）；**不得**手改为主真源 |
 | 策略叙事 | 仓库根 `AGENTS.md`（磁盘编辑真源） | Codex **编译期嵌入**快照；Cursor **`.cursor/rules/*.mdc`**（`framework install --to cursor`）；Claude `.claude/rules/framework.md` |
 | L4 | N/A | `.cursor/hooks.json`、`.codex/hooks.json`、`router-rs claude hook` 绑定（stdin 透传） |
-| L5 | `skills/**/SKILL.md` + RFV 等 reference | 宿主内「发现用」短描述；**不**复制整份路由表（`host_adapter_contracts.md` Hard Rules 6） |
+| L5 | `skills/**/SKILL.md` + RFV 等 reference | 宿主内「发现用」短描述；**不**复制整份路由表（见 `host_adapter_contract.md` 的 L4/L5 边界） |
 
 **反模式（文档已禁止）**：在 hook shell / `.mdc` / skill prose 中复制 L3 门控或第二套 `EVIDENCE_INDEX` 规则（`harness_architecture.md` §2、`host_adapter_contract.md` §1）。
 

@@ -37,9 +37,13 @@ struct SkillEntry {
     path: String,
     source: String,
     source_position: i64,
+    #[allow(dead_code)]
     routing_layer: String,
+    #[allow(dead_code)]
     routing_owner: String,
+    #[allow(dead_code)]
     routing_gate: String,
+    #[allow(dead_code)]
     session_start: String,
 }
 
@@ -163,13 +167,12 @@ const RUNTIME_RESEARCH_WORKFLOW_SLUGS: &[&str] = &[
     "information-retrieval",
     // `literature-synthesis` removed: ref-corpus work lives under `paper-workbench`; keep slug retired in policy tests.
     "research-engineer",
-    "research-workbench",
 ];
-const FALLBACK_FRAMEWORK_COMMANDS: &[&str] =
-    &["autopilot", "deepinterview", "gitx", "team", "update"];
+const FALLBACK_FRAMEWORK_COMMANDS: &[&str] = &["autopilot", "deepinterview", "gitx", "update"];
 
 const DEFAULT_SURFACE_OWNERS: &[&str] = &[];
 const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
+    "research-workbench",
     "citation-management",
     "paper-workbench",
     "paper-reviewer",
@@ -201,6 +204,7 @@ const DEFAULT_OVERLAYS: &[&str] = &[];
 const IMPLEMENTATION_OVERLAYS: &[&str] = &[];
 const AUDIT_OVERLAYS: &[&str] = &[];
 const FRAMEWORK_OVERLAYS: &[&str] = &[];
+const OPS_OVERLAYS: &[&str] = &[];
 
 fn main() -> Result<(), String> {
     let args = Cli::parse();
@@ -440,11 +444,7 @@ fn compile_bundle(
     let index = build_index(&manifest, &framework_rows, &framework_surface_policy);
     let plugin_catalog = build_plugin_catalog(docs, &manifest, &framework_rows)?;
     let routing_metadata = build_routing_metadata_catalog(docs, &manifest, &framework_rows);
-    let runtime_index = build_runtime_index(
-        &manifest,
-        &framework_rows,
-        &framework_surface_policy,
-    );
+    let runtime_index = build_runtime_index(&manifest, &framework_rows, &framework_surface_policy);
     let runtime_explain = build_runtime_explain(
         &manifest,
         &runtime_index,
@@ -755,7 +755,9 @@ fn build_registry_and_manifest(
         "trigger_hints",
         "source",
         "source_position",
-        "skill_path"
+        "skill_path",
+        "host_platforms",
+        "kind"
     ]);
     let mut rows = Vec::new();
     let mut skills = Vec::new();
@@ -791,6 +793,10 @@ fn build_registry_and_manifest(
         let session_start = string_field(&doc.metadata, "session_start");
         let description = optional_string_field(&doc.metadata, "description").unwrap_or_default();
         let trigger_hints = extract_trigger_hints(&doc.metadata, &description, &doc.body);
+        let host_platforms = host_platforms::normalize_skill_host_platforms(
+            &platforms_raw_from_skill_metadata(&doc.metadata),
+        )
+        .map_err(|e| format!("skill `{slug}`: {e}"))?;
         let summary = pick_runtime_summary(&doc.metadata, 80);
         let long_summary = pick_runtime_summary(&doc.metadata, 200);
 
@@ -806,6 +812,8 @@ fn build_registry_and_manifest(
             json!(source_entry.source),
             json!(source_entry.source_position),
             json!(format!("{}/SKILL.md", source_entry.path)),
+            json!(host_platforms),
+            json!("skill"),
         ];
 
         if is_runtime_owned_skill(&string_at(&skill_row, 0)) {
@@ -986,6 +994,8 @@ fn build_runtime_index(
                 value_at(skill, 7),
                 string_at(skill, 4),
                 string_at(skill, 10),
+                value_at(skill, 11),
+                string_at(skill, 12),
             ])
         })
         .collect::<Vec<_>>();
@@ -1002,7 +1012,7 @@ fn build_runtime_index(
             "full_skill_count": manifest.get("skills").and_then(Value::as_array).map(Vec::len).unwrap_or(0),
             "hot_skill_count": skills.len(),
         },
-        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
+        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path", "host_platforms", "kind"],
         "skills": skills,
     })
 }
@@ -1032,12 +1042,19 @@ fn framework_command_runtime_rows_from_registry(registry: &Value) -> Result<Vec<
     let mut slugs = commands.keys().cloned().collect::<Vec<_>>();
     slugs.sort();
     for slug in slugs {
+        if framework_command_hidden_from_skill_surface(&slug) {
+            continue;
+        }
         let command = commands
             .get(&slug)
             .ok_or_else(|| format!("runtime registry missing command `{slug}`"))?;
         rows.push(framework_command_runtime_row(&slug, command));
     }
     Ok(rows)
+}
+
+fn framework_command_hidden_from_skill_surface(slug: &str) -> bool {
+    matches!(slug, "team")
 }
 
 fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
@@ -1073,7 +1090,9 @@ fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
         summary,
         trigger_hints,
         "P1",
-        skill_path
+        skill_path,
+        ["codex-cli", "codex-app", "cursor", "claude-code"],
+        "framework_command"
     ])
 }
 
@@ -1093,11 +1112,6 @@ fn fallback_framework_command_runtime_row(slug: &str) -> Value {
             "skill_path": "skills/gitx/SKILL.md",
             "interaction_invariants": {"explicit_entrypoints": ["/gitx", "gitx"]},
             "lineage": {"description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."}
-        }),
-        "team" => json!({
-            "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/team"]},
-            "lineage": {"description": "Run the local framework team orchestration entrypoint."}
         }),
         "update" => json!({
             "skill_path": "skills/update/SKILL.md",
@@ -1167,8 +1181,10 @@ fn build_plugin_catalog(
             "fail_closed_rule": "unknown capability classes are denied until the runtime explicitly supports them"
         },
         "capability_classes": [
+            "routing",
             "routing_owner",
             "routing_gate",
+            "tool",
             "artifact",
             "source",
             "evidence",
@@ -1177,6 +1193,15 @@ fn build_plugin_catalog(
             "networked",
             "high_risk"
         ],
+        "capability_key_classes": {
+            "routing_layer": "routing",
+            "routing_owner": "routing_owner",
+            "routing_gate": "routing_gate",
+            "allowed_tools": "tool",
+            "approval_required_tools": "high_risk",
+            "artifact_outputs": "artifact",
+            "network_access": "networked"
+        },
         "skills": Value::Object(skills)
     }))
 }
@@ -1640,122 +1665,6 @@ fn build_health_manifest(
     })
 }
 
-fn string_list_at(value: &Value, path: &[&str]) -> Vec<String> {
-    let mut current = value;
-    for key in path {
-        current = current.get(*key).unwrap_or(&Value::Null);
-    }
-    current
-        .as_array()
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
-}
-
-fn build_loadouts(surface_policy: &Value, manifest: &Value) -> Value {
-    let default_loadouts = string_list_at(surface_policy, &["default_surface", "default_loadouts"]);
-    let explicit_opt_in_loadouts = string_list_at(
-        surface_policy,
-        &["default_surface", "explicit_opt_in_loadouts"],
-    );
-    let tier_activation_defaults = surface_policy
-        .get("default_surface")
-        .and_then(|surface| surface.get("tier_activation_defaults"))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    let slugs = manifest_slug_set(manifest);
-    json!({
-        "version": 2,
-        "schema_version": "skill-loadouts-v2",
-        "source": "generated-by-skill-compiler-rs",
-        "source_of_truth": false,
-        "derived_from": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
-        "report_status": "foldable_generated_report",
-        "activation_policy": {
-            "default_loadouts": default_loadouts,
-            "explicit_opt_in_loadouts": explicit_opt_in_loadouts,
-            "experimental_tiers": tier_activation_defaults.get("experimental").cloned().unwrap_or_else(|| json!("explicit_opt_in")),
-            "deprecated_tiers": tier_activation_defaults.get("deprecated").cloned().unwrap_or_else(|| json!("disabled")),
-            "compatibility_surfaces": "explicit_opt_in"
-        },
-        "loadouts": {
-            "default_surface_loadout": {
-                "activation": "default",
-                "surface_class": "default",
-                "owners": filter_existing_slugs(&slugs, DEFAULT_SURFACE_OWNERS),
-                "overlays": filter_existing_slugs(&slugs, DEFAULT_OVERLAYS),
-                "exclude": [],
-                "purpose": "Single default day-to-day surface; specialized owners route by query instead of default loadout membership."
-            },
-            "research_loadout": {
-                "activation": "explicit",
-                "surface_class": "specialist",
-                "owners": filter_existing_slugs(&slugs, RESEARCH_LOADOUT_OWNERS),
-                "overlays": [],
-                "exclude": [],
-                "purpose": "Research-project front door plus bounded research, repo investigation, and evidence gathering."
-            },
-            "implementation_loadout": {
-                "activation": "explicit",
-                "surface_class": "specialist",
-                "owners": filter_existing_slugs(&slugs, IMPLEMENTATION_LOADOUT_OWNERS),
-                "overlays": filter_existing_slugs(&slugs, IMPLEMENTATION_OVERLAYS),
-                "exclude": [],
-                "purpose": "Concrete implementation and refactor execution with test support."
-            },
-            "audit_loadout": {
-                "activation": "explicit",
-                "surface_class": "specialist",
-                "owners": filter_existing_slugs(&slugs, AUDIT_LOADOUT_OWNERS),
-                "overlays": filter_existing_slugs(&slugs, AUDIT_OVERLAYS),
-                "exclude": [],
-                "purpose": "Strict sign-off, audit, verification, and issue surfacing."
-            },
-            "framework_loadout": {
-                "activation": "explicit",
-                "surface_class": "specialist",
-                "owners": filter_existing_slugs(&slugs, FRAMEWORK_LOADOUT_OWNERS),
-                "overlays": filter_existing_slugs(&slugs, FRAMEWORK_OVERLAYS),
-                "exclude": [],
-                "purpose": "Framework design, routing policy, orchestrator evolution, and execution-shape normalization work."
-            },
-            "ops_loadout": {
-                "activation": "explicit",
-                "surface_class": "specialist",
-                "owners": filter_existing_slugs(&slugs, OPS_LOADOUT_OWNERS),
-                "overlays": [],
-                "exclude": [],
-                "purpose": "Operational changes, deployment support, and production diagnostics."
-            }
-        }
-    })
-}
-
-fn manifest_slug_set(manifest: &Value) -> HashSet<String> {
-    manifest
-        .get("skills")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_array)
-        .map(|row| string_at(row, 0))
-        .filter(|slug| !slug.is_empty())
-        .collect()
-}
-
-fn filter_existing_slugs(known_slugs: &HashSet<String>, slugs: &[&str]) -> Vec<String> {
-    slugs
-        .iter()
-        .filter(|slug| known_slugs.contains(**slug))
-        .map(|slug| (*slug).to_string())
-        .collect()
-}
-
 fn build_framework_surface_policy(tiers: &Value, configured_policy: Option<&Value>) -> Value {
     let tier_counts = tiers
         .get("summary")
@@ -1767,12 +1676,18 @@ fn build_framework_surface_policy(tiers: &Value, configured_policy: Option<&Valu
         .and_then(|summary| summary.get("activation_counts"))
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let hot_first_turn_owners = configured_policy
+    let mut hot_first_turn_owners = configured_policy
         .and_then(|policy| policy.get("default_surface"))
         .and_then(|surface| surface.get("hot_first_turn_owners"))
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_else(|| vec![json!("skill-framework-developer")]);
+    if !hot_first_turn_owners
+        .iter()
+        .any(|owner| owner.as_str() == Some("research-workbench"))
+    {
+        hot_first_turn_owners.push(json!("research-workbench"));
+    }
     json!({
         "version": 1,
         "schema_version": "framework-surface-policy-v1",
@@ -1919,79 +1834,119 @@ fn build_shadow_map(skill_entries: &[SkillEntry], source_manifest: &Value) -> Va
     })
 }
 
-fn build_approval_policy(docs: &[SkillDoc]) -> Value {
-    let mut skills = serde_json::Map::new();
-    for doc in docs {
-        if is_runtime_owned_skill(&doc.slug) {
-            continue;
-        }
-        let allowed_tools = normalize_list(doc.metadata.get("allowed_tools"));
-        let approval_required_tools = normalize_list(doc.metadata.get("approval_required_tools"));
-        let filesystem_scope = doc
-            .metadata
-            .get("filesystem_scope")
-            .cloned()
-            .unwrap_or_else(|| Value::Array(Vec::new()));
-        let network_access = doc
-            .metadata
-            .get("network_access")
-            .cloned()
-            .unwrap_or_else(|| Value::String("unspecified".to_string()));
-        let destructive_risk = doc
-            .metadata
-            .get("destructive_risk")
-            .cloned()
-            .unwrap_or_else(|| Value::String("unspecified".to_string()));
-        let bridge_behavior = doc
-            .metadata
-            .get("bridge_behavior")
-            .cloned()
-            .unwrap_or_else(|| Value::String("default".to_string()));
-        let artifact_outputs = normalize_list(doc.metadata.get("artifact_outputs"));
-
-        let mut policy = Map::new();
-        if !allowed_tools.is_empty() {
-            policy.insert("allowed_tools".to_string(), json!(allowed_tools));
-        }
-        if !approval_required_tools.is_empty() {
-            policy.insert(
-                "approval_required_tools".to_string(),
-                json!(approval_required_tools),
-            );
-        }
-        if filesystem_scope != Value::Array(Vec::new()) {
-            policy.insert("filesystem_scope".to_string(), filesystem_scope);
-        }
-        if network_access != Value::String("unspecified".to_string()) {
-            policy.insert("network_access".to_string(), network_access);
-        }
-        if destructive_risk != Value::String("unspecified".to_string()) {
-            policy.insert("destructive_risk".to_string(), destructive_risk);
-        }
-        if bridge_behavior != Value::String("default".to_string()) {
-            policy.insert("bridge_behavior".to_string(), bridge_behavior);
-        }
-        if !artifact_outputs.is_empty() {
-            policy.insert("artifact_outputs".to_string(), json!(artifact_outputs));
-        }
-        if !policy.is_empty() {
-            skills.insert(doc.slug.clone(), Value::Object(policy));
-        }
+fn string_list_at(value: &Value, path: &[&str]) -> Vec<String> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key).unwrap_or(&Value::Null);
     }
+    current
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn manifest_slug_set(manifest: &Value) -> HashSet<String> {
+    manifest
+        .get("skills")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+        .map(|row| string_at(row, 0))
+        .filter(|slug| !slug.is_empty())
+        .collect()
+}
+
+fn filter_existing_slugs(known_slugs: &HashSet<String>, slugs: &[&str]) -> Vec<String> {
+    slugs
+        .iter()
+        .filter(|slug| known_slugs.contains(**slug))
+        .map(|slug| (*slug).to_string())
+        .collect()
+}
+
+fn build_loadouts(surface_policy: &Value, manifest: &Value) -> Value {
+    let default_loadouts = string_list_at(surface_policy, &["default_surface", "default_loadouts"]);
+    let explicit_opt_in_loadouts = string_list_at(
+        surface_policy,
+        &["default_surface", "explicit_opt_in_loadouts"],
+    );
+    let tier_activation_defaults = surface_policy
+        .get("default_surface")
+        .and_then(|surface| surface.get("tier_activation_defaults"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let slugs = manifest_slug_set(manifest);
     json!({
         "version": 2,
-        "schema_version": "skill-approval-policy-v2",
+        "schema_version": "skill-loadouts-v2",
         "source": "generated-by-skill-compiler-rs",
-        "default_policy": {
-            "allowed_tools": [],
-            "approval_required_tools": [],
-            "filesystem_scope": [],
-            "network_access": "unspecified",
-            "destructive_risk": "unspecified",
-            "bridge_behavior": "default",
-            "artifact_outputs": []
+        "source_of_truth": false,
+        "derived_from": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+        "report_status": "foldable_generated_report",
+        "activation_policy": {
+            "default_loadouts": default_loadouts,
+            "explicit_opt_in_loadouts": explicit_opt_in_loadouts,
+            "experimental_tiers": tier_activation_defaults.get("experimental").cloned().unwrap_or_else(|| json!("explicit_opt_in")),
+            "deprecated_tiers": tier_activation_defaults.get("deprecated").cloned().unwrap_or_else(|| json!("disabled")),
+            "compatibility_surfaces": "explicit_opt_in"
         },
-        "skills": Value::Object(skills)
+        "loadouts": {
+            "default_surface_loadout": {
+                "activation": "default",
+                "surface_class": "default",
+                "owners": filter_existing_slugs(&slugs, DEFAULT_SURFACE_OWNERS),
+                "overlays": filter_existing_slugs(&slugs, DEFAULT_OVERLAYS),
+                "exclude": [],
+                "purpose": "Single default day-to-day surface; specialized owners route by query instead of default loadout membership."
+            },
+            "research_loadout": {
+                "activation": "explicit",
+                "surface_class": "specialist",
+                "owners": filter_existing_slugs(&slugs, RESEARCH_LOADOUT_OWNERS),
+                "overlays": [],
+                "exclude": [],
+                "purpose": "Research-project front door plus bounded research, repo investigation, and evidence gathering."
+            },
+            "implementation_loadout": {
+                "activation": "explicit",
+                "surface_class": "specialist",
+                "owners": filter_existing_slugs(&slugs, IMPLEMENTATION_LOADOUT_OWNERS),
+                "overlays": filter_existing_slugs(&slugs, IMPLEMENTATION_OVERLAYS),
+                "exclude": [],
+                "purpose": "Concrete implementation and refactor execution with test support."
+            },
+            "audit_loadout": {
+                "activation": "explicit",
+                "surface_class": "specialist",
+                "owners": filter_existing_slugs(&slugs, AUDIT_LOADOUT_OWNERS),
+                "overlays": filter_existing_slugs(&slugs, AUDIT_OVERLAYS),
+                "exclude": [],
+                "purpose": "Strict sign-off, audit, verification, and issue surfacing."
+            },
+            "framework_loadout": {
+                "activation": "explicit",
+                "surface_class": "specialist",
+                "owners": filter_existing_slugs(&slugs, FRAMEWORK_LOADOUT_OWNERS),
+                "overlays": filter_existing_slugs(&slugs, FRAMEWORK_OVERLAYS),
+                "exclude": [],
+                "purpose": "Framework design, routing policy, orchestrator evolution, and execution-shape normalization work."
+            },
+            "ops_loadout": {
+                "activation": "explicit",
+                "surface_class": "specialist",
+                "owners": filter_existing_slugs(&slugs, OPS_LOADOUT_OWNERS),
+                "overlays": filter_existing_slugs(&slugs, OPS_OVERLAYS),
+                "exclude": [],
+                "purpose": "Operational changes, deployment support, and production diagnostics."
+            }
+        }
     })
 }
 
@@ -2176,6 +2131,82 @@ fn skill_entry_to_value(entry: &SkillEntry) -> Value {
         "routing_owner": entry.routing_owner,
         "routing_gate": entry.routing_gate,
         "session_start": entry.session_start,
+    })
+}
+
+fn build_approval_policy(docs: &[SkillDoc]) -> Value {
+    let mut skills = serde_json::Map::new();
+    for doc in docs {
+        if is_runtime_owned_skill(&doc.slug) {
+            continue;
+        }
+        let allowed_tools = normalize_list(doc.metadata.get("allowed_tools"));
+        let approval_required_tools = normalize_list(doc.metadata.get("approval_required_tools"));
+        let filesystem_scope = doc
+            .metadata
+            .get("filesystem_scope")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(Vec::new()));
+        let network_access = doc
+            .metadata
+            .get("network_access")
+            .cloned()
+            .unwrap_or_else(|| Value::String("unspecified".to_string()));
+        let destructive_risk = doc
+            .metadata
+            .get("destructive_risk")
+            .cloned()
+            .unwrap_or_else(|| Value::String("unspecified".to_string()));
+        let bridge_behavior = doc
+            .metadata
+            .get("bridge_behavior")
+            .cloned()
+            .unwrap_or_else(|| Value::String("default".to_string()));
+        let artifact_outputs = normalize_list(doc.metadata.get("artifact_outputs"));
+
+        let mut policy = Map::new();
+        if !allowed_tools.is_empty() {
+            policy.insert("allowed_tools".to_string(), json!(allowed_tools));
+        }
+        if !approval_required_tools.is_empty() {
+            policy.insert(
+                "approval_required_tools".to_string(),
+                json!(approval_required_tools),
+            );
+        }
+        if filesystem_scope != Value::Array(Vec::new()) {
+            policy.insert("filesystem_scope".to_string(), filesystem_scope);
+        }
+        if network_access != Value::String("unspecified".to_string()) {
+            policy.insert("network_access".to_string(), network_access);
+        }
+        if destructive_risk != Value::String("unspecified".to_string()) {
+            policy.insert("destructive_risk".to_string(), destructive_risk);
+        }
+        if bridge_behavior != Value::String("default".to_string()) {
+            policy.insert("bridge_behavior".to_string(), bridge_behavior);
+        }
+        if !artifact_outputs.is_empty() {
+            policy.insert("artifact_outputs".to_string(), json!(artifact_outputs));
+        }
+        if !policy.is_empty() {
+            skills.insert(doc.slug.clone(), Value::Object(policy));
+        }
+    }
+    json!({
+        "version": 2,
+        "schema_version": "skill-approval-policy-v2",
+        "source": "generated-by-skill-compiler-rs",
+        "default_policy": {
+            "allowed_tools": [],
+            "approval_required_tools": [],
+            "filesystem_scope": [],
+            "network_access": "unspecified",
+            "destructive_risk": "unspecified",
+            "bridge_behavior": "default",
+            "artifact_outputs": []
+        },
+        "skills": Value::Object(skills)
     })
 }
 
@@ -2573,11 +2604,7 @@ mod tests {
         let plugin_catalog =
             build_plugin_catalog(&docs, &manifest, &framework_rows).expect("plugin catalog");
         let routing_metadata = build_routing_metadata_catalog(&docs, &manifest, &framework_rows);
-        let runtime = build_runtime_index(
-            &manifest,
-            &framework_rows,
-            &surface_policy,
-        );
+        let runtime = build_runtime_index(&manifest, &framework_rows, &surface_policy);
         let shadow_map = build_shadow_map(&entries, &source_manifest);
 
         assert_eq!(
@@ -2598,15 +2625,21 @@ mod tests {
                 "trigger_hints",
                 "source",
                 "source_position",
-                "skill_path"
+                "skill_path",
+                "host_platforms",
+                "kind"
             ])
         );
         assert_eq!(runtime["keys"][6], json!("trigger_hints"));
         assert_eq!(runtime["keys"][7], json!("priority"));
         assert_eq!(shadow_map["winning_rule"], json!("highest-position-wins"));
         assert!(manifest["skills"][0][7].is_array());
+        assert_eq!(manifest["skills"][0][11], json!(["codex-app", "codex-cli"]));
+        assert_eq!(manifest["skills"][0][12], json!("skill"));
         assert!(runtime["skills"][0][6].is_array());
         assert_eq!(runtime["skills"][0][7], json!("P2"));
+        assert_eq!(runtime["skills"][0][9], json!(["codex-app", "codex-cli"]));
+        assert_eq!(runtime["skills"][0][10], json!("skill"));
         assert_eq!(
             plugin_catalog["plugin_abi_version"],
             json!("skill-plugin-abi-v1")
@@ -2691,17 +2724,15 @@ mod tests {
             .expect("excluded object")
             .contains_key("optional-owner"));
 
-        assert_eq!(bundle.shadow_map["summary"]["sparse_mode"], json!(true));
-        assert_eq!(bundle.shadow_map["summary"]["skill_total_count"], json!(3));
-        assert_eq!(
-            bundle.shadow_map["summary"]["shadowed_skill_count"],
-            json!(1)
-        );
-        assert!(bundle.shadow_map["skills"]
+        let shadow_map = build_shadow_map(&entries, &source_manifest);
+        assert_eq!(shadow_map["summary"]["sparse_mode"], json!(true));
+        assert_eq!(shadow_map["summary"]["skill_total_count"], json!(3));
+        assert_eq!(shadow_map["summary"]["shadowed_skill_count"], json!(1));
+        assert!(shadow_map["skills"]
             .as_object()
             .expect("skills object")
             .contains_key("beta"));
-        assert!(!bundle.shadow_map["skills"]
+        assert!(!shadow_map["skills"]
             .as_object()
             .expect("skills object")
             .contains_key("alpha"));
@@ -2734,6 +2765,13 @@ mod tests {
             "---\nname: plan-to-code\ndescription: plan to code\nrouting_layer: L2\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P1\nsession_start: preferred\n---\n## When to use\n- plan to code\n",
         )
         .expect("write hot owner skill");
+        fs::create_dir_all(skills_root.join("research-workbench"))
+            .expect("create research-workbench dir");
+        fs::write(
+            skills_root.join("research-workbench").join("SKILL.md"),
+            "---\nname: research-workbench\ndescription: research workbench\nrouting_layer: L2\nrouting_owner: owner\nrouting_gate: none\nrouting_priority: P2\nsession_start: preferred\n---\n## When to use\n- research project\n",
+        )
+        .expect("write research-workbench skill");
         write_skill(&skills_root.join("optional-owner"), "optional-owner");
 
         let docs = load_skill_documents(&skills_root).expect("load skill docs");
@@ -2747,7 +2785,7 @@ mod tests {
         let bundle =
             compile_bundle(&skills_root, &docs, &entries, &source_manifest).expect("compile");
 
-        assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(4));
+        assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(5));
         assert!(!bundle.manifest["skills"]
             .as_array()
             .unwrap()
@@ -2756,7 +2794,7 @@ mod tests {
         assert_eq!(
             bundle.runtime_index["skills"].as_array().map(Vec::len),
             Some(7),
-            "expected 2 hot gates + 5 framework_command rows (autopilot/deepinterview/gitx/team/update)"
+            "expected 2 hot gates + research-workbench + 4 framework_command rows (autopilot/deepinterview/gitx/update)"
         );
         assert!(bundle.runtime_index["skills"]
             .as_array()
@@ -2773,7 +2811,7 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("gitx"))));
-        assert!(bundle.runtime_index["skills"]
+        assert!(!bundle.runtime_index["skills"]
             .as_array()
             .unwrap()
             .iter()
@@ -2793,11 +2831,16 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("preferred-owner"))));
+        assert!(bundle.runtime_index["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("research-workbench"))));
         let configured_surface_policy = build_framework_surface_policy(
             &bundle.tiers,
             Some(&json!({
                 "default_surface": {
-                    "hot_first_turn_owners": ["preferred-owner"]
+                    "hot_first_turn_owners": ["preferred-owner", "research-workbench"]
                 }
             })),
         );
@@ -2812,6 +2855,11 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row.get(0) == Some(&json!("preferred-owner"))));
+        assert!(configured_runtime["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row.get(0) == Some(&json!("research-workbench"))));
         assert_eq!(bundle.runtime_index["scope"]["kind"], json!("hot"));
         assert_eq!(bundle.tiers["summary"]["tier_counts"]["core"], json!(2));
         assert_eq!(
@@ -2828,25 +2876,12 @@ mod tests {
         );
         assert!(bundle.tiers["skills"].get("plan-to-code").is_none());
         assert_eq!(
-            bundle.loadouts["source"],
-            json!("generated-by-skill-compiler-rs")
-        );
-        assert_eq!(
-            bundle.loadouts["derived_from"],
-            json!("configs/framework/FRAMEWORK_SURFACE_POLICY.json")
-        );
-        assert_eq!(
-            bundle.loadouts["loadouts"]["default_surface_loadout"]["owners"],
-            json!([])
-        );
-        assert_eq!(bundle.loadouts["source_of_truth"], json!(false));
-        assert_eq!(
             bundle.framework_surface_policy["source"],
             json!("generated-by-skill-compiler-rs")
         );
         assert_eq!(
             bundle.framework_surface_policy["default_surface"]["hot_first_turn_owners"],
-            json!(["skill-framework-developer"])
+            json!(["skill-framework-developer", "research-workbench"])
         );
         assert_eq!(
             bundle.framework_surface_policy["source_of_truth"],
@@ -2855,6 +2890,10 @@ mod tests {
         assert_eq!(
             bundle.framework_surface_policy["derived_reports"],
             json!(["skills/SKILL_TIERS.json"])
+        );
+        assert_eq!(
+            bundle.framework_surface_policy["skill_system"]["loadout_catalog_path"],
+            json!("skills/SKILL_LOADOUTS.json")
         );
         assert_eq!(
             bundle.tiers["derived_from"],

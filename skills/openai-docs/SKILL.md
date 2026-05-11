@@ -76,9 +76,16 @@ task depends on current OpenAI product or API documentation.
 
 1. Install `openaiDeveloperDocs` for Codex from `https://developers.openai.com/mcp`.
 2. Retry the doc lookup after installation.
+3. If installation or lookup is unavailable, return a source blocker and do not
+   answer volatile OpenAI product behavior from memory alone.
 
 ## Output contract
 
 - Lead with the answer.
 - Keep it concise unless the user asked for depth.
 - Cite the official OpenAI doc page or section used.
+- Verification path: name how to verify the MCP doc result or official URL used; if web
+  fallback was required, say that the fallback was restricted to official OpenAI
+  domains.
+- Failure path: surface missing-doc, stale-source, or tool error states as
+  blockers with the next retry step, not as successful guidance.

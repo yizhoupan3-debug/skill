@@ -90,10 +90,13 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 
 1. Normalize the problem: given conditions, goal, notation, domains, and hidden assumptions.
 2. State the proof strategy before the derivation.
-3. Derive step by step; every equality, inequality, limit exchange, and implication needs a justification.
-4. Verify named-theorem hypotheses before applying the theorem.
-5. Run the relevant self-checks: special values, boundary cases, assumption audit, inequality direction, and counterexample probe.
-6. Close with the formal conclusion and assumptions used.
+3. Build a **witness list** before claiming rigor: special cases, degenerate limits, dimensional checks, boundary values, and expected monotonicity/symmetry.
+4. Build an **assumption dependency graph**: each step cites the assumptions, lemmas, or prior numbered steps it depends on.
+5. Derive step by step; every equality, inequality, limit exchange, and implication needs a justification.
+6. Verify named-theorem hypotheses before applying the theorem.
+7. Run the relevant self-checks: special values, boundary cases, assumption audit, inequality direction, and counterexample probe.
+8. If the answer is framed as verified, deep-reviewed, or research-grade, include an executable verifier where feasible (SymPy/CAS, Z3/SMT, Lean/Coq, brute-force enumeration, or a deterministic numeric script) or explicitly state the blocker.
+9. Close with the formal conclusion and assumptions used.
 
 ## Hard constraints
 
@@ -112,6 +115,8 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 10. **No circular reasoning**: The conclusion must never appear (even in disguised form) in its own proof chain.
 11. **Limit interchange justification**: Swapping $\lim$, $\int$, $\sum$, or $\frac{d}{dx}$ requires explicit invocation of the justifying theorem (DCT, MCT, Fubini, Leibniz, etc.) with verification of its hypotheses.
 12. **Theorem hypothesis verification**: Before applying any named theorem, explicitly verify that all its hypotheses are satisfied in the current context.
+13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Provide checker output / a runnable command, or mark the verification gap.
+14. **Counterexample probe**: For research-grade critique, attempt at least one counterexample or boundary probe before accepting the claim.
 
 ## Output template
 
@@ -131,8 +136,12 @@ Minimal structure:
 **Assumptions used**
 
 ## Self-check
-[Dimension / Special values / Boundary / Direction]
+[Witness list / Assumption dependency graph / Special values / Boundary / Direction / Verifier or blocker]
 ```
+
+For research-grade or multi-round math work, align with
+[`../../docs/references/rfv-loop/math-reasoning-harness.md`](../../docs/references/rfv-loop/math-reasoning-harness.md):
+witnesses, checker-backed PASS/FAIL, dependency graph, and counterexample probes.
 
 ## Common pitfalls
 

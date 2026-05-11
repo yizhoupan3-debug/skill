@@ -6,6 +6,6 @@
     "autopilot_drive_compact_reasoning_depth": "深度：切片 + 验证 + 证据链；避免仅堆长推理。",
     "math_reasoning_harness_line": "数理：用可检验 witness（极限/特例/双轨）+ 符号或脚本 verifier 定 PASS/FAIL；不靠 prose 冒充证明（见 docs/references/rfv-loop/math-reasoning-harness.md）。",
     "retrieval_trace_harness_line": "检索：深度外研须含 contradiction_sweep 与可复核 retrieval_trace（检索式、筛选、排除）；定量结论要写清数据版本与可复跑复算命令；缺关键块则 harness 语义上未完成「深度调研」（见 docs/references/rfv-loop/reasoning-depth-contract.md §B）。",
-    "rfv_loop_external_struct_hint_line": "外研结构化（默认 strict）：`append_round` 并入 `external_research` 时每 claim ≥2 条可溯源 sources；`contradiction_sweep` ≥ max(2, claims)；`queries_used` ≥3；`inclusion_rules`/`exclusions`/`exclusion_rationale` 各 ≥40 字；根对象须含 `unknowns`（`[]` 或 `null`）。关闭任务级 strict：`start` 传 `external_research_strict:false`。契约见 configs/framework/RFV_EXTERNAL_RESEARCH.schema.json 与 docs/references/rfv-loop/external-research-harness.md。"
+    "rfv_loop_external_struct_hint_line": "外研结构化：本轮 `append_round` 需填 `external_research`，按 `RFV_EXTERNAL_RESEARCH.schema.json` 覆盖 sources、contradiction_sweep、queries_used、unknowns。"
   }
 }

@@ -351,6 +351,9 @@ pub(crate) fn is_overlay_record(record: &SkillRecord) -> bool {
 }
 
 pub(crate) fn can_be_primary_owner(record: &SkillRecord) -> bool {
+    if !record.primary_allowed {
+        return false;
+    }
     record.gate_lower == "none"
         && !framework_alias_requires_explicit_call(record)
         && !matches!(record.owner_lower.as_str(), "gate" | "overlay")
@@ -359,13 +362,8 @@ pub(crate) fn can_be_primary_owner(record: &SkillRecord) -> bool {
 pub(crate) fn can_be_fallback_owner(record: &SkillRecord) -> bool {
     can_be_primary_owner(record)
         && !matches!(
-            record.slug.as_str(),
-            "coding-standards"
-                | "error-handling-patterns"
-                | "skill-framework-developer"
-                | "plugin-creator"
-                | "skill-creator"
-                | "skill-installer"
+            record.fallback_policy_mode.as_str(),
+            "never" | "explicit-only"
         )
 }
 

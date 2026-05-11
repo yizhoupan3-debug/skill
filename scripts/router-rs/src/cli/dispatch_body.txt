@@ -2,10 +2,12 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
     match command {
         RouterCommand::Route(command) => {
             let records = load_records(command.runtime.as_deref(), command.manifest.as_deref())?;
+            let records = filter_records_for_host(records, command.host_id.as_deref())?;
             let decision = route_task_with_manifest_fallback(
                 &records,
                 command.runtime.as_deref(),
                 command.manifest.as_deref(),
+                command.host_id.as_deref(),
                 &command.query,
                 &command.session_id,
                 command.allow_overlay,
@@ -21,6 +23,7 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
             } else {
                 load_records(command.runtime.as_deref(), command.manifest.as_deref())?
             };
+            let records = filter_records_for_host(records, command.host_id.as_deref())?;
             let rows = search_skills(&records, &command.query, command.limit);
             let payload = build_search_results_payload(&command.query, rows.clone());
             if command.json {
@@ -122,6 +125,11 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
                 "task_id": task_id,
                 "task_state_path": crate::task_state_aggregate::task_state_aggregate_path(&repo_root, &task_id).display().to_string(),
             }))
+        }
+        FrameworkCommand::StepLedger(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "framework step ledger")?;
+            print_json_value(&handle_step_ledger_operation(payload)?)
         }
         FrameworkCommand::Maint { command } => crate::framework_maint::dispatch(command),
         FrameworkCommand::HostIntegration(command) => {
@@ -358,7 +366,30 @@ fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String> {
                 };
             let record_value: Value = serde_json::from_str(&raw)
                 .map_err(|err| format!("closeout evaluate: invalid JSON: {err}"))?;
-            let response = evaluate_closeout_record_value(record_value)?;
+            let response =
+                match (args.repo_root.as_deref(), args.task_id.as_deref(), args.record_path.as_deref()) {
+                    (Some(repo_root), Some(task_id), Some(record_path)) => {
+                        crate::framework_runtime::evaluate_closeout_record_file_for_task(
+                            repo_root,
+                            task_id,
+                            record_path,
+                        )?
+                    }
+                    (Some(repo_root), Some(task_id), None) => {
+                        let (rows_non_empty, has_success) =
+                            crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+                                repo_root,
+                                task_id,
+                            );
+                        let ctx = CloseoutEvidenceContext {
+                            task_id: Some(task_id.trim().to_string()),
+                            evidence_rows_non_empty: rows_non_empty,
+                            has_successful_verification: has_success,
+                        };
+                        evaluate_closeout_record_value_with_context(record_value, &ctx)?
+                    }
+                    _ => evaluate_closeout_record_value(record_value)?,
+                };
             print_json_value(&response)
         }
         CloseoutCommand::Contract => print_json_value(&closeout_enforcement_contract()),
@@ -376,6 +407,12 @@ fn dispatch_eval_command(command: EvalCommand) -> Result<(), String> {
             print_json_value(&report)
         }
         EvalCommand::RouteContract => print_json_value(&eval_route_contract()),
+        EvalCommand::HarnessContract => print_json_value(&harness_contract()),
+        EvalCommand::SkillContractLint(command) => {
+            let payload =
+                parse_json_input::<Value>(&command.input_json, "eval skill contract lint")?;
+            print_json_value(&lint_skill_contracts(payload)?)
+        }
     }
 }
 

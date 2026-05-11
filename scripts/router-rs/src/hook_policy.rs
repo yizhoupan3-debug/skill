@@ -85,10 +85,6 @@ pub fn evaluate_hook_policy(
                 response.reason = Some("This file is a generated or retired host surface. Regenerate it through the framework runtime instead of editing it directly.".to_string());
             }
         }
-        "provider-rank" => {
-            response.categories = vec!["provider-rank".to_string()];
-            response.category = Some("provider-rank".to_string());
-        }
         "save-optimize-category" => {
             let optimize_category = classify_save_optimize_category(
                 request.path.as_deref().unwrap_or(""),
@@ -128,35 +124,10 @@ pub fn evaluate_hook_policy(
 }
 
 pub fn evaluate_hook_policy_value(payload: Value) -> Result<Value, String> {
-    if matches!(
-        payload.get("operation").and_then(Value::as_str),
-        Some("provider-rank")
-    ) {
-        return Ok(provider_rank_payload());
-    }
     let request = serde_json::from_value::<HookPolicyEvaluateRequest>(payload)
         .map_err(|err| format!("parse hook policy input failed: {err}"))?;
     serde_json::to_value(evaluate_hook_policy(request)?)
         .map_err(|err| format!("serialize hook policy output failed: {err}"))
-}
-
-fn provider_rank_payload() -> Value {
-    json!({
-        "schema_version": HOOK_POLICY_SCHEMA_VERSION,
-        "authority": HOOK_POLICY_AUTHORITY,
-        "operation": "provider-rank",
-        "preference": "prefer-rust-when-implemented",
-        "ranking": [
-            { "provider": "rust-control-plane", "tier": "primary", "delegate_family": "rust-cli", "status": "implemented" },
-            { "provider": "host-tool", "tier": "fallback", "delegate_family": "host-tool", "status": "declared" },
-            { "provider": "python-legacy-hook", "tier": "fallback", "delegate_family": "python-script", "status": "legacy", "scope": "review-subagent-gate" }
-        ],
-        "rust_acceleration": {
-            "policy": "raise-priority-when-control-plane-paths-rustify",
-            "python_fallback_acceptance": "only-when-rust-unimplemented-or-explicit-override",
-            "linked_registry": "configs/framework/RUNTIME_PROVIDER_REGISTRY.json"
-        }
-    })
 }
 
 pub fn dangerous_bash_reason(command: &str) -> Option<String> {
@@ -470,15 +441,10 @@ pub fn hook_policy_contract() -> Value {
             "validation-categories",
             "file-category",
             "protected-path",
-            "provider-rank",
             "save-optimize-category",
             "save-optimize-guard"
         ],
-        "provider_priority": {
-            "primary": "rust-control-plane",
-            "preference": "prefer-rust-when-implemented",
-            "fallback_acceptance": "only-when-rust-unimplemented-or-explicit-override"
-        },
+        "provider_registry_policy": "configs/framework/RUNTIME_PROVIDER_REGISTRY.json is document-only and does not drive hook execution ranking.",
         "protected_path_kinds": [
             "generated_host_entrypoint",
             "retired_native_plugin_surface"
@@ -551,16 +517,14 @@ mod tests {
     }
 
     #[test]
-    fn provider_rank_returns_rust_first_payload() {
-        let payload = evaluate_hook_policy_value(json!({"operation": "provider-rank"})).unwrap();
-        assert_eq!(payload["operation"], "provider-rank");
-        assert_eq!(payload["preference"], "prefer-rust-when-implemented");
-        assert_eq!(payload["ranking"][0]["tier"], "primary");
-        assert_eq!(payload["ranking"][0]["provider"], "rust-control-plane");
+    fn provider_rank_is_not_an_executable_hook_policy_operation() {
+        let err = evaluate_hook_policy_value(json!({"operation": "provider-rank"}))
+            .expect_err("provider registry is document-only");
+        assert!(err.contains("unsupported hook policy operation"));
     }
 
     #[test]
-    fn provider_rank_struct_response_carries_category() {
+    fn provider_rank_struct_response_is_unsupported() {
         let request = HookPolicyEvaluateRequest {
             operation: "provider-rank".to_string(),
             command: None,
@@ -568,14 +532,12 @@ mod tests {
             repo_root: None,
             runtime_root: None,
         };
-        let response = evaluate_hook_policy(request).unwrap();
-        assert_eq!(response.operation, "provider-rank");
-        assert_eq!(response.category.as_deref(), Some("provider-rank"));
-        assert!(response.categories.iter().any(|c| c == "provider-rank"));
+        let err = evaluate_hook_policy(request).expect_err("provider rank must not execute");
+        assert!(err.contains("unsupported hook policy operation"));
     }
 
     #[test]
-    fn contract_advertises_provider_rank_operation() {
+    fn contract_does_not_advertise_provider_rank_operation() {
         let contract = hook_policy_contract();
         let ops = contract
             .get("operations")
@@ -584,8 +546,8 @@ mod tests {
             .expect("contract should expose operations")
             .as_array()
             .expect("operations must be array");
-        assert!(ops_arr.iter().any(|v| v.as_str() == Some("provider-rank")));
-        assert!(contract.get("provider_priority").is_some());
+        assert!(!ops_arr.iter().any(|v| v.as_str() == Some("provider-rank")));
+        assert!(contract.get("provider_registry_policy").is_some());
     }
 
     #[test]

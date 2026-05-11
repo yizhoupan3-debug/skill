@@ -4018,9 +4018,6 @@ fn route_with_full_manifest_fallback(
     }
     let should_retry = should_retry_with_manifest(&hot_decision);
     let full_records = load_records_from_manifest(manifest_path)?;
-    if full_records.len() <= runtime_records.len() {
-        return Ok(hot_decision);
-    }
     let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
     if should_accept_manifest_fallback(
         &hot_decision,

@@ -65,6 +65,8 @@ pub(crate) enum RouterCommand {
 #[derive(Args, Debug, Clone)]
 pub(crate) struct RouteCommand {
     pub(crate) query: String,
+    #[arg(long)]
+    pub(crate) host_id: Option<String>,
     #[arg(long, default_value = "route-cli")]
     pub(crate) session_id: String,
     #[arg(long, default_value_t = true, action = ArgAction::Set, num_args = 1)]
@@ -80,6 +82,8 @@ pub(crate) struct RouteCommand {
 #[derive(Args, Debug, Clone)]
 pub(crate) struct SearchCommand {
     pub(crate) query: String,
+    #[arg(long)]
+    pub(crate) host_id: Option<String>,
     #[arg(long, default_value_t = 5)]
     pub(crate) limit: usize,
     #[arg(long)]
@@ -158,6 +162,8 @@ pub(crate) enum FrameworkCommand {
     TaskLedgerDispatch(JsonInputCommand),
     /// 将 GOAL/RFV/Evidence 投影写入 `TASK_STATE.json`（阶段 3）；见 `docs/task_state_unified_resolve.md`。
     TaskStateAggregateSync(FrameworkTaskStateAggregateSyncCommand),
+    /// Append or summarize task-scoped `STEP_LEDGER.jsonl` recovery records.
+    StepLedger(JsonInputCommand),
     HostIntegration(ForwardedArgsCommand),
     Contracts,
 }
@@ -237,6 +243,10 @@ pub(crate) enum EvalCommand {
     Route(EvalRouteCommand),
     /// Print the eval route contract (metrics, schema versions).
     RouteContract,
+    /// Print the harness behavioral eval and failure taxonomy contract.
+    HarnessContract,
+    /// Run lightweight SKILL.md/tool contract lint against selected skills.
+    SkillContractLint(JsonInputCommand),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -260,6 +270,12 @@ pub(crate) struct CloseoutEvaluateCommand {
     /// Path to a JSON file containing the closeout record.
     #[arg(long, conflicts_with = "input_json")]
     pub(crate) record_path: Option<PathBuf>,
+    /// Optional repository root used to attach task-level evidence context.
+    #[arg(long, requires = "task_id")]
+    pub(crate) repo_root: Option<PathBuf>,
+    /// Optional task id used with --repo-root to attach task-level evidence context.
+    #[arg(long, requires = "repo_root")]
+    pub(crate) task_id: Option<String>,
 }
 
 #[derive(Args, Debug, Clone)]

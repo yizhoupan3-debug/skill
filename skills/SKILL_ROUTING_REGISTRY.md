@@ -37,9 +37,10 @@
 | `paper-workbench` | Active | P2 | L2 | owner | none | project | Unified front door for paper work. Use when the user has a manuscript-level task |
 | `paper-writing` | Active | P2 | L2 | owner | none | project | Write, restructure, or polish bounded academic-paper prose after the claim/evide |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | Handle layout-aware PDF reading, editing, repair, and review. |
-| `plan-mode` | Active | P2 | L1 | owner | none | project | Cursor Plan / 策划文档闸门 owner：先用本地证据起草可执行计划，再产出可验收 todo；`plan_profile: execution`（缺 |
+| `plan-mode` | Active | P2 | L1 | owner | none | project | Cursor Plan / 策划文档闸门 owner：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨 |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
+| `research-workbench` | Active | P2 | L2 | owner | none | project | Non-manuscript research workbench and rigor router |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | Create, refactor, and review code-generated scientific figures for papers using  |
 | `screenshot` | Active | P2 | L3 | owner | none | project | Capture desktop or system screenshots including full screen, a specific app wind |
 | `sentry` | Active | P2 | L0 | gate | source | project | Inspect Sentry production errors and issue evidence read-only. |

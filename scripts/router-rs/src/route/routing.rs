@@ -102,6 +102,37 @@ pub(crate) fn search_skills(records: &[SkillRecord], query: &str, limit: usize) 
     rows
 }
 
+pub(crate) fn filter_records_for_host(
+    records: Vec<SkillRecord>,
+    host_id: Option<&str>,
+) -> Result<Vec<SkillRecord>, String> {
+    let Some(host_id) = host_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(records);
+    };
+    let host_id = host_id.to_ascii_lowercase();
+    let mut saw_host = false;
+    let filtered = records
+        .into_iter()
+        .filter(|record| {
+            if record.record_kind == "framework_command" {
+                return true;
+            };
+            let allowed = record
+                .host_platforms
+                .iter()
+                .any(|platform| platform.eq_ignore_ascii_case(&host_id));
+            saw_host |= allowed;
+            allowed
+        })
+        .collect::<Vec<_>>();
+    if !saw_host {
+        return Err(format!(
+            "host-aware routing has no skill records for host_id `{host_id}`; host_platforms metadata is missing or the host id is unsupported"
+        ));
+    }
+    Ok(filtered)
+}
+
 pub(crate) fn route_task(
     records: &[SkillRecord],
     query: &str,

@@ -1,0 +1,46 @@
+{
+  "schema_version": "harness-failure-taxonomy-v1",
+  "authority": "rust-harness-contract",
+  "classes": [
+    {
+      "id": "route_miss",
+      "description": "The task routes to the wrong owner/gate or misses an expected owner."
+    },
+    {
+      "id": "owner_drift",
+      "description": "The active owner, goal, or scope changes without explicit contract update intent."
+    },
+    {
+      "id": "context_rot",
+      "description": "Large or irrelevant context accumulates in the parent thread or hot prompt surface."
+    },
+    {
+      "id": "tool_contract_bad",
+      "description": "A tool/skill interface is ambiguous, too verbose, or lacks failure semantics."
+    },
+    {
+      "id": "verification_missing",
+      "description": "A completion/pass claim has no executable verifier or evidence reference."
+    },
+    {
+      "id": "source_stale",
+      "description": "The answer depends on volatile external truth without an attributed current source."
+    },
+    {
+      "id": "side_effect_risk",
+      "description": "A step can mutate external state without explicit approval, idempotency, or recovery notes."
+    },
+    {
+      "id": "subagent_misuse",
+      "description": "A subagent lane is used without isolation, bounded scope, digest, or verification."
+    },
+    {
+      "id": "trace_gap",
+      "description": "The task cannot be reconstructed from trace/evidence artifacts."
+    },
+    {
+      "id": "step_recovery_gap",
+      "description": "A long-running task cannot resume from a step-level durable ledger."
+    }
+  ]
+}

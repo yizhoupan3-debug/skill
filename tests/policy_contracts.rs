@@ -6,7 +6,7 @@ use common::{
 };
 use serde_json::{Map, Value};
 use skill_compiler::host_platforms;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -74,11 +74,10 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "performance-expert",
     "prompt-engineer",
     "research-engineer",
-    "research-workbench",
     "web-scraping",
 ];
 
-const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "team", "update"];
+const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "update"];
 
 fn retired_runtime_owned_skill_slugs() -> HashSet<&'static str> {
     RETIRED_RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
@@ -197,9 +196,9 @@ fn update_skill_exposes_explicit_entrypoint_like_gitx() {
         "git 跟踪面",
         "死代码",
         "旧文档",
-        "router-rs framework maint update-audit",
+        "cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-audit",
         "policy_contracts",
-        "router-rs framework maint update-one-shot",
+        "cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot",
         "documentation_contracts",
         "tracked_markdown_utf8_contract",
         "generated-artifacts-status",
@@ -328,7 +327,11 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["claude-code"],
-        serde_json::json!(["AGENTS.md", ".claude/rules/framework.md"])
+        serde_json::json!([
+            "AGENTS.md",
+            ".claude/rules/framework.md",
+            ".claude/settings.json"
+        ])
     );
     assert_eq!(
         manifest["shared_system"]["policy"],
@@ -412,18 +415,15 @@ fn codex_user_skill_surface_stays_lightweight_and_explicit() {
     assert!(skills
         .iter()
         .any(|item| item.as_str() == Some("deepinterview")));
-    assert!(skills.iter().any(|item| item.as_str() == Some("team")));
+    assert!(!skills.iter().any(|item| item.as_str() == Some("team")));
     assert!(!skills.iter().any(|item| item.as_str() == Some("refresh")));
     assert!(surface_root.join("autopilot/SKILL.md").exists());
     assert!(surface_root.join("gitx/SKILL.md").exists());
     assert!(surface_root.join("deepinterview/SKILL.md").exists());
-    assert!(surface_root.join("team/SKILL.md").exists());
+    assert!(!surface_root.join("team/SKILL.md").exists());
     let autopilot = read_text(&surface_root.join("autopilot/SKILL.md"));
-    let team = read_text(&surface_root.join("team/SKILL.md"));
     assert!(autopilot.contains("`/autopilot`"));
     assert!(!autopilot.contains("`$autopilot`"));
-    assert!(team.contains("`/team`"));
-    assert!(!team.contains("`$team`"));
 }
 
 #[test]
@@ -632,7 +632,6 @@ fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
         "skills/SKILL_HEALTH_MANIFEST.json",
         "skills/SKILL_ROUTING_REGISTRY.md",
         "skills/SKILL_ROUTING_INDEX.md",
-        "skills/SKILL_APPROVAL_POLICY.json",
     ]
     .iter()
     .map(|path| read_text(&project_root().join(path)))
@@ -672,7 +671,6 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
     let surface =
         read_json(&project_root().join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"));
     let tiers = read_json(&project_root().join("skills/SKILL_TIERS.json"));
-    let loadouts = read_json(&project_root().join("skills/SKILL_LOADOUTS.json"));
 
     assert_eq!(surface["source_of_truth"], true);
     assert_eq!(
@@ -693,49 +691,9 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
         "configs/framework/FRAMEWORK_SURFACE_POLICY.json"
     );
     assert_eq!(tiers["report_status"], "generated_debug_report");
-    assert_eq!(loadouts["source_of_truth"], false);
-    assert_eq!(
-        loadouts["derived_from"],
-        "configs/framework/FRAMEWORK_SURFACE_POLICY.json"
-    );
-    assert_eq!(loadouts["report_status"], "foldable_generated_report");
     assert_eq!(
         surface["skill_system"]["activation_counts"],
         tiers["summary"]["activation_counts"]
-    );
-    for (name, loadout) in loadouts["loadouts"].as_object().expect("loadout catalog") {
-        let owners = loadout["owners"].as_array().expect("loadout owners");
-        if name == "default_surface_loadout" {
-            assert!(
-                owners.is_empty(),
-                "default surface must not carry generic control owners"
-            );
-        } else {
-            assert!(
-                !owners.is_empty(),
-                "loadout {name} must carry real owner memberships"
-            );
-        }
-    }
-}
-
-#[test]
-fn generated_approval_policy_is_sparse() {
-    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
-    let approval = read_json(&project_root().join("skills/SKILL_APPROVAL_POLICY.json"));
-    let manifest_count = manifest["skills"]
-        .as_array()
-        .expect("manifest skills")
-        .len();
-    let override_count = approval["skills"]
-        .as_object()
-        .expect("approval overrides")
-        .len();
-
-    assert_eq!(approval["schema_version"], "skill-approval-policy-v2");
-    assert!(
-        override_count < manifest_count,
-        "approval policy should emit only non-default overrides"
     );
 }
 
@@ -809,7 +767,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "plugin-creator",
         "skill-creator",
         "skill-installer",
-        "research-workbench",
     ] {
         assert!(
             !slugs.contains(&excluded),
@@ -985,6 +942,147 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     assert_eq!(health["schema_version"], "skill-health-manifest-v2");
     assert_eq!(health["status"], "healthy");
     assert_eq!(health["summary"]["degraded_records"], 0);
+    let capability_classes = plugin_catalog["capability_classes"]
+        .as_array()
+        .expect("capability_classes")
+        .iter()
+        .map(|class| class.as_str().expect("capability class").to_string())
+        .collect::<BTreeSet<_>>();
+    let key_classes = plugin_catalog["capability_key_classes"]
+        .as_object()
+        .expect("capability_key_classes");
+    let allowed_keys = key_classes.keys().cloned().collect::<BTreeSet<_>>();
+    let record_shape = plugin_catalog["contract"]["record_shape"]
+        .as_array()
+        .expect("plugin contract record_shape")
+        .iter()
+        .map(|key| key.as_str().expect("record_shape key").to_string())
+        .collect::<BTreeSet<_>>();
+    for (key, class) in key_classes {
+        let class = class.as_str().expect("capability_key_classes value");
+        assert!(
+            capability_classes.contains(class),
+            "capability key {key} maps to unknown class {class}"
+        );
+    }
+    let allowed_routing_layers = ["L0", "L1", "L2", "L3", "L4"]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let allowed_routing_owners = ["owner", "gate"].into_iter().collect::<BTreeSet<_>>();
+    let allowed_routing_gates = ["none", "evidence", "source", "artifact", "delegation"]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let allowed_network_access = ["local", "conditional", "required", "unspecified"]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    for (slug, record) in plugin_catalog["skills"].as_object().expect("plugin skills") {
+        let record_keys = record
+            .as_object()
+            .unwrap_or_else(|| panic!("plugin {slug} record must be an object"))
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            record_keys, record_shape,
+            "plugin {slug} record keys must match contract.record_shape"
+        );
+        let caps = record["capabilities"]
+            .as_object()
+            .unwrap_or_else(|| panic!("plugin {slug} capabilities must be an object"));
+        for key in caps.keys() {
+            assert!(
+                allowed_keys.contains(key),
+                "plugin {slug} uses unknown capability key {key}"
+            );
+        }
+        let routing_layer = caps["routing_layer"].as_str().unwrap_or_default();
+        let routing_owner = caps["routing_owner"].as_str().unwrap_or_default();
+        let routing_gate = caps["routing_gate"].as_str().unwrap_or_default();
+        let network_access = caps["network_access"].as_str().unwrap_or_default();
+        for array_key in ["allowed_tools", "approval_required_tools", "artifact_outputs"] {
+            let values = caps[array_key]
+                .as_array()
+                .unwrap_or_else(|| panic!("plugin {slug} {array_key} must be an array"));
+            assert!(
+                values.iter().all(|value| value.as_str().is_some()),
+                "plugin {slug} {array_key} must contain strings only"
+            );
+        }
+        assert!(
+            allowed_routing_layers.contains(routing_layer),
+            "plugin {slug} has unknown routing_layer {routing_layer}"
+        );
+        assert!(
+            allowed_routing_owners.contains(routing_owner),
+            "plugin {slug} has unknown routing_owner {routing_owner}"
+        );
+        assert!(
+            allowed_routing_gates.contains(routing_gate),
+            "plugin {slug} has unknown routing_gate {routing_gate}"
+        );
+        assert!(
+            allowed_network_access.contains(network_access),
+            "plugin {slug} has unknown network_access {network_access}"
+        );
+    }
+    let sample = plugin_catalog["skills"]["skill-framework-developer"].clone();
+    let validate_sample = |record: serde_json::Value| -> Result<(), String> {
+        let record_obj = record
+            .as_object()
+            .ok_or_else(|| "record must be object".to_string())?;
+        let keys = record_obj.keys().cloned().collect::<BTreeSet<_>>();
+        if keys != record_shape {
+            return Err("record_shape_mismatch".to_string());
+        }
+        let caps = record["capabilities"]
+            .as_object()
+            .ok_or_else(|| "capabilities must be object".to_string())?;
+        for key in caps.keys() {
+            if !allowed_keys.contains(key) {
+                return Err(format!("unknown_capability_key:{key}"));
+            }
+        }
+        if !allowed_routing_layers.contains(caps["routing_layer"].as_str().unwrap_or_default()) {
+            return Err("unknown_routing_layer".to_string());
+        }
+        if !allowed_routing_owners.contains(caps["routing_owner"].as_str().unwrap_or_default()) {
+            return Err("unknown_routing_owner".to_string());
+        }
+        if !allowed_routing_gates.contains(caps["routing_gate"].as_str().unwrap_or_default()) {
+            return Err("unknown_routing_gate".to_string());
+        }
+        if !allowed_network_access.contains(caps["network_access"].as_str().unwrap_or_default()) {
+            return Err("unknown_network_access".to_string());
+        }
+        for array_key in ["allowed_tools", "approval_required_tools", "artifact_outputs"] {
+            if !caps[array_key]
+                .as_array()
+                .map(|values| values.iter().all(|value| value.as_str().is_some()))
+                .unwrap_or(false)
+            {
+                return Err(format!("invalid_value_shape:{array_key}"));
+            }
+        }
+        Ok(())
+    };
+    let mut unknown_key = sample.clone();
+    unknown_key["capabilities"]["made_up"] = serde_json::json!("x");
+    assert!(validate_sample(unknown_key).unwrap_err().contains("unknown_capability_key"));
+    let mut unknown_enum = sample.clone();
+    unknown_enum["capabilities"]["routing_gate"] = serde_json::json!("made-up");
+    assert_eq!(validate_sample(unknown_enum).unwrap_err(), "unknown_routing_gate");
+    let mut wrong_shape = sample.clone();
+    wrong_shape["capabilities"]["allowed_tools"] = serde_json::json!("shell");
+    assert_eq!(
+        validate_sample(wrong_shape).unwrap_err(),
+        "invalid_value_shape:allowed_tools"
+    );
+    let mut wrong_record_shape = sample.clone();
+    wrong_record_shape["unexpected"] = serde_json::json!(true);
+    assert_eq!(
+        validate_sample(wrong_record_shape).unwrap_err(),
+        "record_shape_mismatch"
+    );
 
     let skill = "skill-framework-developer";
     assert!(plugin_catalog["skills"][skill].is_object());
@@ -1020,6 +1118,7 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
 fn runtime_provider_registry_declares_component_plugin_lanes() {
     let registry =
         read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
+    let runtime = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     assert_eq!(registry["schema_version"], "runtime-provider-registry-v1");
     assert_eq!(registry["plugin_abi_version"], "skill-plugin-abi-v1");
     for lane in [
@@ -1056,6 +1155,33 @@ fn runtime_provider_registry_declares_component_plugin_lanes() {
         registry["host_projection_providers"]["mcp"]["status"],
         "declared"
     );
+    let supported_hosts = runtime["host_targets"]["supported"]
+        .as_array()
+        .expect("runtime supported hosts")
+        .iter()
+        .map(|host| host.as_str().expect("host id").to_string())
+        .collect::<BTreeSet<_>>();
+    let projected_hosts = runtime["host_projections"]
+        .as_object()
+        .expect("runtime host_projections")
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let provider_hosts = registry["host_projection_providers"]
+        .as_object()
+        .expect("provider host_projection_providers")
+        .keys()
+        .filter(|host| supported_hosts.contains(*host))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        projected_hosts, supported_hosts,
+        "RUNTIME_REGISTRY host_targets.supported and host_projections must match"
+    );
+    assert_eq!(
+        provider_hosts, supported_hosts,
+        "RUNTIME_PROVIDER_REGISTRY must cover every supported host projection"
+    );
     assert_eq!(
         registry["governance_eval_loop"]["metrics"][0],
         "route_expected_owner_accuracy"
@@ -1064,6 +1190,91 @@ fn runtime_provider_registry_declares_component_plugin_lanes() {
         !registry.to_string().contains("/Users/joe"),
         "provider registry must stay portable"
     );
+}
+
+#[test]
+fn document_only_provider_lanes_do_not_become_installable_hosts() {
+    let registry =
+        read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
+    let runtime = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let host_metadata = runtime["host_targets"]["metadata"]
+        .as_object()
+        .expect("runtime host metadata");
+    let host_projection_providers = registry["host_projection_providers"]
+        .as_object()
+        .expect("provider host projections");
+
+    for (host_id, provider) in host_projection_providers {
+        let status = provider["status"].as_str().unwrap_or_default();
+        let runtime_installable = host_metadata
+            .get(host_id)
+            .and_then(|meta| meta.get("installable"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if status != "implemented" {
+            assert!(
+                !runtime_installable,
+                "document-only provider `{host_id}` must not be installable in RUNTIME_REGISTRY"
+            );
+        }
+    }
+
+    assert_eq!(
+        host_metadata["codex-app"]["installable"], false,
+        "codex-app remains runtime-supported but non-installable"
+    );
+}
+
+#[test]
+fn runtime_registry_schema_covers_execution_critical_fields_only() {
+    let schema = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY_SCHEMA.json"));
+    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    assert_eq!(
+        schema["schema_version"],
+        "framework-runtime-registry-schema-v1"
+    );
+    let allowed_hosts = schema["host_ids"]
+        .as_array()
+        .expect("schema host_ids")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<HashSet<_>>();
+    let allowed_status = schema["projection_status_values"]
+        .as_array()
+        .expect("schema projection_status_values")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<HashSet<_>>();
+    let required = schema["required_host_metadata_fields"]
+        .as_array()
+        .expect("schema required fields")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    let hosts = registry["host_targets"]["supported"]
+        .as_array()
+        .expect("runtime supported hosts");
+    for host in hosts {
+        let host = host.as_str().expect("host id");
+        assert!(
+            allowed_hosts.contains(host),
+            "host id outside schema: {host}"
+        );
+        let metadata = &registry["host_targets"]["metadata"][host];
+        for field in &required {
+            assert!(
+                !metadata[*field].is_null(),
+                "host metadata missing execution field {host}.{field}"
+            );
+        }
+        let status = metadata["projection_status"]
+            .as_str()
+            .expect("projection_status");
+        assert!(
+            allowed_status.contains(status),
+            "invalid projection_status {status} for {host}"
+        );
+    }
 }
 
 #[test]
@@ -1174,10 +1385,7 @@ fn framework_aliases_reference_manifest_skills() {
 #[test]
 fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
     let root = project_root();
-    let forbidden = [
-        "artifacts/codex-skill-surface/skills/autopilot/",
-        "artifacts/codex-skill-surface/skills/team/",
-    ];
+    let forbidden = ["artifacts/codex-skill-surface/skills/autopilot/"];
     for rel in [
         "configs/framework/RUNTIME_REGISTRY.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
@@ -1200,10 +1408,44 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
             .expect("autopilot skill_path"),
         "skills/autopilot/SKILL.md"
     );
-    let team = &registry["framework_commands"]["team"];
     assert_eq!(
-        team["skill_path"].as_str().expect("team skill_path"),
-        "skills/agent-swarm-orchestration/SKILL.md"
+        registry["framework_commands"]["team"]["canonical_owner"],
+        "agent-swarm-orchestration",
+        "team must remain a framework alias backed by agent-swarm-orchestration"
+    );
+
+    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let runtime_slugs = runtime["skills"]
+        .as_array()
+        .expect("runtime skills")
+        .iter()
+        .filter_map(|row| row.get(0).and_then(|value| value.as_str()))
+        .collect::<Vec<_>>();
+    assert!(
+        !runtime_slugs.contains(&"team"),
+        "team alias must not be a hot runtime skill"
+    );
+
+    let plugin_catalog = read_json(&root.join("skills/SKILL_PLUGIN_CATALOG.json"));
+    assert!(
+        plugin_catalog["skills"].get("team").is_none(),
+        "team alias must not be a plugin skill record"
+    );
+    let routing_metadata = read_json(&root.join("skills/SKILL_ROUTING_METADATA.json"));
+    assert!(
+        routing_metadata["skills"].get("team").is_none(),
+        "team alias must not be a routing metadata owner"
+    );
+    let health = read_json(&root.join("skills/SKILL_HEALTH_MANIFEST.json"));
+    assert!(
+        health["skills"].get("runtime:team").is_none(),
+        "team alias must not be a runtime health skill"
+    );
+    assert!(
+        !root
+            .join("artifacts/codex-skill-surface/skills/team/SKILL.md")
+            .exists(),
+        "team alias must not be a generated Codex skill surface"
     );
 }
 
@@ -1926,20 +2168,21 @@ fn closeout_record_schema_is_published() {
     let rules = schema["enforcement_rules"]
         .as_array()
         .expect("enforcement_rules array");
-    for expected in [
-        "claimed_done_without_evidence",
-        "changed_files_without_command_or_risk",
-        "verification_passed_with_failed_command",
-        "verification_passed_with_missing_artifact",
-        "not_run_without_blockers_or_risks",
-    ] {
-        assert!(
-            rules
-                .iter()
-                .any(|rule| rule["id"].as_str() == Some(expected)),
-            "closeout schema missing enforcement rule: {expected}"
-        );
-    }
+    let schema_rules = rules
+        .iter()
+        .map(|rule| rule["id"].as_str().expect("rule id").to_string())
+        .collect::<BTreeSet<_>>();
+    let contract = router_rs_json(&["closeout", "contract"]);
+    let contract_rules = contract["rules"]
+        .as_array()
+        .expect("contract rules")
+        .iter()
+        .map(|rule| rule.as_str().expect("contract rule id").to_string())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        schema_rules, contract_rules,
+        "CLOSEOUT_RECORD_SCHEMA.enforcement_rules must stay aligned with router-rs closeout contract"
+    );
 }
 
 #[test]
@@ -1971,6 +2214,40 @@ fn closeout_evaluate_allows_clean_record_via_cli() {
     let response = router_rs_json(&["closeout", "evaluate", "--input-json", &payload.to_string()]);
     assert_eq!(response["closeout_allowed"], true, "got {response:#?}");
     assert_eq!(response["claimed_completion"], false);
+}
+
+#[test]
+fn closeout_evaluate_uses_task_evidence_context_via_cli() {
+    let tmp = tempdir().unwrap();
+    let repo = tmp.path();
+    let task_id = "policy-context-closeout";
+    let record_dir = repo.join("artifacts/closeout");
+    fs::create_dir_all(&record_dir).unwrap();
+    let record_path = record_dir.join(format!("{task_id}.json"));
+    let payload = serde_json::json!({
+        "schema_version": "closeout-record-v1",
+        "task_id": task_id,
+        "summary": "tests passed and task completed",
+        "verification_status": "passed",
+        "artifacts_checked": [{"path": "target/debug/app", "exists": true}]
+    });
+    fs::write(&record_path, serde_json::to_string(&payload).unwrap()).unwrap();
+    let response = router_rs_json(&[
+        "closeout",
+        "evaluate",
+        "--repo-root",
+        repo.to_str().unwrap(),
+        "--task-id",
+        task_id,
+        "--record-path",
+        record_path.to_str().unwrap(),
+    ]);
+    assert_eq!(response["closeout_allowed"], false, "got {response:#?}");
+    assert!(response["violations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v["rule"] == "claimed_passed_without_evidence_index_rows"));
 }
 
 #[test]
@@ -2013,6 +2290,216 @@ fn eval_route_contract_cli_lists_metrics() {
     let metrics = response["metrics"].as_array().expect("metrics array");
     assert!(metrics.iter().any(|v| v == "route_accuracy"));
     assert!(metrics.iter().any(|v| v == "wrong_owner_rate"));
+}
+
+#[test]
+fn harness_failure_taxonomy_config_matches_cli_contract() {
+    let config = read_json(&project_root().join("configs/framework/HARNESS_FAILURE_TAXONOMY.json"));
+    assert_eq!(config["schema_version"], "harness-failure-taxonomy-v1");
+    let config_classes = config["classes"]
+        .as_array()
+        .expect("classes array")
+        .iter()
+        .map(|v| {
+            (
+                v["id"].as_str().expect("class id").to_string(),
+                v["description"]
+                    .as_str()
+                    .expect("class description")
+                    .to_string(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let response = router_rs_json(&["eval", "harness-contract"]);
+    let contract_classes = response["failure_taxonomy"]
+        .as_array()
+        .expect("failure taxonomy array")
+        .iter()
+        .map(|v| {
+            (
+                v["id"].as_str().expect("taxonomy id").to_string(),
+                v["description"]
+                    .as_str()
+                    .expect("taxonomy description")
+                    .to_string(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(config_classes, contract_classes);
+    for expected in [
+        "route_miss",
+        "verification_missing",
+        "subagent_misuse",
+        "trace_gap",
+        "step_recovery_gap",
+    ] {
+        assert!(contract_classes.contains_key(expected), "missing {expected}");
+    }
+}
+
+#[test]
+fn harness_behavioral_eval_cases_cover_required_tracks() {
+    let config =
+        read_json(&project_root().join("configs/framework/HARNESS_BEHAVIORAL_EVAL_CASES.json"));
+    assert_eq!(config["schema_version"], "harness-behavioral-eval-cases-v1");
+    let tracks = config["tracks"]
+        .as_array()
+        .expect("tracks array")
+        .iter()
+        .map(|v| v["id"].as_str().expect("track id").to_string())
+        .collect::<BTreeSet<_>>();
+    let cases = config["cases"]
+        .as_array()
+        .expect("cases array");
+    let case_ids = cases
+        .iter()
+        .map(|v| v["id"].as_str().expect("case id").to_string())
+        .collect::<BTreeSet<_>>();
+    let taxonomy_ids = read_json(&project_root().join("configs/framework/HARNESS_FAILURE_TAXONOMY.json"))
+        ["classes"]
+        .as_array()
+        .expect("taxonomy classes")
+        .iter()
+        .map(|v| v["id"].as_str().expect("failure class id").to_string())
+        .collect::<BTreeSet<_>>();
+    let response = router_rs_json(&["eval", "harness-contract"]);
+    let contract_tracks = response["behavioral_eval_tracks"]
+        .as_array()
+        .expect("contract tracks")
+        .iter()
+        .map(|v| v.as_str().expect("track").to_string())
+        .collect::<BTreeSet<_>>();
+    assert!(contract_tracks.is_subset(&tracks));
+    for expected in [
+        "routing_accuracy",
+        "token_efficiency",
+        "long_task_continuity",
+        "trajectory_health",
+        "closeout_integrity",
+        "skill_contract_quality",
+        "subagent_lane_integrity",
+    ] {
+        assert!(tracks.contains(expected), "missing track {expected}");
+    }
+    for track in config["tracks"].as_array().expect("tracks array") {
+        for case_id in track["case_ids"].as_array().expect("case_ids") {
+            let case_id = case_id.as_str().expect("case id");
+            assert!(
+                case_ids.contains(case_id),
+                "track {} references missing case {case_id}",
+                track["id"].as_str().unwrap_or("<unknown>")
+            );
+        }
+    }
+    for case in cases {
+        let failure_class = case["failure_class"].as_str().expect("failure_class");
+        assert!(
+            taxonomy_ids.contains(failure_class),
+            "case {} uses unknown failure_class {failure_class}",
+            case["id"].as_str().unwrap_or("<unknown>")
+        );
+        assert!(
+            case["verify"].as_str().unwrap_or_default().contains("cargo ")
+                || case["verify"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("router-rs "),
+            "case {} must name an executable verification command",
+            case["id"].as_str().unwrap_or("<unknown>")
+        );
+    }
+}
+
+#[test]
+fn harness_skill_contract_lint_cli_reports_protocol_shape() {
+    let payload = serde_json::json!({
+        "skills_root": project_root().join("skills").to_string_lossy(),
+        "slugs": ["skill-framework-developer", "plan-mode", "agent-swarm-orchestration", "research-workbench", "openai-docs"]
+    });
+    let response = router_rs_json(&[
+        "eval",
+        "skill-contract-lint",
+        "--input-json",
+        &payload.to_string(),
+    ]);
+    assert_eq!(
+        response["schema_version"],
+        "router-rs-harness-skill-contract-lint-v1"
+    );
+    assert_eq!(
+        response["skills_scanned"]
+            .as_array()
+            .expect("skills scanned")
+            .len(),
+        5
+    );
+    assert!(response["findings"].is_array());
+    assert!(response["execution_items"].is_array());
+    assert!(response["verification_results"].is_array());
+    assert!(
+        response["findings"]
+            .as_array()
+            .expect("findings")
+            .iter()
+            .all(|finding| finding["severity"] != "major"),
+        "default high-impact lint must not report major findings: {response:#?}"
+    );
+    assert_eq!(
+        response["verification_results"][0]["status"], "pass",
+        "default high-impact lint must be a gate, not shape-only: {response:#?}"
+    );
+}
+
+#[test]
+fn framework_step_ledger_append_projects_summary_into_task_state() {
+    let tmp = tempdir().unwrap();
+    let repo = tmp.path();
+    let payload = serde_json::json!({
+        "operation": "append",
+        "repo_root": repo.to_string_lossy(),
+        "task_id": "step-ledger-policy",
+        "step_id": "plan-1",
+        "phase": "implementation",
+        "status": "pass",
+        "input_text": "implement harness plan",
+        "retry_count": 0,
+        "side_effects": [],
+        "evidence_ref": {"kind":"manual","label":"unit-test"},
+        "next_resume_hint": "continue at verify"
+    });
+    let response = router_rs_json(&[
+        "framework",
+        "step-ledger",
+        "--input-json",
+        &payload.to_string(),
+    ]);
+    assert_eq!(
+        response["schema_version"],
+        "router-rs-step-ledger-response-v1"
+    );
+    let summary_payload = serde_json::json!({
+        "operation": "summary",
+        "repo_root": repo.to_string_lossy(),
+        "task_id": "step-ledger-policy"
+    });
+    let summary = router_rs_json(&[
+        "framework",
+        "step-ledger",
+        "--input-json",
+        &summary_payload.to_string(),
+    ]);
+    assert_eq!(summary["entry_count"], 1);
+    assert_eq!(summary["latest"]["step_id"], "plan-1");
+    let task_state = read_json(
+        &repo
+            .join("artifacts/current/step-ledger-policy")
+            .join("TASK_STATE.json"),
+    );
+    assert_eq!(task_state["step_ledger"]["entry_count"], 1);
+    assert_eq!(
+        task_state["step_ledger"]["latest"]["next_resume_hint"],
+        "continue at verify"
+    );
 }
 
 fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {

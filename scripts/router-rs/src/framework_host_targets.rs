@@ -97,19 +97,73 @@ pub(crate) fn skills_install_tool_for_host_id(
     Ok(tool.to_string())
 }
 
-pub(crate) fn skills_install_tools_ordered(framework_root: &Path) -> Result<Vec<String>, String> {
-    let reg = load_runtime_registry_json(framework_root)?;
-    supported_skills_tools_from_registry(&reg)
+pub(crate) fn projection_status_for_host_id(
+    registry: &Value,
+    host_id: &str,
+) -> Result<String, String> {
+    let id = host_id.trim();
+    let status = host_target_metadata(registry, id)?
+        .get("projection_status")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| host_metadata_error(id, "projection_status"))?;
+    Ok(status.to_string())
 }
 
-fn supported_skills_tools_from_registry(reg: &Value) -> Result<Vec<String>, String> {
+pub(crate) fn host_is_installable(registry: &Value, host_id: &str) -> Result<bool, String> {
+    let id = host_id.trim();
+    host_target_metadata(registry, id)?
+        .get("installable")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| host_metadata_error(id, "installable"))
+}
+
+pub(crate) fn skills_install_tools_ordered(framework_root: &Path) -> Result<Vec<String>, String> {
+    let reg = load_runtime_registry_json(framework_root)?;
+    installable_skills_tools_from_registry(&reg)
+}
+
+fn installable_skills_tools_from_registry(reg: &Value) -> Result<Vec<String>, String> {
     let ids = host_targets_supported_host_ids(reg)?;
     let mut tools = Vec::with_capacity(ids.len());
     for id in &ids {
+        if !host_is_installable(reg, id)?
+            || projection_status_for_host_id(reg, id)? != "implemented"
+        {
+            continue;
+        }
         let t = skills_install_tool_for_host_id(reg, id)?;
-        tools.push(t);
+        if !tools.contains(&t) {
+            tools.push(t);
+        }
     }
     Ok(tools)
+}
+
+pub(crate) fn installable_host_id_and_skills_install_tool_pairs(
+    framework_root: &Path,
+) -> Result<Vec<(String, String)>, String> {
+    let reg = load_runtime_registry_json(framework_root)?;
+    let pairs = host_id_and_skills_install_tool_pairs_from_registry(&reg)?;
+    pairs
+        .into_iter()
+        .filter_map(|(host_id, tool)| {
+            let installable = match host_is_installable(&reg, &host_id) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let status = match projection_status_for_host_id(&reg, &host_id) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            if installable && status == "implemented" {
+                Some(Ok((host_id, tool)))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn host_id_and_skills_install_tool_pairs(
@@ -186,18 +240,29 @@ mod tests {
     fn registry_hosts_map_to_install_tools_and_manifest_entrypoints() {
         let root = repo_root();
         let pairs = host_id_and_skills_install_tool_pairs(&root).expect("pairs");
-        assert!(
-            pairs.len() >= 3,
-            "expected at least codex-cli, cursor, claude-code from stock registry"
-        );
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
         let reg = load_runtime_registry_json(&root).expect("registry");
         for (host_id, tool) in pairs {
             assert!(
                 matches!(tool.as_str(), "codex" | "cursor" | "claude"),
                 "unexpected mapping {host_id} -> {tool}"
             );
+            assert_eq!(
+                projection_status_for_host_id(&reg, &host_id).unwrap(),
+                "implemented"
+            );
             host_entrypoints_value_for_id(&reg, &host_id).unwrap();
         }
+    }
+
+    #[test]
+    fn installable_pairs_exclude_runtime_only_codex_app() {
+        let root = repo_root();
+        let pairs = installable_host_id_and_skills_install_tool_pairs(&root).expect("pairs");
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "codex-cli"));
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "cursor"));
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "claude-code"));
+        assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
     }
 
     #[test]
@@ -209,6 +274,8 @@ mod tests {
                 "metadata": {
                     "codex-cli": {
                         "install_tool": "codex",
+                        "projection_status": "implemented",
+                        "installable": true,
                         "host_entrypoints": "AGENTS.md"
                     }
                 }

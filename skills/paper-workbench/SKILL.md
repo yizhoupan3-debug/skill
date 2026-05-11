@@ -131,7 +131,7 @@ This skill is the one front door for paper work.
 
 启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`$paper-reviewer`** 的 External lane shape 约定。
 
-**Cursor 宿主（可选）**：在 shell/IDE 环境设 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` 时，`router-rs` 可在 **`beforeSubmit`** 合并短段 **`PAPER_ADVERSARIAL_HOOK`**（真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），与本 skill 同向加压；受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。见根 `AGENTS.md` 与 `docs/harness_architecture.md`。
+**宿主 hook（默认短提醒）**：`router-rs` 在 Cursor `beforeSubmit` 与 Codex `UserPromptSubmit` 命中论文 / 手稿语境时合并短段 **`PAPER_ADVERSARIAL_HOOK`**（真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），与本 skill 同向加压；受 `ROUTER_RS_OPERATOR_INJECT` 与 `ROUTER_RS_PAPER_ADVERSARIAL_HOOK` 总闸约束，宿主级 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` / `ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK` 可单独关闭。见根 `AGENTS.md` 与 `docs/harness_architecture.md`。
 
 It exists so the user does not need to decide first whether the job is
 `$paper-reviewer`, `$paper-reviser`, `$paper-writing`, or a review/revision
@@ -167,7 +167,7 @@ dimension mode.
 
 ## Do not use
 
-- The user wants to advance a non-manuscript research project, topic, or experiment plan -> use the current research/project owner; this front door is manuscript-only
+- The user wants to advance a non-manuscript research project, topic, or experiment plan -> use `$research-workbench`; this front door is manuscript-only
 - The user explicitly wants only one narrow lane and names it clearly:
   - local text polish only -> use `$paper-writing`
   - literature corpus / related work only -> keep the work here as source-backed paper context until it narrows to writing or citation hygiene

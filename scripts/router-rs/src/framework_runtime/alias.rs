@@ -1,4 +1,4 @@
-//! Framework command alias envelopes (`/autopilot`, `/team`, `deepinterview`, …).
+//! Framework command alias envelopes (`/autopilot`, `deepinterview`, …).
 
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -150,17 +150,6 @@ fn build_framework_alias_routing_hints(alias_name: &str, alias_record: &Value) -
         "deepinterview" => json!({
             "review_lanes": alias_record_list(alias_record, &["review_lanes"]),
         }),
-        "team" => json!({
-            "delegation_gate": alias_record_text(alias_record, &["delegation_gate"]),
-            "execution_owners": alias_record_list(alias_record, &["execution_owners"]),
-            "auto_route_allowed": alias_record_bool(alias_record, &["auto_route_allowed"]).unwrap_or(false),
-            "route_mode": alias_record_text(alias_record, &["route_mode"]),
-            "selection_signals": alias_value_at_path(alias_record, &["selection_signals"])
-                .cloned()
-                .unwrap_or(Value::Null),
-            "transition_states": alias_record_list(alias_record, &["official_workflow", "transition_states"]),
-            "worker_lifecycle": alias_record_list(alias_record, &["worker_lifecycle", "states"]),
-        }),
         _ => Value::Null,
     }
 }
@@ -181,383 +170,29 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
         .join("configs")
         .join("framework")
         .join("RUNTIME_REGISTRY.json");
-    if let Ok(raw) = fs::read_to_string(&registry_path) {
-        if let Ok(payload) = serde_json::from_str::<Value>(&raw) {
-            if let Some(record) = payload
-                .get("framework_commands")
-                .and_then(Value::as_object)
-                .and_then(|aliases| aliases.get(alias_name))
-                .cloned()
-            {
-                return Ok(record);
-            }
-        }
-    }
-    fallback_framework_alias_record(alias_name)
-        .ok_or_else(|| format!("Unknown framework alias: {alias_name}"))
-}
-
-fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
-    match alias_name {
-        "autopilot" => Some(json!({
-            "canonical_owner": "autopilot",
-            "reroute_when_ambiguous": "deepinterview",
-            "reroute_when_root_cause_unknown": "deepinterview",
-            "skill_path": "skills/autopilot/SKILL.md",
-            "lineage": {
-                "source": "repo-native",
-                "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
-            },
-            "official_workflow": {
-                "phases": ["expansion", "planning", "execution", "qa", "validation", "cleanup"]
-            },
-            "implementation_bar": [
-                "root-cause-first-when-unknown",
-                "verification-evidence-required",
-                "resume-and-recovery-required",
-                "converge-until-bounded-scope-clean",
-                "horizon-slice-macro-goals-with-exit-criteria-each-slice",
-                "no-chat-turn-without-continuity-delta-when-task-active",
-                "prefer-autopilot-deep-when-external-claims-drive-the-critical-path"
-            ],
-            "local_adaptations": [
-                "store execution state in rust-session-supervisor plus continuity artifacts",
-                "store specs and plans in artifacts/current task-local bootstrap outputs",
-                "use deepinterview as the first-class clarification gate for vague requests",
-                "treat each turn as a bus cycle: read alias+continuity then mutate repo then refresh SESSION_SUMMARY and NEXT_ACTIONS",
-                "for goals larger than one context window: chain horizons; each horizon ends with explicit next_actions for cold resume"
-            ],
-            "autonomy_contract": {
-                "auto_agent_orchestration": {
-                    "enabled": true,
-                    "default_mode": "bounded-sidecar-first",
-                    "spawn_policy": "admit-when-lanes-are-clear",
-                    "max_parallel_lanes": 5,
-                    "preferred_parallel_lanes": 3,
-                    "join_policy": "fan-out-fan-in-with-disjoint-writes",
-                    "user_visible_style": {
-                        "prefer_compact_orchestration_prompts": true,
-                        "avoid_subagent_process_narration": true
-                    },
-                    "require_reject_reason_when_not_spawning": true,
-                    "reject_reasons": [
-                        "small_task",
-                        "shared_context_heavy",
-                        "write_scope_overlap",
-                        "next_step_blocked",
-                        "verification_missing",
-                        "token_overhead_dominates"
-                    ]
-                },
-                "goal_style_execution": {
-                    "enabled": true,
-                    "run_to_completion": "until-done-or-blocked",
-                    "requires_done_definition": true,
-                    "requires_non_goals_definition": true,
-                    "loop": [
-                        "plan",
-                        "implement",
-                        "verify",
-                        "repair",
-                        "closeout"
-                    ],
-                    "lifecycle_states": [
-                        "goal_defined",
-                        "running",
-                        "paused",
-                        "blocked",
-                        "verification_pending",
-                        "completed"
-                    ],
-                    "lifecycle_states_implementation": {
-                        "owner": "host_agent_layer",
-                        "rust_runtime_coverage": "job_lifecycle_only",
-                        "status": "host_owned_no_rust_native_state_machine",
-                        "rationale": "Rust runtime tracks worker/job lifecycle (queued/running/interrupted/...). The goal-level six-state machine listed above is owned by the host agent layer (codex/cursor LLM + hooks). Treat the list as a host-side contract, not a Rust enum."
-                    },
-                    "control_surface": [
-                        "goal_start",
-                        "goal_pause",
-                        "goal_resume",
-                        "goal_clear"
-                    ],
-                    "control_surface_implementation": {
-                        "owner": "hybrid_host_plus_rust_persistence",
-                        "rust_runtime_coverage": "goal_persistence_and_drive_hook",
-                        "status": "rust_stdio_goal_store_plus_cursor_followup",
-                        "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block|clear) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit (including hook-state lock failure and ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE) so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0."
-                    },
-                    "never_stop_at_plan_only": true,
-                    "allow_network_research_for_unknowns": true,
-                    "require_source_citation_for_external_claims": true,
-                    "requires_checkpoint_log_each_loop": true,
-                    "pause_requires_explicit_resume": true,
-                    "checkpoint_artifacts": [
-                        "SESSION_SUMMARY.md",
-                        "NEXT_ACTIONS.json",
-                        "EVIDENCE_INDEX.json",
-                        "GOAL_STATE.json"
-                    ]
-                }
-            },
-            "execution_owners": [
-                "autopilot",
-                "deepinterview"
-            ],
-            "decision_contract": {
-                "execute_when": [
-                    "task is concrete enough to implement",
-                    "acceptance criteria are already bounded",
-                    "next actions are specific enough to continue"
-                ],
-                "clarify_when": [
-                    "task is still ambiguous",
-                    "user intent would materially change the implementation"
-                ],
-                "debug_when": [
-                    "root cause is still unknown",
-                    "the same failure pattern repeats without a validated explanation"
-                ],
-                "resume_when": [
-                    "continuity state is active and recovery anchors are present"
-                ],
-                "refresh_when": [],
-                "repair_when": [
-                    "continuity state is inconsistent"
-                ],
-                "start_new_task_when": [
-                    "current continuity is completed and should stay historical"
-                ],
-                "verify_when": [
-                    "implementation changed but evidence is still missing",
-                    "verification status is not yet passed or completed"
-                ]
-            },
-            "host_entrypoints": {
-                "codex-cli": "/autopilot",
-                "cursor": "/autopilot"
-            },
-            "entrypoint_modes": {
-                "quick": {
-                    "codex-cli": "/autopilot-quick",
-                    "cursor": "/autopilot-quick"
-                },
-                "deep": {
-                    "codex-cli": "/autopilot-deep",
-                    "cursor": "/autopilot-deep"
-                }
-            },
-            "interaction_invariants": {
-                "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": [
-                    "/autopilot",
-                    "/autopilot-quick",
-                    "/autopilot-deep",
-                    "/autopilot quick",
-                    "/autopilot deep"
-                ],
-                "implicit_route_policy": "never"
-            },
-            "research_contract": {
-                "quick": {
-                    "target": "fast-check",
-                    "default_output_style": "compact",
-                    "max_rounds": 1
-                },
-                "deep": {
-                    "target": "deep-research",
-                    "default_output_style": "evidence-ledger",
-                    "requires_multi_source_validation": true,
-                    "minimum_independent_sources_per_major_claim": 2,
-                    "requires_uncertainty_register": true,
-                    "requires_counter_evidence": true,
-                    "auto_continue_on_length_finish": true
-                }
-            }
-        })),
-        "deepinterview" => Some(json!({
-            "canonical_owner": "deepinterview",
-            "skill_path": "skills/deepinterview/SKILL.md",
-            "lineage": {
-                "source": "repo-native",
-                "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review."
-            },
-            "official_workflow": {
-                "loop_rules": [
-                    "one-question-at-a-time",
-                    "target-weakest-clarity-dimension",
-                    "score-ambiguity-after-each-answer",
-                    "handoff-to-execution-only-below-threshold"
-                ]
-            },
-            "implementation_bar": [
-                "root-cause-first-when-unknown",
-                "findings-first-with-severity-order",
-                "verification-evidence-required",
-                "fix-verify-loop-until-bounded-scope-clean"
-            ],
-            "local_adaptations": [
-                "store interview progress in continuity artifacts and task-local bootstrap outputs",
-                "use live repo evidence first for brownfield clarification before asking the user",
-                "handoff into local autopilot and rust-session-supervisor after clarity is sufficient"
-            ],
-            "review_lanes": [
-                "deepinterview",
-                "visual-review",
-                "gh-address-comments",
-                "gh-fix-ci",
-                "sentry"
-            ],
-            "host_entrypoints": {
-                "codex-cli": "/deepinterview"
-            },
-            "interaction_invariants": {
-                "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/deepinterview"],
-                "implicit_route_policy": "never"
-            }
-        })),
-        "team" => Some(json!({
-            "canonical_owner": "team",
-            "delegation_gate": "agent-swarm-orchestration",
-            "auto_route_allowed": false,
-            "route_mode": "team-orchestration",
-            "selection_signals": {
-                "prefer_when": [
-                    "multi-phase execution needs explicit worker lifecycle management",
-                    "supervisor-owned continuity and lane-local outputs are required",
-                    "integration, qa, cleanup, or resume/recovery are first-class workflow phases"
-                ],
-                "avoid_when": [
-                    "task is a small tightly coupled local change",
-                    "bounded sidecars are enough and orchestration overhead would dominate",
-                    "the next supervisor step is blocked on the delegated result",
-                    "worker write scopes would overlap or require shared editing context"
-                ]
-            },
-            "spawn_admission_policy": {
-                "default": "deny",
-                "allow_when": [
-                    "read-heavy exploration can run independently",
-                    "independent hypotheses or domains can be investigated in parallel",
-                    "review or verification can run without blocking the supervisor",
-                    "write scopes are fully disjoint and lane-local"
-                ],
-                "reject_reasons": [
-                    "small_task",
-                    "shared_context_heavy",
-                    "write_scope_overlap",
-                    "next_step_blocked",
-                    "verification_missing",
-                    "token_overhead_dominates"
-                ],
-                "fallback": "local-supervisor-queue"
-            },
-            "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
-            "lineage": {
-                "source": "repo-native",
-                "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
-            },
-            "official_workflow": {
-                "phases": ["scoping", "delegation", "execution", "integration", "qa", "cleanup"],
-                "transition_states": [
-                    "delegation-planned",
-                    "spawn-pending",
-                    "spawn-blocked",
-                    "worker-output-ready",
-                    "integration-pending",
-                    "resume-required"
-                ],
-                "recovery_states": [
-                    "worker-failed-recoverable",
-                    "stale-continuity",
-                    "inconsistent-continuity"
-                ],
-                "terminal_states": ["cleanup-completed", "completed", "failed-terminal"]
-            },
-            "implementation_bar": [
-                "worker-boundaries-required",
-                "verification-evidence-required",
-                "resume-and-recovery-required",
-                "supervisor-owned-continuity"
-            ],
-            "local_adaptations": [
-                "store team state in rust-session-supervisor plus continuity artifacts",
-                "keep shared continuity supervisor-owned while workers emit lane-local outputs",
-                "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
-            ],
-            "execution_owners": [
-                "team",
-                "agent-swarm-orchestration",
-                "deepinterview"
-            ],
-            "supervisor_contract": {
-                "shared_continuity_owner": "supervisor",
-                "integration_owner": "supervisor",
-                "verification_owner": "supervisor",
-                "worker_write_scope": "lane-local-delta-only",
-                "resume_requires_recovery_anchor": true
-            },
-            "lane_contract": {
-                "required_fields": [
-                    "lane_id",
-                    "lane_owner",
-                    "goal",
-                    "bounded_scope",
-                    "forbidden_scope",
-                    "expected_output",
-                    "integration_status",
-                    "verification_status",
-                    "recovery_anchor"
-                ],
-                "integration_statuses": ["planned", "running", "output-ready", "integrated", "blocked"],
-                "verification_statuses": ["not-started", "pending", "passed", "failed"]
-            },
-            "worker_lifecycle": {
-                "states": [
-                    "planned",
-                    "spawn-pending",
-                    "running",
-                    "stalled",
-                    "failed-recoverable",
-                    "failed-terminal",
-                    "completed-unintegrated",
-                    "integrated"
-                ],
-                "resume_state": "failed-recoverable",
-                "fallback_mode": "local-supervisor-queue"
-            },
-            "recovery_contract": {
-                "continuity_states": ["active", "stale", "inconsistent"],
-                "requires_resume_judgment": [
-                    "spawn-blocked",
-                    "worker-failed-recoverable",
-                    "stale-continuity",
-                    "inconsistent-continuity"
-                ],
-                "required_artifacts": [
-                    "SESSION_SUMMARY.md",
-                    "NEXT_ACTIONS.json",
-                    "EVIDENCE_INDEX.json",
-                    "TRACE_METADATA.json",
-                    ".supervisor_state.json"
-                ]
-            },
-            "verification_contract": {
-                "integration_requires_local_judgment": true,
-                "verification_evidence_required_before_cleanup": true
-            },
-            "host_entrypoints": {
-                "codex-cli": "/team"
-            },
-            "interaction_invariants": {
-                "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/team"],
-                "implicit_route_policy": "never"
-            }
-        })),
-        _ => None,
-    }
+    let raw = fs::read_to_string(&registry_path).map_err(|err| {
+        format!(
+            "framework alias registry unavailable at {}: {err}",
+            registry_path.display()
+        )
+    })?;
+    let payload = serde_json::from_str::<Value>(&raw).map_err(|err| {
+        format!(
+            "framework alias registry parse failed at {}: {err}",
+            registry_path.display()
+        )
+    })?;
+    payload
+        .get("framework_commands")
+        .and_then(Value::as_object)
+        .and_then(|aliases| aliases.get(alias_name))
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "Unknown framework alias `{alias_name}` in {}",
+                registry_path.display()
+            )
+        })
 }
 
 fn alias_value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
@@ -585,10 +220,6 @@ fn alias_record_list(value: &Value, path: &[&str]) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn alias_record_bool(value: &Value, path: &[&str]) -> Option<bool> {
-    alias_value_at_path(value, path).and_then(Value::as_bool)
-}
-
 fn alias_skill_path(alias_name: &str, alias_record: &Value) -> String {
     let explicit_path = alias_record_text(alias_record, &["skill_path"]);
     if !explicit_path.is_empty() {
@@ -599,78 +230,8 @@ fn alias_skill_path(alias_name: &str, alias_record: &Value) -> String {
     if !upstream_path.is_empty() {
         return upstream_path;
     }
-    match alias_name {
-        "autopilot" => "skills/autopilot/SKILL.md".to_string(),
-        "deepinterview" => "skills/deepinterview/SKILL.md".to_string(),
-        "team" => "skills/agent-swarm-orchestration/SKILL.md".to_string(),
-        _ => String::new(),
-    }
-}
-
-fn team_current_state(continuity: &Value) -> String {
-    let state = value_text(continuity.get("state"));
-    let phase = value_text(continuity.get("phase"));
-    let status = value_text(continuity.get("status"));
-
-    if state == "stale" {
-        return "stale-continuity".to_string();
-    }
-    if state == "inconsistent" {
-        return "inconsistent-continuity".to_string();
-    }
-    if status == "completed" {
-        return "cleanup-completed".to_string();
-    }
-    match phase.as_str() {
-        "delegation" => "delegation-planned".to_string(),
-        "execution" => "worker-running".to_string(),
-        "integration" => "integration-pending".to_string(),
-        "qa" => "qa-in-progress".to_string(),
-        "cleanup" => "cleanup-pending".to_string(),
-        _ if state == "active" => "scoping-active".to_string(),
-        _ => "fresh-entry".to_string(),
-    }
-}
-
-fn team_resume_action(current_state: &str) -> (&'static str, &'static str, &'static str) {
-    match current_state {
-        "stale-continuity" => (
-            "resume_requires_refresh",
-            "refresh_continuity_then_resume",
-            "refresh-continuity",
-        ),
-        "inconsistent-continuity" => (
-            "resume_requires_repair",
-            "repair_continuity_then_resume",
-            "repair-continuity",
-        ),
-        "delegation-planned" => (
-            "resume_team_delegation",
-            "review_worker_split_and_admit_or_fallback",
-            "continue-current-task",
-        ),
-        "worker-running" => (
-            "resume_team_execution",
-            "review_lane_progress_and_integrate_when_ready",
-            "continue-current-task",
-        ),
-        "integration-pending" => (
-            "resume_team_integration",
-            "integrate_lane_outputs_then_verify",
-            "continue-current-task",
-        ),
-        "qa-in-progress" => (
-            "resume_team_qa",
-            "verify_integrated_result_and_close_loop",
-            "continue-current-task",
-        ),
-        "cleanup-completed" => (
-            "resume_blocked_completed",
-            "start_new_task",
-            "start-new-task",
-        ),
-        _ => ("fresh_team_entry", "start_team_supervision", "fresh-start"),
-    }
+    let _ = alias_name;
+    String::new()
 }
 
 fn compact_alias_next_actions(continuity: &Value, max_lines: usize) -> Vec<String> {
@@ -809,52 +370,6 @@ fn build_framework_alias_entry_contract(
             "进入 deepinterview。本仓原生澄清流启动，访谈状态与 handoff 都走本地 Rust/continuity。"
                 .to_string()
         }
-        "team" => {
-            let owner = alias_record_text(alias_record, &["canonical_owner"]);
-            let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
-            let execution_owners = alias_record_list(alias_record, &["execution_owners"]);
-            let transition_states =
-                alias_record_list(alias_record, &["official_workflow", "transition_states"]);
-            let recovery_states =
-                alias_record_list(alias_record, &["official_workflow", "recovery_states"]);
-            let lane_fields =
-                alias_record_list(alias_record, &["lane_contract", "required_fields"]);
-            let supervisor_write_scope =
-                alias_record_text(alias_record, &["supervisor_contract", "worker_write_scope"]);
-            let requires_recovery_anchor = alias_record_bool(
-                alias_record,
-                &["supervisor_contract", "resume_requires_recovery_anchor"],
-            )
-            .unwrap_or(false);
-            route_rules.push(format!("主 owner -> `{owner}`"));
-            route_rules.push(format!("team split gate -> `{delegation_gate}`"));
-            route_rules.push(format!("bounded subagent lane -> `{delegation_gate}`"));
-            route_rules.push("full orchestration route -> `team`".to_string());
-            route_rules.push(format!("worker write scope -> `{supervisor_write_scope}`"));
-            if requires_recovery_anchor {
-                route_rules.push("恢复续跑必须保留 recovery anchor".to_string());
-            }
-            if !execution_owners.is_empty() {
-                route_rules.push(format!(
-                    "execution lanes -> {}",
-                    execution_owners.join(", ")
-                ));
-            }
-            if !transition_states.is_empty() {
-                route_rules.push(format!(
-                    "transition states -> {}",
-                    transition_states.join(", ")
-                ));
-            }
-            if !recovery_states.is_empty() {
-                route_rules.push(format!("recovery states -> {}", recovery_states.join(", ")));
-            }
-            if !lane_fields.is_empty() {
-                route_rules.push(format!("lane contract -> {}", lane_fields.join(", ")));
-            }
-            "进入 team。本仓原生团队编排流启动，worker 生命周期、lane 合同、恢复和 continuity 都走本地 Rust/supervisor。"
-                .to_string()
-        }
         _ => format!(
             "进入 {alias_name}。优先使用本地 Rust/continuity alias 载荷，不要回退成长文说明。"
         ),
@@ -935,122 +450,100 @@ fn build_framework_alias_state_machine(
             }
         })
         .unwrap_or_default();
-    let (current_state, recommended_action, resume_mode, resume_reason) = if alias_name == "team" {
-        let current_state = team_current_state(continuity);
-        let (_resume_state, action, mode) = team_resume_action(&current_state);
-        let reason = match current_state.as_str() {
-            "delegation-planned" => {
-                "worker split exists but still needs supervisor admission or fallback"
-            }
-            "worker-running" => "active worker lanes require supervision before integration",
-            "integration-pending" => "lane outputs are ready but not yet integrated",
-            "qa-in-progress" => "integrated result still needs verification evidence",
-            "cleanup-completed" => {
-                "completed team execution should stay historical; start a new bounded task"
-            }
-            "stale-continuity" => "stale continuity cannot be resumed directly",
-            "inconsistent-continuity" => "continuity artifacts disagree and must be repaired first",
-            _ => "no active continuity is available; enter as a fresh team task",
-        };
-        (
-            current_state,
-            action.to_string(),
-            mode.to_string(),
-            reason.to_string(),
-        )
-    } else if alias_name == "autopilot" {
-        match state.as_str() {
-            "active"
-                if evidence_missing
-                    && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
-            {
-                (
-                    "resume_active_needs_verification".to_string(),
-                    "verify_before_done".to_string(),
+    let (current_state, recommended_action, resume_mode, resume_reason) =
+        if alias_name == "autopilot" {
+            match state.as_str() {
+                "active"
+                    if evidence_missing
+                        && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
+                {
+                    (
+                        "resume_active_needs_verification".to_string(),
+                        "verify_before_done".to_string(),
+                        "continue-current-task".to_string(),
+                        "implementation is active but verification evidence is still missing"
+                            .to_string(),
+                    )
+                }
+                "active" if !missing_recovery_anchors.is_empty() => (
+                    "resume_active_missing_anchors".to_string(),
+                    "repair_recovery_anchors_then_resume".to_string(),
+                    "repair-continuity".to_string(),
+                    "active continuity is missing required recovery anchors".to_string(),
+                ),
+                "active" => (
+                    "resume_active".to_string(),
+                    "resume_current_task".to_string(),
                     "continue-current-task".to_string(),
-                    "implementation is active but verification evidence is still missing"
-                        .to_string(),
-                )
+                    "live continuity is active".to_string(),
+                ),
+                "completed" => (
+                    "resume_blocked_completed".to_string(),
+                    "start_new_task".to_string(),
+                    "start-new-task".to_string(),
+                    "completed work should stay historical; start a new bounded task".to_string(),
+                ),
+                "stale" => (
+                    "resume_requires_refresh".to_string(),
+                    "refresh_continuity_then_resume".to_string(),
+                    "refresh-continuity".to_string(),
+                    "stale continuity cannot be resumed directly".to_string(),
+                ),
+                "inconsistent" => (
+                    "resume_requires_repair".to_string(),
+                    "repair_continuity_then_resume".to_string(),
+                    "repair-continuity".to_string(),
+                    "continuity artifacts disagree and must be repaired first".to_string(),
+                ),
+                _ => (
+                    "fresh_entry".to_string(),
+                    "start_execution".to_string(),
+                    "fresh-start".to_string(),
+                    "no active continuity is available; enter as a fresh task".to_string(),
+                ),
             }
-            "active" if !missing_recovery_anchors.is_empty() => (
-                "resume_active_missing_anchors".to_string(),
-                "repair_recovery_anchors_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "active continuity is missing required recovery anchors".to_string(),
-            ),
-            "active" => (
-                "resume_active".to_string(),
-                "resume_current_task".to_string(),
-                "continue-current-task".to_string(),
-                "live continuity is active".to_string(),
-            ),
-            "completed" => (
-                "resume_blocked_completed".to_string(),
-                "start_new_task".to_string(),
-                "start-new-task".to_string(),
-                "completed work should stay historical; start a new bounded task".to_string(),
-            ),
-            "stale" => (
-                "resume_requires_refresh".to_string(),
-                "refresh_continuity_then_resume".to_string(),
-                "refresh-continuity".to_string(),
-                "stale continuity cannot be resumed directly".to_string(),
-            ),
-            "inconsistent" => (
-                "resume_requires_repair".to_string(),
-                "repair_continuity_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "continuity artifacts disagree and must be repaired first".to_string(),
-            ),
-            _ => (
-                "fresh_entry".to_string(),
-                "start_execution".to_string(),
-                "fresh-start".to_string(),
-                "no active continuity is available; enter as a fresh task".to_string(),
-            ),
-        }
-    } else {
-        match state.as_str() {
-            "active" => (
-                "resume_active".to_string(),
-                if alias_name == "deepinterview" {
-                    "resume_interview".to_string()
-                } else {
-                    "resume_current_task".to_string()
-                },
-                "continue-current-task".to_string(),
-                "live continuity is active".to_string(),
-            ),
-            "completed" => (
-                "resume_blocked_completed".to_string(),
-                "start_new_task".to_string(),
-                "start-new-task".to_string(),
-                "completed work should stay historical; start a new bounded task".to_string(),
-            ),
-            "stale" => (
-                "resume_requires_refresh".to_string(),
-                "refresh_continuity_then_resume".to_string(),
-                "refresh-continuity".to_string(),
-                "stale continuity cannot be resumed directly".to_string(),
-            ),
-            "inconsistent" => (
-                "resume_requires_repair".to_string(),
-                "repair_continuity_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "continuity artifacts disagree and must be repaired first".to_string(),
-            ),
-            _ => (
-                "fresh_entry".to_string(),
-                if alias_name == "deepinterview" {
-                    "start_interview".to_string()
-                } else {
-                    "start_execution".to_string()
-                },
-                "fresh-start".to_string(),
-                "no active continuity is available; enter as a fresh task".to_string(),
-            ),
-        }
-    };
+        } else {
+            match state.as_str() {
+                "active" => (
+                    "resume_active".to_string(),
+                    if alias_name == "deepinterview" {
+                        "resume_interview".to_string()
+                    } else {
+                        "resume_current_task".to_string()
+                    },
+                    "continue-current-task".to_string(),
+                    "live continuity is active".to_string(),
+                ),
+                "completed" => (
+                    "resume_blocked_completed".to_string(),
+                    "start_new_task".to_string(),
+                    "start-new-task".to_string(),
+                    "completed work should stay historical; start a new bounded task".to_string(),
+                ),
+                "stale" => (
+                    "resume_requires_refresh".to_string(),
+                    "refresh_continuity_then_resume".to_string(),
+                    "refresh-continuity".to_string(),
+                    "stale continuity cannot be resumed directly".to_string(),
+                ),
+                "inconsistent" => (
+                    "resume_requires_repair".to_string(),
+                    "repair_continuity_then_resume".to_string(),
+                    "repair-continuity".to_string(),
+                    "continuity artifacts disagree and must be repaired first".to_string(),
+                ),
+                _ => (
+                    "fresh_entry".to_string(),
+                    if alias_name == "deepinterview" {
+                        "start_interview".to_string()
+                    } else {
+                        "start_execution".to_string()
+                    },
+                    "fresh-start".to_string(),
+                    "no active continuity is available; enter as a fresh task".to_string(),
+                ),
+            }
+        };
     let handoff = match alias_name {
         "autopilot" => json!({
             "default_mode": "stay-in-autopilot",
@@ -1079,31 +572,6 @@ fn build_framework_alias_state_machine(
                     "when": "clarity is high enough to execute",
                     "target": "autopilot",
                     "action": "handoff_to_execution",
-                }
-            ]
-        }),
-        "team" => json!({
-            "default_mode": "supervise-team-locally",
-            "rules": [
-                {
-                    "when": "task is still a single-lane change",
-                    "target": "main-thread",
-                    "action": "keep_local_ownership",
-                },
-                {
-                    "when": "bounded sidecars improve throughput without full orchestration overhead",
-                    "target": alias_record_text(alias_record, &["delegation_gate"]),
-                    "action": "use_bounded_subagent_lane",
-                },
-                {
-                    "when": "worker lifecycle, integration, qa, or resume/recovery must stay supervisor-led",
-                    "target": "team",
-                    "action": "keep_team_orchestration",
-                },
-                {
-                    "when": "worker outputs are ready to merge",
-                    "target": "supervisor-verification",
-                    "action": "verify_and_close_loop",
                 }
             ]
         }),

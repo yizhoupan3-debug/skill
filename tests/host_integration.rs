@@ -67,6 +67,18 @@ fn cursor_hooks_template_matches_repo_hook_events_and_timeouts() {
             repo_timeout, template_timeout,
             "cursor hook timeout drift for event {key}"
         );
+        let repo_command = repo_hooks[&key][0]["command"].as_str().unwrap_or_default();
+        let template_command = template_hooks[&key][0]["command"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(
+            repo_command.contains("cursor-router-rs-hook.sh"),
+            "repo Cursor hook {key} must use the router-rs launcher: {repo_command}"
+        );
+        assert!(
+            template_command.contains("cursor-router-rs-hook.sh"),
+            "template Cursor hook {key} must use the router-rs launcher: {template_command}"
+        );
     }
 }
 
@@ -107,7 +119,7 @@ fn install_native_integration_is_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"autopilot":{},"team":{}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"autopilot":{}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -138,6 +150,12 @@ fn install_native_integration_is_idempotent() {
     assert_eq!(content.matches("[features]").count(), 1);
     assert_eq!(content.matches("hooks = false").count(), 1);
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
+    assert_eq!(first["hooks_enabled"], false);
+    assert_eq!(first["hooks_disabled_changed"], true);
+    assert_eq!(first["deprecated_codex_hooks_removed"], false);
+    assert_eq!(second["hooks_enabled"], false);
+    assert_eq!(second["hooks_disabled_changed"], false);
+    assert_eq!(second["deprecated_codex_hooks_removed"], false);
     assert_eq!(content.matches("[mcp_servers.browser-mcp]").count(), 0);
     assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 0);
     assert_eq!(
@@ -160,7 +178,10 @@ fn install_native_integration_is_idempotent() {
         &repo_root.join("skills/systematic-debugging")
     ));
     assert_framework_alias_skill(&surface_root, "autopilot");
-    assert_framework_alias_skill(&surface_root, "team");
+    assert!(
+        !surface_root.join("team/SKILL.md").exists(),
+        "team must remain a framework alias, not a visible Codex skill surface"
+    );
     let surface_runtime = read_json(&surface_root.join("SKILL_ROUTING_RUNTIME.json"));
     let surface_runtime_text = serde_json::to_string(&surface_runtime).unwrap();
     assert!(!surface_runtime_text.contains("review-fix-verify-loop"));
@@ -191,7 +212,7 @@ fn install_native_integration_is_idempotent() {
 }
 
 #[test]
-fn install_native_integration_forces_codex_hook_false_when_true_only() {
+fn install_native_integration_forces_hooks_false_when_deprecated_key_is_true() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
@@ -226,10 +247,12 @@ fn install_native_integration_forces_codex_hook_false_when_true_only() {
     assert!(content.contains("codex_hooks_extra = true"));
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
     assert_eq!(content.matches("hooks = false").count(), 1);
+    assert_eq!(result["hooks_enabled"], false);
+    assert_eq!(result["deprecated_codex_hooks_removed"], true);
 }
 
 #[test]
-fn install_native_integration_adds_codex_hook_when_missing_in_features() {
+fn install_native_integration_adds_hooks_false_when_missing_in_features() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
@@ -261,6 +284,8 @@ fn install_native_integration_adds_codex_hook_when_missing_in_features() {
     assert!(content.contains("[features]"));
     assert!(content.contains("codex_hooks_extra = true"));
     assert_eq!(content.matches("hooks = false").count(), 1);
+    assert_eq!(result["hooks_enabled"], false);
+    assert_eq!(result["deprecated_codex_hooks_removed"], false);
 }
 
 #[test]
@@ -299,10 +324,12 @@ fn install_native_integration_adds_features_block_when_missing() {
     assert!(content.contains("[tui]"));
     assert!(content.contains("[features]"));
     assert_eq!(content.matches("hooks = false").count(), 1);
+    assert_eq!(result["hooks_enabled"], false);
+    assert_eq!(result["deprecated_codex_hooks_removed"], false);
 }
 
 #[test]
-fn install_native_integration_dedupes_codex_hooks_and_forces_false() {
+fn install_native_integration_dedupes_deprecated_codex_hooks_and_forces_hooks_false() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
@@ -337,6 +364,8 @@ fn install_native_integration_dedupes_codex_hooks_and_forces_false() {
     assert!(content.contains("codex_hooks_extra = true"));
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
     assert_eq!(content.matches("hooks = false").count(), 1);
+    assert_eq!(result["hooks_enabled"], false);
+    assert_eq!(result["deprecated_codex_hooks_removed"], true);
 }
 
 #[test]
@@ -504,11 +533,190 @@ fn install_skills_claude_target_installs_only_claude() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["claude"]["status"], "installed");
     assert!(repo_root.join(".claude/rules/framework.md").exists());
+    let settings_path = repo_root.join(".claude/settings.json");
+    assert!(settings_path.exists());
+    let settings = read_json(&settings_path);
+    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+        let entries = settings["hooks"][event].as_array().unwrap_or_else(|| {
+            panic!("expected Claude settings hook entries for {event}: {settings:?}")
+        });
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.to_string().contains("router-rs")
+                    && entry.to_string().contains("claude hook --help")
+                    && entry.to_string().contains(&format!("--event={event}"))),
+            "expected managed router-rs Claude hook for {event}: {entries:?}"
+        );
+    }
+    let pre_tool_command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .expect("claude hook command");
+    assert!(
+        pre_tool_command.contains("HOOK_PAYLOAD")
+            && pre_tool_command.contains("cursor_version")
+            && pre_tool_command.contains("workspace_roots"),
+        "Claude hook command must no-op Cursor host payloads before invoking router-rs: {pre_tool_command}"
+    );
+    let fallback = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(pre_tool_command)
+        .env("CLAUDE_PROJECT_ROOT", tmp.path().join("missing-router-root"))
+        .env("PATH", "/bin:/usr/bin")
+        .output()
+        .expect("run claude fallback command");
+    assert!(
+        !fallback.status.success(),
+        "fallback should fail closed when router-rs is unavailable"
+    );
+    let fallback_json: Value = serde_json::from_slice(&fallback.stdout).unwrap_or_else(|err| {
+        panic!(
+            "fallback stdout must be valid JSON: {err}; stdout={}; stderr={}",
+            String::from_utf8_lossy(&fallback.stdout),
+            String::from_utf8_lossy(&fallback.stderr)
+        )
+    });
+    assert_eq!(fallback_json["decision"], "block");
+    assert_eq!(fallback_json["suppressOutput"], true);
     assert!(repo_root
         .join(".claude/.framework-projection.json")
         .exists());
+    let manifest = read_json(&repo_root.join(".claude/.framework-projection.json"));
+    assert!(manifest["files"].as_array().unwrap().iter().any(|path| path
+        .as_str()
+        .unwrap_or_default()
+        .ends_with(".claude/settings.json")));
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/framework.md").exists());
+}
+
+#[test]
+fn project_scope_all_does_not_install_claude_projection() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let result = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "all",
+    ]);
+
+    assert_eq!(result["success"], true);
+    assert_eq!(result["results"]["codex"]["status"], "installed");
+    assert_eq!(result["results"]["cursor"]["status"], "installed");
+    assert!(result["results"].get("claude").is_none());
+    assert!(repo_root.join(".codex/prompts/framework.md").exists());
+    assert!(repo_root.join(".cursor/rules/framework.mdc").exists());
+    assert!(!repo_root.join(".claude/settings.json").exists());
+    assert!(!repo_root.join(".claude/rules/framework.md").exists());
+}
+
+#[test]
+fn remove_claude_projection_removes_managed_settings_hooks() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude",
+    ]);
+    assert_eq!(install["results"]["claude"]["status"], "installed");
+
+    let settings_path = repo_root.join(".claude/settings.json");
+    let mut settings = read_json(&settings_path);
+    settings["theme"] = json!("dark");
+    write_json(&settings_path, &settings);
+
+    let removed = host_integration_json(&[
+        "remove",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude",
+    ]);
+
+    assert_eq!(removed["results"]["claude"]["status"], "removed");
+    assert_eq!(
+        removed["results"]["claude"]["settings"]["removed_events"],
+        json!(["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"])
+    );
+    assert!(!repo_root.join(".claude/rules/framework.md").exists());
+    assert!(!repo_root
+        .join(".claude/.framework-projection.json")
+        .exists());
+    let settings = read_json(&settings_path);
+    assert_eq!(settings["theme"], "dark");
+    assert!(settings.get("hooks").is_none());
+}
+
+#[test]
+fn remove_claude_projection_deletes_settings_when_only_managed_hooks_remain() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude",
+    ]);
+    assert_eq!(install["results"]["claude"]["status"], "installed");
+
+    let removed = host_integration_json(&[
+        "remove",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude",
+    ]);
+
+    assert_eq!(
+        removed["results"]["claude"]["settings"]["removed_file"],
+        true
+    );
+    assert!(!repo_root.join(".claude/settings.json").exists());
 }
 
 #[test]
@@ -1002,10 +1210,13 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
     );
     assert_eq!(
         status["manifest_status"]["mode"],
-        "manifest-backed-byte-for-byte-drift-gate"
+        "manifest-backed-generated-artifact-drift-gate"
     );
     assert_eq!(status["drift_gate"]["enabled"], true);
-    assert_eq!(status["drift_gate"]["compare"], "byte-for-byte");
+    assert_eq!(
+        status["drift_gate"]["compare"],
+        json!(["byte-for-byte", "normalized-text"])
+    );
     assert_eq!(
         status["manifest_status"]["missing_required_generated_artifacts"],
         json!([])
@@ -1020,12 +1231,10 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         "skills/SKILL_PLUGIN_CATALOG.json",
         "skills/SKILL_ROUTING_METADATA.json",
         "skills/SKILL_HEALTH_MANIFEST.json",
-        "skills/SKILL_SHADOW_MAP.json",
         "skills/SKILL_APPROVAL_POLICY.json",
-        "skills/SKILL_LOADOUTS.json",
-        "skills/SKILL_TIERS.json",
         "AGENTS.md",
         ".codex/host_entrypoints_sync_manifest.json",
+        ".cursor/rules/framework.mdc",
     ] {
         assert!(
             status["generated_artifacts"]
@@ -1084,7 +1293,7 @@ printf '%s\n' '{"status":"fresh"}' > configs/framework/FRAMEWORK_SURFACE_POLICY.
         .as_array()
         .unwrap();
     assert!(missing.contains(&json!("skills/SKILL_ROUTING_RUNTIME.json")));
-    assert!(missing.contains(&json!("skills/SKILL_TIERS.json")));
+    assert!(missing.contains(&json!("skills/SKILL_HEALTH_MANIFEST.json")));
     assert!(
         !artifact_root
             .join("generated-artifacts-drift-check")
@@ -1160,17 +1369,22 @@ fn generated_artifacts_status_reports_undeclared_markers_across_reverse_referenc
     );
     write_text(
         &framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"),
-        r#"{"status":"fresh","marker":"generated-by-test"}
+        r#"{"status":"fresh","marker":"generated-by-test","derived_reports":["skills/SKILL_TIERS.json"]}
 "#,
     );
     write_text(
         &framework_root.join("scripts/generate-surface.sh"),
         r##"mkdir -p configs/framework
-printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framework/FRAMEWORK_SURFACE_POLICY.json
+printf '%s\n' '{"status":"fresh","marker":"generated-by-test","derived_reports":["skills/SKILL_TIERS.json"]}' > configs/framework/FRAMEWORK_SURFACE_POLICY.json
 "##,
     );
     write_text(
         &framework_root.join("skills/SKILL_EXTRA.json"),
+        r#"{"marker":"generated-by-test"}
+"#,
+    );
+    write_text(
+        &framework_root.join("skills/SKILL_TIERS.json"),
         r#"{"marker":"generated-by-test"}
 "#,
     );
@@ -1215,6 +1429,10 @@ printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framew
         );
     }
     assert!(!undeclared.contains(&json!("tests/source.rs")));
+    assert!(
+        !undeclared.contains(&json!("skills/SKILL_TIERS.json")),
+        "derived reports declared by FRAMEWORK_SURFACE_POLICY.json should not be flagged"
+    );
 }
 
 #[test]
@@ -1264,7 +1482,7 @@ printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framew
     assert_eq!(status["ok"], false);
     assert_eq!(
         status["manifest_status"]["mode"],
-        "manifest-backed-byte-for-byte-drift-gate"
+        "manifest-backed-generated-artifact-drift-gate"
     );
     assert_eq!(
         status["manifest_status"]["drifted_artifacts"],
@@ -1284,6 +1502,123 @@ printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framew
             .unwrap()
             .len(),
         0
+    );
+}
+
+#[test]
+fn codex_app_is_runtime_supported_but_not_installable() {
+    let tmp = tempdir().unwrap();
+    let framework_root = project_root();
+    let project_root = tmp.path().join("consumer");
+    let artifact_root = tmp.path().join("artifacts");
+    std::fs::create_dir_all(&project_root).unwrap();
+
+    let all = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "all",
+        "--dry-run",
+    ]);
+    assert!(all["results"].get("codex-app").is_none());
+    assert_eq!(all["host_targets"]["codex-app"]["installable"], false);
+    assert_eq!(all["host_targets"]["codex-app"]["status"], "unsupported");
+
+    let explicit = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "install",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--project-root",
+        project_root.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "codex-app",
+        "--dry-run",
+    ]);
+    assert_eq!(explicit["results"]["codex-app"]["installable"], false);
+    assert_eq!(explicit["results"]["codex-app"]["status"], "unsupported");
+}
+
+#[test]
+fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_commands() {
+    let tmp = tempdir().unwrap();
+    let runtime_path = tmp.path().join("SKILL_ROUTING_RUNTIME.json");
+    let manifest_path = tmp.path().join("SKILL_MANIFEST.json");
+    write_json(
+        &runtime_path,
+        &json!({
+            "version": 3,
+            "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path", "host_platforms", "kind"],
+            "skills": [
+                ["codex-only", "L1", "owner", "none", "n/a", "Codex-only skill", ["codex only"], "P1", "skills/codex-only/SKILL.md", ["codex-cli"], "skill"],
+                ["cursor-skill", "L1", "owner", "none", "n/a", "Cursor skill", ["cursor task"], "P1", "skills/cursor-skill/SKILL.md", ["cursor"], "skill"],
+                ["gitx", "L1", "owner", "none", "n/a", "Git command", ["gitx", "/gitx"], "P1", "skills/gitx/SKILL.md", ["codex-cli"], "framework_command"]
+            ]
+        }),
+    );
+    write_json(
+        &manifest_path,
+        &json!({
+            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path", "host_platforms", "kind"],
+            "skills": [
+                ["codex-only", "L1", "owner", "none", "P1", "Codex-only skill", "n/a", ["codex only"], "project", 3, "skills/codex-only/SKILL.md", ["codex-cli"], "skill"],
+                ["cursor-skill", "L1", "owner", "none", "P1", "Cursor skill", "n/a", ["cursor task"], "project", 3, "skills/cursor-skill/SKILL.md", ["cursor"], "skill"],
+                ["gitx", "L1", "owner", "none", "P1", "Git command", "n/a", ["gitx", "/gitx"], "project", 3, "skills/gitx/SKILL.md", ["codex-cli"], "framework_command"]
+            ]
+        }),
+    );
+    let filtered = router_rs_json(&[
+        "search",
+        "codex only",
+        "--runtime",
+        runtime_path.to_str().unwrap(),
+        "--manifest",
+        manifest_path.to_str().unwrap(),
+        "--host-id",
+        "cursor",
+        "--json",
+    ]);
+    assert!(
+        filtered["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|entry| { entry["record"]["name"].as_str().unwrap_or_default() != "codex-only" }),
+        "cursor host search must not return codex-only skill: {filtered}"
+    );
+
+    let alias = router_rs_json(&[
+        "search",
+        "/gitx",
+        "--runtime",
+        runtime_path.to_str().unwrap(),
+        "--manifest",
+        manifest_path.to_str().unwrap(),
+        "--host-id",
+        "cursor",
+        "--json",
+    ]);
+    assert!(
+        alias["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| { entry["record"]["name"].as_str().unwrap_or_default() == "gitx" }),
+        "cursor host search must keep framework command aliases available: {alias}"
     );
 }
 
@@ -1709,6 +2044,14 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         "codex"
     );
     assert_eq!(
+        payload["host_targets"]["metadata"]["codex-app"]["installable"],
+        false
+    );
+    assert_eq!(
+        payload["host_targets"]["metadata"]["codex-app"]["projection_status"],
+        "implemented"
+    );
+    assert_eq!(
         payload["host_targets"]["metadata"]["cursor"]["host_entrypoints"],
         json!(["AGENTS.md", ".cursor/rules/*.mdc"])
     );
@@ -1718,10 +2061,13 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["claude-code"]["host_entrypoints"],
-        json!(["AGENTS.md", ".claude/rules/framework.md"])
+        json!([
+            "AGENTS.md",
+            ".claude/rules/framework.md",
+            ".claude/settings.json"
+        ])
     );
     assert!(payload.get("mcp_clients").is_none());
-    assert_eq!(aliases["team"]["route_mode"], "team-orchestration");
     let autopilot = &aliases["autopilot"];
     assert_eq!(autopilot["lineage"]["source"], "repo-native");
     assert!(autopilot["implementation_bar"]

@@ -8,17 +8,17 @@
 - [ ] **`plan_profile`**（与 `name` / `overview` / `todos` 同级）：**缺省或 `execution`** → 标准实现计划；**`research`** → 仅只读调研 todo，见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **Plan profile**。
 - [ ] **`overview` profile 声明**（与 SKILL **CreatePlan 输出契约 §0** 对齐）：
   - **`research`**：`overview` 含调研期 **Non-goals** 硬声明——**不修改** tracked 源码 / 配置 / 测试 / CI 工作流 / 依赖锁文件，实现另开 `plan_profile: execution` 计划；如使用「仅回写本 `.plan.md`」窄例外，须在同一 `overview` 单句声明。
-  - **`execution`（缺省）**：`overview` 有一句标明**本计划允许**按 todos 修改代码 / 配置 / 测试等实现面资产，并由末条 **`/gitx plan`** 完成 Git 收口。
+  - **`execution`（缺省）**：`overview` 有一句标明**本计划允许**按 todos 修改代码 / 配置 / 测试等实现面资产，并由末条完成计划 vs 实际 + Git 状态证据收口；宿主支持时可使用 **`/gitx plan`**。
 - [ ] **`overview` 调研范围句**（见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **调研范围（Research scope）与能力联动**）：**默认**须标明仅仓库内只读（不默认对外网络检索）；若用户要求「外部 / 网络 / 官方 cross-check」，须标明 **仓库内 + 外部只读并行**，且至少一条 todo 的 `Verify` 能核对外部来源（URL + 日期/版本）；**不得**用外部摘要替代仓库内检索 todo。
 - [ ] **最后一条** todo（依 profile）：
-  - **`execution`（缺省）**：`Verify` 显式含 **`/gitx plan`**；`Done when` 可判定（对照计划逐项、未做项有原因或 defer）；关联 closeout 或末条说明中宜含 **`git diff --stat`** 或显式「本次无代码 diff」（与 [`skills/gitx/SKILL.md`](../../skills/gitx/SKILL.md) 实质性 diff 记录习惯一致）。
+  - **`execution`（缺省）**：`Verify` 显式含 Git 状态证据（如 `git status --short --branch`、`git diff --stat` 或显式「本次无代码 diff」）；宿主支持时可附带 **`/gitx plan`**；`Done when` 可判定（对照计划逐项、未做项有原因或 defer）。
   - **`research`**：`Verify` **不含** **`/gitx plan`** 作为必需收口；须含 **`git status --porcelain`** 与对照正文 + YAML `todos`；`Done when` 覆盖调研问题矩阵结论文或 open gap。
 - [ ] 调用 CreatePlan 后若不合规：**编辑该 `.plan.md` 补齐**（含补写被剥离的 `plan_profile: research` 与 `overview` profile 声明），不依赖路由或 hook 自动改文件。
 
 ## `execution`：继承调研（有前置 research 或结论文档时）
 
 - [ ] 正文在 todos 前有 **`## 执行计划继承面`** 标题，字段见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **执行计划继承面（research→execution）**（继承指针、Goal/Non-goals 各一行、不变量、已否决、矩阵映射、**外部准入表或显式「无」**）。
-- [ ] **继承指针** 链到真实 `docs/plans/*.md` 或 `.cursor/plans/*.plan.md`（勿写虚构路径）；冷启动则该节首行写 **`继承指针：无（冷启动）`**。
+- [ ] **继承指针** 链到真实 `docs/plans/*.md` 或 `.cursor/plans/*.plan.md`（勿写虚构路径）；无前置调研时可省略本节，或首行写 **`继承指针：无（无前置调研）`**。
 - [ ] **`overview` 与继承面分工**：背景与结论**链**调研文档，**禁止**把 research 或外部长文整段贴进 `overview`（减法：overview 以 profile 声明 + 短链为主）。
 
 ## 起草每条 todo 时
@@ -39,5 +39,5 @@
 
 - [ ] 调研与证据先进计划，计划不代替定位结论（见 `plan-mode` Workflow 第 1 步）。
 - [ ] **可选 review 只找问题**：仅当用户明确要求审 plan / review plan / 深度 review 时，review 只输出 findings、风险与缺失验证，不改代码；如采纳 findings，`Verify` 宜含对本计划文件的 `git diff .cursor/plans/<本计划>.plan.md | head -n 40`（路径按实际替换）或 closeout 内嵌等价 diff 摘要。
-- [ ] **`execution`**：实现与测试通过后按计划对照实际，用 **`/gitx plan`**（与 **`/gitx`** 同契约，见 `skills/gitx/SKILL.md`）收口。
-- [ ] **`research`**：末条完成调研矩阵与合成收口；后续实现另开 **`execution`**（或缺省）计划再 **`/gitx plan`**。
+- [ ] **`execution`**：实现与测试通过后按计划对照实际，并记录 Git 状态证据；宿主支持时可用 **`/gitx plan`**（与 **`/gitx`** 同契约，见 `skills/gitx/SKILL.md`）收口。
+- [ ] **`research`**：末条完成调研矩阵与合成收口；后续实现另开 **`execution`**（或缺省）计划，再用计划/Git 状态证据收口。

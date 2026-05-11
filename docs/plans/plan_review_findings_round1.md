@@ -1,6 +1,6 @@
-# 独立 reviewer：对 `plan_review_adoption_execution.plan.md` 的只读 findings
+# 本地主线程模拟独立视角：对 `plan_review_adoption_execution.plan.md` 的只读 findings
 
-**角色**：与主线程隔离的 plan reviewer（模拟）。**范围**：仅审 `.cursor/plans/plan_review_adoption_execution.plan.md` 初稿与已有真源引用是否自洽。
+**角色**：本地主线程模拟独立 reviewer 视角；未实际启用 subagent。**范围**：仅审 `.cursor/plans/plan_review_adoption_execution.plan.md` 初稿与已有真源引用是否自洽。
 
 ## Finding 1（采纳）— t4 Verify 与 gitx checklist 对齐不足
 

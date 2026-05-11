@@ -1,81 +1,88 @@
 {
   "version": 1,
-  "_doc": "各事件 stdin → 本仓库 `scripts/router-rs/target/release/router-rs cursor hook --event=...`（按 CURSOR_WORKSPACE_ROOT 解析；请先 `cargo build --release --manifest-path scripts/router-rs/Cargo.toml`）。PostToolUse 仍负责消费 subagent 证据以满足 pre_goal；preCompact 合并 token 摘要；未编译时 Cursor 侧通常 fail-open。",
+  "_doc": "各事件 stdin → `configs/framework/cursor-router-rs-hook.sh`；launcher 按 release/debug/PATH 探测 router-rs。关键门控事件缺 binary fail-closed，telemetry/format 类事件 fail-open。",
   "hooks": {
     "beforeSubmitPrompt": [
       {
         "_doc": "Goal/autopilot + review gate：stdin JSON → router-rs BeforeSubmitPrompt",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=BeforeSubmitPrompt --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" BeforeSubmitPrompt",
         "timeout": 20
       }
     ],
     "stop": [
       {
         "_doc": "Goal 续跑提示 + gate：stdin JSON → router-rs Stop",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=Stop --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" Stop",
         "timeout": 20
       }
     ],
     "sessionStart": [
       {
         "_doc": "TOKEN REDUCTION: compact project briefing (~300 tokens) at session start.",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=SessionStart --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" SessionStart",
         "timeout": 5
       }
     ],
     "sessionEnd": [
       {
         "_doc": "会话结束：清 hook-state（review gate）；默认仅 terminate 本会话 shell 账本 `session-terminals-<key>.json` 内登记的 Cursor terminal PID（SessionStart baseline + Before/AfterShell + PostToolUse Shell）。ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0/false/off/no 关闭 terminate。需要旧「全仓库 active terminal 清扫」时用 ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy。",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=SessionEnd --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" SessionEnd",
         "timeout": 15
       }
     ],
     "postToolUse": [
       {
         "_doc": "单次 stdin：PostToolUse 门控（pre_goal）+ rust-lint；由 router-rs cursor hook 内置处理。",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=PostToolUse --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" PostToolUse",
         "timeout": 60
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "_doc": "Agent response signal scan：采集 goal/review 证据，减少仅靠 Stop 兜底重扫。",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" AfterAgentResponse",
+        "timeout": 20
       }
     ],
     "beforeShellExecution": [
       {
         "_doc": "Shell 生命周期（执行前）：记录本会话触达的 terminal pid 归属账本，仅用于 SessionEnd 会话内回收。",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=BeforeShellExecution --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" BeforeShellExecution",
         "timeout": 15
       }
     ],
     "afterShellExecution": [
       {
         "_doc": "Shell 生命周期（执行后）：补记 terminal pid 归属账本，提升并发/命令漂移下的会话归属稳定性。",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=AfterShellExecution --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" AfterShellExecution",
         "timeout": 15
       }
     ],
     "afterFileEdit": [
       {
         "_doc": "CODE QUALITY: rustfmt on .rs after agent edits.",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=AfterFileEdit --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" AfterFileEdit",
         "timeout": 10
       }
     ],
     "preCompact": [
       {
         "_doc": "Token 用量 + router-rs PreCompact（门状态/RFV 摘要），与 AGENTS.md / RFV 隐式账本对齐。",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=PreCompact --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" PreCompact",
         "timeout": 25
       }
     ],
     "subagentStart": [
       {
         "_doc": "更新 review gate：pre-goal subagent 计数 / phase（与 autopilot 契约对齐）；并按会话活跃 subagent 数做启动限流，避免旧 subagent 堆积。",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=SubagentStart --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" SubagentStart",
         "timeout": 20
       }
     ],
     "subagentStop": [
       {
         "_doc": "subagent 结束：推进 phase，供 Stop/beforeSubmit 门控消费。",
-        "command": "${CURSOR_WORKSPACE_ROOT:-$PWD}/scripts/router-rs/target/release/router-rs cursor hook --event=SubagentStop --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${CURSOR_WORKSPACE_ROOT:-$PWD}/configs/framework/cursor-router-rs-hook.sh\" SubagentStop",
         "timeout": 20
       }
     ]

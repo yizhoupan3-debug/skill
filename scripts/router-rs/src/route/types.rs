@@ -28,6 +28,11 @@ pub(crate) struct SkillRecord {
     pub(crate) alias_tokens: HashSet<String>,
     pub(crate) do_not_use_tokens: HashSet<String>,
     pub(crate) framework_alias_entrypoints: Vec<String>,
+    pub(crate) metadata_positive_triggers: Vec<String>,
+    pub(crate) host_platforms: Vec<String>,
+    pub(crate) record_kind: String,
+    pub(crate) primary_allowed: bool,
+    pub(crate) fallback_policy_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,13 +312,18 @@ pub(crate) struct RawSkillRecord {
     pub(crate) do_not_use: String,
     pub(crate) tags: Vec<String>,
     pub(crate) trigger_hints: Vec<String>,
+    pub(crate) host_platforms: Vec<String>,
+    pub(crate) record_kind: String,
 }
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RouteMetadataPatch {
     pub(crate) priority: Option<String>,
     pub(crate) session_start: Option<String>,
+    pub(crate) positive_triggers: Vec<String>,
     pub(crate) negative_triggers: Vec<String>,
+    pub(crate) primary_allowed: Option<bool>,
+    pub(crate) fallback_policy_mode: Option<String>,
 }
 
 fn default_skill_layer() -> String {
@@ -350,6 +360,8 @@ pub(crate) struct RecordRowIndexes {
     pub(crate) gate: usize,
     pub(crate) summary: usize,
     pub(crate) trigger_hints: usize,
+    pub(crate) host_platforms: Option<usize>,
+    pub(crate) record_kind: Option<usize>,
     pub(crate) priority: Option<usize>,
     pub(crate) session_start: Option<usize>,
     pub(crate) required_max: usize,
@@ -371,6 +383,8 @@ impl RecordRowIndexes {
             gate,
             summary,
             trigger_hints,
+            host_platforms: None,
+            record_kind: None,
             priority,
             session_start,
             required_max,

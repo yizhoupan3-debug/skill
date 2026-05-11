@@ -1,81 +1,88 @@
 {
   "version": 1,
-  "_doc": "Cross-workspace bootstrap: hooks invoke router-rs from PATH (or ROUTER_RS_BIN). Modes: (1) embedded — framework repo .cursor/hooks.json points at target/release/router-rs under that repo; (2) workspace — cargo install --path <framework>/scripts/router-rs, copy this template via scripts/cursor-bootstrap-framework.sh. repo-root is CURSOR_WORKSPACE_ROOT so artifacts/.cursor/hook-state stay in the opened folder. For JSON nudges / PAPER_ADVERSARIAL_HOOK.txt parity with the framework checkout, symlink configs/ (--with-configs on bootstrap).",
+  "_doc": "Cross-workspace bootstrap: hooks call configs/framework/cursor-router-rs-hook.sh, which probes release/debug/PATH (or ROUTER_RS_BIN). Critical gate events fail-closed when router-rs is unavailable; telemetry/format events fail-open. repo-root is CURSOR_WORKSPACE_ROOT so artifacts/.cursor/hook-state stay in the opened folder.",
   "hooks": {
     "beforeSubmitPrompt": [
       {
         "_doc": "Goal/autopilot + review gate",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=BeforeSubmitPrompt --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" BeforeSubmitPrompt",
         "timeout": 20
       }
     ],
     "stop": [
       {
         "_doc": "Goal follow-up + gates",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=Stop --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" Stop",
         "timeout": 20
       }
     ],
     "sessionStart": [
       {
         "_doc": "Compact project briefing at session start",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=SessionStart --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SessionStart",
         "timeout": 5
       }
     ],
     "sessionEnd": [
       {
         "_doc": "Session end cleanup + terminal scope",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=SessionEnd --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SessionEnd",
         "timeout": 15
       }
     ],
     "postToolUse": [
       {
         "_doc": "PostToolUse + rust-lint",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=PostToolUse --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" PostToolUse",
         "timeout": 60
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "_doc": "Agent response signal scan",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" AfterAgentResponse",
+        "timeout": 20
       }
     ],
     "beforeShellExecution": [
       {
         "_doc": "Shell lifecycle (before)",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=BeforeShellExecution --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" BeforeShellExecution",
         "timeout": 15
       }
     ],
     "afterShellExecution": [
       {
         "_doc": "Shell lifecycle (after)",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=AfterShellExecution --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" AfterShellExecution",
         "timeout": 15
       }
     ],
     "afterFileEdit": [
       {
         "_doc": "rustfmt on .rs after agent edits",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=AfterFileEdit --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" AfterFileEdit",
         "timeout": 10
       }
     ],
     "preCompact": [
       {
         "_doc": "Token usage + PreCompact",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=PreCompact --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" PreCompact",
         "timeout": 25
       }
     ],
     "subagentStart": [
       {
         "_doc": "Review gate subagent phase + throttle",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=SubagentStart --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SubagentStart",
         "timeout": 20
       }
     ],
     "subagentStop": [
       {
         "_doc": "Subagent end phase",
-        "command": "\"${ROUTER_RS_BIN:-router-rs}\" cursor hook --event=SubagentStop --repo-root \"${CURSOR_WORKSPACE_ROOT:-$PWD}\"",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SubagentStop",
         "timeout": 20
       }
     ]

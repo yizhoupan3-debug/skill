@@ -35,7 +35,7 @@
 
 - **真源**：[references/rfv-loop/reasoning-depth-contract.md](references/rfv-loop/reasoning-depth-contract.md) — **不靠单模型拉长 CoT**；靠 **`review ∥ external → fix → verify`** + **`EVIDENCE_INDEX` / `append_round`** 形成可审计链。
 - **提升调研深度的计划（契约级）**：同文件 §**提升调研深度的 harness 方向** — **A** 外研 API 式输出（Claims / Contradiction sweep / Unknowns）；**B** 检索留下可复核轨迹并与定量复算命令同源；**C** 多视角真并行、角色分离（禁止同上下文换帽）。
-- **宿主注入文案**：`configs/framework/HARNESS_OPERATOR_NUDGES.json`（RFV / Autopilot 续跑末尾附带的「推理深度」句，及可选 **`math_reasoning_harness_line`**（数理）、**`retrieval_trace_harness_line`**（外研检索轨迹）、**`rfv_loop_external_struct_hint_line`**（结构化外研单行提示）；**`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`** 可整体关闭；**`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT=0`** 仅关结构化单行。
+- **宿主注入文案**：默认 RFV / Autopilot 续跑保持紧凑；RFV 在 `allow_external_research=true` 时追加检索 / `retrieval_trace` 短句，在 goal/scope/verify 命中数学或 checker 信号时追加数理 witness/checker 短句。`configs/framework/HARNESS_OPERATOR_NUDGES.json` 仍是文案真源；`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 可关闭这些 nudge；`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT=0` 仅关结构化短提示。
 - **数理 / STEM 契约长文**：[references/rfv-loop/math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)（witness、符号 verifier、反事实探针；与 lane 模板同目录）。
 - **外研不得顶替 verify**：external 只产出可引用结论与假设；**Pass/Fail 只认可执行验证**。定量复算的 **replay** 与 `cargo test` 同类 spirit：写入 `verify_commands` 或 `quantitative_replays` 并由 verifier / supervisor 执行，证据进 `EVIDENCE_INDEX`（或等价记录）。
 

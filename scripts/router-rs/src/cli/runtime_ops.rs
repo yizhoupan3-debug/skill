@@ -22,7 +22,10 @@ use super::common::{
 
 use crate::autopilot_goal;
 use crate::background_state::handle_background_state_operation;
-use crate::closeout_enforcement::{closeout_enforcement_contract, evaluate_closeout_record_value};
+use crate::closeout_enforcement::{
+    closeout_enforcement_contract, evaluate_closeout_record_value,
+    evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
+};
 use crate::eval_route::{eval_route_contract, run_eval_route};
 use crate::execution_contract::{
     build_execution_contract_bundle, build_execution_kernel_contracts_by_mode,
@@ -47,10 +50,10 @@ use crate::hook_policy::evaluate_hook_policy_value;
 use crate::rfv_loop;
 use crate::route::{
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
-    build_search_results_payload, load_inline_records, load_records_cached_for_stdio,
-    load_records_from_manifest, route_task, search_skills, RouteDecision,
-    RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload,
-    SkillRecord, ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
+    build_search_results_payload, filter_records_for_host, load_inline_records,
+    load_records_cached_for_stdio, load_records_from_manifest, route_task, search_skills,
+    RouteDecision, RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload,
+    RouteSnapshotRequestPayload, SkillRecord, ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
 };
 use crate::runtime_envelope_ids::*;
 use crate::runtime_storage::{

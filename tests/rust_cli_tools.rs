@@ -74,12 +74,14 @@ fn update_audit_cli_contract_is_registered() {
 }
 
 #[test]
-fn refresh_host_projections_includes_claude_projection_verification() {
+fn refresh_host_projections_keeps_claude_projection_explicit() {
     let args = read_text(&project_root().join("scripts/router-rs/src/cli/args.inc"));
     let maint = read_text(&project_root().join("scripts/router-rs/src/framework_maint.rs"));
     assert!(args.contains("non-Codex framework installs"));
-    assert!(maint.contains("for tool in [\"cursor\", \"claude\"]"));
-    assert!(maint.contains("verify_claude_projection(&fw)"));
+    assert!(maint.contains("let installable_tools = installable_projection_tools(&fw)?"));
+    assert!(maint.contains("verify_installable_projections(&fw, &installable_tools)?"));
+    assert!(maint.contains("if tool == \"claude\""));
+    assert!(maint.contains("\"claude\" => verify_claude_projection(repo_root)?"));
     assert!(maint.contains(".claude/rules/framework.md"));
     assert!(maint.contains(".claude/.framework-projection.json"));
     assert!(maint.contains("host_projection: claude-code"));

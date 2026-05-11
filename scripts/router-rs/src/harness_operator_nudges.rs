@@ -85,7 +85,7 @@ fn builtin_defaults() -> ResolvedHarnessNudges {
         math_reasoning_harness_line: String::new(),
         retrieval_trace_harness_line: String::new(),
         rfv_loop_external_struct_hint_line:
-            "外研结构化（默认 strict）：每 claim ≥2 可溯源 sources；contradiction_sweep ≥ max(2, claims)；queries_used ≥3；retrieval_trace 三字段各 ≥40 字；须含 unknowns 键（[] 或 null）。关闭：start 传 external_research_strict:false。见 configs/framework/RFV_EXTERNAL_RESEARCH.schema.json。"
+            "外研结构化：本轮 `append_round` 需填 `external_research`，按 `RFV_EXTERNAL_RESEARCH.schema.json` 覆盖 sources、contradiction_sweep、queries_used、unknowns。"
                 .to_string(),
     }
 }
@@ -142,28 +142,6 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         &file.nudges.rfv_loop_external_struct_hint_line,
     );
     out
-}
-
-fn push_optional_operator_line(lines: &mut Vec<String>, line: &str) {
-    let t = line.trim();
-    if !t.is_empty() {
-        lines.push(t.to_string());
-    }
-}
-
-/// Append optional STEM line after primary reasoning-depth nudge (RFV / Autopilot / digest).
-pub fn push_math_reasoning_line(lines: &mut Vec<String>, nudges: &ResolvedHarnessNudges) {
-    push_optional_operator_line(lines, &nudges.math_reasoning_harness_line);
-}
-
-/// Append optional retrieval / external-research audit line after math nudge (same surfaces).
-pub fn push_retrieval_trace_line(lines: &mut Vec<String>, nudges: &ResolvedHarnessNudges) {
-    push_optional_operator_line(lines, &nudges.retrieval_trace_harness_line);
-}
-
-/// Append optional structured external-research hint (RFV only; callers gate conditions).
-pub fn push_rfv_external_struct_hint_line(lines: &mut Vec<String>, nudges: &ResolvedHarnessNudges) {
-    push_optional_operator_line(lines, &nudges.rfv_loop_external_struct_hint_line);
 }
 
 fn merge_nonempty(target: &mut String, incoming: &str) {
@@ -257,9 +235,6 @@ mod tests {
         drop(f);
         let n = resolve_harness_operator_nudges(&tmp);
         assert_eq!(n.math_reasoning_harness_line, "MATH_TEST_LINE");
-        let mut lines: Vec<String> = vec!["a".into()];
-        push_math_reasoning_line(&mut lines, &n);
-        assert_eq!(lines, vec!["a", "MATH_TEST_LINE"]);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
@@ -286,9 +261,6 @@ mod tests {
         drop(f);
         let n = resolve_harness_operator_nudges(&tmp);
         assert_eq!(n.retrieval_trace_harness_line, "RETR_TEST_LINE");
-        let mut lines: Vec<String> = vec!["x".into()];
-        push_retrieval_trace_line(&mut lines, &n);
-        assert_eq!(lines, vec!["x", "RETR_TEST_LINE"]);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

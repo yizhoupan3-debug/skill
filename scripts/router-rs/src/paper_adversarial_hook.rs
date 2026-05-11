@@ -3,7 +3,7 @@
 //! 文案真源：`configs/framework/PAPER_ADVERSARIAL_HOOK.txt`。**单真源**：`builtin_block()`
 //! 通过 `include_str!` 在编译期嵌入同一份 txt，避免「磁盘文案 vs Rust 硬编码」双轨漂移
 //! （review P0-1 修复）。环境变量：
-//! - `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK`：`1`/`true`/`yes`/`on` 启用；**未设置或其它值视为关闭**（避免误伤非论文对话）。
+//! - `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK`：`1`/`true`/`yes`/`on` 启用；未设置或其它值视为关闭。
 //! - 受 `ROUTER_RS_OPERATOR_INJECT` 聚合闸约束（与 AUTOPILOT/RFV nudge 一致）。
 
 use crate::router_env_flags::{
@@ -219,6 +219,13 @@ mod tests {
         assert!(builtin_block().contains("closest-work"));
     }
 
+    fn restore_env(key: &str, prior: Option<String>) {
+        match prior {
+            Some(v) => std::env::set_var(key, v),
+            None => std::env::remove_var(key),
+        }
+    }
+
     /// review P1-5：`ROUTER_RS_OPERATOR_INJECT=0` 即使子开关已开也必须关。
     #[test]
     fn requested_false_when_operator_inject_killed() {
@@ -228,15 +235,8 @@ mod tests {
         std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
         std::env::set_var(ENV_HOOK, "1");
         assert!(!cursor_paper_adversarial_hook_requested());
-        // restore
-        match prior_inject {
-            Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
-            None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
-        }
-        match prior_hook {
-            Some(v) => std::env::set_var(ENV_HOOK, v),
-            None => std::env::remove_var(ENV_HOOK),
-        }
+        restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
+        restore_env(ENV_HOOK, prior_hook);
     }
 
     /// review P1-5：未显式 opt-in 子开关时必须关（默认 opt-in 为 false）。
@@ -248,14 +248,8 @@ mod tests {
         std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
         std::env::remove_var(ENV_HOOK);
         assert!(!cursor_paper_adversarial_hook_requested());
-        match prior_inject {
-            Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
-            None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
-        }
-        match prior_hook {
-            Some(v) => std::env::set_var(ENV_HOOK, v),
-            None => std::env::remove_var(ENV_HOOK),
-        }
+        restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
+        restore_env(ENV_HOOK, prior_hook);
     }
 
     /// review P1-5：开关 + 命中 prompt 时必须真合并；用磁盘 txt 真源走完整路径。
@@ -290,14 +284,8 @@ mod tests {
         assert!(ctx.contains(PREFIX_LINE), "expected merged: {ctx}");
         assert!(ctx.contains("短段正文"));
 
-        match prior_inject {
-            Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
-            None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
-        }
-        match prior_hook {
-            Some(v) => std::env::set_var(ENV_HOOK, v),
-            None => std::env::remove_var(ENV_HOOK),
-        }
+        restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
+        restore_env(ENV_HOOK, prior_hook);
     }
 
     /// review P1-5：开关关闭时即使 prompt 强命中（`审稿`）也不注入。
@@ -324,13 +312,7 @@ mod tests {
         assert!(out.get("additional_context").is_none());
         assert!(out.get("followup_message").is_none());
 
-        match prior_inject {
-            Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
-            None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
-        }
-        match prior_hook {
-            Some(v) => std::env::set_var(ENV_HOOK, v),
-            None => std::env::remove_var(ENV_HOOK),
-        }
+        restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
+        restore_env(ENV_HOOK, prior_hook);
     }
 }

@@ -107,7 +107,11 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
         ],
     )?;
 
-    for tool in ["cursor", "claude"] {
+    let installable_tools = installable_projection_tools(&fw)?;
+    for tool in installable_tools
+        .iter()
+        .filter(|tool| tool.as_str() != "codex")
+    {
         run_router(
             &fw,
             &[
@@ -123,14 +127,48 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
                 "--scope",
                 "project",
                 "--to",
-                tool,
+                tool.as_str(),
             ],
         )?;
     }
 
-    verify_cursor_hooks(fw.clone())?;
-    verify_claude_projection(&fw)?;
-    eprintln!("ok: refreshed codex + cursor + claude (project-level) projections");
+    verify_installable_projections(&fw, &installable_tools)?;
+    eprintln!(
+        "ok: refreshed installable project-level projections: {}",
+        installable_tools.join(", ")
+    );
+    Ok(())
+}
+
+fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String> {
+    let pairs = crate::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
+        repo_root,
+    )?;
+    let mut tools = Vec::new();
+    for (_host_id, tool) in pairs {
+        if tool == "claude" {
+            continue;
+        }
+        if !tools.contains(&tool) {
+            tools.push(tool);
+        }
+    }
+    Ok(tools)
+}
+
+fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<(), String> {
+    for tool in tools {
+        match tool.as_str() {
+            "codex" => verify_codex_hooks(repo_root.to_path_buf())?,
+            "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
+            "claude" => verify_claude_projection(repo_root)?,
+            other => {
+                return Err(format!(
+                    "installable projection tool `{other}` has no maint verifier"
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -158,6 +196,7 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         "sessionStart",
         "sessionEnd",
         "postToolUse",
+        "afterAgentResponse",
         "beforeShellExecution",
         "afterShellExecution",
         "afterFileEdit",
@@ -165,7 +204,8 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         "subagentStart",
         "subagentStop",
     ];
-    const NEEDLE: &str = "router-rs cursor hook";
+    const ROUTER_NEEDLE: &str = "router-rs cursor hook";
+    const LAUNCHER_NEEDLE: &str = "cursor-router-rs-hook.sh";
 
     for event in REQUIRED_EVENTS {
         let entries = hooks
@@ -182,9 +222,12 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
                 "verify_cursor_hooks: event {event} must contain command hooks"
             ));
         }
-        if !cmds.iter().any(|c| c.contains(NEEDLE)) {
+        if !cmds
+            .iter()
+            .any(|c| c.contains(ROUTER_NEEDLE) || c.contains(LAUNCHER_NEEDLE))
+        {
             return Err(format!(
-                "verify_cursor_hooks: {event} must invoke `{NEEDLE}` (see hooks.json)"
+                "verify_cursor_hooks: {event} must invoke `{ROUTER_NEEDLE}` or `{LAUNCHER_NEEDLE}` (see hooks.json)"
             ));
         }
     }
@@ -196,8 +239,9 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
 
 fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
     let rule = repo_root.join(".claude/rules/framework.md");
+    let settings = repo_root.join(".claude/settings.json");
     let manifest = repo_root.join(".claude/.framework-projection.json");
-    for path in [&rule, &manifest] {
+    for path in [&rule, &settings, &manifest] {
         if !path.is_file() {
             return Err(format!(
                 "verify_claude_projection: missing {}",
@@ -219,6 +263,22 @@ fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
             "verify_claude_projection: .claude/.framework-projection.json must declare claude-code"
                 .to_string(),
         );
+    }
+    let settings_text = fs::read_to_string(&settings).map_err(|e| e.to_string())?;
+    let settings_json: Value = serde_json::from_str(&settings_text).map_err(|e| e.to_string())?;
+    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+        let has_hook = settings_json
+            .get("hooks")
+            .and_then(|hooks| hooks.get(event))
+            .map(|value| {
+                value.to_string().contains("router-rs") && value.to_string().contains("claude hook")
+            })
+            .unwrap_or(false);
+        if !has_hook {
+            return Err(format!(
+                "verify_claude_projection: .claude/settings.json missing router-rs hook for {event}"
+            ));
+        }
     }
     eprintln!("verify_claude_projection: ok");
     Ok(())
@@ -331,13 +391,13 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         &exe,
         &repo_root,
         "PostToolUse",
-        r#"{"hook_event_name":"PostToolUse","session_id":"verify-session","tool_name":"functions.spawn_agent","tool_input":{"agent_type":"explorer"}}"#,
+        r#"{"hook_event_name":"PostToolUse","session_id":"verify-session","tool_name":"functions.spawn_agent","tool_input":{"agent_type":"explorer","fork_context":false}}"#,
     )?;
     codex_hook_smoke(
         &exe,
         &repo_root,
         "Stop",
-        r#"{"hook_event_name":"Stop","session_id":"verify-session","prompt":"review this PR","stop_hook_active":true}"#,
+        r#"{"hook_event_name":"Stop","session_id":"verify-session","prompt":"review this PR"}"#,
     )?;
 
     eprintln!("Codex hook projection verified");

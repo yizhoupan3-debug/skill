@@ -10,10 +10,10 @@
 
 本合成稿初版以「契约摘录 + 宿主 URL」为主，未把 **可执行工作流** 写成与仓库技能的一一指针；以下与 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **调研范围（Research scope）与能力联动** 小节对齐，供 `plan_profile: research` / `execution` 起草时对照。
 
-- **六步 Workflow**：尤其第 1 步（调研 + review 先于结构化计划）、第 3 步（独立上下文 subagent 审 plan）与第 4 步（一轮修订）— 均在 `plan-mode` 正文；修订可复核证据见该 skill **弱例与强例** 中「审 plan 修订可复核」强例。
-- **Git 计划收口**：[`skills/gitx/SKILL.md`](../../skills/gitx/SKILL.md) 的 **`/gitx plan`**（与 **`/gitx`** 同契约）对应 `execution` 末条；closeout 与 **`git diff --stat`** 习惯见同 skill **强例**及 [`plan_review_findings_round1.md`](plan_review_findings_round1.md)。
+- **分层 Workflow**：默认小中型任务用轻量五行证据 + 可验收 todo；跨模块/高风险/用户要求时升级 audit plan。review plan 仅在用户明确要求、深度 review 或高风险审计时触发；是否启用 subagent 仍受 `AGENTS.md` 执行梯子约束。
+- **Git 计划收口**：`execution` 末条以计划 vs 实际 + Git 状态证据为硬要求；宿主支持时可使用 [`skills/gitx/SKILL.md`](../../skills/gitx/SKILL.md) 的 **`/gitx plan`**（与 **`/gitx`** 同契约）。closeout 与 **`git diff --stat`** 习惯见同 skill **强例**及 [`plan_review_findings_round1.md`](plan_review_findings_round1.md)。
 - **深度代码审**：对抗式 / 整 PR 级 review 路由 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（verdict、P0–P2 符号锚点与本仓库 **强例**一致）。
-- **审 plan 样例 findings**：[`plan_review_findings_round1.md`](plan_review_findings_round1.md) 演示独立 reviewer 对 execution plan 的只读 findings 形态。
+- **审 plan 样例 findings**：[`plan_review_findings_round1.md`](plan_review_findings_round1.md) 演示本地主线程模拟独立视角对 execution plan 的只读 findings 形态；未实际启用 subagent。
 - **research→execution 第一性与继承面**（减法式交接、外部准入上限）：[`RESEARCH_plan_execution_handoff_first_principles.md`](RESEARCH_plan_execution_handoff_first_principles.md)；执行侧模板见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **执行计划继承面（research→execution）**。
 
 ## 2. 内部：契约硬条款、hook 默认、审 plan 弱项（int-audit）
@@ -23,7 +23,7 @@
 | 条款 | 要点 | 真源 |
 |------|------|------|
 | CreatePlan 后自检 | 每条 `todos[].content` 同条内四元组；`overview` + 末条依 `plan_profile`；正文 checkbox 与 YAML 对齐；不合规则**直接编辑** `.plan.md` | [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) |
-| `plan_profile` | `execution`（缺省）末条须含 **`/gitx plan`**；`research` 末条**不得**强制 `/gitx plan`，须 `git status --porcelain` + 正文对照 | [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) CreatePlan 输出契约 |
+| `plan_profile` | `execution`（缺省）末条须含计划 vs 实际 + Git 状态证据；宿主支持时可含 **`/gitx plan`**；`research` 末条**不得**强制 `/gitx plan`，须 `git status --porcelain` + 正文对照 | [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) CreatePlan 输出契约 |
 | 宿主剥离 YAML | 未知键被剥离时须**手动**补 `plan_profile: research` | [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) Plan profile 节 |
 | hook 不写字段 | **不要**假定 skill 路由或 hook 会改写 plan 文件 | [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) §4 |
 
@@ -35,7 +35,7 @@
 
 | ID | 主题 | 采纳状态 |
 |----|------|----------|
-| 1 | 末条 `/gitx plan` 与 closeout 中 `git diff --stat` 习惯对齐不足 | 采纳 |
+| 1 | 末条 Git 状态证据与 closeout 中 `git diff --stat` 习惯对齐不足 | 采纳 |
 | 2 | 「一轮修订」Verify 仅 `rg Finding`，不足以证明修订已写入**本计划文件** | 采纳 |
 | 3 | `Blocked by` 分支示例 | defer |
 | 4 | 深度 review 防空壳：Done 要求至少一条符号锚点 | 采纳 |
@@ -90,7 +90,7 @@ rg -n "CreatePlan|plan_profile|gitx|Finding" docs/plans/plan_review_findings_rou
 
 ## 5. 建议优先级（执行摘要）
 
-1. 继续以四元组 + `plan_profile` + YAML/正文对齐 + **一轮**独立 reviewer 为主杠杆；补强 Verify 的**可复核**证据（计划文件 diff、closeout 与 gitx 习惯对齐）。  
+1. 继续以四元组 + `plan_profile` + YAML/正文对齐 + 可选只读审 plan 为主杠杆；补强 Verify 的**可复核**证据（计划文件 diff、closeout 与 Git 状态证据对齐）。  
 2. 协作与审计优先：**Save to workspace** 或仓库内 `docs/plans/`（或 workdocs 约定）作为人类可读真源。  
 3. 自动化门禁仅在团队共识后引入，避免误伤草稿 plan。
 

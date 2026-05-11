@@ -19,10 +19,14 @@
     "metadata": {
       "codex-cli": {
         "install_tool": "codex",
+        "projection_status": "implemented",
+        "installable": true,
         "host_entrypoints": "AGENTS.md"
       },
       "cursor": {
         "install_tool": "cursor",
+        "projection_status": "implemented",
+        "installable": true,
         "host_entrypoints": [
           "AGENTS.md",
           ".cursor/rules/*.mdc"
@@ -30,13 +34,19 @@
       },
       "codex-app": {
         "install_tool": "codex",
+        "projection_status": "implemented",
+        "installable": false,
+        "unsupported_reason": "Codex app is runtime-supported through the desktop thread host; it does not install file projections.",
         "host_entrypoints": "AGENTS.md"
       },
       "claude-code": {
         "install_tool": "claude",
+        "projection_status": "implemented",
+        "installable": true,
         "host_entrypoints": [
           "AGENTS.md",
-          ".claude/rules/framework.md"
+          ".claude/rules/framework.md",
+          ".claude/settings.json"
         ]
       }
     }
@@ -246,6 +256,27 @@
         "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
       }
     },
+    "team": {
+      "canonical_owner": "agent-swarm-orchestration",
+      "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
+      "host_entrypoints": {
+        "codex-cli": "/team",
+        "cursor": "/team",
+        "claude-code": "/team"
+      },
+      "interaction_invariants": {
+        "requires_explicit_entrypoint": true,
+        "explicit_entrypoints": [
+          "/team",
+          "$team"
+        ],
+        "implicit_route_policy": "never"
+      },
+      "lineage": {
+        "source": "framework-alias",
+        "description": "Framework alias for explicit team orchestration entry only; not a visible skill or natural-language owner."
+      }
+    },
     "deepinterview": {
       "canonical_owner": "deepinterview",
       "skill_path": "skills/deepinterview/SKILL.md",
@@ -342,181 +373,12 @@
         "stale files",
         "dead code"
       ]
-    },
-    "team": {
-      "canonical_owner": "team",
-      "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
-      "delegation_gate": "agent-swarm-orchestration",
-      "auto_route_allowed": false,
-      "route_mode": "team-orchestration",
-      "selection_signals": {
-        "prefer_when": [
-          "multi-phase execution needs explicit worker lifecycle management",
-          "supervisor-owned continuity and lane-local outputs are required",
-          "integration, qa, cleanup, or resume/recovery are first-class workflow phases"
-        ],
-        "avoid_when": [
-          "task is a small tightly coupled local change",
-          "bounded sidecars are enough and orchestration overhead would dominate",
-          "the next supervisor step is blocked on the delegated result",
-          "worker write scopes would overlap or require shared editing context"
-        ]
-      },
-      "spawn_admission_policy": {
-        "default": "admit_bounded_sidecars_when_lanes_are_clear",
-        "allow_when": [
-          "read-heavy exploration can run independently",
-          "independent hypotheses or domains can be investigated in parallel",
-          "review or verification can run without blocking the supervisor",
-          "write scopes are fully disjoint and lane-local"
-        ],
-        "reject_reasons": [
-          "small_task",
-          "shared_context_heavy",
-          "write_scope_overlap",
-          "next_step_blocked",
-          "verification_missing",
-          "token_overhead_dominates"
-        ],
-        "fallback": "local-supervisor-queue"
-      },
-      "official_workflow": {
-        "phases": [
-          "scoping",
-          "delegation",
-          "execution",
-          "integration",
-          "qa",
-          "cleanup"
-        ],
-        "transition_states": [
-          "delegation-planned",
-          "spawn-pending",
-          "spawn-blocked",
-          "worker-output-ready",
-          "integration-pending",
-          "resume-required"
-        ],
-        "recovery_states": [
-          "worker-failed-recoverable",
-          "stale-continuity",
-          "inconsistent-continuity"
-        ],
-        "terminal_states": [
-          "cleanup-completed",
-          "completed",
-          "failed-terminal"
-        ]
-      },
-      "implementation_bar": [
-        "worker-boundaries-required",
-        "verification-evidence-required",
-        "resume-and-recovery-required",
-        "supervisor-owned-continuity"
-      ],
-      "local_adaptations": [
-        "store team state in rust-session-supervisor plus continuity artifacts",
-        "keep shared continuity supervisor-owned while workers emit lane-local outputs",
-        "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
-      ],
-      "execution_owners": [
-        "team",
-        "agent-swarm-orchestration",
-        "deepinterview"
-      ],
-      "supervisor_contract": {
-        "shared_continuity_owner": "supervisor",
-        "integration_owner": "supervisor",
-        "verification_owner": "supervisor",
-        "worker_write_scope": "lane-local-delta-only",
-        "resume_requires_recovery_anchor": true
-      },
-      "lane_contract": {
-        "required_fields": [
-          "lane_id",
-          "lane_owner",
-          "goal",
-          "bounded_scope",
-          "forbidden_scope",
-          "expected_output",
-          "integration_status",
-          "verification_status",
-          "recovery_anchor"
-        ],
-        "integration_statuses": [
-          "planned",
-          "running",
-          "output-ready",
-          "integrated",
-          "blocked"
-        ],
-        "verification_statuses": [
-          "not-started",
-          "pending",
-          "passed",
-          "failed"
-        ]
-      },
-      "worker_lifecycle": {
-        "states": [
-          "planned",
-          "spawn-pending",
-          "running",
-          "stalled",
-          "failed-recoverable",
-          "failed-terminal",
-          "completed-unintegrated",
-          "integrated"
-        ],
-        "resume_state": "failed-recoverable",
-        "fallback_mode": "local-supervisor-queue"
-      },
-      "recovery_contract": {
-        "continuity_states": [
-          "active",
-          "stale",
-          "inconsistent"
-        ],
-        "requires_resume_judgment": [
-          "spawn-blocked",
-          "worker-failed-recoverable",
-          "stale-continuity",
-          "inconsistent-continuity"
-        ],
-        "required_artifacts": [
-          "SESSION_SUMMARY.md",
-          "NEXT_ACTIONS.json",
-          "EVIDENCE_INDEX.json",
-          "TRACE_METADATA.json",
-          ".supervisor_state.json"
-        ]
-      },
-      "verification_contract": {
-        "integration_requires_local_judgment": true,
-        "verification_evidence_required_before_cleanup": true
-      },
-      "host_entrypoints": {
-        "codex-cli": "/team",
-        "cursor": "/team",
-        "claude-code": "/team"
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/team"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "lineage": {
-        "source": "repo-native",
-        "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management."
-      }
     }
   },
   "host_projections": {
     "codex-cli": {
       "profile_id": "codex_profile",
-      "host_id": "codex",
+      "host_id": "codex-cli",
       "transport": "native-codex",
       "context_files": [
         "AGENTS.md"
@@ -555,6 +417,30 @@
         "rate_limit_auto_resume",
         "host_resume_entrypoint",
         "host_tmux_worker_management",
+        "framework_alias_entrypoints"
+      ]
+    },
+    "codex-app": {
+      "profile_id": "codex_app_profile",
+      "host_id": "codex-app",
+      "transport": "codex-desktop-app",
+      "context_files": [
+        "AGENTS.md"
+      ],
+      "settings_paths": [],
+      "session_supervisor_driver": "unsupported",
+      "session_supervisor_status": {
+        "supported": false,
+        "rationale": "Codex app thread execution is managed by the desktop host rather than external router-rs tmux supervision."
+      },
+      "resume_command_examples": [
+        "Continue in the same Codex app thread"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "thread_destination",
+        "automation_hooks",
+        "non_technical_ui",
         "framework_alias_entrypoints"
       ]
     },
@@ -621,7 +507,8 @@
         "artifact_contract",
         "workspace_bootstrap",
         "interactive_agent_chat",
-        "framework_alias_entrypoints"
+        "framework_alias_entrypoints",
+        "hard_gate_hooks"
       ]
     }
   }

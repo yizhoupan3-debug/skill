@@ -43,7 +43,7 @@
 
 ## Surface Policy
 
-默认面只保留 `routing / memory / continuity / host_projection` 四轴；research、implementation、audit、framework 和 ops 都必须显式 opt-in。机器可读真源在 `configs/framework/FRAMEWORK_SURFACE_POLICY.json`，并由 `skills/SKILL_LOADOUTS.json` 与 `skills/SKILL_TIERS.json` 支撑。
+默认面只保留 `routing / memory / continuity / host_projection` 四轴；research、implementation、audit、framework 和 ops 都必须显式 opt-in。机器可读真源在 `configs/framework/FRAMEWORK_SURFACE_POLICY.json`，`skills/SKILL_TIERS.json` 仅作为可再生成的调试报告，不参与热路由或宿主必需门禁。
 
 这里的“默认面”不是 `SKILL_ROUTING_RUNTIME.json` 的 hot routing index。默认面只统计 `session_start: required` 的 source/artifact/evidence gate；hot routing index 还会包含少量 `session_start: preferred` owner 和显式 `$` framework command alias，用于首轮路由发现。完整 specialist 只能通过 `SKILL_MANIFEST.json` fallback 被选中，不能被解释成默认加载或恢复旧入口。
 

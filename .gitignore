@@ -39,6 +39,10 @@ output/
 .cursor/rules/framework.mdc
 .claude/.framework-projection.json
 .claude/rules/framework.md
+.claude/router-rs-hook.env
+.claude/settings.json
+.claude/hook_state_*.json
+.claude/review_gate_*.json
 .local/
 archives/artifact-history/
 artifacts/current/
@@ -53,6 +57,7 @@ artifacts/ops/
 artifacts/evidence/
 artifacts/scratch/
 artifacts/generated-artifacts-drift-check/
+artifacts/pet-runs/
 artifacts/tmp-*/
 uploads/
 codex_agno_runtime/tmp-data-test/

@@ -248,7 +248,7 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
     let scoped_docs = [
         "docs/rust_contracts.md",
         "docs/framework_profile_contract.md",
-        "docs/host_adapter_contracts.md",
+        "docs/host_adapter_contract.md",
         "docs/runtime_observability_contract.md",
         "docs/runtime_plugin_contract.md",
         "docs/runtime_sandbox_contract.md",
