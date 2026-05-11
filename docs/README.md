@@ -18,9 +18,9 @@
 | 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | [RESEARCH_harness_weak_model_top_tier.md](plans/RESEARCH_harness_weak_model_top_tier.md)，[context_token_audit_deep_dive.md](plans/context_token_audit_deep_dive.md) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
-| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 见总契约 [host_adapter_contract.md](host_adapter_contract.md)；Codex 专属投影契约见 [host_adapter_contracts.md](host_adapter_contracts.md)（不是总宿主适配契约）；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md)；Harness 改进 backlog（路线图展开） [plans/harness_improvement_backlog.md](plans/harness_improvement_backlog.md) |
-| Cursor Plan / 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)（含 **`plan_profile: research`**、**CreatePlan 输出契约**、**调研范围与能力联动**）；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；短清单 [plans/plan_todo_checklist.md](plans/plan_todo_checklist.md)；能力调研合成 [plans/plan_writing_capability_research_synthesis.md](plans/plan_writing_capability_research_synthesis.md)；草稿目录 `.cursor/plans/` |
-| Codex 宿主投影边界 | [host_adapter_contracts.md](host_adapter_contracts.md)，[.codex/README.md](../.codex/README.md) |
+| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 与 Codex/Cursor/Claude 投影边界统一见 [host_adapter_contract.md](host_adapter_contract.md)；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md)；Harness 改进 backlog（路线图展开） [plans/harness_improvement_backlog.md](plans/harness_improvement_backlog.md) |
+| Cursor Plan / 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)（含轻量 / execution / audit plan、**`plan_profile: research`**、**CreatePlan 输出契约**、Git 状态证据收口、**调研范围与能力联动**）；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；短清单 [plans/plan_todo_checklist.md](plans/plan_todo_checklist.md)；能力调研合成 [plans/plan_writing_capability_research_synthesis.md](plans/plan_writing_capability_research_synthesis.md)；草稿目录 `.cursor/plans/` |
+| Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
 | 插件 ABI / routing metadata | [runtime_plugin_contract.md](runtime_plugin_contract.md) |
 | 历史迁移、减法记录 | [history/](history/) |
 
@@ -31,5 +31,5 @@
 ## 已淘汰叙述（清理边界）
 
 - **勿假设** `router-rs` 只存在于 `scripts/router-rs/target/release/`。根目录 `.cargo/config.toml` 可将 `target-dir` 指到 workspace 统一目录；解析以 `cargo metadata` 的 `target_directory` 为准（或 `cargo build` / `cargo run` 的输出路径）。
-- **勿依赖** 旧版 `.cursor/hooks/*.sh` 脚本链：steady-state 以 [`.cursor/hooks.json`](../.cursor/hooks.json) 为准，事件 stdin 由各条目中的 `router-rs cursor hook --event=...` 承接（校验：`router-rs framework maint verify-cursor-hooks`）。
+- **勿依赖** 旧版 `.cursor/hooks/*.sh` 脚本链：steady-state 以 [`.cursor/hooks.json`](../.cursor/hooks.json) 为准，事件 stdin 由各条目中的 `router-rs cursor hook --event=...` 承接（校验：在仓库根执行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks`）。
 - **勿将** `docs/history/` 中的计划或清单当作当前契约；steady-state 仅认本索引列出的文档与 `configs/framework/*.json`。

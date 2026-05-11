@@ -1,8 +1,5 @@
 //! Candidate scoring and owner/overlay selection.
-use super::aliases::{
-    framework_alias_requires_explicit_call, has_explicit_framework_alias_call,
-    has_literal_framework_alias_call,
-};
+use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framework_alias_call};
 use super::signals::*;
 use super::text::{common_route_stop_tokens, normalize_text, text_matches_phrase};
 use super::types::{RouteCandidate, SkillRecord};
@@ -186,27 +183,16 @@ pub(crate) fn score_route_candidate<'a>(
                 .to_string(),
         );
     }
-    let literal_framework_alias = framework_alias_requires_explicit_call(record)
-        && has_literal_framework_alias_call(query_text, record);
     let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
-    let team_negation_context = has_team_negation_context(query_text, query_token_list);
     let token_budget_pressure = has_token_budget_pressure(query_text, query_token_list);
-    if record.slug == "team" && team_negation_context && !literal_framework_alias {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: query explicitly rejects team orchestration and should stay on bounded multi-agent lanes."
-                    .to_string(),
-            ],
-        };
-    }
+    let team_orchestration_context = has_team_orchestration_context(query_text, query_token_list)
+        && !has_team_negation_context(query_text, query_token_list);
     let explicit_framework_alias = framework_alias_requires_explicit_call(record)
         && has_explicit_framework_alias_call(query_text, query_token_list, record);
     let parallel_execution_context = has_parallel_execution_context(query_text, query_token_list);
     if record.slug == "agent-swarm-orchestration"
         && (bounded_subagent_context
-            || has_team_orchestration_context(query_text, query_token_list)
+            || team_orchestration_context
             || has_parallel_review_candidate_context(query_text, query_token_list)
             || parallel_execution_context)
     {
@@ -567,6 +553,24 @@ pub(crate) fn score_route_candidate<'a>(
         ));
     }
 
+    let matched_metadata_triggers = record
+        .metadata_positive_triggers
+        .iter()
+        .filter(|phrase| {
+            phrase.chars().count() >= 2
+                && !common_route_stop_tokens().contains(&phrase.as_str())
+                && text_matches_phrase(query_token_list, phrase)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !matched_metadata_triggers.is_empty() {
+        score += (matched_metadata_triggers.len() as f64) * 8.0;
+        reasons.push(format!(
+            "Routing metadata positive trigger matched: {}.",
+            matched_metadata_triggers.join(", ")
+        ));
+    }
+
     let mut shared_keywords = record
         .keyword_tokens
         .iter()
@@ -637,28 +641,6 @@ pub(crate) fn score_route_candidate<'a>(
             "Visual-review boost applied: visible UI evidence and concrete visual findings requested."
                 .to_string(),
         );
-    }
-
-    if record.slug == "team" && score > 0.0 && bounded_subagent_context && !explicit_framework_alias
-    {
-        score *= 0.2;
-        reasons.push(
-            "Team suppression applied: bounded sidecar wording prefers agent-swarm admission over team."
-                .to_string(),
-        );
-    }
-
-    if record.slug == "team" && score > 0.0 && bounded_subagent_context && token_budget_pressure {
-        score *= 0.6;
-        reasons.push(
-            "Team suppression applied: token-budget pressure favors bounded sidecars over full team orchestration."
-                .to_string(),
-        );
-    }
-
-    if record.slug == "team" && score > 0.0 && !explicit_framework_alias {
-        score *= 0.25;
-        reasons.push("Team suppression applied: team needs explicit entry.".to_string());
     }
 
     if record.slug == "visual-review" && score > 0.0 {
@@ -863,10 +845,19 @@ pub(crate) fn route_candidate_cmp(
 
 pub(crate) fn pick_overlay(
     records: &[SkillRecord],
-    _query_text: &str,
+    query_text: &str,
     query_tokens: &[String],
     selected_skill: &SkillRecord,
 ) -> Option<String> {
+    if selected_skill.slug == "skill-framework-developer"
+        && has_framework_review_overlay_context(query_text, query_tokens)
+        && records
+            .iter()
+            .any(|record| record.slug == "code-review-deep")
+    {
+        return Some("code-review-deep".to_string());
+    }
+
     let mut ordered = records.iter().collect::<Vec<_>>();
     ordered.sort_unstable_by(|left, right| {
         layer_rank(&left.layer)
@@ -893,6 +884,32 @@ pub(crate) fn pick_overlay(
     }
 
     None
+}
+
+fn has_framework_review_overlay_context(query_text: &str, query_tokens: &[String]) -> bool {
+    let framework_surface = [
+        "harness",
+        "skill",
+        "路由",
+        "router",
+        "routing",
+        "hook",
+        "hooks",
+        "framework",
+        "runtime",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_tokens, marker));
+    let review_surface = [
+        "深度 review",
+        "深度review",
+        "deep review",
+        "code review",
+        "审计",
+    ]
+    .iter()
+    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_tokens, marker));
+    framework_surface && review_surface
 }
 
 pub(crate) fn round2(value: f64) -> f64 {

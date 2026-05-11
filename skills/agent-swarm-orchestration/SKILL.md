@@ -38,7 +38,7 @@ metadata:
 
 ## Overview
 
-这个 skill 是多 agent 的准入门：先判断任务是否应该留在主线程、使用 bounded sidecars，还是升级到 `/team` 的完整生命周期编排。
+这个 skill 是多 agent 的准入门：先判断任务是否应该留在主线程、使用 bounded sidecars，或退回主线程的 local-supervisor queue。
 
 关注点包括：
 - spawn admission
@@ -66,8 +66,8 @@ metadata:
 - 用户要做任务路由、agent handoff、shared memory、consensus、quality gate
 - 用户要做 research swarm、support router、自动审查流水线
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
-- 用户明确要求 full team orchestration 而不是普通 bounded sidecars；显式 `/team` 入口只归 `team` 命令本身，不由本 gate 抢占
-- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板见 harness 参考 [`rfv_loop_harness.md`](../docs/rfv_loop_harness.md)（**非热 skill 路由**）；用户侧入口优先 [`loop`](../loop/SKILL.md)（`/loop`）或 `/autopilot` / `/team`；本 gate 仍负责 spawn admission 与 reject reason
+- 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 是否足够；不再新增独立 orchestration owner
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板见 harness 参考 [`rfv_loop_harness.md`](../docs/rfv_loop_harness.md)（**非热 skill 路由**）；用户侧入口优先 [`loop`](../loop/SKILL.md)（`/loop`）或 `/autopilot`；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”
@@ -178,5 +178,3 @@ If the discussion touches current-session execution:
 ## Reference
 
 For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).
-
-For explicit `/team` alias handling, see [references/team-mode.md](./references/team-mode.md).

@@ -69,6 +69,8 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
         do_not_use: skill.do_not_use,
         tags: skill.tags,
         trigger_hints: skill.trigger_hints,
+        host_platforms: Vec::new(),
+        record_kind: "skill".to_string(),
     }))
 }
 
@@ -99,6 +101,17 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
         do_not_use: String::new(),
         tags: Vec::new(),
         trigger_hints: value_to_string_list(&row[indexes.trigger_hints]),
+        host_platforms: indexes
+            .host_platforms
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string_list)
+            .unwrap_or_default(),
+        record_kind: indexes
+            .record_kind
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "skill".to_string()),
     })
 }
 
@@ -146,9 +159,20 @@ fn apply_route_metadata_patch(record: &mut SkillRecord, patch: &RouteMetadataPat
     if let Some(session_start) = &patch.session_start {
         record.session_start = session_start.clone();
     }
+    if !patch.positive_triggers.is_empty() {
+        record
+            .metadata_positive_triggers
+            .extend(patch.positive_triggers.iter().cloned());
+    }
     record.do_not_use_tokens.extend(negative_trigger_tokens(
         patch.negative_triggers.iter().map(String::as_str),
     ));
+    if let Some(primary_allowed) = patch.primary_allowed {
+        record.primary_allowed = primary_allowed;
+    }
+    if let Some(mode) = &patch.fallback_policy_mode {
+        record.fallback_policy_mode = mode.clone();
+    }
 }
 
 fn default_runtime_path() -> Option<PathBuf> {
@@ -326,7 +350,10 @@ fn load_manifest_route_meta(path: &Path) -> Result<HashMap<String, RouteMetadata
             RouteMetadataPatch {
                 priority,
                 session_start,
+                positive_triggers: Vec::new(),
                 negative_triggers: Vec::new(),
+                primary_allowed: None,
+                fallback_policy_mode: None,
             },
         );
     }
@@ -345,15 +372,29 @@ fn merge_sidecar_route_metadata(
         return Ok(());
     }
     let payload = read_json(&sidecar)?;
-    merge_route_metadata_payload(&payload, meta);
+    merge_route_metadata_payload(&payload, meta)?;
     Ok(())
 }
 
-fn merge_route_metadata_payload(payload: &Value, meta: &mut HashMap<String, RouteMetadataPatch>) {
+fn merge_route_metadata_payload(
+    payload: &Value,
+    meta: &mut HashMap<String, RouteMetadataPatch>,
+) -> Result<(), String> {
     let Some(skills) = payload.get("skills").and_then(Value::as_object) else {
-        return;
+        return Ok(());
     };
     for (slug, record) in skills {
+        let positive_triggers = record
+            .get("positive_triggers")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let negative_triggers = record
             .get("negative_triggers")
             .and_then(Value::as_array)
@@ -365,14 +406,43 @@ fn merge_route_metadata_payload(payload: &Value, meta: &mut HashMap<String, Rout
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        if negative_triggers.is_empty() {
+        let primary_allowed = record
+            .get("overlay_policy")
+            .and_then(|policy| policy.get("primary_allowed"))
+            .and_then(Value::as_bool);
+        let fallback_policy_mode = record
+            .get("fallback_policy")
+            .and_then(|policy| policy.get("mode"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        if let Some(mode) = fallback_policy_mode.as_deref() {
+            if !matches!(
+                mode,
+                "eligible-in-runtime" | "explicit-or-fallback" | "explicit-only" | "never"
+            ) {
+                return Err(format!(
+                    "unsupported fallback_policy.mode `{mode}` for skill `{slug}`"
+                ));
+            }
+        }
+        if positive_triggers.is_empty()
+            && negative_triggers.is_empty()
+            && primary_allowed.is_none()
+            && fallback_policy_mode.is_none()
+        {
             continue;
         }
-        meta.entry(slug.clone())
-            .or_default()
-            .negative_triggers
-            .extend(negative_triggers);
+        let patch = meta.entry(slug.clone()).or_default();
+        patch.positive_triggers.extend(positive_triggers);
+        patch.negative_triggers.extend(negative_triggers);
+        if primary_allowed.is_some() {
+            patch.primary_allowed = primary_allowed;
+        }
+        if fallback_policy_mode.is_some() {
+            patch.fallback_policy_mode = fallback_policy_mode;
+        }
     }
+    Ok(())
 }
 
 pub(crate) fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
@@ -434,6 +504,8 @@ pub(crate) fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>,
     );
     let indexes = RecordRowIndexes {
         skill_path: index.get("skill_path").copied(),
+        host_platforms: index.get("host_platforms").copied(),
+        record_kind: index.get("kind").copied(),
         ..indexes
     };
 
@@ -455,7 +527,7 @@ fn merge_sidecar_route_metadata_from_runtime(
         return Ok(());
     }
     let payload = read_json(&sidecar)?;
-    merge_route_metadata_payload(&payload, meta);
+    merge_route_metadata_payload(&payload, meta)?;
     Ok(())
 }
 
@@ -512,6 +584,8 @@ pub(crate) fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>
     );
     let indexes = RecordRowIndexes {
         skill_path: key_index.get("skill_path").copied(),
+        host_platforms: key_index.get("host_platforms").copied(),
+        record_kind: key_index.get("kind").copied(),
         ..indexes
     };
 

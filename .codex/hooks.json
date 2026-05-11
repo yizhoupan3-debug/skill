@@ -1,5 +1,5 @@
 {
-  "_comment": "Managed by router-rs. Regenerate with `router-rs codex sync --repo-root \"$PWD\"`.",
+  "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
   "hooks": {
     "PostToolUse": [
       {
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "command": "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_BIN=\"\"; if [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$ROUTER_RS_BIN\" ]; then echo \"[codex-hook] router-rs binary missing; state update skipped\" >&2; exit 0; fi; \"$ROUTER_RS_BIN\" codex hook --event=SessionStart --repo-root \"$CODEX_PROJECT_ROOT\"'",
-            "statusMessage": "Loading Codex workspace context",
+            "statusMessage": "Loading Codex live state",
             "timeout": 3,
             "type": "command"
           }

@@ -1,5 +1,5 @@
-//! Shared Cursor/Codex hook heuristics (no host-specific JSON/event dispatch).
-//! Dependency direction: `cursor_hooks` / `codex_hooks` → `hook_common` only.
+//! Shared hook heuristics for prompt/gate classification (no host-specific JSON/event dispatch).
+//! Dependency direction: `cursor_hooks` / `codex_hooks` / `claude_hooks` → `hook_common` only.
 
 use regex::Regex;
 use std::sync::OnceLock;
@@ -225,13 +225,11 @@ pub fn is_review_prompt(text: &str) -> bool {
     if !matched {
         return false;
     }
-    if crate::router_env_flags::router_rs_review_gate_suppress_on_manuscript_context_enabled() {
-        let tokens = crate::route::tokenize_query(&sanitized);
-        if crate::route::has_paper_context(&sanitized, &tokens)
-            && !strong_code_review_anchor(&sanitized, &tokens)
-        {
-            return false;
-        }
+    let tokens = crate::route::tokenize_query(&sanitized);
+    if crate::route::has_paper_context(&sanitized, &tokens)
+        && !strong_code_review_anchor(&sanitized, &tokens)
+    {
+        return false;
     }
     true
 }
@@ -337,11 +335,6 @@ pub fn normalize_tool_name(value: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static MANUSCRIPT_REVIEW_ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    const MANUSCRIPT_REVIEW_ENV: &str = "ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT";
 
     #[test]
     fn saw_reject_reason_accepts_line_only_tokens_and_rg_clear() {
@@ -371,37 +364,30 @@ mod tests {
     }
 
     #[test]
-    fn is_review_prompt_manuscript_suppression_opt_in_and_defaults() {
-        let _guard = MANUSCRIPT_REVIEW_ENV_LOCK
-            .lock()
-            .expect("env test lock poisoned");
-        let prev = std::env::var(MANUSCRIPT_REVIEW_ENV).ok();
-
-        std::env::remove_var(MANUSCRIPT_REVIEW_ENV);
-        assert!(
-            is_review_prompt("深度 review 论文 methodology 节"),
-            "default off: manuscript + depth review still counts as review prompt"
-        );
-        assert!(is_review_prompt("深度 review 整个路由系统"));
-
-        std::env::set_var(MANUSCRIPT_REVIEW_ENV, "1");
+    fn is_review_prompt_suppresses_manuscript_without_code_anchor_by_default() {
         assert!(
             !is_review_prompt("深度 review 论文 methodology 节"),
-            "opt-in: clear manuscript context without code anchor -> not review prompt"
+            "manuscript + depth review should not arm code review gate without code anchor"
+        );
+        assert!(is_review_prompt("深度 review 整个路由系统"));
+        assert!(
+            !is_review_prompt("deep review this manuscript introduction"),
+            "English manuscript review should not arm code review gate"
         );
         assert!(
             is_review_prompt("深度 review 整个路由系统"),
-            "routing-system phrase is a strong anchor even when opt-in"
+            "routing-system phrase is a strong code/framework anchor"
         );
         assert!(
             is_review_prompt("深度 review 论文 pull request 把关"),
-            "PR/github anchor keeps review prompt when opt-in"
+            "PR/github anchor keeps review prompt"
         );
         assert!(is_review_prompt("Please do a code review of this change."));
-
-        match prev {
-            Some(value) => std::env::set_var(MANUSCRIPT_REVIEW_ENV, value),
-            None => std::env::remove_var(MANUSCRIPT_REVIEW_ENV),
-        }
+        assert!(
+            !is_review_prompt(
+                "cursor 对话频繁触发 claude 的 hook，深度review，我的设计是主 harness + 三个独立宿主"
+            ),
+            "host-hook debugging complaints should not arm the shared deep-review gate"
+        );
     }
 }

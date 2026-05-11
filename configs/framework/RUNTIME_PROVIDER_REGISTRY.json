@@ -7,21 +7,13 @@
     "path_rule": "All provider paths are repo-relative or logical provider ids.",
     "compatibility_rule": "Provider additions are additive; breaking provider shape changes require a schema version bump."
   },
-  "provider_priority_policy": {
-    "primary": [
-      "local_rust"
-    ],
-    "fallback": [
-      "host_tool"
-    ],
-    "planned": [
-      "remote_worker"
-    ],
-    "rust_acceleration": {
-      "preference": "prefer-rust-when-implemented",
-      "python_fallback": "only-when-rust-unimplemented-or-explicit-override",
-      "schema_note": "Reflects the current rustification priority; raise priority when migrating new control-plane paths to local_rust."
-    }
+  "provider_inventory_policy": {
+    "purpose": "document-only implementation inventory; not an execution ranking source",
+    "live_execution_boundaries": [
+      "Skill routing",
+      "Host projection",
+      "Runtime persistence/evidence"
+    ]
   },
   "execution_providers": {
     "local_rust": {
@@ -128,9 +120,14 @@
       "capabilities": ["context_files", "settings_paths", "mcp_config_paths", "interactive_agent_chat"]
     },
     "codex-app": {
-      "status": "declared",
+      "status": "implemented",
       "projection": "codex_app_profile",
       "capabilities": ["thread_destination", "automation_hooks", "non_technical_ui"]
+    },
+    "claude-code": {
+      "status": "implemented",
+      "projection": "claude_code_profile",
+      "capabilities": ["context_files", "settings_paths", "hook_settings_paths", "hard_gate_hooks"]
     },
     "mcp": {
       "status": "declared",
@@ -145,8 +142,8 @@
   },
   "governance_eval_loop": {
     "status": "declared",
-    "inputs": ["tests/routing_eval_cases.json", "skills/SKILL_HEALTH_MANIFEST.json", "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json"],
-    "metrics": ["route_expected_owner_accuracy", "overlay_accuracy", "overtrigger_rate", "fallback_accept_rate", "token_cost", "latency", "recoverability"],
-    "outputs": ["runtime_findings", "metadata_patch_candidates", "dashboard_summary"]
+    "inputs": ["tests/routing_eval_cases.json", "skills/SKILL_HEALTH_MANIFEST.json", "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json", "configs/framework/HARNESS_BEHAVIORAL_EVAL_CASES.json", "configs/framework/HARNESS_FAILURE_TAXONOMY.json"],
+    "metrics": ["route_expected_owner_accuracy", "overlay_accuracy", "overtrigger_rate", "fallback_accept_rate", "token_cost", "latency", "recoverability", "trajectory_health", "closeout_integrity", "skill_contract_quality", "subagent_lane_integrity"],
+    "outputs": ["runtime_findings", "metadata_patch_candidates", "dashboard_summary", "failure_taxonomy_rollup"]
   }
 }

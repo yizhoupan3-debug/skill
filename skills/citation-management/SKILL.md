@@ -42,7 +42,7 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 
 ## Do Not Use
 
-- Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to the current paper/research owner.
+- Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to `$paper-workbench` for manuscripts or `$research-workbench` for non-manuscript research.
 - Writing or polishing manuscript prose -> use `$paper-writing`.
 - Checking paper logic beyond citations -> use `$paper-reviewer` logic mode.
 - Formatting non-academic documents without citations.

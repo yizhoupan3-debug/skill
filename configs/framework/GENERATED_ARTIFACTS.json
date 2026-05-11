@@ -47,22 +47,7 @@
       "compare": "byte-for-byte"
     },
     {
-      "path": "skills/SKILL_SHADOW_MAP.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
       "path": "skills/SKILL_APPROVAL_POLICY.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_LOADOUTS.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_TIERS.json",
       "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
       "compare": "byte-for-byte"
     },
@@ -75,6 +60,21 @@
       "path": ".codex/host_entrypoints_sync_manifest.json",
       "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"",
       "compare": "byte-for-byte"
+    },
+    {
+      "path": ".cursor/rules/framework.mdc",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to cursor",
+      "compare": "normalized-text"
+    },
+    {
+      "path": ".claude/rules/framework.md",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
+      "compare": "normalized-text"
+    },
+    {
+      "path": ".claude/settings.json",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
+      "compare": "normalized-text"
     }
   ]
 }

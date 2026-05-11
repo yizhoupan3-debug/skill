@@ -1,0 +1,31 @@
+{
+  "schema_version": "framework-runtime-registry-schema-v1",
+  "scope": "execution-critical-fields-only",
+  "host_ids": [
+    "codex-cli",
+    "codex-app",
+    "cursor",
+    "claude-code"
+  ],
+  "projection_status_values": [
+    "implemented",
+    "declared",
+    "planned",
+    "retired"
+  ],
+  "required_host_metadata_fields": [
+    "install_tool",
+    "projection_status",
+    "installable",
+    "host_entrypoints"
+  ],
+  "install_tools": [
+    "codex",
+    "cursor",
+    "claude"
+  ],
+  "framework_command_required_fields": [
+    "canonical_owner",
+    "skill_path"
+  ]
+}

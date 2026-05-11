@@ -6,7 +6,7 @@ description: |
 metadata:
   model: haiku
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [codex, cursor]
   tags:
     - diagramming
     - flowchart

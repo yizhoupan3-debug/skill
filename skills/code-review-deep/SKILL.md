@@ -3,9 +3,9 @@ name: code-review-deep
 description: |
   Deep adversarial-style code review (review-only verdict first). Use for whole-PR/repo-slice/security/deps
   review when the bar is hostile-but-fair: correctness, abuse cases, API/compat, observability,
-  dependency/supply-chain, and reproducible reasoning. Prefer parallel disjoint read-only subagent lanes plus
-  an external research lane when the user allows tools/network. Does not silently rewrite implementation unless
-  the user explicitly exits review-only posture.
+  dependency/supply-chain, and reproducible reasoning. Broad/deep/PR-level review requests explicitly authorize
+  a read-only independent reviewer subagent first; then integrate locally. Does not silently rewrite implementation
+  unless the user explicitly exits review-only posture.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -57,12 +57,12 @@ Judgment-focused review lane for code changes **without** rewriting by default.
 - Assume a **hostile but fair** reviewer: maximize plausible failure under real abuse, regressions,
   flaky ops, closest prior API expectations, dependency churn, or incomplete tests.
 - **Verdict-first**: summarize overall risk and top blockers before long findings lists.
-- **Parallel read-only lanes** over monologue: schedule disjoint subagents for distinct lenses once scope is clear.
+- **Lane structure over monologue**: review through distinct lenses once scope is clear.
   See [`references/review-dimensions.md`](references/review-dimensions.md).
 
-## Parallel lane contracts
+## Lane contracts
 
-Run these as **fork_context=false**, read-only, **artifact-disjoint**. Do **not** have multiple lanes silently edit shared files mid-review.
+For broad/deep/PR-level review, start at least one read-only reviewer subagent with **fork_context=false** before the main-thread synthesis. Narrow single-file review may stay local unless the user asks for deep/adversarial coverage. When additional subagents are admitted, keep them read-only and **artifact-disjoint**. Do **not** have multiple lanes silently edit shared files mid-review.
 
 Suggested default split (adapt to repo shape):
 
@@ -78,7 +78,7 @@ Lane outputs must cite **locations** (paths + anchors / symbols where possible).
 
 ## External / network research lane (optional but recommended)
 
-When scope touches third-party crates/services or known vulnerability classes:
+Use only when the user allows network/tools or the scope touches third-party crates/services or known vulnerability classes:
 
 - Produce **Claims** backed by citations (changelog URL, GitHub Advisory ID, CVE, release notes DOI/issue).
 - **Contradiction sweep**: cite evidence that contradicts or limits each high-confidence Claim.
@@ -87,6 +87,13 @@ When scope touches third-party crates/services or known vulnerability classes:
 
 Structured output expectations align with
 [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B (same headings whenever you mark work as “deep external,” even outside an RFV ledger).
+
+## Severity evidence gate
+
+- **P0/P1 requires evidence**: include at least one of a concrete call chain, a repro path, a checked test gap, or a cited external advisory/source. Without that, downgrade to P2, caveat, or open question.
+- **No hollow findings**: every finding must include path + symbol/line anchor, user or operational impact, and the smallest verification or missing test that would confirm it.
+- **Testing honesty**: if tests were not run, say so in the review and name the residual risk.
+- **Security claims**: state exploitability or blast radius; speculative abuse without a reachable path is a caveat/open question, not a blocker.
 
 ## Deliverable shape (default)
 

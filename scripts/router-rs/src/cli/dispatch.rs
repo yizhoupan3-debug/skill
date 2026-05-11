@@ -15,7 +15,10 @@ use crate::browser_mcp::{
     resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
 };
 use crate::claude_hooks::run_claude_hook_cli;
-use crate::closeout_enforcement::{closeout_enforcement_contract, evaluate_closeout_record_value};
+use crate::closeout_enforcement::{
+    closeout_enforcement_contract, evaluate_closeout_record_value,
+    evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
+};
 use crate::codex_hooks::{
     build_codex_hook_projection, codex_host_entrypoint_provider, install_codex_cli_hooks,
     resolve_codex_home, run_codex_audit_hook, InstallMode,
@@ -31,19 +34,21 @@ use crate::framework_runtime::{
     build_framework_statusline, framework_hook_evidence_append, resolve_repo_root_arg,
     write_framework_session_artifacts, FrameworkAliasBuildOptions,
 };
+use crate::harness_contract::{harness_contract, lint_skill_contracts};
 use crate::hook_policy::{evaluate_hook_policy, hook_policy_contract, HookPolicyEvaluateRequest};
 use crate::host_entrypoint_sync::sync_host_entrypoints;
 use crate::host_integration::run_host_integration_from_args;
 use crate::review_gate::run_review_gate;
 use crate::route::{
-    build_search_results_payload, load_records, load_records_from_manifest, search_skills,
-    MatchRow, SearchResultsPayload,
+    build_search_results_payload, filter_records_for_host, load_records,
+    load_records_from_manifest, search_skills, MatchRow, SearchResultsPayload,
 };
 use crate::router_self;
 use crate::runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, runtime_backend_family_catalog_payload,
     runtime_backend_family_parity_payload, runtime_storage_operation,
 };
+use crate::step_ledger::handle_step_ledger_operation;
 use crate::task_command;
 use crate::task_state;
 use crate::trace_runtime::{

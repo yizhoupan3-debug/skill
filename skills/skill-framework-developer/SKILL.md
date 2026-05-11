@@ -196,6 +196,11 @@ cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
 
 For local high-output runs, follow [`RTK.md`](../../RTK.md) and prefer the corresponding `rtk ...` wrapper when raw output is not required.
 
+If validation tools fail, report the failing command, the affected generated or
+runtime surface, and the smallest next repair step. Do not claim sync health
+from prose-only inspection when a compiler, registry, or contract check was
+available but failed or was not run.
+
 ## References
 
 - [references/skill-maintenance-modes.md](references/skill-maintenance-modes.md)

@@ -22,7 +22,8 @@
     "host_entrypoints": {
       "claude-code": [
         "AGENTS.md",
-        ".claude/rules/framework.md"
+        ".claude/rules/framework.md",
+        ".claude/settings.json"
       ],
       "codex-app": "AGENTS.md",
       "codex-cli": "AGENTS.md",

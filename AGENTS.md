@@ -71,7 +71,8 @@
 ## Execution Ladder
 
 - 主线程始终负责上下文判断、阻塞项、共享决策、集成与最终验证。
-- Codex CLI 及未加载 Cursor rules 的环境：默认主线程本地执行；只有用户显式要求 subagent、delegation、parallel agent work、多 agent、分路、分头、并行，或显式调用 `/autopilot`、`/team` 时，才进入 bounded sidecar admission。
+- Codex CLI 及未加载 Cursor rules 的环境：默认主线程本地执行；只有用户显式要求 subagent、delegation、parallel agent work、多 agent、分路、分头、并行，或显式调用 `/autopilot` 时，才进入 bounded sidecar admission。
+- review 请求是独立上下文授权：深度 / 全面 / 全仓 / 跨模块 / PR 级 review 必须先启动只读 `fork_context=false` reviewer subagent，再由主线程整合；不得用模型自写拒因跳过，只有用户明确要求不用子代理时除外。
 - Cursor 工作区的 review gate / 执行偏好差异由 `.cursor/rules/*.mdc` 补充；这些文件只保留 Cursor 独有硬约束与差异。
 - 适合 subagent：高噪音搜索、日志整理、独立风险审查、互不重叠的文件级实现。
 - 不适合 subagent：小任务、共享上下文重、顺序依赖、写入范围重叠、验证缺失、用户要求本地处理。
@@ -97,6 +98,5 @@
 Codex 侧可能使用编译期嵌入的 `AGENTS.md` 快照。修改本文件后，如需同步 Codex hook 投影，执行：
 
 ```bash
-cargo build --manifest-path scripts/router-rs/Cargo.toml
-router-rs codex sync --repo-root "$PWD"
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
 ```

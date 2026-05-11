@@ -82,6 +82,7 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
     let state_path = resolve_state_path(&payload)?;
     let dry_run = optional_bool(&payload, "dry_run").unwrap_or(false);
     let now = now_from_payload(&payload)?;
+    let _store_lock = acquire_runtime_path_lock(&state_path)?;
     let mut store = load_store(&state_path)?;
 
     match operation.as_str() {
@@ -598,31 +599,71 @@ fn ensure_lane_contract_metadata(
     lane_contract: Option<Value>,
 ) -> Value {
     let mut object = metadata.as_object().cloned().unwrap_or_default();
-    if !object.contains_key("lane_contract") {
-        object.insert(
-            "lane_contract".to_string(),
-            lane_contract.unwrap_or_else(|| {
-                json!({
-                    "lane_id": worker_id,
-                    "lane_owner": host,
-                    "goal": prompt.unwrap_or("bounded worker lane"),
-                    "bounded_scope": cwd,
-                    "forbidden_scope": "outside assigned lane-local scope",
-                    "expected_output": {
-                        "changed_files": [],
-                        "evidence": [],
-                        "verification": [],
-                        "risk": null,
-                        "next_action": null
-                    },
-                    "integration_status": "planned",
-                    "verification_status": "not-started",
-                    "recovery_anchor": worker_id
-                })
-            }),
-        );
-    }
+    let existing_lane_contract = object.remove("lane_contract").or(lane_contract);
+    object.insert(
+        "lane_contract".to_string(),
+        merge_lane_contract_defaults(
+            existing_lane_contract,
+            worker_id,
+            host,
+            cwd,
+            prompt.unwrap_or("bounded worker lane"),
+        ),
+    );
     Value::Object(object)
+}
+
+fn merge_lane_contract_defaults(
+    lane_contract: Option<Value>,
+    worker_id: &str,
+    host: &str,
+    cwd: &str,
+    lane_goal: &str,
+) -> Value {
+    let defaults = json!({
+        "lane_id": worker_id,
+        "lane_owner": host,
+        "lane_goal": lane_goal,
+        "goal": lane_goal,
+        "bounded_scope": cwd,
+        "forbidden_scope": "outside assigned lane-local scope",
+        "verification_required": true,
+        "expected_output": {
+            "changed_files": [],
+            "evidence": [],
+            "verification": [],
+            "risk": null,
+            "next_action": null
+        },
+        "final_digest": null,
+        "evidence_ref": null,
+        "integration_status": "planned",
+        "verification_status": "not-started",
+        "recovery_anchor": worker_id
+    });
+    let mut merged = defaults.as_object().cloned().unwrap_or_default();
+    if let Some(Value::Object(provided)) = lane_contract {
+        for (key, value) in provided {
+            if key == "expected_output" {
+                let mut expected = merged
+                    .get("expected_output")
+                    .and_then(Value::as_object)
+                    .cloned()
+                    .unwrap_or_default();
+                if let Value::Object(provided_expected) = value {
+                    for (nested_key, nested_value) in provided_expected {
+                        expected.insert(nested_key, nested_value);
+                    }
+                    merged.insert(key, Value::Object(expected));
+                } else {
+                    merged.insert(key, value);
+                }
+            } else {
+                merged.insert(key, value);
+            }
+        }
+    }
+    Value::Object(merged)
 }
 
 fn default_resume_mode(_host: &str) -> &'static str {
@@ -733,9 +774,6 @@ fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), String>
     let payload = serde_json::to_string_pretty(store)
         .map_err(|err| format!("serialize supervisor store failed: {err}"))?
         + "\n";
-    // Cross-process advisory lock: align with runtime_storage so concurrent
-    // codex/cursor/test writers cannot clobber each other.
-    let _path_lock = acquire_runtime_path_lock(path)?;
     // Atomic replace: write to sibling tmp, fsync, rename. Mirrors
     // runtime_storage::filesystem_write_text_inner so the supervisor state
     // file gets the same crash-consistency guarantees as background_state.
@@ -996,6 +1034,18 @@ mod tests {
             json!("继续处理 backlog")
         );
         assert_eq!(
+            launch["worker"]["metadata"]["lane_contract"]["lane_goal"],
+            json!("继续处理 backlog")
+        );
+        assert_eq!(
+            launch["worker"]["metadata"]["lane_contract"]["verification_required"],
+            json!(true)
+        );
+        assert_eq!(
+            launch["worker"]["metadata"]["lane_contract"]["final_digest"],
+            Value::Null
+        );
+        assert_eq!(
             launch["worker"]["metadata"]["lane_contract"]["expected_output"]["changed_files"],
             json!([])
         );
@@ -1031,6 +1081,78 @@ mod tests {
         .expect("list workers");
         assert_eq!(listed["workers"][0]["driver_id"], json!("codex_driver"));
 
+        let _ = fs::remove_file(state_path);
+    }
+
+    #[test]
+    fn launch_merges_empty_lane_contract_with_required_defaults() {
+        let state_path = temp_state_path("session-supervisor-lane-contract");
+        let launch = handle_session_supervisor_operation(json!({
+            "operation": "launch",
+            "state_path": state_path,
+            "worker_id": "lane-empty-contract",
+            "host": "codex",
+            "cwd": "/tmp/project",
+            "prompt": "bounded review",
+            "lane_contract": {},
+            "dry_run": true,
+            "now": "2026-04-23T10:00:00Z",
+        }))
+        .expect("launch worker");
+        let contract = &launch["worker"]["metadata"]["lane_contract"];
+        assert_eq!(contract["lane_goal"], json!("bounded review"));
+        assert_eq!(contract["bounded_scope"], json!("/tmp/project"));
+        assert_eq!(
+            contract["forbidden_scope"],
+            json!("outside assigned lane-local scope")
+        );
+        assert_eq!(contract["verification_required"], json!(true));
+        assert_eq!(contract["final_digest"], Value::Null);
+        assert_eq!(contract["integration_status"], json!("planned"));
+        assert!(contract["expected_output"]["verification"].is_array());
+        let _ = fs::remove_file(state_path);
+    }
+
+    #[test]
+    fn concurrent_dry_run_launches_do_not_clobber_store() {
+        let state_path = temp_state_path("session-supervisor-concurrent");
+        let mut handles = Vec::new();
+        for idx in 0..6 {
+            let state_path = state_path.clone();
+            handles.push(std::thread::spawn(move || {
+                handle_session_supervisor_operation(json!({
+                    "operation": "launch",
+                    "state_path": state_path,
+                    "worker_id": format!("worker-{idx}"),
+                    "host": "codex",
+                    "cwd": "/tmp/project",
+                    "prompt": format!("lane {idx}"),
+                    "dry_run": true,
+                    "now": "2026-04-23T10:00:00Z",
+                }))
+                .expect("launch worker");
+            }));
+        }
+        for handle in handles {
+            handle.join().expect("thread join");
+        }
+
+        let listed = handle_session_supervisor_operation(json!({
+            "operation": "list",
+            "state_path": state_path,
+            "now": "2026-04-23T10:00:00Z",
+        }))
+        .expect("list workers");
+        let worker_ids = listed["workers"]
+            .as_array()
+            .expect("workers")
+            .iter()
+            .map(|worker| worker["worker_id"].as_str().unwrap().to_string())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(worker_ids.len(), 6, "workers={worker_ids:?}");
+        for idx in 0..6 {
+            assert!(worker_ids.contains(&format!("worker-{idx}")));
+        }
         let _ = fs::remove_file(state_path);
     }
 }

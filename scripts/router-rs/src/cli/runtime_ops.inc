@@ -4658,6 +4658,34 @@ where
     serialize_payload(handler(request)?, context)
 }
 
+fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
+    let repo_root = optional_non_empty_string(&payload, "repo_root");
+    let task_id = optional_non_empty_string(&payload, "task_id");
+    if let (Some(repo_root), Some(task_id), Some(record_path)) = (
+        repo_root.as_deref(),
+        task_id.as_deref(),
+        optional_non_empty_string(&payload, "record_path").as_deref(),
+    ) {
+        return framework_runtime::evaluate_closeout_record_file_for_task(
+            Path::new(repo_root),
+            task_id,
+            Path::new(record_path),
+        );
+    }
+    let record_value = payload.get("record").cloned().unwrap_or_else(|| payload.clone());
+    if let (Some(repo_root), Some(task_id)) = (repo_root.as_deref(), task_id.as_deref()) {
+        let (rows_non_empty, has_success) =
+            autopilot_goal::task_evidence_artifacts_summary_for_task(Path::new(repo_root), task_id);
+        let ctx = CloseoutEvidenceContext {
+            task_id: Some(task_id.trim().to_string()),
+            evidence_rows_non_empty: rows_non_empty,
+            has_successful_verification: has_success,
+        };
+        return evaluate_closeout_record_value_with_context(record_value, &ctx);
+    }
+    evaluate_closeout_record_value(record_value)
+}
+
 fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
     match op {
         "route" => dispatch_stdio_route(payload),
@@ -4673,7 +4701,7 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "compile_codex_profile_artifacts" => {
             dispatch_stdio_compile_codex_profile_artifacts(payload)
         }
-        "closeout_evaluate" => evaluate_closeout_record_value(payload),
+        "closeout_evaluate" => dispatch_stdio_closeout_evaluate(payload),
         "closeout_contract" => Ok(closeout_enforcement_contract()),
         "eval_route" => dispatch_stdio_eval_route(payload),
         "eval_route_contract" => Ok(eval_route_contract()),
@@ -4836,6 +4864,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
     };
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
+    let host_id = optional_non_empty_string(&payload, "host_id");
     let cached_records;
     let using_inline_records = owned_inline_records.is_some();
     let records: &[SkillRecord] = if let Some(items) = owned_inline_records.as_ref() {
@@ -4845,13 +4874,24 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
             load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
         cached_records.as_ref()
     };
+    let owned_host_records = if host_id.is_some() {
+        Some(filter_records_for_host(records.to_vec(), host_id.as_deref())?)
+    } else {
+        None
+    };
+    let route_records = if let Some(items) = owned_host_records.as_ref() {
+        items.as_slice()
+    } else {
+        records
+    };
     let decision = if using_inline_records {
-        route_task(records, &query, &session_id, allow_overlay, first_turn)?
+        route_task(route_records, &query, &session_id, allow_overlay, first_turn)?
     } else {
         route_task_with_manifest_fallback(
-            records,
+            route_records,
             runtime_path.as_deref(),
             manifest_path.as_deref(),
+            host_id.as_deref(),
             &query,
             &session_id,
             allow_overlay,
@@ -4870,19 +4910,18 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
         .unwrap_or(5);
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
+    let host_id = optional_non_empty_string(&payload, "host_id");
     let manifest_fallback =
         manifest_fallback_path(runtime_path.as_deref(), manifest_path.as_deref())?;
-    let owned_records;
-    let cached_records;
-    let records: &[SkillRecord] = if let Some(path) = manifest_fallback.as_deref() {
-        owned_records = load_records_from_manifest(path)?;
-        owned_records.as_slice()
+    let records = if let Some(path) = manifest_fallback.as_deref() {
+        load_records_from_manifest(path)?
     } else {
-        cached_records =
-            load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
-        cached_records.as_ref()
+        load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?
+            .as_ref()
+            .clone()
     };
-    let matches = search_skills(records, &query, limit);
+    let records = filter_records_for_host(records, host_id.as_deref())?;
+    let matches = search_skills(&records, &query, limit);
     let resolved = build_search_results_payload(&query, matches);
     serde_json::to_value(resolved).map_err(|err| format!("serialize search output failed: {err}"))
 }

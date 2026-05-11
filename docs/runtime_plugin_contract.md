@@ -7,6 +7,9 @@ to keep the Rust control plane stable while letting skills, framework commands,
 storage backends, route policies, host projections, and execution delegates
 evolve as replaceable components.
 
+V1 is declarative only. It does not define dynamic plugin execution, a generic
+capability engine, a provider loader, or a new crate boundary.
+
 Documentation index: [`README.md`](README.md) (this directory).
 
 ## Contract Rules
@@ -32,6 +35,20 @@ Every plugin record must expose:
 
 The generated source of truth is `skills/SKILL_PLUGIN_CATALOG.json`.
 
+Capability validation is closed-set. `capability_key_classes` maps record keys
+to semantic classes:
+
+- `routing_layer` -> `routing`
+- `routing_owner` -> `routing_owner`
+- `routing_gate` -> `routing_gate`
+- `allowed_tools` -> `tool`
+- `approval_required_tools` -> `high_risk`
+- `artifact_outputs` -> `artifact`
+- `network_access` -> `networked`
+
+Policy tests reject unknown capability keys, unknown mapped classes, and unknown
+enum values for routing layer, routing owner, routing gate, or network access.
+
 ## Routing Metadata ABI
 
 Skill-specific routing behavior should move out of Rust hardcoding and into
@@ -46,8 +63,10 @@ declarations:
 - `selection_reason`: why the skill is or is not in the hot runtime.
 
 The generated source of truth is `skills/SKILL_ROUTING_METADATA.json`.
-The router consumes declarative `negative_triggers` from the metadata sidecar,
-not from hot runtime payload duplication.
+The router consumes declarative `positive_triggers`, `negative_triggers`,
+`overlay_policy.primary_allowed`, and `fallback_policy.mode` from the metadata
+sidecar, not from hot runtime payload duplication. Other fields remain catalog
+or report material until they have a Rust consumption point and a contract test.
 
 ## Hot Runtime Projection
 
@@ -94,3 +113,7 @@ The registry is intentionally declarative:
 - declared providers define stable future plugin slots
 - planned providers reserve extension points without changing the live kernel
 - every provider path or input must stay repo-relative or logical
+
+Document-only or declared providers must not become install, route, or runtime
+execution paths. Live execution remains under the three hard boundaries:
+`Skill routing`, `Host projection`, and `Runtime persistence/evidence`.

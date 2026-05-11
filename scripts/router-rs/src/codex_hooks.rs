@@ -6,6 +6,10 @@ use crate::framework_runtime::{
 use crate::hook_common::{normalize_subagent_type, normalize_tool_name};
 use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
 use crate::host_integration::ensure_codex_skill_surface;
+use crate::review_gate_engine::{
+    fork_context_from_values, independent_reviewer_evidence, review_gate_blocks_stop,
+    ReviewGateFacts,
+};
 use crate::router_env_flags::router_rs_env_enabled_default_true;
 use chrono::Utc;
 use regex::Regex;
@@ -32,7 +36,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 pub(crate) const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str =
     ".codex/host_entrypoints_sync_manifest.json";
-const HOST_ENTRYPOINT_SYNC_HINT: &str = "router-rs codex sync --repo-root \"$PWD\"";
+const HOST_ENTRYPOINT_SYNC_HINT: &str =
+    "cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"";
 pub(crate) const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
 pub(crate) const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub(crate) const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
@@ -79,7 +84,7 @@ const INSTALL_EVENTS: [&str; 5] = [
 ];
 pub const ROUTER_RS_HOOK_PROJECTION_VERSION: &str = "v1.0.0";
 const INSTALL_STATUS_USER_PROMPT: &str = "Loading Codex turn context";
-const INSTALL_STATUS_SESSION_START: &str = "Loading Codex workspace context";
+const INSTALL_STATUS_SESSION_START: &str = "Loading Codex live state";
 const INSTALL_STATUS_PRE_TOOL: &str = "Checking generated-surface guard";
 const INSTALL_STATUS_POST_TOOL: &str = "Recording Codex tool evidence";
 const INSTALL_STATUS_STOP: &str = "Writing Codex continuity checkpoint";
@@ -154,6 +159,12 @@ struct CodexLifecycleContextState {
     review_lane_seen: bool,
     #[serde(default)]
     parallel_lane_seen: bool,
+    #[serde(default)]
+    review_required: bool,
+    #[serde(default)]
+    review_override: bool,
+    #[serde(default)]
+    independent_review_subagent_seen: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     review_subagent_tool: Option<String>,
 }
@@ -413,7 +424,6 @@ fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLifecycleContex
         .map_err(|_| "state_json_invalid".to_string())
 }
 
-#[cfg(test)]
 fn codex_load_state(
     repo_root: &Path,
     event: &Value,
@@ -638,6 +648,14 @@ fn codex_subagent_lane_bits_from_kind(kind: Option<&str>) -> (bool, bool) {
     (review_lane, parallel_lane)
 }
 
+fn codex_tool_fork_context(tool_input: &Value) -> Option<bool> {
+    fork_context_from_values(tool_input, None)
+}
+
+fn codex_counts_as_independent_context(tool_input: &Value) -> bool {
+    independent_reviewer_evidence(true, codex_tool_fork_context(tool_input))
+}
+
 fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
     let mut dedup = HashSet::new();
     let mut unique = Vec::new();
@@ -663,10 +681,12 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
 }
 
 fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
-    // Codex keeps sidecar policy in AGENTS.md and the model runtime, not in a
-    // hard Stop gate. This state is only telemetry for best-effort tool evidence.
+    let prompt = codex_prompt_text(event);
+    let facts = ReviewGateFacts::from_prompt(&prompt);
     let state = CodexLifecycleContextState {
         seq: 0,
+        review_required: facts.review_required,
+        review_override: facts.review_override,
         ..CodexLifecycleContextState::default()
     };
 
@@ -674,6 +694,9 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         let mut next = state.clone();
         if let Some(prev) = loaded {
             next.seq = prev.seq.saturating_add(1);
+            next.review_required = prev.review_required || facts.review_required;
+            next.review_override = prev.review_override || facts.review_override;
+            next.independent_review_subagent_seen = prev.independent_review_subagent_seen;
         } else {
             next.seq = 1;
         }
@@ -690,7 +713,9 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
     if let Some(warning) = codex_projection_drift_warning(repo_root) {
         contexts.push(warning);
     }
-
+    if facts.review_required && !facts.review_override {
+        contexts.push("Review gate: start an independent reviewer subagent first (`fork_context=false`), then synthesize findings locally. Codex records observed independent reviewer evidence; read-only intent must remain explicit in the lane prompt.".to_string());
+    }
     let additional_context = codex_compact_contexts(contexts);
     if additional_context.is_none() {
         None
@@ -736,6 +761,9 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
             state.parallel_lane_seen = true;
         }
         state.review_subagent_seen = true;
+        if review_lane && codex_counts_as_independent_context(&tool_input) {
+            state.independent_review_subagent_seen = true;
+        }
         Ok((Some(state), ()))
     }) {
         Ok(()) => None,
@@ -757,6 +785,19 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         // is still best-effort (same non-blocking posture as an unblocked Stop).
         try_write_continuity_checkpoint_on_codex_stop(repo_root, event);
         return None;
+    }
+
+    if let Ok(Some(state)) = codex_load_state(repo_root, event) {
+        if review_gate_blocks_stop(ReviewGateFacts {
+            review_required: state.review_required,
+            review_override: state.review_override,
+            independent_reviewer_seen: state.independent_review_subagent_seen,
+        }) {
+            return Some(json!({
+                "decision": "block",
+                "followup_message": "router-rs CODEX_REVIEW_GATE incomplete need=independent_context_reviewer_subagent_fork_context_false"
+            }));
+        }
     }
 
     let reset_result = with_codex_state_lock(repo_root, event, |_loaded| {
@@ -802,23 +843,13 @@ fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value
         .or(payload.get("matcher"))
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let mut contexts = vec![
-        format!(
-            "Codex workspace context: policy root={}, routing truth=skills/SKILL_ROUTING_RUNTIME.json, active state=.supervisor_state.json.",
-            repo_root.display()
-        ),
-    ];
-    // Keep digest compact: SessionStart additionalContext is capped via `codex_compact_contexts`
-    // (`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`, default ~640 chars).
+    let mut contexts = Vec::new();
     if let Ok(prompt) = build_framework_continuity_digest_prompt(repo_root, 4) {
         if !prompt.trim().is_empty() {
             contexts.push(format!("Continuity digest:\n{}", prompt.trim()));
         }
     }
-    contexts.push(
-        "Hook policy: inject only short live state; keep long-lived rules in AGENTS.md and generated/runtime truth in skills/."
-            .to_string(),
-    );
+    contexts.push(format!("Repo: {}", repo_root.display()));
     if !source.trim().is_empty() {
         contexts.push(format!("SessionStart source: {source}."));
     }
@@ -890,7 +921,7 @@ pub fn build_codex_hook_manifest() -> Value {
     }
     json!({
         "version": 1,
-        "_comment": "Managed by router-rs. Regenerate with `router-rs codex sync --repo-root \"$PWD\"`.",
+        "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
         "hooks": hooks,
     })
 }
@@ -926,14 +957,13 @@ Codex hooks are enabled for this repo and are managed by the Rust `router-rs` co
 **Policy snapshot:** the `codex_agent_policy` payload embeds the repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` preserves an existing root `AGENTS.md` from disk and only uses the embedded copy to bootstrap a missing file; rebuild before sync when you need generated Codex payloads to carry policy edits (see `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**).\n\n\
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
-`SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` records best-effort subagent/tool telemetry and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Codex review/delegation policy is advisory in `AGENTS.md`; it is not enforced by a hard subagent gate. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
+`SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` records subagent/tool telemetry and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Broad/deep review prompts also require an independent read-only reviewer subagent (`fork_context=false`) before Stop can close. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active.\n\n\
-Use `router-rs framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
+Use `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
-cargo build --manifest-path scripts/router-rs/Cargo.toml\n\
-router-rs codex sync --repo-root \"$PWD\"\n\
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"\n\
 ```\n\n\
 Steady-state documentation map (vs `docs/history/` archive): `docs/README.md`.\n"
         .to_string()
@@ -2649,7 +2679,7 @@ mod tests {
         }
 
         #[test]
-        fn user_prompt_submit_review_does_not_emit_subagent_gate_context() {
+        fn user_prompt_submit_review_emits_subagent_gate_context() {
             let repo = fresh_repo();
             let payload = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -2662,13 +2692,14 @@ mod tests {
                 .as_ref()
                 .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
                 .unwrap_or_default();
-            assert!(!ctx.contains("Subagent gate active:"));
-            assert!(!ctx.contains("Review gate active:"));
+            assert!(ctx.contains("Review gate:"));
+            assert!(ctx.contains("fork_context=false"));
             if !ctx.is_empty() {
                 assert!(ctx.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
             }
             let state = codex_load_state(&repo, &payload).unwrap().unwrap();
             assert_eq!(state.seq, 1);
+            assert!(state.review_required);
         }
 
         #[test]
@@ -2686,7 +2717,7 @@ mod tests {
 
         #[test]
         fn additional_context_is_deduped_and_capped() {
-            let duplicate = "Codex workspace context: one".to_string();
+            let duplicate = "Codex live state: one".to_string();
             let long_line = "x".repeat(CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
             let ctx = codex_compact_contexts(vec![
                 duplicate.clone(),
@@ -2696,7 +2727,42 @@ mod tests {
             ])
             .unwrap();
             assert!(ctx.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
-            assert_eq!(ctx.matches("Codex workspace context: one").count(), 1);
+            assert_eq!(ctx.matches("Codex live state: one").count(), 1);
+        }
+
+        #[test]
+        fn session_start_uses_single_compact_digest_under_small_budget() {
+            let repo = fresh_repo();
+            let task_id = "session-priority";
+            fs::create_dir_all(repo.join("artifacts/current").join(task_id)).expect("mkdir task");
+            fs::write(
+                repo.join("artifacts/current/active_task.json"),
+                format!(r#"{{"task_id":"{task_id}"}}"#),
+            )
+            .expect("write active");
+            fs::write(
+                repo.join("artifacts/current").join(task_id).join("GOAL_STATE.json"),
+                r#"{"goal":"keep the active goal visible before any static context","status":"running","drive_until_done":true,"done_when":["done"],"validation_commands":["cargo test -q"]}"#,
+            )
+            .expect("write goal");
+            fs::write(
+                repo.join("artifacts/current/SESSION_SUMMARY.md"),
+                "very long continuity line ".repeat(80),
+            )
+            .expect("write summary");
+
+            std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
+            let out = handle_codex_session_start(&repo, &json!({"source":"startup"}))
+                .expect("session start output");
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
+            let ctx = out["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .expect("additionalContext");
+            assert!(ctx.contains("Continuity digest:"), "{ctx}");
+            assert!(!ctx.contains("Goal: running"), "{ctx}");
+            assert!(!ctx.contains("routing truth"), "{ctx}");
+            assert!(!ctx.contains("Hook policy"), "{ctx}");
+            assert!(ctx.len() <= 256, "len={} ctx={ctx:?}", ctx.len());
         }
 
         #[test]
@@ -2714,12 +2780,13 @@ mod tests {
                 "session_id":"sm-2",
                 "cwd": repo.to_string_lossy().to_string(),
                 "tool_name":"Task",
-                "tool_input":{"subagent_type":"explore"}
+                "tool_input":{"subagent_type":"explore","fork_context":false}
             });
             let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
+            assert!(state.independent_review_subagent_seen);
             assert!(state.generic_subagent_seen);
             assert!(state.review_lane_seen);
             assert!(!state.parallel_lane_seen);
@@ -2804,7 +2871,7 @@ mod tests {
                 "session_id":"sm-6b",
                 "cwd": repo.to_string_lossy().to_string(),
                 "tool_name":"Task",
-                "tool_input":{"subagent_type":"explore"}
+                "tool_input":{"subagent_type":"explore","fork_context":false}
             });
             let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
             let stop = json!({
@@ -2911,7 +2978,7 @@ mod tests {
                 "session_id":"sm-2c",
                 "cwd": repo.to_string_lossy().to_string(),
                 "tool_name":"Task",
-                "tool_input":{"subagent_type":"explore"}
+                "tool_input":{"subagent_type":"explore","fork_context":false}
             });
             let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
             assert!(out.is_none());
@@ -2967,7 +3034,7 @@ mod tests {
         }
 
         #[test]
-        fn stop_with_review_prompt_no_subagent_does_not_block() {
+        fn stop_with_review_prompt_no_subagent_blocks() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -2983,7 +3050,75 @@ mod tests {
                 "prompt":"继续"
             });
             let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
-            assert!(out.is_none());
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE"), "out={out:?}");
+        }
+
+        #[test]
+        fn stop_with_review_prompt_shared_fork_subagent_blocks() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-5b",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-5b",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"explore","fork_context":true}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-5b",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE"), "out={out:?}");
+        }
+
+        #[test]
+        fn stop_with_review_prompt_missing_fork_context_subagent_blocks() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-5c",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-5c",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"explore"}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-5c",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE"), "out={out:?}");
         }
 
         #[test]
@@ -3021,7 +3156,7 @@ mod tests {
                 "session_id":"sm-7",
                 "cwd": repo.to_string_lossy().to_string(),
                 "tool_name":"Task",
-                "tool_input":{"subagent_type":"explore"}
+                "tool_input":{"subagent_type":"explore","fork_context":false}
             });
             let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
             let stop = json!({
@@ -3035,6 +3170,7 @@ mod tests {
             let state = codex_load_state(&repo, &stop).unwrap().unwrap();
             assert_eq!(state.seq, 0);
             assert!(!state.review_subagent_seen);
+            assert!(!state.independent_review_subagent_seen);
         }
 
         #[test]
@@ -3205,12 +3341,13 @@ mod tests {
                 "session_id":"sm-2e",
                 "cwd": repo.to_string_lossy().to_string(),
                 "tool_name":"Task",
-                "tool_input":{"agentType":"explore"}
+                "tool_input":{"agentType":"explore","fork_context":false}
             });
             let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
+            assert!(state.independent_review_subagent_seen);
             assert!(state.generic_subagent_seen);
             assert!(state.review_lane_seen);
             assert!(!state.parallel_lane_seen);
@@ -3369,7 +3506,7 @@ mod tests {
         }
 
         #[test]
-        fn userpromptsubmit_review_prompt_records_only_telemetry() {
+        fn userpromptsubmit_review_prompt_records_gate_requirement() {
             let repo = fresh_repo();
             let event = json!({
                 "hook_event_name": "UserPromptSubmit",
@@ -3380,6 +3517,7 @@ mod tests {
             let _ = run_codex_review_subagent_gate(&repo, &event).unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
             assert_eq!(state.seq, 1);
+            assert!(state.review_required);
             assert!(!state.review_subagent_seen);
         }
 

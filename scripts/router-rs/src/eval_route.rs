@@ -91,6 +91,7 @@ pub fn evaluate_route_cases(
             records,
             runtime_path,
             manifest_path,
+            None,
             &case.task,
             &session_id,
             true,
@@ -292,6 +293,11 @@ mod tests {
             alias_tokens: HashSet::new(),
             do_not_use_tokens: HashSet::new(),
             framework_alias_entrypoints: vec![],
+            metadata_positive_triggers: Vec::new(),
+            host_platforms: vec!["codex-cli".to_string()],
+            record_kind: "skill".to_string(),
+            primary_allowed: true,
+            fallback_policy_mode: "eligible-in-runtime".to_string(),
         }
     }
 

@@ -104,5 +104,5 @@
 
 - **契约长文**：[math-reasoning-harness.md](math-reasoning-harness.md)（中间对象、CAS/SMT、依赖图、反事实探针）。
 - **Lane 模板**：[lane-templates.md](lane-templates.md) 中「数理 / STEM 专项」各 lane。
-- **宿主续跑短句**：`configs/framework/HARNESS_OPERATOR_NUDGES.json` 的 **`math_reasoning_harness_line`**（数理）与 **`retrieval_trace_harness_line`**（外研检索可审计）（在 RFV / AUTOPILOT 续跑与 continuity digest 中接在推理深度句之后：先数理句再检索句；关断与其它 nudge 相同）。
+- **宿主续跑短句**：RFV / AUTOPILOT 默认只输出紧凑状态、证据锚点与必要 schema 路径；RFV 会在外研开启时追加 **`retrieval_trace_harness_line`**，在数学 / checker 语境命中时追加 **`math_reasoning_harness_line`**。文案真源为 `configs/framework/HARNESS_OPERATOR_NUDGES.json`。
 - **结构化落盘与外研单行提示**：参见 [external-research-harness.md](external-research-harness.md)。

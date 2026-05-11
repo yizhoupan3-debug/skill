@@ -11,12 +11,12 @@ title: Cursor Hook 深度调研报告
 
 ## 0. 摘要（TL;DR）
 
-- 本仓 `.cursor/hooks.json` 把 **11 个** Cursor 事件 100% 转发给 `router-rs cursor hook --event=<EventName>`，事件名由 router-rs 在 `dispatch_cursor_hook_event` 中 trim + lowercase 后分发到 12 个 `handle_*` 函数（其中 `beforesubmitprompt` 与 `userpromptsubmit` 走同一分支）。详见 **D1**。
+- 本仓 `.cursor/hooks.json` 把 **12 个** Cursor 事件 100% 转发给 `router-rs cursor hook --event=<EventName>`，事件名由 router-rs 在 `dispatch_cursor_hook_event` 中 trim + lowercase 后分发到 12 个 `handle_*` 函数（其中 `beforesubmitprompt` 与 `userpromptsubmit` 走同一分支）。详见 **D1**。
 - 出站 JSON 字段在本仓主要使用 5 个键：`continue` / `permission` / `user_message` / `followup_message` / `additional_context`；续跑/门控类提示**默认**写入 `additional_context`，仅 `retired followup-channel toggle=1` 等情况改写 `followup_message`。详见 **D2** 与 `router_env_flags.rs`。
 - review/subagent 门控状态机以 `.cursor/hook-state/review-subagent-<session_key>.json` 为唯一持久层；`phase` 0→1→2→3 由 `beforeSubmit`（点燃 `review_required`）→ `subagentStart`/`PostToolUse`（armed 时 phase=2）→ `subagentStop`（armed 且 phase≥2 时 phase=3）推进；`Stop` 仅消费这份状态决定是否注入 `router-rs REVIEW_GATE / AG_FOLLOWUP / CLOSEOUT_FOLLOWUP`。详见 **D3**。
-- 与官方 `create-hook` SKILL 的契约差异：本仓**未使用** `preToolUse / postToolUseFailure / beforeMCPExecution / afterMCPExecution / beforeReadFile / afterAgentThought / Tab*` 等事件；`afterAgentResponse` 在 `dispatch_cursor_hook_event` 已有 handler **但未在** `.cursor/hooks.json` 绑定（看似 dead-binding 的活分支）；`beforeSubmitPrompt` / `stop` / `preCompact` 出站字段 cheat-sheet 未明确列出，本仓视为 **未验证假设**。**D4 头号缺口**。
+- 与官方 `create-hook` SKILL 的契约差异：本仓**未使用** `preToolUse / postToolUseFailure / beforeMCPExecution / afterMCPExecution / beforeReadFile / afterAgentThought / Tab*` 等事件；`afterAgentResponse` 已与 handler 对齐并在 `.cursor/hooks.json` 绑定；`beforeSubmitPrompt` / `stop` / `preCompact` 出站字段 cheat-sheet 未明确列出，本仓视为 **未验证假设**。
 
-> **D4 头号发现（用作返回行）**：`afterAgentResponse` 在 router-rs 中已有完整 handler（更新 reject_reason / goal contract|progress|verify 信号），但仓库根 `.cursor/hooks.json` **没有绑定**该事件 → 在不主动 `dispatch` 该事件的 Cursor 版本下，对应的 goal-gate 信号采集**仅靠 `Stop` 上的兜底重扫**生效。这是当前实现与 hooks.json 绑定之间最显著的"潜在能力 vs 实际触达"差距。
+> **D4 更新**：`afterAgentResponse` 在 router-rs 中已有完整 handler（更新 reject_reason / goal contract|progress|verify 信号），且仓库根 `.cursor/hooks.json` 已绑定该事件；若宿主版本不触发该事件，`Stop` 兜底重扫仍保留。
 
 ---
 
@@ -101,7 +101,7 @@ title: Cursor Hook 深度调研报告
 | `beforeReadFile` | ✗ 未绑定 | 缺口（未启用） |
 | `afterFileEdit` | ✓（timeout 10） | 一致 |
 | `preCompact` | ✓（timeout 25） | 一致 |
-| `afterAgentResponse` | ✗ 未绑定 | **router-rs 有 `handle_after_agent_response`，但 hooks.json 未拉起**（参见 D4） |
+| `afterAgentResponse` | ✓（timeout 20） | 已绑定到 `handle_after_agent_response`（参见 D4） |
 | `afterAgentThought` | ✗ 未绑定 | 缺口（未启用） |
 | `beforeTabFileRead` / `afterTabFileEdit` | ✗ 未绑定 | 与 Agent 路径无关，预期不接入 |
 
@@ -264,7 +264,7 @@ stateDiagram-v2
 1. **SessionStart**：写 `session-terminals-<key>.json` baseline；注入 briefing；不触动 review state（只 lazy 创建）。
 2. **BeforeSubmitPrompt**：取 `prompt_text` + `hook_event_signal_text` → 检查 review / delegation / autopilot / override / reject_reason → 写 `review-subagent-<key>.json`（`save_state`）→ 仅在 pre_goal 缺失且 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` 显式开启时合并 pre-goal 段；按 `retired beforeSubmit AUTOPILOT_DRIVE opt-in` / `retired beforeSubmit RFV opt-in` 合并续跑（默认关闭，跳过）；按 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` 合并论文对抗段。
 3. **SubagentStart / PostToolUse**：在 review armed 时 `bump_phase(2)`；在 goal 需要 pre-goal 时若是 independent_fork 子代理 lane，把 `pre_goal_review_satisfied=true`。
-4. **AfterAgentResponse**（仅当 hooks.json 已绑定时生效）：扫信号文本写 `goal_contract_seen / goal_progress_seen / goal_verify_or_block_seen / reject_reason_seen`。当前 hooks.json 未绑定，此采集只能依赖 Stop 再扫一次响应文本。
+4. **AfterAgentResponse**：扫信号文本写 `goal_contract_seen / goal_progress_seen / goal_verify_or_block_seen / reject_reason_seen`；若宿主版本未触发该事件，Stop 仍会兜底重扫一次响应文本。
 5. **SubagentStop**：在 review armed 且 phase≥2 时 `bump_phase(3)`。
 6. **Stop**：四岔决策——
    1. 锁失败 → `lock_failure_followup_for_stop` + 续跑；
@@ -285,8 +285,8 @@ stateDiagram-v2
 
 | 项 | 状态 | 备注 |
 |---|---|---|
-| 11 个绑定事件 vs §3 表 | 【一致】 | `version: 1` 与字段形态完全符合 SKILL.md |
-| `afterAgentResponse` 在 router-rs 有 handler 但 `.cursor/hooks.json` 未绑定 | **【头号缺口】** | dispatch_cursor_hook_event L3860 `"afteragentresponse" => handle_after_agent_response`；不在 `.cursor/hooks.json` 的 hooks 字典里。结果：goal-gate 的 `goal_contract / progress / verify_or_block` 仅靠 Stop 时 `hook_event_signal_text(event, prompt, response_text)` 一次性补扫 |
+| 12 个绑定事件 vs §3 表 | 【一致】 | `version: 1` 与字段形态完全符合 SKILL.md |
+| `afterAgentResponse` handler 与 `.cursor/hooks.json` 绑定 | 【一致】 | dispatch_cursor_hook_event `"afteragentresponse" => handle_after_agent_response`；goal-gate 信号可在 response 后采集，Stop 保留兜底重扫 |
 | `preToolUse` / `postToolUseFailure` / `beforeMCPExecution` / `afterMCPExecution` / `beforeReadFile` / `afterAgentThought` 未启用 | 【缺口·有意】 | 本仓策略：避免向工具层注入策略 prose；保留以后扩展空间；非紧急 |
 | `userpromptsubmit` 作为 `beforeSubmitPrompt` 的别名共享同一 handler | 【扩展】 | dispatch_cursor_hook_event L3854 `"beforesubmitprompt" \| "userpromptsubmit"`。官方 SKILL matcher 一节提到 `beforeSubmitPrompt` 的 matcher 值固定为 `UserPromptSubmit`；router-rs 把此值也当成事件名兜底 |
 | `loop_limit` 字段在 `.cursor/hooks.json` 未声明 | 【未验证假设】 | router-rs 自己用 `state.followup_count` / `review_followup_count` / `goal_followup_count` 做局部计数限速；官方 `loop_limit` 默认值未知，未在 hook 定义里显式设置 |
@@ -443,7 +443,7 @@ rg -n 'managed.*false.*not-enabled-by-framework-policy|install_cursor_projection
 ## 12. 已知风险与未解决问题
 
 1. **Cursor 版本锚点未在 SKILL.md 中暴露**：当前 cheat-sheet 缺失多个事件（beforeSubmitPrompt / stop / preCompact / sessionStart / afterAgentResponse）的允许字段；本仓在生产中按惯例使用，未来 Cursor 升级若收紧字段白名单，部分续跑可能被丢弃（影响：续跑/门控变安静，但不影响硬阻塞）。**建议**：见 §7.4 的最小 echo 实验。
-2. **`afterAgentResponse` 半连接**：handler 已实现却未在 hooks.json 绑定。若未来希望让 goal-gate 在 Stop 之前也能采集到 agent response 信号，需要在 `.cursor/hooks.json` 增 4 行（不在本轮范围）。
+2. **`afterAgentResponse` 宿主兼容性**：handler 与 hooks.json 已对齐；风险转为 Cursor 版本是否实际触发该事件，需用 §7.4 的最小 echo 实验持续校准。
 3. **`loop_limit` 未声明**：依赖 router-rs 自有 follow-up 计数 + Cursor 默认 `loop_limit`；后者数值未知。极端情况下可能让 follow-up 循环偏长或偏短。
 4. **`failClosed: false`（默认）下** 若 router-rs 二进制缺失，所有 hook 静默 fail-open——这是有意为之（README/host_adapter_contract.md 已说明），但调试时可能被误以为"hook 没在用"。SessionStart 上 briefing 缺失就是最可见的 smoke signal。
 

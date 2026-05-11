@@ -3,6 +3,9 @@ use crate::hook_common::{
     is_review_prompt, normalize_subagent_type, normalize_tool_name, saw_reject_reason,
     strip_quoted_or_codeblock_or_url,
 };
+use crate::review_gate_engine::{
+    fork_context_from_values, independent_context_fork, review_gate_armed,
+};
 use crate::runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT;
 use chrono::{DateTime, Utc};
 use regex::Regex;
@@ -46,42 +49,51 @@ fn merge_continuity_followups(
     output: &mut Value,
     frame: &crate::task_state::CursorContinuityFrame,
 ) {
-    merge_autopilot_drive_followup_with_frame(repo_root, output, frame);
-    merge_rfv_loop_followup_with_frame(repo_root, output, frame);
+    let autopilot = build_autopilot_drive_followup_using_frame(repo_root, frame);
+    let rfv = build_rfv_loop_followup_using_frame(repo_root, frame);
+    match (autopilot, rfv) {
+        (Some(mut msg), Some(_)) if !msg.is_empty() => {
+            msg.push_str("\nAlso: RFV active (`RFV_LOOP_STATE.json`).");
+            crate::autopilot_goal::merge_hook_nudge_paragraph(
+                output,
+                &msg,
+                "AUTOPILOT_DRIVE",
+                false,
+            );
+        }
+        (Some(msg), _) if !msg.is_empty() => {
+            crate::autopilot_goal::merge_hook_nudge_paragraph(
+                output,
+                &msg,
+                "AUTOPILOT_DRIVE",
+                false,
+            );
+        }
+        (None, Some(msg)) if !msg.is_empty() => {
+            crate::autopilot_goal::merge_hook_nudge_paragraph(
+                output,
+                &msg,
+                "RFV_LOOP_CONTINUE",
+                false,
+            );
+        }
+        _ => {}
+    }
 }
 
 fn build_autopilot_drive_followup_using_frame(
     repo_root: &Path,
     frame: &crate::task_state::CursorContinuityFrame,
 ) -> Option<String> {
-    let active = crate::autopilot_goal::read_active_task_id(repo_root)?;
-    if frame.pointer_view.task_id.as_deref() == Some(active.as_str()) {
-        if let Some(ref g) = frame.pointer_view.goal_state {
-            return crate::autopilot_goal::build_autopilot_drive_followup_message_from_state(
-                repo_root, &active, g,
-            );
-        }
+    if let (Some(task_id), Some(goal)) = (
+        frame.pointer_view.task_id.as_deref(),
+        frame.pointer_view.goal_state.as_ref(),
+    ) {
+        return crate::autopilot_goal::build_autopilot_drive_followup_message_from_state(
+            repo_root, task_id, goal,
+        );
     }
     crate::autopilot_goal::build_autopilot_drive_followup_message(repo_root)
-}
-
-fn merge_autopilot_drive_followup_with_frame(
-    repo_root: &Path,
-    output: &mut Value,
-    frame: &crate::task_state::CursorContinuityFrame,
-) {
-    let Some(msg) = build_autopilot_drive_followup_using_frame(repo_root, frame) else {
-        return;
-    };
-    if msg.is_empty() {
-        return;
-    }
-    crate::autopilot_goal::merge_hook_nudge_paragraph(
-        output,
-        &msg,
-        "AUTOPILOT_DRIVE",
-        false,
-    );
 }
 
 fn build_rfv_loop_followup_using_frame(
@@ -97,25 +109,6 @@ fn build_rfv_loop_followup_using_frame(
         }
     }
     crate::rfv_loop::build_rfv_loop_followup_message(repo_root)
-}
-
-fn merge_rfv_loop_followup_with_frame(
-    repo_root: &Path,
-    output: &mut Value,
-    frame: &crate::task_state::CursorContinuityFrame,
-) {
-    let Some(msg) = build_rfv_loop_followup_using_frame(repo_root, frame) else {
-        return;
-    };
-    if msg.is_empty() {
-        return;
-    }
-    crate::autopilot_goal::merge_hook_nudge_paragraph(
-        output,
-        &msg,
-        "RFV_LOOP_CONTINUE",
-        false,
-    );
 }
 
 fn merge_continuity_followups_before_submit(
@@ -163,9 +156,11 @@ fn closeout_followup_for_completion_claim(
             "CLOSEOUT_FOLLOWUP task_id={task_id} reason=missing_record path={}\n\
 请在完成态宣称前写入 closeout record 并通过评估：\n\
 - 记录路径：{}\n\
-- 评估命令：router-rs closeout evaluate --record-path \"{}\"",
+- 评估命令：router-rs closeout evaluate --repo-root \"{}\" --task-id \"{}\" --record-path \"{}\"",
             record_path.display(),
             record_path.display(),
+            repo_root.display(),
+            task_id,
             record_path.display()
         )));
     }
@@ -272,35 +267,18 @@ fn goal_verify_or_block_re() -> &'static Regex {
     })
 }
 
-fn json_value_as_boolish(v: &Value) -> Option<bool> {
-    match v {
-        Value::Bool(b) => Some(*b),
-        Value::Number(n) => n.as_i64().map(|i| i != 0),
-        Value::String(s) => match s.trim().to_lowercase().as_str() {
-            "true" | "1" | "yes" | "y" => Some(true),
-            "false" | "0" | "no" | "n" => Some(false),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
 /// Task/subagent 调用里明示 `fork_context: true` 时视为与主会话共享上下文，不满足 autopilot 要求的「独立上下文」预检。
 /// 部分宿主以字符串 `"true"` / `"false"` 下发，需与 JSON bool 同等解析。
 fn fork_context_from_tool(event: &Value, tool_input: &Value) -> Option<bool> {
-    tool_input
-        .get("fork_context")
-        .or_else(|| tool_input.get("forkContext"))
-        .or_else(|| event.get("fork_context"))
-        .or_else(|| event.get("forkContext"))
-        .and_then(json_value_as_boolish)
+    fork_context_from_values(tool_input, Some(event))
 }
 
 fn counts_as_independent_context_fork(fork: Option<bool>) -> bool {
-    match fork {
-        Some(true) => false,
-        Some(false) | None => true,
-    }
+    independent_context_fork(fork)
+}
+
+fn fork_context_explicit_false(fork: Option<bool>) -> bool {
+    independent_context_fork(fork)
 }
 
 fn has_goal_contract_signal(text: &str) -> bool {
@@ -470,6 +448,79 @@ fn pre_goal_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
         || !agent_type.is_empty()
 }
 
+fn review_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
+    fn lane_ok(lane: &str) -> bool {
+        matches!(
+            lane,
+            "explore"
+                | "explorer"
+                | "general-purpose"
+                | "generalpurpose"
+                | "ci-investigator"
+                | "ciinvestigator"
+                | "cursor-guide"
+                | "cursorguide"
+                | "best-of-n-runner"
+                | "bestofnrunner"
+        )
+    }
+    (!sub_type.is_empty() && lane_ok(sub_type)) || (!agent_type.is_empty() && lane_ok(agent_type))
+}
+
+fn first_nonempty_tool_or_event_str(event: &Value, tool_input: &Value, keys: &[&str]) -> String {
+    for key in keys {
+        if let Some(value) = tool_input.get(*key).and_then(Value::as_str) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+        if let Some(value) = event.get(*key).and_then(Value::as_str) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+fn review_subagent_cycle_key(
+    event: &Value,
+    tool_input: &Value,
+    sub_type: &str,
+    agent_type: &str,
+) -> Option<String> {
+    let id = first_nonempty_tool_or_event_str(
+        event,
+        tool_input,
+        &[
+            "subagent_id",
+            "subagentId",
+            "agent_id",
+            "agentId",
+            "task_id",
+            "taskId",
+            "run_id",
+            "runId",
+            "id",
+        ],
+    );
+    if !id.is_empty() {
+        return Some(format!("id:{id}"));
+    }
+    let lane = if !sub_type.is_empty() {
+        sub_type
+    } else {
+        agent_type
+    };
+    if lane.is_empty() {
+        None
+    } else {
+        Some(format!("lane:{lane}"))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReviewGateState {
     pub version: u32,
@@ -506,6 +557,10 @@ pub struct ReviewGateState {
     pub last_subagent_tool: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lane_intent_matches: Option<bool>,
+    #[serde(default)]
+    pub review_subagent_cycle_open: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_subagent_cycle_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
 }
@@ -652,10 +707,11 @@ fn agent_response_text(event: &Value) -> String {
     first_nonempty_event_str(event, KEYS)
 }
 
-/// 从整棵 hook JSON 抓取字符串（深度与总字节上限），用于识别藏在未知路径下的 `reject_reason` / goal 片段。
-/// 长会话若预算过小，会先扫满早期大段 transcript，**截断后丢失末尾用户输入**（例如单独一行的 `small_task`）。
+/// 从整棵 hook JSON 抓取字符串（深度与总字节上限），仅用于显式兼容 fallback。
+/// 默认热路径只读结构化字段，避免长会话 transcript 把末尾用户输入挤出预算。
 const HOOK_JSON_STRING_SCRAPE_CAP: usize = 2 * 1024 * 1024;
 const HOOK_JSON_STRING_SCRAPE_MAX_DEPTH: u32 = 48;
+const CURSOR_FULL_JSON_SCRAPE_ENV: &str = "ROUTER_RS_CURSOR_HOOK_FULL_JSON_SCRAPE";
 
 fn append_scraped_line(out: &mut String, s: &str, budget: &mut usize) {
     if *budget == 0 || s.is_empty() {
@@ -717,8 +773,22 @@ fn hook_event_all_text(event: &Value) -> String {
     out
 }
 
-/// 结构化字段解析 + 全树字符串（后者覆盖 `messages[].content` 等未知路径）。
-fn hook_event_signal_text(event: &Value, prompt: &str, response: &str) -> String {
+fn cursor_full_json_scrape_enabled() -> bool {
+    std::env::var(CURSOR_FULL_JSON_SCRAPE_ENV)
+        .ok()
+        .map(|raw| {
+            let value = raw.trim().to_ascii_lowercase();
+            matches!(value.as_str(), "1" | "true" | "yes" | "on")
+        })
+        .unwrap_or(false)
+}
+
+fn hook_event_signal_text_with_scrape_mode(
+    event: &Value,
+    prompt: &str,
+    response: &str,
+    full_scrape: bool,
+) -> String {
     let mut s = String::with_capacity(
         prompt
             .len()
@@ -729,8 +799,20 @@ fn hook_event_signal_text(event: &Value, prompt: &str, response: &str) -> String
     s.push('\n');
     s.push_str(response);
     s.push('\n');
-    s.push_str(&hook_event_all_text(event));
+    if full_scrape {
+        s.push_str(&hook_event_all_text(event));
+    }
     s
+}
+
+/// 结构化字段解析；显式开关启用时再追加全树字符串兼容未知宿主路径。
+fn hook_event_signal_text(event: &Value, prompt: &str, response: &str) -> String {
+    hook_event_signal_text_with_scrape_mode(
+        event,
+        prompt,
+        response,
+        cursor_full_json_scrape_enabled(),
+    )
 }
 
 fn grab_tool_name_from_object(obj: &serde_json::Map<String, Value>) -> Option<String> {
@@ -957,9 +1039,9 @@ fn try_extract_parent_session_from_tool_json(tool: &Value) -> Option<String> {
 }
 
 fn extract_first_session_string_including_tool_input(event: &Value) -> Option<String> {
-    min_priority_session_identity_from_hook_json(event)
-        .or_else(|| extract_first_session_string(event))
+    extract_first_session_string(event)
         .or_else(|| try_extract_parent_session_from_tool_json(&tool_input_of(event)))
+        .or_else(|| min_priority_session_identity_from_hook_json(event))
 }
 
 /// 派生 `.cursor/hook-state/review-subagent-<key>.json` 文件名组件。
@@ -1010,7 +1092,7 @@ fn is_autopilot_goal_entry_prompt(prompt: &str, signal_text: &str) -> bool {
     is_autopilot_entrypoint_prompt(prompt)
 }
 
-/// `/team` 等框架入口仍视为委托/并行编排；**框架命令仅认 `/` 前缀**；**`/autopilot` 除外**（只走 goal 机）。
+/// 显式委托/并行入口走 bounded sidecar gate；**框架命令仅认 `/` 前缀**；**`/autopilot` 除外**（只走 goal 机）。
 /// 修复：此前 `framework_entrypoint` 含 autopilot，导致 `delegation_required` 与 `goal_required` 叠乘，
 /// 与 autopilot 执行轮的门控语义冲突（现已拆分为仅 goal 路径跟 AG_FOLLOWUP）。
 fn framework_prompt_arms_delegation(text: &str) -> bool {
@@ -1468,6 +1550,8 @@ fn empty_state() -> ReviewGateState {
         last_subagent_type: None,
         last_subagent_tool: None,
         lane_intent_matches: None,
+        review_subagent_cycle_open: false,
+        review_subagent_cycle_key: None,
         updated_at: None,
     }
 }
@@ -1645,18 +1729,16 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
 
 /// 仅 **review** 路径的硬门控（独立上下文 subagent 证据链）；**不包含** `delegation_required`。
 fn review_hard_armed(state: &ReviewGateState) -> bool {
-    state.review_required && !state.review_override
+    review_gate_armed(state.review_required, state.review_override)
 }
 
-/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3：start 后 stop 记账）。
+/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3：独立 start 后 stop 记账）。
 fn review_subagent_evidence_satisfied(state: &ReviewGateState) -> bool {
     state.phase >= 3
 }
 
 fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
-    review_hard_armed(state)
-        && !review_subagent_evidence_satisfied(state)
-        && !state.reject_reason_seen
+    review_hard_armed(state) && !review_subagent_evidence_satisfied(state)
 }
 
 fn review_stop_followup_line(state: &ReviewGateState) -> String {
@@ -2142,8 +2224,11 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     }
     let fork = fork_context_from_tool(event, &tool_input);
     let independent_fork = counts_as_independent_context_fork(fork);
+    let explicit_independent_fork = fork_context_explicit_false(fork);
     let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
+    let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
+    let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
     let armed = review_hard_armed(&state);
     state.active_subagent_count = state.active_subagent_count.saturating_add(1);
     state.active_subagent_last_started_at = Some(Utc::now().to_rfc3339());
@@ -2154,17 +2239,19 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         state.pre_goal_nag_count = 0;
         mutated = true;
     }
-    if armed {
+    if armed && explicit_independent_fork && review_kind {
         let was_below_2 = state.phase < 2;
         bump_phase(&mut state, 2);
         state.subagent_start_count += 1;
         state.lane_intent_matches = Some(true);
+        state.review_subagent_cycle_open = true;
+        state.review_subagent_cycle_key = cycle_key;
         if was_below_2 {
             clear_review_gate_escalation_counters(&mut state);
         }
         mutated = true;
     }
-    if armed && (!sub_type.is_empty() || !agent_type.is_empty()) {
+    if armed && explicit_independent_fork && review_kind {
         state.last_subagent_type = Some(if !sub_type.is_empty() {
             sub_type.clone()
         } else {
@@ -2200,8 +2287,15 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
         mutated = true;
     }
     if review_hard_armed(&state) {
-        // Intentional hardening vs baseline: stop evidence only counts after start reached phase 2.
-        if state.phase < 2 {
+        let tool_input = tool_input_of(event);
+        let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
+        let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
+        let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
+        let cycle_matches = state.review_subagent_cycle_open
+            && cycle_key.is_some()
+            && cycle_key == state.review_subagent_cycle_key;
+        // Stop evidence only counts for the same explicit reviewer cycle that opened the gate.
+        if state.phase < 2 || !review_kind || !cycle_matches {
             if mutated {
                 let _ = save_state(repo_root, event, &mut state);
             }
@@ -2211,6 +2305,8 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
         bump_phase(&mut state, 3);
         state.subagent_stop_count += 1;
         state.lane_intent_matches = Some(true);
+        state.review_subagent_cycle_open = false;
+        state.review_subagent_cycle_key = None;
         mutated = true;
     }
     if mutated {
@@ -2236,6 +2332,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
     let fork = fork_context_from_tool(event, &tool_input);
     let independent_fork = counts_as_independent_context_fork(fork);
+    let explicit_independent_fork = fork_context_explicit_false(fork);
     let mut mutated = false;
     if tool_name_matches_subagent_lane(&name)
         && pre_goal_kind
@@ -2246,11 +2343,18 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
         state.pre_goal_nag_count = 0;
         mutated = true;
     }
-    if tool_name_matches_subagent_lane(&name) && pre_goal_kind && armed {
+    if tool_name_matches_subagent_lane(&name)
+        && review_subagent_kind_ok(&sub_type, &agent_type)
+        && armed
+        && explicit_independent_fork
+    {
         let was_below_2 = state.phase < 2;
         bump_phase(&mut state, 2);
         state.subagent_start_count += 1;
         state.last_subagent_tool = Some(name.clone());
+        state.review_subagent_cycle_open = true;
+        state.review_subagent_cycle_key =
+            review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
         if !sub_type.is_empty() || !agent_type.is_empty() {
             state.last_subagent_type = Some(if !sub_type.is_empty() {
                 sub_type
@@ -2810,22 +2914,7 @@ fn compact_cursor_sessionstart_context(parts: Vec<String>) -> Option<String> {
 
 fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     maybe_init_session_terminal_ledger(repo_root, event);
-    let mut sections = vec![format!(
-        "Repo: {} · routing=skills/SKILL_ROUTING_RUNTIME.json",
-        repo_root.display()
-    )];
-    let summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
-    if summary_path.is_file() {
-        if let Some(head) = read_file_head_lines(&summary_path, 12) {
-            let head = head.trim();
-            if !head.is_empty() {
-                sections.push(format!(
-                    "## Continuity\n{}",
-                    truncate_utf8_chars_local(head, 700)
-                ));
-            }
-        }
-    }
+    let mut sections = Vec::new();
 
     let active_task = repo_root.join("artifacts/current/active_task.json");
     if active_task.is_file() {
@@ -2876,6 +2965,19 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
             }
         }
     }
+    let summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
+    if summary_path.is_file() {
+        if let Some(head) = read_file_head_lines(&summary_path, 12) {
+            let head = head.trim();
+            if !head.is_empty() {
+                sections.push(format!(
+                    "Continuity: {}",
+                    truncate_utf8_chars_local(head, 420)
+                ));
+            }
+        }
+    }
+    sections.push(format!("Repo: {}", repo_root.display()));
     let ctx = compact_cursor_sessionstart_context(sections).unwrap_or_default();
     json!({ "additional_context": ctx })
 }
@@ -3724,12 +3826,12 @@ mod tests {
     }
 
     #[test]
-    fn session_key_prefers_nested_conversation_over_root_session_via_deep_scan() {
+    fn session_key_prefers_root_session_over_nested_child_conversation() {
         let mixed = json!({
-            "session_id": "ephemeral-rev",
-            "hookPayload": {"conversation_id": "stable-chat-x"},
+            "session_id": "stable-chat-x",
+            "hookPayload": {"conversation_id": "child-agent-thread"},
         });
-        let stable = json!({"conversation_id": "stable-chat-x"});
+        let stable = json!({"session_id": "stable-chat-x"});
         assert_eq!(super::session_key(&mixed), super::session_key(&stable));
     }
 
@@ -4326,7 +4428,7 @@ mod tests {
     }
 
     #[test]
-    fn reject_reason_satisfies_stop() {
+    fn reject_reason_does_not_satisfy_review_stop() {
         let repo = fresh_repo();
         let _ = dispatch_cursor_hook_event(
             &repo,
@@ -4340,12 +4442,14 @@ mod tests {
         );
         let out =
             dispatch_cursor_hook_event(&repo, "stop", &event("s4", "reject reason: small_task"));
-        assert_eq!(out, json!({}));
+        assert!(
+            hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
+            "review gate must still require independent reviewer; out={out:?}"
+        );
     }
 
     #[test]
-    // renamed from reject_reason_in_user_prompt_does_not_satisfy_gate after stop-stage parity fix
-    fn reject_reason_in_user_prompt_satisfies_gate_on_stop() {
+    fn reject_reason_in_user_prompt_does_not_satisfy_review_gate_on_stop() {
         let repo = fresh_repo();
         let _ = dispatch_cursor_hook_event(
             &repo,
@@ -4358,13 +4462,16 @@ mod tests {
             .get("followup_message")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        assert!(out.get("continue") == Some(&json!(false)) || followup.is_empty());
+        assert!(
+            followup.contains("router-rs REVIEW_GATE"),
+            "review reject reason must not bypass reviewer gate; out={out:?}"
+        );
         let state = load_state_for(&repo, "s13");
         assert!(state.reject_reason_seen);
     }
 
     #[test]
-    fn reject_reason_in_assistant_response_satisfies_gate_on_stop() {
+    fn reject_reason_in_assistant_response_does_not_satisfy_review_gate_on_stop() {
         let repo = fresh_repo();
         let _ = dispatch_cursor_hook_event(
             &repo,
@@ -4380,11 +4487,14 @@ mod tests {
                 "response": "reject reason: shared_context_heavy"
             }),
         );
-        assert_eq!(out, json!({}));
+        assert!(
+            hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
+            "assistant reject reason must not bypass reviewer gate; out={out:?}"
+        );
     }
 
     #[test]
-    fn nested_payload_response_reject_reason_satisfies_gate_on_stop() {
+    fn nested_payload_response_reject_reason_does_not_satisfy_review_gate_on_stop() {
         let repo = fresh_repo();
         let _ = dispatch_cursor_hook_event(
             &repo,
@@ -4403,7 +4513,10 @@ mod tests {
                 }
             }),
         );
-        assert_eq!(out, json!({}));
+        assert!(
+            hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
+            "nested reject reason must not bypass reviewer gate; out={out:?}"
+        );
     }
 
     #[test]
@@ -4424,6 +4537,27 @@ mod tests {
             }),
         );
         assert!(load_state_for(&repo, "s13nest-a").reject_reason_seen);
+    }
+
+    #[test]
+    fn hook_signal_uses_structured_text_unless_full_scrape_enabled() {
+        let event = json!({
+            "session_id": "scrape-mode",
+            "payload": {
+                "unknown_transcript": "small_task"
+            }
+        });
+        let compact = hook_event_signal_text_with_scrape_mode(&event, "latest user", "", false);
+        assert!(compact.contains("latest user"));
+        assert!(
+            !compact.contains("small_task"),
+            "default hot path must not scrape arbitrary transcript fields"
+        );
+        let full = hook_event_signal_text_with_scrape_mode(&event, "latest user", "", true);
+        assert!(
+            full.contains("small_task"),
+            "explicit fallback mode should preserve unknown-field compatibility"
+        );
     }
 
     #[test]
@@ -4495,7 +4629,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_lock_failure_still_merges_autopilot_drive() {
+    fn stop_lock_failure_still_surfaces_autopilot_drive() {
         let repo = fresh_repo();
         fs::create_dir_all(repo.join("artifacts/current/gl-stop-lock")).expect("mkdir goal");
         fs::write(
@@ -4522,7 +4656,48 @@ mod tests {
         let out = dispatch_cursor_hook_event(&repo, "stop", &payload);
         let blob = hook_user_visible_blob(&out);
         assert!(blob.contains("锁不可用"), "{blob}");
-        assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
+        assert!(
+            blob.contains("AUTOPILOT_DRIVE"),
+            "lock failure should keep active drive visible; blob={blob}"
+        );
+    }
+
+    #[test]
+    fn continuity_followup_with_existing_hard_message_uses_additional_context_and_dedupes() {
+        let repo = fresh_repo();
+        let tid = "existing-followup";
+        fs::create_dir_all(repo.join("artifacts/current").join(tid)).expect("mkdir goal");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            format!(r#"{{"task_id":"{tid}"}}"#),
+        )
+        .expect("active_task");
+        fs::write(
+            repo
+                .join("artifacts/current")
+                .join(tid)
+                .join("GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"drive while hard message exists","status":"running","drive_until_done":true,"non_goals":["n"],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+        )
+        .expect("goal");
+        let frame = crate::task_state::resolve_cursor_continuity_frame(&repo);
+        let mut out = json!({
+            "followup_message": "router-rs REVIEW_GATE incomplete phase=0 need=subagent",
+            "additional_context": "AUTOPILOT_DRIVE: stale\nGoal: old"
+        });
+
+        merge_continuity_followups(&repo, &mut out, &frame);
+        merge_continuity_followups(&repo, &mut out, &frame);
+
+        assert_eq!(
+            out["followup_message"].as_str(),
+            Some("router-rs REVIEW_GATE incomplete phase=0 need=subagent")
+        );
+        let ctx = out["additional_context"].as_str().unwrap_or("");
+        assert!(ctx.contains("AUTOPILOT_DRIVE"), "{ctx}");
+        assert!(ctx.contains("drive while hard message exists"), "{ctx}");
+        assert!(!ctx.contains("Goal: old"), "{ctx}");
+        assert_eq!(ctx.matches("AUTOPILOT_DRIVE").count(), 1, "{ctx}");
     }
 
     #[test]
@@ -4560,6 +4735,40 @@ mod tests {
     }
 
     #[test]
+    fn stop_active_goal_continuity_uses_additional_context_by_default() {
+        let repo = fresh_repo();
+        fs::create_dir_all(repo.join("artifacts/current/default-ac")).expect("mkdir goal");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"default-ac"}"#,
+        )
+        .expect("active_task");
+        crate::autopilot_goal::framework_autopilot_goal(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": "default-ac",
+            "goal": "default additional context drive",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+        }))
+        .expect("goal start");
+
+        let out = dispatch_cursor_hook_event(&repo, "stop", &event("default-ac", "hi"));
+        assert!(
+            out.get("followup_message").is_none(),
+            "continuity nudge should not become hard followup: {out:?}"
+        );
+        let ctx = out
+            .get("additional_context")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        assert!(ctx.contains("AUTOPILOT_DRIVE"), "{ctx}");
+        assert!(ctx.contains("default additional context drive"), "{ctx}");
+    }
+
+    #[test]
     fn review_gate_disabled_stop_still_merges_autopilot_drive() {
         let repo = fresh_repo();
         fs::create_dir_all(repo.join("artifacts/current/gl-rgoff")).expect("mkdir goal");
@@ -4593,6 +4802,41 @@ mod tests {
     }
 
     #[test]
+    fn stop_goal_and_rfv_emit_single_autopilot_reason() {
+        let repo = fresh_repo();
+        let tid = "stop-both";
+        fs::create_dir_all(repo.join("artifacts/current").join(tid)).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            format!(r#"{{"task_id":"{tid}"}}"#),
+        )
+        .expect("active");
+        fs::write(
+            repo
+                .join("artifacts/current")
+                .join(tid)
+                .join("GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+        )
+        .expect("goal");
+        fs::write(
+            repo
+                .join("artifacts/current")
+                .join(tid)
+                .join("RFV_LOOP_STATE.json"),
+            r#"{"schema_version":"router-rs-rfv-loop-v1","goal":"rfv-line","loop_status":"active","current_round":1,"max_rounds":3,"allow_external_research":false,"rounds":[]}"#,
+        )
+        .expect("rfv");
+
+        let out = dispatch_cursor_hook_event(&repo, "stop", &event("stop-both", "hello"));
+        let blob = hook_user_visible_blob(&out);
+        assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
+        assert!(!blob.contains("RFV_LOOP_CONTINUE"), "{blob}");
+        assert!(blob.contains("Also: RFV active"), "{blob}");
+        assert_eq!(blob.matches("AUTOPILOT_DRIVE").count(), 1, "{blob}");
+    }
+
+    #[test]
     fn cursor_hook_output_policy_is_noop_for_hard_gate_lines() {
         let mut out = json!({
             "followup_message": "router-rs REVIEW_GATE incomplete phase=0 need=subagent"
@@ -4622,7 +4866,7 @@ mod tests {
                     "session_id": "srg-pu2",
                     "cwd": "/Users/joe/Documents/skill",
                     "tool_name": "functions.subagent",
-                    "tool_input": { "subagent_type": "explore" }
+                    "tool_input": { "subagent_type": "explore", "fork_context": false }
                 }),
             )
         };
@@ -4661,11 +4905,86 @@ mod tests {
         let _ = dispatch_cursor_hook_event(
             &repo,
             "subagentStart",
-            &json!({ "session_id": "s5", "subagent_type": "explore" }),
+            &json!({ "session_id": "s5", "subagent_type": "explore", "fork_context": false }),
         );
         let state = load_state_for(&repo, "s5");
         assert_eq!(state.phase, 2);
         assert_eq!(state.subagent_start_count, 1);
+    }
+
+    #[test]
+    fn review_subagent_start_with_shared_fork_does_not_promote_phase() {
+        let repo = fresh_repo();
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "beforeSubmitPrompt",
+            &event("s5-shared", "全面review这个仓库"),
+        );
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStart",
+            &json!({
+                "session_id": "s5-shared",
+                "subagent_type": "explore",
+                "fork_context": true
+            }),
+        );
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStop",
+            &json!({ "session_id": "s5-shared", "subagent_type": "explore" }),
+        );
+        let state = load_state_for(&repo, "s5-shared");
+        assert_eq!(state.phase, 0);
+        assert_eq!(state.subagent_start_count, 0);
+        assert_eq!(state.subagent_stop_count, 0);
+    }
+
+    #[test]
+    fn review_subagent_start_without_explicit_fork_false_does_not_promote_phase() {
+        let repo = fresh_repo();
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "beforeSubmitPrompt",
+            &event("s5-missing-fork", "全面review这个仓库"),
+        );
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStart",
+            &json!({ "session_id": "s5-missing-fork", "subagent_type": "explore" }),
+        );
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStop",
+            &json!({ "session_id": "s5-missing-fork", "subagent_type": "explore" }),
+        );
+        let state = load_state_for(&repo, "s5-missing-fork");
+        assert_eq!(state.phase, 0);
+        assert_eq!(state.subagent_start_count, 0);
+        assert_eq!(state.subagent_stop_count, 0);
+        let out = dispatch_cursor_hook_event(&repo, "stop", &event("s5-missing-fork", "继续"));
+        assert!(
+            hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
+            "missing fork_context must keep review gate blocked; out={out:?}"
+        );
+    }
+
+    #[test]
+    fn review_subagent_start_without_reviewer_lane_does_not_promote_phase() {
+        let repo = fresh_repo();
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "beforeSubmitPrompt",
+            &event("s5-untyped", "全面review这个仓库"),
+        );
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStart",
+            &json!({ "session_id": "s5-untyped", "fork_context": false }),
+        );
+        let state = load_state_for(&repo, "s5-untyped");
+        assert_eq!(state.phase, 0);
+        assert_eq!(state.subagent_start_count, 0);
     }
 
     #[test]
@@ -4767,16 +5086,49 @@ mod tests {
         let _ = dispatch_cursor_hook_event(
             &repo,
             "subagentStart",
-            &json!({ "session_id": "s6b", "subagent_type": "explore" }),
+            &json!({
+                "session_id": "s6b",
+                "subagent_type": "explore",
+                "fork_context": false,
+                "subagent_id": "review-1"
+            }),
         );
         let _ = dispatch_cursor_hook_event(
             &repo,
             "subagentStop",
-            &json!({ "session_id": "s6b", "subagent_type": "explore" }),
+            &json!({ "session_id": "s6b", "subagent_type": "explore", "subagent_id": "review-1" }),
         );
         let state = load_state_for(&repo, "s6b");
         assert_eq!(state.phase, 3);
         assert_eq!(state.subagent_stop_count, 1);
+    }
+
+    #[test]
+    fn subagent_stop_must_match_open_reviewer_cycle() {
+        let repo = fresh_repo();
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "beforeSubmitPrompt",
+            &event("s6c", "全面review这个仓库"),
+        );
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStart",
+            &json!({
+                "session_id": "s6c",
+                "subagent_type": "explore",
+                "fork_context": false,
+                "subagent_id": "review-1"
+            }),
+        );
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStop",
+            &json!({ "session_id": "s6c", "subagent_type": "explore", "subagent_id": "other" }),
+        );
+        let state = load_state_for(&repo, "s6c");
+        assert_eq!(state.phase, 2);
+        assert_eq!(state.subagent_stop_count, 0);
     }
 
     #[test]
@@ -4992,7 +5344,7 @@ mod tests {
             &json!({
                 "session_id":"s12",
                 "tool_name":"functions.subagent",
-                "tool_input":{"subagent_type":"explore"}
+                "tool_input":{"subagent_type":"explore","fork_context":false}
             }),
         );
         let state = load_state_for(&repo, "s12");
@@ -5336,7 +5688,7 @@ mod tests {
                 "cwd": "/Users/joe/Documents/skill",
                 "payload": {
                     "tool_name": "functions.subagent",
-                    "tool_input": {"type": "explore"}
+                    "tool_input": {"type": "explore", "fork_context": false}
                 }
             }),
         );

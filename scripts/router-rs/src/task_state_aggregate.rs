@@ -1,6 +1,7 @@
 //! Phase 3: optional **aggregate projection** `artifacts/current/<task_id>/TASK_STATE.json`.
 //!
-//! Canonical source remains `GOAL_STATE.json`, `RFV_LOOP_STATE.json`, and `EVIDENCE_INDEX.json`.
+//! Canonical source remains `GOAL_STATE.json`, `RFV_LOOP_STATE.json`, `EVIDENCE_INDEX.json`,
+//! and task-scoped append logs such as `STEP_LEDGER.jsonl`.
 //! This file is refreshed after ledger mutations so humans/tools can open one JSON for goal+rfv+evidence rollup.
 //!
 //! Design: `docs/task_state_unified_resolve.md` §5 阶段 3.
@@ -16,9 +17,10 @@ pub const TASK_STATE_AGGREGATE_FILENAME: &str = "TASK_STATE.json";
 pub const TASK_STATE_AGGREGATE_SCHEMA_VERSION: &str = "router-rs-task-state-aggregate-v1";
 
 pub fn task_state_aggregate_path(repo_root: &Path, task_id: &str) -> PathBuf {
+    let task_component = safe_task_id_component(task_id).unwrap_or("__invalid_task_id__");
     repo_root
         .join("artifacts/current")
-        .join(task_id.trim())
+        .join(task_component)
         .join(TASK_STATE_AGGREGATE_FILENAME)
 }
 
@@ -50,9 +52,11 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
     if tid.is_empty() {
         return Ok(());
     }
+    validate_task_id_component(tid)?;
     let goal_state = read_goal_state(repo_root, Some(tid)).unwrap_or(None);
     let rfv_loop_state = read_rfv_loop_state(repo_root, Some(tid)).unwrap_or(None);
     let (evidence_rows, evidence_ok) = task_evidence_artifacts_summary_for_task(repo_root, tid);
+    let step_ledger = crate::step_ledger::summarize_step_ledger_for_task(repo_root, tid);
 
     let payload = json!({
         "schema_version": TASK_STATE_AGGREGATE_SCHEMA_VERSION,
@@ -64,7 +68,8 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
             "evidence_rows_non_empty": evidence_rows,
             "has_successful_verification": evidence_ok,
         },
-        "note": "Projection only; canonical GOAL_STATE.json / RFV_LOOP_STATE.json / EVIDENCE_INDEX.json remain authoritative."
+        "step_ledger": step_ledger,
+        "note": "Projection only; canonical GOAL_STATE.json / RFV_LOOP_STATE.json / EVIDENCE_INDEX.json / STEP_LEDGER.jsonl remain authoritative."
     });
     let path = task_state_aggregate_path(repo_root, tid);
     write_atomic_json(&path, &payload)
@@ -81,6 +86,26 @@ pub(crate) fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &
             e
         );
     }
+}
+
+fn safe_task_id_component(task_id: &str) -> Option<&str> {
+    let tid = task_id.trim();
+    if tid.is_empty()
+        || tid == "."
+        || tid == ".."
+        || tid.contains("..")
+        || tid.contains('/')
+        || tid.contains('\\')
+        || tid.contains('\0')
+    {
+        return None;
+    }
+    Some(tid)
+}
+
+fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
+    safe_task_id_component(task_id)
+        .ok_or_else(|| "TASK_STATE task_id must be a single safe path component".to_string())
 }
 
 #[cfg(test)]
@@ -127,6 +152,22 @@ mod tests {
         );
         assert_eq!(v.get("task_id").and_then(Value::as_str), Some("t-agg"));
         assert!(v.get("goal_state").is_some());
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_rejects_task_id_path_traversal() {
+        let tmp = std::env::temp_dir().join(format!(
+            "router-rs-task-agg-traversal-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&tmp);
+        let err = sync_task_state_aggregate(&tmp, "../outside").unwrap_err();
+        assert!(err.contains("safe path component"), "{err}");
+        assert!(!tmp.join("artifacts/outside/TASK_STATE.json").exists());
         let _ = fs::remove_dir_all(&tmp);
     }
 }

@@ -857,6 +857,7 @@ fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
 
 fn append_evidence_index_merged_row(
     repo_root: &Path,
+    task_id_override: Option<&str>,
     entry: Map<String, Value>,
 ) -> Result<(), String> {
     if !continuity_post_tool_evidence_env_enabled() {
@@ -865,7 +866,13 @@ fn append_evidence_index_merged_row(
     let _guard = crate::task_write_lock::task_ledger_write_lock()
         .lock()
         .map_err(|_| "task ledger write lock poisoned".to_string())?;
-    let snapshot = load_framework_runtime_view(repo_root, None, None);
+    let resolved_task_id = task_id_override
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| crate::autopilot_goal::read_active_task_id(repo_root))
+        .or_else(|| crate::autopilot_goal::read_focus_task_id(repo_root));
+    let snapshot = load_framework_runtime_view(repo_root, None, resolved_task_id.as_deref());
     if !continuity_session_ready_for_evidence_append(&snapshot) {
         return Ok(());
     }
@@ -890,17 +897,15 @@ fn append_evidence_index_merged_row(
         "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
     });
     write_json_if_changed_unlocked(&evidence_path, &payload)?;
-    if let Some(tid) = crate::autopilot_goal::read_active_task_id(repo_root) {
-        if !tid.is_empty() {
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &tid);
-        }
+    if let Some(tid) = resolved_task_id {
+        crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &tid);
     }
     Ok(())
 }
 
 /// `framework hook-evidence-append`：供 Cursor hook 等外部进程写入一条验证记录。
 ///
-/// JSON：`repo_root`（可选）、`command_preview`（必填）、`exit_code`（可选）、`source`（可选，默认 `external_hook`）。
+/// JSON：`repo_root`（可选）、`task_id`（可选）、`command_preview`（必填）、`exit_code`（可选）、`source`（可选，默认 `external_hook`）。
 pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
     let explicit = payload.get("repo_root").and_then(|v| {
         let s = value_text(Some(v));
@@ -917,6 +922,12 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
         return Err("hook evidence append requires non-empty command_preview".to_string());
     }
     let source = defaulted_payload_text(&payload, "source", "external_hook");
+    let task_id = payload
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
     let exit_code = payload
         .get("exit_code")
         .and_then(|v| coerce_exit_code_value(Some(v)));
@@ -942,7 +953,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
         entry.insert("exit_code".to_string(), json!(ec));
         entry.insert("success".to_string(), json!(ec == 0));
     }
-    append_evidence_index_merged_row(&repo_root, entry)?;
+    append_evidence_index_merged_row(&repo_root, task_id.as_deref(), entry)?;
     Ok(json!({
         "ok": true,
         "skipped": false,
@@ -1141,7 +1152,7 @@ pub fn try_append_post_tool_shell_evidence(
         entry.insert("exit_code".to_string(), json!(ec));
         entry.insert("success".to_string(), json!(ec == 0));
     }
-    append_evidence_index_merged_row(repo_root, entry)?;
+    append_evidence_index_merged_row(repo_root, None, entry)?;
     Ok(())
 }
 
@@ -1187,6 +1198,7 @@ pub fn evaluate_closeout_record_file_for_task(
     let (rows_non_empty, has_success) =
         crate::autopilot_goal::task_evidence_artifacts_summary_for_task(repo_root, tid);
     let ctx = CloseoutEvidenceContext {
+        task_id: Some(tid.to_string()),
         evidence_rows_non_empty: rows_non_empty,
         has_successful_verification: has_success,
     };
@@ -1271,6 +1283,7 @@ fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>
                 &task_id_str,
             );
         let ctx = CloseoutEvidenceContext {
+            task_id: Some(task_id_str.trim().to_string()),
             evidence_rows_non_empty: rows_non_empty,
             has_successful_verification: has_success,
         };

@@ -21,6 +21,8 @@ impl SkillRecord {
             do_not_use,
             tags,
             trigger_hints,
+            host_platforms,
+            record_kind,
         } = raw;
         let slug_lower = normalize_text(&slug);
         let owner_lower = normalize_text(&owner);
@@ -69,6 +71,11 @@ impl SkillRecord {
             alias_tokens,
             do_not_use_tokens,
             framework_alias_entrypoints,
+            metadata_positive_triggers: Vec::new(),
+            host_platforms,
+            record_kind,
+            primary_allowed: true,
+            fallback_policy_mode: "eligible-in-runtime".to_string(),
         }
     }
 }

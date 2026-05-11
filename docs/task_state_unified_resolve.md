@@ -19,7 +19,7 @@
 ## 2. 设计原则
 
 1. **单处解析**：`task_state::resolve_task_view(repo_root, task_id_override)` 为默认入口；禁止在新代码中散落 `join!(artifacts/current, tid, GOAL_STATE.json)`。
-2. **显式优于隐式（v1）**：`task_id` 解析顺序为 **`task_id_override` > `active_task.json` > `focus_task.json`**。**不包含** `read_goal_state_for_hydration` 的「按 mtime 扫 `**/GOAL_STATE.json`」——那是 Stop 门控补救路径；若要对齐，在后续版本增加 `resolve_task_view_with_goal_scan` 并单独文档化。
+2. **显式优于隐式（v1）**：`task_id` 解析顺序为 **`task_id_override` > `active_task.json` > `focus_task.json`**。`read_goal_state_for_hydration` 中非空 `active_task.json` 是硬当前任务指针；active 指向缺失/损坏时返回空，不回退 focus。只有 active 缺失/空时才读 `focus_task.json`；按 mtime 扫 `**/GOAL_STATE.json` 仅可作为诊断/兼容路径，不得触发当前任务 Stop/drive 门控。
 3. **控制面互斥**：`TaskControlMode` 在视图中显式分类：`idle` / `autopilot` / `rfv_loop` / `conflict`（GOAL 续跑与 RFV `loop_status=active` 同时成立时标记冲突，并附 `resolution_notes`）。
 4. **性能**：本地小 JSON、低频 hook；聚合为内存操作。若未来需要缓存，仅在单 hook 进程内按 `mtime` 短路。
 5. **适配器保持薄**：Cursor/Codex 仅 stdin/out；不在本文件写宿主策略长文。

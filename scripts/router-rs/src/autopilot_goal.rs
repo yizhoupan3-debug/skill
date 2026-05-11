@@ -14,6 +14,7 @@ use std::time::SystemTime;
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-autopilot-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
+const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
 const AUTOPILOT_DRIVE_HOOK_ENV: &str = "ROUTER_RS_AUTOPILOT_DRIVE_HOOK";
 
 fn autopilot_drive_hook_enabled() -> bool {
@@ -103,8 +104,10 @@ fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<(Val
     Some((value, task_id.trim().to_string()))
 }
 
+#[allow(dead_code)]
 const GOAL_DISCOVER_MAX_DEPTH: usize = 8;
 
+#[allow(dead_code)]
 fn discover_goal_state_task_ids_under_current(
     repo_root: &Path,
 ) -> Result<Vec<(String, SystemTime)>, String> {
@@ -117,6 +120,7 @@ fn discover_goal_state_task_ids_under_current(
     Ok(out)
 }
 
+#[allow(dead_code)]
 fn visit_goal_state_dirs(
     dir: &Path,
     current_root: &Path,
@@ -154,27 +158,24 @@ fn visit_goal_state_dirs(
     Ok(())
 }
 
-/// Cursor Stop 门控回补：依次尝试 `active_task.json`、`focus_task.json`；仍无时递归扫描
-/// `artifacts/current/**/GOAL_STATE.json`（深度上限见常量），按 mtime 新者优先；非法 JSON 不短路，继续尝试其它路径。
+/// Cursor Stop/drive 门控回补：只依次尝试 `active_task.json`、`focus_task.json`。
+/// 历史 orphan goal 不能被当作当前任务续跑真源。
 pub fn read_goal_state_for_hydration(repo_root: &Path) -> Result<Option<(Value, String)>, String> {
-    let mut try_ids: Vec<String> = Vec::new();
-    for tid in [
-        read_active_task_id(repo_root),
-        read_focus_task_id(repo_root),
-    ] {
-        let Some(t) = tid else {
-            continue;
-        };
-        if !try_ids.iter().any(|x| x == &t) {
-            try_ids.push(t);
-        }
+    if let Some(active) = read_active_task_id(repo_root) {
+        return Ok(read_goal_state_pair_if_valid(repo_root, &active));
     }
-    for tid in &try_ids {
-        if let Some(pair) = read_goal_state_pair_if_valid(repo_root, tid) {
-            return Ok(Some(pair));
-        }
+    if let Some(focus) = read_focus_task_id(repo_root) {
+        return Ok(read_goal_state_pair_if_valid(repo_root, &focus));
     }
+    Ok(None)
+}
 
+/// 诊断/兼容用途：扫描 `artifacts/current/**/GOAL_STATE.json`，按 mtime 新者优先。
+/// 不用于 Cursor 当前任务 Stop/drive 门控，避免历史 orphan goal 误续跑。
+#[allow(dead_code)]
+pub fn read_goal_state_for_diagnostics_scan(
+    repo_root: &Path,
+) -> Result<Option<(Value, String)>, String> {
     let mut candidates = discover_goal_state_task_ids_under_current(repo_root)?;
     if candidates.is_empty() {
         return Ok(None);
@@ -267,6 +268,7 @@ fn base_goal_object(
     done_when: Vec<Value>,
     validation_commands: Vec<Value>,
     drive_until_done: bool,
+    requires_completion_evidence: bool,
     current_horizon: Option<String>,
 ) -> Map<String, Value> {
     let mut m = Map::new();
@@ -275,6 +277,10 @@ fn base_goal_object(
         json!(GOAL_STATE_SCHEMA_VERSION),
     );
     m.insert("drive_until_done".to_string(), json!(drive_until_done));
+    m.insert(
+        REQUIRES_COMPLETION_EVIDENCE_KEY.to_string(),
+        json!(requires_completion_evidence),
+    );
     m.insert("status".to_string(), json!("running"));
     m.insert("goal".to_string(), json!(goal));
     m.insert("non_goals".to_string(), Value::Array(non_goals));
@@ -320,6 +326,31 @@ fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
             }
         })
         .unwrap_or_default()
+}
+
+fn value_has_nonempty_string_item(value: Option<&Value>) -> bool {
+    match value {
+        Some(Value::Array(items)) => items
+            .iter()
+            .any(|v| v.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false)),
+        Some(Value::String(s)) => !s.trim().is_empty(),
+        _ => false,
+    }
+}
+
+fn goal_requires_completion_evidence(state: &Value) -> bool {
+    if let Some(b) = state
+        .get(REQUIRES_COMPLETION_EVIDENCE_KEY)
+        .and_then(Value::as_bool)
+    {
+        return b;
+    }
+    state
+        .get("drive_until_done")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || value_has_nonempty_string_item(state.get("validation_commands"))
+        || value_has_nonempty_string_item(state.get("done_when"))
 }
 
 /// stdio / CLI：`framework_autopilot_goal`
@@ -406,6 +437,14 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
+            let requires_completion_evidence = if drive_until_done {
+                true
+            } else {
+                payload
+                    .get(REQUIRES_COMPLETION_EVIDENCE_KEY)
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            };
             let non_goals = value_string_list(&payload, "non_goals");
             let done_when = value_string_list(&payload, "done_when");
             let validation_commands = value_string_list(&payload, "validation_commands");
@@ -439,6 +478,7 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                 done_when,
                 validation_commands,
                 drive_until_done,
+                requires_completion_evidence,
                 payload
                     .get("current_horizon")
                     .and_then(Value::as_str)
@@ -510,7 +550,13 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
             }))
         }
         "pause" => set_terminal_flags(&repo_root, task_id_override, "paused", Some(false), None),
-        "resume" => resume_goal_running(&repo_root, task_id_override),
+        "resume" => {
+            let drive_until_done = payload
+                .get("drive_until_done")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            resume_goal_running(&repo_root, task_id_override, drive_until_done)
+        }
         "complete" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
@@ -521,6 +567,16 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                 })?;
             let state = read_goal_state(&repo_root, Some(&task_id))?
                 .ok_or_else(|| "GOAL_STATE missing for completion gate check".to_string())?;
+            if goal_requires_completion_evidence(&state) {
+                let (_, evidence_ok) =
+                    task_evidence_artifacts_summary_for_task(&repo_root, task_id.as_str());
+                if !evidence_ok {
+                    return Err(
+                        "framework_autopilot_goal complete requires successful EVIDENCE_INDEX row"
+                            .to_string(),
+                    );
+                }
+            }
             if let Some(gates) = crate::task_state::parse_goal_completion_gates(&state) {
                 let view = crate::task_state::resolve_task_view(&repo_root, Some(task_id.as_str()));
                 crate::task_state::validate_goal_completion_gates(&view, &gates)?;
@@ -657,7 +713,11 @@ fn clear_goal_state(repo_root: &Path, task_id_override: Option<&str>) -> Result<
     }))
 }
 
-fn resume_goal_running(repo_root: &Path, task_id_override: Option<&str>) -> Result<Value, String> {
+fn resume_goal_running(
+    repo_root: &Path,
+    task_id_override: Option<&str>,
+    drive_until_done: bool,
+) -> Result<Value, String> {
     let task_id = task_id_override
         .map(|s| s.to_string())
         .or_else(|| read_active_task_id(repo_root))
@@ -671,6 +731,7 @@ fn resume_goal_running(repo_root: &Path, task_id_override: Option<&str>) -> Resu
         .as_object_mut()
         .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
     obj.insert("status".to_string(), json!("running"));
+    obj.insert("drive_until_done".to_string(), json!(drive_until_done));
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
     let rfv_loop_superseded =
@@ -783,9 +844,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
     if !nudges.autopilot_drive_compact_reasoning_depth.is_empty() {
         lines.push(nudges.autopilot_drive_compact_reasoning_depth.clone());
     }
-    crate::harness_operator_nudges::push_math_reasoning_line(&mut lines, &nudges);
-    crate::harness_operator_nudges::push_retrieval_trace_line(&mut lines, &nudges);
-    lines.push("Done → `framework_autopilot_goal` operation=complete.".to_string());
+    lines.push("Done: `framework_autopilot_goal` complete/pause/block.".to_string());
     Some(lines.join("\n"))
 }
 
@@ -886,12 +945,7 @@ pub(crate) fn merge_autopilot_drive_followup(repo_root: &Path, output: &mut Valu
     if msg.is_empty() {
         return;
     }
-    merge_hook_nudge_paragraph(
-        output,
-        &msg,
-        "AUTOPILOT_DRIVE",
-        false,
-    );
+    merge_hook_nudge_paragraph(output, &msg, "AUTOPILOT_DRIVE", false);
 }
 
 #[cfg(test)]
@@ -929,6 +983,10 @@ mod tests {
         }))
         .expect("start");
         assert_eq!(out["ok"], json!(true));
+        assert_eq!(
+            out["goal_state"][REQUIRES_COMPLETION_EVIDENCE_KEY],
+            json!(true)
+        );
 
         let st = framework_autopilot_goal(json!({
             "repo_root": rr,
@@ -943,6 +1001,11 @@ mod tests {
             msg.contains("深度") && msg.contains("证据链"),
             "compact autopilot nudge from registry; msg={msg:?}"
         );
+        fs::write(
+            repo.join("artifacts/current/my-task/EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"cargo test -q","exit_code":0}]}"#,
+        )
+        .expect("evidence");
 
         framework_autopilot_goal(json!({
             "repo_root": rr,
@@ -950,6 +1013,50 @@ mod tests {
         }))
         .expect("complete");
         assert!(build_autopilot_drive_followup_message(&repo).is_none());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_start_rejects_incomplete_drive_contract() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-start-bad-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/bad-start")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"bad-start"}"#,
+        )
+        .expect("write pointer");
+        let rr = repo.display().to_string();
+
+        let missing_non_goals = framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "bad-start",
+            "goal": "g",
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+        }))
+        .expect_err("non_goals required");
+        assert!(missing_non_goals.contains("non_goals"));
+
+        let single_done_when = framework_autopilot_goal(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "bad-start",
+            "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+        }))
+        .expect_err("two done_when items required");
+        assert!(single_done_when.contains("done_when"));
+
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -993,7 +1100,7 @@ mod tests {
     }
 
     #[test]
-    fn resume_does_not_force_drive_until_done_after_pause() {
+    fn resume_restores_drive_until_done_by_default_after_pause() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1025,6 +1132,7 @@ mod tests {
         .expect("pause");
         let paused = read_goal_state(&repo, None).expect("read").expect("some");
         assert_eq!(paused["drive_until_done"], json!(false));
+        assert_eq!(paused[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
         framework_autopilot_goal(json!({
             "repo_root": rr,
             "operation": "resume",
@@ -1034,9 +1142,57 @@ mod tests {
         assert_eq!(running["status"], json!("running"));
         assert_eq!(
             running["drive_until_done"],
-            json!(false),
-            "resume must not flip drive_until_done back to true after pause"
+            json!(true),
+            "explicit resume should restore drive continuation by default"
         );
+        assert_eq!(running[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
+        assert!(build_autopilot_drive_followup_message(&repo)
+            .expect("drive after resume")
+            .contains("AUTOPILOT_DRIVE"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn resume_can_leave_drive_until_done_disabled_when_requested() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-resume-off-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/rs-off")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"rs-off"}"#,
+        )
+        .expect("write pointer");
+        let rr = repo.display().to_string();
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "rs-off",
+            "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+        }))
+        .expect("start");
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "pause",
+        }))
+        .expect("pause");
+        framework_autopilot_goal(json!({
+            "repo_root": rr,
+            "operation": "resume",
+            "drive_until_done": false,
+        }))
+        .expect("resume");
+        let running = read_goal_state(&repo, None).expect("read").expect("some");
+        assert_eq!(running["status"], json!("running"));
+        assert_eq!(running["drive_until_done"], json!(false));
+        assert!(build_autopilot_drive_followup_message(&repo).is_none());
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1067,7 +1223,160 @@ mod tests {
     }
 
     #[test]
-    fn hydration_reads_goal_when_active_task_missing() {
+    fn goal_complete_rejected_without_successful_evidence_for_drive_goal() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-complete-noev-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/noev")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"noev"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "noev",
+            "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+        }))
+        .expect("start");
+        let err = framework_autopilot_goal(json!({
+            "repo_root": rr,
+            "operation": "complete",
+        }))
+        .expect_err("complete should require evidence");
+        assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
+        let st = read_goal_state(&repo, Some("noev"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("running"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_complete_after_pause_still_requires_successful_evidence() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-complete-paused-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/paused")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"paused"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "paused",
+            "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+        }))
+        .expect("start");
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "pause",
+        }))
+        .expect("pause");
+        let err = framework_autopilot_goal(json!({
+            "repo_root": rr,
+            "operation": "complete",
+        }))
+        .expect_err("paused drive goal still requires evidence");
+        assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
+        let st = read_goal_state(&repo, Some("paused"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("paused"));
+        assert_eq!(st[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn legacy_goal_complete_requires_evidence_when_validation_contract_exists() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-complete-legacy-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/legacy")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"legacy"}"#,
+        )
+        .expect("ptr");
+        fs::write(
+            repo.join("artifacts/current/legacy/GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"legacy","status":"running","drive_until_done":false,"done_when":["d1"],"validation_commands":["cargo test -q"],"checkpoints":[]}"#,
+        )
+        .expect("legacy goal");
+        let err = framework_autopilot_goal(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+        }))
+        .expect_err("legacy validation contract requires evidence");
+        assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
+        let st = read_goal_state(&repo, Some("legacy"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("running"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn explicit_non_drive_goal_can_complete_without_evidence_when_allowed() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-complete-no-gate-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/nogate")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"nogate"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "nogate",
+            "goal": "g",
+            "drive_until_done": false,
+            "requires_completion_evidence": false,
+        }))
+        .expect("start");
+        framework_autopilot_goal(json!({
+            "repo_root": rr,
+            "operation": "complete",
+        }))
+        .expect("complete without evidence");
+        let st = read_goal_state(&repo, Some("nogate"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("completed"));
+        assert_eq!(st[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(false));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn hydration_ignores_orphan_goal_when_active_task_missing() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1081,7 +1390,10 @@ mod tests {
         )
         .expect("goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr read");
-        let (g, tid) = got.expect("some goal");
+        assert!(got.is_none(), "orphan goal must not hydrate current task");
+        let (g, tid) = read_goal_state_for_diagnostics_scan(&repo)
+            .expect("diagnostic scan")
+            .expect("diagnostic should find orphan");
         assert_eq!(tid, "fb-task");
         assert_eq!(g["goal"], json!("orphan pointer"));
         assert_eq!(
@@ -1118,7 +1430,7 @@ mod tests {
     }
 
     #[test]
-    fn hydration_skips_corrupt_active_goal_and_uses_other_task() {
+    fn hydration_does_not_skip_corrupt_active_goal_to_unrelated_task() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1143,14 +1455,58 @@ mod tests {
         )
         .expect("good goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr");
-        let (g, tid) = got.expect("must find good-task");
+        assert!(
+            got.is_none(),
+            "corrupt active pointer must not hydrate unrelated task"
+        );
+        let (g, tid) = read_goal_state_for_diagnostics_scan(&repo)
+            .expect("diagnostic scan")
+            .expect("diagnostic should find good-task");
         assert_eq!(tid, "good-task");
         assert_eq!(g["goal"], json!("recovered"));
         let _ = fs::remove_dir_all(&repo);
     }
 
     #[test]
-    fn hydration_reads_nested_path_under_current() {
+    fn hydration_does_not_fallback_from_corrupt_active_to_focus_goal() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-hydr-active-focus-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/bad-active")).expect("mkdir active");
+        fs::create_dir_all(repo.join("artifacts/current/old-focus")).expect("mkdir focus");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"bad-active"}"#,
+        )
+        .expect("active");
+        fs::write(
+            repo.join("artifacts/current/focus_task.json"),
+            r#"{"task_id":"old-focus"}"#,
+        )
+        .expect("focus");
+        fs::write(
+            repo.join("artifacts/current/bad-active/GOAL_STATE.json"),
+            "{ not valid json",
+        )
+        .expect("bad goal");
+        fs::write(
+            repo.join("artifacts/current/old-focus/GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"stale focus","status":"running","drive_until_done":true}"#,
+        )
+        .expect("focus goal");
+        let got = read_goal_state_for_hydration(&repo).expect("hydr");
+        assert!(
+            got.is_none(),
+            "non-empty corrupt active pointer must not fallback to focus"
+        );
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn hydration_ignores_nested_orphan_path_under_current() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1164,7 +1520,13 @@ mod tests {
         )
         .expect("goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr");
-        let (_g, tid) = got.expect("pair");
+        assert!(
+            got.is_none(),
+            "nested orphan goal must not hydrate current task"
+        );
+        let (_g, tid) = read_goal_state_for_diagnostics_scan(&repo)
+            .expect("diagnostic scan")
+            .expect("pair");
         assert_eq!(tid, "ns/sub");
         let _ = fs::remove_dir_all(&repo);
     }

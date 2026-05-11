@@ -27,7 +27,8 @@
 
 **宿主集合术语（避免混读）**：
 `host_targets.supported` 是全局闭集宿主 id；
-`host_projections` 是当前可生成 profile / install projection payload 的宿主集合；
+`host_targets.metadata.<host>.projection_status` / `installable` 决定该宿主是否进入 install/status/remove 投影路径；
+`host_projections` 是当前可生成 profile payload 的宿主集合；
 `framework_commands.*.host_entrypoints` 是显式命令入口覆盖集合；
 `skills/SKILL_PLUGIN_CATALOG.json` 中 `skills.<slug>.host_support.platforms` 是 skill body 可用宿主集合。`codex-app` 可以出现在 skill host support 中，即使 framework command 显式入口只列 `codex-cli`；这表示同一 Codex 投影族的消费面不同，不是 drift。
 
@@ -35,7 +36,7 @@
 |--------|----------------|-----------------------------|-------------|
 | L2 连续性 | `artifacts/current`、`EVIDENCE_INDEX`、`GOAL_STATE`、`SESSION_SUMMARY` schema | 当前任务指针路径由 repo root 解析 | `CURRENT_ARTIFACT_DIR` / `EVIDENCE_INDEX_FILENAME` |
 | 事件 × CLI × L2 | 宿主事件最终调用 `router-rs`，验证类命令追加同一 evidence row 形状 | Codex `PostToolUse` / Cursor `postToolUse` 的事件字段归一化 | `try_append_post_tool_shell_evidence` |
-| 宿主安装/入口 | 闭集宿主 id 来自 `host_targets.supported`，缺元数据 fail-closed | `host_targets.metadata.<host>.install_tool` 与 `host_entrypoints` | `host_id_and_skills_install_tool_pairs_from_registry` |
+| 宿主安装/入口 | 闭集宿主 id 来自 `host_targets.supported`，缺元数据 fail-closed；install 遍历只使用 `projection_status=implemented && installable=true` | `host_targets.metadata.<host>.install_tool`、`projection_status`、`installable` 与 `host_entrypoints` | `installable_host_id_and_skills_install_tool_pairs` |
 | L4 / L5 边界 | L4 只做 argv/stdin/超时/路径转发；L5 只承载 skill 契约与可读叙事 | `.cursor/rules/*.mdc`、Codex `AGENTS.md` 投影形状不同 | `host_entrypoints_sync_manifest` |
 | `${CODEX_HOME}/skills` | 表示 Codex 用户级 skill 投影根；仓库开发态优先 `skills/` | 仅 Codex install/sync 使用该 HOME 语义，Cursor 不复用 | `workspace_bootstrap_defaults.skills.user_dir` |
 | **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；运行 **`skill-compiler-rs --apply`** 再生成 `skills/SKILL_PLUGIN_CATALOG.json` 等 | `SKILL_PLUGIN_CATALOG.json` 中 `skills.<slug>.host_support.platforms` **必须**为 `RUNTIME_REGISTRY.host_targets.supported` 闭集 id（`codex-cli` / `codex-app` / `cursor` / `claude-code`）；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由编译器归一 | `normalize_skill_host_platforms`（`scripts/skill-compiler-rs`）；`tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`** |
@@ -85,8 +86,8 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/hook_state.json`（会话 touch 状态）；出站 Claude hook JSON |
-| 投影规则文件 | `router-rs framework install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/.framework-projection.json`（project scope） |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/hook_state_<session>.json`（会话 touch 状态；Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| 投影规则与 hook 绑定 | `router-rs framework install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/settings.json`（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）、`.claude/.framework-projection.json`（project scope） |
 
 **统一原则**：宿主配置中的命令应保持 **短命 + 超时**；语义在 Rust，不在宿主脚本里分支业务规则。
 
@@ -105,7 +106,7 @@
 | Claude Code hook 语义（stdin JSON） | `scripts/router-rs/src/claude_hooks.rs` |
 | `framework host-integration install`、投影 manifest、入口模板 | `scripts/router-rs/src/host_integration.rs` |
 | CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
-| 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入） |
+| 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；Claude 侧 `.claude/settings.json`（由 host integration 写入） |
 | 闭集宿主 id 与 `install_tool` / `host_entrypoints` | `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 与 `host_targets.metadata` |
 
 1. **在 `RUNTIME_REGISTRY.json`** 扩展 `host_targets.supported`、`host_targets.metadata.<host>.install_tool` 与 `host_targets.metadata.<host>.host_entrypoints`（及若需要，`host_projections.*`）；`framework_host_targets.rs` 必须只从注册表读取这些值，并补齐 fail-closed 单测。
@@ -148,7 +149,7 @@
 
 | 位置 | 硬编码内容 | 建议 |
 |------|------------|------|
-| [`scripts/router-rs/src/framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs) | `refresh_host_projections` 固定顺序：build `router-rs` → `codex sync` → project-scope `framework host-integration install --to cursor` / `--to claude` → 对应投影验证；另含 `VerifyCursorHooks` / `VerifyCodexHooks`、`install_codex_user_hooks`、打印/探测 `CODEX_HOME`·`CURSOR_HOME` 等路径 | 新增宿主时必须纳入 refresh 与 verify，或在 registry / 文档中声明该宿主不支持 maint 一键刷新 |
+| [`scripts/router-rs/src/framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs) | `refresh_host_projections` 从 `RUNTIME_REGISTRY` 派生 installable host projection tools；`codex-app` 这类 runtime-supported / non-installable host 不进入安装遍历 | 新增宿主时必须提供 maint verifier，或在 registry 中标记 `installable=false` 并给出 unsupported reason |
 | [`scripts/router-rs/src/session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | `classify_rate_limit_block` 仅接受 `codex` / `codex-cli`；`build_driver_command` 仅组装 Codex CLI；`driver_id_for_host` 非 codex 映射为 `unknown_driver` | 当前明确为 **Codex driver only**；为新 CLI 宿主补 driver / 限速模式前，registry 必须继续标记 `session_supervisor_driver=unsupported` |
 | [`scripts/router-rs/src/framework_profile.rs`](../scripts/router-rs/src/framework_profile.rs) | **已收敛**：`build_profile_bundle` 从 `RUNTIME_REGISTRY.host_projections` 派生 `host_payloads`；保留 `codex_profile` / `full_codex_profile` 作为 Codex 兼容输出 | 新宿主若需要 profile payload，优先补 `host_projections` 与 contract tests；不要新增 Codex-only profile compiler 分支 |
 
@@ -158,7 +159,7 @@
 
 同步范围语义：当前 root 使用 `full_sync`，会物化 text + JSON 入口；匹配到的其它 git worktree 只使用 `partial_sync`，只同步 JSON hook/manifest，不覆盖 `AGENTS.md` 或 `.codex/README.md` 等本地策略文本。
 
-Projection install/status/remove 仍保留 `HostProjectionAdapter` thin adapter 表：registry 负责闭集与 install tool 关系，adapter 表负责宿主专用写盘、状态检查、删除和 HOME 解析。
+Projection install/status/remove 仍保留 `HostProjectionAdapter` thin adapter 表：registry 负责闭集、`projection_status`、`installable` 与 install tool 关系，adapter 表只负责宿主专用写盘、状态检查、删除和 HOME 解析。不新增第二套 host provider 框架；`RUNTIME_PROVIDER_REGISTRY` 中的 host provider lane 只作目录/报告面，不能驱动安装。
 
 ### 3.4 PostTool / 终端证据归一化（本轮未抽取）
 

@@ -1,0 +1,84 @@
+{
+  "schema_version": "harness-behavioral-eval-cases-v1",
+  "authority": "rust-harness-contract",
+  "tracks": [
+    {
+      "id": "routing_accuracy",
+      "case_ids": ["route_miss_owner_near_miss"]
+    },
+    {
+      "id": "token_efficiency",
+      "case_ids": ["sessionstart_budget_guard", "tool_output_success_silent"]
+    },
+    {
+      "id": "long_task_continuity",
+      "case_ids": ["step_ledger_resume_summary"]
+    },
+    {
+      "id": "trajectory_health",
+      "case_ids": ["trace_event_payload_contract"]
+    },
+    {
+      "id": "closeout_integrity",
+      "case_ids": ["completion_without_evidence_blocked"]
+    },
+    {
+      "id": "skill_contract_quality",
+      "case_ids": ["skill_contract_lint_high_impact"]
+    },
+    {
+      "id": "subagent_lane_integrity",
+      "case_ids": ["lane_contract_requires_digest_and_verification"]
+    }
+  ],
+  "cases": [
+    {
+      "id": "route_miss_owner_near_miss",
+      "failure_class": "route_miss",
+      "fixture": "tests/routing_eval_cases.json",
+      "verify": "router-rs eval route --cases tests/routing_eval_cases.json"
+    },
+    {
+      "id": "completion_without_evidence_blocked",
+      "failure_class": "verification_missing",
+      "fixture": "closeout evaluate CLI fixture",
+      "verify": "cargo test --test policy_contracts closeout_evaluate_blocks_unverified_completion_via_cli"
+    },
+    {
+      "id": "sessionstart_budget_guard",
+      "failure_class": "context_rot",
+      "fixture": "Codex/Cursor compact context tests",
+      "verify": "cargo test --manifest-path scripts/router-rs/Cargo.toml codex_compact_contexts"
+    },
+    {
+      "id": "tool_output_success_silent",
+      "failure_class": "tool_contract_bad",
+      "fixture": "PostTool/EVIDENCE_INDEX heuristics",
+      "verify": "cargo test --manifest-path scripts/router-rs/Cargo.toml post_tool"
+    },
+    {
+      "id": "step_ledger_resume_summary",
+      "failure_class": "step_recovery_gap",
+      "fixture": "router-rs framework step-ledger",
+      "verify": "cargo test --manifest-path scripts/router-rs/Cargo.toml step_ledger"
+    },
+    {
+      "id": "trace_event_payload_contract",
+      "failure_class": "trace_gap",
+      "fixture": "TRACE_EVENTS.jsonl trace_runtime record-event",
+      "verify": "cargo test --manifest-path scripts/router-rs/Cargo.toml trace"
+    },
+    {
+      "id": "skill_contract_lint_high_impact",
+      "failure_class": "tool_contract_bad",
+      "fixture": "router-rs eval skill-contract-lint",
+      "verify": "router-rs eval skill-contract-lint --input-json '{\"skills_root\":\"skills\"}'"
+    },
+    {
+      "id": "lane_contract_requires_digest_and_verification",
+      "failure_class": "subagent_misuse",
+      "fixture": "session_supervisor lane_contract default",
+      "verify": "cargo test --manifest-path scripts/router-rs/Cargo.toml session_supervisor"
+    }
+  ]
+}

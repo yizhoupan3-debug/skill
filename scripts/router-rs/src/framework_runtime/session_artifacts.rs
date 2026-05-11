@@ -78,6 +78,7 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
     let status = defaulted_payload_text(payload, "status", "in_progress");
     let summary = value_text(payload.get("summary"));
     let (next_actions, evidence) = session_artifact_payloads(payload);
+    let write_evidence = payload.get("evidence").is_some();
     let task_id = resolve_session_task_id(payload, &task);
     let focus = value_bool_or_none(payload.get("focus")).unwrap_or(false);
     let repo_root = value_text(payload.get("repo_root"));
@@ -95,7 +96,11 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
     let journal_path = primary_dir.join(CONTINUITY_JOURNAL_FILENAME);
     let summary_text = render_session_summary(&task, &phase, &status, &summary);
     let next_actions_payload = build_next_actions_payload(&next_actions);
-    let evidence_payload = build_evidence_index_payload(&evidence);
+    let evidence_payload = if write_evidence {
+        build_evidence_index_payload(&evidence)
+    } else {
+        read_json_strict(&evidence_path)?
+    };
     let trace_metadata_payload = build_trace_metadata_payload(
         &task,
         &phase,
@@ -146,6 +151,7 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         evidence_path,
         trace_metadata_path,
         journal_path,
+        write_evidence,
         next_actions_payload,
         evidence_payload,
         trace_metadata_payload,
@@ -163,7 +169,7 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
 fn write_primary_session_artifacts(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
     let summary_text = render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
     let next_actions_payload = plan.next_actions_payload.clone();
-    let evidence_payload = plan.evidence_payload.clone();
+    let evidence_payload = plan.write_evidence.then(|| plan.evidence_payload.clone());
     let trace_metadata_payload = plan.trace_metadata_payload.clone();
     let journal_payload = plan.journal_payload.clone();
     write_session_artifact_set(
@@ -177,7 +183,7 @@ fn write_primary_session_artifacts(plan: &mut SessionArtifactWritePlan) -> Resul
         ArtifactPayloads {
             summary_text: &summary_text,
             next_actions: &next_actions_payload,
-            evidence: &evidence_payload,
+            evidence: evidence_payload.as_ref(),
             trace_metadata: &trace_metadata_payload,
             journal: Some(&journal_payload),
         },
@@ -198,7 +204,7 @@ fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<
         let summary_text =
             render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
         let next_actions_payload = plan.next_actions_payload.clone();
-        let evidence_payload = plan.evidence_payload.clone();
+        let evidence_payload = plan.write_evidence.then(|| plan.evidence_payload.clone());
         let trace_metadata_payload = plan.trace_metadata_payload.clone();
         let journal_payload = plan.journal_payload.clone();
         write_session_artifact_set(
@@ -212,7 +218,7 @@ fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<
             ArtifactPayloads {
                 summary_text: &summary_text,
                 next_actions: &next_actions_payload,
-                evidence: &evidence_payload,
+                evidence: evidence_payload.as_ref(),
                 trace_metadata: &trace_metadata_payload,
                 journal: Some(&journal_payload),
             },
@@ -387,8 +393,11 @@ fn write_session_artifact_set(
     if write_json_if_changed(paths.next_actions, payloads.next_actions)? {
         changed_paths.push(paths.next_actions.display().to_string());
     }
-    if write_json_if_changed(paths.evidence, payloads.evidence)? {
-        changed_paths.push(paths.evidence.display().to_string());
+    if let Some(evidence) = payloads.evidence {
+        let _lock = crate::runtime_storage::acquire_runtime_path_lock(paths.evidence)?;
+        if write_json_if_changed(paths.evidence, evidence)? {
+            changed_paths.push(paths.evidence.display().to_string());
+        }
     }
     if let Some(path) = paths.trace_metadata {
         write_json_artifact_if_changed(path, payloads.trace_metadata, changed_paths)?;

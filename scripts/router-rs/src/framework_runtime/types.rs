@@ -15,7 +15,7 @@ pub(super) struct ArtifactPaths<'a> {
 pub(super) struct ArtifactPayloads<'a> {
     pub(super) summary_text: &'a str,
     pub(super) next_actions: &'a Value,
-    pub(super) evidence: &'a Value,
+    pub(super) evidence: Option<&'a Value>,
     pub(super) trace_metadata: &'a Value,
     pub(super) journal: Option<&'a Value>,
 }
@@ -78,6 +78,7 @@ pub(super) struct SessionArtifactWritePlan {
     pub(super) evidence_path: PathBuf,
     pub(super) trace_metadata_path: PathBuf,
     pub(super) journal_path: PathBuf,
+    pub(super) write_evidence: bool,
     pub(super) next_actions_payload: Value,
     pub(super) evidence_payload: Value,
     pub(super) trace_metadata_payload: Value,

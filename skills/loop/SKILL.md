@@ -30,7 +30,7 @@ metadata:
 
 显式入口：`/loop`、`$loop`（**监督者**发起；模型默认不可自触发本 skill）。
 
-**宿主 hook 状态（重要）**：历史上的 Cursor `adversarial-loop-<session>.json` 注入路径已从 `router-rs` 移除（仅保留 SessionEnd 清扫与路径常量）。下面的 **轮次标记与 lane 契约仍可作为人工/监督协议**；长轮次、跨会话请用 **`framework_rfv_loop`** 写 `RFV_LOOP_STATE.json`（见 harness 参考 [`rfv_loop_harness.md`](../docs/rfv_loop_harness.md)，**不在热 skill 路由**）。
+**宿主 hook 状态（重要）**：历史上的 Cursor `adversarial-loop-<session>.json` 注入路径已从 `router-rs` 移除（仅保留 SessionEnd 清扫与路径常量）。下面的 **轮次标记与 lane 契约仍可作为人工/监督协议**；长轮次、跨会话请用 **`framework_rfv_loop`** 写 `RFV_LOOP_STATE.json`（见 harness 参考 [`rfv_loop_harness.md`](../../docs/rfv_loop_harness.md)，**不在热 skill 路由**）。
 
 ## 何时使用
 
@@ -52,7 +52,7 @@ metadata:
 
 ## 模型侧契约
 
-每一轮建议：**独立 reviewer subagent → fixer → verifier**；深度与证据链见 [`reasoning-depth-contract.md`](../docs/references/rfv-loop/reasoning-depth-contract.md) 与 lane 模板 [`lane-templates.md`](../docs/references/rfv-loop/lane-templates.md)。数理题另见 [`math-reasoning-harness.md`](../docs/references/rfv-loop/math-reasoning-harness.md)。
+每一轮建议：**独立 reviewer subagent → fixer → verifier**；深度与证据链见 [`reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) 与 lane 模板 [`lane-templates.md`](../../docs/references/rfv-loop/lane-templates.md)。数理题另见 [`math-reasoning-harness.md`](../../docs/references/rfv-loop/math-reasoning-harness.md)。
 
 一轮结束时，助手可输出**独占一行**标记（区分大小写，行内不得有其他字符）：
 

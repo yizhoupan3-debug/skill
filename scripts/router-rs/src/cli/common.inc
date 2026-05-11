@@ -17,6 +17,18 @@ fn repo_root_from_cargo_manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+fn repo_root_for_runtime_path(runtime_path: &Path) -> PathBuf {
+    let parent = runtime_path.parent().unwrap_or_else(|| Path::new("."));
+    if parent.file_name().and_then(|name| name.to_str()) == Some("skills") {
+        parent
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(repo_root_from_cargo_manifest_dir)
+    } else {
+        parent.to_path_buf()
+    }
+}
+
 pub(crate) fn manifest_fallback_path(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
@@ -66,6 +78,8 @@ pub(crate) fn resolve_runtime_declared_manifest_fallback(
     };
     let resolved = if Path::new(declared).is_absolute() {
         PathBuf::from(declared)
+    } else if declared == "skills" || declared.starts_with("skills/") {
+        repo_root_for_runtime_path(runtime_path).join(declared)
     } else {
         runtime_path
             .parent()
@@ -75,10 +89,12 @@ pub(crate) fn resolve_runtime_declared_manifest_fallback(
     Ok(Some(resolved))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn route_task_with_manifest_fallback(
     runtime_records: &[SkillRecord],
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
+    host_id: Option<&str>,
     query: &str,
     session_id: &str,
     allow_overlay: bool,
@@ -98,7 +114,9 @@ pub(crate) fn route_task_with_manifest_fallback(
     let Some(fallback_path) = manifest_fallback_path(runtime_path, manifest_path)? else {
         return Ok(hot_decision);
     };
-    let full_records = match load_records_from_manifest(&fallback_path) {
+    let full_records = match load_records_from_manifest(&fallback_path)
+        .and_then(|records| crate::route::filter_records_for_host(records, host_id))
+    {
         Ok(records) => records,
         Err(err) if !should_retry && manifest_path.is_none() => {
             let mut degraded = hot_decision;
@@ -109,9 +127,6 @@ pub(crate) fn route_task_with_manifest_fallback(
         }
         Err(err) => return Err(err),
     };
-    if full_records.len() <= runtime_records.len() {
-        return Ok(hot_decision);
-    }
     if let Some(decision) = literal_framework_alias_decision(&full_records, query, session_id) {
         return Ok(decision);
     }

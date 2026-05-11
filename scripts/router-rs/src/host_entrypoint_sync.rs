@@ -5,12 +5,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+type AfterApplyHook = fn(&Path) -> Result<Value, String>;
+
 pub(crate) struct HostEntrypointPayloadProvider {
     pub(crate) files: BTreeMap<String, Vec<u8>>,
     pub(crate) json_relative_paths: Vec<String>,
     pub(crate) manifest_relative_path: String,
     pub(crate) agent_policy_entrypoint: String,
-    pub(crate) after_apply: Option<fn(&Path) -> Result<Value, String>>,
+    pub(crate) after_apply: Option<AfterApplyHook>,
 }
 
 struct HostEntrypointSyncSection {
@@ -374,7 +376,7 @@ mod tests {
         let registry_json = registry_dir.join("RUNTIME_REGISTRY.json");
         fs::write(
             &registry_json,
-            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","host_entrypoints":["AGENTS.md",".claude/rules/framework.md"]}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
         )
         .unwrap();
         assert!(
@@ -452,7 +454,7 @@ mod tests {
         fs::create_dir_all(&registry_dir).unwrap();
         fs::write(
             registry_dir.join("RUNTIME_REGISTRY.json"),
-            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","host_entrypoints":["AGENTS.md",".claude/rules/framework.md"]}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
         )
         .unwrap();
         fs::write(sibling.join("AGENTS.md"), "local sibling policy\n").unwrap();

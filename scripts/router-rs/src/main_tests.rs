@@ -498,6 +498,22 @@ fn continuity_digest_copies_compact_prompt_to_configured_file() {
     )
     .expect("write active task");
     fs::write(
+        repo_root
+            .join("artifacts")
+            .join("current")
+            .join("focus_task.json"),
+        r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
+    )
+    .expect("write focus task");
+    fs::write(
+        repo_root
+            .join("artifacts")
+            .join("current")
+            .join("task_registry.json"),
+        r#"{"tasks":[{"task_id":"active-bootstrap-repair-20260418210000","status":"active"}]}"#,
+    )
+    .expect("write task registry");
+    fs::write(
         repo_root.join(".supervisor_state.json"),
         r#"{
                 "task_id":"active-bootstrap-repair-20260418210000",
@@ -523,9 +539,12 @@ fn continuity_digest_copies_compact_prompt_to_configured_file() {
 
     let copied = fs::read_to_string(&clipboard_path).expect("read clipboard file");
     assert_eq!(clipboard["backend"], json!("file"));
-    assert!(copied.contains("继续当前仓库，先看这些恢复锚点："));
+    assert!(copied.contains("任务：active bootstrap repair"));
     assert!(copied.contains("先做："));
-    assert!(copied.contains("按既定串并行分工直接开始执行。"));
+    assert!(copied.contains("恢复锚点："));
+    assert!(copied
+        .contains("artifacts/current/active-bootstrap-repair-20260418210000/SESSION_SUMMARY.md"));
+    assert!(!copied.contains("按既定串并行分工直接开始执行。"));
     assert!(!copied.contains("当前上下文："));
     assert!(!copied.contains("必须先做的下一步："));
 
@@ -591,7 +610,7 @@ fn continuity_digest_completed_task_uses_plain_closeout_wording() {
     assert!(prompt.contains("- bounded rerun"));
     assert!(prompt.contains("- 结果已经稳定，可以直接按已完成上下文来看。"));
     assert!(prompt.contains("- 如果还要继续相关工作，先新开一个 standalone task"));
-    assert!(prompt.contains("先看这些恢复锚点："));
+    assert!(!prompt.contains("恢复锚点："));
     assert!(!prompt.contains("剩余："));
     assert!(!prompt.contains("先做："));
     assert!(!prompt.contains("按既定串并行分工直接开始执行。"));
@@ -824,6 +843,7 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
         "summary": "Make Rust continuity recoverable without manual mirror repair.",
         "focus": true,
         "next_actions": ["Run targeted tests"],
+        "evidence": [],
         "matched_skills": ["autopilot"],
         "execution_contract": {
             "goal": "Improve continuity artifacts",
@@ -1103,6 +1123,93 @@ fn stdio_framework_hook_evidence_append_dispatches() {
 }
 
 #[test]
+fn hook_evidence_append_allows_autopilot_goal_complete() {
+    let repo_root = temp_dir_path("hook-evidence-autopilot-complete");
+    fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir current");
+    fs::write(
+        repo_root.join("artifacts/current/active_task.json"),
+        r#"{"task_id":"hook-goal"}"#,
+    )
+    .expect("active pointer");
+    crate::autopilot_goal::framework_autopilot_goal(json!({
+        "repo_root": repo_root,
+        "operation": "start",
+        "task_id": "hook-goal",
+        "goal": "finish with hook evidence",
+        "non_goals": ["no unrelated cleanup"],
+        "done_when": ["implementation complete", "tests pass"],
+        "validation_commands": ["cargo test -q"],
+        "drive_until_done": true,
+    }))
+    .expect("goal start");
+
+    framework_hook_evidence_append(json!({
+        "repo_root": repo_root,
+        "task_id": "hook-goal",
+        "command_preview": "cargo test -q",
+        "exit_code": 0,
+        "source": "stdio_integration_test",
+    }))
+    .expect("append evidence");
+
+    let done = crate::autopilot_goal::framework_autopilot_goal(json!({
+        "repo_root": repo_root,
+        "operation": "complete",
+        "task_id": "hook-goal",
+    }))
+    .expect("goal complete should see task-local hook evidence");
+    assert_eq!(done["goal_state"]["status"], json!("completed"));
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn hook_evidence_append_feeds_closeout_context() {
+    let repo_root = temp_dir_path("hook-evidence-closeout-context");
+    let output_dir = repo_root.join("artifacts").join("current");
+    let _ = write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "closeout-hook",
+        "task": "closeout hook evidence",
+        "phase": "implementation",
+        "status": "in_progress",
+        "summary": "seed",
+        "focus": true,
+        "next_actions": ["Validate"]
+    }))
+    .expect("seed");
+    framework_hook_evidence_append(json!({
+        "repo_root": repo_root,
+        "task_id": "closeout-hook",
+        "command_preview": "cargo test -q",
+        "exit_code": 0,
+        "source": "stdio_integration_test",
+    }))
+    .expect("append evidence");
+    let record_path = repo_root.join("closeout-hook-record.json");
+    fs::write(
+        &record_path,
+        serde_json::to_string(&json!({
+            "schema_version": "closeout-record-v1",
+            "task_id": "closeout-hook",
+            "verification_status": "passed",
+            "summary": "done",
+            "risks": ["commands_run intentionally empty; relying on hook-appended evidence"]
+        }))
+        .expect("record json"),
+    )
+    .expect("write record");
+    let eval = crate::framework_runtime::evaluate_closeout_record_file_for_task(
+        &repo_root,
+        "closeout-hook",
+        &record_path,
+    )
+    .expect("evaluate closeout");
+    assert_eq!(eval["closeout_allowed"], json!(true));
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
 fn post_tool_evidence_no_ops_without_continuity_seed() {
     let repo_root = temp_dir_path("post-tool-evidence-skip");
     let event = json!({
@@ -1283,6 +1390,76 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
         supervisor["verification"]["verification_status"],
         json!("passed")
     );
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn framework_session_artifact_write_omitted_evidence_preserves_existing_file() {
+    let repo_root = temp_dir_path("framework-session-preserve-evidence");
+    let output_dir = repo_root.join("artifacts").join("current");
+    write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "preserve-evidence",
+        "task": "Preserve evidence",
+        "phase": "implementation",
+        "status": "in_progress",
+        "summary": "Initial write.",
+        "focus": true,
+        "next_actions": ["Continue"],
+        "evidence": [
+            {"command_preview": "cargo test -q", "exit_code": 0, "success": true}
+        ]
+    }))
+    .expect("first write");
+    let evidence_path = repo_root
+        .join("artifacts/current/preserve-evidence")
+        .join("EVIDENCE_INDEX.json");
+    let before = fs::read_to_string(&evidence_path).expect("read before");
+
+    write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "preserve-evidence",
+        "task": "Preserve evidence",
+        "phase": "implementation",
+        "status": "in_progress",
+        "summary": "Automatic checkpoint without evidence payload.",
+        "focus": true,
+        "next_actions": ["Continue"]
+    }))
+    .expect("second write");
+    let after = fs::read_to_string(&evidence_path).expect("read after");
+    assert_eq!(
+        after, before,
+        "omitted evidence must not overwrite existing file"
+    );
+
+    let changed = write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "preserve-evidence",
+        "task": "Preserve evidence",
+        "phase": "implementation",
+        "status": "in_progress",
+        "summary": "Explicit evidence reset.",
+        "focus": true,
+        "next_actions": ["Continue"],
+        "evidence": []
+    }))
+    .expect("explicit reset");
+    assert!(changed["changed_paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|path| path
+            .as_str()
+            .is_some_and(|p| p.ends_with("EVIDENCE_INDEX.json"))));
+    let reset: Value =
+        serde_json::from_str(&fs::read_to_string(&evidence_path).expect("read reset"))
+            .expect("parse reset");
+    assert_eq!(reset["artifacts"], json!([]));
+
     let _ = fs::remove_dir_all(&repo_root);
 }
 
@@ -1594,6 +1771,14 @@ fn task_registry_normalization_dedupes_and_limits_old_tasks() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
+fn write_framework_alias_registry_fixture(repo_root: &Path) {
+    let registry_dir = repo_root.join("configs").join("framework");
+    fs::create_dir_all(&registry_dir).expect("create registry dir");
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../configs/framework/RUNTIME_REGISTRY.json");
+    fs::copy(source, registry_dir.join("RUNTIME_REGISTRY.json")).expect("copy runtime registry");
+}
+
 #[test]
 fn framework_alias_builds_compact_autopilot_payload() {
     let repo_root = std::env::temp_dir().join(format!(
@@ -1626,6 +1811,7 @@ fn framework_alias_builds_compact_autopilot_payload() {
         r#"{"task":"active bootstrap repair","matched_skills":["autopilot"]}"#,
     )
     .expect("write trace metadata");
+    write_framework_alias_registry_fixture(&repo_root);
     fs::write(
         repo_root
             .join("artifacts")
@@ -1729,6 +1915,7 @@ fn framework_alias_builds_compact_deepinterview_payload() {
         r#"{"task":"active bootstrap repair","matched_skills":["deepinterview"]}"#,
     )
     .expect("write trace metadata");
+    write_framework_alias_registry_fixture(&repo_root);
     fs::write(
         repo_root
             .join("artifacts")
@@ -1793,96 +1980,33 @@ fn framework_alias_builds_compact_deepinterview_payload() {
 }
 
 #[test]
-fn framework_alias_builds_compact_team_payload() {
+fn framework_alias_fails_closed_for_missing_alias_record() {
     let repo_root = std::env::temp_dir().join(format!(
-        "router-rs-team-alias-fixture-{}",
+        "router-rs-retired-alias-fixture-{}",
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock before epoch")
             .as_nanos()
     ));
-    let task_root = repo_root
-        .join("artifacts")
-        .join("current")
-        .join("active-bootstrap-repair-20260418210000");
-    fs::create_dir_all(&task_root).expect("create task root");
-    fs::create_dir_all(repo_root.join("artifacts").join("current")).expect("create current root");
+    let registry_dir = repo_root.join("configs").join("framework");
+    fs::create_dir_all(&registry_dir).expect("create registry dir");
     fs::write(
-        task_root.join("SESSION_SUMMARY.md"),
-        "- task: active bootstrap repair\n- phase: implementation\n- status: in_progress\n",
+        registry_dir.join("RUNTIME_REGISTRY.json"),
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"autopilot":{"canonical_owner":"autopilot","skill_path":"skills/autopilot/SKILL.md"}}}"#,
     )
-    .expect("write session summary");
-    fs::write(
-        task_root.join("NEXT_ACTIONS.json"),
-        r#"{"next_actions":["Patch classifier","Run MCP regression tests"]}"#,
-    )
-    .expect("write next actions");
-    fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
-        .expect("write evidence index");
-    fs::write(
-        task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["team"]}"#,
-    )
-    .expect("write trace metadata");
-    fs::write(
-        repo_root
-            .join("artifacts")
-            .join("current")
-            .join("active_task.json"),
-        r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
-    )
-    .expect("write active task");
-    fs::write(
-            repo_root.join(".supervisor_state.json"),
-            r#"{
-                "task_id":"active-bootstrap-repair-20260418210000",
-                "task_summary":"active bootstrap repair",
-                "active_phase":"implementation",
-                "verification":{"verification_status":"in_progress"},
-                "continuity":{"story_state":"active","resume_allowed":true},
-                "execution_contract":{"acceptance_criteria":["completed tasks never appear as current execution"]}
-            }"#,
-        )
-        .expect("write supervisor state");
+    .expect("write registry");
 
-    let payload = build_framework_alias_envelope(
+    let err = build_framework_alias_envelope(
         &repo_root,
         "team",
         FrameworkAliasBuildOptions {
-            max_lines: 5,
-            compact: false,
+            max_lines: 3,
+            compact: true,
             host_id: None,
         },
     )
-    .expect("build alias payload");
-    let alias = payload
-        .get("alias")
-        .and_then(Value::as_object)
-        .expect("alias payload");
-    let prompt = alias
-        .get("entry_prompt")
-        .and_then(Value::as_str)
-        .expect("entry prompt");
-
-    assert_eq!(
-        payload["schema_version"],
-        json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
-    );
-    assert_eq!(alias["name"], json!("team"));
-    assert_eq!(alias["host_entrypoint"], json!("/team"));
-    assert_eq!(alias["compact"], json!(false));
-    assert_eq!(alias["canonical_owner"], json!("team"));
-    assert_eq!(
-        alias["state_machine"]["handoff"]["rules"][1]["target"],
-        json!("agent-swarm-orchestration")
-    );
-    assert_eq!(
-        alias["entry_contract"]["route_rules"][0],
-        json!("主 owner -> `team`")
-    );
-    assert!(prompt.contains("进入 team"));
-    assert!(prompt.contains("bounded subagent lane -> `agent-swarm-orchestration`"));
-    assert!(prompt.contains("worker write scope -> `lane-local-delta-only`"));
+    .expect_err("missing alias should fail closed");
+    assert!(err.contains("Unknown framework alias `team`"));
 
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -1916,9 +2040,10 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
         .expect("write evidence index");
     fs::write(
         task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["team"]}"#,
+        r#"{"task":"active bootstrap repair","matched_skills":["autopilot"]}"#,
     )
     .expect("write trace metadata");
+    write_framework_alias_registry_fixture(&repo_root);
     fs::write(
         repo_root
             .join("artifacts")
@@ -2253,7 +2378,7 @@ fn stdio_request_dispatches_route_snapshot_payload() {
 #[test]
 fn stdio_route_supports_inline_skill_catalog_and_token_budget_bias() {
     let response = handle_stdio_json_line(
-        r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要 team orchestration","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"agent-swarm-orchestration","description":"Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"team","description":"Supervisor-led worker lifecycle with integration qa cleanup and resume phases.","routing_layer":"L0","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["team orchestration","supervisor","worker lifecycle","integration","qa","cleanup"]},{"name":"deepinterview","description":"Evidence-first clarification and convergence review.","routing_layer":"L1","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["deepinterview","review"]}]}}"#,
+        r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要完整 worker 编排","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"agent-swarm-orchestration","description":"Decide whether work should stay local, use bounded sidecars, or fall back to a local supervisor queue.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"deepinterview","description":"Evidence-first clarification and convergence review.","routing_layer":"L1","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["deepinterview","review"]}]}}"#,
     );
     assert!(response.ok, "{:?}", response.error);
     let payload = response.payload.expect("payload");
@@ -2670,6 +2795,7 @@ fn routing_eval_report_matches_expected_baseline() {
             &records,
             Some(&runtime_path),
             Some(&manifest_path),
+            None,
             task,
             session_id,
             true,
@@ -2691,6 +2817,7 @@ fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
         &records,
         Some(&runtime_path),
         Some(&manifest_path),
+        None,
         "用 paper-reviewer 逻辑模式审一下 claim evidence",
         "paper-reviewer-token-case",
         true,
@@ -2709,6 +2836,7 @@ fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
         &records,
         Some(&runtime_path),
         Some(&manifest_path),
+        None,
         "只想要科学性批评不要改稿 manuscript",
         "paper-critique-only-case",
         true,
@@ -2735,6 +2863,7 @@ fn routing_eval_runtime_fallback_matches_expected_baseline() {
             &records,
             Some(&runtime_path),
             None,
+            None,
             task,
             session_id,
             true,
@@ -2752,6 +2881,7 @@ fn runtime_fallback_prefers_framework_manifest_owner_over_low_score_hot_gate() {
     let decision = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
+        None,
         None,
         "review framework snapshot route continuity integration risk",
         "framework-low-hot-gate",
@@ -2784,6 +2914,7 @@ fn confident_hot_route_does_not_parse_implicit_malformed_manifest() {
         &records,
         Some(&runtime_path),
         None,
+        None,
         "inspect sentry production errors",
         "confident-hot-route",
         true,
@@ -2804,19 +2935,19 @@ fn confident_hot_route_does_not_parse_implicit_malformed_manifest() {
 }
 
 #[test]
-fn runtime_declared_manifest_fallback_resolves_relative_to_runtime_directory() {
-    let repo_root = temp_dir_path("runtime-relative-fallback");
+fn runtime_declared_manifest_fallback_resolves_repo_relative_skills_path() {
+    let repo_root = temp_dir_path("runtime-repo-relative-fallback");
     let skills_root = repo_root.join("skills");
     fs::create_dir_all(&skills_root).expect("create skills root");
     let runtime_path = skills_root.join("SKILL_ROUTING_RUNTIME.json");
-    let fallback_path = skills_root.join("nested/SKILL_MANIFEST.json");
+    let fallback_path = skills_root.join("SKILL_MANIFEST.json");
     fs::create_dir_all(fallback_path.parent().expect("fallback parent"))
         .expect("create fallback parent");
     fs::write(
         &runtime_path,
         serde_json::to_string(&json!({
             "scope": {
-                "fallback_manifest": "nested/SKILL_MANIFEST.json"
+                "fallback_manifest": "skills/SKILL_MANIFEST.json"
             }
         }))
         .expect("serialize runtime payload"),
@@ -2852,6 +2983,7 @@ fn pr_triage_summary_routes_to_github_source_gate() {
             &records,
             Some(&runtime_path),
             None,
+            None,
             query,
             &format!("pr-triage::{query}"),
             true,
@@ -2881,6 +3013,7 @@ fn pr_summary_ci_context_routes_to_ci_gate() {
             &records,
             Some(&runtime_path),
             None,
+            None,
             query,
             &format!("pr-summary-ci::{query}"),
             true,
@@ -2905,11 +3038,12 @@ fn framework_command_aliases_require_literal_entrypoints() {
     assert!(records.iter().any(|record| record.slug == "deepinterview"));
     assert!(records.iter().any(|record| record.slug == "gitx"));
     assert!(records.iter().any(|record| record.slug == "update"));
-    assert!(records.iter().any(|record| record.slug == "team"));
+    assert!(!records.iter().any(|record| record.slug == "team"));
 
     let autopilot = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
+        None,
         None,
         "/autopilot",
         "alias-autopilot",
@@ -2919,21 +3053,25 @@ fn framework_command_aliases_require_literal_entrypoints() {
     .expect("route explicit autopilot alias");
     assert_eq!(autopilot.selected_skill, "autopilot");
 
-    let team = route_task_with_manifest_fallback(
-        &records,
-        Some(&runtime_path),
-        None,
-        "/team",
-        "alias-team",
-        true,
-        true,
+    let team_alias = crate::framework_runtime::build_framework_alias_envelope(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        "team",
+        crate::framework_runtime::FrameworkAliasBuildOptions {
+            max_lines: 6,
+            compact: true,
+            host_id: Some("codex-cli"),
+        },
     )
-    .expect("route explicit team alias");
-    assert_eq!(team.selected_skill, "team");
+    .expect("team framework alias must resolve");
+    assert_eq!(
+        team_alias["alias"]["canonical_owner"],
+        "agent-swarm-orchestration"
+    );
 
     let deepinterview = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
+        None,
         None,
         "/deepinterview",
         "alias-deepinterview",
@@ -2947,6 +3085,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         &records,
         Some(&runtime_path),
         None,
+        None,
         "gitx",
         "alias-gitx",
         true,
@@ -2959,6 +3098,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         &records,
         Some(&runtime_path),
         None,
+        None,
         "/update",
         "alias-update",
         true,
@@ -2970,6 +3110,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
     let natural_language_team = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
+        None,
         None,
         "需要 team orchestration 多 agent 执行",
         "natural-language-team",
@@ -2987,6 +3128,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
             &records,
             Some(&runtime_path),
             None,
+            None,
             query,
             &format!("negative-{forbidden}"),
             true,
@@ -3003,6 +3145,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         &records,
         Some(&runtime_path),
         None,
+        None,
         "write a small helper function",
         "native-runtime-helper-fn",
         true,
@@ -3015,6 +3158,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
     let plan_query = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
+        None,
         None,
         "make a plan",
         "native-runtime-make-a-plan",
@@ -3040,6 +3184,7 @@ fn manifest_fallback_preserves_runtime_visual_review_gate() {
             &records,
             Some(&runtime_path),
             None,
+            None,
             query,
             &format!("visual-review-{query}"),
             true,
@@ -3052,6 +3197,7 @@ fn manifest_fallback_preserves_runtime_visual_review_gate() {
     let capture = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
+        None,
         None,
         "take a screenshot",
         "screenshot-capture",
@@ -3075,6 +3221,7 @@ fn explicit_manifest_preserves_native_runtime_for_low_confidence_hits() {
         &records,
         Some(&runtime_path),
         Some(&manifest_path),
+        None,
         "帮我写一个 Python 脚本，并补 pytest 回归测试",
         "explicit-manifest-native-runtime",
         true,

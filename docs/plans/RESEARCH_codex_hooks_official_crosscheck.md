@@ -67,7 +67,7 @@
 1. `framework maint install-codex-user-hooks` 在用户 `config.toml` 创建/合并 **`[features]`** 且 **`hooks = true`**。
 2. 合并结果**不得**包含子串 **`codex_hooks`**（与 `verify_codex_hooks` 一致，视为 deprecated）。
 3. 用户级 `hooks.json` 含 **`SessionStart` / `PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`**，且命令串含 **`codex hook --event=`** 与 **`router-rs`**。
-4. 若干 `install_native_integration_*` 用例：当存在 `codex_hooks = true` 时会被改写为仅保留 **`hooks = true`**，且可保留无关键如 `codex_hooks_extra`。
+4. 若干 `install_native_integration_*` 用例：native/global integration 保持安全默认关闭 hooks；当存在 deprecated `codex_hooks = true/false` 时会被改写为 canonical **`hooks = false`**，且可保留无关键如 `codex_hooks_extra`。
 
 ---
 

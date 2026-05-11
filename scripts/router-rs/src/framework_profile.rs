@@ -1053,11 +1053,7 @@ fn build_delegation_contract() -> Map<String, Value> {
     gate.insert("spawn_is_optional".to_string(), Value::Bool(true));
     gate.insert(
         "route_outcomes".to_string(),
-        json!(["local", "subagent", "team"]),
-    );
-    gate.insert(
-        "team_route_skill".to_string(),
-        Value::String("team".to_string()),
+        json!(["local", "bounded-sidecar", "local-supervisor-queue"]),
     );
 
     let mut local_supervisor_mode = Map::new();
@@ -1439,7 +1435,7 @@ mod tests {
         assert!(bundle.codex_profile["metadata"].get("adapter_id").is_none());
         assert_eq!(
             bundle.codex_profile["execution_surface"]["entrypoint_kind"],
-            Value::String("codex".to_string())
+            Value::String("codex-cli".to_string())
         );
         assert_eq!(
             bundle.codex_profile["execution_surface"]["controller_is_cli"],
@@ -1447,7 +1443,7 @@ mod tests {
         );
         assert_eq!(
             bundle.codex_profile["codex_host_payload"]["host_cli"],
-            Value::String("codex".to_string())
+            Value::String("codex-cli".to_string())
         );
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
         assert!(serialized.get("execution_controller_contract").is_none());
@@ -1497,7 +1493,7 @@ mod tests {
         );
         assert_eq!(
             bundle.codex_profile["runtime_surface"]["host_projection"]["payload"]["host_cli"],
-            json!("codex")
+            json!("codex-cli")
         );
         assert!(bundle.codex_profile.get("bridge_contract").is_none());
         assert!(bundle.codex_profile.get("source_contract").is_none());
@@ -1510,7 +1506,7 @@ mod tests {
             "default": {
                 "required_host_capabilities": ["artifact_contract"]
             },
-            "codex": {
+            "codex-cli": {
                 "required_host_capabilities": ["batch_execution"]
             }
         }))
@@ -1524,7 +1520,7 @@ mod tests {
                 "default": {
                     "required_host_capabilities": ["artifact_contract"]
                 },
-                "codex": {
+                "codex-cli": {
                     "required_host_capabilities": ["batch_execution"]
                 }
             })

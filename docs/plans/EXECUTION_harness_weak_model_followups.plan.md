@@ -1,7 +1,7 @@
 ---
 name: Harness 弱模型调研后续（execution）
 overview: |
-  本文件为执行计划（plan_profile: execution）。允许按下方 todos 修改文档与 `scripts/router-rs` 测试；将 [docs/plans/RESEARCH_harness_weak_model_top_tier.md](RESEARCH_harness_weak_model_top_tier.md) 中已关闭/仍 open 项与索引、回归测试对齐；末条在 Cursor 宿主执行 /gitx plan 对照本计划 vs 实际并完成 Git 收口。
+  本文件为执行计划（plan_profile: execution）。允许按下方 todos 修改文档与 `scripts/router-rs` 测试；将 [docs/plans/RESEARCH_harness_weak_model_top_tier.md](RESEARCH_harness_weak_model_top_tier.md) 中已关闭/仍 open 项与索引、回归测试对齐；末条以计划 vs 实际 + Git 状态证据收口，宿主支持时可使用 /gitx plan。
 plan_profile: execution
 todos:
   - id: sync-depth-open-table
@@ -34,10 +34,10 @@ todos:
     status: pending
   - id: execution-closeout-gitx
     content: |
-      动作：对照本文件 frontmatter `todos` 与正文 §继承面逐项验收；在 Cursor 宿主执行 Git 计划收口。
-      范围：仓库根（`/gitx plan`）；本文件 `docs/plans/EXECUTION_harness_weak_model_followups.plan.md`
+      动作：对照本文件 frontmatter `todos` 与正文 §继承面逐项验收；记录 Git 状态证据。
+      范围：仓库根；本文件 `docs/plans/EXECUTION_harness_weak_model_followups.plan.md`
       Done when：前序 todos 均已达 Done when；无未解释搁置项。
-      Verify：在 Cursor 宿主执行 **`/gitx plan`**（与 `/gitx` 同契约，见 `skills/gitx/SKILL.md`）；`git status --porcelain` 仅含本计划预期变更集或已提交干净。
+      Verify：`git status --short --branch` 与 `git diff --stat` 已记录；宿主支持时可执行 **`/gitx plan`**（与 `/gitx` 同契约，见 `skills/gitx/SKILL.md`）。
     status: pending
 isProject: false
 ---

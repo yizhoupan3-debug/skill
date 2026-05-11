@@ -25,7 +25,7 @@ const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
 const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
     "framework-generated-artifacts-manifest-v1";
-const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(120);
+const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(300);
 const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
     ".codex",
     ".git",
@@ -40,14 +40,13 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
-const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 8] = [
+const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 7] = [
     "autopilot",
     "code-review-deep",
     "deepinterview",
     "gitx",
     "loop",
     "plan-mode",
-    "team",
     "update",
 ];
 const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
@@ -60,12 +59,12 @@ const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
     "skills/SKILL_PLUGIN_CATALOG.json",
     "skills/SKILL_ROUTING_METADATA.json",
     "skills/SKILL_HEALTH_MANIFEST.json",
-    "skills/SKILL_SHADOW_MAP.json",
     "skills/SKILL_APPROVAL_POLICY.json",
-    "skills/SKILL_LOADOUTS.json",
-    "skills/SKILL_TIERS.json",
     "AGENTS.md",
     ".codex/host_entrypoints_sync_manifest.json",
+    ".cursor/rules/framework.mdc",
+    ".claude/rules/framework.md",
+    ".claude/settings.json",
 ];
 const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
     "imagegen",
@@ -768,9 +767,22 @@ fn generated_artifacts_status(
         let forbidden = checked_in
             .as_ref()
             .and_then(|bytes| std::str::from_utf8(bytes).ok())
-            .map(|content| generated_artifact_forbidden_markers(&artifact.path, content))
+            .map(|content| {
+                if artifact.compare == "normalized-text" {
+                    let normalized = normalize_generated_artifact_text(content, &[&framework_root]);
+                    generated_artifact_forbidden_markers(&artifact.path, &normalized)
+                } else {
+                    generated_artifact_forbidden_markers(&artifact.path, content)
+                }
+            })
             .unwrap_or_default();
-        let drifted = checked_in.as_ref() != regenerated.as_ref();
+        let drifted = generated_artifact_drifted(
+            &artifact.compare,
+            checked_in.as_deref(),
+            regenerated.as_deref(),
+            &framework_root,
+            temp_root,
+        )?;
         let clean = exists && regenerated_exists && !drifted && forbidden.is_empty();
         ok &= clean;
         results.push(json!({
@@ -804,7 +816,7 @@ fn generated_artifacts_status(
         "schema_version": "framework-generated-artifacts-status-v1",
         "ok": ok,
         "manifest_status": {
-            "mode": "manifest-backed-byte-for-byte-drift-gate",
+            "mode": "manifest-backed-generated-artifact-drift-gate",
             "artifact_root": artifact_root.to_string_lossy(),
             "temp_root": temp_root.to_string_lossy(),
             "undeclared_generated_artifacts": undeclared,
@@ -814,7 +826,7 @@ fn generated_artifacts_status(
         },
         "drift_gate": {
             "enabled": true,
-            "compare": "byte-for-byte",
+            "compare": ["byte-for-byte", "normalized-text"],
             "manifest": manifest_path.to_string_lossy(),
         },
         "framework_root": framework_root.to_string_lossy(),
@@ -836,7 +848,10 @@ fn validate_generated_artifact_entry(
             artifact.path
         ));
     }
-    if artifact.compare != "byte-for-byte" {
+    if !matches!(
+        artifact.compare.as_str(),
+        "byte-for-byte" | "normalized-text"
+    ) {
         return Err(format!(
             "unsupported generated artifact compare mode for {}: {}",
             artifact.path, artifact.compare
@@ -845,8 +860,62 @@ fn validate_generated_artifact_entry(
     Ok(())
 }
 
+fn generated_artifact_drifted(
+    compare: &str,
+    checked_in: Option<&[u8]>,
+    regenerated: Option<&[u8]>,
+    framework_root: &Path,
+    regenerated_root: &Path,
+) -> Result<bool, String> {
+    match compare {
+        "byte-for-byte" => Ok(checked_in != regenerated),
+        "normalized-text" => {
+            let Some(checked_in) = checked_in else {
+                return Ok(regenerated.is_some());
+            };
+            let Some(regenerated) = regenerated else {
+                return Ok(true);
+            };
+            let checked_in = std::str::from_utf8(checked_in)
+                .map_err(|err| format!("normalized-text artifact is not UTF-8: {err}"))?;
+            let regenerated = std::str::from_utf8(regenerated)
+                .map_err(|err| format!("normalized-text artifact is not UTF-8: {err}"))?;
+            Ok(
+                normalize_generated_artifact_text(checked_in, &[framework_root, regenerated_root])
+                    != normalize_generated_artifact_text(
+                        regenerated,
+                        &[framework_root, regenerated_root],
+                    ),
+            )
+        }
+        other => Err(format!(
+            "unsupported generated artifact compare mode: {other}"
+        )),
+    }
+}
+
+fn normalize_generated_artifact_text(content: &str, roots: &[&Path]) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut normalized = content.to_string();
+    let mut roots = roots
+        .iter()
+        .map(|root| root.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+    roots.sort_unstable_by_key(|root| std::cmp::Reverse(root.len()));
+    for root in roots {
+        normalized = normalized.replace(&root, "${FRAMEWORK_ROOT}");
+    }
+    normalized.replace(&home, "${HOME}")
+}
+
 fn allowed_dot_generated_artifact(path: &str) -> bool {
-    path == ".codex/host_entrypoints_sync_manifest.json"
+    matches!(
+        path,
+        ".codex/host_entrypoints_sync_manifest.json"
+            | ".cursor/rules/framework.mdc"
+            | ".claude/rules/framework.md"
+            | ".claude/settings.json"
+    )
 }
 
 struct GeneratedArtifactTempRoot {
@@ -942,6 +1011,13 @@ fn run_generated_artifact_generator(
     temp_root: &Path,
 ) -> Result<(), String> {
     let timeout = generated_artifact_generator_timeout();
+    let log_stamp = Local::now().timestamp_nanos_opt().unwrap_or_default();
+    let stdout_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stdout.log"));
+    let stderr_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stderr.log"));
+    let stdout_file = fs::File::create(&stdout_path)
+        .map_err(|err| format!("failed to create {}: {err}", stdout_path.display()))?;
+    let stderr_file = fs::File::create(&stderr_path)
+        .map_err(|err| format!("failed to create {}: {err}", stderr_path.display()))?;
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(rewrite_generated_artifact_generator(
@@ -953,8 +1029,8 @@ fn run_generated_artifact_generator(
         .env("SKILL_FRAMEWORK_ROOT", temp_root)
         .env("SKILL_ARTIFACT_ROOT", temp_root.join("artifacts"))
         .env("ROUTER_RS_NO_REBUILD", "1")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file))
         .spawn()
         .map_err(|err| err.to_string())?;
     let start = Instant::now();
@@ -964,24 +1040,29 @@ fn run_generated_artifact_generator(
         }
         if start.elapsed() >= timeout {
             let _ = child.kill();
-            let output = child.wait_with_output().map_err(|err| err.to_string())?;
+            let _ = child.wait().map_err(|err| err.to_string())?;
+            let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
             return Err(format!(
                 "generated artifact generator timed out after {}s: {generator}\nstdout:\n{}\nstderr:\n{}",
                 timeout.as_secs(),
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
+                stdout,
+                stderr
             ));
         }
         thread::sleep(Duration::from_millis(100));
     }
-    let output = child.wait_with_output().map_err(|err| err.to_string())?;
-    if output.status.success() {
+    let status = child.wait().map_err(|err| err.to_string())?;
+    let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
+    let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
+    let _ = fs::remove_file(&stdout_path);
+    let _ = fs::remove_file(&stderr_path);
+    if status.success() {
         return Ok(());
     }
     Err(format!(
         "generated artifact generator failed: {generator}\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        stdout, stderr
     ))
 }
 
@@ -1047,6 +1128,7 @@ fn undeclared_generated_framework_artifacts(
     framework_root: &Path,
     declared_paths: &BTreeSet<String>,
 ) -> Result<Vec<String>, String> {
+    let allowed_reports = surface_policy_generated_reports(framework_root)?;
     let mut undeclared = Vec::new();
     let candidates = generated_artifact_reverse_reference_candidates(framework_root)?;
     for path in candidates {
@@ -1055,13 +1137,33 @@ fn undeclared_generated_framework_artifacts(
             .map_err(|err| err.to_string())?
             .to_string_lossy()
             .into_owned();
-        if !declared_paths.contains(&rel) {
+        if !declared_paths.contains(&rel) && !allowed_reports.contains(&rel) {
             undeclared.push(rel);
         }
     }
     undeclared.sort();
     undeclared.dedup();
     Ok(undeclared)
+}
+
+fn surface_policy_generated_reports(framework_root: &Path) -> Result<BTreeSet<String>, String> {
+    let path = framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json");
+    let Some(policy) = read_json_if_exists(&path)? else {
+        return Ok(BTreeSet::new());
+    };
+    let mut reports = BTreeSet::new();
+    for key in ["derived_reports", "deprecated_or_foldable_reports"] {
+        let Some(items) = policy.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        for item in items {
+            let Some(rel) = item.as_str() else {
+                continue;
+            };
+            reports.insert(rel.to_string());
+        }
+    }
+    Ok(reports)
 }
 
 fn generated_artifact_reverse_reference_candidates(
@@ -1281,7 +1383,8 @@ fn install_native_integration(
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
 
     let created_config = ensure_config_file(&home_config_path)?;
-    let codex_hooks_disabled_changed = ensure_codex_hooks_disabled(&home_config_path)?;
+    let (hooks_disabled_changed, deprecated_codex_hooks_removed) =
+        ensure_codex_hooks_feature_disabled(&home_config_path)?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let home_codex_dir = home_config_path
         .parent()
@@ -1315,7 +1418,9 @@ fn install_native_integration(
         "codex_skill_surface": surface.unwrap_or(Value::Null),
         "codex_prompt_entrypoints": prompt_entrypoints,
         "created_config": created_config,
-        "codex_hooks_disabled_changed": codex_hooks_disabled_changed,
+        "hooks_enabled": false,
+        "hooks_disabled_changed": hooks_disabled_changed,
+        "deprecated_codex_hooks_removed": deprecated_codex_hooks_removed,
         "tui_status_line_changed": tui_changed,
         "home_codex_skills_changed": home_codex_skills_changed,
         "default_bootstrap": default_bootstrap,
@@ -1335,8 +1440,9 @@ fn projection_install_command(
         command.claude_home.as_deref(),
         command.home.as_deref(),
     )?;
-    let selected_tools = selected_projection_tools(&roots.framework_root, &command.to, true)?;
     let scope = canonical_scope(&command.scope)?;
+    let selected_tools =
+        selected_projection_tools(&roots.framework_root, &command.to, true, scope)?;
     let mut results = Map::new();
     for tool in selected_tools {
         results.insert(
@@ -1390,8 +1496,9 @@ fn projection_remove_or_cleanup_command(
         command.claude_home.as_deref(),
         command.home.as_deref(),
     )?;
-    let selected_tools = selected_projection_tools(&roots.framework_root, &command.to, false)?;
     let scope = canonical_scope(&command.scope)?;
+    let selected_tools =
+        selected_projection_tools(&roots.framework_root, &command.to, false, scope)?;
     validate_cleanup_scope(&command, scope, &selected_tools, cleanup_mode)?;
     let mut results = Map::new();
     for tool in selected_tools {
@@ -1441,12 +1548,18 @@ fn projection_envelope(
     let pairs = crate::framework_host_targets::host_id_and_skills_install_tool_pairs(
         &roots.framework_root,
     )?;
+    let registry =
+        crate::framework_host_targets::load_runtime_registry_json(&roots.framework_root)?;
     let mut host_targets_map = serde_json::Map::new();
     for (host_id, tool) in &pairs {
-        host_targets_map.insert(
-            host_id.clone(),
-            results.get(tool.as_str()).cloned().unwrap_or(Value::Null),
-        );
+        let value = if crate::framework_host_targets::host_is_installable(&registry, host_id)? {
+            results.get(tool.as_str()).cloned().unwrap_or(Value::Null)
+        } else {
+            results.get(host_id.as_str()).cloned().unwrap_or_else(|| {
+                non_installable_projection_result(host_id, scope.unwrap_or("status"))
+            })
+        };
+        host_targets_map.insert(host_id.clone(), value);
     }
     let host_targets = Value::Object(host_targets_map);
     Ok(json!({
@@ -1469,7 +1582,13 @@ fn resolved_roots_payload(
     pairs: &[(String, String)],
 ) -> Result<Value, String> {
     let mut host_home_roots = serde_json::Map::new();
+    let registry =
+        crate::framework_host_targets::load_runtime_registry_json(&roots.framework_root)?;
     for (host_id, tool) in pairs {
+        if !crate::framework_host_targets::host_is_installable(&registry, host_id)? {
+            host_home_roots.insert(host_id.clone(), Value::Null);
+            continue;
+        }
         let adapter = projection_adapter(tool).ok_or_else(|| {
             format!(
                 "resolved_roots_payload: unsupported skills-install tool `{tool}` \
@@ -1490,14 +1609,15 @@ fn selected_projection_tools(
     framework_root: &Path,
     raw_tools: &[String],
     default_all: bool,
+    scope: &str,
 ) -> Result<Vec<String>, String> {
     if raw_tools.is_empty() && default_all {
-        return registry_projection_tools(framework_root);
+        return default_projection_tools_for_scope(framework_root, scope);
     }
     let mut selected = Vec::new();
     for raw in raw_tools {
         if raw.trim().eq_ignore_ascii_case("all") {
-            for tool in registry_projection_tools(framework_root)? {
+            for tool in default_projection_tools_for_scope(framework_root, scope)? {
                 if !selected.contains(&tool) {
                     selected.push(tool);
                 }
@@ -1517,6 +1637,17 @@ fn selected_projection_tools(
         ));
     }
     Ok(selected)
+}
+
+fn default_projection_tools_for_scope(
+    framework_root: &Path,
+    scope: &str,
+) -> Result<Vec<String>, String> {
+    let mut tools = registry_projection_tools(framework_root)?;
+    if canonical_scope(scope)? == "project" {
+        tools.retain(|tool| tool != "claude");
+    }
+    Ok(tools)
 }
 
 struct HostProjectionAdapter {
@@ -1578,8 +1709,9 @@ fn projection_adapter_for_raw(raw: &str) -> Option<&'static HostProjectionAdapte
 }
 
 fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
-    let pairs =
-        crate::framework_host_targets::host_id_and_skills_install_tool_pairs(framework_root)?;
+    let pairs = crate::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
+        framework_root,
+    )?;
     let mut tools = Vec::new();
     for (host_id, tool) in pairs {
         let adapter = projection_adapter(&tool).ok_or_else(|| {
@@ -1637,11 +1769,17 @@ fn install_projection_tool(
     tool: &str,
     scope: &str,
 ) -> Result<Value, String> {
+    if tool == "codex-app" {
+        return Ok(non_installable_projection_result("codex-app", scope));
+    }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     (adapter.install)(roots, scope)
 }
 
 fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
+    if tool == "codex-app" {
+        return Ok(non_installable_projection_result("codex-app", "status"));
+    }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     (adapter.status)(roots)
 }
@@ -1652,8 +1790,22 @@ fn remove_projection_tool(
     scope: &str,
     dry_run: bool,
 ) -> Result<Value, String> {
+    if tool == "codex-app" {
+        return Ok(non_installable_projection_result("codex-app", scope));
+    }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     (adapter.remove)(roots, scope, dry_run)
+}
+
+fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
+    json!({
+        "status": "unsupported",
+        "supported": false,
+        "installable": false,
+        "host_id": host_id,
+        "scope": scope,
+        "reason": "runtime-supported host does not install file projections",
+    })
 }
 
 fn codex_home_root_string(roots: &ResolvedProjectionRoots) -> String {
@@ -1923,17 +2075,83 @@ fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> Pat
     }
 }
 
+fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.claude_home_root.join("settings.json")
+    } else {
+        roots.project_root.join(".claude").join("settings.json")
+    }
+}
+
+fn build_router_rs_claude_hook_command(event: &str) -> String {
+    let missing_binary_fallback = "printf \"%s\\n\" \"{\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"router-rs binary unavailable for Claude hook\\\",\\\"suppressOutput\\\":true}\"; exit 1";
+    format!(
+        "/usr/bin/env bash -lc 'HOOK_PAYLOAD=\"$(cat)\"; if printf \"%s\" \"$HOOK_PAYLOAD\" | grep -Eq \"\\\"cursor_version\\\"|\\\"workspace_roots\\\"|/\\\\.cursor/|\\\\\\\\\\\\.cursor\\\\\\\\\"; then printf \"%s\\n\" \"{{\\\"suppressOutput\\\":true}}\"; exit 0; fi; CLAUDE_PROJECT_ROOT=\"${{CLAUDE_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; if [[ -r \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\" ]]; then set -a; . \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\"; set +a; fi; ROUTER_RS_BIN=\"\"; for candidate in \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/debug/router-rs\" \"$(command -v router-rs 2>/dev/null || true)\"; do if [ -n \"$candidate\" ] && [ -x \"$candidate\" ] && \"$candidate\" claude hook --help >/dev/null 2>&1; then ROUTER_RS_BIN=\"$candidate\"; break; fi; done; if [ ! -x \"$ROUTER_RS_BIN\" ]; then {missing_binary_fallback}; fi; printf \"%s\" \"$HOOK_PAYLOAD\" | \"$ROUTER_RS_BIN\" claude hook --event={event} --repo-root \"$CLAUDE_PROJECT_ROOT\"'"
+    )
+}
+
+fn managed_claude_hook_entry(event: &str) -> Value {
+    json!({
+        "matcher": "",
+        "hooks": [{
+            "type": "command",
+            "command": build_router_rs_claude_hook_command(event),
+        }]
+    })
+}
+
+fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
+    match value {
+        Value::String(s) => s.contains("router-rs") && s.contains("claude hook"),
+        Value::Array(items) => items.iter().any(value_contains_router_rs_claude_hook),
+        Value::Object(map) => map.values().any(value_contains_router_rs_claude_hook),
+        _ => false,
+    }
+}
+
+fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value, String> {
+    let mut root = match existing {
+        Some(Value::Object(map)) => map,
+        Some(_) => return Err("Claude settings root must be a JSON object".to_string()),
+        None => Map::new(),
+    };
+    let mut hooks = match root.remove("hooks") {
+        Some(Value::Object(map)) => map,
+        Some(_) => return Err("Claude settings `hooks` must be a JSON object".to_string()),
+        None => Map::new(),
+    };
+    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+        let mut entries = hooks
+            .remove(event)
+            .and_then(|value| value.as_array().cloned())
+            .unwrap_or_default();
+        entries.retain(|entry| !value_contains_router_rs_claude_hook(entry));
+        entries.push(managed_claude_hook_entry(event));
+        hooks.insert(event.to_string(), Value::Array(entries));
+    }
+    root.insert("hooks".to_string(), Value::Object(hooks));
+    Ok(Value::Object(root))
+}
+
+fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool, String> {
+    let existing = read_json_if_exists(settings_path)?;
+    let merged = merge_claude_settings_hooks(existing)?;
+    write_json_if_changed(settings_path, &merged)
+}
+
 fn install_claude_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
     let target = claude_entrypoint_target(roots, scope);
+    let settings_path = claude_settings_target(roots, scope);
     let changed =
         write_text_if_changed(&target, &render_claude_framework_entrypoint(roots, scope))?;
-    let manifest_changed = write_claude_projection_manifest(roots, scope, &target)?;
+    let hooks_changed = install_claude_settings_hooks(&settings_path)?;
+    let manifest_changed = write_claude_projection_manifest(roots, scope, &target, &settings_path)?;
     Ok(json!({
         "status": "installed",
-        "changed": changed || manifest_changed,
+        "changed": changed || hooks_changed || manifest_changed,
         "scope": scope,
         "prompts": {
             "framework": {
@@ -1943,7 +2161,12 @@ fn install_claude_projection(
                 "native_representation": "markdown-rule",
             }
         },
-        "hooks": {"managed": false, "reason": "use-router-rs-claude-hook-cli"},
+        "hooks": {
+            "managed": true,
+            "path": settings_path.to_string_lossy(),
+            "changed": hooks_changed,
+            "events": ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"],
+        },
         "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
     }))
 }
@@ -1951,6 +2174,8 @@ fn install_claude_projection(
 fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let project_target = claude_entrypoint_target(roots, "project");
     let user_target = claude_entrypoint_target(roots, "user");
+    let project_settings = claude_settings_target(roots, "project");
+    let user_settings = claude_settings_target(roots, "user");
     Ok(json!({
         "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
         "status": "projection-status",
@@ -1964,7 +2189,10 @@ fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, St
             "project": projection_manifest_status(&projection_manifest_path(roots, "claude-code", "project"))?,
             "user": projection_manifest_status(&projection_manifest_path(roots, "claude-code", "user"))?,
         },
-        "hooks": {"managed": false, "reason": "use-router-rs-claude-hook-cli"},
+        "hooks": {
+            "project": claude_settings_hook_status(&project_settings)?,
+            "user": claude_settings_hook_status(&user_settings)?,
+        },
     }))
 }
 
@@ -1974,6 +2202,7 @@ fn remove_claude_projection(
     dry_run: bool,
 ) -> Result<Value, String> {
     let target = claude_entrypoint_target(roots, scope);
+    let settings_path = claude_settings_target(roots, scope);
     let manifest_path = projection_manifest_path(roots, "claude-code", scope);
     let manifest_ownership =
         projection_manifest_ownership(&manifest_path, "claude-code", scope, &target)?;
@@ -1991,16 +2220,116 @@ fn remove_claude_projection(
     } else {
         false
     };
-    let any_changed = changed || manifest_removed;
+    let settings_removal = remove_claude_settings_hooks(&settings_path, dry_run)?;
+    let any_changed = changed || manifest_removed || settings_removal.changed;
+    let would_remove_any =
+        would_remove_projection || would_remove_manifest || settings_removal.would_change;
+    let mut removed_paths =
+        removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
+    if settings_removal.removed_file {
+        if let Some(paths) = removed_paths.as_array_mut() {
+            paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
+        }
+    }
+    let mut would_remove_paths = removed_projection_paths(
+        would_remove_projection,
+        &target,
+        would_remove_manifest,
+        &manifest_path,
+    );
+    if settings_removal.would_remove_file {
+        if let Some(paths) = would_remove_paths.as_array_mut() {
+            paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
+        }
+    }
     Ok(json!({
-        "status": if dry_run && (would_remove_projection || would_remove_manifest) { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
+        "status": if dry_run && would_remove_any { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
         "changed": any_changed,
         "dry_run": dry_run,
         "scope": scope,
-        "removed_paths": removed_projection_paths(changed, &target, manifest_removed, &manifest_path),
-        "would_remove_paths": removed_projection_paths(would_remove_projection, &target, would_remove_manifest, &manifest_path),
+        "removed_paths": removed_paths,
+        "would_remove_paths": would_remove_paths,
+        "settings": {
+            "path": settings_path.to_string_lossy(),
+            "changed": settings_removal.changed,
+            "would_change": dry_run && settings_removal.would_change,
+            "removed_file": settings_removal.removed_file,
+            "would_remove_file": dry_run && settings_removal.would_remove_file,
+            "removed_events": settings_removal.removed_events,
+        },
         "skipped_user_owned_paths": if would_remove_projection || !target.exists() { json!([]) } else { json!([target.to_string_lossy()]) },
     }))
+}
+
+#[derive(Debug, Default)]
+struct ClaudeSettingsRemoval {
+    changed: bool,
+    would_change: bool,
+    removed_file: bool,
+    would_remove_file: bool,
+    removed_events: Vec<String>,
+}
+
+fn remove_claude_settings_hooks(
+    settings_path: &Path,
+    dry_run: bool,
+) -> Result<ClaudeSettingsRemoval, String> {
+    let Some(Value::Object(mut root)) = read_json_if_exists(settings_path)? else {
+        return Ok(ClaudeSettingsRemoval::default());
+    };
+    let Some(hooks_value) = root.remove("hooks") else {
+        return Ok(ClaudeSettingsRemoval::default());
+    };
+    let Value::Object(mut hooks) = hooks_value else {
+        root.insert("hooks".to_string(), hooks_value);
+        return Ok(ClaudeSettingsRemoval::default());
+    };
+
+    let mut removed_events = Vec::new();
+    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+        let Some(value) = hooks.remove(event) else {
+            continue;
+        };
+        let Value::Array(entries) = value else {
+            hooks.insert(event.to_string(), value);
+            continue;
+        };
+        let original_len = entries.len();
+        let retained = entries
+            .into_iter()
+            .filter(|entry| !value_contains_router_rs_claude_hook(entry))
+            .collect::<Vec<_>>();
+        if retained.len() != original_len {
+            removed_events.push(event.to_string());
+        }
+        if !retained.is_empty() {
+            hooks.insert(event.to_string(), Value::Array(retained));
+        }
+    }
+
+    if removed_events.is_empty() {
+        root.insert("hooks".to_string(), Value::Object(hooks));
+        return Ok(ClaudeSettingsRemoval::default());
+    }
+
+    if !hooks.is_empty() {
+        root.insert("hooks".to_string(), Value::Object(hooks));
+    }
+    let remove_file = root.is_empty();
+    if !dry_run {
+        if remove_file {
+            fs::remove_file(settings_path).map_err(|err| err.to_string())?;
+        } else {
+            write_json_if_changed(settings_path, &Value::Object(root))?;
+        }
+    }
+    Ok(ClaudeSettingsRemoval {
+        changed: !dry_run,
+        would_change: true,
+        removed_file: !dry_run && remove_file,
+        would_remove_file: remove_file,
+        removed_events,
+    })
 }
 
 fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
@@ -2008,9 +2337,7 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `{}`.\nProject root: `{}`.\n",
-        roots.framework_root.to_string_lossy(),
-        roots.project_root.to_string_lossy(),
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
     )
 }
 
@@ -2018,6 +2345,7 @@ fn write_claude_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     command_path: &Path,
+    settings_path: &Path,
 ) -> Result<bool, String> {
     write_json_if_changed(
         &projection_manifest_path(roots, "claude-code", scope),
@@ -2026,12 +2354,41 @@ fn write_claude_projection_manifest(
             "managed_by": "skill-framework",
             "host_projection": "claude-code",
             "scope": scope,
-            "files": [command_path.to_string_lossy()],
+            "files": [command_path.to_string_lossy(), settings_path.to_string_lossy()],
             "settings": {
-                "managed_key_paths": [],
+                "managed_key_paths": [
+                    "hooks.PreToolUse",
+                    "hooks.UserPromptSubmit",
+                    "hooks.PostToolUse",
+                    "hooks.Stop"
+                ],
             }
         }),
     )
+}
+
+fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
+    let payload = read_json_if_exists(path)?;
+    let mut managed_events = Vec::new();
+    if let Some(Value::Object(root)) = payload.as_ref() {
+        if let Some(Value::Object(hooks)) = root.get("hooks") {
+            for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+                if hooks
+                    .get(event)
+                    .map(value_contains_router_rs_claude_hook)
+                    .unwrap_or(false)
+                {
+                    managed_events.push(event);
+                }
+            }
+        }
+    }
+    Ok(json!({
+        "path": path.to_string_lossy(),
+        "exists": path.exists(),
+        "managed": managed_events.len() == 4,
+        "managed_events": managed_events,
+    }))
 }
 
 fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
@@ -2261,11 +2618,9 @@ fn write_codex_projection_manifest(
     )
 }
 
-fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+fn render_codex_framework_entrypoint(_roots: &ResolvedProjectionRoots, scope: &str) -> String {
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\nFramework root: `{}`.\nProject root: `{}`.\n\n$ARGUMENTS\n",
-        roots.framework_root.to_string_lossy(),
-        roots.project_root.to_string_lossy(),
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
     )
 }
 
@@ -2468,9 +2823,7 @@ fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `{}`.\nProject root: `{}`.\n",
-        roots.framework_root.to_string_lossy(),
-        roots.project_root.to_string_lossy(),
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
     )
 }
 
@@ -2551,6 +2904,16 @@ fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String
 }
 
 fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
+    let normalized = raw.trim().to_lowercase();
+    if normalized == "codex-app" {
+        let registry = crate::framework_host_targets::load_runtime_registry_json(framework_root)?;
+        if crate::framework_host_targets::host_targets_supported_host_ids(&registry)?
+            .iter()
+            .any(|host_id| host_id == "codex-app")
+        {
+            return Ok("codex-app".to_string());
+        }
+    }
     if let Some(adapter) = projection_adapter_for_raw(raw) {
         return Ok(adapter.tool.to_string());
     }
@@ -2565,13 +2928,17 @@ fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, Strin
 }
 
 fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
-    registry_projection_tools(framework_root).unwrap_or_else(|_| {
+    let mut tools = registry_projection_tools(framework_root).unwrap_or_else(|_| {
         vec![
             "codex".to_string(),
             "cursor".to_string(),
             "claude".to_string(),
         ]
-    })
+    });
+    if !tools.iter().any(|tool| tool == "codex-app") {
+        tools.push("codex-app".to_string());
+    }
+    tools
 }
 
 fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
@@ -3437,15 +3804,22 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
+fn ensure_codex_hooks_feature_disabled(config_path: &Path) -> Result<(bool, bool), String> {
     const HOOKS_DISABLED_LINE: &str = "hooks = false";
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
         let block = content[start..end].trim_end_matches('\n');
         let mut has_hooks = false;
+        let mut hooks_already_disabled = false;
+        let mut hook_setting_count = 0usize;
+        let mut deprecated_codex_hooks_removed = false;
         let mut updated_lines = Vec::new();
         for line in block.lines() {
             if is_named_setting(line, "codex_hooks") || is_named_setting(line, "hooks") {
+                hook_setting_count += 1;
+                deprecated_codex_hooks_removed |= is_named_setting(line, "codex_hooks");
+                hooks_already_disabled |=
+                    is_named_setting(line, "hooks") && line.trim() == HOOKS_DISABLED_LINE;
                 if !has_hooks {
                     updated_lines.push(HOOKS_DISABLED_LINE.to_string());
                     has_hooks = true;
@@ -3454,12 +3828,20 @@ fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
                 updated_lines.push(line.to_string());
             }
         }
+        if has_hooks
+            && hooks_already_disabled
+            && hook_setting_count == 1
+            && !deprecated_codex_hooks_removed
+        {
+            return Ok((false, false));
+        }
         if !has_hooks {
             updated_lines.push(HOOKS_DISABLED_LINE.to_string());
         }
         let new_block = format!("{}\n", updated_lines.join("\n"));
         let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
-        return write_text_if_changed(config_path, &updated);
+        let changed = write_text_if_changed(config_path, &updated)?;
+        return Ok((changed, deprecated_codex_hooks_removed));
     }
     let mut updated = content.trim_end().to_string();
     if !updated.is_empty() {
@@ -3468,7 +3850,8 @@ fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
     updated.push_str("[features]\n");
     updated.push_str(HOOKS_DISABLED_LINE);
     updated.push('\n');
-    write_text_if_changed(config_path, &updated)
+    let changed = write_text_if_changed(config_path, &updated)?;
+    Ok((changed, false))
 }
 
 fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {
@@ -3658,6 +4041,19 @@ mod tests {
     }
 
     #[test]
+    fn build_router_rs_claude_hook_command_sources_optional_env_file() {
+        let cmd = build_router_rs_claude_hook_command("Stop");
+        assert!(
+            cmd.contains("router-rs-hook.env"),
+            "expected optional hook env injection path segment: {cmd}"
+        );
+        assert!(
+            cmd.contains("set -a"),
+            "expected set -a for env sourcing: {cmd}"
+        );
+    }
+
+    #[test]
     fn canonical_tool_name_reports_registry_supported_tools_and_aliases() {
         let root = repo_root();
 
@@ -3666,7 +4062,7 @@ mod tests {
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         assert!(
-            err.contains("Supported tools: codex, cursor, claude"),
+            err.contains("Supported tools: codex, cursor, claude, codex-app"),
             "{err}"
         );
         assert!(err.contains("codex-cli"), "{err}");

@@ -355,7 +355,7 @@ fn check_routing_surfaces_are_rust_only(repo_root: &Path) -> DoctorCheck {
         "skills/SKILL_ROUTING_RUNTIME.json",
         "skills/SKILL_ROUTING_REGISTRY.md",
         "skills/SKILL_ROUTING_INDEX.md",
-        "skills/SKILL_APPROVAL_POLICY.json",
+        "skills/SKILL_ROUTING_METADATA.json",
     ];
     let joined = surfaces
         .iter()
@@ -1549,7 +1549,7 @@ const SUMMARY_MARKER: &str = "summary";
             "skills/SKILL_ROUTING_RUNTIME.json",
             "skills/SKILL_ROUTING_REGISTRY.md",
             "skills/SKILL_ROUTING_INDEX.md",
-            "skills/SKILL_APPROVAL_POLICY.json",
+            "skills/SKILL_ROUTING_METADATA.json",
         ] {
             write_file(&root.join(path), "gh-source-gate");
         }

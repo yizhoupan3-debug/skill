@@ -4,6 +4,26 @@
 
 ---
 
+## Failure taxonomy 与 findings 映射
+
+机器可读分类见 [`configs/framework/HARNESS_FAILURE_TAXONOMY.json`](../../configs/framework/HARNESS_FAILURE_TAXONOMY.json)；behavioral eval 用例见 [`configs/framework/HARNESS_BEHAVIORAL_EVAL_CASES.json`](../../configs/framework/HARNESS_BEHAVIORAL_EVAL_CASES.json)。分类只用于诊断与评估，不替代 `EVIDENCE_INDEX`、closeout 或路由真源。
+
+| failure_class | 典型来源 | 对应吸收项 |
+|---|---|---|
+| `route_miss` / `owner_drift` | 路由 owner/gate/overlay 偏移 | routing eval + skill contract lint |
+| `context_rot` | SessionStart、工具输出、账本整文件进入上下文 | token_efficiency + success-silent 输出 |
+| `tool_contract_bad` | skill/tool 参数、错误、返回值不清晰 | skill/tool contract lint |
+| `verification_missing` | 完成/通过声明缺 verifier 或 evidence row | closeout_integrity |
+| `source_stale` | 易过期外部来源未验证 | source gate / external research trace |
+| `side_effect_risk` | 外部副作用、迁移、审批边界不清 | tool policy / step side_effects |
+| `subagent_misuse` | lane 无隔离、无 digest、无验证 | lane_contract integrity |
+| `trace_gap` | 无法从 `TRACE_EVENTS` + evidence 复盘 | trajectory_health |
+| `step_recovery_gap` | 长任务无 step 级恢复点 | `STEP_LEDGER.jsonl` |
+
+新增执行面：`router-rs eval harness-contract` 输出 taxonomy/eval 合约；`router-rs eval skill-contract-lint` 输出共享 `findings / execution_items / verification_results`；`router-rs framework step-ledger` 追加或汇总 task-scoped step ledger。
+
+---
+
 ## P0（立刻可验收、阻断「无证据完成」）
 
 ### P0-1：记账型证据（L1→L2）— PostTool / `EVIDENCE_INDEX` 契约对齐

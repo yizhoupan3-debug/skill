@@ -51,4 +51,4 @@ Harness **只认 checker 输出**（exit code + 约定 stdout/stderr），不认
 
 - 不在 L3/L4 实现自动定理证明；默认仍是 **小 checker + 强对照**。
 - 不新增第二套证据 schema；仍用 **`EVIDENCE_INDEX`** + **`append_round`**。
-- Operator 文案见 `configs/framework/HARNESS_OPERATOR_NUDGES.json` 中的 **`math_reasoning_harness_line`**；深度外研检索句为同文件的 **`retrieval_trace_harness_line`**（与 `ROUTER_RS_HARNESS_OPERATOR_NUDGES` 同闸）。
+- 长版 Operator 文案见 `configs/framework/HARNESS_OPERATOR_NUDGES.json` 中的 **`math_reasoning_harness_line`**；深度外研检索句为同文件的 **`retrieval_trace_harness_line`**。这些长句保留作参考，不默认进入 RFV / Autopilot hook 输出。

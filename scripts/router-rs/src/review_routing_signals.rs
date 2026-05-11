@@ -37,9 +37,10 @@ fn fallback_review_gate_pattern_strings() -> &'static [&'static str] {
         r"(?i)\breview\s+(code|security|architecture)\b",
         r"(?im)^\s*review\b.*\bagain\b",
         r"(?i)\bfocus on finding\b.*\bproblems\b",
-        r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维)\s*review",
+        r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维)\s*review.*(代码|安全|架构|仓库|全仓|repo|repository|cross[- ]module|回归风险|架构风险|实现质量|严重程度|findings|severity|路由系统|skill\s*边界|PR|pull request)",
+        r"(?i)^\s*(深度|全面|全仓|仓库级|跨模块|多模块|多维)\s*review\s*$",
         r"(?i)review.*(仓库|全仓|跨模块|多模块|严重程度|findings|severity|repo|repository|cross[- ]module|回归风险|架构风险|实现质量|路由系统|skill\s*边界)",
-        r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维).*(审查|审核|审计|评审)",
+        r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维).*(审查|审核|审计|评审).*(代码|安全|架构|仓库|全仓|回归风险|架构风险|实现质量|严重程度|路由系统|skill\s*边界|PR|pull request|合并请求)",
         r"(?i)(审查|审核|审计|评审).*(仓库|全仓|跨模块|多模块|严重程度|回归风险|架构风险|实现质量|路由系统|skill\s*边界)",
         r"(?i)(代码审查|安全审查|架构审查|审查这个\s*PR|审查这段代码)",
         r"(?i)(审查|评审|审核).*(PR|pull request|合并请求)",
@@ -178,7 +179,7 @@ mod tests {
     fn embedded_review_routing_json_parses() {
         let parsed: ReviewRoutingSignalsFile =
             serde_json::from_str(EMBEDDED_JSON).expect("embedded REVIEW_ROUTING_SIGNALS.json");
-        assert_eq!(parsed.review_gate_regexes.len(), 13);
+        assert_eq!(parsed.review_gate_regexes.len(), 14);
         assert!(!parsed.parallel_review_candidate.review_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.breadth_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.scope_markers.is_empty());
@@ -192,6 +193,18 @@ mod tests {
     #[test]
     fn is_review_prompt_matches_depth_review_chinese() {
         assert!(is_review_prompt("深度 review 整个路由系统"));
+    }
+
+    #[test]
+    fn is_review_prompt_matches_standalone_compact_review() {
+        assert!(is_review_prompt("全面review"));
+    }
+
+    #[test]
+    fn is_review_prompt_ignores_host_hook_misfire_complaints() {
+        assert!(!is_review_prompt(
+            "cursor 对话频繁触发 claude 的 hook，深度review，我的设计是主 harness + 三个独立宿主"
+        ));
     }
 
     #[test]

@@ -36,14 +36,13 @@ pub fn build_framework_continuity_digest_prompt(
 /// 把 `GOAL_STATE.json` 嵌进 digest，使 SessionStart 等可见「可执行目标」而非仅有连续性摘要。
 /// GOAL 段落统一使用紧凑模板。
 ///
-/// GOAL 段落走 `HARNESS_OPERATOR_NUDGES.json` 真源（与 RFV/AUTOPILOT 续跑共用），含可选 **`math_reasoning_harness_line`** / **`retrieval_trace_harness_line`**，并附带「深度自检」行。
-/// `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 仅去掉 JSON 配置的 operator 文案；**深度自检行仍在**。
-/// 另：digest 主线在 `build_framework_continuity_digest_prompt` 中追加 `task_state::depth_compliance_refresh_hint`。
+/// GOAL 段落只保留状态、验收和证据锚点；长 nudge 留在文档/schema。
+/// digest 主线在 `build_framework_continuity_digest_prompt` 中追加 `task_state::depth_compliance_refresh_hint`。
 fn format_goal_state_digest_section(repo_root: &Path, goal: &Value) -> String {
     format_goal_state_digest_section_compact(repo_root, goal)
 }
 
-fn format_goal_state_digest_section_compact(repo_root: &Path, goal: &Value) -> String {
+fn format_goal_state_digest_section_compact(_repo_root: &Path, goal: &Value) -> String {
     let g = value_text(goal.get("goal"));
     let st = value_text(goal.get("status"));
     let drive = goal
@@ -96,23 +95,7 @@ fn format_goal_state_digest_section_compact(repo_root: &Path, goal: &Value) -> S
     lines.push(
         "- 收口: `framework_autopilot_goal` operation=complete（或 pause/block）。".to_string(),
     );
-    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
-    if !nudges.autopilot_drive_compact_reasoning_depth.is_empty() {
-        lines.push(format!(
-            "- {}",
-            nudges.autopilot_drive_compact_reasoning_depth
-        ));
-    }
-    if !nudges.math_reasoning_harness_line.trim().is_empty() {
-        lines.push(format!("- {}", nudges.math_reasoning_harness_line.trim()));
-    }
-    if !nudges.retrieval_trace_harness_line.trim().is_empty() {
-        lines.push(format!("- {}", nudges.retrieval_trace_harness_line.trim()));
-    }
-    lines.push(
-        "- 深度自检：先定分工/汇合点 → 并行查证 → 收敛改动 → 跑验证并留证据（EVIDENCE/RFV）。"
-            .to_string(),
-    );
+    lines.push("- 证据见 `EVIDENCE_INDEX.json` / `RFV_LOOP_STATE.json`。".to_string());
     lines.join("\n")
 }
 
@@ -133,6 +116,10 @@ fn render_continuity_digest_prompt_base(
             raw
         }
     };
+    let can_resume = continuity
+        .get("can_resume")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let route = value_string_list(continuity.get("route"));
     let paths_map = continuity
         .get("paths")
@@ -228,7 +215,7 @@ fn render_continuity_digest_prompt_base(
             .map(|_| {
                 format!(
                     "SESSION_SUMMARY: {}",
-                    value_text(paths_map.get("session_summary"))
+                    compact_artifact_anchor(&value_text(paths_map.get("session_summary")))
                 )
             })
             .unwrap_or_default(),
@@ -238,7 +225,7 @@ fn render_continuity_digest_prompt_base(
             .map(|_| {
                 format!(
                     "NEXT_ACTIONS: {}",
-                    value_text(paths_map.get("next_actions"))
+                    compact_artifact_anchor(&value_text(paths_map.get("next_actions")))
                 )
             })
             .unwrap_or_default(),
@@ -248,7 +235,7 @@ fn render_continuity_digest_prompt_base(
             .map(|_| {
                 format!(
                     "TRACE_METADATA: {}",
-                    value_text(paths_map.get("trace_metadata"))
+                    compact_artifact_anchor(&value_text(paths_map.get("trace_metadata")))
                 )
             })
             .unwrap_or_default(),
@@ -258,7 +245,7 @@ fn render_continuity_digest_prompt_base(
             .map(|_| {
                 format!(
                     "SUPERVISOR_STATE: {}",
-                    value_text(paths_map.get("supervisor_state"))
+                    compact_artifact_anchor(&value_text(paths_map.get("supervisor_state")))
                 )
             })
             .unwrap_or_default(),
@@ -283,25 +270,10 @@ fn render_continuity_digest_prompt_base(
                 .take(capped_max_lines)
                 .map(|item| format!("- {item}")),
         );
-        lines.push(String::new());
-        lines.push("先看这些恢复锚点：".to_string());
-        lines.extend(
-            anchors
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|anchor| format!("- {anchor}")),
-        );
         return lines.join("\n") + "\n";
     }
 
-    let mut lines = vec!["继续当前仓库，先看这些恢复锚点：".to_string()];
-    lines.extend(
-        anchors
-            .into_iter()
-            .take(capped_max_lines)
-            .map(|anchor| format!("- {anchor}")),
-    );
-    lines.push(String::new());
+    let mut lines = Vec::new();
     lines.push(format!(
         "任务：{}",
         if task.is_empty() { "未记录" } else { &task }
@@ -363,9 +335,29 @@ fn render_continuity_digest_prompt_base(
                 .map(|item| format!("- {item}")),
         );
     }
-    lines.push(String::new());
-    lines.push("按既定串并行分工直接开始执行。".to_string());
+    if can_resume && !anchors.is_empty() {
+        lines.push(String::new());
+        lines.push("恢复锚点：".to_string());
+        lines.extend(
+            anchors
+                .into_iter()
+                .take(capped_max_lines)
+                .map(|anchor| format!("- {anchor}")),
+        );
+    }
     lines.join("\n") + "\n"
+}
+
+fn compact_artifact_anchor(path: &str) -> String {
+    for marker in ["artifacts/current/", ".supervisor_state.json"] {
+        if marker == ".supervisor_state.json" && path.ends_with(marker) {
+            return marker.to_string();
+        }
+        if let Some(idx) = path.find(marker) {
+            return path[idx..].to_string();
+        }
+    }
+    path.to_string()
 }
 
 #[cfg(test)]
@@ -387,8 +379,8 @@ mod digest_depth_self_check_tests {
             }),
         );
         assert!(
-            joined.contains("深度自检"),
-            "expected self-check line; got {joined:?}"
+            !joined.contains("深度自检"),
+            "long self-check removed; got {joined:?}"
         );
         assert!(
             joined.contains("EVIDENCE") || joined.contains("RFV"),

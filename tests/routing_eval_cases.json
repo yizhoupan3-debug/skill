@@ -7,7 +7,7 @@
       "task": "深度review现在的路由系统和 skill 边界。",
       "focus_skill": "skill-framework-developer",
       "expected_owner": "skill-framework-developer",
-      "expected_overlay": null,
+      "expected_overlay": "code-review-deep",
       "first_turn": true
     },
     {
@@ -428,15 +428,13 @@
       "first_turn": true
     },
     {
-      "id": "team-explicit-alias-beats-delegation-gate",
-      "category": "explicit-framework-command",
-      "task": "/team 帮我组织 worker 协作",
-      "focus_skill": "team",
-      "expected_owner": "team",
+      "id": "team-alias-natural-language-falls-back-to-delegation-gate",
+      "category": "framework-alias",
+      "task": "帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent",
+      "focus_skill": "agent-swarm-orchestration",
+      "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
-      "forbidden_owners": [
-        "agent-swarm-orchestration"
-      ],
+      "forbidden_owners": [],
       "first_turn": true
     },
     {

@@ -11,7 +11,7 @@ alwaysApply: true
 
 1. 每条 frontmatter `todos[].content` 在同一条字符串内可见：**动作**、**范围（1–3 路径）**、**Done when**、**Verify**。
 2. **`overview` 与 `todos` 最后一条**（依 **`plan_profile`**，缺省等同 **`execution`**，见 [`skills/plan-mode/SKILL.md`](skills/plan-mode/SKILL.md)）：
-   - **`execution`（缺省）**：`overview` 须有一句标明**本计划允许**按 todos 修改代码 / 配置 / 测试等实现面资产，并由末条 **`/gitx plan`** 完成 Git 收口；末条 `Verify` **必须**显式包含宿主执行 **`/gitx plan`**（与 **`/gitx`** 同契约，见 `skills/gitx/SKILL.md`）；`Done when` 可客观判定（逐项对照、未做项有原因）。
+   - **`execution`（缺省）**：`overview` 须有一句标明**本计划允许**按 todos 修改代码 / 配置 / 测试等实现面资产，并由末条完成计划 vs 实际 + Git 状态证据收口；末条 `Verify` 硬要求 Git 状态证据（如 `git status --short --branch`、`git diff --stat`）；宿主支持时可包含 **`/gitx plan`**（与 **`/gitx`** 同契约，见 `skills/gitx/SKILL.md`）；`Done when` 可客观判定（逐项对照、未做项有原因）。
    - **`research`**（调研专用，frontmatter 须 `plan_profile: research`）：`overview` 须含**调研期零实现面改动**硬声明（**不修改** tracked 源码 / 配置 / 测试 / CI 工作流 / 依赖锁文件；实现另开 `plan_profile: execution` 计划），如使用「仅回写本 `.plan.md`」窄例外须在同一 `overview` 单句显式声明；末条 `Verify` **不得**将 **`/gitx plan`** 作为必需项，须含 **`git status --porcelain`** 约束（为空或仅含本 `.plan.md`）与「对照正文约定节 + YAML `todos`」的可客观判定表述；`Done when` 覆盖问题矩阵结论文或 **open gap**。
 3. 正文若有 checkbox：与 YAML `todos` 的 **id / 顺序 / 验收**一致。
 4. **不要**假定 skill 路由或 hook 会改写 plan 文件；不合规则**直接编辑**该 `.plan.md` 补齐后再交付用户。

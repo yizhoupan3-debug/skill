@@ -1,6 +1,6 @@
 ---
 name: Plan调研联动与范围开关
-overview: 本文件为执行计划（plan_profile: execution / 缺省）。允许按下方 todos 修改 skills/plan-mode/SKILL.md、docs/plans/plan_writing_capability_research_synthesis.md、docs/plans/plan_todo_checklist.md；按需最小补丁 docs/README.md。末条以宿主执行 /gitx plan 对照本计划 vs 实际并完成 Git 收口。目标：把《plan能力调研加强》合成稿 §2–§5 与 plan_review_findings_round1 采纳项**逐项**写回 skill/清单/合成文档；补齐调研范围开关（默认仅仓库内；用户要「外部」则内外并行）及与本地审 plan / 深度 review / gitx 收口的显式联动。不修改附件 plan能力调研加强_982eda11.plan.md；本轮不实现 router-rs 对 .plan.md 的机器校验（Non-goals）。
+overview: 本文件为执行计划（plan_profile: execution / 缺省）。允许按下方 todos 修改 skills/plan-mode/SKILL.md、docs/plans/plan_writing_capability_research_synthesis.md、docs/plans/plan_todo_checklist.md；按需最小补丁 docs/README.md。末条以计划 vs 实际 + Git 状态证据收口，宿主支持时可使用 /gitx plan。目标：把《plan能力调研加强》合成稿 §2–§5 与 plan_review_findings_round1 采纳项**逐项**写回 skill/清单/合成文档；补齐调研范围开关（默认仅仓库内；用户要「外部」则内外并行）及与本地审 plan / 深度 review / Git 状态证据收口的显式联动。不修改附件 plan能力调研加强_982eda11.plan.md；本轮不实现 router-rs 对 .plan.md 的机器校验（Non-goals）。
 todos:
   - id: trace-matrix
     content: 在 docs/plans/plan_writing_capability_research_synthesis.md 增加「调研→执行映射」表：合成稿 §2.1 每行条款、§2.3 findings 1/2/4、§3 四条外部结论、§4 矩阵 A–D 行 → 对应本 execution 的 todo id 或明示 defer | Done: 表至少 12 行且每行含「合成出处 + 执行落点路径」；defer 行含原因 | Verify: rg -n \"调研→执行映射|§2\\.1|§4\" docs/plans/plan_writing_capability_research_synthesis.md
@@ -9,7 +9,7 @@ todos:
     content: 在 skills/plan-mode/SKILL.md 新增「调研范围（Research scope）」：overview 模板句①仅仓库内只读 ②仓库内+外部只读并行（外部开启不得省略内部 todo）；与 Plan profile research 的 overview 模板并列说明可粘贴 | Done: 两模板句全文可检索；写明外部仅 WebSearch/WebFetch/MCP 只读、须在 §证据与范围 写 URL+日期 | Verify: rg -n \"调研范围|仅仓库内|外部只读\" skills/plan-mode/SKILL.md
     status: pending
   - id: skill-linkage-table
-    content: 在同文件增「能力与工件联动」表或同级小节：行含 本地代码调研 rg+Read、router-rs framework snapshot（可选一句指向 RUNTIME_REGISTRY/harness  doc）、Workflow 第3步 findings 建议落盘 docs/plans/*findings*.md、code-review-deep 触发画像、execution 下游 /gitx plan、research 末条 git status；列 profile 与最小证据 | Done: code-review-deep 与 gitx 各至少一链 | Verify: rg -n \"code-review-deep|gitx|findings|framework snapshot\" skills/plan-mode/SKILL.md
+    content: 在同文件增「能力与工件联动」表或同级小节：行含 本地代码调研 rg+Read、router-rs framework snapshot（可选一句指向 RUNTIME_REGISTRY/harness doc）、Workflow 第3步 findings 建议落盘 docs/plans/*findings*.md、code-review-deep 触发画像、execution 下游 Git 状态证据（宿主支持时 /gitx plan）、research 末条 git status；列 profile 与最小证据 | Done: code-review-deep 与 gitx 各至少一链 | Verify: rg -n \"code-review-deep|gitx|findings|framework snapshot|Git 状态证据\" skills/plan-mode/SKILL.md
     status: pending
   - id: skill-strong-examples
     content: 在 skills/plan-mode/SKILL.md「弱例与强例」或紧接段增补 round1 采纳：① execution 末条/closeout 须含 git diff --stat 或声明无代码 diff（对齐 skills/gitx/SKILL.md Substantive diff 习惯）；② 审 plan 修订轮 Verify 须含 git diff .cursor/plans/<本文件>.plan.md | head -n 40 或 closeout 内嵌摘要；③ 深度 review Done 须含至少一符号锚点 + Verify rg 命中 | Done: 三条各有一句可复制到 .plan.md 的示例 | Verify: rg -n \"git diff --stat|head -n 40|符号锚点\" skills/plan-mode/SKILL.md
@@ -21,7 +21,7 @@ todos:
     content: 在 skills/plan-mode/SKILL.md Continuity 小节增 2–4 句：Cursor 默认计划目录与用户主目录、Save to workspace、forum  workaround 链到 plan_writing_capability_research_synthesis §3（不重复长贴） | Done: 含官方 Plan Mode URL 或相对链至合成稿 | Verify: rg -n \"Save to workspace|cursor.com/docs/agent/plan-mode|plan_writing_capability\" skills/plan-mode/SKILL.md
     status: pending
   - id: gitx-closeout
-    content: 对照本 plan 正文与已实现 diff，宿主执行 Git 收口 @ 仓库根 | Done: 上列 todos 均有对应文件变更或正文 defer；未改 plan能力调研加强_982eda11 | Verify: 宿主执行 /gitx plan（与 /gitx 同契约，见 skills/gitx/SKILL.md）
+    content: 对照本 plan 正文与已实现 diff，记录 Git 状态证据 @ 仓库根 | Done: 上列 todos 均有对应文件变更或正文 defer；未改 plan能力调研加强_982eda11 | Verify: git status --short --branch && git diff --stat；宿主支持时可执行 /gitx plan（与 /gitx 同契约，见 skills/gitx/SKILL.md）
     status: pending
 plan_profile: execution
 isProject: true

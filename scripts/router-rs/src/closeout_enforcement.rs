@@ -105,9 +105,11 @@ pub struct CloseoutEnforcementResponse {
 }
 
 pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
+    let raw_shape_violations = raw_closeout_record_shape_violations(&payload, None);
     let record: CloseoutRecord = serde_json::from_value(payload)
         .map_err(|err| format!("parse closeout record failed: {err}"))?;
-    let response = evaluate_closeout_record(&record);
+    let mut response = evaluate_closeout_record(&record);
+    append_closeout_violations(&mut response, raw_shape_violations);
     serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
 }
 
@@ -115,8 +117,9 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     let mut violations: Vec<CloseoutViolation> = Vec::new();
     let mut missing: Vec<String> = Vec::new();
 
-    // 0. schema_version sanity (warn-style block: refuse evaluation of unknown shape).
-    if !record.schema_version.is_empty() && record.schema_version != CLOSEOUT_RECORD_SCHEMA_VERSION
+    // 0. schema_version sanity (block: refuse evaluation of missing or unknown shape).
+    if record.schema_version.trim().is_empty()
+        || record.schema_version != CLOSEOUT_RECORD_SCHEMA_VERSION
     {
         violations.push(CloseoutViolation {
             rule: "schema_version_mismatch".to_string(),
@@ -212,6 +215,23 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         }
     }
 
+    // R3b: command evidence must be auditable; serde defaults must not turn `{}` into success.
+    if let Some(invalid) = record
+        .commands_run
+        .iter()
+        .find(|c| c.command.trim().is_empty())
+    {
+        violations.push(CloseoutViolation {
+            rule: "invalid_command_evidence".to_string(),
+            severity: "block".to_string(),
+            detail: format!(
+                "commands_run contains a row without a non-empty command; exit_code={}",
+                invalid.exit_code
+            ),
+        });
+        missing.push("command".to_string());
+    }
+
     // R4: verification_status=passed but artifact missing.
     if status_lower == "passed" {
         if let Some(missing_artifact) = record.artifacts_checked.iter().find(|a| !a.exists) {
@@ -305,6 +325,7 @@ pub fn closeout_enforcement_contract() -> Value {
         "completion_keywords": COMPLETION_KEYWORDS,
         "rules": [
             "schema_version_mismatch",
+            "task_id_context_mismatch",
             "task_id_missing",
             "summary_missing",
             "verification_status_missing",
@@ -312,6 +333,7 @@ pub fn closeout_enforcement_contract() -> Value {
             "claimed_done_without_evidence",
             "changed_files_without_command_or_risk",
             "verification_passed_with_failed_command",
+            "invalid_command_evidence",
             "verification_passed_with_missing_artifact",
             "not_run_without_blockers_or_risks",
             "claimed_done_with_failed_verification",
@@ -328,6 +350,8 @@ pub fn closeout_enforcement_contract() -> Value {
 #[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
 pub struct CloseoutEvidenceContext {
+    /// Expected task id for task-scoped evaluation.
+    pub task_id: Option<String>,
     /// Whether the task's `EVIDENCE_INDEX.json` `artifacts` array is non-empty.
     /// (Reserved: future R-rules may want to flag "rows present but none successful".)
     pub evidence_rows_non_empty: bool,
@@ -342,6 +366,27 @@ pub fn evaluate_closeout_record_with_context(
     ctx: &CloseoutEvidenceContext,
 ) -> CloseoutEnforcementResponse {
     let mut response = evaluate_closeout_record(record);
+    if let Some(expected) = ctx
+        .task_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if record.task_id.trim() != expected {
+            response.violations.push(CloseoutViolation {
+                rule: "task_id_context_mismatch".to_string(),
+                severity: "block".to_string(),
+                detail: format!(
+                    "closeout record task_id {:?} does not match evaluation context {:?}",
+                    record.task_id, expected
+                ),
+            });
+            response
+                .missing_evidence
+                .push("matching_task_id".to_string());
+            response.closeout_allowed = false;
+        }
+    }
     let status_lower = record.verification_status.trim().to_ascii_lowercase();
     if status_lower == "passed"
         && record.commands_run.is_empty()
@@ -369,10 +414,86 @@ pub fn evaluate_closeout_record_value_with_context(
     payload: Value,
     ctx: &CloseoutEvidenceContext,
 ) -> Result<Value, String> {
+    let raw_shape_violations =
+        raw_closeout_record_shape_violations(&payload, ctx.task_id.as_deref());
     let record: CloseoutRecord = serde_json::from_value(payload)
         .map_err(|err| format!("parse closeout record failed: {err}"))?;
-    let response = evaluate_closeout_record_with_context(&record, ctx);
+    let mut response = evaluate_closeout_record_with_context(&record, ctx);
+    append_closeout_violations(&mut response, raw_shape_violations);
     serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+}
+
+fn raw_closeout_record_shape_violations(
+    payload: &Value,
+    expected_task_id: Option<&str>,
+) -> Vec<CloseoutViolation> {
+    let mut violations = Vec::new();
+    if payload
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("")
+        .is_empty()
+    {
+        violations.push(CloseoutViolation {
+            rule: "schema_version_mismatch".to_string(),
+            severity: "block".to_string(),
+            detail: format!("expected schema_version={CLOSEOUT_RECORD_SCHEMA_VERSION}, got missing or empty value"),
+        });
+    }
+    if let Some(expected) = expected_task_id.map(str::trim).filter(|s| !s.is_empty()) {
+        let actual = payload
+            .get("task_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        if actual != expected {
+            violations.push(CloseoutViolation {
+                rule: "task_id_context_mismatch".to_string(),
+                severity: "block".to_string(),
+                detail: format!("closeout record task_id {actual:?} does not match evaluation context {expected:?}"),
+            });
+        }
+    }
+    if let Some(commands) = payload.get("commands_run").and_then(Value::as_array) {
+        for (idx, command) in commands.iter().enumerate() {
+            let command_text = command
+                .get("command")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("");
+            let has_exit_code = command.get("exit_code").and_then(Value::as_i64).is_some();
+            if command_text.is_empty() || !has_exit_code {
+                violations.push(CloseoutViolation {
+                    rule: "invalid_command_evidence".to_string(),
+                    severity: "block".to_string(),
+                    detail: format!(
+                        "commands_run[{idx}] must include non-empty command and integer exit_code"
+                    ),
+                });
+            }
+        }
+    }
+    violations
+}
+
+fn append_closeout_violations(
+    response: &mut CloseoutEnforcementResponse,
+    violations: Vec<CloseoutViolation>,
+) {
+    for violation in violations {
+        if response
+            .violations
+            .iter()
+            .any(|existing| existing.rule == violation.rule && existing.detail == violation.detail)
+        {
+            continue;
+        }
+        if violation.severity == "block" {
+            response.closeout_allowed = false;
+        }
+        response.violations.push(violation);
+    }
 }
 
 fn summary_claims_completion(summary: &str) -> bool {
@@ -547,6 +668,66 @@ mod tests {
     }
 
     #[test]
+    fn schema_version_missing_blocks_value_evaluator() {
+        let response = evaluate_closeout_record_value(json!({
+            "task_id": "t",
+            "summary": "ok",
+            "verification_status": "partial"
+        }))
+        .expect("evaluate closeout");
+        assert_eq!(response["closeout_allowed"], json!(false));
+        assert!(response["violations"]
+            .as_array()
+            .expect("violations")
+            .iter()
+            .any(|v| v["rule"] == "schema_version_mismatch"));
+    }
+
+    #[test]
+    fn empty_command_record_does_not_count_as_success_evidence() {
+        let response = evaluate_closeout_record_value(json!({
+            "schema_version": CLOSEOUT_RECORD_SCHEMA_VERSION,
+            "task_id": "t",
+            "summary": "done",
+            "verification_status": "passed",
+            "commands_run": [{}]
+        }))
+        .expect("evaluate closeout");
+        assert_eq!(response["closeout_allowed"], json!(false));
+        assert!(response["violations"]
+            .as_array()
+            .expect("violations")
+            .iter()
+            .any(|v| v["rule"] == "invalid_command_evidence"));
+    }
+
+    #[test]
+    fn context_task_id_mismatch_blocks_value_evaluator() {
+        let ctx = CloseoutEvidenceContext {
+            task_id: Some("expected-task".to_string()),
+            evidence_rows_non_empty: true,
+            has_successful_verification: true,
+        };
+        let response = evaluate_closeout_record_value_with_context(
+            json!({
+                "schema_version": CLOSEOUT_RECORD_SCHEMA_VERSION,
+                "task_id": "other-task",
+                "summary": "done",
+                "verification_status": "passed",
+                "commands_run": [{"command": "cargo test", "exit_code": 0}]
+            }),
+            &ctx,
+        )
+        .expect("evaluate closeout");
+        assert_eq!(response["closeout_allowed"], json!(false));
+        assert!(response["violations"]
+            .as_array()
+            .expect("violations")
+            .iter()
+            .any(|v| v["rule"] == "task_id_context_mismatch"));
+    }
+
+    #[test]
     fn invalid_status_is_blocked() {
         let record = record_with("ok", "maybe");
         let resp = evaluate_closeout_record(&record);
@@ -604,6 +785,7 @@ mod tests {
             .risks
             .push("did not run verifier locally".to_string());
         let ctx = CloseoutEvidenceContext {
+            task_id: Some(record.task_id.clone()),
             evidence_rows_non_empty: false,
             has_successful_verification: false,
         };
@@ -623,6 +805,7 @@ mod tests {
             "commands_run intentionally empty; relying on hook-appended evidence".to_string(),
         );
         let ctx = CloseoutEvidenceContext {
+            task_id: Some(record.task_id.clone()),
             evidence_rows_non_empty: true,
             has_successful_verification: true,
         };
