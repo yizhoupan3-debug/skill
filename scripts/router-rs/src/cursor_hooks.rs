@@ -2461,7 +2461,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     }
 
     // 与 Codex PostTool 对齐：终端执行验证类命令时写入 EVIDENCE_INDEX（连续性就绪且未关闭 POSTTOOL_EVIDENCE）。
-    let syn = synthetic_codex_shape_for_post_tool_evidence(event);
+    let syn = synthetic_post_tool_evidence_shape(event);
     if let Err(err) = crate::framework_runtime::try_append_post_tool_shell_evidence(
         repo_root,
         &syn,
@@ -2634,7 +2634,7 @@ fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String>
 }
 
 /// 将 Cursor 异构 PostTool 载荷归一成 `framework_runtime` 可解析的 shell 证据形状（保留原始 `tool_output` / `exit_code` 等）。
-fn synthetic_codex_shape_for_post_tool_evidence(event: &Value) -> Value {
+fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
     let mut out = match event.as_object() {
         Some(o) => o.clone(),
         None => serde_json::Map::new(),

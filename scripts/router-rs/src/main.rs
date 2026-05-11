@@ -17,6 +17,7 @@ mod framework_runtime;
 mod harness_operator_nudges;
 mod hook_common;
 mod hook_policy;
+mod host_entrypoint_sync;
 mod host_integration;
 mod paper_adversarial_hook;
 mod review_gate;
@@ -40,9 +41,9 @@ mod trace_runtime;
 mod integration_test_prelude;
 
 pub mod hook_status {
-    pub const REVIEW_GATE_CHECKING: &str = "Checking review/subagent gate";
-    pub const REVIEW_GATE_UPDATING: &str = "Updating review/subagent gate state";
-    pub const REVIEW_GATE_ENFORCING: &str = "Enforcing review/subagent gate";
+    pub const REVIEW_GATE_CHECKING: &str = "Loading Codex turn context";
+    pub const REVIEW_GATE_UPDATING: &str = "Recording Codex tool evidence";
+    pub const REVIEW_GATE_ENFORCING: &str = "Writing Codex continuity checkpoint";
 }
 
 pub(crate) use cli::route_task_with_manifest_fallback;

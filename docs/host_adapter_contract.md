@@ -25,6 +25,12 @@
 
 **非目标**：不把每个宿主做成独立 runtime；不在 hook shell、`.mdc` 或 skill prose 中复制 L3 决策；不承诺所有宿主具备同等外部能力（如 tmux supervisor / GUI 自动化），只要求降级路径清晰。
 
+**宿主集合术语（避免混读）**：
+`host_targets.supported` 是全局闭集宿主 id；
+`host_projections` 是当前可生成 profile / install projection payload 的宿主集合；
+`framework_commands.*.host_entrypoints` 是显式命令入口覆盖集合；
+`records[].plugin.host_support.platforms` 是 skill body 可用宿主集合。`codex-app` 可以出现在 skill host support 中，即使 framework command 显式入口只列 `codex-cli`；这表示同一 Codex 投影族的消费面不同，不是 drift。
+
 | 维护面 | 不变量（共享） | 变量（宿主元数据 / 薄适配） | grep anchor |
 |--------|----------------|-----------------------------|-------------|
 | L2 连续性 | `artifacts/current`、`EVIDENCE_INDEX`、`GOAL_STATE`、`SESSION_SUMMARY` schema | 当前任务指针路径由 repo root 解析 | `CURRENT_ARTIFACT_DIR` / `EVIDENCE_INDEX_FILENAME` |
@@ -32,6 +38,7 @@
 | 宿主安装/入口 | 闭集宿主 id 来自 `host_targets.supported`，缺元数据 fail-closed | `host_targets.metadata.<host>.install_tool` 与 `host_entrypoints` | `host_id_and_skills_install_tool_pairs_from_registry` |
 | L4 / L5 边界 | L4 只做 argv/stdin/超时/路径转发；L5 只承载 skill 契约与可读叙事 | `.cursor/rules/*.mdc`、Codex `AGENTS.md` 投影形状不同 | `host_entrypoints_sync_manifest` |
 | `${CODEX_HOME}/skills` | 表示 Codex 用户级 skill 投影根；仓库开发态优先 `skills/` | 仅 Codex install/sync 使用该 HOME 语义，Cursor 不复用 | `workspace_bootstrap_defaults.skills.user_dir` |
+| **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；运行 **`skill-compiler-rs --apply`** 再生成 `skills/SKILL_ROUTING_RUNTIME.json` 等 | `records[].plugin.host_support.platforms` **必须**为 `RUNTIME_REGISTRY.host_targets.supported` 闭集 id（`codex-cli` / `codex-app` / `cursor` / `claude-code`）；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由编译器归一 | `normalize_skill_host_platforms`（`scripts/skill-compiler-rs`）；`tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`** |
 
 单行指针：五层模型见 [`harness_architecture.md`](harness_architecture.md)；Rust API / CLI 契约见 [`rust_contracts.md`](rust_contracts.md)；跨宿主语言、路由与执行协议见仓库根 [`../AGENTS.md`](../AGENTS.md)。
 
@@ -65,7 +72,7 @@
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | 会话连续性 / digest / PostTool | 配置项指向 `router-rs codex hook …` | `codex hook`（`codex_hooks.rs`） | `EVIDENCE_INDEX`、`FRAMEWORK_DIGEST` / session 工件等（以 hook 分支为准） |
-| 宿主入口对齐 | `router-rs codex sync` | 生成 `.codex/hooks.json`、`AGENTS.md` 等及 **`host_entrypoints_sync_manifest`** | 受 **`RUNTIME_REGISTRY.host_targets.supported`** 约束 |
+| 宿主入口对齐 | `router-rs codex sync` | 经 shared `host_entrypoint_sync` engine + Codex provider 生成 `.codex/hooks.json`、`AGENTS.md` 等及 **`host_entrypoints_sync_manifest`** | 受 **`RUNTIME_REGISTRY.host_targets.supported`** 约束 |
 
 ### Cursor（`.cursor/hooks.json`）
 
@@ -92,7 +99,9 @@
 | 职责 | 仓库路径 |
 |------|----------|
 | Cursor hook 语义与出站 JSON | `scripts/router-rs/src/cursor_hooks.rs` |
-| Codex hook 语义、`sync_host_entrypoints` 等 | `scripts/router-rs/src/codex_hooks.rs` |
+| Codex hook 语义 | `scripts/router-rs/src/codex_hooks.rs` |
+| shared host entrypoint sync engine | `scripts/router-rs/src/host_entrypoint_sync.rs` |
+| Codex host entrypoint provider | `scripts/router-rs/src/codex_hooks.rs` |
 | Claude Code hook 语义（stdin JSON） | `scripts/router-rs/src/claude_hooks.rs` |
 | `framework host-integration install`、投影 manifest、入口模板 | `scripts/router-rs/src/host_integration.rs` |
 | CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
@@ -105,7 +114,7 @@
 4. **再接入安装/投影**：`framework host-integration install --to …` 路径应注册到宿主专用安装函数（与其它宿主并列，`match`/`factory` 收敛在宿主集成模块内）。
 5. **文档**：先更新本节或 `rust_contracts.md` Host 小节，再合入大范围行为改动（与 [`harness_architecture.md`](harness_architecture.md) **§7** 文末维护说明一致）。
 
-**本轮边界**：[计划镜像 `plans/harness_host_round2.md`](plans/harness_host_round2.md) 将第三宿主 PoC **defer**；接入清单仍按闭集扩展编写，但 **不要** 向 [`RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) 添加占位宿主 id。
+**当前边界**：`host_targets.supported` 已包含 Codex / Cursor / Claude Code 闭集宿主；后续新增宿主仍必须先改 [`RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，并按本清单补齐 adapter、hook、投影与测试。不要添加无 adapter / 无验证的占位宿主 id。
 
 ### 3.1 可复制执行清单（工程顺序）
 
@@ -135,17 +144,25 @@
 
 ### 3.2 Maint / supervisor / profile 硬编码宿主耦合盘点
 
-以下为 **盘点结论**（非要求本轮改代码）：第三宿主出现时优先扩展对应 `match` / 维护序列，或在 [`RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) / 文档中写明能力降级，避免 silent drift。
+以下为 **盘点结论**：新增或强化宿主能力时优先扩展对应 `match` / 维护序列，或在 [`RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) / 文档中写明能力降级，避免 silent drift。
 
 | 位置 | 硬编码内容 | 建议 |
 |------|------------|------|
-| [`scripts/router-rs/src/framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs) | `refresh_host_projections` 固定顺序：`codex sync` → `framework host-integration install --to cursor` → `verify_cursor_hooks`；另含 `VerifyCursorHooks` / `VerifyCodexHooks`、`install_codex_user_hooks`、打印/探测 `CODEX_HOME`·`CURSOR_HOME` 等路径 | **扩展**：新宿主纳入 refresh 与 verify；或 **文档**：声明 maint 默认仅刷新 codex+cursor |
-| [`scripts/router-rs/src/session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | `classify_rate_limit_block` 仅接受 `codex` / `codex-cli`；`build_driver_command` 仅组装 Codex CLI；`driver_id_for_host` 非 codex 映射为 `unknown_driver` | **扩展**：为新 CLI 宿主补 driver / 限速模式；或 **文档**：标明 supervisor 仅保障 Codex 驱动 |
-| [`scripts/router-rs/src/framework_profile.rs`](../scripts/router-rs/src/framework_profile.rs) | `build_profile_bundle` 仅注入 `codex-cli` 的 `host_payloads`；`HostProfileKind::Codex`；产物字段 `codex_profile` / `full_codex_profile` 为 Codex 一等投影（无 `cursor` 字面量，但模块语义上 **非通用多宿主**） | **扩展**：并列构建第三宿主 profile bundle；或 **文档**：Cursor 投影由 `host_integration` 等路径承担，与本模块 Codex 工件分离 |
+| [`scripts/router-rs/src/framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs) | `refresh_host_projections` 固定顺序：build `router-rs` → `codex sync` → project-scope `framework host-integration install --to cursor` / `--to claude` → 对应投影验证；另含 `VerifyCursorHooks` / `VerifyCodexHooks`、`install_codex_user_hooks`、打印/探测 `CODEX_HOME`·`CURSOR_HOME` 等路径 | 新增宿主时必须纳入 refresh 与 verify，或在 registry / 文档中声明该宿主不支持 maint 一键刷新 |
+| [`scripts/router-rs/src/session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | `classify_rate_limit_block` 仅接受 `codex` / `codex-cli`；`build_driver_command` 仅组装 Codex CLI；`driver_id_for_host` 非 codex 映射为 `unknown_driver` | 当前明确为 **Codex driver only**；为新 CLI 宿主补 driver / 限速模式前，registry 必须继续标记 `session_supervisor_driver=unsupported` |
+| [`scripts/router-rs/src/framework_profile.rs`](../scripts/router-rs/src/framework_profile.rs) | **已收敛**：`build_profile_bundle` 从 `RUNTIME_REGISTRY.host_projections` 派生 `host_payloads`；保留 `codex_profile` / `full_codex_profile` 作为 Codex 兼容输出 | 新宿主若需要 profile payload，优先补 `host_projections` 与 contract tests；不要新增 Codex-only profile compiler 分支 |
 
-### 3.3 PostTool / 终端证据归一化（本轮未抽取）
+### 3.3 Host entrypoint sync engine / provider 边界
 
-Codex 侧 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) 中 `PostToolUse` 直接将原生事件传入 [`try_append_post_tool_shell_evidence`](../scripts/router-rs/src/framework_runtime/mod.rs)；Cursor 侧在 [`cursor_hooks.rs`](../scripts/router-rs/src/cursor_hooks.rs) 中先用 `synthetic_codex_shape_for_post_tool_evidence` 将异构 `postToolUse` 合成 **同一 evidence 解析形状** 再调用同一 API，并额外承担终端归属、`rust-lint` 等 Cursor 专用分支。**共享归一化路径已在 `framework_runtime`**，再抽独立 `hook_posttool_normalize` 模块会把「仅 Cursor 需要的字段拆解」与通用层揉在一起，收益有限，故 **本轮不抽取**。
+[`host_entrypoint_sync.rs`](../scripts/router-rs/src/host_entrypoint_sync.rs) 只负责通用 sync engine：比较 provider 产出的文件、写入 manifest、同步匹配 worktree、汇总 `written` / `would_write` / `unchanged` 等报告字段。Codex 私有 payload 构建（`.codex/hooks.json`、`.codex/README.md`、`AGENTS.md` bootstrap）与 Codex skill surface 刷新由 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) 中的 `codex provider` 负责。`router-rs codex sync` 是兼容 CLI 名称，不表示 shared sync engine 属于 Codex hook 模块。
+
+同步范围语义：当前 root 使用 `full_sync`，会物化 text + JSON 入口；匹配到的其它 git worktree 只使用 `partial_sync`，只同步 JSON hook/manifest，不覆盖 `AGENTS.md` 或 `.codex/README.md` 等本地策略文本。
+
+Projection install/status/remove 仍保留 `HostProjectionAdapter` thin adapter 表：registry 负责闭集与 install tool 关系，adapter 表负责宿主专用写盘、状态检查、删除和 HOME 解析。
+
+### 3.4 PostTool / 终端证据归一化（本轮未抽取）
+
+Codex 侧 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) 中 `PostToolUse` 直接将原生事件传入 [`try_append_post_tool_shell_evidence`](../scripts/router-rs/src/framework_runtime/mod.rs)；Cursor 侧在 [`cursor_hooks.rs`](../scripts/router-rs/src/cursor_hooks.rs) 中先用 `synthetic_post_tool_evidence_shape` 将异构 `postToolUse` 合成 **同一 evidence 解析形状** 再调用同一 API，并额外承担终端归属、`rust-lint` 等 Cursor 专用分支。**共享归一化路径已在 `framework_runtime`**，再抽独立 `hook_posttool_normalize` 模块会把「仅 Cursor 需要的字段拆解」与通用层揉在一起，收益有限，故 **本轮不抽取**。
 
 ---
 

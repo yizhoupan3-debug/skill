@@ -4,6 +4,7 @@
 # Keep only repository-scoped settings here.
 # Machine-wide defaults belong in ~/.codex/config.toml.
 
+approval_policy = "never"
 [features]
 hooks = true
 memories = false

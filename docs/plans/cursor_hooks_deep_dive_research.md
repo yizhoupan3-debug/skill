@@ -250,7 +250,7 @@ stateDiagram-v2
 | `BeforeSubmitPrompt` | `handle_before_submit`（L2155）、`is_review_prompt`、`is_autopilot_entrypoint_prompt`、`is_parallel_delegation_prompt`、`framework_prompt_arms_delegation`、`has_review_override`、`has_override`、`has_delegation_override`、`saw_reject_reason`、`maybe_autopilot_pre_goal_nag_cap_release` |
 | `SubagentStart` | `handle_subagent_start`（L2287）、`subagent_limit_denial`、`reset_stale_active_subagents`、`fork_context_from_tool`、`counts_as_independent_context_fork`、`cursor_subagent_type_pair`、`pre_goal_subagent_kind_ok`、`review_hard_armed`、`bump_phase` |
 | `SubagentStop` | `handle_subagent_stop`（L2346）、`review_hard_armed`、`bump_phase` |
-| `PostToolUse` | `handle_post_tool_use`（L2384）、`tool_name_matches_subagent_lane`、`synthetic_codex_shape_for_post_tool_evidence`、`try_append_post_tool_shell_evidence`、`maybe_run_cursor_rust_lint` |
+| `PostToolUse` | `handle_post_tool_use`（L2384）、`tool_name_matches_subagent_lane`、`synthetic_post_tool_evidence_shape`、`try_append_post_tool_shell_evidence`、`maybe_run_cursor_rust_lint` |
 | `AfterAgentResponse`（非 hooks.json 绑定，仅 dispatch 拉起） | `handle_after_agent_response`（L2632）、`hook_event_signal_text`、`has_goal_contract_signal`、`has_goal_progress_signal`、`has_goal_verify_or_block_signal`、`clear_review_gate_escalation_counters` |
 | `Stop` | `handle_stop`（L2674）、`completion_claimed_in_text`、`closeout_followup_for_completion_claim`、`review_stop_followup_needed`、`review_stop_followup_line`、`goal_is_satisfied`、`goal_stop_followup_line`、`merge_continuity_followups`、`hydrate_goal_gate_from_disk` |
 | `SessionStart` | `handle_session_start`（L3058）、`maybe_init_session_terminal_ledger`、`read_file_head_lines`、`read_json_value_strict` |
@@ -351,7 +351,7 @@ stateDiagram-v2
 
 **结论**：
 - **模板（template）与仓库根 hooks.json 字段完全等价**，差异仅在 `command` 解析路径（仓库内绝对路径 vs PATH/`ROUTER_RS_BIN`）。两者同时维护时，跨仓 bootstrap 与本仓开发体验是一致的。
-- **`framework install --to cursor` 显式不管 hooks**（见 `install_cursor_projection` 返回 `"hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"}`，host_integration.rs L1672）。所以"安装 hooks" 路径是 `scripts/cursor-bootstrap-framework.sh`（外部仓库）或人工拷贝 `.cursor/hooks.json`（本仓自身）。这与 `docs/host_adapter_contract.md` §3.2 L142–L144 中 maint 模块"refresh_host_projections 仅刷新 codex+cursor 投影且不含 hooks"叙事一致。
+- **`framework install --to cursor` 显式不管 hooks**（见 `install_cursor_projection` 返回 `"hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"}`）。所以"安装 hooks" 路径是 `scripts/cursor-bootstrap-framework.sh`（外部仓库）或人工拷贝 `.cursor/hooks.json`（本仓自身）。当前 `refresh_host_projections` 会刷新 Codex 入口同步与 project-scope Cursor / Claude 投影，但仍不安装 Cursor hooks。
 - **细微 drift 风险**：若未来扩展事件，需要同时改三处的两处（仓库根 `.cursor/hooks.json` + `cursor-hooks.workspace-template.json`），host_integration.rs 不参与；任何只改其中之一都会让跨仓 bootstrap 与本仓行为分叉。建议在 `scripts/cursor-bootstrap-framework.sh` 中加一行 `cmp -s` 之外的**字段集合** diff（如 jq 比较 `hooks` 顶层 key 集合）以提早暴露 drift（属未来工程改进建议，本轮不实施）。
 
 ---

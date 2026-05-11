@@ -9,6 +9,8 @@ alwaysApply: true
 
 其它场景（并行实现、委托启发式、`/autopilot`、RFV 续跑等）**不等同**于本条硬路径；编排与多 lane 的细节以 `AGENTS.md` 与 **`ROUTER_RS_*`** 开关为准。
 
+**review-only 边界（硬要求）**：review lane 只读检查，只输出 findings / risks / missing tests 及证据锚点；不改代码、不自动修复、不顺手格式化。若用户要修复，必须在 review 结论之后进入单独实现步骤。
+
 细则（拒因集合、禁止向用户暴露拒因元说明、goal-style 收口要求）：以 `AGENTS.md` **Execution Ladder** 与 **Autopilot Goal Mechanism** 为准。
 
 **反模式（硬禁止）**：在可见回复里自拟整段「续跑/门控」机读块（拼装键值、拒因长文、仿内部字段等）——与宿主实际注入的 **`router-rs REVIEW_GATE`** / **`router-rs AG_FOLLOWUP`** 等短码不一致时应视为伪造；应输出业务结论，清门只用了 **单行** token（见 `AGENTS.md` **Host Boundaries** 与 **Execution Ladder**）。

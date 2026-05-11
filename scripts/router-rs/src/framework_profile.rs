@@ -20,20 +20,6 @@ const CAPABILITY_SURFACE_FIELDS: [&str; 12] = [
     "delegation_contract",
     "supervisor_state_contract",
 ];
-const CODEX_HOST_CAPABILITIES: [&str; 12] = [
-    "artifact_contract",
-    "mcp_servers",
-    "workspace_bootstrap",
-    "batch_execution",
-    "cron_execution",
-    "ci_runner",
-    "non_interactive_entrypoint",
-    "external_session_supervisor",
-    "rate_limit_auto_resume",
-    "host_resume_entrypoint",
-    "host_tmux_worker_management",
-    "framework_alias_entrypoints",
-];
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "checkpointing_supported",
     "config_root_env_var",
@@ -156,19 +142,26 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
     let workspace_bootstrap = compile_workspace_bootstrap(profile);
     let shared_contract =
         build_shared_contract(profile, &normalized_mcp_servers, &workspace_bootstrap);
-    let codex_host_payload = complete_host_payload("codex", build_codex_host_payload());
+    let host_specs = load_host_profile_specs()?;
+    let codex_spec = host_specs
+        .iter()
+        .find(|spec| spec.host_key == "codex-cli")
+        .ok_or_else(|| {
+            "RUNTIME_REGISTRY host_projections must include codex-cli for legacy codex_profile"
+                .to_string()
+        })?;
+    let codex_host_payload = codex_spec.build_payload();
     let mut host_payloads = Map::new();
-    host_payloads.insert(
-        "codex-cli".to_string(),
-        Value::Object(codex_host_payload.clone()),
-    );
+    for spec in &host_specs {
+        host_payloads.insert(spec.host_key.clone(), Value::Object(spec.build_payload()));
+    }
     let codex_profile = build_host_profile(
         profile,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
         &codex_host_payload,
-        HostProfileKind::Codex,
+        codex_spec,
         false,
     );
     let full_codex_profile = build_host_profile(
@@ -177,7 +170,7 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         &workspace_bootstrap,
         &shared_contract,
         &codex_host_payload,
-        HostProfileKind::Codex,
+        codex_spec,
         true,
     );
     Ok(ProfileBundle {
@@ -479,14 +472,11 @@ fn build_host_profile_output_base(
                 .collect(),
         ),
     );
-    capabilities.insert("host".to_string(), string_array(&CODEX_HOST_CAPABILITIES));
+    capabilities.insert("host".to_string(), Value::Array(vec![]));
 
     let mut metadata = Map::new();
-    metadata.insert("host_id".to_string(), Value::String("codex".to_string()));
-    metadata.insert(
-        "transport".to_string(),
-        Value::String("native-codex".to_string()),
-    );
+    metadata.insert("host_id".to_string(), Value::Null);
+    metadata.insert("transport".to_string(), Value::Null);
     metadata.insert("deep_adaptation_not_fork".to_string(), Value::Bool(false));
     metadata.insert(
         "upgrade_zone".to_string(),
@@ -636,84 +626,126 @@ fn build_host_alias_entrypoints(host_key: &str) -> Value {
     Value::Object(entrypoints)
 }
 
-fn build_codex_host_payload() -> Map<String, Value> {
-    let mut payload = Map::new();
-    payload.insert(
-        "context_files".to_string(),
-        Value::Array(vec![Value::String("AGENTS.md".to_string())]),
-    );
-    payload.insert(
-        "settings_paths".to_string(),
-        json!([
-            {"scope": "user", "host_root": "codex", "relative": "config.toml"},
-            {"scope": "project", "relative": ".codex/config.toml"}
-        ]),
-    );
-    payload.insert(
-        "mcp_config_paths".to_string(),
-        json!([{"scope": "project", "relative": ".codex/config.toml"}]),
-    );
-    payload.insert(
-        "session_supervisor_driver".to_string(),
-        Value::String("codex_driver".to_string()),
-    );
-    payload.insert(
-        "resume_command_examples".to_string(),
-        json!(["codex resume --last", "codex resume <session_id>"]),
-    );
-    payload.insert(
-        "framework_alias_entrypoints".to_string(),
-        build_host_alias_entrypoints("codex-cli"),
-    );
-    payload.insert(
-        "gpt_model_path_contract".to_string(),
-        json!({
-            "path_kind": "native-openai-compatible",
-            "preferred_for_gpt_family": true,
-            "transport_loss_profile": "minimal",
-            "avoidable_loss_sources": [],
-            "reduce_loss_by": [
-                "use /v1 OpenAI-compatible endpoint directly",
-                "avoid third-party request/response translation for GPT-default work"
-            ]
-        }),
-    );
-    payload
+#[derive(Clone, Debug)]
+struct HostProfileSpec {
+    host_key: String,
+    host_cli: String,
+    transport: String,
+    capabilities: Vec<String>,
+    projection: Map<String, Value>,
 }
 
-#[derive(Clone, Copy)]
-enum HostProfileKind {
-    Codex,
-}
-
-impl HostProfileKind {
-    fn host_key(self) -> &'static str {
-        match self {
-            HostProfileKind::Codex => "codex-cli",
-        }
+impl HostProfileSpec {
+    fn entrypoint_kind(&self) -> &str {
+        self.host_cli.as_str()
     }
 
-    fn host_cli(self) -> &'static str {
-        match self {
-            HostProfileKind::Codex => "codex",
-        }
-    }
-
-    fn entrypoint_kind(self) -> &'static str {
-        match self {
-            HostProfileKind::Codex => "codex",
-        }
-    }
-
-    fn controller_is_cli(self) -> bool {
+    fn controller_is_cli(&self) -> bool {
         false
     }
 
-    fn capabilities(self) -> Value {
-        match self {
-            HostProfileKind::Codex => string_array(&CODEX_HOST_CAPABILITIES),
-        }
+    fn capabilities_value(&self) -> Value {
+        Value::Array(
+            self.capabilities
+                .iter()
+                .map(|value| Value::String(value.clone()))
+                .collect(),
+        )
     }
+
+    fn build_payload(&self) -> Map<String, Value> {
+        let mut host_fields = self.projection.clone();
+        host_fields.remove("profile_id");
+        host_fields.remove("host_id");
+        host_fields.remove("transport");
+        host_fields.remove("capabilities");
+        host_fields.insert(
+            "framework_alias_entrypoints".to_string(),
+            build_host_alias_entrypoints(&self.host_key),
+        );
+        if self.host_key == "codex-cli" {
+            host_fields.insert(
+                "gpt_model_path_contract".to_string(),
+                json!({
+                    "path_kind": "native-openai-compatible",
+                    "preferred_for_gpt_family": true,
+                    "transport_loss_profile": "minimal",
+                    "avoidable_loss_sources": [],
+                    "reduce_loss_by": [
+                        "use /v1 OpenAI-compatible endpoint directly",
+                        "avoid third-party request/response translation for GPT-default work"
+                    ]
+                }),
+            );
+        }
+        complete_host_payload(&self.host_cli, host_fields)
+    }
+}
+
+fn load_host_profile_specs() -> Result<Vec<HostProfileSpec>, String> {
+    let registry_path = repo_scan_root()
+        .join("configs")
+        .join("framework")
+        .join("RUNTIME_REGISTRY.json");
+    let raw = fs::read_to_string(&registry_path)
+        .map_err(|err| format!("failed reading {}: {err}", registry_path.display()))?;
+    let registry: Value = serde_json::from_str(&raw)
+        .map_err(|err| format!("failed parsing {}: {err}", registry_path.display()))?;
+    let projections = registry
+        .get("host_projections")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            "RUNTIME_REGISTRY.json missing host_projections for profile bundle".to_string()
+        })?;
+    let mut keys = projections.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+    let mut specs = Vec::with_capacity(keys.len());
+    for host_key in keys {
+        let projection = projections
+            .get(&host_key)
+            .and_then(Value::as_object)
+            .ok_or_else(|| format!("host_projections.{host_key} must be an object"))?;
+        let host_cli = projection
+            .get("host_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("host_projections.{host_key}.host_id is required"))?
+            .to_string();
+        let transport = projection
+            .get("transport")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("host_projections.{host_key}.transport is required"))?
+            .to_string();
+        let capabilities = projection
+            .get("capabilities")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("host_projections.{host_key}.capabilities is required"))?
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|text| !text.is_empty())
+                    .map(str::to_string)
+                    .ok_or_else(|| {
+                        format!(
+                            "host_projections.{host_key}.capabilities must contain non-empty strings"
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        specs.push(HostProfileSpec {
+            host_key,
+            host_cli,
+            transport,
+            capabilities,
+            projection: projection.clone(),
+        });
+    }
+    Ok(specs)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -723,7 +755,7 @@ fn build_host_profile(
     workspace_bootstrap: &Map<String, Value>,
     shared_contract: &Map<String, Value>,
     host_payload: &Map<String, Value>,
-    host_kind: HostProfileKind,
+    host_spec: &HostProfileSpec,
     include_full_contract: bool,
 ) -> Map<String, Value> {
     let mut payload = build_host_profile_output_base(
@@ -733,18 +765,18 @@ fn build_host_profile(
             workspace_bootstrap,
         },
     );
-    payload["capabilities"]["host"] = host_kind.capabilities();
-    payload["metadata"]["host_id"] = Value::String(host_kind.host_cli().to_string());
-    payload["metadata"]["transport"] = Value::String(format!("native-{}", host_kind.host_cli()));
+    payload["capabilities"]["host"] = host_spec.capabilities_value();
+    payload["metadata"]["host_id"] = Value::String(host_spec.host_cli.clone());
+    payload["metadata"]["transport"] = Value::String(host_spec.transport.clone());
     payload["host_capability_requirements"] = Value::Object(resolve_host_capability_requirements(
         profile,
-        host_kind.host_cli(),
+        &host_spec.host_cli,
     ));
     let mut runtime_surface = build_runtime_surface(shared_contract);
     runtime_surface.insert(
         "host_projection".to_string(),
         value_object([
-            ("host", Value::String(host_kind.host_key().to_string())),
+            ("host", Value::String(host_spec.host_key.clone())),
             ("payload", Value::Object(host_payload.clone())),
         ]),
     );
@@ -767,7 +799,7 @@ fn build_host_profile(
         value_object([
             (
                 "entrypoint_kind",
-                Value::String(host_kind.entrypoint_kind().to_string()),
+                Value::String(host_spec.entrypoint_kind().to_string()),
             ),
             ("non_interactive", Value::Bool(true)),
             ("supports_batch", Value::Bool(true)),
@@ -779,19 +811,19 @@ fn build_host_profile(
             ),
             (
                 "controller_is_cli",
-                Value::Bool(host_kind.controller_is_cli()),
+                Value::Bool(host_spec.controller_is_cli()),
             ),
-            ("host_cli", Value::String(host_kind.host_cli().to_string())),
+            ("host_cli", Value::String(host_spec.host_cli.clone())),
         ]),
     );
     payload.insert(
         "host_projection".to_string(),
         value_object([
-            ("host", Value::String(host_kind.host_key().to_string())),
+            ("host", Value::String(host_spec.host_key.clone())),
             ("payload", Value::Object(host_payload.clone())),
         ]),
     );
-    if matches!(host_kind, HostProfileKind::Codex) {
+    if host_spec.host_key == "codex-cli" {
         payload.insert(
             "codex_host_payload".to_string(),
             Value::Object(host_payload.clone()),
@@ -1333,15 +1365,6 @@ fn value_to_string(value: &Value) -> String {
     }
 }
 
-fn string_array(values: &[&str]) -> Value {
-    Value::Array(
-        values
-            .iter()
-            .map(|value| Value::String((*value).to_string()))
-            .collect(),
-    )
-}
-
 fn value_object<const N: usize>(pairs: [(&str, Value); N]) -> Value {
     let mut object = Map::new();
     for (key, value) in pairs {
@@ -1528,7 +1551,35 @@ mod tests {
         assert!(serialized.get("codex_profile").is_some());
         assert!(serialized.get("full_codex_profile").is_some());
         assert!(serialized["host_payloads"].get("codex-cli").is_some());
+        assert!(serialized["host_payloads"].get("cursor").is_some());
+        assert!(serialized["host_payloads"].get("claude-code").is_some());
         assert!(serialized.get("host_entrypoint_outputs").is_none());
+    }
+
+    #[test]
+    fn profile_bundle_builds_registry_host_payloads_without_driver_parity_claims() {
+        let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
+
+        assert_eq!(
+            bundle.host_payloads["codex-cli"]["session_supervisor_driver"],
+            json!("codex_driver")
+        );
+        assert_eq!(
+            bundle.host_payloads["cursor"]["session_supervisor_driver"],
+            json!("unsupported")
+        );
+        assert_eq!(
+            bundle.host_payloads["claude-code"]["session_supervisor_driver"],
+            json!("unsupported")
+        );
+        assert_eq!(
+            bundle.host_payloads["cursor"]["framework_alias_entrypoints"]["autopilot"],
+            json!("/autopilot")
+        );
+        assert_eq!(
+            bundle.host_payloads["claude-code"]["framework_alias_entrypoints"]["gitx"],
+            json!("/gitx")
+        );
     }
 
     #[test]

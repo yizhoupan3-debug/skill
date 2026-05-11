@@ -90,6 +90,13 @@
 - **Done when**：`plan-mode` 或 checklist 文档中可链回本文 **P0 验证命令**。
 - **Verify**：用户于 Cursor 执行 `/gitx plan`（**此处不可由 CI 子代理替代**）。
 
+### P2-5：Cursor `additional_context` 无总 cap（弱模型 / 长会话噪声）
+
+- **做什么**：记录 Cursor 侧 `merge_additional_context` **无合并后总字符 cap** 的产品风险与缓解依赖（`ROUTER_RS_CURSOR_HOOK_SILENT`、段落 strip 等）；可选后续增加 **`ROUTER_RS_*` 总 cap** 或宿主侧观测，属 **产品决策**，不在未立项前改 `cursor_hooks.rs` 默认行为。
+- **证据与路径**：[`context_token_audit_deep_dive.md`](context_token_audit_deep_dive.md) §2–§3；[`scripts/router-rs/src/cursor_hooks.rs`](../../scripts/router-rs/src/cursor_hooks.rs) `merge_additional_context`。
+- **Done when**：本小节可被 `docs/plans/RESEARCH_harness_weak_model_top_tier.md` / `docs/harness_architecture.md` §6 指针命中；执行 execution 时优先 **文档 + preset** 再议 cap。
+- **Verify**：`rg -n 'merge_additional_context|cursor_hooks|context_token_audit' docs/plans/harness_improvement_backlog.md docs/plans/context_token_audit_deep_dive.md`。
+
 ---
 
 ## 建议 PR切片（独立可合并方向）
@@ -102,7 +109,7 @@
 | **PR-B：Closeout 硬门禁与叙事对齐** | `scripts/router-rs/src/closeout_enforcement.rs`、`AGENTS.md`、`docs/closeout_enforcement.md` | CI/本地分层单一真源；减少误设空字符串 env。 |
 | **PR-C：REVIEW_GATE fixture + 文档样例** | `.cursor/hooks.json`（仅当契约变）、`tests/host_integration.rs`、`docs/host_adapter_contract.md`、`tests/fixtures/` | 可复现 review 证据链；利于 onboarding。 |
 | **PR-D：开关 preset + 外研 JSON schema 草案** | `scripts/router-rs/src/router_env_flags.rs`、`configs/framework/`、`docs/references/rfv-loop/reasoning-depth-contract.md` | 调试体验与长期配置面收敛；可与 PR-A/B 并行若文件不重叠。 |
-| **PR-E：Claude Code L4 薄壳** | [`.cursor/plans/harness_portable_core_claude_code.plan.md`](../../.cursor/plans/harness_portable_core_claude_code.plan.md)、`RUNTIME_REGISTRY`、`scripts/router-rs/src/claude_hooks.rs`（落地时）、[host_adapter_contract.md §3.1](../host_adapter_contract.md#31-可复制执行清单工程顺序) | 第三宿主与现有 Codex/Cursor **零默认行为变更**；与 portable core 复用同一 L2/L3。 |
+| **PR-E：Claude Code L4 薄壳（已落地，后续仅增量）** | `RUNTIME_REGISTRY`、`scripts/router-rs/src/claude_hooks.rs`、`scripts/router-rs/src/host_integration.rs`、[host_adapter_contract.md §3.1](../host_adapter_contract.md#31-可复制执行清单工程顺序) | Claude Code 已进入闭集宿主与 project projection；后续只做 hooks/投影增量强化，不再作为未立项第三宿主。 |
 
 ---
 

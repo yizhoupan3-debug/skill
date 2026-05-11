@@ -14,10 +14,11 @@
 
 | 主题 | 文档 |
 |------|------|
-| RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
+| RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)）；**ADR**：[`close_gates` 与 `max_rounds` 收口路径](plans/ADR_rfv_close_gates_max_rounds.md) |
+| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | [RESEARCH_harness_weak_model_top_tier.md](plans/RESEARCH_harness_weak_model_top_tier.md)，[context_token_audit_deep_dive.md](plans/context_token_audit_deep_dive.md) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
-| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 见 [host_adapter_contract.md](host_adapter_contract.md)；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md)；Harness 改进 backlog（路线图展开） [plans/harness_improvement_backlog.md](plans/harness_improvement_backlog.md) |
+| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 见总契约 [host_adapter_contract.md](host_adapter_contract.md)；Codex 专属投影契约见 [host_adapter_contracts.md](host_adapter_contracts.md)（不是总宿主适配契约）；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md)；Harness 改进 backlog（路线图展开） [plans/harness_improvement_backlog.md](plans/harness_improvement_backlog.md) |
 | Cursor Plan / 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)（含 **`plan_profile: research`**、**CreatePlan 输出契约**、**调研范围与能力联动**）；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；短清单 [plans/plan_todo_checklist.md](plans/plan_todo_checklist.md)；能力调研合成 [plans/plan_writing_capability_research_synthesis.md](plans/plan_writing_capability_research_synthesis.md)；草稿目录 `.cursor/plans/` |
 | Codex 宿主投影边界 | [host_adapter_contracts.md](host_adapter_contracts.md)，[.codex/README.md](../.codex/README.md) |
 | 插件 ABI / routing metadata | [runtime_plugin_contract.md](runtime_plugin_contract.md) |

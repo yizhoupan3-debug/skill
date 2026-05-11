@@ -1,10 +1,10 @@
 mod common;
 
 use common::{
-    host_integration_json, json_from_output, output_text, project_root, read_text,
+    host_integration_json, json_from_output, output_text, project_root, read_json, read_text,
     router_rs_command, router_rs_json, run, seed_framework_markers, write_json, write_text,
 };
-use serde_json::json;
+use serde_json::{json, Value};
 use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
@@ -38,6 +38,45 @@ fn shell_installer_e2e_writes_expected_files() {
     assert!(hooks.contains("router-rs"));
     assert!(hooks.contains("codex hook --event="));
     assert!(!hooks.contains("sessionEnd"));
+}
+
+#[test]
+fn cursor_hooks_template_matches_repo_hook_events_and_timeouts() {
+    let root = project_root();
+    let repo_hooks = read_json(&root.join(".cursor/hooks.json"));
+    let template_hooks =
+        read_json(&root.join("configs/framework/cursor-hooks.workspace-template.json"));
+    let repo_hooks = repo_hooks["hooks"].as_object().expect("repo hooks object");
+    let template_hooks = template_hooks["hooks"]
+        .as_object()
+        .expect("template hooks object");
+
+    let mut repo_keys = repo_hooks.keys().cloned().collect::<Vec<_>>();
+    let mut template_keys = template_hooks.keys().cloned().collect::<Vec<_>>();
+    repo_keys.sort();
+    template_keys.sort();
+    assert_eq!(
+        repo_keys, template_keys,
+        "repo .cursor/hooks.json and cursor workspace template must bind the same events"
+    );
+
+    for key in repo_keys {
+        let repo_timeout = first_cursor_hook_timeout(repo_hooks.get(&key).unwrap());
+        let template_timeout = first_cursor_hook_timeout(template_hooks.get(&key).unwrap());
+        assert_eq!(
+            repo_timeout, template_timeout,
+            "cursor hook timeout drift for event {key}"
+        );
+    }
+}
+
+fn first_cursor_hook_timeout(value: &Value) -> Option<i64> {
+    value
+        .as_array()
+        .and_then(|entries| entries.first())
+        .and_then(Value::as_object)
+        .and_then(|entry| entry.get("timeout"))
+        .and_then(Value::as_i64)
 }
 
 #[test]
@@ -122,6 +161,19 @@ fn install_native_integration_is_idempotent() {
     ));
     assert_framework_alias_skill(&surface_root, "autopilot");
     assert_framework_alias_skill(&surface_root, "team");
+    let surface_runtime = read_json(&surface_root.join("SKILL_ROUTING_RUNTIME.json"));
+    let surface_runtime_text = serde_json::to_string(&surface_runtime).unwrap();
+    assert!(!surface_runtime_text.contains("review-fix-verify-loop"));
+    assert!(!surface_runtime_text.contains("artifacts/codex-skill-surface"));
+    assert_eq!(
+        surface_runtime["skills"][0][8],
+        "skills/systematic-debugging/SKILL.md"
+    );
+    assert!(surface_root
+        .parent()
+        .unwrap()
+        .join(surface_runtime["skills"][0][8].as_str().unwrap())
+        .is_file());
     assert!(!tmp.path().join("home/.codex/prompts/autopilot.md").exists());
     assert!(!tmp.path().join("home/.codex/prompts/gitx.md").exists());
     assert!(!tmp
@@ -421,6 +473,41 @@ fn install_skills_cursor_target_installs_only_cursor() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["cursor"]["status"], "installed");
     assert!(repo_root.join(".cursor/rules/framework.mdc").exists());
+    assert!(!repo_root.join(".codex/prompts/framework.md").exists());
+}
+
+#[test]
+fn install_skills_claude_target_installs_only_claude() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+
+    let result = host_integration_json(&[
+        "install-skills",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--bootstrap-output-dir",
+        tmp.path().join("bootstrap").to_str().unwrap(),
+        "claude",
+    ]);
+
+    assert_eq!(result["success"], true);
+    assert_eq!(result["results"]["claude"]["status"], "installed");
+    assert!(repo_root.join(".claude/rules/framework.md").exists());
+    assert!(repo_root
+        .join(".claude/.framework-projection.json")
+        .exists());
+    assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/framework.md").exists());
 }
 

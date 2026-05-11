@@ -2,6 +2,7 @@ use clap::Parser;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
+use skill_compiler::host_platforms;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -437,14 +438,12 @@ fn compile_bundle(
     let framework_surface_policy =
         build_framework_surface_policy(&tiers, configured_surface_policy.as_ref());
     let index = build_index(&manifest, &framework_rows, &framework_surface_policy);
-    let plugin_catalog = build_plugin_catalog(docs, &manifest, &framework_rows);
+    let plugin_catalog = build_plugin_catalog(docs, &manifest, &framework_rows)?;
     let routing_metadata = build_routing_metadata_catalog(docs, &manifest, &framework_rows);
     let runtime_index = build_runtime_index(
         &manifest,
         &framework_rows,
         &framework_surface_policy,
-        &plugin_catalog,
-        &routing_metadata,
     );
     let runtime_explain = build_runtime_explain(
         &manifest,
@@ -971,8 +970,6 @@ fn build_runtime_index(
     manifest: &Value,
     framework_rows: &[Value],
     surface_policy: &Value,
-    plugin_catalog: &Value,
-    routing_metadata: &Value,
 ) -> Value {
     let selected = select_runtime_skills(manifest, surface_policy);
     let full_manifest_path = "skills/SKILL_MANIFEST.json";
@@ -995,12 +992,9 @@ fn build_runtime_index(
     for row in framework_rows {
         skills.push(row.clone());
     }
-    let records = runtime_named_records(&skills, plugin_catalog, routing_metadata);
     json!({
         "version": 3,
         "schema_version": "skill-routing-runtime-v3",
-        "plugin_abi_version": "skill-plugin-abi-v1",
-        "checklist": index_checklist(),
         "scope": {
             "kind": "hot",
             "policy": "session-start required gates plus allowlisted first-turn control owners plus explicit framework command aliases; route/search may load the fallback manifest after runtime-owned skills have been excluded.",
@@ -1010,43 +1004,7 @@ fn build_runtime_index(
         },
         "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path"],
         "skills": skills,
-        "records": records,
-        "vnext": {
-            "schema_version": "skill-routing-runtime-records-v1",
-            "compatibility": "legacy keys/skills rows remain canonical for v3 consumers; records provide named plugin-ready projections",
-            "plugin_catalog_ref": "skills/SKILL_PLUGIN_CATALOG.json",
-            "routing_metadata_ref": "skills/SKILL_ROUTING_METADATA.json",
-            "runtime_explain_ref": "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
-            "health_manifest_ref": "skills/SKILL_HEALTH_MANIFEST.json"
-        },
     })
-}
-
-fn runtime_named_records(
-    skills: &[Value],
-    plugin_catalog: &Value,
-    routing_metadata: &Value,
-) -> Vec<Value> {
-    skills
-        .iter()
-        .filter_map(Value::as_array)
-        .map(|row| {
-            let slug = string_at(row, 0);
-            json!({
-                "slug": slug,
-                "layer": string_at(row, 1),
-                "owner": string_at(row, 2),
-                "gate": string_at(row, 3),
-                "session_start": string_at(row, 4),
-                "summary": string_at(row, 5),
-                "trigger_hints": value_at(row, 6),
-                "priority": string_at(row, 7),
-                "skill_path": string_at(row, 8),
-                "plugin": plugin_catalog.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or(Value::Null),
-                "routing_metadata": routing_metadata.get("skills").and_then(|skills| skills.get(&slug)).cloned().unwrap_or(Value::Null)
-            })
-        })
-        .collect()
 }
 
 fn framework_command_runtime_rows(skills_root: &Path) -> Result<Vec<Value>, String> {
@@ -1151,7 +1109,11 @@ fn fallback_framework_command_runtime_row(slug: &str) -> Value {
     framework_command_runtime_row(slug, &command)
 }
 
-fn build_plugin_catalog(docs: &[SkillDoc], manifest: &Value, framework_rows: &[Value]) -> Value {
+fn build_plugin_catalog(
+    docs: &[SkillDoc],
+    manifest: &Value,
+    framework_rows: &[Value],
+) -> Result<Value, String> {
     let doc_lookup = docs
         .iter()
         .map(|doc| (doc.slug.as_str(), doc))
@@ -1171,7 +1133,7 @@ fn build_plugin_catalog(docs: &[SkillDoc], manifest: &Value, framework_rows: &[V
         let metadata = doc_lookup.get(slug.as_str()).map(|doc| &doc.metadata);
         skills.insert(
             slug.clone(),
-            build_skill_plugin_record(&slug, row, metadata),
+            build_skill_plugin_record(&slug, row, metadata)?,
         );
     }
     for row in framework_rows.iter().filter_map(Value::as_array) {
@@ -1184,7 +1146,7 @@ fn build_plugin_catalog(docs: &[SkillDoc], manifest: &Value, framework_rows: &[V
             build_framework_command_plugin_record(&slug, row),
         );
     }
-    json!({
+    Ok(json!({
         "schema_version": "skill-plugin-catalog-v1",
         "plugin_abi_version": "skill-plugin-abi-v1",
         "source": "generated-by-skill-compiler-rs",
@@ -1216,14 +1178,14 @@ fn build_plugin_catalog(docs: &[SkillDoc], manifest: &Value, framework_rows: &[V
             "high_risk"
         ],
         "skills": Value::Object(skills)
-    })
+    }))
 }
 
 fn build_skill_plugin_record(
     slug: &str,
     row: &[Value],
     metadata: Option<&HashMap<String, Value>>,
-) -> Value {
+) -> Result<Value, String> {
     let allowed_tools =
         metadata.map_or_else(Vec::new, |meta| normalize_list(meta.get("allowed_tools")));
     let approval_required_tools = metadata.map_or_else(Vec::new, |meta| {
@@ -1232,14 +1194,11 @@ fn build_skill_plugin_record(
     let artifact_outputs = metadata.map_or_else(Vec::new, |meta| {
         normalize_list(meta.get("artifact_outputs"))
     });
-    let platforms = metadata
-        .map(|meta| {
-            normalize_list(meta.get("platforms"))
-                .into_iter()
-                .collect::<Vec<_>>()
-        })
-        .filter(|items| !items.is_empty())
-        .unwrap_or_else(|| vec!["codex".to_string()]);
+    let raw_platforms: Vec<String> = metadata
+        .map(platforms_raw_from_skill_metadata)
+        .unwrap_or_default();
+    let platforms = host_platforms::normalize_skill_host_platforms(&raw_platforms)
+        .map_err(|e| format!("skill `{slug}`: {e}"))?;
     let network_access = metadata
         .and_then(|meta| optional_string_field(meta, "network_access"))
         .unwrap_or_else(|| "unspecified".to_string());
@@ -1250,7 +1209,7 @@ fn build_skill_plugin_record(
         .and_then(|meta| optional_string_field(meta, "status"))
         .unwrap_or_else(|| "active".to_string());
     let approval_required = !approval_required_tools.is_empty();
-    json!({
+    Ok(json!({
         "slug": slug,
         "kind": "skill",
         "skill_path": string_at(row, 10),
@@ -1297,7 +1256,7 @@ fn build_skill_plugin_record(
                 "removal_policy": "remove from manifest/runtime first, then delete package after route/eval parity"
             }
         }
-    })
+    }))
 }
 
 fn build_framework_command_plugin_record(slug: &str, row: &[Value]) -> Value {
@@ -2196,6 +2155,17 @@ fn normalize_list(value: Option<&Value>) -> Vec<String> {
     }
 }
 
+/// `platforms` may live at top-level or under `metadata.platforms` (nested mapping).
+fn platforms_raw_from_skill_metadata(meta: &HashMap<String, Value>) -> Vec<String> {
+    let mut raw = normalize_list(meta.get("platforms"));
+    if raw.is_empty() {
+        if let Some(Value::Object(inner)) = meta.get("metadata") {
+            raw = normalize_list(inner.get("platforms"));
+        }
+    }
+    raw
+}
+
 fn skill_entry_to_value(entry: &SkillEntry) -> Value {
     json!({
         "slug": entry.slug,
@@ -2600,16 +2570,20 @@ mod tests {
         let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
         let tiers = build_tier_catalog(&manifest);
         let surface_policy = build_framework_surface_policy(&tiers, None);
-        let plugin_catalog = build_plugin_catalog(&docs, &manifest, &framework_rows);
+        let plugin_catalog =
+            build_plugin_catalog(&docs, &manifest, &framework_rows).expect("plugin catalog");
         let routing_metadata = build_routing_metadata_catalog(&docs, &manifest, &framework_rows);
         let runtime = build_runtime_index(
             &manifest,
             &framework_rows,
             &surface_policy,
-            &plugin_catalog,
-            &routing_metadata,
         );
         let shadow_map = build_shadow_map(&entries, &source_manifest);
+
+        assert_eq!(
+            plugin_catalog["skills"]["sample-skill"]["host_support"]["platforms"],
+            json!(["codex-app", "codex-cli"])
+        );
 
         assert_eq!(
             manifest["keys"],
@@ -2633,9 +2607,12 @@ mod tests {
         assert!(manifest["skills"][0][7].is_array());
         assert!(runtime["skills"][0][6].is_array());
         assert_eq!(runtime["skills"][0][7], json!("P2"));
-        assert_eq!(runtime["plugin_abi_version"], json!("skill-plugin-abi-v1"));
-        assert!(runtime["records"][0]["plugin"].is_object());
-        assert!(runtime["records"][0]["routing_metadata"].is_object());
+        assert_eq!(
+            plugin_catalog["plugin_abi_version"],
+            json!("skill-plugin-abi-v1")
+        );
+        assert!(plugin_catalog["skills"]["sample-skill"].is_object());
+        assert!(routing_metadata["skills"]["sample-skill"].is_object());
     }
 
     #[test]
@@ -2829,8 +2806,6 @@ mod tests {
             &bundle.manifest,
             &framework_rows,
             &configured_surface_policy,
-            &bundle.plugin_catalog,
-            &bundle.routing_metadata,
         );
         assert!(configured_runtime["skills"]
             .as_array()

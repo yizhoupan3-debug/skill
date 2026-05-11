@@ -6204,14 +6204,14 @@ fn install_hooks_cli_repo_root_optional() {
 fn hook_status_constants_are_stable() {
     assert_eq!(
         hook_status::REVIEW_GATE_CHECKING,
-        "Checking review/subagent gate"
+        "Loading Codex turn context"
     );
     assert_eq!(
         hook_status::REVIEW_GATE_UPDATING,
-        "Updating review/subagent gate state"
+        "Recording Codex tool evidence"
     );
     assert_eq!(
         hook_status::REVIEW_GATE_ENFORCING,
-        "Enforcing review/subagent gate"
+        "Writing Codex continuity checkpoint"
     );
 }

@@ -196,6 +196,21 @@ fn route_metadata_sidecar_path(manifest_path: &Path) -> Option<PathBuf> {
         .map(|parent| parent.join("SKILL_ROUTING_METADATA.json"))
 }
 
+fn route_metadata_sidecar_for_runtime(runtime_path: &Path) -> Option<PathBuf> {
+    runtime_path
+        .parent()
+        .map(|parent| parent.join("SKILL_ROUTING_METADATA.json"))
+}
+
+fn route_metadata_sidecar(
+    runtime_path: Option<&Path>,
+    manifest_path: Option<&Path>,
+) -> Option<PathBuf> {
+    runtime_path
+        .and_then(route_metadata_sidecar_for_runtime)
+        .or_else(|| manifest_path.and_then(route_metadata_sidecar_path))
+}
+
 fn records_cache_state() -> &'static Mutex<RecordsCacheState> {
     static RECORDS_CACHE: OnceLock<Mutex<RecordsCacheState>> = OnceLock::new();
     RECORDS_CACHE.get_or_init(|| Mutex::new(RecordsCacheState::default()))
@@ -233,11 +248,8 @@ pub(crate) fn load_records_cached_for_stdio_resolved(
     let key = records_cache_key(runtime_path, manifest_path);
     let runtime_mtime = file_modified_at(runtime_path);
     let manifest_mtime = file_modified_at(manifest_path);
-    let metadata_mtime = file_modified_at(
-        manifest_path
-            .and_then(route_metadata_sidecar_path)
-            .as_deref(),
-    );
+    let metadata_sidecar = route_metadata_sidecar(runtime_path, manifest_path);
+    let metadata_mtime = file_modified_at(metadata_sidecar.as_deref());
 
     {
         let state = records_cache_state()
@@ -365,13 +377,6 @@ fn merge_route_metadata_payload(payload: &Value, meta: &mut HashMap<String, Rout
 
 pub(crate) fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
     let payload = read_json(path)?;
-    if let Some(records) = collect_skill_records_from_named_runtime_records(&payload) {
-        let mut meta = HashMap::new();
-        merge_runtime_records_route_metadata(&payload, &mut meta);
-        let mut records = records;
-        apply_manifest_route_meta(&mut records, &meta);
-        return Ok(records);
-    }
     let rows = payload
         .get("skills")
         .and_then(Value::as_array)
@@ -434,113 +439,24 @@ pub(crate) fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>,
 
     let mut records = collect_skill_records_from_rows(rows, indexes);
     let mut meta = HashMap::new();
-    merge_runtime_records_route_metadata(&payload, &mut meta);
+    merge_sidecar_route_metadata_from_runtime(path, &mut meta)?;
     apply_manifest_route_meta(&mut records, &meta);
     Ok(records)
 }
 
-fn collect_skill_records_from_named_runtime_records(payload: &Value) -> Option<Vec<SkillRecord>> {
-    let records = payload.get("records")?.as_array()?;
-    if records.is_empty() {
-        return None;
-    }
-    let collect = || {
-        records
-            .iter()
-            .filter_map(Value::as_object)
-            .map(build_skill_record_from_named_runtime_record)
-            .collect::<Vec<_>>()
-    };
-    if records.len() < PARALLEL_RECORD_SCAN_MIN {
-        return Some(collect());
-    }
-    Some(
-        records
-            .par_iter()
-            .filter_map(Value::as_object)
-            .map(build_skill_record_from_named_runtime_record)
-            .collect(),
-    )
-}
-
-fn build_skill_record_from_named_runtime_record(
-    record: &serde_json::Map<String, Value>,
-) -> SkillRecord {
-    SkillRecord::from_raw(RawSkillRecord {
-        slug: object_string_field(record, "slug"),
-        skill_path: record
-            .get("skill_path")
-            .map(value_to_string)
-            .filter(|value| !value.trim().is_empty()),
-        layer: object_string_field(record, "layer"),
-        owner: object_string_field(record, "owner"),
-        gate: object_string_field(record, "gate"),
-        priority: object_string_field_with_default(record, "priority", "P2"),
-        session_start: object_string_field_with_default(record, "session_start", "n/a"),
-        summary: object_string_field(record, "summary"),
-        short_description: String::new(),
-        when_to_use: String::new(),
-        do_not_use: String::new(),
-        tags: Vec::new(),
-        trigger_hints: record
-            .get("trigger_hints")
-            .map(value_to_string_list)
-            .unwrap_or_default(),
-    })
-}
-
-fn object_string_field(record: &serde_json::Map<String, Value>, field: &str) -> String {
-    record.get(field).map(value_to_string).unwrap_or_default()
-}
-
-fn object_string_field_with_default(
-    record: &serde_json::Map<String, Value>,
-    field: &str,
-    default: &str,
-) -> String {
-    record
-        .get(field)
-        .map(value_to_string)
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| default.to_string())
-}
-
-fn merge_runtime_records_route_metadata(
-    payload: &Value,
+fn merge_sidecar_route_metadata_from_runtime(
+    runtime_path: &Path,
     meta: &mut HashMap<String, RouteMetadataPatch>,
-) {
-    let Some(records) = payload.get("records").and_then(Value::as_array) else {
-        return;
+) -> Result<(), String> {
+    let Some(sidecar) = route_metadata_sidecar_for_runtime(runtime_path) else {
+        return Ok(());
     };
-    for record in records.iter().filter_map(Value::as_object) {
-        let slug = record
-            .get("slug")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
-        if slug.is_empty() {
-            continue;
-        }
-        let metadata = record.get("routing_metadata").unwrap_or(&Value::Null);
-        let negative_triggers = metadata
-            .get("negative_triggers")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        if negative_triggers.is_empty() {
-            continue;
-        }
-        meta.entry(slug)
-            .or_default()
-            .negative_triggers
-            .extend(negative_triggers);
+    if !sidecar.is_file() {
+        return Ok(());
     }
+    let payload = read_json(&sidecar)?;
+    merge_route_metadata_payload(&payload, meta);
+    Ok(())
 }
 
 pub(crate) fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
