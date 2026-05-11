@@ -18,7 +18,7 @@ trigger_hints:
   - ACM
   - GB/T 7714
 metadata:
-  version: "2.3.1"
+  version: "2.3.2"
   platforms: [codex]
   tags: [citation, bibliography, bibtex, reference, doi, academic]
 risk: low
@@ -49,6 +49,7 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 
 ## Truth Rules
 
+- **诚信红线**（不可核验主张、图像诚信、自我剽窃）：[`references/integrity-redlines.md`](references/integrity-redlines.md)；与 `$paper-reviewer` **P0** 口径对齐（致命问题先报、不粉饰）。
 - When manuscript context is available, keep citation keys and bibliography
   titles aligned with the frozen terminology in
   [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
@@ -56,6 +57,7 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
   naming system in `.bib` that conflicts with in-text terms unless the user
   asked for a rename pass.
 - Never invent missing author, title, venue, year, DOI, PMID, or pages.
+- **软件 / 数据 / 预印本**：在 `.bib` 或参考表里写清版本、修订、仓库 commit、数据 DOI 或访问条款；不得用模糊「某工具/某数据集」顶替可核对字段。
 - Mark unverifiable fields instead of guessing.
 - Preserve citation keys unless the user asks to rename them.
 - Keep style formatting separate from factual metadata.
@@ -83,3 +85,4 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 ## References
 
 - [references/style-policy.md](./references/style-policy.md)
+- [references/integrity-redlines.md](./references/integrity-redlines.md)

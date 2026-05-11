@@ -15,13 +15,21 @@
 
 - 文件：`artifacts/current/<task_id>/RFV_LOOP_STATE.json`
 - stdio op：**`framework_rfv_loop`**
-  - `operation: start` — 字段含 `goal`、`max_rounds`、`allow_external_research`、`parallel_external_with_review`（默认 `true`）、`prefer_structured_external_research`（默认 `false`，为 `true` 时可触发单行结构化外研提示）、**`external_research_strict`**（默认 **`true`**；显式 `false` 关闭；旧 `RFV_LOOP_STATE.json` 缺此键时 `append_round` 视为宽松）、`review_scope`、`fix_scope`、`verify_commands`、`stop_when`
+  - `operation: start` — 字段含 `goal`、`max_rounds`、`allow_external_research`、`parallel_external_with_review`（默认 `true`）、`prefer_structured_external_research`（**当 `allow_external_research=true` 时默认 `true`**；显式 `false` 可关闭；`null`/缺省走默认）、**`external_research_strict`**（默认 **`true`**；显式 `false` 关闭；旧 `RFV_LOOP_STATE.json` 缺此键时 `append_round` 视为宽松）、可选 **`close_gates`**（显式 RFV 收口硬门禁，默认 off；语义见 [`reasoning-depth-contract.md`](references/rfv-loop/reasoning-depth-contract.md)）、`review_scope`、`fix_scope`、`verify_commands`、`stop_when`
   - `operation: append_round` — 每轮结束后 supervisor 写入：`round`、`review_summary`、`external_research_summary`（可空）、可选结构化 **`external_research`**（校验见 [references/rfv-loop/external-research-harness.md](references/rfv-loop/external-research-harness.md)）、`fix_summary`、`verify_result`（`PASS|FAIL|SKIPPED`）、`supervisor_decision`（`continue|close|block`）、`reason`
   - `operation: status`
 - `max_rounds` 在 Rust 侧有 **硬上限 1000**（防止误填天文数字）；超过会截断并在响应中带 `warning`。
 - **Cursor**：若 `.cursor/hooks.json` 接入 `router-rs cursor hook`，且 **`RFV_LOOP_STATE.json`** 中 **`loop_status=active`**，Stop / beforeSubmit 可合并 **RFV_LOOP_CONTINUE** 跟进；preCompact 可附带一行 RFV 摘要。关闭注入：`ROUTER_RS_RFV_LOOP_HOOK=0`。
 
 可与宏任务 **`GOAL_STATE.json`** / `framework_autopilot_goal` 同目录并用：目标级续跑 + 轮次级质量闭环。
+
+### 迁移说明（`prefer_structured_external_research` 默认）
+
+自本仓库行为更新起：**`allow_external_research=true` 且未传 `prefer_structured_external_research`** 时，落盘默认 **`true`**（旧脚本若依赖「默认 false、不触发单行 struct hint」须显式传 **`prefer_structured_external_research: false`**）。
+
+### 迁移说明（`external_research_strict` 默认 **`true`**）
+
+**`append_round` 写入结构化 `external_research` 时**：新启动的 RFV 任务默认 **`external_research_strict: true`**，blob 须同时满足结构化形状与 **strict** 附加规则（见 `validate_external_research_strict`）。**旧磁盘 `RFV_LOOP_STATE.json` 若缺少该键**：`append_round` 按 **宽松** 路径接受仅结构化校验通过的 blob（与 `rfv_loop.rs` 一致）。若要从宽松迁到 strict：用 **`operation: start`** 重建账本并传入显式布尔，或手改 JSON 写入 **`"external_research_strict": true`** 后再按 strict 补全外研字段。
 
 ### 推理深度契约（与可审计链）
 
@@ -31,10 +39,11 @@
 - **数理 / STEM 契约长文**：[references/rfv-loop/math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)（witness、符号 verifier、反事实探针；与 lane 模板同目录）。
 - **外研不得顶替 verify**：external 只产出可引用结论与假设；**Pass/Fail 只认可执行验证**。定量复算的 **replay** 与 `cargo test` 同类 spirit：写入 `verify_commands` 或 `quantitative_replays` 并由 verifier / supervisor 执行，证据进 `EVIDENCE_INDEX`（或等价记录）。
 
-### 可执行验证与 Cursor 钩子（证据自动落盘）
+### 可执行验证与证据落盘（PostTool 启发式 vs 显式 append）
 
-- 连续性已初始化时，**verifier lane** 在终端跑的命令若匹配 `router-rs` 内置启发式（如 `cargo test` / `cargo check` / `pytest` / `verify_cursor_hooks` / `policy_contracts` / `nextest` 等），**Cursor `postToolUse`** 会把 **`cursor_post_tool_verification`** 写入 `EVIDENCE_INDEX.json`（需 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` 未关闭）。
-- `verify_commands` 建议优先选仓库内 **短、确定性** 命令，并与上述启发式有交集，便于 hook 自动记账；冷僻命令可改用语义等价且含关键字的拼法，或依赖 verifier 人工粘贴 `hook-evidence-append`。
+- **宿主 PostTool 自动追加**（`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` 未关闭、连续性已初始化）：Codex/Cursor 在 **`postToolUse` / `postTool`** 路径上解析终端类 tool 载荷，命令字符串命中 `router-rs` 内置验证启发式（如 `cargo test`、`pytest`、**窄域数理/形式化**子串见 `framework_runtime::shell_command_looks_like_verification`）时，写入 `EVIDENCE_INDEX.json` 行（`kind` 如 `cursor_post_tool_verification` / `codex_post_tool_verification`）。**不替跑命令**，只记账采样到的 preview / exit hint。
+- **`framework hook-evidence-append`**：任意宿主或人工可把 **`command_preview`** 写入证据索引；非 Cursor `cursor_*` 来源时仍须通过同一套验证启发式（否则 `skipped`），用于 **PostTool 未覆盖** 的长尾命令。
+- `verify_commands` 建议优先选仓库内 **短、确定性** 命令，并与上述启发式有交集，便于自动记账；仍不匹配时用 **`hook-evidence-append`** 或选用带关键字的安全拼法（**避免**依赖裸 `python` 作为唯一验证信号）。
 
 ## When to use
 

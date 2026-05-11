@@ -12,6 +12,8 @@ Field wants [goal], but [specific bottleneck] prevents it under [scope]. Existin
 
 If any slot is missing, do not hide it with fluent prose. Mark it with `[VERIFY: ...]` or hand back to `$paper-reviewer` logic mode.
 
+结构化 Claim card + IMRaD 章节读者任务与 handoff：见 [`claim-spine-and-section-contract.md`](claim-spine-and-section-contract.md)。
+
 For whole-manuscript work, reuse the canonical throughline in `../SKILL.md`:
 
 - `core_problem -> bottleneck -> paper_move -> decisive_evidence -> bounded_implication`

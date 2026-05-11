@@ -53,6 +53,7 @@
       "focus_skill": "openai-docs",
       "expected_owner": "openai-docs",
       "expected_overlay": null,
+      "expected_layer": "L1",
       "first_turn": true
     },
     {
@@ -470,7 +471,6 @@
       "task": "帮我做一个演示文稿，关于河川修复的",
       "expected_owner": "slides",
       "expected_overlay": null,
-      "expected_layer": "L3",
       "notes": "PPT/slides request should route to slides skill"
     },
     {
@@ -479,7 +479,6 @@
       "task": "把这个 PDF 里的表格提取出来",
       "expected_owner": "pdf",
       "expected_overlay": null,
-      "expected_layer": "L3",
       "notes": "PDF artifact gate should route to pdf skill"
     },
     {
@@ -488,7 +487,6 @@
       "task": "帮我整理一个 Word 文档模板，并导出 docx",
       "expected_owner": "doc",
       "expected_overlay": null,
-      "expected_layer": "L3",
       "notes": "Word/docx artifact gate should route to doc skill"
     },
     {
@@ -497,7 +495,6 @@
       "task": "/gitx 提交代码并推送到远端",
       "expected_owner": "gitx",
       "expected_overlay": null,
-      "expected_layer": "L0",
       "notes": "Git operations via explicit /gitx entrypoint should route to gitx"
     },
     {
@@ -506,7 +503,6 @@
       "task": "/update",
       "expected_owner": "update",
       "expected_overlay": null,
-      "expected_layer": "L0",
       "notes": "Explicit /update routes to tracked-codegen refresh workflow (framework command alias)"
     },
     {
@@ -515,7 +511,6 @@
       "task": "修这个 bug，先定位根因再改代码",
       "expected_owner": "systematic-debugging",
       "expected_overlay": null,
-      "expected_layer": "L0",
       "notes": "Bug fix with root-cause-first should route to systematic-debugging (L0 evidence gate)"
     },
     {
@@ -524,7 +519,6 @@
       "task": "GitHub Actions CI 挂了，帮我修一下",
       "expected_owner": "gh-fix-ci",
       "expected_overlay": null,
-      "expected_layer": "L0",
       "notes": "CI failure should route to gh-fix-ci (L0)"
     },
     {
@@ -533,7 +527,6 @@
       "task": "需要多 agent 并行处理这个跨模块任务",
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
-      "expected_layer": "L0",
       "notes": "Multi-agent delegation should route to agent-swarm-orchestration gate"
     },
     {
@@ -542,7 +535,6 @@
       "task": "LaTeX 编译太慢了，帮我加速",
       "expected_owner": "latex-compile-acceleration",
       "expected_overlay": null,
-      "expected_layer": "L4",
       "notes": "LaTeX compile speed should route to latex-compile-acceleration (L4)"
     },
     {
@@ -551,7 +543,6 @@
       "task": "帮我写论文的 related work 部分",
       "expected_owner": "paper-writing",
       "expected_overlay": null,
-      "expected_layer": "L2",
       "notes": "Paper writing should route to paper-writing (L2)"
     },
     {
@@ -560,8 +551,23 @@
       "task": "基于这组截图做 UI 审查，告诉我哪里有视觉问题",
       "expected_owner": "visual-review",
       "expected_overlay": null,
-      "expected_layer": "L3",
       "notes": "Screenshot review should route to visual-review"
+    },
+    {
+      "id": "route-011-phd-proposal-paper-workbench",
+      "category": "should-trigger",
+      "task": "博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "开题级叙事与可投性应走 paper-workbench 前门而非单一专科"
+    },
+    {
+      "id": "route-012-prereg-reproducibility",
+      "category": "should-trigger",
+      "task": "预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录",
+      "expected_owner": "experiment-reproducibility",
+      "expected_overlay": null,
+      "notes": "预注册边界与偏离记录优先路由 experiment-reproducibility"
     }
   ]
 }

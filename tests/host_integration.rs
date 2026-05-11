@@ -1611,15 +1611,27 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["supported"],
-        json!(["codex-cli", "cursor"])
+        json!(["codex-cli", "codex-app", "cursor", "claude-code"])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["codex-cli"]["install_tool"],
         "codex"
     );
     assert_eq!(
+        payload["host_targets"]["metadata"]["codex-app"]["install_tool"],
+        "codex"
+    );
+    assert_eq!(
         payload["host_targets"]["metadata"]["cursor"]["host_entrypoints"],
         json!(["AGENTS.md", ".cursor/rules/*.mdc"])
+    );
+    assert_eq!(
+        payload["host_targets"]["metadata"]["claude-code"]["install_tool"],
+        "claude"
+    );
+    assert_eq!(
+        payload["host_targets"]["metadata"]["claude-code"]["host_entrypoints"],
+        json!(["AGENTS.md", ".claude/rules/framework.md"])
     );
     assert!(payload.get("mcp_clients").is_none());
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");

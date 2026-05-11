@@ -23,9 +23,10 @@ pub fn build_framework_continuity_digest_prompt(
         prompt.push_str("\n\n");
         prompt.push_str(&hint);
     }
-    let goal_state = crate::autopilot_goal::read_goal_state(repo_root, None)
+    let goal_state = crate::autopilot_goal::read_goal_state_for_hydration(repo_root)
         .ok()
-        .flatten();
+        .flatten()
+        .map(|(value, _task_id)| value);
     if let Some(ref g) = goal_state {
         prompt.push_str("\n\n");
         prompt.push_str(&format_goal_state_digest_section(repo_root, g));
@@ -48,7 +49,7 @@ fn format_goal_state_digest_section(repo_root: &Path, goal: &Value) -> String {
 }
 
 /// Verbose 版本（仅 GOAL_PROMPT_VERBOSE=1 时启用）：使用 RFV reasoning-depth contract 的完整三问。
-/// Compact 版本：单行；保留 SessionStart 640 字符上限友好。
+/// Compact 版本：单行；保留 SessionStart 注入体的默认长度友好（参见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`）。
 fn digest_depth_self_check_lines(verbose: bool) -> Vec<String> {
     if verbose {
         vec![
@@ -443,4 +444,34 @@ fn render_continuity_digest_prompt_base(
     lines.push(String::new());
     lines.push("按既定串并行分工直接开始执行。".to_string());
     lines.join("\n") + "\n"
+}
+
+#[cfg(test)]
+mod digest_depth_self_check_tests {
+    use super::digest_depth_self_check_lines;
+
+    #[test]
+    fn verbose_lists_numbered_self_check() {
+        let lines = digest_depth_self_check_lines(true);
+        let joined = lines.join("\n");
+        assert!(
+            joined.contains("1)"),
+            "expected numbered checklist; got {joined:?}"
+        );
+        assert!(
+            joined.contains("EVIDENCE_INDEX") || joined.contains("append_round"),
+            "expected evidence anchor; got {joined:?}"
+        );
+    }
+
+    #[test]
+    fn compact_single_line_self_check() {
+        let lines = digest_depth_self_check_lines(false);
+        assert_eq!(lines.len(), 1);
+        assert!(
+            lines[0].contains("深度自检"),
+            "unexpected compact line: {:?}",
+            lines[0]
+        );
+    }
 }

@@ -4,7 +4,7 @@
 
 **与 `AGENTS.md` 的分工**：`AGENTS.md` = 跨宿主**执行与语言策略**；本文 = **控制面结构**（谁写盘、谁注入、谁算证据）。
 
-**文档索引**：steady-state 契约导航与历史边界见 [`README.md`](README.md)（本目录）；多账本只读聚合见 [`task_state_unified_resolve.md`](task_state_unified_resolve.md)。
+**文档索引**：steady-state 契约导航与历史边界见 [`README.md`](README.md)（本目录）；多账本只读聚合见 [`task_state_unified_resolve.md`](task_state_unified_resolve.md)。跨 Cursor 工作区接入操作见仓库根 [`README.md`](../README.md)「其它仓库一键接入」与「建议自检命令序列」（约 L147–L192）。
 
 ---
 
@@ -38,6 +38,23 @@
 | **L2** | 单一真源目录、schema 版本、任务指针 | 把聊天当状态机 |
 | **L1** | 产生 exit code / 测试报告 | 无 |
 
+### 2.1 Review：skill 路由、执行偏好与 REVIEW_GATE 三层
+
+下列三层**不要混为一谈**：关路由 ≠ 关门控；编辑器侧规则也不替代磁盘相位。
+
+1. **（a）Skill 路由与 trigger 提示**：`skills/SKILL_ROUTING_RUNTIME.json`（及 manifest）负责命中 `skill_path`、关键词与 skill 内契约；**不实现** REVIEW 门控状态机。
+2. **（b）Cursor 规则与 `AGENTS.md` 执行偏好**：`.cursor/rules/*.mdc` 与 `AGENTS.md` 的 **Execution Ladder** 描述何时倾向 review/subagent；属**跨宿主执行叙事**，不等于 hook 内算法。
+3. **（c）`router-rs` REVIEW_GATE 状态机（L3）**：`hook_common`、`cursor_hooks` 等解析 Cursor 事件、更新 **`.cursor/hook-state`**、在 Stop 注入 **`router-rs REVIEW_GATE`** 单行短码。路由侧与门控侧共享的结构化信号真源见 [`REVIEW_ROUTING_SIGNALS.json`](../configs/framework/REVIEW_ROUTING_SIGNALS.json) 与 [`review_routing_signals.rs`](../scripts/router-rs/src/review_routing_signals.rs)。
+
+**本机自检清单**（可选，排障时逐项过）：
+
+- `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`：是否仅为调试临时关闭（门控短路；续跑仍可合并，见 §8 表）。
+- `ROUTER_RS_CURSOR_HOOK_SILENT`：若开启，确认 §8 对含 `REVIEW_GATE` 等字样的 followup **保留**语义仍符合预期。
+- `.cursor/hooks.json`：**已注册的事件**（如 `beforeSubmit` / `Stop` 等）是否都指向预期的 `router-rs cursor hook` 子命令。
+- `.cursor/hook-state`：目录可写、无长期锁失败；异常时再对照仓库根 [`AGENTS.md`](../AGENTS.md)（不重复长政策正文）。
+
+- **Cursor Plan 收口**：若本次改动纳入某 Cursor Plan，在仓库根执行 **`/gitx plan`** 对照计划逐项验收（以本机实际输出为准；**不要**在文档或叙述中编造执行结果）。
+
 ---
 
 ## 3. 两条「主数据流」
@@ -62,13 +79,14 @@
 - **运行时归属**：L3 仅做 **轻量提醒**（可选、可关），**不得**用长文案替代 L1/L2。
 - **单一结论**：深度来自 **分工 + 可执行验证 + 落盘**；不是单模型 CoT。该结论 **只应在一处** 写长文，其余层 **链接或一行指针**。
 - **调研深度（外研加强）**：结构性外研输出、可复核检索轨迹、多视角真分离 — 见 `docs/references/rfv-loop/reasoning-depth-contract.md` §**提升调研深度的 harness 方向**（与 `lane-templates.md` 外研深度模式一致；**不以** L3 hook 长文案代替）。
+- **硬门禁（opt-in）**：`GOAL_STATE.completion_gates`（`framework_autopilot_goal` **`complete`**）、`RFV_LOOP_STATE.close_gates`（显式 **`append_round` close** 或 **`max_rounds` 耗尽**自动 closed）在开启时读取 **`resolve_task_view` / `DepthCompliance`** 校验；默认关闭、与 advisory rollup 分工见 [`reasoning-depth-contract.md`](references/rfv-loop/reasoning-depth-contract.md) §**可程序化硬门禁**。
 
 ---
 
 ## 5. 扩展规则（避免继续「加抽象」失控）
 
 1. **新宿主行为** → 先标清属于 L3 哪条管道（PostTool / Stop / refresh），再实现；禁止在 L4 bash 里复制 L3 逻辑。
-2. **新 env 开关** → 仅在 **跨用户可见噪音 / 合规** 需要时添加；优先收束到 `router_env_flags` + 文档表，**禁止**在随机模块读裸 `std::env::var`。
+2. **新 env 开关** → 仅在 **跨用户可见噪音 / 合规** 需要时添加；**优先**收束到 `router_env_flags` + 文档表。**例外**：少量宿主专用或窄作用域旋钮（例如 **Codex** `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`）目前可在对应模块按需读 `std::env::var`；跨宿主或通用开关仍应集中到 `router_env_flags`。**禁止**在随机模块零散增加裸 env 读出而不登记文档。
 3. **新验证启发式** → 必须 **可测**（单测含命令样例）；宁可 **少而准**，用 `hook-evidence-append` 补长尾。
 4. **新 operator 文案** → 默认进 **L5 文档**；注入宿主时以 **`configs/framework/HARNESS_OPERATOR_NUDGES.json`** 为真源（`router-rs` 启动时合并内置默认值）。Schema 不匹配会**回退到内置默认**（不再做部分合并）。**关闭全部此类注入**：`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0`（与其它 `ROUTER_RS_*` 软关断语义一致）。Schema 说明见同目录 `HARNESS_OPERATOR_NUDGES_SCHEMA.json`。
 5. **同时关掉所有续跑/nudge + 可选论文对抗 hook** → `ROUTER_RS_OPERATOR_INJECT=0`（聚合关断；P1-E）。等价于同时设 `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` + `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` + `ROUTER_RS_RFV_LOOP_HOOK=0`，并在你已启用时还关掉 Cursor **`beforeSubmit`** 的 **`PAPER_ADVERSARIAL_HOOK`**（见 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），单变量更易调试。
@@ -107,6 +125,7 @@
 |---------|------|------------------------|
 | `ROUTER_RS_OPERATOR_INJECT` | 开 | **聚合关断**：推理 nudge + AUTOPILOT_DRIVE + RFV_LOOP **及**（若启用）Cursor beforeSubmit **`PAPER_ADVERSARIAL_HOOK`** 全部消失 |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅去掉 `HARNESS_OPERATOR_NUDGES.json` 注入的 operator 文案（含 **推理深度** 三键与可选 **`math_reasoning_harness_line`** / **`retrieval_trace_harness_line`**）；RFV/AUTOPILOT 续跑骨架仍在。**不**影响：continuity digest 主线 `prompt` 里的 **`深度信号: dN/3`**（`depth_compliance` rollup）与 GOAL 段落内硬编码的 **深度自检** 行（见 `framework_runtime::continuity_digest`） |
+| *（脚注 #3）* | — | **`深度信号` 行**与 digest 内 **`depth_compliance_refresh_hint`** 走 `task_state` rollup，**不受**本行开关关断；若将来要「一条 env 关掉 digest 内全部深度提示」，属 **breaking 产品决策**，须另开开关或版本化 digest 契约（见 `docs/plans/RESEARCH_harness_depth_longrun_math.md` Open #3）。 |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | 整个 **AUTOPILOT_DRIVE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 整个 **RFV_LOOP_CONTINUE** 续跑块（含其内的 nudge 句）消失 |
 | `ROUTER_RS_GOAL_PROMPT_VERBOSE` | 关（默认紧凑） | 仅切换 verbose/compact 模板；与「是否注入」无关 |
@@ -116,9 +135,12 @@
 | `ROUTER_RS_CURSOR_HOOK_CHAT_FOLLOWUP` | 关 | 改写入 `additional_context` vs `followup_message` |
 | `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | 输出层整段剥离（含 nudge）；**例外**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup 会**保留**，避免静默丢失硬阻塞与合规提示|
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | 仅短路 review/delegation 门控；**续跑仍合并** |
+| `ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT` | 关（**opt-in**） | 为 on 时，`hook_common::is_review_prompt` 在命中 review 正则且路由侧 **`has_paper_context`** 为真、且无强代码/PR 锚点时返回 **false**，减轻手稿话术误触 **`REVIEW_GATE`**；**不**影响 `skills/SKILL_ROUTING_RUNTIME.json` 路由；**不受** **`ROUTER_RS_OPERATOR_INJECT`** 总闸约束 |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | 关（**opt-in**：须显式 `1`/`true`/`yes`/`on`） | Cursor **`beforeSubmit`**：论文类用户提示合并 **`PAPER_ADVERSARIAL_HOOK`** 短段（强对抗审稿禁令摘要）；文案真源 **`configs/framework/PAPER_ADVERSARIAL_HOOK.txt`**；受 **`ROUTER_RS_OPERATOR_INJECT`** 总闸约束 |
+| `ROUTER_RS_DEPTH_SCORE_MODE` | `legacy`（未设置与其它取值同 legacy） | 设为 **`strict`** 时，`DepthCompliance.depth_score` 的第三分在「checkpoint / 对抗轮」之外还把 **falsification_tests 计数** 与（任务 `external_research_strict` 时）**strict 外研通过轮次**计入；用于 digest / gate 与同一 rollup 对齐 |
+| `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` | 约 **640**（ clamp **256–8192**） | **Codex `SessionStart` / `UserPromptSubmit` `additionalContext`** 字符上限；超长时在 **换行边界**截断（见 `codex_hooks::truncate_codex_additional_context`）。宿主窄域读取，未放入 `router_env_flags` |
 
-实现入口：所有开关均通过 [`router_env_flags`](../scripts/router-rs/src/router_env_flags.rs) 解析；新增分支或开关请加在该模块并在此表登记。
+实现入口：**跨宿主 / 高频** router 行为的开关主路径在 [`router_env_flags`](../scripts/router-rs/src/router_env_flags.rs)；少数宿主窄域例外（例如上表 **`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`**）可由对应宿主模块解析 `std::env::var`。**`REVIEW_ROUTING_SIGNALS.json`** 中单条坏 regex 在加载时 **跳过该条**（其余 pattern 仍编译），仅当全部无效时才回落内置 literals（见 `review_routing_signals::compile_review_gate_regexes`）。新增通用开关请优先加到 `router_env_flags`（或确认为窄域例外后在本节与对应模块注释登记）。
 
 ---
 
@@ -131,6 +153,7 @@
 | `claimed_passed_without_evidence` | `closeout_enforcement` R7（record 内自检） | `enforce_closeout_for_session_payload` 阻断 |
 | `claimed_passed_without_evidence_index_rows` | `closeout_enforcement` R8（context-aware；读 EVIDENCE_INDEX） | 同上 |
 | `goal_verify_or_block_seen` | `cursor_hooks::hydrate_goal_gate_from_disk`（已收紧：纯 has_goal_text 不够）| Stop AG_FOLLOWUP 决策 |
-| `depth_score ∈ {0..3}` | `task_state::DepthCompliance` | **`task_state` / `ResolvedTaskView` 的 `depth_compliance`**；**digest `prompt` 一行 `深度信号`**（经 Codex SessionStart）；**`framework statusline` 段 `depth=dN`**（`PASS` 无对照证据时后缀 `!`） |
+| `depth_score ∈ {0..3}` | `task_state::DepthCompliance`（`ROUTER_RS_DEPTH_SCORE_MODE=strict` 时第三分公式见上表） | **`task_state` / `ResolvedTaskView` 的 `depth_compliance`**；**digest `prompt` 一行 `深度信号`**（经 Codex SessionStart）；**`framework statusline` 段 `depth=dN`**（`PASS` 无对照证据时后缀 `!`）；**可选**与 `GOAL_STATE.completion_gates` / `RFV_LOOP_STATE.close_gates` 的 `min_depth_score` 对齐 |
+| `completion_gates` / `close_gates` | 账本字段 + `autopilot_goal` / `rfv_loop` | 默认 off；开启后为 **硬门禁**（失败 Err、不落盘终态 / 不写收口轮）；RFV 侧含 **`max_rounds` 耗尽** 自动 closed 与显式 close 两条收口预览路径 |
 
 详细深度契约（语义层）见 [`reasoning-depth-contract.md`](references/rfv-loop/reasoning-depth-contract.md)。

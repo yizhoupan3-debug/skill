@@ -46,7 +46,7 @@ trigger_hints:
   - "edit_scope: surgical"
   - "edit_scope: refactor"
 metadata:
-  version: "2.13.5"
+  version: "2.14.0"
   platforms: [codex]
   tags: [paper, writing, rewrite, abstract, introduction, caption, rebuttal]
 framework_roles:
@@ -75,10 +75,26 @@ science, citations, results, or reviewer-facing promises.
 Before rewriting, set **`edit_scope`** per
 [`../paper-workbench/references/edit-scope-gate.md`](../paper-workbench/references/edit-scope-gate.md).
 
+## Step 0 — Claim card（改写前）
+
+Before any rewrite or new prose pass, emit the Claim card (four slots:
+`headline_contribution`, `decisive_evidence_unit`, `closest_work_gap`,
+`venue_slot`) per
+[`references/claim-spine-and-section-contract.md`](references/claim-spine-and-section-contract.md).
+Treat it as the narrative ceiling for this turn; if the user asks for louder
+claims without new evidence, stop and route per the claim–evidence ladder.
+
+When **`edit_scope: refactor`** (or multi-section scope is explicitly listed),
+also emit a **section-level outline** before dense prose: for each main section
+in scope, 3–7 bullets that state reader job, what must be delivered, and
+handoff—using the same contract as the reference doc’s IMRaD-ish table.
+
 - Default **`surgical`**: only the user-confirmed spans; no cross-section
   throughline rewrites unless **`refactor`** was chosen.
 - **`refactor`**: allowed only when the user (or `$paper-workbench`) has
-  explicitly authorized structural / multi-section narrative work.
+  explicitly authorized structural / multi-section narrative work. In
+  **`refactor`**, ship the **section-level outline** (per Claim spine reference)
+  **before** full paragraph prose for touched sections.
 
 If scope is unclear, ask one question before producing text.
 
@@ -162,6 +178,11 @@ When a manuscript is revised across turns, keep a visible claim lock:
 Use [`../paper-workbench/references/top-tier-paper-standard.md`](../paper-workbench/references/top-tier-paper-standard.md)
 as a guardrail when the user wants 顶刊/顶会/top-tier writing.
 
+**Top-tier sentence（与本 skill 输出对齐）**：顶刊存活依赖标准文档 **Core Standard**
+的前三层同时成立——**(1) Target contract（venue/track 读者契约明确）**、**(2)
+Contribution right（move 对该会场确实重要）**、**(3) Novelty separation（最近邻工作 +
+公平对照 + 残余缝隙仍重要）**；证据关停、审稿稳健与手稿表面是其后三层，不得只靠辞藻绕过。
+
 - Do not upgrade contribution language beyond the frozen claim ceiling.
 - Make the one defensible contribution unmistakable before adding secondary angles.
 - Shape abstract and introduction around the venue-calibrated gap, not generic importance.
@@ -212,20 +233,44 @@ Canonical slot checks:
 
 ## Workflow
 
-1. Identify section type, target audience, journal/register, and allowed claims.
-2. Extract supplied facts, evidence, and constraints before rewriting.
-3. For multi-round work, refresh `claim_ledger` and check proposed edits against it.
-4. Choose the section move: motivate, gap, method, result, implication, or response.
-5. Rewrite for flow and precision while keeping claim ceiling intact.
-6. Mirror check (abstract / introduction / conclusion / captions)：仅当 **`edit_scope:
+1. Fix **`edit_scope`** and `scope_items` / `non_goals` or **`refactor_intent`**
+   (see edit-scope gate). For **`refactor`**, draft the **section-level outline**
+   next.
+2. Emit **Claim card** (Step 0 reference).
+3. Identify section type, target audience, journal/register, and allowed claims.
+4. Extract supplied facts, evidence, and constraints before rewriting.
+5. For multi-round work, refresh `claim_ledger` and check proposed edits against it.
+6. Choose the section move: motivate, gap, method, result, implication, or response.
+7. Rewrite for flow and precision while keeping claim ceiling intact.
+8. Mirror check (abstract / introduction / conclusion / captions)：仅当 **`edit_scope:
    refactor`**，或这些表面**全部**已列入 **`scope_items`** 时执行，确认没有表面在
    静默超过允许 claim level。若在 **`surgical`** 且未覆盖上述全部表面，则只对
    **已改写过的表面**做局部一致性检查，或提示升格 / 补全 scope 后再做全 mirror。
-7. Return the polished text first; include notes only for important claim risks.
+9. 根据**最终**文稿填写 **`tone_audit`**（Output Defaults；仅结构/图表未触句则 `n/a`）。
+10. 按 **mandatory output order** 排版输出：**即使** tone 检视针对定稿生成，用户可见块顺序仍为 *tone_audit → prose*（检视先于正文块出现）。
 
 ## Output Defaults
 
-- For short passages: polished text only.
+**Mandatory output order**（每一轮交付按此顺序出现；可极简但不允许静默打乱）：
+
+1. **`edit_scope`**：`surgical` 或 `refactor`。
+2. **`scope_items` + `non_goals`**（`surgical`）或 **`refactor_intent` + `risk_note`**
+  （`refactor`；可与门控模板一致）。
+3. **Claim card**（四个槽位；见 Step 0 参考）。
+4. **`tone_audit`**：四句检视，逐条映射
+   [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+   **§3**——**(a)** 内部口径（代码名 / 路径 / `.csv` 式工程产物是否冒充结论）、**(b)**
+   防御口径（是否层层免责堆砌）、**(c)** 负面口径 / 对比成瘾（是否以否定骨架撑贡献）、**(d)**
+   `but` / `not` / `rather than` 否定链与转折堆叠是否超限。若本轮**完全未改英文/中文句子**
+   （例如仅接收上游提纲），写一行 **`tone_audit: n/a (no prose touches)`** 并说明原因。
+5. **Prose**：patch、hunk、或逐条「摘录 → 改后」；`refactor` 在大块 prose 前已给出 section outline。
+6. **追溯**：`surgical` 用 **`change_id` ledger**（与门控一致）；`refactor` 用
+   **`sections_touched` 列表**（主节 / 小节 id）并指明本章是否触及 **`claim_ledger`**
+   （例如 `claim_ledger_delta: none | <摘要>`）。
+
+Then adapt density to task shape:
+
+- For short passages: keep items 1–6 compact; prose may be the only long block.
 - For section rewrites: revised section plus concise rationale if useful.
 - For rebuttals: point-by-point response with polite stance and no overpromise;
   each point should **point to a concrete manuscript/supplement change** or an
@@ -236,6 +281,7 @@ Canonical slot checks:
 
 - [../paper-workbench/references/RESEARCH_PAPER_STACK.md](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - [../paper-workbench/references/research-language-norms.md](../paper-workbench/references/research-language-norms.md)
+- [references/claim-spine-and-section-contract.md](./references/claim-spine-and-section-contract.md)
 - [references/section-by-section.md](./references/section-by-section.md)
 - [references/storytelling-patterns.md](./references/storytelling-patterns.md)
 - [references/rebuttal-patterns.md](./references/rebuttal-patterns.md)

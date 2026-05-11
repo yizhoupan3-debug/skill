@@ -11,25 +11,8 @@ fn compile_patterns(patterns: &[&str]) -> Vec<Regex> {
         .collect()
 }
 
-fn review_patterns() -> &'static Vec<Regex> {
-    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
-    PATTERNS.get_or_init(|| {
-        compile_patterns(&[
-            r"(?i)\b(code|security|architecture|architect)\s+review\b",
-            r"(?i)\breview\s+this\s+(pr|pull request)\b",
-            r"(?i)\breview\s+(my\s+)?(pr|pull request)\b",
-            r"(?i)\b(pr|pull request)\s+review\b",
-            r"(?i)\breview\s+(code|security|architecture)\b",
-            r"(?i)^\s*review\b.*\bagain\b",
-            r"(?i)\bfocus on finding\b.*\bproblems\b",
-            r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维)\s*review",
-            r"(?i)review.*(仓库|全仓|跨模块|多模块|严重程度|findings|severity|repo|repository|cross[- ]module|回归风险|架构风险|实现质量|路由系统|skill\s*边界)",
-            r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维).*(审查|审核|审计|评审)",
-            r"(?i)(审查|审核|审计|评审).*(仓库|全仓|跨模块|多模块|严重程度|回归风险|架构风险|实现质量|路由系统|skill\s*边界)",
-            r"(?i)(代码审查|安全审查|架构审查|审查这个\s*PR|审查这段代码)",
-            r"(?i)(审查|评审|审核).*(PR|pull request|合并请求)",
-        ])
-    })
+fn review_patterns() -> &'static [Regex] {
+    crate::review_routing_signals::review_gate_compiled_regexes()
 }
 
 fn parallel_delegation_patterns() -> &'static Vec<Regex> {
@@ -219,12 +202,38 @@ pub fn is_narrow_review_prompt(text: &str) -> bool {
     narrow_review_prefix_re().is_match(text)
 }
 
+fn strong_code_review_anchor(sanitized: &str, tokens: &[String]) -> bool {
+    if crate::route::has_github_pr_context(sanitized, tokens) {
+        return true;
+    }
+    if sanitized.contains("路由系统") || sanitized.contains("代码库") {
+        return true;
+    }
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)\b(codebase|repo|repository|skill)\b").expect("invalid anchor regex")
+    })
+    .is_match(sanitized)
+}
+
 pub fn is_review_prompt(text: &str) -> bool {
     let sanitized = strip_quoted_or_codeblock_or_url(text);
     if is_narrow_review_prompt(&sanitized) {
         return false;
     }
-    review_patterns().iter().any(|p| p.is_match(&sanitized))
+    let matched = review_patterns().iter().any(|p| p.is_match(&sanitized));
+    if !matched {
+        return false;
+    }
+    if crate::router_env_flags::router_rs_review_gate_suppress_on_manuscript_context_enabled() {
+        let tokens = crate::route::tokenize_query(&sanitized);
+        if crate::route::has_paper_context(&sanitized, &tokens)
+            && !strong_code_review_anchor(&sanitized, &tokens)
+        {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn is_parallel_delegation_prompt(text: &str) -> bool {
@@ -328,6 +337,11 @@ pub fn normalize_tool_name(value: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static MANUSCRIPT_REVIEW_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    const MANUSCRIPT_REVIEW_ENV: &str = "ROUTER_RS_REVIEW_GATE_SUPPRESS_ON_MANUSCRIPT_CONTEXT";
 
     #[test]
     fn saw_reject_reason_accepts_line_only_tokens_and_rg_clear() {
@@ -354,5 +368,40 @@ mod tests {
             saw_reject_reason("ok", bad.as_str()),
             "user paste of legacy line in their turn must still clear gate"
         );
+    }
+
+    #[test]
+    fn is_review_prompt_manuscript_suppression_opt_in_and_defaults() {
+        let _guard = MANUSCRIPT_REVIEW_ENV_LOCK
+            .lock()
+            .expect("env test lock poisoned");
+        let prev = std::env::var(MANUSCRIPT_REVIEW_ENV).ok();
+
+        std::env::remove_var(MANUSCRIPT_REVIEW_ENV);
+        assert!(
+            is_review_prompt("深度 review 论文 methodology 节"),
+            "default off: manuscript + depth review still counts as review prompt"
+        );
+        assert!(is_review_prompt("深度 review 整个路由系统"));
+
+        std::env::set_var(MANUSCRIPT_REVIEW_ENV, "1");
+        assert!(
+            !is_review_prompt("深度 review 论文 methodology 节"),
+            "opt-in: clear manuscript context without code anchor -> not review prompt"
+        );
+        assert!(
+            is_review_prompt("深度 review 整个路由系统"),
+            "routing-system phrase is a strong anchor even when opt-in"
+        );
+        assert!(
+            is_review_prompt("深度 review 论文 pull request 把关"),
+            "PR/github anchor keeps review prompt when opt-in"
+        );
+        assert!(is_review_prompt("Please do a code review of this change."));
+
+        match prev {
+            Some(value) => std::env::set_var(MANUSCRIPT_REVIEW_ENV, value),
+            None => std::env::remove_var(MANUSCRIPT_REVIEW_ENV),
+        }
     }
 }

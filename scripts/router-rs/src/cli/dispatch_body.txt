@@ -31,6 +31,7 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Codex { command } => dispatch_codex_command(command),
+        RouterCommand::Claude { command } => dispatch_claude_command(command),
         RouterCommand::Cursor { command } => dispatch_cursor_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
@@ -179,6 +180,14 @@ fn dispatch_cursor_command(command: CursorCommand) -> Result<(), String> {
     match command {
         CursorCommand::Hook(command) => {
             run_review_gate(&command.event, command.repo_root.as_deref())
+        }
+    }
+}
+
+fn dispatch_claude_command(command: ClaudeCommand) -> Result<(), String> {
+    match command {
+        ClaudeCommand::Hook(command) => {
+            run_claude_hook_cli(&command.event, command.repo_root.as_deref())
         }
     }
 }

@@ -10,6 +10,7 @@ use crate::autopilot_goal::{
 use crate::rfv_loop::{
     read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
 };
+use crate::router_env_flags::router_rs_depth_score_mode_strict;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
@@ -62,8 +63,9 @@ pub struct EvidenceRollup {
 /// - 1 point: at least one goal checkpoint recorded (model wrote progress at least once).
 ///
 /// Notes:
-/// - This is **advisory** — it does not gate writes. Use it as a discriminator when displaying
-///   continuity status or as one of several signals in custom enforcement.
+/// - Rollup counters and `depth_score` are **advisory** for hooks/digest unless a ledger enables
+///   **hard gates** (`GOAL_STATE.completion_gates` on `complete`, `RFV_LOOP_STATE.close_gates` on
+///   RFV **显式 close** 与 **`max_rounds` 耗尽** 自动 closed 的 `append_round` 收口预览) — those paths read the same aggregate via [`resolve_task_view`].
 /// - `rfv_unknown_round_count` and `rfv_pass_without_evidence_count` are explicitly broken out
 ///   so dashboards can flag "RFV says PASS but EVIDENCE shows no successful row in the same
 ///   window" — the cross-check label written by `rfv_loop::cross_link_evidence`.
@@ -87,7 +89,11 @@ pub struct DepthCompliance {
     pub depth_score: u8,
 }
 
-fn depth_compliance_from_disk(
+/// Roll up RFV rounds + optional GOAL checkpoints + evidence_ok into [`DepthCompliance`].
+///
+/// Used by [`resolve_task_view`] and by RFV **`close_gates`** pre-write preview（显式 close 与
+/// `max_rounds` 轮次上限收口）so rollup stays single-sourced. `rfv` is typically `RFV_LOOP_STATE` root; `goal` is optional `GOAL_STATE`.
+pub fn depth_compliance_aggregate(
     goal: Option<&Value>,
     rfv: Option<&Value>,
     evidence_ok: bool,
@@ -100,8 +106,9 @@ fn depth_compliance_from_disk(
         }
     }
 
+    let mut strict_task = false;
     if let Some(r) = rfv {
-        let strict_task = r
+        strict_task = r
             .get("external_research_strict")
             .and_then(Value::as_bool)
             .unwrap_or(false);
@@ -163,9 +170,17 @@ fn depth_compliance_from_disk(
     if evidence_ok {
         score += 1;
     }
-    // Third point is "structured progress signal": goal checkpoints OR adversarial RFV round.
-    // This keeps the dN/3 scale stable while rewarding adversarial depth in pure RFV mode.
-    if c.goal_checkpoint_count > 0 || c.rfv_adversarial_round_count > 0 {
+    // Third point: legacy = checkpoints OR adversarial round. `ROUTER_RS_DEPTH_SCORE_MODE=strict`
+    // also counts falsification tests and (when task strict) external_research strict-pass rounds.
+    let third_legacy = c.goal_checkpoint_count > 0 || c.rfv_adversarial_round_count > 0;
+    let third = if router_rs_depth_score_mode_strict() {
+        third_legacy
+            || c.rfv_falsification_test_count > 0
+            || (strict_task && c.rfv_external_strict_ok_round_count > 0)
+    } else {
+        third_legacy
+    };
+    if third {
         score += 1;
     }
     c.depth_score = score;
@@ -279,7 +294,7 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
         has_successful_verification: evidence_ok,
     });
 
-    let depth_compliance = Some(depth_compliance_from_disk(
+    let depth_compliance = Some(depth_compliance_aggregate(
         goal_state.as_ref(),
         rfv_loop_state.as_ref(),
         evidence_ok,
@@ -332,6 +347,104 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
         ));
     }
     Some(out)
+}
+
+/// Optional hard gates for `framework_autopilot_goal` **`operation=complete`** (stored on `GOAL_STATE`).
+#[derive(Debug, Clone)]
+pub struct GoalCompletionGates {
+    pub enabled: bool,
+    pub min_depth_score: Option<u8>,
+    pub require_successful_evidence_row: bool,
+    pub min_goal_checkpoints: Option<u64>,
+    pub block_on_rfv_pass_without_evidence: bool,
+}
+
+/// Parse `GOAL_STATE.completion_gates`. Missing / null → **off** (no gate). Object with
+/// `"enabled": false` → parsed but [`validate_goal_completion_gates`] is a no-op.
+pub fn parse_goal_completion_gates(goal: &Value) -> Option<GoalCompletionGates> {
+    let raw = goal.get("completion_gates")?;
+    if raw.is_null() {
+        return None;
+    }
+    let o = raw.as_object()?;
+    let enabled = o.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+    let min_depth_score = o
+        .get("min_depth_score")
+        .and_then(Value::as_u64)
+        .map(|u| u.min(3) as u8);
+    let require_successful_evidence_row = o
+        .get("require_successful_evidence_row")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let min_goal_checkpoints = o.get("min_goal_checkpoints").and_then(Value::as_u64);
+    let block_on_rfv_pass_without_evidence = o
+        .get("block_on_rfv_pass_without_evidence")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    Some(GoalCompletionGates {
+        enabled,
+        min_depth_score,
+        require_successful_evidence_row,
+        min_goal_checkpoints,
+        block_on_rfv_pass_without_evidence,
+    })
+}
+
+/// Enforce `completion_gates` against [`resolve_task_view`] output (same rollup as L3 digest).
+pub fn validate_goal_completion_gates(
+    view: &ResolvedTaskView,
+    gates: &GoalCompletionGates,
+) -> Result<(), String> {
+    if !gates.enabled {
+        return Ok(());
+    }
+    let Some(dc) = view.depth_compliance.as_ref() else {
+        return Err(
+            "GOAL completion_gates: missing depth rollup (no resolved task_id / idle view)"
+                .to_string(),
+        );
+    };
+    if let Some(min) = gates.min_depth_score {
+        if dc.depth_score < min {
+            return Err(format!(
+                "GOAL completion_gates: depth_score={} < min_depth_score={} (fix RFV/EVIDENCE/checkpoints or lower the gate; rollup from resolve_task_view)",
+                dc.depth_score, min
+            ));
+        }
+    }
+    if gates.require_successful_evidence_row {
+        let ok = view
+            .evidence
+            .as_ref()
+            .is_some_and(|e| e.has_successful_verification);
+        if !ok {
+            return Err(
+                "GOAL completion_gates: require_successful_evidence_row but EVIDENCE_INDEX has no successful row"
+                    .to_string(),
+            );
+        }
+    }
+    if let Some(min_ck) = gates.min_goal_checkpoints {
+        let n = view
+            .goal_state
+            .as_ref()
+            .and_then(|g| g.get("checkpoints"))
+            .and_then(Value::as_array)
+            .map(|a| a.len() as u64)
+            .unwrap_or(0);
+        if n < min_ck {
+            return Err(format!(
+                "GOAL completion_gates: checkpoints.len()={n} < min_goal_checkpoints={min_ck}"
+            ));
+        }
+    }
+    if gates.block_on_rfv_pass_without_evidence && dc.rfv_pass_without_evidence_count > 0 {
+        return Err(format!(
+            "GOAL completion_gates: block_on_rfv_pass_without_evidence but rfv_pass_without_evidence_count={}",
+            dc.rfv_pass_without_evidence_count
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -487,6 +600,48 @@ mod tests {
             dc.depth_score, 2,
             "PASS (1) + adversarial (1) = 2, no evidence"
         );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn depth_score_strict_mode_counts_falsification_for_third_point() {
+        let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
+        std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict");
+        let tmp = unique_repo("strict-fals");
+        let tid = "t-strict-fals";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("RFV_LOOP_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "loop_status": "active",
+                "goal": "g",
+                "max_rounds": 3,
+                "current_round": 1,
+                "rounds": [{
+                    "round": 1,
+                    "verify_result": "PASS",
+                    "falsification_tests": [{"id":"T1"}]
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            task_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"x","exit_code":0}]}"#,
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        let dc = v.depth_compliance.expect("dc");
+        assert_eq!(dc.depth_score, 3, "strict third point via falsification");
+        match prior {
+            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
+            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+        }
         let _ = fs::remove_dir_all(&tmp);
     }
 

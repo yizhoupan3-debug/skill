@@ -235,7 +235,7 @@ pub(crate) fn route_task(
         });
     }
 
-    let selected = pick_owner(viable);
+    let selected = pick_owner(viable, &normalized_query, &query_token_list);
     if selected.score < layer_threshold(&selected.record.layer) {
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill."

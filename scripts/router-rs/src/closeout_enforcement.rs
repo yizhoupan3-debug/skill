@@ -256,6 +256,12 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         });
     }
 
+    // R9 (task-scoped depth / `GOAL_STATE.completion_gates` alignment): **deferred** — needs
+    // `task_id`→ledger policy resolution and `CLOSEOUT_RECORD` serde/schema lockstep; use GOAL
+    // `complete` + RFV `append_round` close_gates (explicit close **and** max_rounds cap close)
+    // instead — contract: `docs/references/rfv-loop/reasoning-depth-contract.md`; ADR:
+    // `docs/plans/ADR_rfv_close_gates_max_rounds.md`.
+
     // R7 (depth review P0-B): verification_status=passed but record carries no command evidence
     // and the optional EvidenceContext (when supplied by orchestrator) shows no successful
     // EVIDENCE_INDEX rows either. Pure self-attestation should not be enough to claim "passed".

@@ -44,7 +44,7 @@ Rust owns the default runtime and contract path.
 - Live execution and dry-run preview use Rust stdio.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, storage, and `background`.
 - Framework snapshot, contract summary, session artifact writing, hook evidence append (CLI + stdio), and prompt policy use direct `router-rs` surfaces.
-- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the **closed-set supported host projections** are defined by **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (install-skills/tool spellings derive from `framework_host_targets` in router-rs); the checkout default lists `codex-cli` and `cursor`.
+- Host entrypoint sync and native integration are Rust-owned through `router-rs`; the **closed-set supported host projections** are defined by **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (install-skills/tool spellings derive from `framework_host_targets` in router-rs). Older docs and onboarding examples sometimes mention only `codex-cli` and `cursor`; **that is not an alternate host-id enumeration**—the authoritative closed-set ids are **only** whatever appears under `host_targets.supported` in the checked-in registry JSON.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed alignment between store/checkpointer/trace/state families.
 - SQLite is the strongest local backend for WAL, consistent append, compaction, and snapshot-delta support; filesystem remains the safe default storage.
@@ -77,7 +77,8 @@ Rust owns the default runtime and contract path.
 ## Host Projection Invariants
 
 - The shared framework core is the profile authority; host projections are closed-set and explicit.
-- Supported host projections are **exactly** the ids enumerated under **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (not a hard-coded second source); the bundled registry currently lists `codex-cli` and `cursor`.
+- Supported host projections are **exactly** the ids enumerated under **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`** (not a hard-coded second source in contract prose—read the JSON; do not infer the closed set from profile-bundle layout alone).
+- **Profile bundle vs host registry:** `build_profile_bundle` (`scripts/router-rs/src/framework_profile.rs`) currently inserts **`codex-cli` only** into `host_payloads` alongside the Codex profile artifacts. That Codex-first bundle is **orthogonal** to `host_targets.supported`, which also governs install/sync entrypoints for hosts such as `cursor`, `codex-app`, and `claude-code` via `host_integration` and hook adapters.
 - `codex_profile` is the Codex projection artifact and may carry Codex-private payload fields.
 - Generated host projections are disposable install targets and must remain thin bootstrap pointers to the Rust core.
 - `framework host-integration remove` removes only framework-owned projection files and manifest-recorded settings keys; user-authored files and unrelated settings are preserved.

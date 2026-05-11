@@ -100,7 +100,7 @@ trigger_hints:
   - 不要生造概念
   - 论文用语长期规范
 metadata:
-  version: "1.11.1"
+  version: "1.12.0"
   platforms: [codex, cursor]
   tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
@@ -149,6 +149,8 @@ dimension mode.
 **减法**：专科 skill 多 ≠ 用户入口多。`disable-model-invocation` 的 paper 专科应视为 **内部能力切片**；入口计数按 **用户可见的一个前门** 算，否则「agent 太多」会反噬可用性。
 
 **全栈索引**（技能 × reference × L0–L3）：[`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md)。
+
+**宿主与专科契约（与 stack 对齐）**：`$paper-workbench` 在 Codex 与 Cursor 上均为用户可 invocation 的前门；`$paper-writing` / `$paper-reviewer` / `$paper-reviser` 保持 `disable-model-invocation`，表示由本前门在**任一支宿主**上**内联**加载的专科 lane，而非与用户入口并列的第二扇门。权威表述见 [`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md) §宿主与专科入口。
 
 ## Use this when
 
@@ -218,7 +220,7 @@ separate "known blocker" from "uncertainty that needs lookup".
 - When **edit_scope=surgical**, do not delete, merge, or relocate sections and do not run cross-section throughline rewrites unless the user listed that work in **scope_items** (see [`references/edit-scope-gate.md`](references/edit-scope-gate.md)).
 - When **edit_scope=surgical**, do not return a **whole-section or whole-document paste** as the primary deliverable if `scope_items` only names local spans—use **patches/hunks or excerpt-to-excerpt replacements** tied to `change_id` (same gate reference).
 - Do not end at critique if the user asked to get the paper closer to submission; convert findings into ordered edits.
-- **审稿 R&R**：若是 **repair** 类意见，关停件应优先落在 **图/表/方法/统计/附录/补充材料** 的可核验修改（或已定稿的补充实验落点），不得把「只改摘要、只加长 hedge」当主交付；见 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md) §「审稿意见 / R&R」。
+- **审稿 R&R（repair）**：关停件须落在可核验的手稿/图表/方法/统计/附录改动，不得以摘要 hedge 或措辞替代；细则与「审稿意见 / R&R」条款只信 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)（下文 §审稿意见与之对齐，不重复扩写）。
 - Do not present "top-tier" as a style problem. Treat it as a selective-venue
   acceptance problem: novelty, evidence, comparison fairness, venue fit, and
   reproducibility must survive before prose polish matters.
@@ -232,7 +234,6 @@ separate "known blocker" from "uncertainty that needs lookup".
 - **数学/推导质疑**不是「文风问题」：禁止用直觉句、Notation 洗牙或把 Wrong proof
   悄悄收成「非正式叙述」来回避；必须 **补证明 / 定理勘误 / 反例收窄 / 或为 conjecture
   并改 claim**；细则见阶梯文 **§数学/推导质疑**。
-- **R&R / repair 类意见**：closure 工件优先落在 **图/方法/统计/附录** 等可核验改动，而非仅靠 abstract 层面 hedge；见 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md) §审稿意见 / R&R。
 - Keep this front door thin: if a rule needs more than one sentence, link the
   owning reference instead of restating it here.
 
@@ -288,6 +289,8 @@ For the full manuscript stack map and progressive reading order, use
 
 ## What this skill should deliver
 
+本前门转发或收口 **`$paper-writing` / `$paper-reviser`** 的改稿时，**统一输出顺序**须先回声门控与叙事契约，再贴正文块：**`edit_scope` → `scope_items`/`non_goals` 或 `refactor_intent`/`risk_note` → Claim card（四槽）→ `tone_audit` 或「未触达用语层」→ prose/hunks → `change_id` 账本（`surgical`）或 `sections_touched` + `claim_ledger_touch_statement`/`claim_ledger_delta`（`refactor`）**；细则见 [`../paper-writing/SKILL.md`](../paper-writing/SKILL.md) **Output Defaults** 与 [`references/edit-scope-gate.md`](references/edit-scope-gate.md)。
+
 Keep the user-facing output simple:
 
 1. what mode the paper is in now
@@ -340,7 +343,7 @@ In filesystem-backed work, the stable artifacts are:
 
 ## 审稿意见 / R&R：禁止逃避（硬约束）
 
-与前门 **Anti-bad-output**、[`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/research-language-norms.md`](references/research-language-norms.md) 叠加；**优先于**「少惹事、快过关」的模型默认。
+与前门 **Anti-bad-output**、[`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md) §审稿意见 / R&R、[`references/research-language-norms.md`](references/research-language-norms.md) 叠加；**优先于**「少惹事、快过关」的模型默认。可核验关停与 repair 优先级以 **claim-evidence-ladder** 为单真源，本节只强调审稿语境下易逃逸的禁令。
 
 - **禁止「降 claim / 缩口径」当主手逃避**：在仍属 B 类可闭合、且存在合理 **evidence-first** 路径时，不得把本轮主策略做成「改弱提法 + 加长 limitation」却对证据结构不动（见阶梯文与后门 **Hard rules** 已有条目；本条是审稿场景的显式复述）。
 - **禁止「防御口径」顶替改稿**：不得用连环 hedge、冗长免责声明、叠叠乐的 `but/not/rather than`（辩论腔 prose）填满回复或正文，**代替**审稿人点名的对照/消融/协议澄清/图表修正/披露与复现条目。

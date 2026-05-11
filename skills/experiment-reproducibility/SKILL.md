@@ -25,8 +25,12 @@ trigger_hints:
   - seed management
   - DVC
   - MLflow tracking
+  - 预注册
+  - 方案偏离
+  - 主分析
+  - 探索性分析
 metadata:
-  version: "1.0.1"
+  version: "1.0.3"
   platforms: [codex]
   tags:
     - reproducibility
@@ -64,6 +68,7 @@ This skill owns **experiment reproducibility management** for research.
 ## Cross-references
 
 - Manuscript workflow map: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
+- **科研纪录最低清单**（预注册、主/探索分析、方案偏离、数据 DOI、软件 pin）：[`references/research-record-minimum.md`](references/research-record-minimum.md)；与仓库连续性（`artifacts/current/`、`SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`）对齐见 [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md) §科研纪录与仓库连续性
 - Project and experiment owners may use this skill as the rigor / reproducibility lane
 - Inner-loop research automation should route deep reproducibility requirements here
 - Works with performance work when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs

@@ -93,6 +93,16 @@ refactor_intent: <例如：按 R1 全面压篇幅 / 重写 related work 叙事 /
 risk_note: <哪些 claim 可能被动到，是否需要先过 reviewer 逻辑门>
 ```
 
+**交付最低限度（与 `surgical` 对称）**：`refactor` 每一批次交付须带可追溯骨架，避免「整稿重写但说不清动到哪」——至少给出：
+
+```text
+sections_touched:
+  - <主节 / 小节 stable id，如 §3.2 / Fig.4 caption / Appendix B>
+claim_ledger_touch_statement: <none | 摘要：哪些 claim_id / allowed_claim_level 被动到；若仅排版或未改主张句写 none>
+```
+
+并与 `$paper-reviser` 批次末的 `claim_ledger_delta` / `evidence_anchor_delta` 叙述一致：凡声称动了主张边界，`claim_ledger_touch_statement` 不得写 `none`。
+
 ## 强信号词（启发式，非穷尽）
 
 - 偏向 **refactor**：`大面积`、`重构`、`整篇改版`、`故事线`、`砍到 X 页`、`结构性`、`合并章节`、`全书式润色`、`全稿重写`。

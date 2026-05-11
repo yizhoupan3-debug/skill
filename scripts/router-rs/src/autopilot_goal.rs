@@ -448,6 +448,11 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
             if let Some(extra) = payload.get("metadata").cloned() {
                 obj.insert("metadata".to_string(), extra);
             }
+            if let Some(cg) = payload.get("completion_gates") {
+                if !cg.is_null() {
+                    obj.insert("completion_gates".to_string(), cg.clone());
+                }
+            }
             let path = goal_state_path_for_task(&repo_root, &task_id);
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
@@ -508,7 +513,26 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
         "pause" => set_terminal_flags(&repo_root, task_id_override, "paused", Some(false), None),
         "resume" => resume_goal_running(&repo_root, task_id_override),
         "complete" => {
-            set_terminal_flags(&repo_root, task_id_override, "completed", Some(false), None)
+            let task_id = task_id_override
+                .map(|s| s.to_string())
+                .or_else(|| read_active_task_id(&repo_root))
+                .ok_or_else(|| {
+                    "framework_autopilot_goal complete requires task_id or active_task.json"
+                        .to_string()
+                })?;
+            let state = read_goal_state(&repo_root, Some(&task_id))?
+                .ok_or_else(|| "GOAL_STATE missing for completion gate check".to_string())?;
+            if let Some(gates) = crate::task_state::parse_goal_completion_gates(&state) {
+                let view = crate::task_state::resolve_task_view(&repo_root, Some(task_id.as_str()));
+                crate::task_state::validate_goal_completion_gates(&view, &gates)?;
+            }
+            set_terminal_flags(
+                &repo_root,
+                Some(task_id.as_str()),
+                "completed",
+                Some(false),
+                None,
+            )
         }
         "block" => {
             let blocker = payload
@@ -804,8 +828,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
 /// Cursor stop / beforeSubmit：若 goal 仍在 drive 且 running，生成续跑提示。
 /// 默认极短，避免每轮提交淹没用户主关注；`ROUTER_RS_GOAL_PROMPT_VERBOSE=1` 恢复冗长版。
 pub fn build_autopilot_drive_followup_message(repo_root: &Path) -> Option<String> {
-    let state = read_goal_state(repo_root, None).ok()??;
-    let task_id = read_active_task_id(repo_root)?;
+    let (state, task_id) = read_goal_state_for_hydration(repo_root).ok()??;
     build_autopilot_drive_followup_message_from_state(repo_root, &task_id, &state)
 }
 
@@ -1290,6 +1313,101 @@ mod tests {
         assert_eq!(v["loop_status"], json!("superseded"));
         assert_eq!(v["superseded_by"], json!("autopilot_goal"));
 
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_complete_rejected_when_completion_gates_depth_not_met() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-gate-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/ggate")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"ggate"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "ggate",
+            "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+            "completion_gates": {
+                "enabled": true,
+                "min_depth_score": 2
+            }
+        }))
+        .expect("start");
+        fs::write(
+            repo.join("artifacts/current/ggate/EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"t","exit_code":0}]}"#,
+        )
+        .expect("evidence");
+        let err = framework_autopilot_goal(json!({
+            "repo_root": rr,
+            "operation": "complete",
+        }))
+        .expect_err("gate should reject");
+        assert!(
+            err.contains("completion_gates") && err.contains("depth_score"),
+            "err={err}"
+        );
+        let st = read_goal_state(&repo, Some("ggate"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("running"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_complete_allowed_when_completion_gates_satisfied() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-gate-ok-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/gok")).expect("mkdir");
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"gok"}"#,
+        )
+        .expect("ptr");
+        let rr = repo.display().to_string();
+        framework_autopilot_goal(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "gok",
+            "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": true,
+            "completion_gates": { "enabled": true, "min_depth_score": 1 }
+        }))
+        .expect("start");
+        fs::write(
+            repo.join("artifacts/current/gok/EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"t","exit_code":0}]}"#,
+        )
+        .expect("evidence");
+        framework_autopilot_goal(json!({
+            "repo_root": rr,
+            "operation": "complete",
+        }))
+        .expect("complete ok");
+        let st = read_goal_state(&repo, Some("gok"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("completed"));
         let _ = fs::remove_dir_all(&repo);
     }
 }

@@ -2210,8 +2210,8 @@ fn stdio_framework_rfv_loop_roundtrip() {
 
     assert_eq!(
         body["rfv_loop_state"]["prefer_structured_external_research"],
-        json!(false),
-        "prefer_structured defaults false in persisted RFV state"
+        json!(true),
+        "prefer_structured defaults true when allow_external_research=true"
     );
     assert_eq!(
         body["rfv_loop_state"]["external_research_strict"],

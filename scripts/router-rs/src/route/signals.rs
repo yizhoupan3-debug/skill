@@ -3,6 +3,13 @@ use super::aliases::framework_alias_requires_explicit_call;
 use super::constants::ARTIFACT_GATE_PHRASES;
 use super::text::{normalize_text, text_matches_phrase};
 use super::types::{RouteContextPayload, SkillRecord};
+use regex::Regex;
+use std::sync::OnceLock;
+
+fn github_pr_standalone_token_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)\bpr\b").expect("static github pr token regex"))
+}
 
 pub(crate) fn is_meta_routing_task(query_text: &str) -> bool {
     (query_text.contains("skill")
@@ -362,6 +369,24 @@ pub(crate) fn can_be_fallback_owner(record: &SkillRecord) -> bool {
         )
 }
 
+/// High-precision Cursor Plan / 策划闸门 intent (aligned with `skills/plan-mode/SKILL.md` trigger_hints).
+/// Used to keep delegation-gate admission from overriding the `plan-mode` owner on first-turn routing.
+pub(crate) fn has_cursor_plan_mode_owner_context(
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
+    query_text.contains("cursor plan")
+        || query_text.contains("plan 模式")
+        || query_text.contains("策划文档闸门")
+        || text_matches_phrase(query_token_list, "plan revision round")
+        || text_matches_phrase(query_token_list, "可验收 todo")
+        || text_matches_phrase(query_token_list, "subagent 审 plan")
+        || text_matches_phrase(query_token_list, "gitx plan 收口")
+        || text_matches_phrase(query_token_list, "计划对照实际")
+        || text_matches_phrase(query_token_list, "独立上下文 review 计划")
+        || (query_text.contains("可验收") && query_text.contains("todo"))
+}
+
 pub(crate) fn has_bounded_subagent_context(query_text: &str, query_token_list: &[String]) -> bool {
     [
         "sidecar",
@@ -556,20 +581,12 @@ pub(crate) fn has_parallel_review_candidate_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    let review_requested = [
-        "review",
-        "code review",
-        "审查",
-        "审核",
-        "审计",
-        "评审",
-        "代码 review",
-        "代码审查",
-        "架构审查",
-        "安全审查",
-    ]
-    .iter()
-    .any(|marker| {
+    let markers = crate::review_routing_signals::parallel_review_candidate_markers();
+    let review_requested = markers.review_markers.iter().any(|marker| {
+        // Avoid treating "revision" / "revisions" as a standalone "review" hit.
+        if marker.as_str() == "review" {
+            return text_matches_phrase(query_token_list, "review");
+        }
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
     });
@@ -577,27 +594,7 @@ pub(crate) fn has_parallel_review_candidate_context(
         return false;
     }
 
-    let broad_or_independent = [
-        "深度",
-        "全面",
-        "全量",
-        "全仓",
-        "仓库级",
-        "整个仓库",
-        "这个仓库",
-        "repo-wide",
-        "codebase-wide",
-        "跨模块",
-        "多模块",
-        "多维",
-        "多方向",
-        "多假设",
-        "第一性原理",
-        "多余入口",
-        "不必要抽象",
-    ]
-    .iter()
-    .any(|marker| {
+    let broad_or_independent = markers.breadth_markers.iter().any(|marker| {
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
     });
@@ -605,25 +602,7 @@ pub(crate) fn has_parallel_review_candidate_context(
         return false;
     }
 
-    [
-        "仓库",
-        "repo",
-        "codebase",
-        "代码库",
-        "架构",
-        "architecture",
-        "系统",
-        "路由",
-        "skill",
-        "模块",
-        "边界",
-        "实现质量",
-        "bug",
-        "风险",
-        "findings",
-    ]
-    .iter()
-    .any(|marker| {
+    markers.scope_markers.iter().any(|marker| {
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
     })
@@ -659,10 +638,14 @@ pub(crate) fn has_paper_context(query_text: &str, query_token_list: &[String]) -
 }
 
 pub(crate) fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool {
-    ["github", "gh", "pull request", "pr"].iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    query_text.contains(&normalize_text("github"))
+        || text_matches_phrase(query_token_list, "github")
+        || query_text.contains(&normalize_text("gh"))
+        || text_matches_phrase(query_token_list, "gh")
+        || query_text.contains(&normalize_text("pull request"))
+        || text_matches_phrase(query_token_list, "pull request")
+        || github_pr_standalone_token_regex().is_match(query_text)
+        || text_matches_phrase(query_token_list, "pr")
 }
 
 pub(crate) fn has_pr_triage_summary_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -1402,5 +1385,31 @@ pub(crate) fn build_route_context(
         delegation_candidate,
         continue_safe_local_steps: completion_requested,
         route_reason: route_reason.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod github_pr_context_tests {
+    use super::*;
+    use crate::route::tokenize_query;
+
+    #[test]
+    fn github_pr_context_does_not_match_preview_primary() {
+        let q = "preview the layout before deploy";
+        let tok = tokenize_query(q);
+        assert!(!has_github_pr_context(q, &tok));
+        let q2 = "primary owner for the module";
+        let tok2 = tokenize_query(q2);
+        assert!(!has_github_pr_context(q2, &tok2));
+    }
+
+    #[test]
+    fn github_pr_context_matches_pr_token_and_phrase() {
+        let spaced = "please triage my pr now";
+        let tok = tokenize_query(spaced);
+        assert!(has_github_pr_context(spaced, &tok));
+        let spaced2 = "please triage pr fixes";
+        let tok2 = tokenize_query(spaced2);
+        assert!(has_github_pr_context(spaced2, &tok2));
     }
 }

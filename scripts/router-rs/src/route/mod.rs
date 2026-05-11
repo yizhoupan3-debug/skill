@@ -32,7 +32,10 @@ pub(crate) use routing::{
     build_route_snapshot, build_search_results_payload, literal_framework_alias_decision,
     route_task, search_skills, should_accept_manifest_fallback, should_retry_with_manifest,
 };
-pub(crate) use text::{read_json, value_to_string};
+#[cfg(test)]
+pub(crate) use signals::has_parallel_review_candidate_context;
+pub(crate) use signals::{has_github_pr_context, has_paper_context};
+pub(crate) use text::{read_json, tokenize_query, value_to_string};
 pub(crate) use types::{
     MatchRow, RouteContextPayload, RouteDecision, RouteDecisionSnapshotPayload,
     RouteDiffReportPayload, RouteExecutionPolicyPayload, RouteResolutionPayload,

@@ -11,7 +11,9 @@
     "policy": "shared-rust-core-explicit-host-projections",
     "supported": [
       "codex-cli",
-      "cursor"
+      "codex-app",
+      "cursor",
+      "claude-code"
     ],
     "shared_system_source": "skills",
     "metadata": {
@@ -24,6 +26,17 @@
         "host_entrypoints": [
           "AGENTS.md",
           ".cursor/rules/*.mdc"
+        ]
+      },
+      "codex-app": {
+        "install_tool": "codex",
+        "host_entrypoints": "AGENTS.md"
+      },
+      "claude-code": {
+        "install_tool": "claude",
+        "host_entrypoints": [
+          "AGENTS.md",
+          ".claude/rules/framework.md"
         ]
       }
     }
@@ -186,16 +199,19 @@
       },
       "host_entrypoints": {
         "codex-cli": "/autopilot",
-        "cursor": "/autopilot"
+        "cursor": "/autopilot",
+        "claude-code": "/autopilot"
       },
       "entrypoint_modes": {
         "quick": {
           "codex-cli": "/autopilot-quick",
-          "cursor": "/autopilot-quick"
+          "cursor": "/autopilot-quick",
+          "claude-code": "/autopilot-quick"
         },
         "deep": {
           "codex-cli": "/autopilot-deep",
-          "cursor": "/autopilot-deep"
+          "cursor": "/autopilot-deep",
+          "claude-code": "/autopilot-deep"
         }
       },
       "interaction_invariants": {
@@ -261,7 +277,8 @@
       ],
       "host_entrypoints": {
         "codex-cli": "/deepinterview",
-        "cursor": "/deepinterview"
+        "cursor": "/deepinterview",
+        "claude-code": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -280,7 +297,8 @@
       "skill_path": "skills/gitx/SKILL.md",
       "host_entrypoints": {
         "codex-cli": "/gitx",
-        "cursor": "/gitx"
+        "cursor": "/gitx",
+        "claude-code": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -300,7 +318,8 @@
       "skill_path": "skills/update/SKILL.md",
       "host_entrypoints": {
         "codex-cli": "/update",
-        "cursor": "/update"
+        "cursor": "/update",
+        "claude-code": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -468,7 +487,8 @@
       },
       "host_entrypoints": {
         "codex-cli": "/team",
-        "cursor": "/team"
+        "cursor": "/team",
+        "claude-code": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -567,6 +587,30 @@
         "workspace_bootstrap",
         "interactive_agent_chat",
         "host_resume_entrypoint",
+        "framework_alias_entrypoints"
+      ]
+    },
+    "claude-code": {
+      "profile_id": "claude_code_profile",
+      "host_id": "claude-code",
+      "transport": "anthropic-claude-code",
+      "context_files": [
+        "AGENTS.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "project",
+          "relative": ".claude/settings.json"
+        }
+      ],
+      "session_supervisor_driver": "unsupported",
+      "resume_command_examples": [
+        "Continue in Claude Code in this workspace"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
         "framework_alias_entrypoints"
       ]
     }

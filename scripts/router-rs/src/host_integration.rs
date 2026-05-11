@@ -40,8 +40,16 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
-const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 5] =
-    ["autopilot", "deepinterview", "gitx", "team", "update"];
+const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 8] = [
+    "autopilot",
+    "code-review-deep",
+    "deepinterview",
+    "gitx",
+    "loop",
+    "plan-mode",
+    "team",
+    "update",
+];
 const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
@@ -193,6 +201,8 @@ enum Commands {
         #[arg(long)]
         cursor_home: Option<PathBuf>,
         #[arg(long)]
+        claude_home: Option<PathBuf>,
+        #[arg(long)]
         to: Vec<String>,
         #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
         scope: String,
@@ -231,6 +241,8 @@ struct ProjectionCommand {
     #[arg(long)]
     cursor_home: Option<PathBuf>,
     #[arg(long)]
+    claude_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
     #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
     scope: String,
@@ -253,6 +265,8 @@ struct ProjectionStatusCommand {
     #[arg(long)]
     cursor_home: Option<PathBuf>,
     #[arg(long)]
+    claude_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
 }
 
@@ -263,6 +277,7 @@ struct ResolvedProjectionRoots {
     artifact_root: PathBuf,
     codex_home_root: PathBuf,
     cursor_home_root: PathBuf,
+    claude_home_root: PathBuf,
 }
 
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
@@ -350,6 +365,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             home,
             codex_home,
             cursor_home,
+            claude_home,
             to,
             scope,
             bootstrap_output_dir,
@@ -365,6 +381,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 artifact_root,
                 codex_home,
                 cursor_home,
+                claude_home,
                 home,
                 scope,
                 to: selected,
@@ -380,6 +397,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         artifact_root: projection_command.artifact_root.clone(),
                         codex_home: projection_command.codex_home.clone(),
                         cursor_home: projection_command.cursor_home.clone(),
+                        claude_home: projection_command.claude_home.clone(),
                         home: projection_command.home.clone(),
                     })?
                 }
@@ -585,6 +603,7 @@ fn resolve_projection_roots(
     artifact_root: Option<&Path>,
     codex_home: Option<&Path>,
     cursor_home: Option<&Path>,
+    claude_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
@@ -592,12 +611,14 @@ fn resolve_projection_roots(
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
     let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
     let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
+    let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
         artifact_root,
         codex_home_root,
         cursor_home_root,
+        claude_home_root,
     })
 }
 
@@ -1311,6 +1332,7 @@ fn projection_install_command(
         command.artifact_root.as_deref(),
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
+        command.claude_home.as_deref(),
         command.home.as_deref(),
     )?;
     let selected_tools = selected_projection_tools(&roots.framework_root, &command.to, true)?;
@@ -1332,6 +1354,7 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.artifact_root.as_deref(),
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
+        command.claude_home.as_deref(),
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
@@ -1364,6 +1387,7 @@ fn projection_remove_or_cleanup_command(
         command.artifact_root.as_deref(),
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
+        command.claude_home.as_deref(),
         command.home.as_deref(),
     )?;
     let selected_tools = selected_projection_tools(&roots.framework_root, &command.to, false)?;
@@ -1398,11 +1422,12 @@ fn validate_cleanup_scope(
         let explicit_home = match tool.as_str() {
             "codex" => command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some(),
             "cursor" => command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some(),
+            "claude" => command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some(),
             _ => true,
         };
         if !explicit_home && command.home.is_none() {
             return Err(format!(
-                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home/--cursor-home, --home, or the matching host HOME environment variable"
+                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home/--cursor-home/--claude-home, --home, or the matching host HOME environment variable"
             ));
         }
     }
@@ -1451,6 +1476,7 @@ fn resolved_roots_payload(
         let path = match tool.as_str() {
             "codex" => roots.codex_home_root.to_string_lossy(),
             "cursor" => roots.cursor_home_root.to_string_lossy(),
+            "claude" => roots.claude_home_root.to_string_lossy(),
             other => {
                 return Err(format!(
                     "resolved_roots_payload: unsupported skills-install tool `{other}` \
@@ -1493,7 +1519,10 @@ fn selected_projection_tools(
         }
     }
     if selected.is_empty() {
-        return Err("projection command requires --to codex/--to cursor or --to all".to_string());
+        return Err(
+            "projection command requires --to codex/--to cursor/--to claude or --to all"
+                .to_string(),
+        );
     }
     Ok(selected)
 }
@@ -1516,6 +1545,7 @@ fn install_projection_tool(
     match tool {
         "codex" => install_codex_projection(roots, scope),
         "cursor" => install_cursor_projection(roots, scope),
+        "claude" => install_claude_projection(roots, scope),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1524,6 +1554,7 @@ fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result
     match tool {
         "codex" => codex_projection_status(roots),
         "cursor" => cursor_projection_status(roots),
+        "claude" => claude_projection_status(roots),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1537,6 +1568,7 @@ fn remove_projection_tool(
     match tool {
         "codex" => remove_codex_projection(roots, scope, dry_run),
         "cursor" => remove_cursor_projection(roots, scope, dry_run),
+        "claude" => remove_claude_projection(roots, scope, dry_run),
         _ => Err(format!("Unsupported tool: {tool}")),
     }
 }
@@ -1772,6 +1804,149 @@ fn remove_cursor_projection(
     }))
 }
 
+fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.claude_home_root.join("rules").join("framework.md")
+    } else {
+        roots
+            .project_root
+            .join(".claude")
+            .join("rules")
+            .join("framework.md")
+    }
+}
+
+fn install_claude_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
+    let target = claude_entrypoint_target(roots, scope);
+    let changed =
+        write_text_if_changed(&target, &render_claude_framework_entrypoint(roots, scope))?;
+    let manifest_changed = write_claude_projection_manifest(roots, scope, &target)?;
+    Ok(json!({
+        "status": "installed",
+        "changed": changed || manifest_changed,
+        "scope": scope,
+        "prompts": {
+            "framework": {
+                "scope": scope,
+                "path": target.to_string_lossy(),
+                "logical_entrypoint": "$framework",
+                "native_representation": "markdown-rule",
+            }
+        },
+        "hooks": {"managed": false, "reason": "use-router-rs-claude-hook-cli"},
+        "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
+    }))
+}
+
+fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    let project_target = claude_entrypoint_target(roots, "project");
+    let user_target = claude_entrypoint_target(roots, "user");
+    Ok(json!({
+        "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
+        "status": "projection-status",
+        "prompts": {
+            "framework": {
+                "project": claude_projection_file_status(&project_target)?,
+                "user": claude_projection_file_status(&user_target)?,
+            }
+        },
+        "manifest": {
+            "project": projection_manifest_status(&projection_manifest_path(roots, "claude-code", "project"))?,
+            "user": projection_manifest_status(&projection_manifest_path(roots, "claude-code", "user"))?,
+        },
+        "hooks": {"managed": false, "reason": "use-router-rs-claude-hook-cli"},
+    }))
+}
+
+fn remove_claude_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    dry_run: bool,
+) -> Result<Value, String> {
+    let target = claude_entrypoint_target(roots, scope);
+    let manifest_path = projection_manifest_path(roots, "claude-code", scope);
+    let manifest_ownership =
+        projection_manifest_ownership(&manifest_path, "claude-code", scope, &target)?;
+    let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
+    let changed = if !dry_run && would_remove_projection {
+        fs::remove_file(&target).map_err(|err| err.to_string())?;
+        true
+    } else {
+        false
+    };
+    let would_remove_manifest = manifest_ownership.managed;
+    let manifest_removed = if !dry_run && would_remove_manifest {
+        fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
+        true
+    } else {
+        false
+    };
+    let any_changed = changed || manifest_removed;
+    Ok(json!({
+        "status": if dry_run && (would_remove_projection || would_remove_manifest) { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
+        "changed": any_changed,
+        "dry_run": dry_run,
+        "scope": scope,
+        "removed_paths": removed_projection_paths(changed, &target, manifest_removed, &manifest_path),
+        "would_remove_paths": removed_projection_paths(would_remove_projection, &target, would_remove_manifest, &manifest_path),
+        "skipped_user_owned_paths": if would_remove_projection || !target.exists() { json!([]) } else { json!([target.to_string_lossy()]) },
+    }))
+}
+
+fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+    let runtime_rel = skills_source_rel(&roots.framework_root)
+        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
+        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
+    format!(
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `{}`.\nProject root: `{}`.\n",
+        roots.framework_root.to_string_lossy(),
+        roots.project_root.to_string_lossy(),
+    )
+}
+
+fn write_claude_projection_manifest(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    command_path: &Path,
+) -> Result<bool, String> {
+    write_json_if_changed(
+        &projection_manifest_path(roots, "claude-code", scope),
+        &json!({
+            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
+            "managed_by": "skill-framework",
+            "host_projection": "claude-code",
+            "scope": scope,
+            "files": [command_path.to_string_lossy()],
+            "settings": {
+                "managed_key_paths": [],
+            }
+        }),
+    )
+}
+
+fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
+    let content = read_text_if_exists(path)?;
+    let marker_managed = content
+        .as_deref()
+        .map(is_managed_projection_content)
+        .unwrap_or(false);
+    let verified = marker_managed
+        && content
+            .as_deref()
+            .map(|content| content.contains("host_projection: claude-code"))
+            .unwrap_or(false);
+    Ok(json!({
+        "path": path.to_string_lossy(),
+        "exists": path.exists(),
+        "managed": verified,
+        "verification": if verified { "verified" } else if marker_managed { "unknown" } else { "unmanaged" },
+        "marker_managed": marker_managed,
+    }))
+}
+
 #[derive(Debug, Clone, Copy)]
 struct ProjectionManifestOwnership {
     managed: bool,
@@ -1947,6 +2122,13 @@ fn projection_manifest_path(
         ("cursor", _) => roots
             .project_root
             .join(".cursor")
+            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+        ("claude-code", "user") => roots
+            .claude_home_root
+            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+        ("claude-code", _) => roots
+            .project_root
+            .join(".claude")
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
         _ => roots.project_root.join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
     }
@@ -2265,9 +2447,16 @@ fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, Strin
     match raw.trim().to_lowercase().as_str() {
         "codex" | "codex-cli" => Ok("codex".to_string()),
         "cursor" => Ok("cursor".to_string()),
+        "claude" | "claude-code" => Ok("claude".to_string()),
         other => {
             let known = crate::framework_host_targets::skills_install_tools_ordered(framework_root)
-                .unwrap_or_else(|_| vec!["codex".to_string(), "cursor".to_string()]);
+                .unwrap_or_else(|_| {
+                    vec![
+                        "codex".to_string(),
+                        "cursor".to_string(),
+                        "claude".to_string(),
+                    ]
+                });
             Err(format!(
                 "Unknown tool: {other}. Supported tools: {} (alias: codex-cli → codex)",
                 known.join(", ")
@@ -2569,13 +2758,38 @@ fn runtime_hot_skill_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
     let Some(skills) = runtime.get("skills").and_then(Value::as_array) else {
         return Ok(Vec::new());
     };
-    Ok(skills
+    let from_skills: Vec<String> = skills
         .iter()
         .filter_map(Value::as_array)
         .filter_map(|record| record.first())
         .filter_map(Value::as_str)
         .map(str::to_owned)
-        .collect())
+        .collect();
+    let Some(records) = runtime.get("records").and_then(Value::as_array) else {
+        return Ok(from_skills);
+    };
+    let from_records: Vec<String> = records
+        .iter()
+        .filter_map(|record| {
+            record
+                .get("slug")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .collect();
+    if from_records.is_empty() {
+        return Ok(from_skills);
+    }
+    let mut sorted_records = from_records.clone();
+    let mut sorted_skills = from_skills.clone();
+    sorted_records.sort();
+    sorted_skills.sort();
+    if sorted_records != sorted_skills {
+        return Err(format!(
+            "SKILL_ROUTING_RUNTIME.json: `records[].slug` set and `skills` hot rows disagree when sorted.\nrecords={sorted_records:?}\nskills={sorted_skills:?}"
+        ));
+    }
+    Ok(from_records)
 }
 
 fn codex_skills_matches_source(target_path: &Path, source_path: &Path) -> Result<bool, String> {

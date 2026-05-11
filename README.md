@@ -144,6 +144,54 @@ codex
 - 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `cursor_hooks.rs`），与 Codex 不完全相同。
 - Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
+**其它仓库一键接入（跨工作区）**
+
+- 在目标项目根运行：`/path/to/skill/scripts/cursor-bootstrap-framework.sh --framework-root /path/to/skill`（或先 `export SKILL_FRAMEWORK_ROOT=/path/to/skill`）。若脚本不可执行，先：`chmod +x /path/to/skill/scripts/cursor-bootstrap-framework.sh`。
+- 脚本写入 `.cursor/hooks.json`，模板真源为 `configs/framework/cursor-hooks.workspace-template.json`（`router-rs` 走 PATH，`--repo-root` 用当前 Cursor 工作区）。
+- 将 `skills/` 与 `AGENTS.md` 符号链接到框架仓库；需要与框架根目录等价的托管规则时加 `--with-cursor-rules`；需要与框架根目录共享 `configs/framework/*`（如 `HARNESS_OPERATOR_NUDGES.json`、`PAPER_ADVERSARIAL_HOOK.txt` 等磁盘真源）时加 **`--with-configs`**（否则相关 hooks 仍可用，但会回落到编译期内置默认，不等价于「改 JSON/txt 即生效」）。
+- 安装二进制：`cargo install --path /path/to/skill/scripts/router-rs`；若可执行文件名不是默认，在环境里设 `ROUTER_RS_BIN`（hooks 内展开）。
+- 与「本仓库 embedded」模式对照：本仓库 `.cursor/hooks.json` 仍指向 `scripts/router-rs/target/release/router-rs`；跨仓模式依赖 PATH / `ROUTER_RS_BIN`。
+- **`router-rs framework …` 维护命令**：在目标仓库目录执行时，若当前目录不是框架检出根，需设置 **`SKILL_FRAMEWORK_ROOT`**（或传 `--framework-root`），否则会报无法解析 `framework_root`（实现会尝试从已安装二进制路径、`CURSOR_WORKSPACE_ROOT` 等推断，不可靠时以环境变量为准）。
+- 科研向 skill、hook 真源与跨工作区核对清单索引：`docs/plans/research_skills_hooks_survey.md`、`docs/plans/cursor_cross_workspace_operator_checklist.md`。
+
+**别的目录验收清单（Cursor 工作区 = 目标项目根）**
+
+1. **PATH**：`which router-rs` 能解析到已安装的 `router-rs`（或 hooks 环境内 `ROUTER_RS_BIN` 指向绝对路径）。
+2. **bootstrap**：已在目标根执行过上述脚本；`ls -l skills AGENTS.md .cursor/hooks.json` 显示 `skills`/`AGENTS.md` 为指向框架的符号链接，`hooks.json` 为普通文件（由模板复制）。
+3. **可选符号链接**：按需存在 `.cursor/rules`、`configs` 分别指向框架（`--with-cursor-rules`、`--with-configs`）。
+4. **打开方式**：在 Cursor 中「打开文件夹」选**目标项目根**（含 `.cursor/hooks.json` 的那一层），不要只打开子目录，否则可能找不到 hooks 或 `repo-root` 解析偏离预期。
+5. **常见失败**：hooks 未触发（工作区根不对、或 `.cursor/hooks.json` 缺失）；`router-rs` 未安装或不在 PATH（事件里 fail-open 或静默跳过）；与 embedded 模式混用（目标仓仍手写 `.../target/release/router-rs` 但从未在该路径构建）。
+6. **（可选）强制技能策略根**：仅在从子目录启动、且父级探测不符合预期时，设置 `CURSOR_PROJECT_ROOT` 或 `SKILL_REPO_ROOT` 指向含 `skills/SKILL_ROUTING_RUNTIME.json` 与 `AGENTS.md` 的目录（实现见 `scripts/router-rs/src/skill_repo.rs`）。
+
+**建议自检命令序列（可复制）**
+
+```bash
+# 0) 框架路径
+export FW=/abs/path/to/skill   # 改成你的框架仓库根
+
+# 1) 安装/确认 router-rs
+command -v router-rs && router-rs --help | head -n 1
+# 若未安装：cargo install --path "$FW/scripts/router-rs"
+
+# 2) 在「目标项目根」执行 bootstrap（按需加规则与 configs）
+cd /abs/path/to/your-other-repo
+"$FW/scripts/cursor-bootstrap-framework.sh" --framework-root "$FW" --with-cursor-rules --with-configs
+
+# 3) JSON / 符号链接粗检
+python3 -m json.tool .cursor/hooks.json > /dev/null
+test -L skills && test -L AGENTS.md && echo "symlinks ok"
+
+# 4) 模拟 hook（stdin 空 JSON；repo-root 用目标根）
+cd /abs/path/to/your-other-repo
+printf '{}' | router-rs cursor hook --event=SessionStart --repo-root "$(pwd)"
+
+# 5) 在「非框架 cwd」下跑维护类命令须带框架根（示例）
+SKILL_FRAMEWORK_ROOT="$FW" router-rs framework maint verify-cursor-hooks
+# 注意：上条校验的是框架仓 $FW 内的 .cursor/hooks.json（本仓库多为 embedded 路径）。
+# 若要确认「目标仓」hooks 与跨仓模板一致：
+cmp .cursor/hooks.json "$FW/configs/framework/cursor-hooks.workspace-template.json" && echo "hooks match workspace template"
+```
+
 ## 日常更新方式
 
 **全量维护（推荐，等同 `/update`）**：首选已安装的 `router-rs`（任意 cwd）；否则在设置框架根后用 `cargo run`：

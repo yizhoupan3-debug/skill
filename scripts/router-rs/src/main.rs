@@ -3,6 +3,7 @@
 mod autopilot_goal;
 mod background_state;
 mod browser_mcp;
+mod claude_hooks;
 mod cli;
 mod closeout_enforcement;
 mod codex_hooks;
@@ -19,6 +20,7 @@ mod hook_policy;
 mod host_integration;
 mod paper_adversarial_hook;
 mod review_gate;
+mod review_routing_signals;
 mod rfv_loop;
 mod route;
 mod router_env_flags;
