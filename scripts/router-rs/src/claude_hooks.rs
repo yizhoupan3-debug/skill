@@ -424,7 +424,9 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     let review_state = match review_load {
         ClaudeDiskState::Absent => ClaudeReviewGateState::default(),
         ClaudeDiskState::Ok(s) => s,
-        ClaudeDiskState::Unreadable => unreachable!("handled above"),
+        ClaudeDiskState::Unreadable => {
+            return block_stop(CLAUDE_HOOK_STATE_UNREADABLE);
+        }
     };
     if !claude_review_gate_disabled()
         && review_gate_blocks_stop(ReviewGateFacts {
@@ -440,7 +442,9 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     let state = match touch_load {
         ClaudeDiskState::Absent => TouchState::default(),
         ClaudeDiskState::Ok(s) => s,
-        ClaudeDiskState::Unreadable => unreachable!("handled above"),
+        ClaudeDiskState::Unreadable => {
+            return block_stop(CLAUDE_HOOK_STATE_UNREADABLE);
+        }
     };
     if state.settings && !state.settings_validated {
         return block_stop("Validate Claude hook/settings JSON before ending this turn.");

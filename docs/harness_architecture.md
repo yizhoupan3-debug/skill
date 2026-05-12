@@ -121,7 +121,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 | 环境变量 | 默认 | 作用 |
 |---------|------|------|
-| `ROUTER_RS_OPERATOR_INJECT` | 开 | 总闸：关闭 advisory 注入（含 Codex lifecycle `additionalContext`、`SESSION_CLOSE_STYLE` 等 Cursor 软段落，以及已由本闸 OR 的其他 nudge）；不影响硬门控短码 |
+| `ROUTER_RS_OPERATOR_INJECT` | 开 | 总闸：关闭 advisory 注入（含 Codex lifecycle `additionalContext`、Cursor `SESSION_CLOSE_STYLE` 软段落，及与 `AUTOPILOT_DRIVE`/`RFV_LOOP`/`paper_adversarial` 等同样经本闸聚合的子能力）；不影响硬门控短码 |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅关闭 operator nudge 文案；不改 gate 逻辑 |
 | `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 开 | 关闭 Stop 等必要事件上的 `AUTOPILOT_DRIVE` advisory |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 关闭必要事件上的 `RFV_LOOP_CONTINUE` advisory |
