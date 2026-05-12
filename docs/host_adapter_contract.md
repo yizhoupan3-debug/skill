@@ -10,6 +10,8 @@
 
 **手稿技能（paper-workbench 栈）**：论文前门与专科 lane 的可读契约以仓库 `skills/` 下对应 `SKILL.md` 与 reference 为内容真源；**安装与宿主投影**不以某一 IDE 为专属——闭集宿主列表与安装工具名以 **`configs/framework/RUNTIME_REGISTRY.json`** 为准，落地到 Cursor/Codex 等工作区时使用 **`router-rs framework install --to <host>`**（实现见 `host_integration.rs`）。技能栈索引见 [`../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md)。
 
+**解绑与共同沉降验收**（可勾选）：[`docs/plans/EXECUTION_harness_decouple_sink_checklist.md`](plans/EXECUTION_harness_decouple_sink_checklist.md) — 与减法全盘 [`docs/plans/harness_subtraction_first_principles_audit_checklist.md`](plans/harness_subtraction_first_principles_audit_checklist.md)、PR 合并门槛 [`docs/plans/EXECUTION_harness_pr_review_checklist.md`](plans/EXECUTION_harness_pr_review_checklist.md) 互补。
+
 ## 快速路径（我要接新宿主）
 
 - **先读**：[`harness_architecture.md`](harness_architecture.md) **§5**（扩展规则）与 **§6**（文件映射），再读本文件 **[§3.1](#31-可复制执行清单工程顺序)** 工程清单与下文 **§0**（维护地图）。
@@ -58,7 +60,8 @@
 | L2 | 连续性工件、`EVIDENCE_INDEX`、`GOAL_STATE`、`SESSION_SUMMARY` 等 | `artifacts/current/`、`docs/harness_architecture.md` §1–§3 |
 | L3 CLI | `router-rs framework snapshot|contract-summary|hook-evidence-append|…`、`closeout`、`task-state-*` | `docs/rust_contracts.md`、`RUNTIME_REGISTRY.json` → `framework_commands` |
 | 共用门控启发式 | review / delegation / reject_reason / normalize_tool 等纯函数 | `scripts/router-rs/src/hook_common.rs` |
-| Cursor review/subagent stdin 流水线 | stdin JSON → `dispatch_cursor_hook_event` → stdout JSON | `scripts/router-rs/src/review_gate.rs` + `cursor_hooks.rs` |
+| Cursor PostTool → shell evidence 形状 | [`hook_posttool_normalize.rs`](../scripts/router-rs/src/hook_posttool_normalize.rs) → `framework_runtime::try_append_post_tool_shell_evidence` | 字段抽取 helper 仍在 [`cursor_hooks/`](../scripts/router-rs/src/cursor_hooks/mod.rs)（含 `tool_name_of` 等） |
+| Cursor review/subagent stdin 流水线 | stdin JSON → `dispatch_cursor_hook_event` → stdout JSON | `scripts/router-rs/src/review_gate.rs` + [`cursor_hooks/`](../scripts/router-rs/src/cursor_hooks/mod.rs) |
 
 **反模式**：在 L4 shell/bash 里复制 L3 正则门控、`EVIDENCE_INDEX` 拼写规则或 RFV/G goal 拼接逻辑——应调用已有子命令或由 hook 二进制统一处理。
 
@@ -72,7 +75,9 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| 会话连续性 / digest / PostTool | 配置项指向 `router-rs codex hook …` | `codex hook`（`codex_hooks.rs`） | `EVIDENCE_INDEX`、`FRAMEWORK_DIGEST` / session 工件等（以 hook 分支为准） |
+| 会话连续性 / digest / PostTool、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（`codex_hooks.rs`） | `EVIDENCE_INDEX`、`FRAMEWORK_DIGEST` / session 工件等（以 hook 分支为准）；默认可清点深度审稿 lane 见 [`harness_architecture.md`](harness_architecture.md) **§5.0** |
+| **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
+| **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
 | 宿主入口对齐 | `router-rs codex sync` | 经 shared `host_entrypoint_sync` engine + Codex provider 生成 `.codex/hooks.json`、`AGENTS.md` 等及 **`host_entrypoints_sync_manifest`** | 受 **`RUNTIME_REGISTRY.host_targets.supported`** 约束 |
 
 ### Cursor（`.cursor/hooks.json`）
@@ -80,13 +85,20 @@
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`（及策略合并字段，见运行时） |
-| 续跑类合并 | Same | `cursor_hooks.rs` + `autopilot_goal` / `rfv_loop` | `additional_context` / `followup_message`（宿主 JSON 出站字段） |
+| 续跑类合并 | Same | [`cursor_hooks/`](../scripts/router-rs/src/cursor_hooks/mod.rs) + `autopilot_goal` / `rfv_loop` | `additional_context` / `followup_message`（宿主 JSON 出站字段） |
+
+**Cursor 排障（短）**：
+
+- **`fork_context` 缺省**：仅当载荷中 **`fork_context`/`forkContext` 可解析为布尔 `false`** 时视为独立上下文子代理；**缺字段 ≠ false**，可能影响 pre-goal / `REVIEW_GATE` 相位，见 [`review_gate_engine.rs`](../scripts/router-rs/src/review_gate_engine.rs) 与 [`harness_architecture.md`](harness_architecture.md) **§5.0**。
+- **磁盘 `GOAL_STATE` 与 pre-goal**：若需收紧「仅凭盘上 GOAL 即在 beforeSubmit 视同 pre-goal 已满足」的信任边界，见 [`harness_architecture.md`](harness_architecture.md) §5 中 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`。
+- **`cursor-router-rs-hook.sh` 与 exit code**：对 **critical** 事件（如 beforeSubmit/Stop/postToolUse/subagentStart/subagentStop）在 `router-rs` 缺失时 **fail-closed**；其余事件 **fail-open**（stderr 提示 + exit 0）。仅看 exit code 时可能漏判 SessionStart 等是否实际注入了上下文。
 
 ### Claude Code（`router-rs claude hook`）
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/hook_state_<session>.json`（会话 touch 状态；Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE`（与 Codex `CODEX_HOOK_STATE_UNREADABLE` 同形排障） |
 | 投影规则与 hook 绑定 | `router-rs framework install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/settings.json`（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）、`.claude/.framework-projection.json`（project scope） |
 
 **统一原则**：宿主配置中的命令应保持 **短命 + 超时**；语义在 Rust，不在宿主脚本里分支业务规则。
@@ -99,7 +111,7 @@
 
 | 职责 | 仓库路径 |
 |------|----------|
-| Cursor hook 语义与出站 JSON | `scripts/router-rs/src/cursor_hooks.rs` |
+| Cursor hook 语义与出站 JSON | [`cursor_hooks/mod.rs`](../scripts/router-rs/src/cursor_hooks/mod.rs) |
 | Codex hook 语义 | `scripts/router-rs/src/codex_hooks.rs` |
 | shared host entrypoint sync engine | `scripts/router-rs/src/host_entrypoint_sync.rs` |
 | Codex host entrypoint provider | `scripts/router-rs/src/codex_hooks.rs` |
@@ -150,8 +162,9 @@
 | 位置 | 硬编码内容 | 建议 |
 |------|------------|------|
 | [`scripts/router-rs/src/framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs) | `refresh_host_projections` 从 `RUNTIME_REGISTRY` 派生 installable host projection tools；`codex-app` 这类 runtime-supported / non-installable host 不进入安装遍历 | 新增宿主时必须提供 maint verifier，或在 registry 中标记 `installable=false` 并给出 unsupported reason |
-| [`scripts/router-rs/src/session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | `classify_rate_limit_block` 仅接受 `codex` / `codex-cli`；`build_driver_command` 仅组装 Codex CLI；`driver_id_for_host` 非 codex 映射为 `unknown_driver` | 当前明确为 **Codex driver only**；为新 CLI 宿主补 driver / 限速模式前，registry 必须继续标记 `session_supervisor_driver=unsupported` |
+| [`scripts/router-rs/src/session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | `classify_rate_limit_block` 仅接受 `codex` / `codex-cli`；`build_driver_command` 仅组装 Codex CLI；`driver_id_for_host` 非 codex 映射为 `unknown_driver` | 当前明确为 **Codex driver only**；为新 CLI 宿主补 driver / 限速模式前，registry 必须继续标记 `session_supervisor_driver=unsupported`（单表复核与 grep 锚点见 [`EXECUTION_harness_decouple_sink_checklist.md`](plans/EXECUTION_harness_decouple_sink_checklist.md) §4） |
 | [`scripts/router-rs/src/framework_profile.rs`](../scripts/router-rs/src/framework_profile.rs) | **已收敛**：`build_profile_bundle` 从 `RUNTIME_REGISTRY.host_projections` 派生 `host_payloads`；保留 `codex_profile` / `full_codex_profile` 作为 Codex 兼容输出 | 新宿主若需要 profile payload，优先补 `host_projections` 与 contract tests；不要新增 Codex-only profile compiler 分支 |
+| [`scripts/router-rs/src/hook_posttool_normalize.rs`](../scripts/router-rs/src/hook_posttool_normalize.rs) | Cursor `postToolUse` stdin → `try_append_post_tool_shell_evidence` 形状的 crate 级归一化（依赖 `cursor_hooks` 字段抽取 helper） | Codex 仍直连 append；terminal / rust-lint 等 Cursor 专有分支仍在 `cursor_hooks` |
 
 ### 3.3 Host entrypoint sync engine / provider 边界
 
@@ -161,9 +174,9 @@
 
 Projection install/status/remove 仍保留 `HostProjectionAdapter` thin adapter 表：registry 负责闭集、`projection_status`、`installable` 与 install tool 关系，adapter 表只负责宿主专用写盘、状态检查、删除和 HOME 解析。不新增第二套 host provider 框架；`RUNTIME_PROVIDER_REGISTRY` 中的 host provider lane 只作目录/报告面，不能驱动安装。
 
-### 3.4 PostTool / 终端证据归一化（本轮未抽取）
+### 3.4 PostTool / 终端证据归一化
 
-Codex 侧 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) 中 `PostToolUse` 直接将原生事件传入 [`try_append_post_tool_shell_evidence`](../scripts/router-rs/src/framework_runtime/mod.rs)；Cursor 侧在 [`cursor_hooks.rs`](../scripts/router-rs/src/cursor_hooks.rs) 中先用 `synthetic_post_tool_evidence_shape` 将异构 `postToolUse` 合成 **同一 evidence 解析形状** 再调用同一 API，并额外承担终端归属、`rust-lint` 等 Cursor 专用分支。**共享归一化路径已在 `framework_runtime`**，再抽独立 `hook_posttool_normalize` 模块会把「仅 Cursor 需要的字段拆解」与通用层揉在一起，收益有限，故 **本轮不抽取**。
+Codex 侧 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) 中 `PostToolUse` 直接将原生事件传入 [`try_append_post_tool_shell_evidence`](../scripts/router-rs/src/framework_runtime/mod.rs)；Cursor 侧先用 crate 级 [`hook_posttool_normalize.rs`](../scripts/router-rs/src/hook_posttool_normalize.rs) 中 `synthetic_post_tool_evidence_shape` 将异构 `postToolUse` 合成 **同一 evidence 解析形状**，再调用同一 API；[`cursor_hooks/`](../scripts/router-rs/src/cursor_hooks/mod.rs) 仍承担终端归属、`rust-lint` 等 Cursor 专用分支。**共享 append 仍在 `framework_runtime`**；归一化模块仅收敛「stdin → append 形状」边界，字段抽取 helper 仍在 `cursor_hooks`（避免 crate 模块循环前提下保持单一合成入口）。**`hook_common::tool_input_value_from_map`** 对**单层** JSON object 的工具入参合并键优先级固定为：`tool_input` → `input` → `arguments` → `parameters`（同键竞争时按此顺序取第一个非缺失键；Cursor 对 `HOOK_EVENT_NESTED` 路径仍重复该规则扫描嵌套对象）。
 
 ---
 

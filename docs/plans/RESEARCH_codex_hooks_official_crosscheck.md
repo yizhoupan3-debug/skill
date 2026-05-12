@@ -26,13 +26,13 @@
 | 区域 | 锚点 |
 |------|------|
 | 事件分发（stdin `hook_event_name` / `event`，小写匹配） | `run_codex_lifecycle_context_hook`：`sessionstart` / `userpromptsubmit` / `posttooluse` / `stop` → 对应 handler；旧 `review-subagent-gate` 命令仅为兼容 alias（[`codex_hooks.rs`](../../scripts/router-rs/src/codex_hooks.rs)） |
-| CLI 入口 | `dispatch_codex_command` → `run_codex_audit_hook(event, repo_root)`（[`dispatch_body.txt`](../../scripts/router-rs/src/cli/dispatch_body.txt) 约 L148–L157） |
+| CLI 入口 | `dispatch_codex_command` → `run_codex_audit_hook` + `codex_hook_stdout_payload`（[`dispatch_body.txt`](../../scripts/router-rs/src/cli/dispatch_body.txt) `CodexCommand::Hook` 分支） |
 | `codex hook` 子命令归一 | `canonical_codex_audit_command`：`PreToolUse` → `pre-tool-use`；其余生命周期事件 → `lifecycle-context`；`review-subagent-gate` 仍被接受为旧 alias |
 | 项目 `hooks.json` 生成 | `build_codex_hook_manifest`：`INSTALL_EVENTS` 五事件、`timeout` 来自 `codex_hook_command_timeout_secs`，`SessionStart` 带 `matcher: "startup|resume|clear"`，`Stop` 带 `loop_limit: 3`（约 L1000–L1025） |
 | 用户 `config.toml` 特性合并 | `merge_features_codex_hooks`：强制 **`hooks = true`**，并将 `codex_hooks`/`hooks` 旧行替换为 canonical `hooks`（约 L1844–L1894） |
 | 安装校验 | `verify_codex_hooks`：要求 `hooks = true`，且 **不得**出现 deprecated 的 `codex_hooks` 字面量（[`framework_maint.rs`](../../scripts/router-rs/src/framework_maint.rs) 约 L194–L199） |
 
-**`ROUTER_RS_*`（Codex 相关，非穷尽）**：`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`（SessionStart `additionalContext` 长度 clamp，默认 640，区间 256–8192，见 `codex_additional_context_max_chars`）；连续性相关见 README / `AGENTS.md`。
+**`ROUTER_RS_*`（Codex 相关，非穷尽）**：`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` 或 legacy `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`：`additionalContext` 合并后为 UTF-8 **字节** clamp（默认 640，区间 256–8192，见 `codex_additional_context_max_bytes`）。Codex hook 成功退出时 **stdout 始终一行紧凑 JSON**，无附带输出为 **`{}`**。stdin ≤4MiB；非法 UTF-8 → **`stdin_invalid_utf8`**。连续性相关见 README / `AGENTS.md`。
 
 ---
 
@@ -47,12 +47,12 @@
 | 3 | Matcher 表：`SessionStart` → `startup\|resume\|clear` | `build_codex_hook_manifest`：`"matcher": "startup\|resume\|clear"` | 生成的 `.codex/hooks.json` 与 manifest 测试可间接覆盖 | **一致** | 低 |
 | 4 | SessionStart 节：`source` 为 `startup` 或 `resume`（表格正文）；Matcher 表含 `clear` | 代码与 manifest 使用三值 matcher；digest 文案含 `source` | — | **官方页内细微不一致**（节内表 vs Matcher 表）；实现与 **Matcher 表**一致 | 低（文档编辑问题） |
 | 5 | PreToolUse：stdout JSON 可 `hookSpecificOutput.permissionDecision` 或旧式 `decision: block` | `block_codex_pre_tool_use` 等返回 `decision`/`reason` 及 `hookSpecificOutput`（grep `block_codex_pre_tool_use`） | 单元测试 `pre_tool_use_blocks_*` | **一致**（含旧式 block） | 低 |
-| 6 | Stop：须 JSON；`decision: block` 表 continuation | `handle_codex_stop` 不执行 hard review gate；仅写 best-effort continuity checkpoint，schema 错误仍通过 lifecycle input error 返回 block | lifecycle 单测覆盖 Stop 不阻塞 review/delegation prompt | **有意差异**：Codex 不复制 Cursor REVIEW_GATE hard path | 低 |
+| 6 | Stop：须 JSON；`decision: block` 表 continuation | `handle_codex_stop`：`CODEX_REVIEW_GATE` 在可读状态下仍会 block；`.codex/hook-state` **不可读**（损坏 JSON / IO，`Ok(None)` 以外的加载失败）**fail-closed**（`CODEX_HOOK_STATE_UNREADABLE`）；`stop_hook_active` 回放跳过 gate；best-effort continuity | lifecycle 单测含 corrupt state | **宿主 continuation + 仓库 state I/O 不变量** | P3：瞬时磁盘故障亦阻断 Stop（已定 invariant） |
 | 7 | Hooks 页：未展示 `loop_limit`；Stop 示例仅 `timeout` | `Stop` handler 对象含 **`loop_limit`: 3** | 未直接断言该键 | **未文档化/需 schema 核对**：可能为 Codex 扩展字段；建议对照 GitHub generated schema 或 PR（如 stop continuation 相关 [#14532](https://github.com/openai/codex/pull/14532)） | P2 |
 | 8 | 默认 `timeout` 省略为 600s | `codex_hook_command_timeout_secs`：SessionStart 3、PostToolUse 5、其余 8 | `shell_installer_e2e` 只检查事件名与 `codex hook --event=` | **一致**（显式短超时，避免挂死） | 低 |
 | 9 | PostToolUse 示例常带 `matcher: Bash` | 生成的 `PostToolUse` **无 matcher**（匹配所有工具） | 同左 | **更宽触发面**（有意：证据与 gate）；与官方示例窄化不同 | P2 性能/噪音；非兼容性错误 |
 | 10 | stdin：`hook_event_name` | `run_codex_lifecycle_context_hook` 接受 `hook_event_name` **或** `event`；`run_codex_audit_hook` 可注入 `hook_event_name` | — | **一致或更宽** | 低 |
-| 11 | SessionStart JSON：`hookSpecificOutput.additionalContext` | `handle_codex_session_start` → `codex_compact_contexts` + `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` | — | **一致** | 低 |
+| 11 | SessionStart JSON：`hookSpecificOutput.additionalContext` | `handle_codex_session_start` → `codex_compact_contexts` + `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX[_BYTES]`（字节预算） | — | **一致** | 低 |
 | 12 | 多 handler 并发、互不阻塞 | 单事件单 command（router-rs 独占一条） | — | **不冲突**；未利用多 handler | 低 |
 | 13 | 项目 `.codex` 需 trusted 才加载项目 hooks | README 描述 Codex CLI / `codex sync`；代码侧不编码 trust | — | **宿主策略**；仓库文档应提醒 untrusted 模式下降级 | P3 运维认知 |
 | 14 | `AGENTS.md` 策略由用户维护 | `build_codex_agent_policy` 使用 **`include_str!("../../../AGENTS.md")`** 编译期嵌入；`codex sync` bootstrap 磁盘文件 | README L8 | **仓库既定策略 A**；与通用 Hooks 文档正交 | 低（已在 AGENTS/README 声明） |
@@ -109,4 +109,4 @@
 ### 验证命令（本轮已执行）
 
 - `cargo test shell_installer_e2e_writes_expected_files -- --nocapture`（**仓库根** `Cargo.toml` 包 `skill-rust-test-harness`）：**通过**（2026-05-11）。
-- 说明：单独 `cargo test --manifest-path scripts/router-rs/Cargo.toml` 在本工作区曾因 `cursor_hooks.rs` 解析错误失败，属 **router-rs 子包编译状态**问题，与本次仅新增本文档无关；根包集成测试通过可佐证 `install-codex-user-hooks` 契约未因本文档引入而破坏。
+- 说明：`router-rs` 子包曾出现 **临时解析/编译失败**（与 Cursor hook 拆分期 `include!` / 语法有关）；当前实现真源为 [`scripts/router-rs/src/cursor_hooks/`](../../scripts/router-rs/src/cursor_hooks/mod.rs) **目录**。根包集成测试通过与本文档增量无关时可佐证契约未破坏。

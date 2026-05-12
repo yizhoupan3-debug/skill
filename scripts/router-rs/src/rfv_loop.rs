@@ -1,5 +1,6 @@
 //! Review-Fix-Verify 多轮闭环：Rust 真源 `RFV_LOOP_STATE.json` + stdio，支撑长任务轮次账本与宿主并行 lane 之后的 supervisor 合并落盘。
 
+use crate::atomic_write::write_atomic_json;
 use crate::autopilot_goal::read_active_task_id;
 use crate::framework_runtime::resolve_repo_root_arg;
 use crate::router_env_flags::{
@@ -560,27 +561,6 @@ fn rfv_loop_hook_enabled() -> bool {
         && router_rs_env_enabled_default_true(RFV_LOOP_HOOK_ENV)
 }
 
-fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory failed: {err}"))?;
-    }
-    let text = serde_json::to_string_pretty(value)
-        .map_err(|err| format!("serialize RFV_LOOP_STATE failed: {err}"))?;
-    let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, text)
-        .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        format!(
-            "rename temp file failed {} -> {}: {err}",
-            tmp_path.display(),
-            path.display()
-        )
-    })?;
-    Ok(())
-}
-
 fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
@@ -691,6 +671,21 @@ fn clamp_max_rounds(raw: u64) -> (u64, bool) {
     }
 }
 
+fn resolve_framework_rfv_loop_repo(payload: &Value) -> Result<PathBuf, String> {
+    let repo_root = payload
+        .get("repo_root")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .ok_or_else(|| "framework_rfv_loop requires repo_root".to_string())?;
+    if !repo_root.is_dir() {
+        return Err(format!(
+            "framework_rfv_loop: repo_root is not a directory: {}",
+            repo_root.display()
+        ));
+    }
+    resolve_repo_root_arg(Some(repo_root.as_path()))
+}
+
 /// stdio：`framework_rfv_loop`
 pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
     let operation = payload
@@ -702,7 +697,10 @@ pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
     if operation == "status" {
         framework_rfv_loop_impl(payload)
     } else {
-        crate::task_write_lock::apply_task_ledger_mutation(|| framework_rfv_loop_impl(payload))
+        let resolved = resolve_framework_rfv_loop_repo(&payload)?;
+        crate::task_write_lock::apply_task_ledger_mutation(&resolved, || {
+            framework_rfv_loop_impl(payload)
+        })
     }
 }
 

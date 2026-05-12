@@ -6,6 +6,22 @@ pub const CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION: &str =
     "router-rs-closeout-enforcement-response-v1";
 pub const CLOSEOUT_ENFORCEMENT_AUTHORITY: &str = "rust-closeout-enforcement";
 
+const COMPLETION_DETECT_EN: &[&str] = &["done", "finished", "completed", "succeeded", "passed"];
+
+/// 与 `cursor_hooks::completion_claimed_in_text` 对齐：中文用语义更完整的短语，避免「完成度」等误报。
+const COMPLETION_DETECT_ZH_PHRASES: &[&str] = &[
+    "已完成",
+    "已经完成",
+    "全部完成",
+    "完成了",
+    "验证通过",
+    "测试通过",
+    "审核通过",
+    "已通过",
+    "搞定",
+];
+
+/// 合约导出用：英文词 + 中文短语（供评估侧/人类对照）。
 const COMPLETION_KEYWORDS: &[&str] = &[
     "done",
     "finished",
@@ -13,8 +29,13 @@ const COMPLETION_KEYWORDS: &[&str] = &[
     "succeeded",
     "passed",
     "已完成",
-    "完成",
-    "通过",
+    "已经完成",
+    "全部完成",
+    "完成了",
+    "验证通过",
+    "测试通过",
+    "审核通过",
+    "已通过",
     "搞定",
 ];
 
@@ -501,9 +522,15 @@ fn summary_claims_completion(summary: &str) -> bool {
         return false;
     }
     let lower = summary.to_ascii_lowercase();
-    COMPLETION_KEYWORDS
+    if COMPLETION_DETECT_EN
         .iter()
         .any(|kw| lower.contains(&kw.to_ascii_lowercase()))
+    {
+        return true;
+    }
+    COMPLETION_DETECT_ZH_PHRASES
+        .iter()
+        .any(|p| summary.contains(p))
 }
 
 #[cfg(test)]

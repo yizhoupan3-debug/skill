@@ -182,6 +182,23 @@
       "n/a"
     ],
     [
+      "code-review-deep",
+      "L2",
+      "owner",
+      "none",
+      "Deep adversarial code review (fixture hints aligned with runtime skill).",
+      [
+        "review",
+        "code review",
+        "代码审查",
+        "帮我 review",
+        "deep code review",
+        "security code review"
+      ],
+      "P1",
+      "preferred"
+    ],
+    [
       "fixture-overlay-marker",
       "L3",
       "overlay",
@@ -345,6 +362,15 @@
         "selected_skill": "skill-framework-developer",
         "overlay_skill": null,
         "layer": "L0"
+      }
+    },
+    {
+      "name": "short-review-token-hits-code-review-deep",
+      "query": "review",
+      "expected": {
+        "selected_skill": "code-review-deep",
+        "overlay_skill": null,
+        "layer": "L2"
       }
     },
     {

@@ -999,7 +999,11 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
         let routing_owner = caps["routing_owner"].as_str().unwrap_or_default();
         let routing_gate = caps["routing_gate"].as_str().unwrap_or_default();
         let network_access = caps["network_access"].as_str().unwrap_or_default();
-        for array_key in ["allowed_tools", "approval_required_tools", "artifact_outputs"] {
+        for array_key in [
+            "allowed_tools",
+            "approval_required_tools",
+            "artifact_outputs",
+        ] {
             let values = caps[array_key]
                 .as_array()
                 .unwrap_or_else(|| panic!("plugin {slug} {array_key} must be an array"));
@@ -1054,7 +1058,11 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
         if !allowed_network_access.contains(caps["network_access"].as_str().unwrap_or_default()) {
             return Err("unknown_network_access".to_string());
         }
-        for array_key in ["allowed_tools", "approval_required_tools", "artifact_outputs"] {
+        for array_key in [
+            "allowed_tools",
+            "approval_required_tools",
+            "artifact_outputs",
+        ] {
             if !caps[array_key]
                 .as_array()
                 .map(|values| values.iter().all(|value| value.as_str().is_some()))
@@ -1067,10 +1075,15 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     };
     let mut unknown_key = sample.clone();
     unknown_key["capabilities"]["made_up"] = serde_json::json!("x");
-    assert!(validate_sample(unknown_key).unwrap_err().contains("unknown_capability_key"));
+    assert!(validate_sample(unknown_key)
+        .unwrap_err()
+        .contains("unknown_capability_key"));
     let mut unknown_enum = sample.clone();
     unknown_enum["capabilities"]["routing_gate"] = serde_json::json!("made-up");
-    assert_eq!(validate_sample(unknown_enum).unwrap_err(), "unknown_routing_gate");
+    assert_eq!(
+        validate_sample(unknown_enum).unwrap_err(),
+        "unknown_routing_gate"
+    );
     let mut wrong_shape = sample.clone();
     wrong_shape["capabilities"]["allowed_tools"] = serde_json::json!("shell");
     assert_eq!(
@@ -1409,8 +1422,7 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
         "skills/autopilot/SKILL.md"
     );
     assert_eq!(
-        registry["framework_commands"]["team"]["canonical_owner"],
-        "agent-swarm-orchestration",
+        registry["framework_commands"]["team"]["canonical_owner"], "agent-swarm-orchestration",
         "team must remain a framework alias backed by agent-swarm-orchestration"
     );
 
@@ -1591,9 +1603,25 @@ fn browser_mcp_live_config_never_points_to_node_runtime() {
     assert!(!joined.contains("npm run dev"));
 }
 
+fn browser_mcp_rust_sources_concat() -> String {
+    let root = project_root().join("scripts/router-rs/src/browser_mcp");
+    let mut paths = collect_files_with_extension(&root, "rs");
+    assert!(
+        !paths.is_empty(),
+        "expected Rust sources under {}",
+        root.display()
+    );
+    paths.sort();
+    paths
+        .into_iter()
+        .map(|p| read_text(&p))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[test]
 fn browser_mcp_exposes_repo_skill_router_tools() {
-    let source = read_text(&project_root().join("scripts/router-rs/src/browser_mcp.rs"));
+    let source = browser_mcp_rust_sources_concat();
     for marker in [
         "skill_route",
         "skill_search",
@@ -2333,7 +2361,10 @@ fn harness_failure_taxonomy_config_matches_cli_contract() {
         "trace_gap",
         "step_recovery_gap",
     ] {
-        assert!(contract_classes.contains_key(expected), "missing {expected}");
+        assert!(
+            contract_classes.contains_key(expected),
+            "missing {expected}"
+        );
     }
 }
 
@@ -2348,20 +2379,19 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
         .iter()
         .map(|v| v["id"].as_str().expect("track id").to_string())
         .collect::<BTreeSet<_>>();
-    let cases = config["cases"]
-        .as_array()
-        .expect("cases array");
+    let cases = config["cases"].as_array().expect("cases array");
     let case_ids = cases
         .iter()
         .map(|v| v["id"].as_str().expect("case id").to_string())
         .collect::<BTreeSet<_>>();
-    let taxonomy_ids = read_json(&project_root().join("configs/framework/HARNESS_FAILURE_TAXONOMY.json"))
-        ["classes"]
-        .as_array()
-        .expect("taxonomy classes")
-        .iter()
-        .map(|v| v["id"].as_str().expect("failure class id").to_string())
-        .collect::<BTreeSet<_>>();
+    let taxonomy_ids =
+        read_json(&project_root().join("configs/framework/HARNESS_FAILURE_TAXONOMY.json"))
+            ["classes"]
+            .as_array()
+            .expect("taxonomy classes")
+            .iter()
+            .map(|v| v["id"].as_str().expect("failure class id").to_string())
+            .collect::<BTreeSet<_>>();
     let response = router_rs_json(&["eval", "harness-contract"]);
     let contract_tracks = response["behavioral_eval_tracks"]
         .as_array()
@@ -2399,7 +2429,10 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
             case["id"].as_str().unwrap_or("<unknown>")
         );
         assert!(
-            case["verify"].as_str().unwrap_or_default().contains("cargo ")
+            case["verify"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("cargo ")
                 || case["verify"]
                     .as_str()
                     .unwrap_or_default()

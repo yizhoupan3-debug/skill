@@ -58,4 +58,9 @@ use crate::trace_runtime::{
 
 use crate::runtime_storage::RuntimeStorageRequestPayload;
 
+/// Serialize Codex hook [`stdout`](print_json_value): `None` means allow/no-op and still emits JSON.
+pub(crate) fn codex_hook_stdout_payload(payload: Option<Value>) -> Value {
+    payload.unwrap_or_else(|| json!({}))
+}
+
 include!("dispatch_body.txt");

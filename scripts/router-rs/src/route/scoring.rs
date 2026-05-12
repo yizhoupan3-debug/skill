@@ -1,8 +1,11 @@
 //! Candidate scoring and owner/overlay selection.
 use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framework_alias_call};
 use super::signals::*;
-use super::text::{common_route_stop_tokens, normalize_text, text_matches_phrase};
+use super::text::{
+    common_route_stop_tokens, normalize_text, text_matches_phrase, tokenize_route_text,
+};
 use super::types::{RouteCandidate, SkillRecord};
+use crate::hook_common::is_review_prompt;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
@@ -621,6 +624,18 @@ pub(crate) fn score_route_candidate<'a>(
         }
     }
 
+    if record.slug == "code-review-deep"
+        && first_turn
+        && is_review_prompt(query_text)
+        && !has_paper_context(query_text, query_token_list)
+    {
+        score += 22.0;
+        reasons.push(
+            "Code-review-deep boost applied: review-class prompt without paper-only context."
+                .to_string(),
+        );
+    }
+
     if record.owner_lower == "gate" && score > 0.0 {
         score += 2.0;
     }
@@ -889,7 +904,6 @@ pub(crate) fn pick_overlay(
 fn has_framework_review_overlay_context(query_text: &str, query_tokens: &[String]) -> bool {
     let framework_surface = [
         "harness",
-        "skill",
         "路由",
         "router",
         "routing",
@@ -903,6 +917,8 @@ fn has_framework_review_overlay_context(query_text: &str, query_tokens: &[String
     let review_surface = [
         "深度 review",
         "深度review",
+        "深底 review",
+        "深底review",
         "deep review",
         "code review",
         "审计",
@@ -979,5 +995,35 @@ pub(crate) fn layer_threshold(layer: &str) -> f64 {
         "L1" => 16.0,
         "L2" | "L3" => 14.0,
         _ => 15.0,
+    }
+}
+
+#[cfg(test)]
+mod framework_review_overlay_typo_tests {
+    use super::has_framework_review_overlay_context;
+    use super::tokenize_route_text;
+
+    #[test]
+    fn shendi_typo_with_routing_matches_overlay_context() {
+        let q = "深底review 路由系统";
+        let tokens = tokenize_route_text(q);
+        assert!(has_framework_review_overlay_context(q, &tokens));
+    }
+
+    #[test]
+    fn shendi_typo_spaced_review_with_hook_matches_overlay_context() {
+        let q = "深底 review hooks 是否合理";
+        let tokens = tokenize_route_text(q);
+        assert!(has_framework_review_overlay_context(q, &tokens));
+    }
+
+    #[test]
+    fn skill_only_with_code_review_does_not_match_overlay_context() {
+        let q = "skill packaging code review only";
+        let tokens = tokenize_route_text(q);
+        assert!(
+            !has_framework_review_overlay_context(q, &tokens),
+            "`skill` keyword alone must not imply framework-overlay surface without routing/harness/hook cues"
+        );
     }
 }

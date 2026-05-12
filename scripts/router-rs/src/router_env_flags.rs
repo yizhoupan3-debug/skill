@@ -6,7 +6,13 @@
 //! - `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`
 //! - `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK`
 //! - `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`
-//! - `ROUTER_RS_DEPTH_SCORE_MODE`
+//! - `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` → [`router_rs_cursor_hook_state_legacy_full_sweep_enabled`]
+//! - `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` → [`router_rs_cursor_pre_goal_strict_disk_enabled`]
+//! - `ROUTER_RS_TASK_LEDGER_FLOCK` → [`router_rs_task_ledger_flock_enabled`]（跨进程账本 flock，默认启用）
+//! - `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` → [`router_rs_cursor_hook_outbound_context_max_bytes`]
+//! - `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` → [`router_rs_cursor_sessionstart_context_max_bytes`]
+//! - `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE`：Stop 软收尾提示（`SESSION_CLOSE_STYLE`）；`0`/`false`/`off`/`no` 关闭
+//! - `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` → Codex：`UserPromptSubmit`/`PostToolUse`/`Stop` 无稳定会话键时 block（见 `codex_hooks.rs`）
 //!
 //! 已退役的文案/投影分叉开关在代码层固定为关闭，不再暴露环境变量入口。
 
@@ -16,10 +22,38 @@ const ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT_ENV: &str = "ROUTER_RS_RFV_EXTERNAL_STR
 const ROUTER_RS_DEPTH_SCORE_MODE_ENV: &str = "ROUTER_RS_DEPTH_SCORE_MODE";
 const ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV: &str =
     "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
+const ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP_ENV: &str =
+    "ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP";
+const ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV: &str = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
+const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
 
 /// `/autopilot` **pre-goal** 仍保持显式 opt-in。
 pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV)
+}
+
+/// Cursor `SessionEnd`：是否对 `.cursor/hook-state/` 做**历史全目录前缀清扫**（与今日旧行为一致）。
+///
+/// 默认 **关闭**（仅清当前 `session_key` 对应状态 + 全局清 tmp 孤儿，避免同仓库多会话互删门控文件）。
+/// 仅当 `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP=1|true|yes|on` 时开启。
+pub fn router_rs_cursor_hook_state_legacy_full_sweep_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP_ENV)
+}
+
+/// Cursor：beforeSubmit 路径上是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
+///
+/// 默认 **关闭**（与历史一致：盘上已有 GOAL 可跳过 pre-goal nag）。**仅**当
+/// `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=1|true|yes|on` 时开启，用于降低 checkout/遗留
+/// `artifacts/current` 带入的旧 GOAL 误放行 pre-goal 的风险；Stop 路径（`arm_if_goal_file`）不受影响。
+pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV)
+}
+
+/// `ROUTER_RS_TASK_LEDGER_FLOCK`：是否对「任务账本」写入使用 `artifacts/current` 旁路 sentinel 文件的 `flock`。
+///
+/// 默认 **启用**（unset 或非 `0`/`false`/`off`/`no`）；网络盘若不靠谱可显式设为关闭（并行写入风险自担）。
+pub fn router_rs_task_ledger_flock_enabled() -> bool {
+    router_rs_env_enabled_default_true(ROUTER_RS_TASK_LEDGER_FLOCK_ENV)
 }
 
 /// 与历史实现一致：空字符串经 trim 后不属于关闭词，仍视为启用。
@@ -61,6 +95,43 @@ pub fn router_rs_depth_score_mode_strict() -> bool {
         Ok(value) => value.trim().eq_ignore_ascii_case("strict"),
         Err(_) => false,
     }
+}
+
+/// Cursor hook：出站 JSON 中 `additional_context` 总站 **UTF-8 字节** 上限。
+///
+/// 默认 **8192**；`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` 解析为十进制 usize，夹在 \[1024, 65536]。
+pub fn router_rs_cursor_hook_outbound_context_max_bytes() -> usize {
+    parse_router_rs_usize_clamped(
+        "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
+        8192,
+        1024,
+        65536,
+    )
+}
+
+/// Cursor `SessionStart`：`additional_context` 合成后的 **UTF-8 字节** 上限。
+///
+/// 默认 **1200**；夹在 \[256, 8192]。
+pub fn router_rs_cursor_sessionstart_context_max_bytes() -> usize {
+    parse_router_rs_usize_clamped(
+        "ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS",
+        1200,
+        256,
+        8192,
+    )
+}
+
+fn parse_router_rs_usize_clamped(
+    env_key: &'static str,
+    default_val: usize,
+    min_allowed: usize,
+    max_allowed: usize,
+) -> usize {
+    env::var(env_key)
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .map(|n| n.clamp(min_allowed, max_allowed))
+        .unwrap_or(default_val)
 }
 
 #[cfg(test)]
@@ -121,6 +192,20 @@ mod tests {
         match prev {
             Some(v) => env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", v),
             None => env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED"),
+        }
+    }
+
+    #[test]
+    fn pre_goal_strict_disk_opt_in_only() {
+        let _g = lock_env();
+        let prev = env::var_os("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
+        env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
+        assert!(!super::router_rs_cursor_pre_goal_strict_disk_enabled());
+        env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", "true");
+        assert!(super::router_rs_cursor_pre_goal_strict_disk_enabled());
+        match prev {
+            Some(v) => env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", v),
+            None => env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK"),
         }
     }
 

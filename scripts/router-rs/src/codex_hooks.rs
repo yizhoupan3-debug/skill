@@ -3,14 +3,19 @@ use crate::framework_runtime::{
     build_framework_contract_summary_envelope, try_append_post_tool_shell_evidence,
     write_framework_session_artifacts,
 };
-use crate::hook_common::{normalize_subagent_type, normalize_tool_name};
+use crate::hook_common::{
+    is_deep_review_gate_lane_normalized, normalize_subagent_type, normalize_tool_name,
+};
 use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
 use crate::host_integration::ensure_codex_skill_surface;
 use crate::review_gate_engine::{
     fork_context_from_values, independent_reviewer_evidence, review_gate_blocks_stop,
     ReviewGateFacts,
 };
-use crate::router_env_flags::router_rs_env_enabled_default_true;
+use crate::router_env_flags::{
+    router_rs_env_enabled_default_false, router_rs_env_enabled_default_true,
+    router_rs_operator_inject_globally_enabled,
+};
 use chrono::Utc;
 use regex::Regex;
 use serde_json::{json, Value};
@@ -30,6 +35,7 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Once;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -88,7 +94,9 @@ const INSTALL_STATUS_SESSION_START: &str = "Loading Codex live state";
 const INSTALL_STATUS_PRE_TOOL: &str = "Checking generated-surface guard";
 const INSTALL_STATUS_POST_TOOL: &str = "Recording Codex tool evidence";
 const INSTALL_STATUS_STOP: &str = "Writing Codex continuity checkpoint";
-const CODEX_ADDITIONAL_CONTEXT_MAX_CHARS: usize = 640;
+/// Default UTF-8 **byte** budget for merged Codex `additionalContext` (SessionStart / UserPromptSubmit).
+const CODEX_ADDITIONAL_CONTEXT_MAX_BYTES: usize = 640;
+static CODEX_SESSION_KEY_FALLBACK_WARN: Once = Once::new();
 static ATOMIC_WRITE_NONCE: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 thread_local! {
@@ -103,21 +111,31 @@ fn codex_hook_command_timeout_secs(event: &str) -> u64 {
     }
 }
 
-fn codex_additional_context_max_chars() -> usize {
+/// Upper bound for merged `additionalContext` UTF-8 **bytes** (not Unicode scalar count).
+///
+/// Reads `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` first when set; otherwise
+/// `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` (legacy name; still interpreted as bytes).
+/// Value is clamped to \[256, 8192].
+fn codex_additional_context_max_bytes() -> usize {
     const MIN: usize = 256;
     const MAX: usize = 8192;
-    std::env::var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX")
+    std::env::var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES")
         .ok()
         .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .or_else(|| {
+            std::env::var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX")
+                .ok()
+                .and_then(|raw| raw.trim().parse::<usize>().ok())
+        })
         .map(|n| n.clamp(MIN, MAX))
-        .unwrap_or(CODEX_ADDITIONAL_CONTEXT_MAX_CHARS)
+        .unwrap_or(CODEX_ADDITIONAL_CONTEXT_MAX_BYTES)
 }
 
-fn truncate_codex_additional_context(combined: &str, max_chars: usize) -> String {
-    if combined.len() <= max_chars {
+fn truncate_codex_additional_context_bytes(combined: &str, max_bytes: usize) -> String {
+    if combined.len() <= max_bytes {
         return combined.to_string();
     }
-    let budget = max_chars.saturating_sub(3);
+    let budget = max_bytes.saturating_sub(3);
     let mut cut = budget.min(combined.len());
     while cut > 0 && !combined.is_char_boundary(cut) {
         cut -= 1;
@@ -214,27 +232,60 @@ impl Drop for CodexStateLock {
     }
 }
 
+/// Stable session identifier for hook-state filenames: hook JSON fields first (snake_case and
+/// camelCase per Codex *Common input fields*), then env fallbacks operators may set.
+///
+/// Does **not** include the per-invocation fallback (`codex_session_key` adds that); see
+/// [`docs/plans/RESEARCH_codex_hooks_official_crosscheck.md`](../../../docs/plans/RESEARCH_codex_hooks_official_crosscheck.md).
+fn codex_stable_session_raw(event: &Value) -> Option<String> {
+    fn trimmed_nonempty(value: &str) -> Option<String> {
+        let t = value.trim();
+        (!t.is_empty()).then(|| t.to_string())
+    }
+    for key in [
+        "session_id",
+        "sessionId",
+        "conversation_id",
+        "conversationId",
+        "thread_id",
+        "threadId",
+    ] {
+        if let Some(s) = event
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(trimmed_nonempty)
+        {
+            return Some(s);
+        }
+    }
+    for env_key in ["CODEX_SESSION_ID", "CODEX_CONVERSATION_ID"] {
+        if let Ok(v) = env::var(env_key) {
+            if let Some(s) = trimmed_nonempty(&v) {
+                return Some(s);
+            }
+        }
+    }
+    None
+}
+
+fn codex_require_stable_session_key_enabled() -> bool {
+    router_rs_env_enabled_default_false("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY")
+}
+
 fn codex_session_key(event: &Value) -> String {
-    let raw = event
-        .get("session_id")
-        .or(event.get("conversation_id"))
-        .or(event.get("thread_id"))
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .map(str::to_owned)
-        .or_else(|| {
-            std::env::var("CODEX_SESSION_ID")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-        })
-        .unwrap_or_else(|| {
-            let now_ns = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
-            let nonce = ATOMIC_WRITE_NONCE.fetch_add(1, Ordering::SeqCst);
-            format!("invocation:{}:{now_ns}:{nonce}", std::process::id())
+    let raw = codex_stable_session_raw(event).unwrap_or_else(|| {
+        CODEX_SESSION_KEY_FALLBACK_WARN.call_once(|| {
+            eprintln!(
+                "[router-rs] codex hook-state: unstable session key (set CODEX_SESSION_ID / CODEX_CONVERSATION_ID or include session_id / sessionId / conversation_id / thread_id in hook payloads); state under .codex/hook-state may not persist across invocations."
+            );
         });
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let nonce = ATOMIC_WRITE_NONCE.fetch_add(1, Ordering::SeqCst);
+        format!("invocation:{}:{now_ns}:{nonce}", std::process::id())
+    });
     let mut hasher = Sha256::new();
     hasher.update(raw.as_bytes());
     let digest = hasher.finalize();
@@ -652,8 +703,15 @@ fn codex_tool_fork_context(tool_input: &Value) -> Option<bool> {
     fork_context_from_values(tool_input, None)
 }
 
-fn codex_counts_as_independent_context(tool_input: &Value) -> bool {
-    independent_reviewer_evidence(true, codex_tool_fork_context(tool_input))
+/// 与 Cursor `REVIEW_GATE` 深度 lane 对齐：`general-purpose` / `best-of-n-runner`（已 normalize）且显式 `fork_context=false`。
+fn codex_deep_independent_reviewer_evidence(
+    recognized_kind: Option<&str>,
+    tool_input: &Value,
+) -> bool {
+    independent_reviewer_evidence(
+        recognized_kind.is_some_and(is_deep_review_gate_lane_normalized),
+        codex_tool_fork_context(tool_input),
+    )
 }
 
 fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
@@ -673,11 +731,13 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
         return None;
     }
     let combined = unique.join("\n");
-    let max_chars = codex_additional_context_max_chars();
-    if combined.len() <= max_chars {
+    let max_bytes = codex_additional_context_max_bytes();
+    if combined.len() <= max_bytes {
         return Some(combined);
     }
-    Some(truncate_codex_additional_context(&combined, max_chars))
+    Some(truncate_codex_additional_context_bytes(
+        &combined, max_bytes,
+    ))
 }
 
 fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
@@ -707,6 +767,10 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
             "decision": "block",
             "reason": "Codex hook state could not be persisted under .codex/hook-state.",
         }));
+    }
+
+    if !router_rs_operator_inject_globally_enabled() {
+        return None;
     }
 
     let mut contexts: Vec<String> = Vec::new();
@@ -761,7 +825,7 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
             state.parallel_lane_seen = true;
         }
         state.review_subagent_seen = true;
-        if review_lane && codex_counts_as_independent_context(&tool_input) {
+        if codex_deep_independent_reviewer_evidence(recognized.as_deref(), &tool_input) {
             state.independent_review_subagent_seen = true;
         }
         Ok((Some(state), ()))
@@ -787,17 +851,27 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         return None;
     }
 
-    if let Ok(Some(state)) = codex_load_state(repo_root, event) {
-        if review_gate_blocks_stop(ReviewGateFacts {
-            review_required: state.review_required,
-            review_override: state.review_override,
-            independent_reviewer_seen: state.independent_review_subagent_seen,
-        }) {
+    match codex_load_state(repo_root, event) {
+        Err(reason) => {
+            eprintln!("[router-rs] codex hook-state unreadable: {reason}");
             return Some(json!({
                 "decision": "block",
-                "followup_message": "router-rs CODEX_REVIEW_GATE incomplete need=independent_context_reviewer_subagent_fork_context_false"
+                "followup_message": "router-rs CODEX_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions"
             }));
         }
+        Ok(Some(state)) => {
+            if review_gate_blocks_stop(ReviewGateFacts {
+                review_required: state.review_required,
+                review_override: state.review_override,
+                independent_reviewer_seen: state.independent_review_subagent_seen,
+            }) {
+                return Some(json!({
+                    "decision": "block",
+                    "followup_message": "router-rs CODEX_REVIEW_GATE incomplete need=independent_context_reviewer_subagent_fork_context_false"
+                }));
+            }
+        }
+        Ok(None) => {}
     }
 
     let reset_result = with_codex_state_lock(repo_root, event, |_loaded| {
@@ -838,6 +912,9 @@ fn try_write_continuity_checkpoint_on_codex_stop(repo_root: &Path, event: &Value
 }
 
 fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value> {
+    if !router_rs_operator_inject_globally_enabled() {
+        return None;
+    }
     let source = payload
         .get("source")
         .or(payload.get("matcher"))
@@ -877,6 +954,18 @@ fn run_codex_lifecycle_context_hook(
         .and_then(Value::as_str)
         .map(|s| s.trim().to_lowercase())
         .unwrap_or_default();
+    if codex_require_stable_session_key_enabled() {
+        match event_name.as_str() {
+            "userpromptsubmit" | "posttooluse" | "stop" => {
+                if codex_stable_session_raw(payload).is_none() {
+                    return Ok(Some(codex_lifecycle_input_error(
+                        "Codex lifecycle hook blocked: stable session key required under ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY. Provide session_id / conversation_id / thread_id (snake_case or camelCase) in hook JSON or set CODEX_SESSION_ID / CODEX_CONVERSATION_ID.",
+                    )));
+                }
+            }
+            _ => {}
+        }
+    }
     Ok(match event_name.as_str() {
         "sessionstart" => handle_codex_session_start(repo_root, payload),
         "userpromptsubmit" => handle_codex_userpromptsubmit(repo_root, payload),
@@ -958,7 +1047,12 @@ Codex hooks are enabled for this repo and are managed by the Rust `router-rs` co
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
 `SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` records subagent/tool telemetry and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Broad/deep review prompts also require an independent read-only reviewer subagent (`fork_context=false`) before Stop can close. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
-Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active.\n\n\
+Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active. Stable keys require `session_id` / `conversation_id` / `thread_id` in hook payloads (snake_case **or** camelCase, e.g. `sessionId`) or `CODEX_SESSION_ID` / `CODEX_CONVERSATION_ID` in the environment; otherwise hook-state may not persist across invocations (router-rs logs a one-time stderr warning per process).\n\n\
+Optional **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`**: when set to `1`/`true`/`yes`/`on`, `UserPromptSubmit`, `PostToolUse`, and `Stop` **block** if no stable identifier is present (`SessionStart` is unaffected).\n\n\
+Generated hook commands resolve `router-rs` in order: **`ROUTER_RS_BIN`** when set to an executable path, then `scripts/router-rs/target/{release,debug}/router-rs`, then repo `target/{release,debug}/router-rs`, finally `command -v router-rs` (last resort — prefer pinning `ROUTER_RS_BIN` or building into the repo). If the binary is missing, **all** lifecycle hooks fail closed with a JSON `decision:block` line.\n\n\
+Merged `additionalContext` for SessionStart/UserPromptSubmit is capped by UTF-8 **byte** length (not Unicode character count). Tune with `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` or legacy `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` (same semantics; clamped 256–8192; default 640 bytes).\n\n\
+Successful Codex hook processes always print one JSON object line on stdout (including `{}` when there is no hook-specific output).\n\n\
+Stop hook blocks when `.codex/hook-state` cannot be read or parsed (non-recoverable JSON/IO): fix permissions or delete corrupted state files before continuing.\n\n\
 Use `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
@@ -1027,14 +1121,15 @@ fn build_hook_binary_preamble(
         "{project_var}=\"${{{env_var}:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; "
     ));
     command.push_str(&format!(
-        "ROUTER_RS_BIN=\"\"; \
-if [ -x \"${project_var}/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"${project_var}/scripts/router-rs/target/release/router-rs\"; \
-elif [ -x \"${project_var}/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"${project_var}/scripts/router-rs/target/debug/router-rs\"; \
-elif [ -x \"${project_var}/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"${project_var}/target/release/router-rs\"; \
-elif [ -x \"${project_var}/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"${project_var}/target/debug/router-rs\"; \
-else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; "
+        "RS_BIN=\"\"; \
+if [ -n \"${{ROUTER_RS_BIN:-}}\" ] && [ -x \"${{ROUTER_RS_BIN}}\" ]; then RS_BIN=\"${{ROUTER_RS_BIN}}\"; \
+elif [ -x \"${project_var}/scripts/router-rs/target/release/router-rs\" ]; then RS_BIN=\"${project_var}/scripts/router-rs/target/release/router-rs\"; \
+elif [ -x \"${project_var}/scripts/router-rs/target/debug/router-rs\" ]; then RS_BIN=\"${project_var}/scripts/router-rs/target/debug/router-rs\"; \
+elif [ -x \"${project_var}/target/release/router-rs\" ]; then RS_BIN=\"${project_var}/target/release/router-rs\"; \
+elif [ -x \"${project_var}/target/debug/router-rs\" ]; then RS_BIN=\"${project_var}/target/debug/router-rs\"; \
+else RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; "
     ));
-    command.push_str("if [ ! -x \"$ROUTER_RS_BIN\" ]; then ");
+    command.push_str("if [ ! -x \"$RS_BIN\" ]; then ");
     command.push_str(missing_binary_fallback);
     command.push_str("; fi; ");
     command
@@ -1044,7 +1139,7 @@ fn build_codex_hook_command(event: &str) -> String {
     let mut command =
         build_hook_binary_preamble("CODEX_PROJECT_ROOT", "CODEX_PROJECT_ROOT", "printf '%s\\n' '{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Codex hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}'; exit 1");
     command.push_str(&format!(
-        "\"$ROUTER_RS_BIN\" codex hook {event} --repo-root \"$CODEX_PROJECT_ROOT\""
+        "\"$RS_BIN\" codex hook {event} --repo-root \"$CODEX_PROJECT_ROOT\""
     ));
     command
 }
@@ -1345,6 +1440,10 @@ fn mode_status(status: &'static str, mode: InstallMode) -> &'static str {
 }
 
 fn write_atomic_text(path: &Path, text: &str) -> Result<(), String> {
+    #[cfg(test)]
+    if FORCE_ATOMIC_WRITE_FAIL.with(|flag| flag.get()) {
+        return Err("forced atomic write failure".to_string());
+    }
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let stem = path
         .file_name()
@@ -1359,47 +1458,7 @@ fn write_atomic_text(path: &Path, text: &str) -> Result<(), String> {
         ".{stem}.tmp-{}-{ts_nanos}-{nonce}",
         std::process::id()
     ));
-    #[cfg(test)]
-    if FORCE_ATOMIC_WRITE_FAIL.with(|flag| flag.get()) {
-        return Err("forced atomic write failure".to_string());
-    }
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&tmp_path)
-        .map_err(|err| {
-            format!(
-                "Failed to write temporary file {}: {err}",
-                tmp_path.display()
-            )
-        })?;
-    use std::io::Write as _;
-    file.write_all(text.as_bytes()).map_err(|err| {
-        format!(
-            "Failed to write temporary file {}: {err}",
-            tmp_path.display()
-        )
-    })?;
-    file.sync_all().map_err(|err| {
-        format!(
-            "Failed to fsync temporary file {}: {err}",
-            tmp_path.display()
-        )
-    })?;
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        format!(
-            "Failed to replace {} with {}: {err}",
-            path.display(),
-            tmp_path.display()
-        )
-    })?;
-    #[cfg(unix)]
-    if let Ok(dir) = OpenOptions::new().read(true).open(parent) {
-        let _ = dir.sync_all();
-    }
-    Ok(())
+    crate::atomic_write::write_atomic_text_to_temp(path, text, &tmp_path)
 }
 
 fn serialize_ascii_json_pretty(value: &Value) -> Result<String, String> {
@@ -1432,13 +1491,9 @@ fn hook_event_status_message(event_name: &str) -> &'static str {
 
 fn build_install_hook_command(_repo_root: &Path, event: &str) -> String {
     let audit_command = format!("--event={event}");
-    let missing_binary_fallback = if matches!(event, "SessionStart" | "PostToolUse") {
-        "echo \"[codex-hook] router-rs binary missing; state update skipped\" >&2; exit 0"
-    } else {
-        "printf '%s\\n' '{{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Codex hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}}'; exit 1"
-    };
+    let missing_binary_fallback = "printf '%s\\n' '{{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Codex hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}}'; exit 1";
     format!(
-        "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${{CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; ROUTER_RS_BIN=\"\"; if [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then ROUTER_RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else ROUTER_RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$ROUTER_RS_BIN\" ]; then {missing_binary_fallback}; fi; \"$ROUTER_RS_BIN\" codex hook {audit_command} --repo-root \"$CODEX_PROJECT_ROOT\"'"
+        "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${{CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; RS_BIN=\"\"; if [ -n \"${{ROUTER_RS_BIN:-}}\" ] && [ -x \"${{ROUTER_RS_BIN}}\" ]; then RS_BIN=\"${{ROUTER_RS_BIN}}\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$RS_BIN\" ]; then {missing_binary_fallback}; fi; \"$RS_BIN\" codex hook {audit_command} --repo-root \"$CODEX_PROJECT_ROOT\"'"
     )
 }
 
@@ -1624,14 +1679,26 @@ fn is_legacy_python_codex_hook_command(command: &str) -> bool {
         || command.contains(".codex/hooks/review_subagent_gate.py")
 }
 
+fn attach_codex_hook_observation(mut value: Option<Value>) -> Option<Value> {
+    if let Some(ref mut v) = value {
+        crate::router_rs_observation::attach_router_rs_observation(
+            v,
+            crate::router_rs_observation::HookObservationHost::Codex,
+        );
+    }
+    value
+}
+
 pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Value>, String> {
     let canonical = canonical_codex_audit_command(command)?;
     let mut payload = match read_stdin_payload() {
         Ok(payload) => payload,
         Err(err) if canonical == "lifecycle-context" => {
-            return Ok(Some(codex_lifecycle_input_error(&format!(
-                "Codex lifecycle hook input JSON invalid: {err}",
-            ))));
+            return Ok(attach_codex_hook_observation(Some(
+                codex_lifecycle_input_error(&format!(
+                    "Codex lifecycle hook input JSON invalid: {err}"
+                )),
+            )));
         }
         Err(err) => return Err(err),
     };
@@ -1644,9 +1711,15 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
         }
     }
     match canonical {
-        "pre-tool-use" => run_codex_pre_tool_use(repo_root, &payload),
-        "contract-guard" => run_codex_contract_guard(repo_root, &payload),
-        "lifecycle-context" => run_codex_lifecycle_context_hook(repo_root, &payload),
+        "pre-tool-use" => Ok(attach_codex_hook_observation(run_codex_pre_tool_use(
+            repo_root, &payload,
+        )?)),
+        "contract-guard" => Ok(attach_codex_hook_observation(run_codex_contract_guard(
+            repo_root, &payload,
+        )?)),
+        "lifecycle-context" => Ok(attach_codex_hook_observation(
+            run_codex_lifecycle_context_hook(repo_root, &payload)?,
+        )),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
 }
@@ -1923,9 +1996,20 @@ fn read_codex_stdin_limited<R: Read>(reader: &mut R) -> Result<String, String> {
     const LIMIT: u64 = 4 * 1024 * 1024;
     let mut input = String::new();
     let mut limited = reader.take(LIMIT);
-    limited
-        .read_to_string(&mut input)
-        .map_err(|err| err.to_string())?;
+    limited.read_to_string(&mut input).map_err(|err| {
+        let msg = err.to_string();
+        let lower = msg.to_ascii_lowercase();
+        // `Read::read_to_string` UTF-8 failures vary by Rust/stdlib wording and punctuation
+        // (e.g. hyphen vs minus); normalize any obvious decode error to a stable hook token.
+        if matches!(err.kind(), std::io::ErrorKind::InvalidData)
+            || lower.contains("utf-8")
+            || lower.contains("utf8")
+            || lower.contains("utf")
+        {
+            return "stdin_invalid_utf8".to_string();
+        }
+        msg
+    })?;
     if limited.limit() == 0 {
         let inner = limited.into_inner();
         let mut probe = [0u8; 1];
@@ -2650,6 +2734,23 @@ mod tests {
             let err = read_codex_stdin_limited(&mut cursor).unwrap_err();
             assert!(err.contains("exceeds 4 MiB"));
         }
+
+        #[test]
+        fn codex_hook_rejects_invalid_utf8_stdin() {
+            let bytes = vec![0xff, 0xfe, 0xfd];
+            let mut cursor = std::io::Cursor::new(bytes);
+            let err = read_codex_stdin_limited(&mut cursor).unwrap_err();
+            assert_eq!(err, "stdin_invalid_utf8");
+        }
+
+        #[test]
+        fn codex_hook_rejects_truncated_utf8_sequence_stdin() {
+            let mut buf = vec![b'a'; 64];
+            buf.push(0x80);
+            let mut cursor = std::io::Cursor::new(buf);
+            let err = read_codex_stdin_limited(&mut cursor).unwrap_err();
+            assert_eq!(err, "stdin_invalid_utf8");
+        }
     }
 
     mod lifecycle_context_tests {
@@ -2679,6 +2780,47 @@ mod tests {
         }
 
         #[test]
+        fn operator_inject_off_skips_session_start_additional_context() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_OPERATOR_INJECT");
+            std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+            let repo = fresh_repo();
+            let out =
+                super::super::handle_codex_session_start(&repo, &json!({"source": "startup"}));
+            assert!(
+                out.is_none(),
+                "advisory SessionStart must honor ROUTER_RS_OPERATOR_INJECT kill-switch: {out:?}"
+            );
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
+                None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+            }
+        }
+
+        #[test]
+        fn operator_inject_off_skips_user_prompt_submit_additional_context() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_OPERATOR_INJECT");
+            std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+            let repo = fresh_repo();
+            let evt = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-inject-off-ups",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let out = super::super::handle_codex_userpromptsubmit(&repo, &evt);
+            assert!(
+                out.is_none(),
+                "advisory UserPromptSubmit must honor ROUTER_RS_OPERATOR_INJECT kill-switch: {out:?}"
+            );
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
+                None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+            }
+        }
+
+        #[test]
         fn user_prompt_submit_review_emits_subagent_gate_context() {
             let repo = fresh_repo();
             let payload = json!({
@@ -2695,7 +2837,7 @@ mod tests {
             assert!(ctx.contains("Review gate:"));
             assert!(ctx.contains("fork_context=false"));
             if !ctx.is_empty() {
-                assert!(ctx.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
+                assert!(ctx.len() <= codex_additional_context_max_bytes());
             }
             let state = codex_load_state(&repo, &payload).unwrap().unwrap();
             assert_eq!(state.seq, 1);
@@ -2718,7 +2860,7 @@ mod tests {
         #[test]
         fn additional_context_is_deduped_and_capped() {
             let duplicate = "Codex live state: one".to_string();
-            let long_line = "x".repeat(CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
+            let long_line = "x".repeat(codex_additional_context_max_bytes());
             let ctx = codex_compact_contexts(vec![
                 duplicate.clone(),
                 duplicate,
@@ -2726,7 +2868,7 @@ mod tests {
                 long_line,
             ])
             .unwrap();
-            assert!(ctx.len() <= CODEX_ADDITIONAL_CONTEXT_MAX_CHARS);
+            assert!(ctx.len() <= codex_additional_context_max_bytes());
             assert_eq!(ctx.matches("Codex live state: one").count(), 1);
         }
 
@@ -2766,7 +2908,7 @@ mod tests {
         }
 
         #[test]
-        fn post_tool_use_with_subagent_marks_seen() {
+        fn post_tool_use_with_subagent_marks_seen_without_explore_counting_deep_independent() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -2786,11 +2928,38 @@ mod tests {
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
-            assert!(state.independent_review_subagent_seen);
+            assert!(
+                !state.independent_review_subagent_seen,
+                "explore must not satisfy Codex independent deep-review bar"
+            );
             assert!(state.generic_subagent_seen);
             assert!(state.review_lane_seen);
             assert!(!state.parallel_lane_seen);
             assert_eq!(state.review_subagent_tool.as_deref(), Some("Task#explore"));
+        }
+
+        #[test]
+        fn post_tool_general_purpose_fork_false_counts_deep_independent() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-2gp",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-2gp",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            assert!(out.is_none());
+            let state = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(state.independent_review_subagent_seen);
+            assert!(state.review_lane_seen);
         }
 
         #[test]
@@ -2857,6 +3026,38 @@ mod tests {
         }
 
         #[test]
+        fn stop_blocks_when_hook_state_corrupt() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"Stop",
+                "session_id":"stop-corrupt-1",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"x"
+            });
+            let path = super::super::codex_state_path(&repo, &payload);
+            fs::write(&path, b"{not json").unwrap();
+            let out =
+                super::super::handle_codex_stop(&repo, &payload).expect("expected block payload");
+            assert_eq!(out["decision"], json!("block"));
+            let msg = out["followup_message"].as_str().unwrap_or("");
+            assert!(
+                msg.contains("CODEX_HOOK_STATE_UNREADABLE"),
+                "unexpected followup: {msg}"
+            );
+        }
+
+        #[test]
+        fn session_key_without_stable_identifier_differs_per_invocation() {
+            let _g = env_lock();
+            std::env::remove_var("CODEX_SESSION_ID");
+            let k1 = super::super::codex_session_key(&json!({}));
+            let k2 = super::super::codex_session_key(&json!({}));
+            assert_ne!(k1, k2, "fallback keys must not alias distinct hook calls");
+            assert_eq!(k1.len(), 32);
+            assert_eq!(k2.len(), 32);
+        }
+
+        #[test]
         fn delegation_stop_does_not_block_when_only_explore_subagent_observed() {
             let repo = fresh_repo();
             let start = json!({
@@ -2886,7 +3087,7 @@ mod tests {
 
         #[test]
         fn additional_context_truncates_on_newline_preference_under_small_budget() {
-            // codex_additional_context_max_chars clamps to [256, 8192]; use the
+            // codex_additional_context_max_bytes clamps to [256, 8192]; use the
             // floor so the assertions exercise the real budget rather than a
             // value that the clamp silently rewrites.
             std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
@@ -3142,7 +3343,7 @@ mod tests {
         }
 
         #[test]
-        fn stop_with_subagent_seen_resets_state() {
+        fn stop_with_subagent_seen_resets_state_after_general_purpose_deep_reviewer() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3156,7 +3357,7 @@ mod tests {
                 "session_id":"sm-7",
                 "cwd": repo.to_string_lossy().to_string(),
                 "tool_name":"Task",
-                "tool_input":{"subagent_type":"explore","fork_context":false}
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
             });
             let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
             let stop = json!({
@@ -3171,6 +3372,38 @@ mod tests {
             assert_eq!(state.seq, 0);
             assert!(!state.review_subagent_seen);
             assert!(!state.independent_review_subagent_seen);
+        }
+
+        #[test]
+        fn stop_with_review_explore_fork_false_still_blocks() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-7-explore",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-7-explore",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"explore","fork_context":false}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-7-explore",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE"), "out={out:?}");
         }
 
         #[test]
@@ -3327,7 +3560,7 @@ mod tests {
         }
 
         #[test]
-        fn post_tool_use_with_agent_type_camel_case_marks_seen() {
+        fn post_tool_use_with_agent_type_camel_case_marks_seen_without_deep_independent() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3347,7 +3580,10 @@ mod tests {
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
-            assert!(state.independent_review_subagent_seen);
+            assert!(
+                !state.independent_review_subagent_seen,
+                "explore must not satisfy Codex independent deep-review bar"
+            );
             assert!(state.generic_subagent_seen);
             assert!(state.review_lane_seen);
             assert!(!state.parallel_lane_seen);
@@ -3564,6 +3800,88 @@ mod tests {
                 "key should be hex"
             );
             assert_eq!(a.len(), 32, "key should be 32 hex chars");
+        }
+
+        #[test]
+        fn codex_session_key_matches_for_session_id_camel_case() {
+            let sid = "sess-key-camel-01";
+            let snake = codex_session_key(&json!({"session_id": sid}));
+            let camel = codex_session_key(&json!({"sessionId": sid}));
+            assert_eq!(snake, camel);
+        }
+
+        #[test]
+        fn codex_session_key_uses_codex_conversation_id_env_when_no_event_fields() {
+            let _guard = env_lock();
+            let unique_id = format!(
+                "test-conv-{}-{}",
+                std::process::id(),
+                SEQ.fetch_add(1, Ordering::SeqCst)
+            );
+            let event = json!({});
+            std::env::remove_var("CODEX_SESSION_ID");
+            std::env::set_var("CODEX_CONVERSATION_ID", &unique_id);
+            let a = codex_session_key(&event);
+            let b = codex_session_key(&event);
+            std::env::remove_var("CODEX_CONVERSATION_ID");
+            assert_eq!(a, b, "CODEX_CONVERSATION_ID fallback should be stable");
+            assert_eq!(a.len(), 32);
+        }
+
+        #[test]
+        fn strict_stable_session_key_blocks_userpromptsubmit_without_identifier() {
+            let _guard = env_lock();
+            std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "1");
+            std::env::remove_var("CODEX_SESSION_ID");
+            std::env::remove_var("CODEX_CONVERSATION_ID");
+            let repo = fresh_repo();
+            let event = json!({
+                "hook_event_name": "UserPromptSubmit",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt": "hello"
+            });
+            let out = super::run_codex_lifecycle_context_hook(&repo, &event)
+                .unwrap()
+                .unwrap();
+            assert_eq!(out["decision"], json!("block"));
+            std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
+        }
+
+        #[test]
+        fn strict_stable_session_key_allows_sessionstart_without_identifier() {
+            let _guard = env_lock();
+            std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "1");
+            std::env::remove_var("CODEX_SESSION_ID");
+            std::env::remove_var("CODEX_CONVERSATION_ID");
+            let repo = fresh_repo();
+            let event = json!({
+                "hook_event_name": "SessionStart",
+                "source": "startup"
+            });
+            let out = super::run_codex_lifecycle_context_hook(&repo, &event)
+                .unwrap()
+                .expect("sessionstart output");
+            assert!(out.get("hookSpecificOutput").is_some());
+            std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
+        }
+
+        #[test]
+        fn strict_stable_session_key_off_allows_userpromptsubmit_without_identifier() {
+            let _guard = env_lock();
+            std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
+            std::env::remove_var("CODEX_SESSION_ID");
+            std::env::remove_var("CODEX_CONVERSATION_ID");
+            let repo = fresh_repo();
+            let event = json!({
+                "hook_event_name": "UserPromptSubmit",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt": "hello"
+            });
+            let out = super::run_codex_lifecycle_context_hook(&repo, &event).unwrap();
+            assert!(
+                !matches!(out, Some(ref v) if v.get("decision") == Some(&json!("block"))),
+                "unexpected lifecycle block when strict mode off"
+            );
         }
 
         // P1-C: prune_stale_hook_state_files test

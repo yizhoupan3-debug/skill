@@ -20,7 +20,7 @@
 
 1. **单处解析**：`task_state::resolve_task_view(repo_root, task_id_override)` 为默认入口；禁止在新代码中散落 `join!(artifacts/current, tid, GOAL_STATE.json)`。
 2. **显式优于隐式（v1）**：`task_id` 解析顺序为 **`task_id_override` > `active_task.json` > `focus_task.json`**。`read_goal_state_for_hydration` 中非空 `active_task.json` 是硬当前任务指针；active 指向缺失/损坏时返回空，不回退 focus。只有 active 缺失/空时才读 `focus_task.json`；按 mtime 扫 `**/GOAL_STATE.json` 仅可作为诊断/兼容路径，不得触发当前任务 Stop/drive 门控。
-3. **控制面互斥**：`TaskControlMode` 在视图中显式分类：`idle` / `autopilot` / `rfv_loop` / `conflict`（GOAL 续跑与 RFV `loop_status=active` 同时成立时标记冲突，并附 `resolution_notes`）。
+3. **控制面互斥**：`TaskControlMode` 在视图中显式分类：`idle` / `autopilot` / `rfv_loop` / `conflict`（GOAL 续跑与 RFV `loop_status=active` 同时成立时标记冲突，并附 `resolution_notes`）。当 `GOAL_STATE.json` 或 `RFV_LOOP_STATE.json` **不可解析**（读盘/JSON 失败）时，`resolve_task_view` 在 `resolution_notes` 填入 `*_read_failed` 短句，`goal_state` / `rfv_loop_state` 字段为 `null`，区别于「文件缺失」。
 4. **性能**：本地小 JSON、低频 hook；聚合为内存操作。若未来需要缓存，仅在单 hook 进程内按 `mtime` 短路。
 5. **适配器保持薄**：Cursor/Codex 仅 stdin/out；不在本文件写宿主策略长文。
 
@@ -62,7 +62,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-ledger-
 |------|------|
 | **0** | `task_state` 模块 + `framework task-state-resolve` + 单测 |
 | **1** | `cursor_hooks`：`resolve_cursor_continuity_frame` → hydrate + merge；`build_*_from_state` + frame 缓存 |
-| **2** | `task_write_lock`：`TaskLedgerWriteGuard` + `apply_task_ledger_mutation`；与 `framework_runtime` session/evidence 共用互斥量 |
+| **2** | `task_write_lock`：`artifacts/current/.router-rs.task-ledger.lock` 上 `flock` + `apply_task_ledger_mutation(repo_root, …)`；与 session / evidence **同序**共用 repo 级锁（`EVIDENCE_INDEX` 尚可再持 per-path lock）。跨进程边界是 **flock**，不是单进程 `Mutex` |
 | **2.5（当前）** | `task_command`：`TaskLedgerCommand` + `dispatch_task_ledger_command_envelope`；CLI `framework task-ledger-dispatch`；stdio `task_ledger_dispatch` |
 | **3（可选）** | 单文件 `TASK_STATE.json`（`task_state_aggregate`）+ `framework task-state-aggregate-sync`；GOAL/RFV/Evidence 变更后 best-effort 刷新；`ResolvedTaskView` / `task-state-resolve` 仍只读分文件 |
 

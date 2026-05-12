@@ -10,4 +10,5 @@ alwaysApply: true
 - 深度 / 跨模块 / PR 级 review 在 Cursor 上由 `router-rs` hook 维护独立上下文证据链。
 - 宿主硬门控以 `.cursor/hook-state` 和 Stop 上的 `router-rs REVIEW_GATE` 单行短码为真源。
 - review lane 必须只读：输出 findings、风险、缺测与证据锚点；不改代码、不顺手修复。
+- **透镜与 lane 自选**、输出形状（含 **Scope / Lenses / Omitted**）以 [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md) 为准；本规则不复制 lens 表。
 - 用户明确要求避免 subagent 时，本 gate 不适用。

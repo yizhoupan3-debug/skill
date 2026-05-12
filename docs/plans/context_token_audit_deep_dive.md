@@ -11,14 +11,14 @@
 
 | 缺口主题 | 基线报告覆盖 | 本报告对应证据 |
 |----------|--------------|----------------|
-| **谁在什么相位写入模型侧上下文** | 仅习惯叙述 | `cursor_hooks.rs` / `codex_hooks.rs` 各事件分支；Codex `SessionStart` 调 `build_framework_continuity_digest_prompt(repo_root, 4)`（`codex_hooks.rs`） |
+| **谁在什么相位写入模型侧上下文** | 仅习惯叙述 | `cursor_hooks/` / `codex_hooks.rs` 各事件分支；Codex `SessionStart` 调 `build_framework_continuity_digest_prompt(repo_root, 4)`（`codex_hooks.rs`） |
 | **合并后是否有字符上限** | 未区分宿主 | Codex：`codex_compact_contexts` + `truncate_codex_additional_context`，默认 **640** 字符（可调 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`，clamp **256–8192**）。Cursor：`merge_additional_context` **仅追加字符串**，**无**合并后总长度 cap（见 §3 风险） |
 | **SessionStart digest 行数上界** | 未写 | `continuity_digest.rs`：`max_lines` 经 `clamp(2, 4)` 限制；与传入参数（如 Codex 用 `4`）共同约束基线正文长度 |
 | **PostTool → 磁盘证据膨胀** | 提到 EVIDENCE 条数现象 | `framework_runtime/mod.rs`：`MAX_POST_TOOL_EVIDENCE_ARTIFACTS = 120`，超出 **drain 头部**；`command_preview` 截断 **2000** UTF-8 字符；关断：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` |
-| **大段 JSON 调试刮取** | 未提 | `cursor_hooks.rs`：`HOOK_JSON_STRING_SCRAPE_CAP = 2 * 1024 * 1024`（2MiB 级字符串拼接预算，属极端排障路径） |
+| **大段 JSON 调试刮取** | 未提 | `cursor_hooks/`：`HOOK_JSON_STRING_SCRAPE_CAP = 2 * 1024 * 1024`（2MiB 级字符串拼接预算，属极端排障路径） |
 | **续跑文案 verbose** | 仅 env 名 | `router_env_flags::retired verbose followup helper` 同时影响 digest 内 Goal 段落、`build_autopilot_drive_followup_*`、`build_rfv_loop_followup_*`（及 pre-goal 路径，见各文件注释） |
 | **operator 文案与 digest 硬编码行** | harness §8 有表 | `continuity_digest.rs`：`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` **不**去掉深度自检行；`depth_compliance_refresh_hint` 仍追加到 digest |
-| **账本 → 门控读盘（非整段注入）** | 注册表/Goal 不一致已记 | `cursor_hooks.rs` `hydrate_goal_gate_from_disk`：读 `GOAL_STATE` + `EVIDENCE_INDEX` **布尔/摘要**补全门控，与「把整份 EVIDENCE 贴进 prompt」不同；但若 **agent 或用户** `read_file` 全文件仍属 Tier0 误用 |
+| **账本 → 门控读盘（非整段注入）** | 注册表/Goal 不一致已记 | `cursor_hooks/` 内 `hydrate_goal_gate_from_disk`：读 `GOAL_STATE` + `EVIDENCE_INDEX` **布尔/摘要**补全门控，与「把整份 EVIDENCE 贴进 prompt」不同；但若 **agent 或用户** `read_file` 全文件仍属 Tier0 误用 |
 
 ---
 
@@ -77,9 +77,9 @@
 | 变量 | 模块 | 与上下文关系 |
 |------|------|----------------|
 | `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` | `codex_hooks.rs` | Codex `additionalContext` **硬 cap**（文档已列为窄域例外） |
-| `ROUTER_RS_CURSOR_SESSION_NAMESPACE` / `WORKSPACE_ROOT` / `TERMINAL_KILL_MODE` / `KILL_STALE_TERMINALS` | `cursor_hooks.rs` | 多为路径/终端生命周期，非 prompt 体积主因 |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` 等 | `cursor_hooks.rs` | pre-goal 次数 cap，影响 beforeSubmit **条数** |
-| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` / `HOOK_SILENT` / `MAX_OPEN_SUBAGENTS` / `OPEN_SUBAGENT_STALE_AFTER_SECS` | `cursor_hooks.rs` | 门控与静默剥离；SILENT 对含 `REVIEW_GATE` 等关键字 **保留**（见 harness §8） |
+| `ROUTER_RS_CURSOR_SESSION_NAMESPACE` / `WORKSPACE_ROOT` / `TERMINAL_KILL_MODE` / `KILL_STALE_TERMINALS` | `cursor_hooks/` | 多为路径/终端生命周期，非 prompt 体积主因 |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` 等 | `cursor_hooks/` | pre-goal 次数 cap，影响 beforeSubmit **条数** |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` / `HOOK_SILENT` / `MAX_OPEN_SUBAGENTS` / `OPEN_SUBAGENT_STALE_AFTER_SECS` | `cursor_hooks/` | 门控与静默剥离；SILENT 对含 `REVIEW_GATE` 等关键字 **保留**（见 harness §8） |
 | `ROUTER_RS_CLOSEOUT_ENFORCEMENT` | `framework_runtime/mod.rs` | CI/本地 closeout 硬软路径 |
 | `ROUTER_RS_GENERATOR_TIMEOUT_SECONDS` / `ROUTER_RS_BIN` | `host_integration.rs` | 生成/路径，非 prompt |
 | `ROUTER_RS_STORAGE_ROOT` | `runtime_storage.rs` | 存储根 |
@@ -133,7 +133,7 @@ cd /Users/joe/Documents/skill
 printenv | grep -E '^ROUTER_' || true
 
 # 符号定位（本报告 §2–§5）
-rg -n "merge_additional_context|codex_additional_context_max_chars|MAX_POST_TOOL_EVIDENCE" scripts/router-rs/src/cursor_hooks.rs scripts/router-rs/src/codex_hooks.rs scripts/router-rs/src/framework_runtime/mod.rs
+rg -n "merge_additional_context|codex_additional_context_max_chars|MAX_POST_TOOL_EVIDENCE" scripts/router-rs/src/cursor_hooks/ scripts/router-rs/src/codex_hooks.rs scripts/router-rs/src/framework_runtime/mod.rs
 rg -n "router_rs_goal_prompt_verbose|build_autopilot_drive_followup|build_rfv_loop_followup" scripts/router-rs/src/router_env_flags.rs scripts/router-rs/src/autopilot_goal.rs scripts/router-rs/src/rfv_loop.rs
 rg -n "std::env::var\(.*ROUTER" scripts/router-rs/src --glob "*.rs"
 
@@ -171,7 +171,7 @@ rg -n "std::env::var\(.*ROUTER" scripts/router-rs/src --glob "*.rs"
 | 步骤 | 结果 |
 |------|------|
 | `printenv \| grep -E '^ROUTER_'` | **无输出**（未设置 `ROUTER_*`；与默认矩阵一致，与 [context_token_audit_build_report.md](context_token_audit_build_report.md) §1 一致） |
-| `rg merge_additional_context\|codex_additional_context_max_chars\|MAX_POST_TOOL_EVIDENCE`（三文件） | 命中 `cursor_hooks.rs:1411` 及多处 `merge_additional_context` 调用点；`codex_hooks.rs:101/681`；`framework_runtime/mod.rs:913/1026-1027`（常量 **120**） |
+| `rg merge_additional_context\|codex_additional_context_max_chars\|MAX_POST_TOOL_EVIDENCE`（三路径） | 命中 `cursor_hooks/` 内多处 `merge_additional_context` 调用点；`codex_hooks.rs:101/681`；`framework_runtime/mod.rs:913/1026-1027`（常量 **120**） |
 
 ### 10.2 阶段 B — `EVIDENCE_INDEX.json` 体积（`/usr/bin/find`）
 
@@ -297,7 +297,7 @@ A  skills/statistical-analysis/references/causal-prereg.md
 | 检查项 | 结果 |
 |--------|------|
 | `printenv \| grep -E '^ROUTER_'` | **无输出**（与 §10.1 一致） |
-| `rg`：`merge_additional_context` / `codex_additional_context_max_chars` / `MAX_POST_TOOL_EVIDENCE` | 行号与 §10.1 一致（`cursor_hooks.rs:1411`；`codex_hooks.rs:101/681`；`framework_runtime/mod.rs:913/1026-1027`） |
+| `rg`：`merge_additional_context` / `codex_additional_context_max_chars` / `MAX_POST_TOOL_EVIDENCE` | 语义与 §10.1 一致（`cursor_hooks/` 内多处；`codex_hooks.rs:101/681`；`framework_runtime/mod.rs:913/1026-1027`） |
 | `rg`：§7 另两条（`router_rs_goal_prompt_verbose` / `std::env::var(.*ROUTER`） | 已执行，命中集与 §5 / §3 叙述一致 |
 
 ### 11.2 阶段 B — `EVIDENCE_INDEX.json`

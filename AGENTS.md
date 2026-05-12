@@ -72,7 +72,8 @@
 
 - 主线程始终负责上下文判断、阻塞项、共享决策、集成与最终验证。
 - Codex CLI 及未加载 Cursor rules 的环境：默认主线程本地执行；只有用户显式要求 subagent、delegation、parallel agent work、多 agent、分路、分头、并行，或显式调用 `/autopilot` 时，才进入 bounded sidecar admission。
-- review 请求是独立上下文授权：深度 / 全面 / 全仓 / 跨模块 / PR 级 review 必须先启动只读 `fork_context=false` reviewer subagent，再由主线程整合；不得用模型自写拒因跳过，只有用户明确要求不用子代理时除外。
+- review 请求是独立上下文授权：深度 / 全面 / 全仓 / 跨模块 / PR 级 review 必须先启动只读 `fork_context=false` reviewer subagent，再由主线程整合；不得用模型自写拒因跳过，只有用户明确要求不用子代理时除外。**各宿主默认可清点的深度 reviewer lane 分列**见 [`docs/harness_architecture.md`](docs/harness_architecture.md) **§5.0**（勿假设三宿主使用同一 `subagent_type` 字符串）。
+- 用户请求 **review / 代码审查**（代码与改动面）且**未被更窄 owner 抢占**（例如纯截图或 UI 视觉证据、手稿/论文主线、仅 GitHub PR review comment 处置作为第一目标）时，**默认**遵循 [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)：**verdict-first**、**严重程度证据门槛**、从技能内透镜目录 **自选 lane** 并在已选维度内系统化穷尽；并行只读子代理按所选 lens 拆分整合。**勿**在 `AGENTS.md` 维护第二份 lens 清单。
 - Cursor 工作区的 review gate / 执行偏好差异由 `.cursor/rules/*.mdc` 补充；这些文件只保留 Cursor 独有硬约束与差异。
 - 适合 subagent：高噪音搜索、日志整理、独立风险审查、互不重叠的文件级实现。
 - 不适合 subagent：小任务、共享上下文重、顺序依赖、写入范围重叠、验证缺失、用户要求本地处理。
@@ -82,6 +83,8 @@
 ## Closeout
 
 - 收口必须给出证据：测试、命令、diff、截图、生成产物或明确 blocker。
+- **分层**：上述证据优先落在工件与记录（如 closeout record、`EVIDENCE_INDEX`、会话摘要文件、测试输出），并满足程序化门禁与诚实要求；**不等于**必须在面向用户的聊天回复里长篇罗列路径、diff 或命令全文。
+- **可见收尾口吻**：结束前用几句自然话带过就好——交代清楚这轮做了什么、结果怎样、还有没有悬而未决的、你是想先收工还是需要对方接着做哪一步；少用「条目体」话术，别把路径清单、长 diff、整段命令默认贴进聊天，除非对方点名要或为排错所必需。
 - 如果没有运行验证，要说明原因和剩余风险，不把未验证状态说成完成。
 - `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 的软硬门禁细节见 `docs/harness_architecture.md`；本文件只保留“必须如实给证据”这个不变量。
 - 发现与当前任务无关的脏工作区改动时只报告，不回滚、不顺手整理。

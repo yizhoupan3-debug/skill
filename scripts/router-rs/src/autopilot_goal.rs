@@ -1,6 +1,7 @@
 //! Autopilot 宏目标：Rust 真源 `GOAL_STATE.json` + stdio 控制面 + Cursor hook 续跑提示。
 //! 不替代 LLM 执行，但把「未完成不得停」写成可校验文件态并由 hook 注入跟进。
 
+use crate::atomic_write::write_atomic_json;
 use crate::framework_runtime::resolve_repo_root_arg;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
@@ -21,27 +22,6 @@ fn autopilot_drive_hook_enabled() -> bool {
     // P1-E: aggregate kill-switch first.
     router_rs_operator_inject_globally_enabled()
         && router_rs_env_enabled_default_true(AUTOPILOT_DRIVE_HOOK_ENV)
-}
-
-fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory failed: {err}"))?;
-    }
-    let text = serde_json::to_string_pretty(value)
-        .map_err(|err| format!("serialize GOAL_STATE failed: {err}"))?;
-    let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, text)
-        .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        format!(
-            "rename temp file failed {} -> {}: {err}",
-            tmp_path.display(),
-            path.display()
-        )
-    })?;
-    Ok(())
 }
 
 /// 从 `artifacts/current/active_task.json` 读取 `task_id`。
@@ -353,6 +333,21 @@ fn goal_requires_completion_evidence(state: &Value) -> bool {
         || value_has_nonempty_string_item(state.get("done_when"))
 }
 
+fn resolve_framework_autopilot_goal_repo(payload: &Value) -> Result<PathBuf, String> {
+    let repo_root = payload
+        .get("repo_root")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .ok_or_else(|| "framework_autopilot_goal requires repo_root".to_string())?;
+    if !repo_root.is_dir() {
+        return Err(format!(
+            "framework_autopilot_goal: repo_root is not a directory: {}",
+            repo_root.display()
+        ));
+    }
+    resolve_repo_root_arg(Some(repo_root.as_path()))
+}
+
 /// stdio / CLI：`framework_autopilot_goal`
 pub fn framework_autopilot_goal(payload: Value) -> Result<Value, String> {
     let operation = payload
@@ -364,7 +359,8 @@ pub fn framework_autopilot_goal(payload: Value) -> Result<Value, String> {
     if operation == "status" {
         framework_autopilot_goal_impl(payload)
     } else {
-        crate::task_write_lock::apply_task_ledger_mutation(|| {
+        let repo_root = resolve_framework_autopilot_goal_repo(&payload)?;
+        crate::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
             framework_autopilot_goal_impl(payload)
         })
     }

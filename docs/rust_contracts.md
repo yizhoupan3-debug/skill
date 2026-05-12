@@ -22,7 +22,7 @@ It is the contract source of truth for:
 
 ## Harness architecture (control plane)
 
-Upper-level layering for hooks, continuity artifacts, and evidence flows lives in [`harness_architecture.md`](harness_architecture.md) (L1–L5 model, extension rules). **Closed-set host ids** and install/sync alignment with manifests: `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` (see [`host_adapter_contract.md`](host_adapter_contract.md)). Operator nudge strings for RFV / Autopilot hooks are loaded from `configs/framework/HARNESS_OPERATOR_NUDGES.json` (`harness_operator_nudges`); default hook output only uses compact status nudges, while long math/retrieval/strict hints stay in docs/schema. **Cursor review-routing regexes** ship as **`include_str!("…/REVIEW_ROUTING_SIGNALS.json")`** in `review_routing_signals.rs` (build-time snapshot; changing the JSON on disk alone does not change hook behavior until `router-rs` is rebuilt). Rust contracts below remain the implementation authority.
+Upper-level layering for hooks, continuity artifacts, and evidence flows lives in [`harness_architecture.md`](harness_architecture.md) (L1–L5 model, extension rules). **Closed-set host ids** and install/sync alignment with manifests: `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` (see [`host_adapter_contract.md`](host_adapter_contract.md)). Operator nudge strings for RFV / Autopilot hooks are loaded from `configs/framework/HARNESS_OPERATOR_NUDGES.json` (`harness_operator_nudges`); default hook output only uses compact status nudges, while long math/retrieval/strict hints stay in docs/schema. **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`** and **`ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE`** both use **`router_rs_env_enabled_default_false`** (`scripts/router-rs/src/router_env_flags.rs`): only `1`/`true`/`yes`/`on` disables the gate; other non-empty values leave it enabled. **Cursor review-routing regexes** ship as **`include_str!("…/REVIEW_ROUTING_SIGNALS.json")`** in `review_routing_signals.rs` (build-time snapshot; changing the JSON on disk alone does not change hook behavior until `router-rs` is rebuilt). Rust contracts below remain the implementation authority.
 
 ## Current Boundary
 
@@ -31,7 +31,8 @@ Rust owns the default runtime and contract path.
 - `router-rs route <query>` owns route decisions; route diagnostics use the Rust stdio route policy/report operations.
 - `router-rs profile emit` and `router-rs profile artifacts` own the shared framework profile plus explicit Codex projection artifacts.
 - Rust stdio `execute` operation owns the live/dry-run execution response contract.
-- `router-rs framework snapshot`, `contract-summary`, `session-artifact-write`, `hook-evidence-append`, and `prompt-compression` own framework runtime read/write/policy surfaces. Cursor `PostToolUse` may append `cursor_post_tool_verification` rows (terminal tools + verification-shaped commands) alongside Codex `codex_post_tool_verification` and `rust-lint`’s `cursor_rust_lint` hook evidence.
+- `router-rs framework snapshot`, `contract-summary`, `session-artifact-write`, `hook-evidence-append`, and `prompt-compression` own framework runtime read/write/policy surfaces. Cursor `PostToolUse` normalizes stdin via `hook_posttool_normalize::synthetic_post_tool_evidence_shape` before append and may emit `cursor_post_tool_verification` rows (terminal tools + verification-shaped commands) alongside Codex `codex_post_tool_verification` and `rust-lint`’s `cursor_rust_lint` hook evidence.
+- Cursor `review_gate` / Codex **`codex hook`** 出站 JSON 可含顶层 **`router_rs_observation`**（`scripts/router-rs/src/router_rs_observation.rs`）；可选 `correlation.session_id` / `correlation.task_id`。
 - Stdio op `framework_hook_evidence_append` mirrors `router-rs framework hook-evidence-append --input-json …` for scripted callers appending rows to `EVIDENCE_INDEX.json` under continuity (same payload shape as the CLI).
 - `router-rs codex sync` remains the compatibility CLI for repo host-entrypoint materialization; internally, `host_entrypoint_sync` is the shared sync engine and `codex_hooks` supplies the `codex provider` for `.codex/hooks.json`, `AGENTS.md` bootstrap, and Codex skill surface refresh. Full sync applies to the current root; matched sibling worktrees receive JSON hook/manifest updates only, so local policy text entrypoints are not overwritten across worktrees.
 - `router-rs framework host-integration ...` owns native install/status/remove, bootstrap, projection, and related host integration flows. `router-rs codex host-integration ...` is a thin compatibility alias only.
@@ -125,6 +126,13 @@ Runtime control-plane payloads must keep these owner markers stable:
 - `rust-framework-runtime-read-model`
 - `rust-framework-session-artifact-writer`
 - `rust-framework-prompt-policy`
+
+## Portability and environment (`router-rs`)
+
+- **Non-Unix**: Hook helpers that depend on POSIX process semantics (for example lock staleness or `kill(pid, 0)`) use conservative defaults under `cfg(not(unix))` so builds stay green; behavior may differ from Linux/macOS until those paths are specialized.
+- **`libc` and `unsafe`**: Codex/Cursor hooks use narrow `unsafe` blocks for `flock`, `kill`, and related syscalls. Call sites are responsible for invariants; errors surface as structured hook outcomes, not panics, except where tests explicitly exercise failure injection.
+- **`ROUTER_RS_*` flags**: Parsing, default-on/default-off policy, and naming for environment toggles should stay in [`scripts/router-rs/src/router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs) so new flags do not sprawl across the crate.
+- **Browser MCP**: Steady-state control for Browser MCP stdio in this repo is the Rust implementation (`scripts/router-rs/src/browser_mcp/` and CLI wiring). The [`tools/browser-mcp/`](../tools/browser-mcp/) TypeScript package is auxiliary (for example dev or replay); treat Rust as the default product path unless documentation explicitly scopes a TS-only workflow.
 
 ## External Benchmark
 

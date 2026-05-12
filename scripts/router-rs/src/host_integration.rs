@@ -2086,7 +2086,7 @@ fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathB
 fn build_router_rs_claude_hook_command(event: &str) -> String {
     let missing_binary_fallback = "printf \"%s\\n\" \"{\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"router-rs binary unavailable for Claude hook\\\",\\\"suppressOutput\\\":true}\"; exit 1";
     format!(
-        "/usr/bin/env bash -lc 'HOOK_PAYLOAD=\"$(cat)\"; if printf \"%s\" \"$HOOK_PAYLOAD\" | grep -Eq \"\\\"cursor_version\\\"|\\\"workspace_roots\\\"|/\\\\.cursor/|\\\\\\\\\\\\.cursor\\\\\\\\\"; then printf \"%s\\n\" \"{{\\\"suppressOutput\\\":true}}\"; exit 0; fi; CLAUDE_PROJECT_ROOT=\"${{CLAUDE_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; if [[ -r \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\" ]]; then set -a; . \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\"; set +a; fi; ROUTER_RS_BIN=\"\"; for candidate in \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/debug/router-rs\" \"$(command -v router-rs 2>/dev/null || true)\"; do if [ -n \"$candidate\" ] && [ -x \"$candidate\" ] && \"$candidate\" claude hook --help >/dev/null 2>&1; then ROUTER_RS_BIN=\"$candidate\"; break; fi; done; if [ ! -x \"$ROUTER_RS_BIN\" ]; then {missing_binary_fallback}; fi; printf \"%s\" \"$HOOK_PAYLOAD\" | \"$ROUTER_RS_BIN\" claude hook --event={event} --repo-root \"$CLAUDE_PROJECT_ROOT\"'"
+        "/usr/bin/env bash -lc 'HOOK_PAYLOAD=\"$(cat)\"; CLAUDE_PROJECT_ROOT=\"${{CLAUDE_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; if [[ -r \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\" ]]; then set -a; . \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\"; set +a; fi; ROUTER_RS_BIN=\"\"; for candidate in \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/debug/router-rs\" \"$(command -v router-rs 2>/dev/null || true)\"; do if [ -n \"$candidate\" ] && [ -x \"$candidate\" ] && \"$candidate\" claude hook --help >/dev/null 2>&1; then ROUTER_RS_BIN=\"$candidate\"; break; fi; done; if [ ! -x \"$ROUTER_RS_BIN\" ]; then {missing_binary_fallback}; fi; printf \"%s\" \"$HOOK_PAYLOAD\" | \"$ROUTER_RS_BIN\" claude hook --event={event} --repo-root \"$CLAUDE_PROJECT_ROOT\"'"
     )
 }
 
@@ -4050,6 +4050,10 @@ mod tests {
         assert!(
             cmd.contains("set -a"),
             "expected set -a for env sourcing: {cmd}"
+        );
+        assert!(
+            !cmd.contains("grep -Eq"),
+            "Cursor stdin prefilter must not short-circuit before router-rs (see claude_hooks payload_looks_like_cursor_hook_stdin): {cmd}"
         );
     }
 

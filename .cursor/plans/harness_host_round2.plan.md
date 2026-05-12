@@ -82,7 +82,7 @@ isProject: false
 
 ### P1 — 新宿主脚手架（可选，可与 P0 并行）
 
-- [ ] **P1.1** [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §3 增补 **路径表**：`cursor_hooks.rs`、`codex_hooks.rs`、`host_integration.rs`、`cli/dispatch`、`hooks.json`、[`RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) `metadata`。  
+- [ ] **P1.1** [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §3 增补 **路径表**：`cursor_hooks/`（`mod.rs`、`dispatch.rs`、`frag_*.rs`）、`codex_hooks.rs`、`host_integration.rs`、`cli/dispatch`、`hooks.json`、[`RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) `metadata`。  
 - [ ] **P1.2（可选）** `framework host scaffold --dry-run` —— defer 则写日期于本文件备注。
 
 ### P2 — `host_integration` 减法（可选）

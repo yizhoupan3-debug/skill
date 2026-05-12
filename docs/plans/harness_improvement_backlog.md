@@ -112,8 +112,8 @@
 
 ### P2-5：Cursor `additional_context` 无总 cap（弱模型 / 长会话噪声）
 
-- **做什么**：记录 Cursor 侧 `merge_additional_context` **无合并后总字符 cap** 的产品风险与缓解依赖（`retired silent-mode branch`、段落 strip 等）；可选后续增加 **`ROUTER_RS_*` 总 cap** 或宿主侧观测，属 **产品决策**，不在未立项前改 `cursor_hooks.rs` 默认行为。
-- **证据与路径**：[`context_token_audit_deep_dive.md`](context_token_audit_deep_dive.md) §2–§3；[`scripts/router-rs/src/cursor_hooks.rs`](../../scripts/router-rs/src/cursor_hooks.rs) `merge_additional_context`。
+- **做什么**：记录 Cursor 侧 `merge_additional_context` **无合并后总字符 cap** 的产品风险与缓解依赖（`retired silent-mode branch`、段落 strip 等）；可选后续增加 **`ROUTER_RS_*` 总 cap** 或宿主侧观测，属 **产品决策**，不在未立项前改 `cursor_hooks/` 默认行为。
+- **证据与路径**：[`context_token_audit_deep_dive.md`](context_token_audit_deep_dive.md) §2–§3；[`scripts/router-rs/src/cursor_hooks/mod.rs`](../../scripts/router-rs/src/cursor_hooks/mod.rs)（同目录 `frag_*.rs` 内含 `merge_additional_context`，以 `rg` 为准）。
 - **Done when**：本小节可被 `docs/plans/RESEARCH_harness_weak_model_top_tier.md` / `docs/harness_architecture.md` §6 指针命中；执行 execution 时优先 **文档 + preset** 再议 cap。
 - **Verify**：`rg -n 'merge_additional_context|cursor_hooks|context_token_audit' docs/plans/harness_improvement_backlog.md docs/plans/context_token_audit_deep_dive.md`。
 

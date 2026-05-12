@@ -1099,6 +1099,53 @@ fn install_codex_user_hooks(args: InstallCodexUserHooksArgs) -> Result<(), Strin
     Ok(())
 }
 
+fn clean_rust_target_dirs(repo_root: &Path) -> Result<(), String> {
+    clean_targets_walk(repo_root)?;
+    Ok(())
+}
+
+fn clean_targets_walk(path: &Path) -> Result<(), String> {
+    if path.file_name().and_then(|n| n.to_str()) == Some(".git") {
+        return Ok(());
+    }
+    if path.file_name().and_then(|n| n.to_str()) == Some("target") && path.is_dir() {
+        fs::remove_dir_all(path).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    if path.is_dir() {
+        let read = fs::read_dir(path).map_err(|e| e.to_string())?;
+        for ent in read {
+            clean_targets_walk(&ent.map_err(|e| e.to_string())?.path())?;
+        }
+    }
+    Ok(())
+}
+
+fn run_cargo(repo_root: &Path, args: &[&str]) -> Result<(), String> {
+    let status = Command::new("cargo")
+        .args(args)
+        .current_dir(repo_root)
+        .status()
+        .map_err(|e| format!("cargo spawn failed: {e}"))?;
+    if !status.success() {
+        return Err(format!("cargo failed with {status}"));
+    }
+    Ok(())
+}
+
+fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let status = Command::new(&exe)
+        .args(args)
+        .current_dir(repo_root)
+        .status()
+        .map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err(format!("router-rs {} failed: {status}", args.join(" ")));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1149,51 +1196,4 @@ mod tests {
             "{err}"
         );
     }
-}
-
-fn clean_rust_target_dirs(repo_root: &Path) -> Result<(), String> {
-    clean_targets_walk(repo_root)?;
-    Ok(())
-}
-
-fn clean_targets_walk(path: &Path) -> Result<(), String> {
-    if path.file_name().and_then(|n| n.to_str()) == Some(".git") {
-        return Ok(());
-    }
-    if path.file_name().and_then(|n| n.to_str()) == Some("target") && path.is_dir() {
-        fs::remove_dir_all(path).map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    if path.is_dir() {
-        let read = fs::read_dir(path).map_err(|e| e.to_string())?;
-        for ent in read {
-            clean_targets_walk(&ent.map_err(|e| e.to_string())?.path())?;
-        }
-    }
-    Ok(())
-}
-
-fn run_cargo(repo_root: &Path, args: &[&str]) -> Result<(), String> {
-    let status = Command::new("cargo")
-        .args(args)
-        .current_dir(repo_root)
-        .status()
-        .map_err(|e| format!("cargo spawn failed: {e}"))?;
-    if !status.success() {
-        return Err(format!("cargo failed with {status}"));
-    }
-    Ok(())
-}
-
-fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let status = Command::new(&exe)
-        .args(args)
-        .current_dir(repo_root)
-        .status()
-        .map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err(format!("router-rs {} failed: {status}", args.join(" ")));
-    }
-    Ok(())
 }

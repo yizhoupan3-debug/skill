@@ -360,7 +360,9 @@ fn temp_dir_path(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("clock before epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("router-rs-{name}-{nonce}"))
+    let path = std::env::temp_dir().join(format!("router-rs-{name}-{nonce}"));
+    fs::create_dir_all(&path).expect("create temp dir");
+    path
 }
 
 fn write_text_fixture(path: &Path, content: &str) {

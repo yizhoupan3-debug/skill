@@ -4,12 +4,16 @@
 //! continuity classification logic extracted from `framework_runtime/mod.rs`.
 
 use super::constants::*;
+use super::json_io::{read_json_if_exists, read_json_strict, read_text_if_exists};
+use super::json_value::{
+    first_nonempty, join_lines, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
+    value_string_list, value_text,
+};
 use super::types::*;
 
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use serde_json::{json, Map, Value};
 use std::collections::HashSet;
-use std::fs;
 use std::ops::Not;
 use std::path::{Path, PathBuf};
 
@@ -511,26 +515,6 @@ pub(super) fn workspace_name_from_root(repo_root: &Path) -> String {
         .to_string()
 }
 
-pub(super) fn read_json_if_exists(path: &Path) -> Value {
-    if !path.is_file() {
-        return Value::Object(Map::new());
-    }
-    match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| Value::Object(Map::new())),
-        Err(_) => Value::Object(Map::new()),
-    }
-}
-
-fn read_json_strict(path: &Path) -> Result<Value, String> {
-    if !path.is_file() {
-        return Ok(Value::Object(Map::new()));
-    }
-    let text = fs::read_to_string(path)
-        .map_err(|err| format!("read json failed for {}: {err}", path.display()))?;
-    serde_json::from_str(&text)
-        .map_err(|err| format!("parse json failed for {}: {err}", path.display()))
-}
-
 pub(super) fn read_json_control_plane_field(
     path: &Path,
     label: &str,
@@ -549,10 +533,6 @@ pub(super) fn read_json_control_plane_field(
             Value::Object(Map::new())
         }
     }
-}
-
-pub(super) fn read_text_if_exists(path: &Path) -> String {
-    fs::read_to_string(path).unwrap_or_default()
 }
 
 fn object_field(map: &Map<String, Value>, key: &str) -> Map<String, Value> {
@@ -1078,94 +1058,4 @@ fn looks_same_identity(left: &str, right: &str) -> bool {
     left_token == right_token
         || left_token.contains(&right_token)
         || right_token.contains(&left_token)
-}
-
-fn join_lines(values: &[String]) -> String {
-    values
-        .iter()
-        .filter(|item| !item.trim().is_empty())
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(" / ")
-}
-
-fn safe_slug(value: &str) -> String {
-    let mut slug = String::new();
-    let mut last_dash = false;
-    for ch in value.chars() {
-        if ch.is_alphanumeric() || matches!(ch, '_' | '.' | '-') {
-            slug.push(ch);
-            last_dash = false;
-        } else if !last_dash {
-            slug.push('-');
-            last_dash = true;
-        }
-    }
-    slug.trim_matches(|ch| matches!(ch, '.' | '_' | '-'))
-        .to_string()
-}
-
-fn value_text(value: Option<&Value>) -> String {
-    match value {
-        Some(Value::String(text)) => text.trim().to_string(),
-        Some(Value::Number(number)) => number.to_string(),
-        Some(Value::Bool(flag)) => flag.to_string(),
-        Some(Value::Null) | None => String::new(),
-        Some(other) => other.to_string(),
-    }
-}
-
-fn nonempty_string(value: Option<&Value>) -> Option<String> {
-    let text = value_text(value);
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
-}
-
-fn value_bool_or_none(value: Option<&Value>) -> Option<bool> {
-    match value {
-        Some(Value::Bool(flag)) => Some(*flag),
-        Some(Value::String(text)) => match text.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" | "yes" => Some(true),
-            "false" | "0" | "no" => Some(false),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn value_string_list(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn first_nonempty(values: &[String]) -> String {
-    values
-        .iter()
-        .find(|value| !value.trim().is_empty())
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn stable_line_items(items: Vec<String>) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut result = Vec::new();
-    for item in items {
-        let value = item.trim().to_string();
-        if value.is_empty() || !seen.insert(value.clone()) {
-            continue;
-        }
-        result.push(value);
-    }
-    result
 }

@@ -1,5 +1,7 @@
 # 死代码与冗余设计调研 Findings（减法 / 第一性原理）
 
+**路径说明（2026-05）**：下文「`cursor_hooks.rs`」均指重构前的单文件形态；现为 [`scripts/router-rs/src/cursor_hooks/`](../../scripts/router-rs/src/cursor_hooks/mod.rs) 目录（`mod.rs` + `frag_*.rs` + `dispatch.rs`）。
+
 **日期**：2026-05-11  
 **范围**：仓库内 `router-rs`、框架 JSON、宿主集成、`tools/browser-mcp`；对照 `docs/history/` 归档清单。  
 **非目标**：本文件不执行删除 PR；结论以静态证据为准，动态覆盖率未测。
@@ -37,7 +39,7 @@
 | 文件 | 行级线索 | 类别 | 结论 |
 |------|-----------|------|------|
 | `framework_runtime/mod.rs` | 528–592, 700–704, 800–900+, 1394–1766 等大量 `allow(dead_code)` | **duplicate-island** | 与 `runtime_view.rs`、`session_artifacts.rs` 中**同名能力重复**；`load_framework_runtime_view` 已委托 `runtime_view::load_framework_runtime_view`（`mod.rs:377-382`），本模块内死区函数**无外部调用**。 |
-| `cursor_hooks.rs` | 3055–3079 `read_json_strict`、`truncate_utf8_chars` | **duplicate** | 仅定义；正文使用 `truncate_utf8_chars_local`（3119/3138）。`read_json_strict` **零引用**。 |
+| `cursor_hooks/`（重构前单行号，仅归档） | 3055–3079（历史） `read_json_strict`、`truncate_utf8_chars` | **duplicate** | 仅定义；正文使用 `truncate_utf8_chars_local`（3119/3138）。`read_json_strict` **零引用**。 |
 | `closeout_enforcement.rs` | 25/41/60 整 struct、`CloseoutEvidenceContext` 327 | **serde / reserved** | 字段由 serde 与 `evaluate_closeout_record*` 路径消费；`evidence_rows_non_empty` 在 `framework_runtime/mod.rs`、`task_state` 等有赋值。`allow(dead_code)` 多为消除「仅反序列化使用」警告。 |
 | `eval_route.rs` | 15/27/34 | **fixture** | 注释已说明 fixture 元数据。 |
 | `cli/runtime_ops.inc` | 1749 `copy_text_to_clipboard` | **integration-test** | 注释写明保留给集成测试；`main_tests.rs:521` 调用。 |
@@ -47,7 +49,7 @@
 ### 2.2 P0 结论（高置信死代码 / 可删候选）
 
 1. **`framework_runtime/mod.rs` 大段重复逻辑**：`write_session_artifact_set`、`authoritative_route`、`normalize_supervisor_state`、`read_json_if_exists`（返回 `Value` 的包装）等与子模块 live 实现并存；属于典型合并残留，**删除前**需单次 PR 内 `rustfmt` + 全量 `cargo test` + 确认无 `pub use` 依赖这些私有符号。
-2. **`cursor_hooks.rs`**：`read_json_strict`、`truncate_utf8_chars` 为未使用副本，可与 `hook_common` 或单一 truncate 工具合并删除。
+2. **`cursor_hooks/`（原 `cursor_hooks.rs`）**：`read_json_strict`、`truncate_utf8_chars` 为未使用副本，可与 `hook_common` 或单一 truncate 工具合并删除。
 
 ### 2.3 P1 / P2
 
@@ -125,7 +127,7 @@
 | 等级 | 项 | 建议动作 |
 |------|-----|----------|
 | **P0** | `framework_runtime/mod.rs` 死区函数岛 | 单 PR 删除重复私有函数，委托唯一 `runtime_view` / `session_artifacts` |
-| **P0** | `cursor_hooks.rs` 未用 `read_json_strict` / `truncate_utf8_chars` | 删除或合并到公共 util |
+| **P0** | `cursor_hooks/` 未用 `read_json_strict` / `truncate_utf8_chars` | 删除或合并到公共 util |
 | **P1** | TS browser-mcp `runtime.ts` 与 Rust stdio 双轨 | 文档声明默认路径 + 可选降级 CI；长期收敛 replay 只保留一侧 |
 | **P1** | tiers/loadouts 与 surface policy 三份结构 | compiler/测试驱动的合并设计，非静默删文件 |
 | **P2** | `closeout_enforcement` struct 级 dead_code allow | 收紧到字段级或测试模块 |
@@ -136,7 +138,7 @@
 ## 7. 建议下一实现波次（≤5 条）
 
 1. **P0（done）**：已删除 `framework_runtime/mod.rs` 中与 `runtime_view.rs` / `session_artifacts.rs` 重复的 `#[allow(dead_code)]` 私有函数岛及仅被其使用的 `write_text_if_changed` / `write_json_if_changed` 包装层；保留 `normalize_task_registry_rows`、`read_json_strict`、`is_terminal`、`normalize_evidence_index` 等仍被子模块或本模块热路径使用的符号。
-2. **P0（done）**：已删除 `cursor_hooks.rs` 内未引用的 `read_json_strict` 与 `truncate_utf8_chars`。
+2. **P0（done）**：已删除 `cursor_hooks/` 目录内（原单体文件迁移后）未引用的 `read_json_strict` 与 `truncate_utf8_chars`。
 3. **P1**：为 `tools/browser-mcp` 增加「默认宿主仅 Rust stdio」的 README/CI 声明，并列出 TS pool 的允许场景（dev-only 或 replay-only）。
 4. **P1**：若要做 loadouts/tiers 减法，先改 `skill-compiler-rs` + `tests/policy_contracts.rs` 的契约，再删生成物。
 5. **P2**：`runtime_storage.rs` 专盘审计（legacy key / sqlite 默认策略）与历史 §3 对齐。
@@ -183,5 +185,5 @@ rg -n "browser-mcp|browser_mcp" scripts/router-rs/src tools/browser-mcp
 | 项 | 动作 | 验证 |
 |----|------|------|
 | `framework_runtime/mod.rs` | 移除与子模块重复的 dead 私有函数、`chrono` 未用 import、冗余 `write_*` 包装；收紧 `constants` / `types` import | `cargo test --manifest-path scripts/router-rs/Cargo.toml`；`cargo clippy … -D warnings` |
-| `cursor_hooks.rs` | 移除未调用 `read_json_strict`、`truncate_utf8_chars` | 同上 |
+| `cursor_hooks/` | 移除未调用（历史记录） `read_json_strict`、`truncate_utf8_chars` | 同上 |
 | §7 第 3–5 条 | **defer** 至后续 PR（browser-mcp 文档、tiers/loadouts 契约、`runtime_storage` 审计） | 未改对应路径 |
