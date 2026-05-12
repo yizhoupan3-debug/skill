@@ -36,7 +36,7 @@ isProject: false
 
 ## 结论（对抗式但基于代码）
 
-**L2/L3 在叙事与多数实现上已与具体 IDE 解耦**（单一 `artifacts/current`、同一套 `framework_*` / `closeout` / `task_state`）；**L4 安装与 CLI 分发仍显著「双宿主形状」**：`host_integration.rs` 的 `canonical_tool_name` 仅识别 `codex`/`cursor`，`framework host-integration install` 的 `--to` 分支与投影路径大量手写；`codex_hooks.rs` 与 `cursor_hooks.rs` 为平行模块而非插件 ABI——这在工程上可接受，但**不等于**「任意第三宿主零成本插入」。要做到「新宿主完美享受全部能力」且「旧宿主零感知」，必须：**新增平行 L4 薄壳 + 复用 L3**，并对「工具名解析」等横切点做 **registry 数据驱动**，避免每加一个宿主就改一串 `match`。
+**L2/L3 在叙事与多数实现上已与具体 IDE 解耦**（单一 `artifacts/current`、同一套 `framework_*` / `closeout` / `task_state`）；**L4 安装与 CLI 分发仍显著「双宿主形状」**：`host_integration.rs` 的 `canonical_tool_name` 仅识别 `codex`/`cursor`，`framework host-integration install` 的 `--to` 分支与投影路径大量手写；`codex_hooks.rs` 与 `cursor_hooks/`（`mod.rs`、`dispatch.rs`、`frag_*.rs`）为平行宿主适配面而非插件 ABI——这在工程上可接受，但**不等于**「任意第三宿主零成本插入」。要做到「新宿主完美享受全部能力」且「旧宿主零感知」，必须：**新增平行 L4 薄壳 + 复用 L3**，并对「工具名解析」等横切点做 **registry 数据驱动**，避免每加一个宿主就改一串 `match`。
 
 ## 零影响约束（硬）
 

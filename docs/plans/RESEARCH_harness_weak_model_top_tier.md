@@ -36,7 +36,7 @@
 **失效模式（弱模型更痛）**
 
 1. **Codex**：合并后整段 `additionalContext` 被 **硬截断**（换行优先 + `...`），弱模型可能 **读不到** 续跑/Goal 尾部 → 丢步骤或重复问状态。证据：`codex_hooks.rs` `truncate_codex_additional_context`。
-2. **Cursor**：**无合并总 cap**，弱模型反受 **噪声膨胀** 影响（长会话多路径 `merge_additional_context`）。证据：`cursor_hooks.rs` L1435–1446。
+2. **Cursor**：**无合并总 cap**，弱模型反受 **噪声膨胀** 影响（长会话多路径 `merge_additional_context`）。证据：`cursor_hooks/` 内合并路径（单行号已废弃；见 `merge_additional_context` 的 `rg` 命中）。
 3. **闸断认知负荷**：`ROUTER_RS_OPERATOR_INJECT=0` 关续跑，但 digest 仍可有 **深度 rollup 行**（与 harness §8 一致），弱模型易 **误判「已关深度」**。证据：`docs/harness_architecture.md` §8 脚注。
 4. **verbose 续跑**：`retired verbose followup mode` 放大 Goal/RFV followup 与 digest Goal 段；弱模型 token 预算更紧。证据：TOKEN §1 表。
 5. **误用 Tier0**：若 agent `read_file` 整份 `EVIDENCE_INDEX`，与 hook「摘要注入」设计相悖，弱模型更易上下文爆炸。证据：TOKEN §1「账本 → 门控读盘」脚注。
@@ -125,7 +125,7 @@
 | Plan todo id | 状态 | 证据 |
 |---------------|------|------|
 | inherit-baseline | Done | 本文件 §2 |
-| internal-weak-context | Done | §3 + `codex_hooks.rs` / `cursor_hooks.rs` / `continuity_digest.rs` |
+| internal-weak-context | Done | §3 + `codex_hooks.rs` / `cursor_hooks/` / `continuity_digest.rs` |
 | internal-depth-gates | Done | §4 |
 | external-scaffold | Done | §5 + `curl -sI` |
 | synthesis-verdict | Done | §1、§6、§7 |
@@ -141,7 +141,7 @@
 
 ```bash
 rg -n "completion_gates|close_gates|DepthCompliance" scripts/router-rs/src/autopilot_goal.rs scripts/router-rs/src/rfv_loop.rs scripts/router-rs/src/task_state.rs | head -n 30
-rg -n "truncate|merge_additional_context|SessionStart|max_lines" scripts/router-rs/src/codex_hooks.rs scripts/router-rs/src/cursor_hooks.rs scripts/router-rs/src/framework_runtime/continuity_digest.rs | head -n 40
+rg -n "truncate|merge_additional_context|SessionStart|max_lines" scripts/router-rs/src/codex_hooks.rs scripts/router-rs/src/cursor_hooks/ scripts/router-rs/src/framework_runtime/continuity_digest.rs | head -n 40
 ```
 
 ---

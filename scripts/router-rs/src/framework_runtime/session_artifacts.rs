@@ -7,12 +7,16 @@ use super::constants::{
     SUPERVISOR_STATE_SCHEMA_VERSION, TASK_REGISTRY_NAME, TERMINAL_VERIFICATION_STATUSES,
     TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
 };
+use super::json_io::{read_json_strict, read_text_if_exists};
+use super::json_value::{
+    nonempty_string, safe_slug, value_bool_or_none, value_string_list, value_text,
+};
 use super::types::{
     ArtifactPaths, ArtifactPayloads, ContinuityJournalInput, SessionArtifactWritePlan,
     SupervisorStateInput, TaskRegistryEntry,
 };
 use chrono::{Local, SecondsFormat};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -41,31 +45,51 @@ impl SessionArtifactWritePlan {
     }
 }
 
+fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<PathBuf>, String> {
+    let rr = value_text(payload.get("repo_root"));
+    if rr.is_empty() {
+        return Ok(None);
+    }
+    let path = PathBuf::from(&rr);
+    if !path.is_dir() {
+        fs::create_dir_all(&path).map_err(|e| {
+            format!(
+                "framework session artifact writer: repo_root create_dir_all {} failed: {e}",
+                path.display()
+            )
+        })?;
+    }
+    Ok(Some(super::resolve_repo_root_arg(Some(path.as_path()))?))
+}
+
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
-    let _guard = crate::task_write_lock::task_ledger_write_lock()
-        .lock()
-        .map_err(|_| "task ledger write lock poisoned".to_string())?;
-    let closeout_evaluation = super::enforce_closeout_for_session_payload(&payload)?;
-    let mut plan = build_session_artifact_write_plan(&payload)?;
-    let sync_repo = plan.repo_root.clone();
-    let sync_tid = plan.task_id.clone();
-    write_primary_session_artifacts(&mut plan)?;
-    write_optional_session_mirror(&mut plan)?;
-    write_repo_session_focus(&mut plan)?;
-    let mut response = plan.into_response();
-    if let Some(ref root) = sync_repo {
-        if let Ok(resolved) = super::resolve_repo_root_arg(Some(root.as_path())) {
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                &resolved, &sync_tid,
-            );
+    let run = || -> Result<Value, String> {
+        let closeout_evaluation = super::enforce_closeout_for_session_payload(&payload)?;
+        let mut plan = build_session_artifact_write_plan(&payload)?;
+        let sync_repo = plan.repo_root.clone();
+        let sync_tid = plan.task_id.clone();
+        write_primary_session_artifacts(&mut plan)?;
+        write_optional_session_mirror(&mut plan)?;
+        write_repo_session_focus(&mut plan)?;
+        let mut response = plan.into_response();
+        if let Some(ref root) = sync_repo {
+            if let Ok(resolved) = super::resolve_repo_root_arg(Some(root.as_path())) {
+                crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                    &resolved, &sync_tid,
+                );
+            }
         }
-    }
-    if let Some(eval) = closeout_evaluation {
-        if let Some(obj) = response.as_object_mut() {
-            obj.insert("closeout_evaluation".to_string(), eval);
+        if let Some(eval) = closeout_evaluation {
+            if let Some(obj) = response.as_object_mut() {
+                obj.insert("closeout_evaluation".to_string(), eval);
+            }
         }
+        Ok(response)
+    };
+    match resolve_session_repo_root_for_task_ledger(&payload)? {
+        Some(resolved) => crate::task_write_lock::apply_task_ledger_mutation(&resolved, run),
+        None => run(),
     }
-    Ok(response)
 }
 
 fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactWritePlan, String> {
@@ -763,32 +787,8 @@ pub(super) fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, 
         fs::create_dir_all(parent)
             .map_err(|err| format!("create parent directory failed: {err}"))?;
     }
-    write_atomic_text(path, content)?;
+    crate::atomic_write::write_atomic_text(path, content)?;
     Ok(true)
-}
-
-pub(super) fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory failed: {err}"))?;
-    }
-    let tmp_path = path.with_extension(format!(
-        "{}.tmp",
-        path.extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("txt")
-    ));
-    fs::write(&tmp_path, content)
-        .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        format!(
-            "rename temp file failed {} -> {}: {err}",
-            tmp_path.display(),
-            path.display()
-        )
-    })?;
-    Ok(())
 }
 
 pub(super) fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
@@ -828,80 +828,6 @@ pub(super) fn assert_expected_file_hash(
         path.display(),
         current.unwrap_or_else(|| "<missing>".to_string())
     ))
-}
-
-pub(super) fn read_json_strict(path: &Path) -> Result<Value, String> {
-    if !path.is_file() {
-        return Ok(Value::Object(Map::new()));
-    }
-    let text = fs::read_to_string(path)
-        .map_err(|err| format!("read json failed for {}: {err}", path.display()))?;
-    serde_json::from_str(&text)
-        .map_err(|err| format!("parse json failed for {}: {err}", path.display()))
-}
-
-pub(super) fn read_text_if_exists(path: &Path) -> String {
-    fs::read_to_string(path).unwrap_or_default()
-}
-
-fn value_text(value: Option<&Value>) -> String {
-    match value {
-        Some(Value::String(text)) => text.trim().to_string(),
-        Some(Value::Number(number)) => number.to_string(),
-        Some(Value::Bool(flag)) => flag.to_string(),
-        Some(Value::Null) | None => String::new(),
-        Some(other) => other.to_string(),
-    }
-}
-
-fn value_bool_or_none(value: Option<&Value>) -> Option<bool> {
-    match value {
-        Some(Value::Bool(flag)) => Some(*flag),
-        Some(Value::String(text)) => match text.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" | "yes" => Some(true),
-            "false" | "0" | "no" => Some(false),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn nonempty_string(value: Option<&Value>) -> Option<String> {
-    let text = value_text(value);
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
-}
-
-fn value_string_list(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn safe_slug(value: &str) -> String {
-    let mut slug = String::new();
-    let mut last_dash = false;
-    for ch in value.chars() {
-        if ch.is_alphanumeric() || matches!(ch, '_' | '.' | '-') {
-            slug.push(ch);
-            last_dash = false;
-        } else if !last_dash {
-            slug.push('-');
-            last_dash = true;
-        }
-    }
-    slug.trim_matches(|ch| matches!(ch, '.' | '_' | '-'))
-        .to_string()
 }
 
 fn build_task_id(task: &str, created_at: Option<&str>) -> String {

@@ -1,0 +1,11 @@
+---
+description: Natural short close; no default evidence dumps in chat (Stop hook also nudges via SESSION_CLOSE_STYLE)
+alwaysApply: true
+---
+
+# Session Close Summary Shape（Cursor）
+
+跨宿主收口原则与诚实要求见仓库根 `AGENTS.md` → **Closeout**。本节只约束 **对用户可见的收尾回复**：
+
+- 默认**几句带过**即可，像口头收尾：做了什么、结果如何、有没有坑、接下来是你收工还是对方继续；语气自然，少用模板腔。
+- **不要**在收尾回复里默认罗列路径列表、完整 diff、命令全文或长篇「证据目录」；证据落在工件与记录（closeout、`EVIDENCE_INDEX`、摘要文件等），除非用户明确要求或需要最小复现 / 关键报错片段。

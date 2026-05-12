@@ -39,7 +39,7 @@
 ## 4. `REVIEW_GATE` 与「审论文」话术
 
 - **正则真源**：`configs/framework/REVIEW_ROUTING_SIGNALS.json` → 编译期嵌入 `scripts/router-rs/src/review_routing_signals.rs`（`EMBEDDED_JSON` + `compile_review_gate_regexes` 容错说明见 `docs/harness_architecture.md` §8 末段）。
-- **Cursor 门控短码**：`scripts/router-rs/src/cursor_hooks.rs` 出现字面 `router-rs REVIEW_GATE`（与 `AGENTS.md` Host Boundaries 一致）；**非** skill 路由状态机。
+- **Cursor 门控短码**：`scripts/router-rs/src/cursor_hooks/` 出现字面 `router-rs REVIEW_GATE`（与 `AGENTS.md` Host Boundaries 一致）；**非** skill 路由状态机。
 - **与论文的交叉风险**：`review_gate_regexes` 含 `(?i)(深度|全面|…)\s*review` 等；若用户中英混写 **「深度 review」** 且语义指向手稿，仍可能落入 **代码向 review 门控** 的 regex 集合（与 `paper-workbench` 的「整篇 review」类 **路由** 触发词是不同子系统）。并行 review 启发式 `has_parallel_review_candidate_context` 需 **review 标记 + breadth 标记 + scope 标记** 同时满足（`signals.rs`），纯「帮我审稿意见改稿」更常走论文信号链而非该三元组，但 **边界话术** 仍建议以宿主实际注入的 **`router-rs REVIEW_GATE`** 行为为准，勿与 `skills/SKILL_ROUTING_RUNTIME.json` 命中混谈。
 
 ## 5. Hook / 环境变量子集（科研工作流相关）
@@ -67,14 +67,14 @@
 | 论文语境与意图切片 | `scripts/router-rs/src/route/signals.rs` |
 | 候选打分与抑制 | `scripts/router-rs/src/route/scoring.rs` |
 | 路由回归夹具 | `tests/routing_eval_cases.json`、`main_tests.rs` |
-| Cursor hook 合并点 | `scripts/router-rs/src/cursor_hooks.rs`（`maybe_merge_paper_adversarial_before_submit` 调用） |
+| Cursor hook 合并点 | `scripts/router-rs/src/cursor_hooks/`（`maybe_merge_paper_adversarial_before_submit` 调用） |
 | 五层 harness + 开关矩阵 | `docs/harness_architecture.md` §1–2.1、§8 |
 | 宿主安装与手稿栈 | `docs/host_adapter_contract.md`、`configs/framework/RUNTIME_REGISTRY.json` |
 | 跨工作区 Cursor hooks 模板 | `configs/framework/cursor-hooks.workspace-template.json`（`_doc` 写明 symlink `configs/` 与 JSON/txt 同轨） |
 
 ## 7. 混淆与风险（≤1 页）
 
-1. **skill 命中 ≠ `REVIEW_GATE`**：前者由 `SKILL_ROUTING_RUNTIME.json` + `route/*`；后者为 Cursor Stop/beforeSubmit 路径上 **子代理证据链** 门控（`cursor_hooks.rs` / `.cursor/hook-state`），短码 **`router-rs REVIEW_GATE`**。
+1. **skill 命中 ≠ `REVIEW_GATE`**：前者由 `SKILL_ROUTING_RUNTIME.json` + `route/*`；后者为 Cursor Stop/beforeSubmit 路径上 **子代理证据链** 门控（`cursor_hooks/` / `.cursor/hook-state`），短码 **`router-rs REVIEW_GATE`**。
 2. **`paper-reviewer` / `paper-reviser` 不在 hot 25**：日常首轮路由更常落到 `paper-workbench` / `paper-writing` 等 hot owner；**显式** `paper-reviewer` 字样或 manifest fallback 才稳定专科（见 `main_tests.rs`）。
 3. **`ROUTER_RS_OPERATOR_INJECT=0`**：一键关闭多类注入含 **对抗论文 hook**；调试时易误判为「单关 PAPER 变量无效」。
 4. **未 symlink `configs/framework`**：hook 仍可能跑，但 **改 `PAPER_ADVERSARIAL_HOOK.txt` / JSON 不一定** 与框架仓库磁盘同轨；`README.md`（`--with-configs`）与 `cursor-hooks.workspace-template.json` `_doc` 一致叙述。

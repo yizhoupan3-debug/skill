@@ -10,7 +10,7 @@
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | Check whether a homework or course-project submission satisfies the stated requi |
 | `autopilot` | Active | P1 | L0 | owner | none | project | Repo-native `/autopilot`：goal-style 连续执行、地平线切片、continuity 硬接力； bounded sidecar 并 |
 | `citation-management` | Active | P2 | L1 | owner | none | project | Verify and format academic citations and bibliographies. |
-| `code-review-deep` | Active | P2 | L2 | owner | none | project | Deep adversarial-style code review (review-only verdict first). Use for whole-PR |
+| `code-review-deep` | Active | P2 | L2 | owner | none | project | Deep adversarial-style code review (review-only verdict first). Default depth fo |
 | `copywriting` | Active | P2 | L4 | owner | none | project | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `deepinterview` | Active | P2 | L1 | owner | none | project | Repo-native deepinterview workflow for evidence-first clarification and converge |
 | `design-md` | Active | P1 | L3 | gate | artifact | project | Manage DESIGN.md design-system contracts and visual tokens. |

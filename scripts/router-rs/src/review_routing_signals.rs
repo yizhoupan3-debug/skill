@@ -44,6 +44,9 @@ fn fallback_review_gate_pattern_strings() -> &'static [&'static str] {
         r"(?i)(审查|审核|审计|评审).*(仓库|全仓|跨模块|多模块|严重程度|回归风险|架构风险|实现质量|路由系统|skill\s*边界)",
         r"(?i)(代码审查|安全审查|架构审查|审查这个\s*PR|审查这段代码)",
         r"(?i)(审查|评审|审核).*(PR|pull request|合并请求)",
+        r"(?i)^\s*review\s*$",
+        r"(?i)^\s*代码审查\s*$",
+        r"(?i)^\s*code\s+review\s*$",
     ]
 }
 
@@ -179,10 +182,18 @@ mod tests {
     fn embedded_review_routing_json_parses() {
         let parsed: ReviewRoutingSignalsFile =
             serde_json::from_str(EMBEDDED_JSON).expect("embedded REVIEW_ROUTING_SIGNALS.json");
-        assert_eq!(parsed.review_gate_regexes.len(), 14);
+        assert_eq!(parsed.review_gate_regexes.len(), 17);
         assert!(!parsed.parallel_review_candidate.review_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.breadth_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.scope_markers.is_empty());
+    }
+
+    #[test]
+    fn is_review_prompt_matches_standalone_review_short_prompt() {
+        assert!(is_review_prompt("review"));
+        assert!(is_review_prompt("  review  "));
+        assert!(is_review_prompt("代码审查"));
+        assert!(is_review_prompt("code review"));
     }
 
     #[test]

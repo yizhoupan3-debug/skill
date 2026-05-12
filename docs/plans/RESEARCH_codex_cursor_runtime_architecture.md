@@ -40,7 +40,7 @@
 |------|--------|--------|------|
 | L4 配置 | 项目 `.codex/hooks.json`（`codex sync` / install 生成）；用户侧 `install-codex-user-hooks` 写 `hooks.json` | 仓库 `.cursor/hooks.json` | `docs/host_adapter_contract.md` §2、§3 路径表；本仓库 `.cursor/hooks.json` |
 | CLI 入口 | `router-rs codex hook …`（`dispatch_codex_command` → `run_codex_audit_hook`） | `router-rs cursor hook …`（`dispatch_cursor_command` → `run_review_gate`） | `scripts/router-rs/src/cli/dispatch_body.txt` L137–L184 |
-| stdin 归一化后核心 | 生命周期事件进入 `run_codex_lifecycle_context_hook` → `handle_codex_session_start` / `handle_codex_posttooluse` / `handle_codex_stop` 等；`review-subagent-gate` 仅为兼容 alias | `dispatch_cursor_hook_event` 按事件名分发 `handle_session_start`、`handle_before_submit`、`handle_stop`、`handle_post_tool_use` 等 | `scripts/router-rs/src/codex_hooks.rs`（grep `SessionStart`/`run_codex_lifecycle_context_hook`）；`scripts/router-rs/src/cursor_hooks.rs` `dispatch_cursor_hook_event` |
+| stdin 归一化后核心 | 生命周期事件进入 `run_codex_lifecycle_context_hook` → `handle_codex_session_start` / `handle_codex_posttooluse` / `handle_codex_stop` 等；`review-subagent-gate` 仅为兼容 alias | `dispatch_cursor_hook_event` 按事件名分发 `handle_session_start`、`handle_before_submit`、`handle_stop`、`handle_post_tool_use` 等 | `scripts/router-rs/src/codex_hooks.rs`（grep `SessionStart`/`run_codex_lifecycle_context_hook`）；[`cursor_hooks/dispatch.rs`](../../scripts/router-rs/src/cursor_hooks/dispatch.rs) 等同模块作用域 |
 | Review 门磁盘状态 | 无 Codex hard REVIEW_GATE；`.codex/hook-state` 只保留 transient lifecycle/tool telemetry | `.cursor/hook-state` | `docs/harness_architecture.md` §2.1；`docs/host_adapter_contract.md` §2 Cursor 行 |
 | 出站提示字段 | Codex 响应 JSON / `additionalContext` 等（以各 handler 为准） | `additional_context` / `followup_message`（`retired followup-channel toggle` 切换） | `docs/harness_architecture.md` §3.2；`scripts/router-rs/src/router_env_flags.rs` `router_rs_cursor_hook_chat_followup_enabled` |
 | AGENTS.md | 磁盘为编辑真源；Codex 可用**编译期嵌入**快照，需 `cargo build` + `codex sync` 刷新 | Cursor 框架规则由 `framework install --to cursor` 渲染 `.cursor/rules/framework.mdc`，**不经** `codex sync` | `AGENTS.md` 权威分层表；`AGENTS.md`「Codex：`AGENTS.md` 构建快照」 |
@@ -74,11 +74,11 @@ sequenceDiagram
   RS-->>H: stdout JSON（续跑/门控/permission 等）
 ```
 
-依据：`docs/host_adapter_contract.md` §1–§2；`scripts/router-rs/src/review_gate.rs`；`scripts/router-rs/src/cursor_hooks.rs` `dispatch_cursor_hook_event`；`scripts/router-rs/src/codex_hooks.rs` `run_codex_audit_hook` / `run_codex_lifecycle_context_hook`。
+依据：`docs/host_adapter_contract.md` §1–§2；`scripts/router-rs/src/review_gate.rs`；[`scripts/router-rs/src/cursor_hooks/dispatch.rs`](../../scripts/router-rs/src/cursor_hooks/dispatch.rs) `dispatch_cursor_hook_event`；`scripts/router-rs/src/codex_hooks.rs` `run_codex_audit_hook` / `run_codex_lifecycle_context_hook`。
 
 ### 符号对齐（rg 验证）
 
-- **`dispatch_cursor_hook_event`**：`pub(crate) fn dispatch_cursor_hook_event(repo_root, event_name, payload) -> Value`，定义于 `scripts/router-rs/src/cursor_hooks.rs`（本调研读取约 L3792 起）。
+- **`dispatch_cursor_hook_event`**：`pub(crate) fn dispatch_cursor_hook_event(repo_root, event_name, payload) -> Value`，[`cursor_hooks/dispatch.rs`](../../scripts/router-rs/src/cursor_hooks/dispatch.rs)（旧「单文件行号」已不再维护）。
 - **`run_review_gate`**：读 stdin → `resolve_cursor_hook_repo_root` → **`dispatch_cursor_hook_event`** → `scrub_followup_fields_in_hook_output` → `apply_cursor_hook_output_policy`，见 `scripts/router-rs/src/review_gate.rs`。
 - **Codex `codex hook`**：`dispatch_codex_command` 的 `CodexCommand::Hook` 分支调用 **`run_codex_audit_hook`**（非直接调用 `dispatch_cursor_hook_event`）；生命周期语义在 `codex_hooks.rs` 内 `run_codex_lifecycle_context_hook` 匹配 `sessionstart`/`posttooluse`/`stop` 等，旧 `review-subagent-gate` 命令仅作兼容 alias。
 

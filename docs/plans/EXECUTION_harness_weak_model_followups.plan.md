@@ -22,7 +22,7 @@ todos:
     content: |
       动作：在路线图 backlog 登记 Cursor `additional_context` 无总 cap 的工程跟进位，避免仅留在 TOKEN 文内。
       范围：`docs/plans/harness_improvement_backlog.md`
-      Done when：P1 或 P2 下新增 ≤8 行 bullet，指向 `context_token_audit_deep_dive.md` 与 `cursor_hooks.rs` `merge_additional_context`，标明「可选 env cap / 产品决策」。
+      Done when：P1 或 P2 下新增 ≤8 行 bullet，指向 `context_token_audit_deep_dive.md` 与 [`cursor_hooks/`](../../scripts/router-rs/src/cursor_hooks/mod.rs) `merge_additional_context`，标明「可选 env cap / 产品决策」。
       Verify：`rg -n "merge_additional_context|cursor_hooks|CONTEXT_MAX|cursor.*cap" docs/plans/harness_improvement_backlog.md`
     status: pending
   - id: codex-sessionstart-truncation-test

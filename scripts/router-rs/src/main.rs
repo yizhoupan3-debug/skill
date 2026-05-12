@@ -1,5 +1,6 @@
 #![recursion_limit = "256"]
 
+mod atomic_write;
 mod autopilot_goal;
 mod background_state;
 mod browser_mcp;
@@ -18,6 +19,7 @@ mod harness_contract;
 mod harness_operator_nudges;
 mod hook_common;
 mod hook_policy;
+mod hook_posttool_normalize;
 mod host_entrypoint_sync;
 mod host_integration;
 mod paper_adversarial_hook;
@@ -27,6 +29,7 @@ mod review_routing_signals;
 mod rfv_loop;
 mod route;
 mod router_env_flags;
+mod router_rs_observation;
 mod router_self;
 mod runtime_envelope_ids;
 mod runtime_storage;

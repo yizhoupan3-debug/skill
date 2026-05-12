@@ -248,6 +248,20 @@ fn classify_control_mode(
     }
 }
 
+fn push_resolution_read_err(notes: &mut Vec<String>, prefix: &'static str, err: String) {
+    let mut line = format!("{prefix}: {err}");
+    const MAX: usize = 220;
+    if line.len() > MAX {
+        let mut idx = MAX.min(line.len());
+        while idx > 0 && !line.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        line.truncate(idx);
+        line.push_str("...");
+    }
+    notes.push(line);
+}
+
 /// Resolve a single view for continuity debugging and future hook consumption.
 ///
 /// `task_id` resolution: `task_id_override` (non-empty) > `active_task.json` > `focus_task.json`.
@@ -283,8 +297,20 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
         };
     };
 
-    let goal_state = read_goal_state(repo_root, Some(task_id.as_str())).unwrap_or(None);
-    let rfv_loop_state = read_rfv_loop_state(repo_root, Some(task_id.as_str())).unwrap_or(None);
+    let goal_state = match read_goal_state(repo_root, Some(task_id.as_str())) {
+        Ok(g) => g,
+        Err(e) => {
+            push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e);
+            None
+        }
+    };
+    let rfv_loop_state = match read_rfv_loop_state(repo_root, Some(task_id.as_str())) {
+        Ok(v) => v,
+        Err(e) => {
+            push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e);
+            None
+        }
+    };
 
     let (evidence_rows, evidence_ok) =
         task_evidence_artifacts_summary_for_task(repo_root, task_id.as_str());
@@ -519,6 +545,35 @@ mod tests {
         assert!(!ev.has_successful_verification);
         let hint = depth_compliance_refresh_hint(&v).expect("hint");
         assert!(hint.contains("深度信号") && hint.contains("d0/3"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn unreadable_goal_state_adds_resolution_note() {
+        let tmp = unique_repo("bad-goal");
+        let tid = "tbad";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(task_dir.join("GOAL_STATE.json"), "{\"not\": valid json").unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        assert_eq!(v.task_id.as_deref(), Some(tid));
+        assert!(v.goal_state.is_none());
+        assert!(
+            v.resolution_notes
+                .iter()
+                .any(|n| n.contains("goal_state_read_failed")),
+            "notes={:?}",
+            v.resolution_notes
+        );
+        assert!(
+            v.resolution_notes
+                .iter()
+                .any(|n| n.contains("parse") || n.contains("GOAL")),
+            "notes={:?}",
+            v.resolution_notes
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 

@@ -6,11 +6,11 @@
 //!
 //! Design: `docs/task_state_unified_resolve.md` §5 阶段 3.
 
+use crate::atomic_write::write_atomic_json;
 use crate::autopilot_goal::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::rfv_loop::read_rfv_loop_state;
 use chrono::Utc;
-use serde_json::{json, Value};
-use std::fs;
+use serde_json::json;
 use std::path::{Path, PathBuf};
 
 pub const TASK_STATE_AGGREGATE_FILENAME: &str = "TASK_STATE.json";
@@ -22,27 +22,6 @@ pub fn task_state_aggregate_path(repo_root: &Path, task_id: &str) -> PathBuf {
         .join("artifacts/current")
         .join(task_component)
         .join(TASK_STATE_AGGREGATE_FILENAME)
-}
-
-fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory failed: {err}"))?;
-    }
-    let text = serde_json::to_string_pretty(value)
-        .map_err(|err| format!("serialize TASK_STATE aggregate failed: {err}"))?;
-    let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, text)
-        .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        format!(
-            "rename temp file failed {} -> {}: {err}",
-            tmp_path.display(),
-            path.display()
-        )
-    })?;
-    Ok(())
 }
 
 /// Refresh `TASK_STATE.json` from canonical per-task files (does **not** acquire `task_write_lock` —
@@ -112,7 +91,7 @@ fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
 mod tests {
     use super::*;
     use crate::autopilot_goal::framework_autopilot_goal;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::fs;
 
     #[test]

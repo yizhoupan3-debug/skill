@@ -151,7 +151,7 @@
 | 模块 | 公开入口示例 |
 |------|----------------|
 | `codex_hooks.rs` | `build_codex_hook_manifest`、`build_codex_hook_projection`、`install_codex_cli_hooks`、`run_codex_audit_hook`、内部 `run_codex_pre_tool_use` / `run_pre_tool_use` |
-| `cursor_hooks.rs` | `resolve_cursor_hook_repo_root`、（大文件内 `dispatch_cursor_hook_event` 等） |
+| `cursor_hooks/`（`mod.rs`、`dispatch.rs`、`frag_*.rs`） | `resolve_cursor_hook_repo_root`、`dispatch_cursor_hook_event` 等 |
 | `claude_hooks.rs` | `run_claude_hook`、`run_claude_hook_cli` |
 | `review_gate.rs` | Cursor review/subagent 状态机 |
 | `hook_common.rs` | 共享启发式、工具名归一 |

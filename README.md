@@ -141,7 +141,8 @@ codex
 - Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
 - 本仓库在 `.cursor/hooks.json` 通过 `configs/framework/cursor-router-rs-hook.sh` 调用 `router-rs cursor hook --event=…`。launcher 只做 release/debug/PATH 探测和缺 binary 策略：关键门控事件 fail-closed，session/format/telemetry 类事件 fail-open；业务语义仍全部在 Rust hook 内。`.cursor/hook-state/` 存门控临时状态。
 - 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
-- 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `cursor_hooks.rs`），与 Codex 不完全相同。
+- Codex `.codex/hooks.json` 包装脚本解析 `router-rs` 的顺序为：环境变量 **`ROUTER_RS_BIN`**（可执行绝对路径）→ 仓库 `scripts/router-rs/target/{release,debug}` → 仓库根 `target/{release,debug}` → **`command -v router-rs`**（最后手段；生产环境建议固定前两档之一）。缺少二进制时各生命周期事件一律 fail-closed（单行 JSON `decision:block`）。`.codex/hook-state/` 跨事件串联依赖 stdin 常见字段（`session_id` 等，含 camelCase）或 **`CODEX_SESSION_ID`** / **`CODEX_CONVERSATION_ID`**；需要硬前置时可设 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=1`**，在无稳定键时阻断 `UserPromptSubmit`/`PostToolUse`/`Stop`（详见 `docs/harness_architecture.md` 环境变量表）。
+- 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `scripts/router-rs/src/cursor_hooks/` 内 `dispatch.rs`/handlers），与 Codex 不完全相同。
 - Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
 **其它仓库一键接入（跨工作区）**

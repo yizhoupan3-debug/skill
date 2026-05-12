@@ -1387,6 +1387,54 @@ fn build_routing_metadata_catalog(
     })
 }
 
+/// `SKILL_MANIFEST.json` rows place `routing_priority` at index 4 and `session_start` / `trigger_hints`
+/// at 6 / 7. `SKILL_ROUTING_RUNTIME.json` (v3) and framework-command rows place `session_start` at 4
+/// and `trigger_hints` at 6. Distinguish by index 4: manifest uses `P0`–`P3`, runtime uses
+/// `required` / `preferred` / `n/a`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CompiledRouteRowLayout {
+    ManifestSkill,
+    RuntimeV3,
+}
+
+fn compiled_route_row_layout(row: &[Value]) -> CompiledRouteRowLayout {
+    if row.len() > 4 {
+        let col4 = string_at(row, 4);
+        if matches!(col4.as_str(), "P0" | "P1" | "P2" | "P3") {
+            return CompiledRouteRowLayout::ManifestSkill;
+        }
+    }
+    CompiledRouteRowLayout::RuntimeV3
+}
+
+fn row_session_start_for_route_metadata(row: &[Value]) -> String {
+    match compiled_route_row_layout(row) {
+        CompiledRouteRowLayout::ManifestSkill => {
+            if row.len() > 9 {
+                string_at(row, 6)
+            } else {
+                string_at(row, 4)
+            }
+        }
+        CompiledRouteRowLayout::RuntimeV3 => string_at(row, 4),
+    }
+}
+
+fn row_trigger_hints_value_for_route_metadata(row: &[Value]) -> Value {
+    match compiled_route_row_layout(row) {
+        CompiledRouteRowLayout::ManifestSkill => {
+            if row.len() > 9 {
+                value_at(row, 7)
+            } else if row.len() > 7 {
+                value_at(row, 7)
+            } else {
+                value_at(row, 6)
+            }
+        }
+        CompiledRouteRowLayout::RuntimeV3 => value_at(row, 6),
+    }
+}
+
 fn build_route_metadata_record(
     slug: &str,
     row: &[Value],
@@ -1394,16 +1442,8 @@ fn build_route_metadata_record(
 ) -> Value {
     let owner = string_at(row, 2);
     let gate = string_at(row, 3);
-    let session_start = if row.len() > 9 {
-        string_at(row, 6)
-    } else {
-        string_at(row, 4)
-    };
-    let trigger_hints = if row.len() > 9 {
-        value_at(row, 7)
-    } else {
-        value_at(row, 6)
-    };
+    let session_start = row_session_start_for_route_metadata(row);
+    let trigger_hints = row_trigger_hints_value_for_route_metadata(row);
     let negative_triggers = metadata
         .map(|meta| normalize_list(meta.get("do_not_use")))
         .unwrap_or_default();
@@ -1447,11 +1487,7 @@ fn build_route_metadata_record(
 fn route_selection_reason(row: &[Value]) -> String {
     let owner = string_at(row, 2);
     let gate = string_at(row, 3);
-    let session_start = if row.len() > 9 {
-        string_at(row, 6)
-    } else {
-        string_at(row, 4)
-    };
+    let session_start = row_session_start_for_route_metadata(row);
     if owner == "gate" && session_start == "required" {
         format!("required {gate} gate")
     } else if owner == "owner" && session_start == "preferred" {
@@ -2646,6 +2682,25 @@ mod tests {
         );
         assert!(plugin_catalog["skills"]["sample-skill"].is_object());
         assert!(routing_metadata["skills"]["sample-skill"].is_object());
+
+        let gitx_meta = routing_metadata["skills"]["gitx"]
+            .as_object()
+            .expect("gitx routing meta");
+        let pt = gitx_meta
+            .get("positive_triggers")
+            .expect("positive_triggers present");
+        assert!(
+            pt.is_array(),
+            "framework commands must serialize trigger_hints as JSON array (not priority string)"
+        );
+        assert!(
+            gitx_meta["intent_tags"]
+                .as_array()
+                .is_some_and(|items| items
+                    .iter()
+                    .any(|v| v.as_str() == Some("session_start:n/a"))),
+            "framework-command row must read session_start from runtime index 4"
+        );
     }
 
     #[test]

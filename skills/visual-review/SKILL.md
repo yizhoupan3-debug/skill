@@ -9,7 +9,8 @@ session_start: required
 trigger_hints:
   - 看图
   - visual
-  - review
+  - visual review
+  - UI review
   - screenshot
   - screenshot UI
   - chart screenshot
@@ -17,11 +18,10 @@ trigger_hints:
   - exported chart
   - 图表截图
   - 图表导出
-  - audit
 metadata:
-  version: "2.2.0"
+  version: "2.2.1"
   platforms: [codex]
-  tags: [visual, review, screenshot, screenshot-ui, chart, audit, accessibility, evidence]
+  tags: [visual, review, screenshot, screenshot-ui, chart, accessibility, evidence]
 framework_roles:
   - gate
   - detector

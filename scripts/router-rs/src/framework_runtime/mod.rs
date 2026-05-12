@@ -8,19 +8,27 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 mod alias;
 mod constants;
 mod continuity_digest;
+mod json_io;
+mod json_value;
 mod prompt_compression;
 mod repo_roots;
 mod runtime_view;
 mod session_artifacts;
 mod statusline;
 mod types;
+
+use json_io::{read_json_strict, read_text_if_exists};
+use json_value::{
+    first_nonempty, join_lines, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
+    value_string_list, value_text,
+};
+
+use crate::atomic_write::write_atomic_text;
 
 pub use alias::build_framework_alias_envelope;
 // Used by `crate::framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION` consumers; not referenced in this module body.
@@ -405,66 +413,6 @@ fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, St
     Ok(true)
 }
 
-#[cfg(unix)]
-fn fsync_parent_dir(path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::OpenOptionsExt;
-    let Some(parent) = path.parent() else {
-        return Ok(());
-    };
-    let dir = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_RDONLY)
-        .open(parent)
-        .map_err(|err| {
-            format!(
-                "open parent dir for fsync failed {}: {err}",
-                parent.display()
-            )
-        })?;
-    dir.sync_all()
-        .map_err(|err| format!("fsync parent dir failed for {}: {err}", parent.display()))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn fsync_parent_dir(_path: &Path) -> Result<(), String> {
-    Ok(())
-}
-
-fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory failed: {err}"))?;
-    }
-    let tmp_path = path.with_extension(format!(
-        "{}.tmp",
-        path.extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("txt")
-    ));
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&tmp_path)
-        .map_err(|err| format!("open temp file failed for {}: {err}", tmp_path.display()))?;
-    file.write_all(content.as_bytes())
-        .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
-    file.sync_all()
-        .map_err(|err| format!("fsync temp file failed for {}: {err}", tmp_path.display()))?;
-    drop(file);
-    fs::rename(&tmp_path, path).map_err(|err| {
-        let _ = fs::remove_file(&tmp_path);
-        format!(
-            "rename temp file failed {} -> {}: {err}",
-            tmp_path.display(),
-            path.display()
-        )
-    })?;
-    fsync_parent_dir(path)?;
-    Ok(())
-}
-
 #[cfg(test)]
 pub(crate) fn hash_file_for_test(path: &Path) -> Result<String, String> {
     let bytes =
@@ -483,57 +431,8 @@ fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, 
     write_text_if_changed_unlocked(path, &serialized)
 }
 
-fn join_lines(values: &[String]) -> String {
-    values
-        .iter()
-        .filter(|item| !item.trim().is_empty())
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(" / ")
-}
-
 fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
-}
-
-pub(crate) fn read_json_strict(path: &Path) -> Result<Value, String> {
-    if !path.is_file() {
-        return Ok(Value::Object(Map::new()));
-    }
-    let text = fs::read_to_string(path)
-        .map_err(|err| format!("read json failed for {}: {err}", path.display()))?;
-    serde_json::from_str(&text)
-        .map_err(|err| format!("parse json failed for {}: {err}", path.display()))
-}
-
-fn read_text_if_exists(path: &Path) -> String {
-    fs::read_to_string(path).unwrap_or_default()
-}
-
-fn safe_slug(value: &str) -> String {
-    let mut slug = String::new();
-    let mut last_dash = false;
-    for ch in value.chars() {
-        if ch.is_alphanumeric() || matches!(ch, '_' | '.' | '-') {
-            slug.push(ch);
-            last_dash = false;
-        } else if !last_dash {
-            slug.push('-');
-            last_dash = true;
-        }
-    }
-    slug.trim_matches(|ch| matches!(ch, '.' | '_' | '-'))
-        .to_string()
-}
-
-fn value_text(value: Option<&Value>) -> String {
-    match value {
-        Some(Value::String(text)) => text.trim().to_string(),
-        Some(Value::Number(number)) => number.to_string(),
-        Some(Value::Bool(flag)) => flag.to_string(),
-        Some(Value::Null) | None => String::new(),
-        Some(other) => other.to_string(),
-    }
 }
 
 fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {
@@ -557,61 +456,6 @@ fn defaulted_payload_text(payload: &Value, key: &str, fallback: &str) -> String 
     } else {
         s
     }
-}
-
-fn nonempty_string(value: Option<&Value>) -> Option<String> {
-    let text = value_text(value);
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
-}
-
-fn value_bool_or_none(value: Option<&Value>) -> Option<bool> {
-    match value {
-        Some(Value::Bool(flag)) => Some(*flag),
-        Some(Value::String(text)) => match text.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" | "yes" => Some(true),
-            "false" | "0" | "no" => Some(false),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn value_string_list(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn first_nonempty(values: &[String]) -> String {
-    values
-        .iter()
-        .find(|value| !value.trim().is_empty())
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn stable_line_items(items: Vec<String>) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut result = Vec::new();
-    for item in items {
-        let value = item.trim().to_string();
-        if value.is_empty() || !seen.insert(value.clone()) {
-            continue;
-        }
-        result.push(value);
-    }
-    result
 }
 
 fn parse_session_summary(text: &str) -> Map<String, Value> {
@@ -728,6 +572,25 @@ fn registry_task_sort_key(row: &Value) -> String {
 
 pub(crate) fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
     input.chars().take(max_chars).collect()
+}
+
+/// Like [`truncate_utf8_chars`], but appends `...` when the input exceeds `max_chars` (for hook UI hints).
+pub(crate) fn truncate_utf8_chars_with_ellipsis(input: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let mut out = String::new();
+    for (i, ch) in input.chars().enumerate() {
+        if i >= max_chars {
+            break;
+        }
+        out.push(ch);
+    }
+    if input.chars().count() > max_chars && max_chars >= 3 {
+        out.truncate(out.len().saturating_sub(3));
+        out.push_str("...");
+    }
+    out
 }
 
 /// 构建自动连续性检查点载荷（非完成态 `status=in_progress`，用于 Codex Stop 等钩子）。
@@ -863,9 +726,7 @@ fn append_evidence_index_merged_row(
     if !continuity_post_tool_evidence_env_enabled() {
         return Ok(());
     }
-    let _guard = crate::task_write_lock::task_ledger_write_lock()
-        .lock()
-        .map_err(|_| "task ledger write lock poisoned".to_string())?;
+    let _ledger = crate::task_write_lock::acquire_task_ledger_repo_lock(repo_root)?;
     let resolved_task_id = task_id_override
         .map(str::trim)
         .filter(|s| !s.is_empty())

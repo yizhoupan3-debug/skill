@@ -4,7 +4,7 @@ title: Cursor Hook 深度调研报告
 调研对象: Cursor 工作区 `hooks.json` 契约 × 本仓 `router-rs cursor hook` 实现
 计划锚点: `.cursor/plans/cursor_hook_深度调研_3da436b6.plan.md`（**只读**：本报告不修改该计划文件）
 读者: 维护 `router-rs` 与 Cursor 接入的工程师
-路由说明: 本文件属于 `docs/plans/`（调研/计划镜像），不是 skill 也不是 hook 真源；hooks 真源在 `.cursor/hooks.json`，事件实现真源在 `scripts/router-rs/src/cursor_hooks.rs`
+路由说明: 本文件属于 `docs/plans/`（调研/计划镜像），不是 skill 也不是 hook 真源；hooks 真源在 `.cursor/hooks.json`，事件实现真源在 `scripts/router-rs/src/cursor_hooks/`
 ---
 
 # Cursor Hook 深度调研报告
@@ -26,7 +26,7 @@ title: Cursor Hook 深度调研报告
 |---|---|
 | 范围 | Cursor 宿主侧 hook 契约 + 本仓 `router-rs cursor hook` 分发 / 出站 JSON / 状态文件 |
 | 不在范围 | Codex / Claude 分支、cursor MCP 安装链、route_eval、autopilot 内部 RFV 算法（仅出现的字段） |
-| 真源 | `.cursor/hooks.json`、`scripts/router-rs/src/cursor_hooks.rs`、`configs/framework/cursor-hooks.workspace-template.json`、`configs/framework/REVIEW_ROUTING_SIGNALS.json`、`scripts/router-rs/src/review_gate.rs`、`router_env_flags.rs`、`docs/host_adapter_contract.md`、`docs/harness_architecture.md`、`AGENTS.md` |
+| 真源 | `.cursor/hooks.json`、`scripts/router-rs/src/cursor_hooks/`、`configs/framework/cursor-hooks.workspace-template.json`、`configs/framework/REVIEW_ROUTING_SIGNALS.json`、`scripts/router-rs/src/review_gate.rs`、`router_env_flags.rs`、`docs/host_adapter_contract.md`、`docs/harness_architecture.md`、`AGENTS.md` |
 | 不修改 | `.cursor/plans/cursor_hook_深度调研_3da436b6.plan.md`（用户明令保护）、任何代码/hook 配置 |
 
 **版本锚点**：调研日期 **2026-05-11**。`~/.cursor/skills-cursor/create-hook/SKILL.md` 为本机已安装的 Cursor 产品侧 skill 文档（无显式 Cursor 版本号；下文凡引用以"该 skill 当前版本"为隐含锚点；未来 Cursor 升级可能扩展事件/字段集，应再次 cross-check）。
@@ -134,7 +134,7 @@ title: Cursor Hook 深度调研报告
 - `cli/args.inc` 定义 `CursorHookCommand { event: String, repo_root: Option<PathBuf> }`（行 333–338）。
 - `cli/dispatch_body.txt::dispatch_cursor_command` 把 `CursorCommand::Hook(command)` 路由到 `run_review_gate(&command.event, command.repo_root.as_deref())`。
 - `review_gate.rs::run_review_gate` 把 event 字符串直接传入 `dispatch_cursor_hook_event` 不做大小写转换；归一化发生在 `dispatch_cursor_hook_event` 自身。
-- `dispatch_cursor_hook_event`（`cursor_hooks.rs` L3792–L3866）首先 `event_name.trim().to_lowercase()`，然后**根据 `cursor_review_gate_disabled_by_env()` 切到两套 match 表**：禁用时跳过 review gate 路径并保留续跑（`merge_continuity_followups_*`），常态下走完整门控。
+- `dispatch_cursor_hook_event`（[`dispatch.rs`](../../scripts/router-rs/src/cursor_hooks/dispatch.rs)；旧单行号已失效）首先 `event_name.trim().to_lowercase()`，然后**根据 `cursor_review_gate_disabled_by_env()` 切到两套 match 表**：禁用时跳过 review gate 路径并保留续跑（`merge_continuity_followups_*`），常态下走完整门控。
 
 ---
 
@@ -164,24 +164,24 @@ title: Cursor Hook 深度调研报告
 | `retired beforeSubmit AUTOPILOT_DRIVE opt-in` | **关**（opt-in） | beforeSubmit 上是否合并 AUTOPILOT_DRIVE | 仅在显式开时 beforeSubmit 输出含 AUTOPILOT_DRIVE 段 | `router_env_flags.rs` L25–27、L131 |
 | `retired beforeSubmit RFV opt-in` | **关**（opt-in） | beforeSubmit 上是否合并 RFV_LOOP_CONTINUE | 同上 | `router_env_flags.rs` L30–32、L132 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | **关**（opt-in） | beforeSubmit 的 `/autopilot` **pre-goal** 段与计数放行 | 关时 pre-goal 段不注入；不影响磁盘 `GOAL_STATE` 收口门控 | `router_env_flags.rs` L35–37、L133 |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | unset → 默认 **8**；`0`/`false`/`off`/`no` 关闭自动放行 | `maybe_autopilot_pre_goal_nag_cap_release` | 达到上限时自动 `pre_goal_review_satisfied=true` 并注入"已达上限"放行文案 | `cursor_hooks.rs` L1770–L1820 |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | unset → 默认 **8**；`0`/`false`/`off`/`no` 关闭自动放行 | `maybe_autopilot_pre_goal_nag_cap_release` | 达到上限时自动 `pre_goal_review_satisfied=true` 并注入"已达上限"放行文案 | `cursor_hooks/` |
 | `retired followup-channel toggle` | 关 | 所有续跑/门控注入位置 | 关：写 `additional_context`；开：写 `followup_message` | `router_env_flags.rs` L41–49 |
-| `retired silent-mode branch` | 关 | 所有 handler 出站（`strip_cursor_hook_user_visible_nags` / `apply_cursor_hook_output_policy`） | 整段剥离续跑/nudge；**例外保留**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup | `cursor_hooks.rs` L1837–L1864；harness §8 L135 |
-| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | `dispatch_cursor_hook_event` 切到应急表 | 仅短路 review/delegation 门控；续跑仍合并；Stop 仍触发 closeout | `cursor_hooks.rs` L1828–L1835、L3799；harness §8 L136 |
+| `retired silent-mode branch` | 关 | 所有 handler 出站（`strip_cursor_hook_user_visible_nags` / `apply_cursor_hook_output_policy`） | 整段剥离续跑/nudge；**例外保留**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup | `cursor_hooks/`；harness §8 L135 |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | `dispatch_cursor_hook_event` 切到应急表 | 仅短路 review/delegation 门控；续跑仍合并；Stop 仍触发 closeout | `cursor_hooks/`；harness §8 L136 |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | **关**（opt-in） | beforeSubmit 论文类提示合并对抗短段 | 开且命中启发式时 followup/additional_context 含 `PAPER_ADVERSARIAL_HOOK` 段；受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束 | `paper_adversarial_hook.rs` L6/L17；harness §8 L137 |
-| `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | unset → 与运行时 `MAX_CONCURRENT_SUBAGENTS_LIMIT` 契约一致；`0` 关闭计数限流 | subagentStart | 超限时返回 `permission:"deny" + user_message`（包含建议关闭限流的文案） | `cursor_hooks.rs` L1865–L1892、L1924–L1934 |
-| `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 内置默认（见代码） | `reset_stale_active_subagents` | 超期 active subagent 不再阻塞新启动 | `cursor_hooks.rs` L1889–L1895 |
-| `ROUTER_RS_CURSOR_SESSION_NAMESPACE` | unset → 用 session_id 或 cwd 派生 key | `session_key`（所有 hook 状态文件名） | 改变 `.cursor/hook-state/review-subagent-<key>.json` 的 `<key>` | `cursor_hooks.rs` L1040–L1050 |
-| `ROUTER_RS_CURSOR_WORKSPACE_ROOT` | unset | `resolve_cursor_hook_repo_root` | 显式覆盖 `--repo-root` 与 stdin payload `cwd` | `cursor_hooks.rs` L1145–L1148 |
-| `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS` | 开 | SessionEnd `terminate_stale_terminal_processes` | 关闭后 SessionEnd 不杀 terminal PID | `cursor_hooks.rs` L3416、L3454–L3460 |
-| `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE` | `scoped`（默认）/ `legacy` / `all` / `repo` 等 | SessionEnd | 默认仅杀 `owned_pids` 账本；legacy 模式恢复全仓 active 扫描 | `cursor_hooks.rs` L1275–L1310（`cursor_terminal_kill_use_scoped_ownership`） |
-| `CURSOR_TERMINALS_DIR` | unset → 派生 `$HOME/.cursor/projects/<mangled>/terminals` | SessionEnd / Shell handlers | 显式覆盖 terminal 列表目录（测试/定制用） | `cursor_hooks.rs` L3465–L3492 |
+| `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | unset → 与运行时 `MAX_CONCURRENT_SUBAGENTS_LIMIT` 契约一致；`0` 关闭计数限流 | subagentStart | 超限时返回 `permission:"deny" + user_message`（包含建议关闭限流的文案） | `cursor_hooks/`、L1924–L1934 |
+| `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 内置默认（见代码） | `reset_stale_active_subagents` | 超期 active subagent 不再阻塞新启动 | `cursor_hooks/` |
+| `ROUTER_RS_CURSOR_SESSION_NAMESPACE` | unset → 用 session_id 或 cwd 派生 key | `session_key`（所有 hook 状态文件名） | 改变 `.cursor/hook-state/review-subagent-<key>.json` 的 `<key>` | `cursor_hooks/` |
+| `ROUTER_RS_CURSOR_WORKSPACE_ROOT` | unset | `resolve_cursor_hook_repo_root` | 显式覆盖 `--repo-root` 与 stdin payload `cwd` | `cursor_hooks/` |
+| `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS` | 开 | SessionEnd `terminate_stale_terminal_processes` | 关闭后 SessionEnd 不杀 terminal PID | `cursor_hooks/` |
+| `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE` | `scoped`（默认）/ `legacy` / `all` / `repo` 等 | SessionEnd | 默认仅杀 `owned_pids` 账本；legacy 模式恢复全仓 active 扫描 | `cursor_hooks/`（`cursor_terminal_kill_use_scoped_ownership`；符号 `rg`/IDE） |
+| `CURSOR_TERMINALS_DIR` | unset → 派生 `$HOME/.cursor/projects/<mangled>/terminals` | SessionEnd / Shell handlers | 显式覆盖 terminal 列表目录（测试/定制用） | `cursor_hooks/` |
 | `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | 开 | PostToolUse `try_append_post_tool_shell_evidence` | 关闭后 PostToolUse 不再追加 `EVIDENCE_INDEX.json` | `framework_runtime/mod.rs` L916、harness §8 |
 | `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | 开（Codex 路径） | Codex Stop 自动 in-progress checkpoint | Cursor Stop 与该开关无直接交互；列出避免误读 | `codex_hooks.rs` L915 |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | `harness_operator_nudges` 模块 | 关闭 RFV/Autopilot 续跑里来自 JSON 的 nudge 句；不影响 digest 主线 `深度信号` 行 | `harness_operator_nudges.rs` L4/L14；harness §8 L127 |
 | `retired verbose followup mode` | 关（紧凑） | autopilot / rfv / pre-goal 文案 | 切换 verbose vs compact 模板；与"是否注入"无关 | `router_env_flags.rs` L52–60；harness §8 L130 |
 | `ROUTER_RS_DEPTH_SCORE_MODE` | `legacy` | `DepthCompliance` 第三分公式 | `strict` 时把 falsification_tests / 外研 strict 通过轮次计入第三分 | `router_env_flags.rs` L106–111；harness §8 L138 |
-| `ROUTER_RS_CLOSEOUT_ENFORCEMENT` | 本地 unset → 软；CI 或显式非关闭值 → 硬 | `closeout_followup_for_completion_claim` | 决定 Stop 时声明完成但缺 closeout 是否注入 `CLOSEOUT_FOLLOWUP` | `cursor_hooks.rs` L227–L256；AGENTS.md "个人使用 / Closeout" |
+| `ROUTER_RS_CLOSEOUT_ENFORCEMENT` | 本地 unset → 软；CI 或显式非关闭值 → 硬 | `closeout_followup_for_completion_claim` | 决定 Stop 时声明完成但缺 closeout 是否注入 `CLOSEOUT_FOLLOWUP` | `cursor_hooks/`；AGENTS.md "个人使用 / Closeout" |
 
 > **rg 证据**：以上键名可用 `rg -n 'ROUTER_RS_CURSOR|ROUTER_RS_AUTOPILOT|ROUTER_RS_RFV|ROUTER_RS_HOOK_SILENT|ROUTER_RS_OPERATOR_INJECT|ROUTER_RS_CONTINUITY|ROUTER_RS_CLOSEOUT|ROUTER_RS_HARNESS_OPERATOR_NUDGES|ROUTER_RS_DEPTH_SCORE_MODE|retired verbose followup mode' scripts/router-rs/src docs/` 复核（输出指向上表所列文件/行）。
 
@@ -193,7 +193,7 @@ title: Cursor Hook 深度调研报告
 
 | 文件 | 写入函数 | 字段要点 | 清扫时机 |
 |---|---|---|---|
-| `review-subagent-<session_key>.json` | `cursor_hooks.rs::save_state` (L1661) | `phase`(u32, 0..3)、`review_required` / `review_override` / `delegation_required` / `delegation_override` / `goal_required` / `goal_contract_seen` / `goal_progress_seen` / `goal_verify_or_block_seen` / `reject_reason_seen` / `pre_goal_review_satisfied` / `pre_goal_nag_count` / `active_subagent_count` / `active_subagent_last_started_at` / `subagent_start_count` / `subagent_stop_count` / `last_subagent_type` / `last_subagent_tool` / `lane_intent_matches` / `followup_count` / `review_followup_count` / `goal_followup_count` / `last_prompt` | SessionEnd 单文件精确删除 + 目录 sweep |
+| `review-subagent-<session_key>.json` | `cursor_hooks/` 内 `save_state`（[`mod.rs`/frag：`frag_03`/…](../../scripts/router-rs/src/cursor_hooks/mod.rs)；旧单行号不维护） | `phase`(u32, 0..3)、`review_required` / `review_override` / `delegation_required` / `delegation_override` / `goal_required` / `goal_contract_seen` / `goal_progress_seen` / `goal_verify_or_block_seen` / `reject_reason_seen` / `pre_goal_review_satisfied` / `pre_goal_nag_count` / `active_subagent_count` / `active_subagent_last_started_at` / `subagent_start_count` / `subagent_stop_count` / `last_subagent_type` / `last_subagent_tool` / `lane_intent_matches` / `followup_count` / `review_followup_count` / `goal_followup_count` / `last_prompt` | SessionEnd 单文件精确删除 + 目录 sweep |
 | `review-subagent-<session_key>.lock` | `acquire_state_lock` / `release_state_lock` | 文件锁 sentinel | 同上 |
 | `session-terminals-<session_key>.json` | `save_session_terminal_ledger` | `version` / `baseline_pids` / `owned_pids` / `pending_shells` | 必须在 sweep 前读出（否则 sweep 会先删掉再读到空 ledger） |
 | `adversarial-loop-<session_key>.json`（历史） | `remove_adversarial_loop` 仅清理 | 已废弃；保留路径用于 cleanup 不残留 | SessionEnd |
@@ -245,17 +245,17 @@ stateDiagram-v2
 
 ### 6.3 关键函数索引（与上图节点对应）
 
-| 节点 / 边 | 关键函数（`scripts/router-rs/src/cursor_hooks.rs`） |
+| 节点 / 边 | 关键函数（`scripts/router-rs/src/cursor_hooks/`） |
 |---|---|
-| `BeforeSubmitPrompt` | `handle_before_submit`（L2155）、`is_review_prompt`、`is_autopilot_entrypoint_prompt`、`is_parallel_delegation_prompt`、`framework_prompt_arms_delegation`、`has_review_override`、`has_override`、`has_delegation_override`、`saw_reject_reason`、`maybe_autopilot_pre_goal_nag_cap_release` |
-| `SubagentStart` | `handle_subagent_start`（L2287）、`subagent_limit_denial`、`reset_stale_active_subagents`、`fork_context_from_tool`、`counts_as_independent_context_fork`、`cursor_subagent_type_pair`、`pre_goal_subagent_kind_ok`、`review_hard_armed`、`bump_phase` |
-| `SubagentStop` | `handle_subagent_stop`（L2346）、`review_hard_armed`、`bump_phase` |
-| `PostToolUse` | `handle_post_tool_use`（L2384）、`tool_name_matches_subagent_lane`、`synthetic_post_tool_evidence_shape`、`try_append_post_tool_shell_evidence`、`maybe_run_cursor_rust_lint` |
-| `AfterAgentResponse`（非 hooks.json 绑定，仅 dispatch 拉起） | `handle_after_agent_response`（L2632）、`hook_event_signal_text`、`has_goal_contract_signal`、`has_goal_progress_signal`、`has_goal_verify_or_block_signal`、`clear_review_gate_escalation_counters` |
-| `Stop` | `handle_stop`（L2674）、`completion_claimed_in_text`、`closeout_followup_for_completion_claim`、`review_stop_followup_needed`、`review_stop_followup_line`、`goal_is_satisfied`、`goal_stop_followup_line`、`merge_continuity_followups`、`hydrate_goal_gate_from_disk` |
-| `SessionStart` | `handle_session_start`（L3058）、`maybe_init_session_terminal_ledger`、`read_file_head_lines`、`read_json_value_strict` |
-| `SessionEnd` | `handle_session_end`（L3302）、`sweep_review_gate_state_dir`、`review_gate_state_file_owned_by_module`、`terminate_stale_terminal_processes` |
-| 续跑合并 | `merge_continuity_followups`（L51）、`merge_continuity_followups_before_submit`（L166）、`build_merged_continuity_block_for_before_submit`（L131）、`crate::autopilot_goal::merge_hook_nudge_paragraph` |
+| `BeforeSubmitPrompt` | `handle_before_submit`、`is_review_prompt`、`is_autopilot_entrypoint_prompt`、`is_parallel_delegation_prompt`、`framework_prompt_arms_delegation`、`has_review_override`、`has_override`、`has_delegation_override`、`saw_reject_reason`、`maybe_autopilot_pre_goal_nag_cap_release` |
+| `SubagentStart` | `handle_subagent_start``subagent_limit_denial`、`reset_stale_active_subagents`、`fork_context_from_tool`、`counts_as_independent_context_fork`、`cursor_subagent_type_pair`、`pre_goal_subagent_kind_ok`、`review_hard_armed`、`bump_phase` |
+| `SubagentStop` | `handle_subagent_stop``review_hard_armed`、`bump_phase` |
+| `PostToolUse` | `handle_post_tool_use``tool_name_matches_subagent_lane`、`synthetic_post_tool_evidence_shape`、`try_append_post_tool_shell_evidence`、`maybe_run_cursor_rust_lint` |
+| `AfterAgentResponse`（非 hooks.json 绑定，仅 dispatch 拉起） | `handle_after_agent_response``hook_event_signal_text`、`has_goal_contract_signal`、`has_goal_progress_signal`、`has_goal_verify_or_block_signal`、`clear_review_gate_escalation_counters` |
+| `Stop` | `handle_stop``completion_claimed_in_text`、`closeout_followup_for_completion_claim`、`review_stop_followup_needed`、`review_stop_followup_line`、`goal_is_satisfied`、`goal_stop_followup_line`、`merge_continuity_followups`、`hydrate_goal_gate_from_disk` |
+| `SessionStart` | `handle_session_start``maybe_init_session_terminal_ledger`、`read_file_head_lines`、`read_json_value_strict` |
+| `SessionEnd` | `handle_session_end``sweep_review_gate_state_dir`、`review_gate_state_file_owned_by_module`、`terminate_stale_terminal_processes` |
+| 续跑合并 | `merge_continuity_followups``merge_continuity_followups_before_submit``build_merged_continuity_block_for_before_submit``crate::autopilot_goal::merge_hook_nudge_paragraph` |
 | 出站策略 | `strip_cursor_hook_user_visible_nags`（cursor_hook_silent 模式下保留例外）、`apply_cursor_hook_output_policy`、`scrub_followup_fields_in_hook_output`（`autopilot_goal`） |
 | review 触发 regex | `scripts/router-rs/src/review_routing_signals.rs::review_gate_compiled_regexes`（来自 `configs/framework/REVIEW_ROUTING_SIGNALS.json`，13 条 regex；坏条目跳过，全坏回退内置 literals） |
 
@@ -288,7 +288,7 @@ stateDiagram-v2
 | 12 个绑定事件 vs §3 表 | 【一致】 | `version: 1` 与字段形态完全符合 SKILL.md |
 | `afterAgentResponse` handler 与 `.cursor/hooks.json` 绑定 | 【一致】 | dispatch_cursor_hook_event `"afteragentresponse" => handle_after_agent_response`；goal-gate 信号可在 response 后采集，Stop 保留兜底重扫 |
 | `preToolUse` / `postToolUseFailure` / `beforeMCPExecution` / `afterMCPExecution` / `beforeReadFile` / `afterAgentThought` 未启用 | 【缺口·有意】 | 本仓策略：避免向工具层注入策略 prose；保留以后扩展空间；非紧急 |
-| `userpromptsubmit` 作为 `beforeSubmitPrompt` 的别名共享同一 handler | 【扩展】 | dispatch_cursor_hook_event L3854 `"beforesubmitprompt" \| "userpromptsubmit"`。官方 SKILL matcher 一节提到 `beforeSubmitPrompt` 的 matcher 值固定为 `UserPromptSubmit`；router-rs 把此值也当成事件名兜底 |
+| `userpromptsubmit` 作为 `beforeSubmitPrompt` 的别名共享同一 handler | 【扩展】 | [`dispatch_cursor_hook_event`](../../scripts/router-rs/src/cursor_hooks/dispatch.rs) 内 `"beforesubmitprompt" \| "userpromptsubmit"` 分支。官方 SKILL matcher 一节提到 `beforeSubmitPrompt` 的 matcher 值固定为 `UserPromptSubmit`；router-rs 把此值也当成事件名兜底 |
 | `loop_limit` 字段在 `.cursor/hooks.json` 未声明 | 【未验证假设】 | router-rs 自己用 `state.followup_count` / `review_followup_count` / `goal_followup_count` 做局部计数限速；官方 `loop_limit` 默认值未知，未在 hook 定义里显式设置 |
 | 所有 hooks 未设置 `failClosed: true` | 【一致】 | 与本仓 fail-open 原则一致：未编译的 router-rs 即"短路"通过；硬阻塞由 router-rs 返回内容决定 |
 
@@ -363,10 +363,10 @@ stateDiagram-v2
 ```bash
 # 1. 列出本仓所有 dispatch 分支与别名（包括 userpromptsubmit）
 rg -n 'dispatch_cursor_hook_event|"sessionstart"|"beforesubmitprompt"|"userpromptsubmit"|"stop"|"posttooluse"|"subagentstart"|"subagentstop"|"beforeshellexecution"|"aftershellexecution"|"afterfileedit"|"precompact"|"sessionend"|"afteragentresponse"' \
-  scripts/router-rs/src/cursor_hooks.rs
+  scripts/router-rs/src/cursor_hooks/
 
 # 2. 所有 handle_* 入口
-rg -n '^fn handle_' scripts/router-rs/src/cursor_hooks.rs
+rg -n '^fn handle_' scripts/router-rs/src/cursor_hooks/
 
 # 3. ROUTER_RS_* 开关命中
 rg -n 'ROUTER_RS_CURSOR|ROUTER_RS_AUTOPILOT|ROUTER_RS_RFV|ROUTER_RS_HOOK_SILENT|ROUTER_RS_OPERATOR_INJECT|ROUTER_RS_CONTINUITY|ROUTER_RS_CLOSEOUT|ROUTER_RS_HARNESS_OPERATOR_NUDGES|ROUTER_RS_DEPTH_SCORE_MODE|retired verbose followup mode' \
@@ -374,7 +374,7 @@ rg -n 'ROUTER_RS_CURSOR|ROUTER_RS_AUTOPILOT|ROUTER_RS_RFV|ROUTER_RS_HOOK_SILENT|
 
 # 4. 状态文件命名约定
 rg -n 'review-subagent-|adversarial-loop-|session-terminals-|review_gate_state_file_owned' \
-  scripts/router-rs/src/cursor_hooks.rs
+  scripts/router-rs/src/cursor_hooks/
 
 # 5. install vs template 的命令前缀差异
 diff <(jq -S . configs/framework/cursor-hooks.workspace-template.json) <(jq -S . .cursor/hooks.json) | head -80
@@ -430,7 +430,7 @@ rg -n 'managed.*false.*not-enabled-by-framework-policy|install_cursor_projection
 - 入口绑定：`.cursor/hooks.json`（11 事件）
 - 跨仓模板：`configs/framework/cursor-hooks.workspace-template.json`
 - bootstrap 脚本：`scripts/cursor-bootstrap-framework.sh`（将模板拷到目标项目）
-- 核心实现：`scripts/router-rs/src/cursor_hooks.rs`（6325 行）
+- 核心实现：`scripts/router-rs/src/cursor_hooks/`（`mod.rs` + `include!`，总物理行数以 `wc`/`rg` 为准）
 - 入口转发：`scripts/router-rs/src/review_gate.rs`、`scripts/router-rs/src/cli/dispatch_body.txt`、`scripts/router-rs/src/cli/args.inc`
 - 开关聚合：`scripts/router-rs/src/router_env_flags.rs`
 - review 触发 regex：`scripts/router-rs/src/review_routing_signals.rs` + `configs/framework/REVIEW_ROUTING_SIGNALS.json`

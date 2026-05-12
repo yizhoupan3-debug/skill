@@ -15,7 +15,7 @@
 | 主题 | 文档 |
 |------|------|
 | RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)）；**ADR**：[`close_gates` 与 `max_rounds` 收口路径](plans/ADR_rfv_close_gates_max_rounds.md) |
-| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | [RESEARCH_harness_weak_model_top_tier.md](plans/RESEARCH_harness_weak_model_top_tier.md)，[context_token_audit_deep_dive.md](plans/context_token_audit_deep_dive.md) |
+| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | [RESEARCH_harness_weak_model_top_tier.md](plans/RESEARCH_harness_weak_model_top_tier.md)，[context_token_audit_deep_dive.md](plans/context_token_audit_deep_dive.md)；全盘减法审计勾选表（与 PR 短清单互补） [harness_subtraction_first_principles_audit_checklist.md](plans/harness_subtraction_first_principles_audit_checklist.md) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
 | 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 与 Codex/Cursor/Claude 投影边界统一见 [host_adapter_contract.md](host_adapter_contract.md)；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md)；Harness 改进 backlog（路线图展开） [plans/harness_improvement_backlog.md](plans/harness_improvement_backlog.md) |

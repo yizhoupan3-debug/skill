@@ -1,7 +1,10 @@
-//! Shared hook heuristics for prompt/gate classification (no host-specific JSON/event dispatch).
-//! Dependency direction: `cursor_hooks` / `codex_hooks` / `claude_hooks` → `hook_common` only.
+//! Shared hook heuristics for prompt/gate classification and small cross-host JSON key merges.
+//! **不含**宿主 hook 的 stdin 生命周期分发、写盘或出站 JSON 投影；这类逻辑在 `cursor_hooks` / `codex_hooks` / `claude_hooks` 等模块。
+//! `tool_input_value_from_map` 仅合并常见别名字段（`tool_input` / `input` / `arguments` / `parameters`），不替代各宿主的嵌套扫描或事件路由。
+//! Dependency direction: `cursor_hooks` / `codex_hooks` / `claude_hooks` → `hook_common`；`hook_posttool_normalize` 不在此链上（其依赖 `cursor_hooks` 的字段 helper）。
 
 use regex::Regex;
+use serde_json::{Map, Value};
 use std::sync::OnceLock;
 
 fn compile_patterns(patterns: &[&str]) -> Vec<Regex> {
@@ -119,6 +122,16 @@ fn reject_reason_patterns() -> &'static Vec<Regex> {
         })
         .collect()
     })
+}
+
+/// Merge hook payloads' tool argument object from common alternate keys (`tool_input`, `input`,
+/// `arguments`, `parameters`). Shared by Cursor nested stdin extraction and Claude tool parsing.
+pub(crate) fn tool_input_value_from_map(obj: &Map<String, Value>) -> Option<Value> {
+    obj.get("tool_input")
+        .or_else(|| obj.get("input"))
+        .or_else(|| obj.get("arguments"))
+        .or_else(|| obj.get("parameters"))
+        .cloned()
 }
 
 /// 与 `reject_reason_patterns` 同步；用于「整行仅 token」时的精确匹配（规避极少数 Unicode 边界与宿主格式差异）。
@@ -328,6 +341,16 @@ pub fn normalize_subagent_type(value: Option<&str>) -> String {
         .unwrap_or_default()
 }
 
+/// 已 `normalize_subagent_type` 后的 lane：**Cursor / Codex** 默认为可清点 **`REVIEW_GATE` / CODEX_STOP 独立审稿** 的深度子代理 lane（与 `fork_context=false` 组合使用）。
+///
+/// **不是** Claude `claude_reviewer_lane` 的超集（Claude 另含 review/critic 等）；勿把本函数结果套到 Claude 门控。
+pub fn is_deep_review_gate_lane_normalized(lane: &str) -> bool {
+    matches!(
+        lane,
+        "general-purpose" | "generalpurpose" | "best-of-n-runner" | "bestofnrunner"
+    )
+}
+
 pub fn normalize_tool_name(value: Option<&str>) -> String {
     value.map(|s| s.trim().to_lowercase()).unwrap_or_default()
 }
@@ -335,6 +358,16 @@ pub fn normalize_tool_name(value: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deep_review_gate_lane_normalized_matches_cursor_codex_bar() {
+        assert!(is_deep_review_gate_lane_normalized("general-purpose"));
+        assert!(is_deep_review_gate_lane_normalized("generalpurpose"));
+        assert!(is_deep_review_gate_lane_normalized("best-of-n-runner"));
+        assert!(is_deep_review_gate_lane_normalized("bestofnrunner"));
+        assert!(!is_deep_review_gate_lane_normalized("explore"));
+        assert!(!is_deep_review_gate_lane_normalized("ci-investigator"));
+    }
 
     #[test]
     fn saw_reject_reason_accepts_line_only_tokens_and_rg_clear() {

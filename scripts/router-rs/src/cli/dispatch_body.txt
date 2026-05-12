@@ -161,9 +161,8 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
                 .event
                 .or(command.name)
                 .ok_or("hook event required")?;
-            if let Some(payload) = run_codex_audit_hook(&event_name, &repo_root)? {
-                print_json_value(&payload)?;
-            }
+            let payload = run_codex_audit_hook(&event_name, &repo_root)?;
+            print_json_value(&codex_hook_stdout_payload(payload))?;
             Ok(())
         }
         CodexCommand::HostIntegration(command) => {
