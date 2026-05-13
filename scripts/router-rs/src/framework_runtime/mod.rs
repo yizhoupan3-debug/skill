@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 mod alias;
 mod constants;
 mod continuity_digest;
+mod framework_doctor;
 mod json_io;
 mod json_value;
 mod prompt_compression;
@@ -41,7 +42,10 @@ pub use constants::{
     FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
     FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
 };
-pub use continuity_digest::build_framework_continuity_digest_prompt;
+pub use continuity_digest::{
+    build_framework_continuity_digest_prompt, build_framework_continuity_digest_prompt_ex,
+};
+pub use framework_doctor::run_framework_doctor;
 pub use prompt_compression::build_framework_prompt_compression_envelope;
 pub use repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
@@ -231,6 +235,7 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
     });
     let contract_digest = stable_json_sha256(&contract_digest_input)?;
     let session_summary_value = Value::Object(session_summary.clone());
+    let host_harness = build_host_harness_summary_fragment(repo_root)?;
     let prompt_lines = build_contract_guard_prompt_lines(
         &contract_digest,
         &continuity,
@@ -272,6 +277,7 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
             "session_summary": session_summary,
             "evidence_count": evidence_count,
             "artifacts_root": snapshot.current_root.display().to_string(),
+            "host_harness": host_harness,
             "recent_completed_execution": continuity.get("recent_completed_execution").cloned().unwrap_or(Value::Null),
             "recovery_hints": continuity.get("recovery_hints").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
         }
@@ -284,6 +290,39 @@ fn stable_json_sha256(value: &Value) -> Result<String, String> {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Machine-readable per-host harness surface from `RUNTIME_REGISTRY.json` (for contract-summary / audits).
+pub(crate) fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String> {
+    let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+    if !path.is_file() {
+        return Err(format!(
+            "RUNTIME_REGISTRY missing at {} — cannot build host_harness fragment",
+            path.display()
+        ));
+    }
+    let v = read_json_strict(&path)?;
+    let projections = v
+        .get("host_projections")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "RUNTIME_REGISTRY missing host_projections".to_string())?;
+    let mut hosts: Vec<String> = projections.keys().cloned().collect();
+    hosts.sort();
+    let mut out = Map::new();
+    for host in hosts {
+        let proj = projections
+            .get(&host)
+            .and_then(Value::as_object)
+            .ok_or_else(|| format!("host_projections.{host} must be an object"))?;
+        out.insert(
+            host,
+            json!({
+                "harness_capabilities": proj.get("harness_capabilities").cloned().unwrap_or(Value::Null),
+                "harness_capability_exceptions": proj.get("harness_capability_exceptions").cloned().unwrap_or(Value::Null),
+            }),
+        );
+    }
+    Ok(Value::Object(out))
 }
 
 fn build_contract_guard_prompt_lines(
@@ -575,6 +614,7 @@ pub(crate) fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
 }
 
 /// Like [`truncate_utf8_chars`], but appends `...` when the input exceeds `max_chars` (for hook UI hints).
+#[allow(dead_code)] // Kept for upcoming hook UI truncation; not wired yet.
 pub(crate) fn truncate_utf8_chars_with_ellipsis(input: &str, max_chars: usize) -> String {
     if max_chars == 0 {
         return String::new();
@@ -718,6 +758,19 @@ fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
     None
 }
 
+/// Task id resolution for evidence append helpers: explicit override wins, then active, then focus.
+fn resolve_evidence_append_task_id(
+    repo_root: &Path,
+    task_id_override: Option<&str>,
+) -> Option<String> {
+    task_id_override
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| crate::autopilot_goal::read_active_task_id(repo_root))
+        .or_else(|| crate::autopilot_goal::read_focus_task_id(repo_root))
+}
+
 fn append_evidence_index_merged_row(
     repo_root: &Path,
     task_id_override: Option<&str>,
@@ -726,13 +779,17 @@ fn append_evidence_index_merged_row(
     if !continuity_post_tool_evidence_env_enabled() {
         return Ok(());
     }
+    // Pass 1 (no flock): skip early when continuity isn't ready — avoids serializing unrelated
+    // PostTool churn on `.router-rs.task-ledger.lock`.
+    let resolved_pre = resolve_evidence_append_task_id(repo_root, task_id_override);
+    let snapshot_pre = load_framework_runtime_view(repo_root, None, resolved_pre.as_deref());
+    if !continuity_session_ready_for_evidence_append(&snapshot_pre) {
+        return Ok(());
+    }
+
     let _ledger = crate::task_write_lock::acquire_task_ledger_repo_lock(repo_root)?;
-    let resolved_task_id = task_id_override
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
-        .or_else(|| crate::autopilot_goal::read_active_task_id(repo_root))
-        .or_else(|| crate::autopilot_goal::read_focus_task_id(repo_root));
+    // Pass 2 (under flock): reconcile readiness after concurrent writers may flip pointers/summary.
+    let resolved_task_id = resolve_evidence_append_task_id(repo_root, task_id_override);
     let snapshot = load_framework_runtime_view(repo_root, None, resolved_task_id.as_deref());
     if !continuity_session_ready_for_evidence_append(&snapshot) {
         return Ok(());
@@ -909,22 +966,8 @@ fn shell_command_looks_like_verification(command: &str) -> bool {
         || c.contains("./verify.sh")
         || c.contains("task test")
         || c.contains("task check")
-        // Formal / math toolchains (narrow tokens; avoid bare `python` as the only signal).
-        || c.contains("sympy")
-        || c.contains(" z3 ")
-        || c.starts_with("z3 ")
-        || c.contains("\tz3 ")
-        || c.contains(" z3\t")
-        || c.contains("lean4")
-        || c.contains(" lean ")
-        || c.trim_start().starts_with("lean ")
-        || c.contains("coqc")
-        || c.contains("coqchk")
-        || c.contains("lake build")
-        || c.contains("lake test")
-        || c.contains("lake check")
-        || c.contains("lake exe")
-        || c.contains("isabelle build")
+        // Formal / math toolchains: shared with `harness_context_signals` (`formal_toolchain`).
+        || crate::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(&c)
 }
 
 #[cfg(test)]

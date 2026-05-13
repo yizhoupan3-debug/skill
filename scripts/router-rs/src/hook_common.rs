@@ -55,25 +55,6 @@ fn capability_domain_re() -> &'static Regex {
     })
 }
 
-fn override_patterns() -> &'static Vec<Regex> {
-    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
-    PATTERNS.get_or_init(|| {
-        compile_patterns(&[
-            r"(?i)do not use (a )?subagent",
-            r"(?i)without (a )?subagent",
-            r"(?i)handle (this|it) locally",
-            r"(?i)do it yourself",
-            r"(?i)no (parallel|delegation|delegating|split)",
-            r"(?i)不要.*subagent",
-            r"(?i)不用.*subagent",
-            r"(?i)不要.*子代理",
-            r"(?i)不用.*子代理",
-            r"(?i)(你|你自己).*(本地处理|直接处理|自己做)",
-            r"(?i)(不要|不用).*(分工|并行|分路|分头)",
-        ])
-    })
-}
-
 fn review_override_patterns() -> &'static Vec<Regex> {
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     PATTERNS.get_or_init(|| {
@@ -146,6 +127,65 @@ const REJECT_REASON_LINE_TOKENS: &[&str] = &[
 
 /// 显式操作符：仅当单独成行（trim 后全串匹配）时生效，避免在正常句子里误触发。
 const REVIEW_GATE_LINE_CLEAR_MARKERS: &[&str] = &["rg_clear", "/rg_clear"];
+
+/// 完成宣称 token：英文词 + 中文短语。**Single source of truth**：
+///
+/// - `closeout_enforcement::summary_claims_completion` 直接对 summary 原文扫描；
+/// - `cursor_hooks::completion_claimed_in_text` 先剥离引文 / 代码块 / URL 再扫描；
+/// - 中文用多字短语避免「完成度 / 完成任务拆分」等子串误命中。
+pub(crate) const COMPLETION_DETECT_EN: &[&str] =
+    &["done", "finished", "completed", "succeeded", "passed"];
+
+pub(crate) const COMPLETION_DETECT_ZH_PHRASES: &[&str] = &[
+    "已完成",
+    "已经完成",
+    "全部完成",
+    "完成了",
+    "验证通过",
+    "测试通过",
+    "审核通过",
+    "已通过",
+    "搞定",
+];
+
+/// 在已剥离/未剥离的文本中查找完成宣称 token。空串直接返回 false；EN 走 ASCII 大小写不敏感，ZH 走原文子串匹配。
+pub(crate) fn contains_completion_claim_token(text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    let lower = text.to_ascii_lowercase();
+    if COMPLETION_DETECT_EN
+        .iter()
+        .any(|kw| lower.contains(&kw.to_ascii_lowercase()))
+    {
+        return true;
+    }
+    COMPLETION_DETECT_ZH_PHRASES
+        .iter()
+        .any(|p| text.contains(p))
+}
+
+/// Contract JSON 导出：EN 词 ++ ZH 短语，保持原 `COMPLETION_KEYWORDS` 的顺序契约。
+pub(crate) fn completion_claim_keywords_export() -> Vec<&'static str> {
+    COMPLETION_DETECT_EN
+        .iter()
+        .chain(COMPLETION_DETECT_ZH_PHRASES.iter())
+        .copied()
+        .collect()
+}
+
+/// 单一来源：`EVIDENCE_INDEX.json` 单条 artifact 是否计作「成功验证」。
+/// 规则：`success == true` **或** `exit_code` 取 0（i64 或 u64 皆可）。
+/// `rfv_loop` 与 `autopilot_goal` 都走这里，防止两路证据口径分叉。
+pub(crate) fn evidence_index_entry_implies_success(entry: &Value) -> bool {
+    if entry.get("success").and_then(Value::as_bool) == Some(true) {
+        return true;
+    }
+    match entry.get("exit_code") {
+        Some(v) => v.as_i64() == Some(0) || v.as_u64() == Some(0),
+        None => false,
+    }
+}
 
 fn review_keyword_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -263,8 +303,7 @@ pub fn is_parallel_delegation_prompt(text: &str) -> bool {
 }
 
 pub fn has_override(text: &str) -> bool {
-    let sanitized = strip_quoted_or_codeblock_or_url(text);
-    override_patterns().iter().any(|p| p.is_match(&sanitized))
+    has_review_override(text) || has_delegation_override(text)
 }
 
 pub fn has_review_override(text: &str) -> bool {
@@ -281,12 +320,12 @@ pub fn has_delegation_override(text: &str) -> bool {
         .any(|p| p.is_match(&sanitized))
 }
 
-/// 用户粘贴的 goal/续跑清门行前缀（分段拼接，避免在源码检索里出现完整误拼 token）。
+/// 用户粘贴的 goal 续跑清门行前缀（分段拼接，避免在源码检索里出现完整误拼 token）。
+/// **不含** `rg_followup`：该形态与 harness 文档中的「仿冒机读行」一致，若允许用户粘贴清门会鼓励误用模型自拟行；清门请用 `rg_clear`、拒因 token 或自然语言 override。
 const PASTED_LINE_AG_FOLLOWUP_PREFIX: &str = concat!("ag", "_followup");
-const PASTED_LINE_LEGACY_REVIEW_GATE_FOLLOWUP_PREFIX: &str = concat!("rg", "_followup");
 
 /// Recognize Codex/Cursor gate clearance: bounded subagent **`reject_reason` tokens**, `rg_clear`,
-/// plus **paste-style** legacy followup prefixes **only when they appear in the user's turn**.
+/// plus **paste-style** `ag_followup` leader **only when it appears in the user's turn**.
 ///
 /// # Why split `signal_text` vs `user_turn_text`
 ///
@@ -317,8 +356,8 @@ pub fn saw_reject_reason(signal_text: &str, user_turn_text: &str) -> bool {
     pasted_followup_line_clear_in_user_turn_only(user_turn_text)
 }
 
-/// 用户把机读续跑行贴回输入框（含真源 `ag_followup` 行或历史上误用的 review-gate 前缀）。
-/// **仅检查用户本轮提交**，不得用整会话 scrape，否则助手自拟 `rg_followup` 会误清门。
+/// 用户把 goal 相关续跑行贴回输入框（`ag_followup` 前缀，无 `router-rs ` 的粘贴兼容路径）。
+/// **仅检查用户本轮提交**，不得用整会话 scrape，否则助手自拟仿机读行会误清门。
 fn pasted_followup_line_clear_in_user_turn_only(user_turn_text: &str) -> bool {
     for raw_line in user_turn_text.lines() {
         let line = raw_line.trim();
@@ -326,9 +365,7 @@ fn pasted_followup_line_clear_in_user_turn_only(user_turn_text: &str) -> bool {
             continue;
         }
         let lower = line.to_lowercase();
-        if lower.starts_with(PASTED_LINE_LEGACY_REVIEW_GATE_FOLLOWUP_PREFIX)
-            || lower.starts_with(PASTED_LINE_AG_FOLLOWUP_PREFIX)
-        {
+        if lower.starts_with(PASTED_LINE_AG_FOLLOWUP_PREFIX) {
             return true;
         }
     }
@@ -337,18 +374,15 @@ fn pasted_followup_line_clear_in_user_turn_only(user_turn_text: &str) -> bool {
 
 pub fn normalize_subagent_type(value: Option<&str>) -> String {
     value
-        .map(|s| s.trim().to_lowercase().replace('_', "-"))
+        .map(crate::lane_normalize::normalize_subagent_lane)
         .unwrap_or_default()
 }
 
 /// 已 `normalize_subagent_type` 后的 lane：**Cursor / Codex** 默认为可清点 **`REVIEW_GATE` / CODEX_STOP 独立审稿** 的深度子代理 lane（与 `fork_context=false` 组合使用）。
 ///
-/// **不是** Claude `claude_reviewer_lane` 的超集（Claude 另含 review/critic 等）；勿把本函数结果套到 Claude 门控。
+/// **不是** Claude/Qoder stdio-agent reviewer lane 的超集（Claude 另含 review/critic 等）；勿把本函数结果套到 Claude 门控。
 pub fn is_deep_review_gate_lane_normalized(lane: &str) -> bool {
-    matches!(
-        lane,
-        "general-purpose" | "generalpurpose" | "best-of-n-runner" | "bestofnrunner"
-    )
+    crate::registry_review_gate::is_deep_review_gate_lane_from_registry(lane)
 }
 
 pub fn normalize_tool_name(value: Option<&str>) -> String {
@@ -360,13 +394,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deep_review_gate_lane_normalized_matches_cursor_codex_bar() {
-        assert!(is_deep_review_gate_lane_normalized("general-purpose"));
-        assert!(is_deep_review_gate_lane_normalized("generalpurpose"));
-        assert!(is_deep_review_gate_lane_normalized("best-of-n-runner"));
-        assert!(is_deep_review_gate_lane_normalized("bestofnrunner"));
-        assert!(!is_deep_review_gate_lane_normalized("explore"));
-        assert!(!is_deep_review_gate_lane_normalized("ci-investigator"));
+    fn has_override_superset_of_review_and_delegation_overrides() {
+        let delegation_only = "Please no parallel delegation on this task.";
+        assert!(
+            has_delegation_override(delegation_only),
+            "fixture must hit delegation-only patterns"
+        );
+        assert!(
+            !has_review_override(delegation_only),
+            "delegation-only wording must not match review-override patterns alone"
+        );
+        assert!(
+            has_override(delegation_only),
+            "has_override delegates to delegation narrow matcher for this fixture"
+        );
+
+        let review_only = "Do not use a subagent.";
+        assert!(has_review_override(review_only));
+        assert!(!has_delegation_override(review_only));
+        assert!(has_override(review_only));
+    }
+
+    #[test]
+    fn deep_review_gate_lane_normalized_matches_registry_matrix() {
+        crate::registry_review_gate::assert_deep_review_gate_lane_matrix();
     }
 
     #[test]
@@ -379,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn saw_reject_reason_ignores_fake_rg_followup_in_scrape_not_in_user_turn() {
+    fn saw_reject_reason_ignores_rg_followup_in_scrape_and_user_turn() {
         let bad = format!(
             "{} {}",
             concat!("RG", "_FOLLOWUP"),
@@ -391,9 +442,16 @@ mod tests {
             "assistant-hallucinated imitation follow-up must not clear gate via conversation scrape"
         );
         assert!(
-            saw_reject_reason("ok", bad.as_str()),
-            "user paste of legacy line in their turn must still clear gate"
+            !saw_reject_reason("ok", bad.as_str()),
+            "user paste of RG_FOLLOWUP imitation line must not clear gate (use rg_clear or reject_reason tokens)"
         );
+    }
+
+    #[test]
+    fn saw_reject_reason_accepts_ag_followup_paste_in_user_turn_only() {
+        let line = concat!("ag", "_followup", " missing_parts=checkpoint_progress");
+        assert!(!saw_reject_reason("signal", "no paste"));
+        assert!(saw_reject_reason("ok", line));
     }
 
     #[test]
@@ -422,5 +480,24 @@ mod tests {
             ),
             "host-hook debugging complaints should not arm the shared deep-review gate"
         );
+    }
+
+    #[test]
+    fn review_subagent_gate_mdc_lists_deep_lanes_consistent_with_hook() {
+        use std::path::PathBuf;
+
+        let mdc_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cursor/rules/review-subagent-gate.mdc");
+        let mdc = std::fs::read_to_string(&mdc_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", mdc_path.display()));
+        for needle in ["general-purpose", "best-of-n-runner"] {
+            assert!(
+                mdc.contains(needle),
+                "review-subagent-gate.mdc should mention {needle}: {}",
+                mdc_path.display()
+            );
+        }
+        assert!(is_deep_review_gate_lane_normalized("general-purpose"));
+        assert!(is_deep_review_gate_lane_normalized("best-of-n-runner"));
     }
 }

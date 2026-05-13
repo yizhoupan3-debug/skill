@@ -64,6 +64,11 @@ pub(crate) fn write_atomic_text_to_temp(
     Ok(())
 }
 
+/// Convenience wrapper around [`write_atomic_text_to_temp`] that derives a `<ext>.tmp` sidecar
+/// for single-writer call sites (e.g. framework runtime session artifacts). If multiple processes
+/// may race to write the same `path` concurrently, **do not** use this helper — derive a unique
+/// `tmp_path` (pid + nanos + nonce) and call [`write_atomic_text_to_temp`] directly. The codex
+/// hook installer takes that route in [`crate::codex_hooks::write_atomic_text`].
 pub(crate) fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     let tmp_path = path.with_extension(format!(
         "{}.tmp",
@@ -74,7 +79,6 @@ pub(crate) fn write_atomic_text(path: &Path, content: &str) -> Result<(), String
     write_atomic_text_to_temp(path, content, &tmp_path)
 }
 
-#[allow(dead_code)]
 pub(crate) fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
     let text = serde_json::to_string_pretty(value)
         .map_err(|err| format!("serialize JSON failed: {err}"))?;

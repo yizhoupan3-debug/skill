@@ -2,10 +2,24 @@
 
 这份仓库是一整套给 Codex 和 Cursor 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆、验证，并按本机的 `CODEX_HOME` / `CURSOR_HOME` 或工作区路径启用；不要依赖某台机器的绝对路径。
 
+**使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)。
+
+## 我该怎么入门（两条路径）
+
+- **路径 A — 只消费 skill 路由（无 hook）**  
+  适合：只想让 Codex/Cursor **按 `AGENTS.md` 查 [`skills/SKILL_ROUTING_RUNTIME.json`](skills/SKILL_ROUTING_RUNTIME.json) 再读命中 `skill_path`**，不需要连续性目录、门控或 `router-rs`。  
+  最小准备：本仓库根、`AGENTS.md`、`skills/`；变更 skill 后运行 **skill-compiler** 刷新路由产物（见下文「修改或新增 skill」与 Windows 下 skill-compiler 命令）。**不要求**安装 `router-rs` 或配置 `.cursor/hooks.json`。
+
+- **路径 B — 全量 harness（router-rs + hooks）**  
+  适合：需要 **Cursor/Codex/Claude hooks**、`.cursor/hook-state` 门控、连续性 `artifacts/current/`、证据索引等。必须先 **构建并安装 `router-rs`**，再按宿主配置 hooks；关键事件在二进制缺失时常 **fail-closed**（见下文 Codex hooks 解析顺序）。  
+  **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 `AGENTS.md` → Codex Sync。  
+  Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
+  `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检。
+
 ## 这套系统包含什么
 
 - `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
-  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"`；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
+  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
 - `docs/README.md`：契约与分层文档索引（阅读顺序、主题表、`target-dir`/hook 清理边界）。
 - `docs/harness_architecture.md`：连续性控制面 **L1–L5** 上层设计（证据流、续跑流、扩展规则）。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。
@@ -91,7 +105,9 @@ cd codex-skill-system
 
 如果是 private repository，她需要先登录 GitHub，或使用 GitHub Desktop / SSH key / personal access token 完成克隆。
 
-## 第一次验证
+## 第一次验证（路径 B：全量 harness）
+
+路径 A 用户可只跑 **skill-compiler** 与 `cargo test --test policy_contracts`（见上节）；本节面向路径 B（还要 hooks / `router-rs`）。
 
 进入仓库后运行：
 
@@ -101,6 +117,8 @@ cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- `
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json `
   --apply
 ```
+
+`--skills-root` 的父目录必须是含 `configs/framework/RUNTIME_REGISTRY.json` 的仓库根；`framework_command` 运行时行**只**从该 registry 生成，缺失文件会直接报错（无静默回退）。
 
 再运行测试：
 
@@ -216,6 +234,7 @@ cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --skills-root skills \
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
   --apply
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
 cargo test --test policy_contracts
 git status --short
 git add skills scripts tests AGENTS.md README.md

@@ -29,9 +29,18 @@ trigger_hints:
   - ablation 方案
   - benchmark 方案
   - 非手稿科研
+do_not_use:
+  - 数学推导
+  - 定理证明
+  - 公式推导
+  - 不等式证明
+  - 收敛性证明
+  - 存在唯一性证明
+  - 变分推导
+  - 线性代数证明
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - research
     - experiment-design

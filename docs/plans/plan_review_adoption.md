@@ -21,17 +21,20 @@ Non-goals: <明确不做的 1 行>
 以下为未在本次仓库内补齐 URL/日期/来源的启发式，不作为已证实事实写入硬契约；需要外部化时须回到 `code-review-deep` 的 external calibration 形态补 URL、抓取日期、contradiction sweep 与 unknowns。
 
 - **计划绑定验证**：先有可执行验证的计划再实现；计划失败时用验证反馈修正计划。
-- **AI 审查上限**：自动化审查与人类 PR 评论对齐度可能有限；应用 **lane 结构 + verdict-first + test/repro gap**，并保留人类与工具链终裁。
+- **AI 审查上限**：自动化审查与人类 PR 评论对齐度可能有限；应用 **findings-first + 单行 verdict（可选）+ test/repro gap**，并保留人类与工具链终裁。
 - **对抗 / 多角色**：Promote 前可反驳过滤、分阶段门控、独立 critic，可能提高「真问题」密度；若作为外部 claim 使用，必须补来源。
 
-## 深度 Review 最小输出（对齐 code-review-deep）
+## 深度 Review 最小输出（对齐 code-review-deep **compact default**）
 
-1. 一行 **verdict**（`ship with caveats` / `revise before merge` / `blocked`）。
-2. **P0–P2**，每条带 **路径 + 符号或锚点**。
-3. **test_repro_gap**：最小缺失测试或复现步骤。
-4. 涉及第三方时：**Claims + contradiction sweep**（可简写为要点 + 链接）。
+默认与 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md) **一致**：**先**列 **severity 全局排序** 的 findings（**P0 → P1 → P2 → caveat/open question**），每条含 **路径 + 符号或锚点**、影响、最小验证/缺测证据（P0/P1 证据门槛不放宽）。
 
-**lane 结构**（只读、artifact-disjoint）：至少拆 **correctness** 与 **security**（或 `review-dimensions.md` 中其它正交组合）。只有用户显式授权 subagent/并行，或宿主 review gate 允许/要求时，才把这些 lane 分配给并行 subagent；否则主线程本地按 lane 结构审。
+以下内容 **可选、且宜短**（避免长篇述职）：
+
+- **一行 verdict**（`ship with caveats` / `revise before merge` / `blocked`）——放在 findings **之后**，或仅占一行前置摘要；二者择一但不要叠床架屋。
+- **test_repro_gap**：单列一行或并入首条高危 finding；若每条已写清验证则不必重复一节。
+- 涉及第三方时：**Claims + contradiction sweep**（可要点 + 链接）；若篇幅大，切换到 skill 中的 **full report profile**。
+
+**lane 结构**（内部推理与并行拆分；**默认不按 lens 对用户分段输出**，除非用户要叙事/Lens 表）：至少覆盖 **correctness** 与 **security**（或 `review-dimensions.md` 中正交组合）。只有用户显式授权 subagent/并行，或宿主 review gate 允许/要求时，才把 lane 分给并行 subagent；否则主线程本地按 lane 穷尽即可。
 
 ## 本仓库执行顺序（与 plan-mode 六步一致）
 

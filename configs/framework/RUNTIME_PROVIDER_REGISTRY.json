@@ -129,6 +129,11 @@
       "projection": "claude_code_profile",
       "capabilities": ["context_files", "settings_paths", "hook_settings_paths", "hard_gate_hooks"]
     },
+    "qoder": {
+      "status": "implemented",
+      "projection": "qoder_profile",
+      "capabilities": ["context_files", "settings_paths", "hook_settings_paths", "hard_gate_hooks"]
+    },
     "mcp": {
       "status": "declared",
       "projection": "mcp_capability_profile",

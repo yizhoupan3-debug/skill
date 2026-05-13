@@ -5,7 +5,7 @@ description: |
   Use proactively when the user asks for quant strategy design, 回测, 交易策略, trading bot logic, Sharpe/drawdown analysis, factor research, or execution/risk rules. For pure market-data acquisition, API verification, or backtest-data export, route to `financial-data-fetching` first.
 metadata:
   version: "3.0.0"
-  platforms: [codex]
+  platforms: [supported]
   category: finance
   tags:
     - algo-trading

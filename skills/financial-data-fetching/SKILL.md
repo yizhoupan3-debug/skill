@@ -9,7 +9,7 @@ description: |
   backtest-ready exports.
 metadata:
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [supported]
   category: finance
   tags:
     - financial-data

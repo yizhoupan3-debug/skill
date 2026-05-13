@@ -1,5 +1,8 @@
 //! Structured observation payloads for hook outbound JSON (`router_rs_observation`).
 
+use crate::hook_observation_rules::{
+    classify_additional_context, classify_followup_first_line, shorten_line, GateClassified,
+};
 use serde_json::{json, Map, Value};
 
 pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-observation-v1";
@@ -8,139 +11,20 @@ pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-obse
 pub enum HookObservationHost {
     Cursor,
     Codex,
-}
-
-#[derive(Debug, Clone)]
-struct GateClassified {
-    code: &'static str,
-    human_prefix: String,
-}
-
-fn shorten_line(s: &str, max: usize) -> String {
-    let t = s.trim();
-    if t.len() <= max {
-        return t.to_string();
-    }
-    let mut cut = max.min(t.len());
-    while cut > 0 && !t.is_char_boundary(cut) {
-        cut -= 1;
-    }
-    format!("{}...", &t[..cut])
-}
-
-fn classify_router_rs_after_leader(line: &str) -> Option<GateClassified> {
-    let rest = line.strip_prefix("router-rs ").unwrap_or("").trim();
-    let token = rest.split_whitespace().next().unwrap_or("");
-    let code = match token {
-        "REVIEW_GATE" => "review_gate",
-        "CODEX_REVIEW_GATE" => "codex_review_gate",
-        "AG_FOLLOWUP" => "ag_followup",
-        _ if !token.is_empty() => "unknown_router_rs",
-        _ => return None,
-    };
-    Some(GateClassified {
-        code,
-        human_prefix: if token.is_empty() {
-            "router-rs".to_string()
-        } else {
-            format!("router-rs {token}")
-        },
-    })
-}
-
-fn classify_line_followup(line: &str) -> Option<GateClassified> {
-    let t = line.trim();
-    if t.starts_with("CLOSEOUT_FOLLOWUP") {
-        return Some(GateClassified {
-            code: "closeout_followup",
-            human_prefix: shorten_line(t, 120),
-        });
-    }
-    if t.starts_with("router-rs ") {
-        return classify_router_rs_after_leader(t);
-    }
-    if t.starts_with("router-rs：") || t.starts_with("router-rs:") {
-        return Some(GateClassified {
-            code: "hook_state_degraded",
-            human_prefix: shorten_line(t, 120),
-        });
-    }
-    None
-}
-
-fn classify_additional(text: &str) -> Option<GateClassified> {
-    let mut picked: Option<(u8, GateClassified)> = None;
-    for line in text.lines() {
-        let t = line.trim();
-        let cand = if t.starts_with("CLOSEOUT_FOLLOWUP") {
-            Some((
-                0_u8,
-                GateClassified {
-                    code: "closeout_followup",
-                    human_prefix: shorten_line(t, 120),
-                },
-            ))
-        } else if t.starts_with("router-rs ") {
-            classify_router_rs_after_leader(t).map(|g| (1_u8, g))
-        } else if t.starts_with("router-rs：") || t.starts_with("router-rs:") {
-            Some((
-                1_u8,
-                GateClassified {
-                    code: "hook_state_degraded",
-                    human_prefix: shorten_line(t, 120),
-                },
-            ))
-        } else if t.starts_with("AUTOPILOT_DRIVE") || t.contains("AUTOPILOT_DRIVE:") {
-            Some((
-                2_u8,
-                GateClassified {
-                    code: "autopilot_drive",
-                    human_prefix: "AUTOPILOT_DRIVE".to_string(),
-                },
-            ))
-        } else if t.contains("RFV_LOOP_CONTINUE") {
-            Some((
-                3_u8,
-                GateClassified {
-                    code: "rfv_loop_continue",
-                    human_prefix: "RFV_LOOP_CONTINUE".to_string(),
-                },
-            ))
-        } else if t.starts_with("SESSION_CLOSE_STYLE") || t.contains("SESSION_CLOSE_STYLE:") {
-            Some((
-                5_u8,
-                GateClassified {
-                    code: "session_close_style",
-                    human_prefix: "SESSION_CLOSE_STYLE".to_string(),
-                },
-            ))
-        } else {
-            None
-        };
-        if let Some((pri, g)) = cand {
-            let replace = picked
-                .as_ref()
-                .map(|(existing_pri, _)| pri < *existing_pri)
-                .unwrap_or(true);
-            if replace {
-                picked = Some((pri, g));
-            }
-            if pri == 0 {
-                break;
-            }
-        }
-    }
-    picked.map(|(_, g)| g)
+    /// Claude Code hook JSON (`router-rs claude hook`).
+    ClaudeCode,
+    /// Qoder IDE Agent hook JSON (`router-rs qoder hook`).
+    Qoder,
 }
 
 fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<GateClassified> {
     if let Some(f) = followup {
         let line = f.lines().next().unwrap_or("").trim();
-        if let Some(g) = classify_line_followup(line) {
+        if let Some(g) = classify_followup_first_line(line) {
             return Some(g);
         }
     }
-    additional.and_then(classify_additional)
+    additional.and_then(classify_additional_context)
 }
 
 fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String>, Option<String>) {
@@ -160,6 +44,26 @@ fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String
                 .get("followup_message")
                 .and_then(Value::as_str)
                 .map(|s| s.to_string());
+            let additional = output
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .map(|s| s.to_string());
+            (followup, additional)
+        }
+        HookObservationHost::ClaudeCode | HookObservationHost::Qoder => {
+            let followup = output
+                .get("stopReason")
+                .or_else(|| output.get("systemMessage"))
+                .or_else(|| output.get("followup_message"))
+                .and_then(Value::as_str)
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    output
+                        .get("message")
+                        .or_else(|| output.get("reason"))
+                        .and_then(Value::as_str)
+                        .map(|s| s.to_string())
+                });
             let additional = output
                 .pointer("/hookSpecificOutput/additionalContext")
                 .and_then(Value::as_str)
@@ -232,10 +136,10 @@ fn compute_blocking(output: &Value, gate: Option<&GateClassified>) -> bool {
     let continue_true = output.get("continue").and_then(Value::as_bool) == Some(true);
     let base = permission_deny || decision_block || continue_false;
 
-    match gate.map(|g| g.code) {
+    match gate.map(|g| g.code.as_str()) {
         Some(
-            "review_gate" | "codex_review_gate" | "ag_followup" | "closeout_followup"
-            | "subagent_limit",
+            "review_gate" | "codex_review_gate" | "claude_review_gate" | "qoder_review_gate"
+            | "ag_followup" | "closeout_followup" | "subagent_limit",
         ) => {
             if continue_true {
                 base
@@ -257,7 +161,7 @@ fn maybe_subagent_limit_gate(output: &Value) -> Option<GateClassified> {
         .unwrap_or("");
     if msg.contains("subagent") && (msg.contains("router-rs") || msg.contains("上限")) {
         return Some(GateClassified {
-            code: "subagent_limit",
+            code: "subagent_limit".to_string(),
             human_prefix: shorten_line(msg, 120),
         });
     }
@@ -282,6 +186,8 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
     let host_str = match host {
         HookObservationHost::Cursor => "cursor",
         HookObservationHost::Codex => "codex",
+        HookObservationHost::ClaudeCode => "claude-code",
+        HookObservationHost::Qoder => "qoder",
     };
 
     if output.get("contract_guard").is_some()
@@ -361,9 +267,14 @@ mod tests {
 
     #[test]
     fn classifies_review_gate_followup() {
+        let followup = format!(
+            "router-rs REVIEW_GATE incomplete phase=0 {} {}",
+            crate::cursor_hooks::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT,
+            crate::cursor_hooks::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+        );
         let v = json!({
             "continue": false,
-            "followup_message": "router-rs REVIEW_GATE incomplete phase=0 need=subagent",
+            "followup_message": followup,
         });
         let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
         assert_eq!(o["gate"]["code"], "review_gate");
@@ -407,20 +318,58 @@ mod tests {
     }
 
     #[test]
-    fn codex_lifecycle_context_input_error_shape() {
-        let msg = "Codex lifecycle hook input schema invalid: missing hook_event_name/event.";
+    fn claude_stop_classifies_claude_review_gate() {
         let v = json!({
+            "continue": false,
             "decision": "block",
-            "message": msg,
-            "reason": msg,
-            "hookSpecificOutput": {
-                "hookEventName": "CodexLifecycleContext",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": msg,
-            },
+            "stopReason": "router-rs CLAUDE_REVIEW_GATE incomplete: run subagent",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Codex);
-        assert_eq!(o["gate"]["code"], "lifecycle_context_input_error");
+        let o = build_router_rs_observation_value(&v, HookObservationHost::ClaudeCode);
+        assert_eq!(o["host"], "claude-code");
+        assert_eq!(o["gate"]["code"], "claude_review_gate");
         assert_eq!(o["gate"]["blocking"], true);
+    }
+
+    #[test]
+    fn qoder_stop_classifies_qoder_review_gate() {
+        let v = json!({
+            "continue": false,
+            "decision": "block",
+            "stopReason": "router-rs QODER_REVIEW_GATE incomplete: run subagent",
+        });
+        let o = build_router_rs_observation_value(&v, HookObservationHost::Qoder);
+        assert_eq!(o["host"], "qoder");
+        assert_eq!(o["gate"]["code"], "qoder_review_gate");
+        assert_eq!(o["gate"]["blocking"], true);
+    }
+
+    #[test]
+    fn golden_unknown_router_rs_token_in_followup() {
+        let v = json!({
+            "continue": true,
+            "followup_message": "router-rs WEIRD_TOKEN hello",
+        });
+        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        assert_eq!(o["gate"]["code"], "unknown_router_rs");
+    }
+
+    #[test]
+    fn golden_hook_state_degraded_fullwidth_colon() {
+        let v = json!({
+            "continue": true,
+            "followup_message": "router-rs：disk full",
+        });
+        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        assert_eq!(o["gate"]["code"], "hook_state_degraded");
+    }
+
+    #[test]
+    fn golden_closeout_followup_wins_in_additional() {
+        let v = json!({
+            "continue": true,
+            "additional_context": "CLOSEOUT_FOLLOWUP please\nAUTOPILOT_DRIVE: x",
+        });
+        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        assert_eq!(o["gate"]["code"], "closeout_followup");
     }
 }

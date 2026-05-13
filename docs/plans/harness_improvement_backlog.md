@@ -110,12 +110,12 @@
 - **Done when**：`plan-mode` 或 checklist 文档中可链回本文 **P0 验证命令**。
 - **Verify**：用户于 Cursor 执行 `/gitx plan`（**此处不可由 CI 子代理替代**）。
 
-### P2-5：Cursor `additional_context` 无总 cap（弱模型 / 长会话噪声）
+### P2-5：Cursor `additional_context` — 合并链路与出站字节上限（两阶段）
 
-- **做什么**：记录 Cursor 侧 `merge_additional_context` **无合并后总字符 cap** 的产品风险与缓解依赖（`retired silent-mode branch`、段落 strip 等）；可选后续增加 **`ROUTER_RS_*` 总 cap** 或宿主侧观测，属 **产品决策**，不在未立项前改 `cursor_hooks/` 默认行为。
-- **证据与路径**：[`context_token_audit_deep_dive.md`](context_token_audit_deep_dive.md) §2–§3；[`scripts/router-rs/src/cursor_hooks/mod.rs`](../../scripts/router-rs/src/cursor_hooks/mod.rs)（同目录 `frag_*.rs` 内含 `merge_additional_context`，以 `rg` 为准）。
-- **Done when**：本小节可被 `docs/plans/RESEARCH_harness_weak_model_top_tier.md` / `docs/harness_architecture.md` §6 指针命中；执行 execution 时优先 **文档 + preset** 再议 cap。
-- **Verify**：`rg -n 'merge_additional_context|cursor_hooks|context_token_audit' docs/plans/harness_improvement_backlog.md docs/plans/context_token_audit_deep_dive.md`。
+- **做什么**：钉死 **两阶段**：① handler 内 [`merge_additional_context`](../../scripts/router-rs/src/cursor_hooks/frag_03_paths_terminal_merge_lock_persist.rs) 可多段 `\n\n` 追加（合并阶段本身不设单独字节预算）；② **`stdout` 写出前**由 `review_gate::run_review_gate` → [`apply_cursor_hook_output_policy`](../../scripts/router-rs/src/cursor_hooks/frag_04_review_gate_runtime.rs) 对 `additional_context` / 超长 `followup_message` 施加 **`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`**（UTF-8 字节、前缀保留，语义见变量注释 [`router_env_flags.rs`](../../scripts/router-rs/src/router_env_flags.rs)）。**残余风险**：较晚并入的 advisory 更易被截掉（[`harness_architecture.md` §4.2](../harness_architecture.md#42-cursor-additional_context合并链路与出站字节上限)），排查应对照合并顺序而非假定 JSON 无界。
+- **证据与路径**：[`context_token_audit_deep_dive.md`](context_token_audit_deep_dive.md) §10 H8；[`harness_architecture.md` §4.2](../harness_architecture.md#42-cursor-additional_context合并链路与出站字节上限)。
+- **Done when**：读者不会因「合并链路可增长」误判 **hook 出站 JSON** 也无字节上限；索引见 [`harness_architecture.md` §8 文件映射](../harness_architecture.md#8-文件映射)「弱模型 / 上下文预算调研索引」行。
+- **Verify**：`rg -n 'merge_additional_context|ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS|apply_cursor_hook_output_policy|context_token_audit' docs/plans/harness_improvement_backlog.md docs/harness_architecture.md`。
 
 ---
 

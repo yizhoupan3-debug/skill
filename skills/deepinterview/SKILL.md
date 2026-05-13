@@ -31,7 +31,7 @@ framework_contracts:
   emits_verification_results: true
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - deepinterview
     - review

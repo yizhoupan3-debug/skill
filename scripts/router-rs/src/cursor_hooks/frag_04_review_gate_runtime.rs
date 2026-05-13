@@ -12,10 +12,42 @@ fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
     review_hard_armed(state) && !review_subagent_evidence_satisfied(state)
 }
 
+/// Stop / 观测 fixture 共用的 `need=` 段（前缀仍须含 `REVIEW_GATE` 供 `router_rs_observation` 分类）。
+pub(crate) const REVIEW_GATE_FOLLOWUP_NEED_SEGMENT: &str =
+    "need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false";
+
+/// Short, stable tail for `REVIEW_GATE incomplete` lines (after `need=`). Does not change the first
+/// `router-rs` token (`REVIEW_GATE`) used by observation classification.
+pub(crate) const REVIEW_GATE_FOLLOWUP_HINT_SEGMENT: &str =
+    "hint=fork_context_json_false_not_omitted";
+
 fn review_stop_followup_line(state: &ReviewGateState) -> String {
     format!(
-        "router-rs REVIEW_GATE incomplete phase={} need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false",
-        state.phase
+        "router-rs REVIEW_GATE incomplete phase={} {} {}",
+        state.phase, REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+    )
+}
+
+/// `merge_hook_nudge_paragraph` 去重前缀：首行须与 `REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX` 常量一致以便每轮刷新同一段落。
+pub(crate) const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str = "router-rs REVIEW_GATE detail";
+
+/// 超过「完整硬行」上限后写入 `followup_message` 的短行（仍以 `router-rs REVIEW_GATE` 开头供观测分类）。
+pub(crate) fn review_stop_followup_soft_line(
+    state: &ReviewGateState,
+    full_line_cap: u32,
+) -> String {
+    format!(
+        "router-rs REVIEW_GATE incomplete mode=soft_nag full_line_cap={full_line_cap} phase={} stop_nudge_count={} see=.cursor/hook-state rg_clear|ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1|ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES=0(strict)|detail=additional_context",
+        state.phase, state.review_followup_count
+    )
+}
+
+/// 完整 `need=`/`hint=` 行：降级到 `additional_context` 时与 `REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX` 首行合并。
+pub(crate) fn review_stop_followup_detail_paragraph(state: &ReviewGateState) -> String {
+    format!(
+        "{}\n{}",
+        REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX,
+        review_stop_followup_line(state)
     )
 }
 
@@ -194,12 +226,26 @@ pub(crate) fn apply_cursor_hook_output_policy(output: &mut Value) {
     }
 }
 
-/// Cursor 出站 `additional_context` / 极端 `followup_message`：**UTF-8 字节预算**，前缀优先，末尾以 `...` 结束（与 Codex `truncate_codex_additional_context_bytes` 对齐）。
+/// Cursor outbound truncation: UTF-8 byte cap; prefix retained; **fixed suffix** so operators can
+/// tell budget clipping from gate logic. (Variable names may say `_CHARS`; semantics are bytes.)
+pub(crate) const CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX: &str = "...[~trunc]";
+
+/// Cursor 出站 `additional_context` / 极端 `followup_message`：**UTF-8 字节预算**，前缀优先，末尾固定
+/// [`CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX`]（与 Codex `truncate_codex_additional_context_bytes` 的 `...` 相比更可观测）。
 fn truncate_cursor_hook_outbound_context(combined: &str, max_bytes: usize) -> String {
     if combined.len() <= max_bytes {
         return combined.to_string();
     }
-    let budget = max_bytes.saturating_sub(3);
+    let suf = CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX;
+    let suf_len = suf.len();
+    if max_bytes <= suf_len {
+        let mut cut = max_bytes.min(combined.len());
+        while cut > 0 && !combined.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        return combined[..cut].to_string();
+    }
+    let budget = max_bytes.saturating_sub(suf_len);
     let mut cut = budget.min(combined.len());
     while cut > 0 && !combined.is_char_boundary(cut) {
         cut -= 1;
@@ -212,7 +258,7 @@ fn truncate_cursor_hook_outbound_context(combined: &str, max_bytes: usize) -> St
     while cut > 0 && !combined.is_char_boundary(cut) {
         cut -= 1;
     }
-    format!("{}{}", &combined[..cut], "...")
+    format!("{}{}", &combined[..cut], suf)
 }
 
 /// 应急关闭门控时仍执行 PostToolUse/Subagent 状态更新，但不对模型注入门控类提示（与 SILENT 剥离字段一致）。
@@ -362,7 +408,7 @@ fn goal_stop_followup_line(state: &ReviewGateState) -> String {
 }
 
 fn state_lock_degraded_followup() -> &'static str {
-    "router-rs：hook-state 锁不可用，本闸门控降级。收口前须见独立 subagent lane，或在助手输出中写明拒因。"
+    "router-rs：hook-state 锁不可用，本闸门控降级。收口前须见独立 subagent lane，或在**用户消息**中单独一行写拒因。"
 }
 
 fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
@@ -373,8 +419,7 @@ fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
     let review_arms = review && !autopilot_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
-    let overridden =
-        has_review_override(&text) || has_delegation_override(&text) || has_override(&text);
+    let overridden = has_override(&text);
 
     let strong_constraint = (review_arms || delegation || autopilot_entrypoint) && !overridden;
     if strong_constraint {
@@ -400,10 +445,7 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
     let review_arms = review && !autopilot_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
-    let overridden = has_review_override(&signal_text)
-        || has_delegation_override(&signal_text)
-        || has_override(&signal_text)
-        || saw_reject_reason(&signal_text, &text);
+    let overridden = has_override(&text) || saw_reject_reason(&signal_text, &text);
 
     let strong_constraint = (review_arms || delegation || autopilot_entrypoint) && !overridden;
     if strong_constraint {

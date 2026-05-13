@@ -35,6 +35,7 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Codex { command } => dispatch_codex_command(command),
         RouterCommand::Claude { command } => dispatch_claude_command(command),
+        RouterCommand::Qoder { command } => dispatch_qoder_command(command),
         RouterCommand::Cursor { command } => dispatch_cursor_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
@@ -58,9 +59,18 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
                 command.task_id.as_deref(),
             )?)
         }
+        FrameworkCommand::Doctor(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            run_framework_doctor(&repo_root)
+        }
         FrameworkCommand::ContractSummary(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             print_json_value(&build_framework_contract_summary_envelope(&repo_root)?)
+        }
+        FrameworkCommand::SyncEntrypoints(command) => {
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let provider = codex_host_entrypoint_provider(&repo_root)?;
+            print_json_value(&sync_host_entrypoints(&repo_root, true, provider)?)
         }
         FrameworkCommand::PromptCompression(command) => {
             let payload =
@@ -136,6 +146,10 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
             let payload = run_host_integration_from_args(&command.args)?;
             print_json_value(&payload)
         }
+        FrameworkCommand::NlRouteSignalRegistryContract => {
+            println!("{}", crate::route::nl_route_signal_registry_names_json());
+            Ok(())
+        }
         FrameworkCommand::Contracts => {
             print_json_value(&build_control_plane_contract_descriptors())
         }
@@ -197,6 +211,14 @@ fn dispatch_claude_command(command: ClaudeCommand) -> Result<(), String> {
     match command {
         ClaudeCommand::Hook(command) => {
             run_claude_hook_cli(&command.event, command.repo_root.as_deref())
+        }
+    }
+}
+
+fn dispatch_qoder_command(command: QoderCommand) -> Result<(), String> {
+    match command {
+        QoderCommand::Hook(command) => {
+            run_qoder_hook_cli(&command.event, command.repo_root.as_deref())
         }
     }
 }

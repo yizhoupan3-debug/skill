@@ -4,6 +4,8 @@
 
 **状态校准（2026-05-12）**：本文件保留 Round 2 历史计划语境；Claude Code 后续已进入 `host_targets.supported` 闭集并具备 `claude_hooks.rs` / project projection。下文“第三宿主未立项 / P3 跳过”只描述 Round 2 当时边界，不再代表当前宿主集合。
 
+**主副本 YAML**：`.cursor/plans/harness_host_round2.plan.md` 已于 2026-05-12 与上述 P0 状态及本镜像叙事对齐（含 frontmatter todos）。
+
 ---
 
 ## 北极星（一句话）

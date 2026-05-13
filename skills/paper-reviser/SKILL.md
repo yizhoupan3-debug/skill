@@ -36,7 +36,7 @@ trigger_hints:
   - "edit_scope: refactor"
 metadata:
   version: "3.6.0"
-  platforms: [codex]
+  platforms: [supported]
   tags: [paper, manuscript, revise, reviewer-comments, rebuttal, appendix-routing]
 framework_roles:
   - planner

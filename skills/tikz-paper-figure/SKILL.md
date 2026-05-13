@@ -33,7 +33,7 @@ trigger_hints:
   - 复刻图片
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags: [tikz, latex, standalone, paper-figure, figure-conversion]
 risk: low
 source: project

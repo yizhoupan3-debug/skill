@@ -101,7 +101,7 @@ trigger_hints:
   - 论文用语长期规范
 metadata:
   version: "1.12.0"
-  platforms: [codex, cursor]
+  platforms: [supported]
   tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
   - orchestrator

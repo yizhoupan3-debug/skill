@@ -1,4 +1,5 @@
 use crate::framework_runtime::resolve_repo_root_arg;
+use crate::path_guard::{safe_task_id_component, validate_task_id_component};
 use crate::runtime_storage::acquire_runtime_path_lock;
 use chrono::{SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
@@ -132,14 +133,16 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
     }
 
     let path = step_ledger_path_for_task(&repo_root, &task_id);
-    let changed = append_jsonl_entry(
-        &path,
-        &Value::Object(entry.clone()),
-        idempotency_key.as_deref(),
-    )?;
-    if changed {
-        crate::task_state_aggregate::sync_task_state_aggregate_best_effort(&repo_root, &task_id);
-    }
+    let entry_value = Value::Object(entry.clone());
+    let changed = crate::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
+        let inner_changed = append_jsonl_entry(&path, &entry_value, idempotency_key.as_deref())?;
+        if inner_changed {
+            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                &repo_root, &task_id,
+            );
+        }
+        Ok(inner_changed)
+    })?;
     Ok(json!({
         "schema_version": STEP_LEDGER_RESPONSE_SCHEMA_VERSION,
         "authority": STEP_LEDGER_AUTHORITY,
@@ -322,26 +325,6 @@ fn sha256_text(text: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
     format!("sha256:{:x}", hasher.finalize())
-}
-
-fn safe_task_id_component(task_id: &str) -> Option<&str> {
-    let tid = task_id.trim();
-    if tid.is_empty()
-        || tid == "."
-        || tid == ".."
-        || tid.contains("..")
-        || tid.contains('/')
-        || tid.contains('\\')
-        || tid.contains('\0')
-    {
-        return None;
-    }
-    Some(tid)
-}
-
-fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
-    safe_task_id_component(task_id)
-        .ok_or_else(|| "step ledger task_id must be a single safe path component".to_string())
 }
 
 #[cfg(test)]

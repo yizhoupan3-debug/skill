@@ -27,6 +27,8 @@ use tungstenite::{connect, Message, WebSocket};
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "browser-mcp";
 const SERVER_VERSION: &str = "0.3.0-rust";
+/// Upper bound for a single Content-Length framed message body (aligned with hook stdin caps).
+const MAX_BROWSER_MCP_CONTENT_LENGTH: usize = 4 * 1024 * 1024;
 const DEFAULT_WAIT_MS: u64 = 5_000;
 const DEFAULT_MAX_ELEMENTS: usize = 100;
 const DEFAULT_TEXT_BUDGET: usize = 4_000;
@@ -120,6 +122,11 @@ fn read_browser_mcp_message<R: BufRead>(
     {
         *transport_mode = Some(BrowserMcpTransportMode::ContentLength);
         let content_length = parse_content_length_header(&first_line)?;
+        if content_length > MAX_BROWSER_MCP_CONTENT_LENGTH {
+            return Err(format!(
+                "browser MCP Content-Length {content_length} exceeds max {MAX_BROWSER_MCP_CONTENT_LENGTH}"
+            ));
+        }
         loop {
             let mut header = String::new();
             let bytes = input
@@ -700,4 +707,21 @@ struct CdpClient {
     _port: u16,
     next_id: u64,
     socket: WebSocket<MaybeTlsStream<TcpStream>>,
+}
+
+#[cfg(test)]
+mod browser_mcp_body_limit_tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn rejects_oversized_content_length() {
+        let mut input = Cursor::new(format!(
+            "Content-Length: {}\r\n\r\n",
+            MAX_BROWSER_MCP_CONTENT_LENGTH + 1
+        ));
+        let mut mode = None;
+        let err = read_browser_mcp_message(&mut input, &mut mode).unwrap_err();
+        assert!(err.contains("exceeds max"), "{err}");
+    }
 }

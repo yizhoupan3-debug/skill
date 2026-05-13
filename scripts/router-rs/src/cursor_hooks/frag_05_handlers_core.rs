@@ -1,4 +1,31 @@
-const CURSOR_DEEP_REVIEW_DEFAULT_NUDGE: &str = "默认审稿=深度+广度（非轻度）：只读、`fork_context=false` 子代理须为 **general-purpose**（或 **best-of-n-runner**）；explore/CI/guide 不计入 REVIEW_GATE。按 `skills/code-review-deep/SKILL.md`：verdict-first、五透镜、P0/P1 须路径/符号锚点（或外链）。";
+/// 首次武装时注入一行指针，避免 `additional_context` 过长刷屏；细则见 skill / harness §5.0。
+const CURSOR_DEEP_REVIEW_DEFAULT_NUDGE: &str = "深度审稿：`skills/code-review-deep/SKILL.md`（默认≥2 路只读并行；lane 仅 general-purpose / best-of-n-runner；每路 JSON 布尔 fork_context=false）。";
+
+/// 同一条用户提交里同时出现 review 信号与 `/autopilot` 入口时追加；与 `review_arms_for_gate` 语义对齐。
+const CURSOR_REVIEW_AUTOPILOT_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 `/autopilot` 入口；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/autopilot`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
+
+/// 将一条 `review_subagent_cycle_key` 压入 multiset 并同步 legacy 字段。
+///
+/// **双事件去重**：宿主可能对同一子代理先发 `subagentStart` 再发 `PostToolUse`（同一 `subagent_id`）。对 **`id:`** 前缀的稳定 key，若 pending 已含该字符串，则 **PostToolUse 路径不再 push**，避免「一次 stop 只核销一条」语义下出现双 pending。
+///
+/// **`subagent_start_count`** 仅在 **`handle_subagent_start`** 的 qualifying review 分支递增；PostToolUse 仅负责 multiset 入队（及 phase bump），**不**增加该计数，以免与宿主双事件重复计数。
+fn push_review_pending_cycle_key(
+    state: &mut ReviewGateState,
+    cycle_key: Option<String>,
+    from_posttool: bool,
+) {
+    let Some(k) = cycle_key else {
+        return;
+    };
+    if from_posttool
+        && k.starts_with("id:")
+        && state.review_subagent_pending_cycle_keys.contains(&k)
+    {
+        return;
+    }
+    state.review_subagent_pending_cycle_keys.push(k);
+    sync_review_cycle_legacy_fields(state);
+}
 
 fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let frame = crate::task_state::resolve_cursor_continuity_frame(repo_root);
@@ -26,15 +53,15 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let review_arms_for_gate = review && !autopilot_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
-    let review_override = has_review_override(&text) || has_override(&text);
-    let delegation_override = has_delegation_override(&text) || has_override(&text);
+    let user_gate_override = has_override(&text);
 
     let prior_review_required = state.review_required;
     state.review_required = state.review_required || review_arms_for_gate;
-    state.review_override = state.review_override || review_override;
-    state.delegation_override = state.delegation_override || delegation_override;
+    state.review_override = state.review_override || user_gate_override;
+    state.delegation_override = state.delegation_override || user_gate_override;
     state.goal_required = state.goal_required || autopilot_entrypoint;
-    state.goal_contract_seen = state.goal_contract_seen || has_goal_contract_signal(&signal_text);
+    state.goal_contract_seen =
+        state.goal_contract_seen || has_structured_goal_contract(&signal_text);
     state.goal_progress_seen = state.goal_progress_seen || has_goal_progress_signal(&signal_text);
     state.goal_verify_or_block_seen =
         state.goal_verify_or_block_seen || has_goal_verify_or_block_signal(&signal_text);
@@ -70,6 +97,9 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         && !state.review_override
     {
         merge_additional_context(&mut output, CURSOR_DEEP_REVIEW_DEFAULT_NUDGE);
+    }
+    if review && autopilot_entrypoint && !cursor_review_gate_disabled_by_env() {
+        merge_additional_context(&mut output, CURSOR_REVIEW_AUTOPILOT_SAME_ROUND_NUDGE);
     }
     if needs_autopilot_pre_goal {
         // 仅计入总 follow-up 次数；不要把 goal_followup_count 算进去，否则首次 stop 会误判成「非首条」而跳过完整 goal 提示。
@@ -122,8 +152,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         }
     }
     let fork = fork_context_from_tool(event, &tool_input);
-    let independent_fork = counts_as_independent_context_fork(fork);
-    let explicit_independent_fork = fork_context_explicit_false(fork);
+    let independent_fork = independent_context_fork(fork);
     let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
     let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
@@ -138,19 +167,16 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         state.pre_goal_nag_count = 0;
         mutated = true;
     }
-    if armed && explicit_independent_fork && review_kind {
+    if armed && independent_fork && review_kind {
         let was_below_2 = state.phase < 2;
         bump_phase(&mut state, 2);
+        // 仅 SubagentStart 事件计数；PostToolUse 入 multiset 不递增（见 `push_review_pending_cycle_key` 模块注释）。
         state.subagent_start_count += 1;
         state.lane_intent_matches = Some(true);
-        state.review_subagent_cycle_open = true;
-        state.review_subagent_cycle_key = cycle_key;
+        push_review_pending_cycle_key(&mut state, cycle_key, false);
         if was_below_2 {
             clear_review_gate_escalation_counters(&mut state);
         }
-        mutated = true;
-    }
-    if armed && explicit_independent_fork && review_kind {
         state.last_subagent_type = Some(if !sub_type.is_empty() {
             sub_type.clone()
         } else {
@@ -190,10 +216,15 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
         let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
         let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
         let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
-        let cycle_matches = state.review_subagent_cycle_open
-            && cycle_key.is_some()
-            && cycle_key == state.review_subagent_cycle_key;
-        // Stop evidence only counts for the same explicit reviewer cycle that opened the gate.
+        let cycle_matches = !state.review_subagent_pending_cycle_keys.is_empty()
+            && cycle_key.as_ref().is_some_and(|k| {
+                state
+                    .review_subagent_pending_cycle_keys
+                    .iter()
+                    .any(|p| p == k)
+            });
+        // Stop：命中 pending  multiset 中**一条**同 key 的 start 记录则移除该条；**仅当** pending 排空时升 phase 3
+        // 并记 `subagent_stop_count`（并行多路需各路各一次 qualifying stop，同 lane 无 id 时依赖重复 `lane:` key）。
         if state.phase < 2 || !review_kind || !cycle_matches {
             if mutated {
                 let _ = save_state(repo_root, event, &mut state);
@@ -201,11 +232,21 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
             release_state_lock(&mut lock);
             return json!({});
         }
-        bump_phase(&mut state, 3);
-        state.subagent_stop_count += 1;
-        state.lane_intent_matches = Some(true);
-        state.review_subagent_cycle_open = false;
-        state.review_subagent_cycle_key = None;
+        if let Some(ref k) = cycle_key {
+            if let Some(pos) = state
+                .review_subagent_pending_cycle_keys
+                .iter()
+                .position(|p| p == k)
+            {
+                state.review_subagent_pending_cycle_keys.remove(pos);
+            }
+        }
+        sync_review_cycle_legacy_fields(&mut state);
+        if state.review_subagent_pending_cycle_keys.is_empty() {
+            bump_phase(&mut state, 3);
+            state.subagent_stop_count += 1;
+            state.lane_intent_matches = Some(true);
+        }
         mutated = true;
     }
     if mutated {
@@ -230,8 +271,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
     let fork = fork_context_from_tool(event, &tool_input);
-    let independent_fork = counts_as_independent_context_fork(fork);
-    let explicit_independent_fork = fork_context_explicit_false(fork);
+    let independent_fork = independent_context_fork(fork);
     let mut mutated = false;
     if tool_name_matches_subagent_lane(&name)
         && pre_goal_kind
@@ -245,15 +285,13 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     if tool_name_matches_subagent_lane(&name)
         && review_subagent_kind_ok(&sub_type, &agent_type)
         && armed
-        && explicit_independent_fork
+        && independent_fork
     {
+        let start_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
         let was_below_2 = state.phase < 2;
         bump_phase(&mut state, 2);
-        state.subagent_start_count += 1;
         state.last_subagent_tool = Some(name.clone());
-        state.review_subagent_cycle_open = true;
-        state.review_subagent_cycle_key =
-            review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
+        push_review_pending_cycle_key(&mut state, start_key, true);
         if !sub_type.is_empty() || !agent_type.is_empty() {
             state.last_subagent_type = Some(if !sub_type.is_empty() {
                 sub_type
@@ -389,6 +427,9 @@ fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String>
         return None;
     }
     let path = payload_tool_path(event)?;
+    if !crate::path_guard::path_is_within_repo_root(repo_root, &path) {
+        return None;
+    }
     if path.extension().and_then(|e| e.to_str()) != Some("rs") {
         return None;
     }
@@ -399,6 +440,9 @@ fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String>
         return None;
     }
     let cargo_dir = find_cargo_dir(&path)?;
+    if !crate::path_guard::path_is_within_repo_root(repo_root, &cargo_dir) {
+        return None;
+    }
 
     let (rc, output) =
         cargo_check_with_timeout(&cargo_dir, std::time::Duration::from_secs(TIMEOUT_S));
@@ -473,7 +517,7 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
         clear_review_gate_escalation_counters(&mut state);
         dirty = true;
     }
-    if track_goal && has_goal_contract_signal(&signal) {
+    if track_goal && has_structured_goal_contract(&signal) {
         state.goal_contract_seen = true;
         dirty = true;
     }
@@ -499,20 +543,17 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         let closeout_msg =
             stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text);
         let mut out = json!({});
-        merge_continuity_followups(repo_root, &mut out, &frame);
-        if closeout_msg.is_none() {
-            merge_session_close_style_nudge_when_soft_terminal(&mut out);
-        }
         if let Some(msg) = closeout_msg {
             out["followup_message"] = Value::String(msg);
         }
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame, false);
         return out;
     }
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         let msg = lock_failure_followup_for_stop(event);
         let mut out = json!({ "followup_message": msg });
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame);
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame, false);
         return out;
     }
     let loaded = load_state(repo_root, event);
@@ -525,27 +566,27 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     if let Some(msg) = stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text)
     {
         let mut out = json!({ "followup_message": msg });
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame);
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame, false);
         release_state_lock(&mut lock);
         return out;
     }
-    let mut output = match loaded {
-        Ok(None) => json!({}),
+    let (mut output, skip_continuity_merge) = match loaded {
+        Ok(None) => (json!({}), false),
         Err(io_error) => {
             let msg = format!(
                 "router-rs：hook-state 不可读（{io_error}），门控降级。请检查权限与 JSON。"
             );
-            json!({ "followup_message": msg })
+            (json!({ "followup_message": msg }), false)
         }
         Ok(Some(mut state)) => {
             state.delegation_required = false;
-            if has_review_override(&signal_text) || has_override(&signal_text) {
+            // Override 句式仅承认用户本轮 prompt（与 beforeSubmit 一致）；勿用含助手输出的
+            // `signal_text`，避免助手复述「不要用子代理」类话术误清空 REVIEW_GATE。
+            if has_override(&text) {
                 state.review_override = true;
-            }
-            if has_delegation_override(&signal_text) || has_override(&signal_text) {
                 state.delegation_override = true;
             }
-            if has_goal_contract_signal(&signal_text) {
+            if has_structured_goal_contract(&signal_text) {
                 state.goal_contract_seen = true;
             }
             if has_goal_progress_signal(&signal_text) {
@@ -565,16 +606,36 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             if review_stop_followup_needed(&state) {
                 state.followup_count += 1;
                 state.review_followup_count += 1;
+                let cap =
+                    crate::router_env_flags::router_rs_cursor_review_gate_stop_max_nudges_cap();
+                let use_full = match cap {
+                    None => true,
+                    Some(n) => state.review_followup_count <= n,
+                };
+                let skip_continuity_merge = !use_full;
+                let out = if use_full {
+                    json!({ "followup_message": review_stop_followup_line(&state) })
+                } else {
+                    let full_cap = cap.expect("soft branch implies cap=Some");
+                    let soft = review_stop_followup_soft_line(&state, full_cap);
+                    let mut soft_out = json!({ "followup_message": soft });
+                    crate::autopilot_goal::merge_hook_nudge_paragraph(
+                        &mut soft_out,
+                        &review_stop_followup_detail_paragraph(&state),
+                        REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX,
+                        false,
+                    );
+                    soft_out
+                };
                 let _ = save_state(repo_root, event, &mut state);
-                let message = review_stop_followup_line(&state);
-                json!({ "followup_message": message })
+                (out, skip_continuity_merge)
             } else if !goal_is_satisfied(&state) {
                 state.followup_count += 1;
                 state.goal_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
                 // Stop 只给短码，避免把整段 Autopilot 契约说明塞进会话收尾（细则见 beforeSubmit / AGENTS）。
                 let message = goal_stop_followup_line(&state);
-                json!({ "followup_message": message })
+                (json!({ "followup_message": message }), false)
             } else {
                 // Do not clear gate state on Stop for sessions that still track goal/review:
                 // the next Stop should still enforce the same requirements until satisfied/overridden.
@@ -584,11 +645,11 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                     let mut reset = empty_state();
                     let _ = save_state(repo_root, event, &mut reset);
                 }
-                json!({})
+                (json!({}), false)
             }
         }
     };
-    finalize_stop_hook_outputs(repo_root, &mut output, &frame);
+    finalize_stop_hook_outputs(repo_root, &mut output, &frame, skip_continuity_merge);
     release_state_lock(&mut lock);
     output
 }
@@ -603,7 +664,7 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
     let mut out = match load_state(repo_root, event) {
         Ok(Some(state)) => {
             let mut summary = format!(
-                "router-rs 门控快照：phase={} review={} delegation={} override={} reject={} pre_goal_ok={} subagent_start={} subagent_stop={}",
+                "router-rs 门控快照：phase={} review={} delegation={} override={} reject={} pre_goal_ok={} subagentStart_n={} subagent_stop={}",
                 state.phase,
                 state.review_required,
                 state.delegation_required,
@@ -698,34 +759,9 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
     out
 }
 
-fn read_file_head_lines(path: &Path, max_lines: usize) -> Option<String> {
-    let bytes = fs::read(path).ok()?;
-    let text = String::from_utf8_lossy(&bytes);
-    Some(text.lines().take(max_lines).collect::<Vec<_>>().join("\n"))
-}
-
-fn read_json_value_strict(path: &Path) -> Option<Value> {
-    let bytes = fs::read(path).ok()?;
-    serde_json::from_slice::<Value>(&bytes).ok()
-}
-
 fn truncate_cursor_sessionstart_context(text: &str) -> String {
     let max_bytes = crate::router_env_flags::router_rs_cursor_sessionstart_context_max_bytes();
-    if text.len() <= max_bytes {
-        return text.to_string();
-    }
-    let budget = max_bytes.saturating_sub(3);
-    let mut cut = budget.min(text.len());
-    while cut > 0 && !text.is_char_boundary(cut) {
-        cut -= 1;
-    }
-    if let Some(pos) = text[..cut].rfind('\n') {
-        let trimmed = text[..pos].trim_end();
-        if !trimmed.is_empty() {
-            return format!("{trimmed}...");
-        }
-    }
-    format!("{}...", text[..cut].trim_end())
+    truncate_cursor_hook_outbound_context(text, max_bytes)
 }
 
 fn compact_cursor_sessionstart_context(parts: Vec<String>) -> Option<String> {
@@ -743,71 +779,31 @@ fn compact_cursor_sessionstart_context(parts: Vec<String>) -> Option<String> {
 
 fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     maybe_init_session_terminal_ledger(repo_root, event);
+    // Align with Codex `handle_codex_session_start`: advisory continuity text must honor
+    // `ROUTER_RS_OPERATOR_INJECT` kill-switch (terminal baseline init above is not advisory).
+    if !crate::router_env_flags::router_rs_operator_inject_globally_enabled() {
+        return json!({ "additional_context": "" });
+    }
     let mut sections = Vec::new();
-
-    let active_task = repo_root.join("artifacts/current/active_task.json");
-    if active_task.is_file() {
-        if let Some(v) = read_json_value_strict(&active_task) {
-            if let Some(tid) = v.get("task_id").and_then(Value::as_str) {
-                if !tid.trim().is_empty() && tid.trim() != "null" {
-                    let gs = repo_root
-                        .join("artifacts/current")
-                        .join(tid)
-                        .join("GOAL_STATE.json");
-                    let rv = repo_root
-                        .join("artifacts/current")
-                        .join(tid)
-                        .join("RFV_LOOP_STATE.json");
-                    if gs.is_file() {
-                        if let Some(gv) = read_json_value_strict(&gs) {
-                            let status = gv.get("status").and_then(Value::as_str).unwrap_or("?");
-                            let drive = gv
-                                .get("drive_until_done")
-                                .and_then(Value::as_bool)
-                                .unwrap_or(false);
-                            let goal = gv.get("goal").and_then(Value::as_str).unwrap_or("-");
-                            sections.push(format!(
-                                "Goal: {status} · drive={drive} · {}",
-                                crate::framework_runtime::truncate_utf8_chars_with_ellipsis(
-                                    goal, 140,
-                                )
-                            ));
-                        }
-                    }
-                    if rv.is_file() {
-                        if let Some(rvj) = read_json_value_strict(&rv) {
-                            let loop_status = rvj
-                                .get("loop_status")
-                                .and_then(Value::as_str)
-                                .unwrap_or("?");
-                            let cur = rvj
-                                .get("current_round")
-                                .and_then(Value::as_i64)
-                                .unwrap_or(0);
-                            let max = rvj.get("max_rounds").and_then(Value::as_i64).unwrap_or(0);
-                            let goal = rvj.get("goal").and_then(Value::as_str).unwrap_or("-");
-                            sections.push(format!(
-                                "RFV: {loop_status} · round {cur}/{max} · {}",
-                                crate::framework_runtime::truncate_utf8_chars_with_ellipsis(
-                                    goal, 100,
-                                )
-                            ));
-                        }
-                    }
-                }
-            }
+    let task_view = crate::task_state::resolve_task_view(repo_root, None);
+    if crate::task_state::task_view_has_active_goal_focus_mismatch_note(&task_view) {
+        sections.push(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH.to_string());
+    }
+    // Raw SESSION_SUMMARY body (prefix-stable under SessionStart byte cap); see
+    // `session_start_additional_context_observes_router_rs_sessionstart_max_env`.
+    let session_summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
+    if let Ok(raw) = fs::read_to_string(&session_summary_path) {
+        let block = raw.trim();
+        if !block.is_empty() {
+            sections.push(block.to_string());
         }
     }
-    let summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
-    if summary_path.is_file() {
-        if let Some(head) = read_file_head_lines(&summary_path, 12) {
-            let head = head.trim();
-            if !head.is_empty() {
-                sections.push(format!(
-                    "Continuity: {}",
-                    crate::framework_runtime::truncate_utf8_chars_with_ellipsis(head, 420)
-                ));
-            }
+    if let Ok(digest) =
+        crate::framework_runtime::build_framework_continuity_digest_prompt_ex(repo_root, 4, true)
+    {
+        let trimmed = digest.trim();
+        if !trimmed.is_empty() {
+            sections.push(trimmed.to_string());
         }
     }
     sections.push(format!("Repo: {}", repo_root.display()));

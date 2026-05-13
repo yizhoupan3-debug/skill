@@ -103,7 +103,7 @@
 |--|---------|------------------|--------|----------|----------|
 | **深度外研** | **满足** — `reasoning-depth-contract` §A–C、`external-research-harness.md`、`RFV_EXTERNAL_RESEARCH.schema.json` | **部分** — `validate_external_research_strict` + `append_round` 强校验；`cross_link_evidence` 窗口对齐 | **满足** — `HARNESS_OPERATOR_NUDGES.json` 检索/trace 行、`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT` | **满足** — struct/strict 矩阵与 close_gates 用例 | **部分** — CRITIC / AutoGen 重工具与对话编排；本仓库更强求 **可执行 verify** 与磁盘 schema（见 Bibliography） |
 | **长时运行** | **满足** — `rfv_loop_harness.md` max_rounds、停轮条件、`GOAL` 地平线 | **满足** — `RFV_LOOP_STATE.json` + `max_rounds` cap 1000；续跑 hook | **部分** — env 控制续跑注入；无内置「周级」调度器 | **部分** — roundtrip 与 close_gates；缺「跨进程崩溃恢复」E2E | **部分** — Voyager 技能库 + 课程；本仓库用 **git 真源 + artifacts** 而非环境模拟器状态 |
-| **数理推理** | **满足** — `math-reasoning-harness.md` witness + checker 分层 | **部分** — rollup 可用 falsification_tests；无 CAS 专用字段 | **满足** — `math_reasoning_harness_line` | **部分** — PostTool 已收窄扩展数理子串 + 单测矩阵；裸 `python` 脚本名仍可能漏记 | **部分** — LeanDojo 重 Lean 数据与证明检索；本 harness 明确 **不** 在 L3 做 ATP（契约非目标） |
+| **数理推理** | **满足** — `math-reasoning-harness.md` witness + checker 分层 | **部分** — rollup 仍仅用 falsification_tests；无 CAS 专用字段；续跑已注入 `math_reasoning_harness_line`（`harness_context_signals` + RFV/Autopilot） | **满足** — `math_reasoning_harness_line` / `retrieval_trace_harness_line` / struct 提示 wired | **部分** — PostTool 已收窄扩展数理子串 + 单测矩阵；裸 `python` 脚本名仍可能漏记 | **部分** — LeanDojo 重 Lean 数据与证明检索；本 harness 明确 **不** 在 L3 做 ATP（契约非目标） |
 
 ---
 

@@ -1,4 +1,5 @@
 use serde_json::json;
+use std::collections::HashSet;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -41,6 +42,70 @@ impl Drop for ReviewGateDisableEnvClearGuard {
         match self.prev.take() {
             Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE", v),
             None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
+        }
+    }
+}
+
+/// 单测临时设置 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`，Drop 时还原。
+struct ReviewGateStopMaxNudgesEnvGuard {
+    prev: Option<std::ffi::OsString>,
+}
+
+impl ReviewGateStopMaxNudgesEnvGuard {
+    fn set(value: &str) -> Self {
+        let key = "ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES";
+        let prev = env::var_os(key);
+        env::set_var(key, value);
+        Self { prev }
+    }
+}
+
+impl Drop for ReviewGateStopMaxNudgesEnvGuard {
+    fn drop(&mut self) {
+        let key = "ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES";
+        match self.prev.take() {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
+/// 暂时清除 operator advisory 相关 `ROUTER_RS_*`（默认视为开启），Drop 时还原；与 `process_env_lock` 组合避免并行泄漏导致 RFV struct hint 被静默关掉。
+struct AdvisoryOperatorEnvClearGuard {
+    operator_inject: Option<std::ffi::OsString>,
+    rfv_struct_hint: Option<std::ffi::OsString>,
+    harness_nudges: Option<std::ffi::OsString>,
+}
+
+impl AdvisoryOperatorEnvClearGuard {
+    fn new() -> Self {
+        let operator_inject = env::var_os("ROUTER_RS_OPERATOR_INJECT");
+        env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        let rfv_struct_hint = env::var_os("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT");
+        env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT");
+        let harness_nudges = env::var_os("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        Self {
+            operator_inject,
+            rfv_struct_hint,
+            harness_nudges,
+        }
+    }
+}
+
+impl Drop for AdvisoryOperatorEnvClearGuard {
+    fn drop(&mut self) {
+        match self.operator_inject.take() {
+            Some(v) => env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
+            None => env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+        }
+        match self.rfv_struct_hint.take() {
+            Some(v) => env::set_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT", v),
+            None => env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT"),
+        }
+        match self.harness_nudges.take() {
+            Some(v) => env::set_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES", v),
+            None => env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES"),
         }
     }
 }
@@ -93,6 +158,60 @@ fn hook_user_visible_blob(out: &Value) -> String {
     s
 }
 
+/// 对齐 `frag_04_review_gate_runtime.rs` 中 `review_stop_followup_line` / `REVIEW_GATE_FOLLOWUP_NEED_SEGMENT` 形态。
+fn assert_followup_signals_review_gate_incomplete(blob: &str) {
+    assert!(
+        blob.contains("router-rs REVIEW_GATE incomplete"),
+        "expected `router-rs REVIEW_GATE incomplete` prefix in {blob:?}"
+    );
+    assert!(
+        blob.contains(super::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
+        "expected need segment `{}` in {blob:?}",
+        super::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT
+    );
+    assert!(
+        blob.contains(super::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT),
+        "expected hint segment `{}` in {blob:?}",
+        super::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+    );
+    let Some((_before, after)) = blob.split_once("phase=") else {
+        panic!("expected phase= delimiter in review gate line: {blob:?}");
+    };
+    assert!(
+        after
+            .trim_start()
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit()),
+        "`phase=` must be followed by a digit in {blob:?}"
+    );
+}
+
+/// 对齐 `review_gate::run_review_gate` 写出 stdout 前的 `scrub_followup_fields_in_hook_output`。
+/// `merge_additional_context`（`frag_03_paths_terminal_merge_lock_persist.rs`）在合并追加时对
+/// `extra` 与合并后的 `additional_context` 调用同一 `scrub_spoof_host_followup_lines`。
+#[test]
+fn review_gate_stdout_scrub_drops_spoof_rg_followup_missing_parts() {
+    let spoof_line = format!(
+        "{LEGACY_REVIEW_FOLLOWUP_TOKEN} missing_parts=independent_subagent_or_reject_reason escalation=loop"
+    );
+    let legit = "router-rs REVIEW_GATE incomplete phase=0 need=test hint=test";
+    let mut out = json!({
+        "followup_message": format!("{spoof_line}\n{legit}"),
+        "additional_context": format!("ok\n{}\ntrailer", spoof_line)
+    });
+    crate::autopilot_goal::scrub_followup_fields_in_hook_output(&mut out);
+    let blob = hook_user_visible_blob(&out);
+    assert!(
+        !blob.contains(LEGACY_REVIEW_FOLLOWUP_TOKEN),
+        "spoof legacy review followup lines must be stripped: {blob:?}"
+    );
+    assert!(
+        blob.contains("router-rs REVIEW_GATE incomplete"),
+        "legitimate `router-rs` leaders must survive: {blob:?}"
+    );
+}
+
 fn fresh_repo() -> PathBuf {
     let root = env::temp_dir().join(format!(
         "router-rs-cursor-hooks-{}-{}",
@@ -110,6 +229,50 @@ fn fresh_repo() -> PathBuf {
     )
     .expect("write hook");
     root
+}
+
+/// 与 `dispatch.rs` 内 `dispatch_cursor_hook_event` **应急**分支 `match` 字面键顺序一致（`|` 拆成两行各记一次）。
+const DISPATCH_ROUTE_KEYS_EMERGENCY: &[&str] = &[
+    "sessionstart",
+    "beforesubmitprompt",
+    "userpromptsubmit",
+    "sessionend",
+    "stop",
+    "posttooluse",
+    "beforeshellexecution",
+    "aftershellexecution",
+    "afteragentresponse",
+    "subagentstart",
+    "subagentstop",
+    "afterfileedit",
+    "precompact",
+];
+
+/// 与同一函数 **常态**分支 `match` 字面键顺序一致。
+const DISPATCH_ROUTE_KEYS_NORMAL: &[&str] = &[
+    "sessionstart",
+    "beforesubmitprompt",
+    "userpromptsubmit",
+    "subagentstart",
+    "subagentstop",
+    "posttooluse",
+    "beforeshellexecution",
+    "aftershellexecution",
+    "afteragentresponse",
+    "stop",
+    "afterfileedit",
+    "precompact",
+    "sessionend",
+];
+
+#[test]
+fn dispatch_cursor_hook_emergency_and_normal_route_key_parity() {
+    let emergency: HashSet<_> = DISPATCH_ROUTE_KEYS_EMERGENCY.iter().copied().collect();
+    let normal: HashSet<_> = DISPATCH_ROUTE_KEYS_NORMAL.iter().copied().collect();
+    assert_eq!(
+        emergency, normal,
+        "应急与常态两臂在 `_ =>` 之前路由的 hook 事件键集合须一致（beforeSubmit 仅处理体不同）；dispatch 只改一侧时请同步本测试中对应数组"
+    );
 }
 
 #[test]
@@ -211,6 +374,77 @@ fn review_prompt_chinese_full_review_arms_state() {
     assert!(state.review_required);
 }
 
+/// 首次武装 review 门控时，`beforeSubmit` 仅注入**一行**紧凑指针（细则在 skill）。
+#[test]
+fn before_submit_first_arm_injects_compact_deep_review_nudge() {
+    let repo = fresh_repo();
+    let sid = "s-parallel-nudge-contract";
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("skills/code-review-deep/SKILL.md"),
+        "expected skill pointer; got {ac:?}"
+    );
+    assert!(
+        ac.contains("≥2") && ac.contains("fork_context=false"),
+        "expected compact ≥2 + fork_context hint; got {ac:?}"
+    );
+    assert!(
+        ac.contains("general-purpose") && ac.contains("best-of-n-runner"),
+        "expected countable lane names; got {ac:?}"
+    );
+    assert!(
+        ac.len() < 280,
+        "nudge should stay a single short line; len={} body={ac:?}",
+        ac.len()
+    );
+}
+
+/// 未命中「并行 review 候选」三元时仍注入同一行指针；不再追加第二段「≥3」以免刷屏。
+#[test]
+fn before_submit_review_prompt_compact_nudge_has_no_second_breadth_paragraph() {
+    let repo = fresh_repo();
+    let sid = "s-review-no-breadth-scope";
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "security code review"),
+    );
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("skills/code-review-deep/SKILL.md") && ac.contains("≥2"),
+        "expected same compact pointer; got {ac:?}"
+    );
+    assert!(
+        !ac.contains("≥3"),
+        "hook must not append a separate ≥3 breadth paragraph; got {ac:?}"
+    );
+}
+
+/// 应急关闭审稿门控时，即使用户轮为 review 也不注入深度审并行提示。
+#[test]
+fn review_gate_disabled_before_submit_suppresses_deep_review_nudge_for_review_prompt() {
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let _rg = ReviewGateDisableTestGuard::new();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("rg-off-review-text", "全面review这个仓库"),
+    );
+    assert_eq!(out, json!({ "continue": true }));
+}
+
 #[test]
 fn parallel_delegation_does_not_latch_delegation_required() {
     let repo = fresh_repo();
@@ -251,6 +485,31 @@ fn autopilot_entry_does_not_arm_delegation_or_review_from_fix_copy() {
 }
 
 #[test]
+fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-dual-review-autopilot-hint";
+    let prompt = "请全面review这个仓库 /autopilot 修复刚发现的问题";
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
+    assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("router-rs：本轮提交同时包含") && ac.contains("REVIEW_GATE"),
+        "expected dual-signal mixing nudge; got {ac:?}"
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(
+        !state.review_required,
+        "same-submit autopilot must suppress review arming; got {state:?}"
+    );
+    assert!(state.goal_required);
+}
+
+#[test]
 fn cursor_plan_build_path_does_not_arm_goal() {
     let repo = fresh_repo();
     let cwd = repo.display().to_string();
@@ -272,8 +531,7 @@ fn cursor_plan_build_path_does_not_arm_goal() {
 fn stop_completion_claim_requires_closeout_record_when_strict_enabled() {
     let _env = crate::test_env_sync::process_env_lock();
     use std::env;
-    let prev_gate_disable = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE");
-    env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE");
+    let _gate_disable_guard = ReviewGateDisableEnvClearGuard::new();
     let prev = env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
     env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1");
 
@@ -322,10 +580,6 @@ fn stop_completion_claim_requires_closeout_record_when_strict_enabled() {
         Some(v) => env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
         None => env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
     }
-    match prev_gate_disable {
-        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE", v),
-        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
-    }
     let _ = fs::remove_dir_all(&repo);
 }
 
@@ -333,8 +587,7 @@ fn stop_completion_claim_requires_closeout_record_when_strict_enabled() {
 fn stop_completion_claim_allows_when_closeout_record_passes() {
     let _env = crate::test_env_sync::process_env_lock();
     use std::env;
-    let prev_gate_disable = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE");
-    env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE");
+    let _gate_disable_guard = ReviewGateDisableEnvClearGuard::new();
     let prev = env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
     env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1");
 
@@ -391,10 +644,6 @@ fn stop_completion_claim_allows_when_closeout_record_passes() {
         Some(v) => env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
         None => env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
     }
-    match prev_gate_disable {
-        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE", v),
-        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
-    }
     let _ = fs::remove_dir_all(&repo);
 }
 
@@ -417,8 +666,7 @@ fn completion_claim_detector_ignores_completion_as_substring_gossip() {
 fn closeout_followup_emits_when_strict_and_record_missing() {
     let _env = crate::test_env_sync::process_env_lock();
     use std::env;
-    let prev_gate_disable = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE");
-    env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE");
+    let _gate_disable_guard = ReviewGateDisableEnvClearGuard::new();
     let prev = env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
     env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1");
 
@@ -434,10 +682,6 @@ fn closeout_followup_emits_when_strict_and_record_missing() {
     match prev {
         Some(v) => env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
         None => env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
-    }
-    match prev_gate_disable {
-        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE", v),
-        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
     }
     let _ = fs::remove_dir_all(&repo);
 }
@@ -785,6 +1029,162 @@ fn override_phrase_in_chinese_disables_arming() {
 }
 
 #[test]
+fn stop_does_not_set_review_override_from_assistant_echo_alone() {
+    let repo = fresh_repo();
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("s-ov-echo", "全面review这个仓库"),
+    );
+    assert!(
+        !load_state_for(&repo, "s-ov-echo").review_override,
+        "user prompt must not imply review_override"
+    );
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": "s-ov-echo",
+            "cwd": "/Users/joe/Documents/skill",
+            "prompt": "全面review这个仓库",
+            "response": "用户坚持不要用子代理，我仅在主会话输出 findings。"
+        }),
+    );
+    let state = load_state_for(&repo, "s-ov-echo");
+    assert!(
+        !state.review_override,
+        "assistant echo of override-like wording must not set review_override"
+    );
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
+}
+
+#[test]
+fn stop_does_not_set_delegation_override_from_assistant_echo_when_review_armed() {
+    let repo = fresh_repo();
+    let sid = "s-delov-echo";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    assert!(!load_state_for(&repo, sid).delegation_override);
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": "/Users/joe/Documents/skill",
+            "prompt": "全面review这个仓库",
+            "response": "项目经理说不要并行分头推进，我只好先在主会话出 findings。"
+        }),
+    );
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
+    let st = load_state_for(&repo, sid);
+    assert!(
+        !st.delegation_override,
+        "`has_delegation_override`-like wording must not be read from assistant response alone"
+    );
+    assert!(
+        !st.review_override,
+        "sanity: user prompt did not request review bypass",
+    );
+}
+
+#[test]
+fn stop_does_not_set_delegation_override_from_assistant_global_override_echo_when_review_armed() {
+    let repo = fresh_repo();
+    let sid = "s-globov-echo";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    assert!(!load_state_for(&repo, sid).delegation_override);
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": "/Users/joe/Documents/skill",
+            "prompt": "全面review这个仓库",
+            "response": "Stand-up recap: we'll handle this locally and summarize in chat."
+        }),
+    );
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
+    let st = load_state_for(&repo, sid);
+    assert!(
+        !st.delegation_override,
+        "`has_override` wording on Stop must not originate from assistant response alone",
+    );
+    assert!(
+        !st.review_override,
+        "sanity: user prompt did not request review bypass",
+    );
+}
+
+#[test]
+fn stop_sets_review_override_from_user_prompt_disarms_review_gate_followup() {
+    let repo = fresh_repo();
+    let sid = "s-user-revov";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": "/Users/joe/Documents/skill",
+            "prompt": "不要使用子代理，本轮只在主会话给结论",
+            "response": "收到。",
+        }),
+    );
+    let st = load_state_for(&repo, sid);
+    assert!(st.review_override);
+    let blob = hook_user_visible_blob(&out);
+    assert!(
+        !blob.contains("router-rs REVIEW_GATE incomplete"),
+        "user-authored override disarms reviewer stop follow-up; blob={blob:?}",
+    );
+}
+
+#[test]
+fn stop_user_parallel_opt_out_matches_has_override_and_delegation_regex_coupling() {
+    // `hook_common::has_override` 与 delegation 正则均含中文「不要…并行/分工」；用户写入 Stop prompt
+    // 时两行 `handle_stop` if 可同时置位，`review_hard_armed` 为假并解除未完成 reviewer 随访。
+    let repo = fresh_repo();
+    let sid = "s-user-parov";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": "/Users/joe/Documents/skill",
+            "prompt": "我们不要并行分工了，先主线程输出",
+            "response": "明白。",
+        }),
+    );
+    let st = load_state_for(&repo, sid);
+    assert!(st.delegation_override);
+    assert!(
+        st.review_override,
+        "同一 `has_override` 句式同时推高 review/disarm branch"
+    );
+    let blob = hook_user_visible_blob(&out);
+    assert!(
+        !blob.contains("router-rs REVIEW_GATE incomplete"),
+        "combined overrides disarm reviewer stop follow-up; blob={blob:?}",
+    );
+}
+
+#[test]
 fn reject_reason_does_not_satisfy_review_stop() {
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
@@ -798,10 +1198,7 @@ fn reject_reason_does_not_satisfy_review_stop() {
         &json!({ "session_id": "s4", "response": "reject reason: small_task" }),
     );
     let out = dispatch_cursor_hook_event(&repo, "stop", &event("s4", "reject reason: small_task"));
-    assert!(
-        hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
-        "review gate must still require independent reviewer; out={out:?}"
-    );
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
 }
 
 #[test]
@@ -817,10 +1214,7 @@ fn reject_reason_in_user_prompt_does_not_satisfy_review_gate_on_stop() {
         .get("followup_message")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    assert!(
-        followup.contains("router-rs REVIEW_GATE"),
-        "review reject reason must not bypass reviewer gate; out={out:?}"
-    );
+    assert_followup_signals_review_gate_incomplete(followup);
     let state = load_state_for(&repo, "s13");
     assert!(state.reject_reason_seen);
 }
@@ -842,10 +1236,7 @@ fn reject_reason_in_assistant_response_does_not_satisfy_review_gate_on_stop() {
             "response": "reject reason: shared_context_heavy"
         }),
     );
-    assert!(
-        hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
-        "assistant reject reason must not bypass reviewer gate; out={out:?}"
-    );
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
 }
 
 #[test]
@@ -868,10 +1259,7 @@ fn nested_payload_response_reject_reason_does_not_satisfy_review_gate_on_stop() 
             }
         }),
     );
-    assert!(
-        hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
-        "nested reject reason must not bypass reviewer gate; out={out:?}"
-    );
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
 }
 
 #[test]
@@ -892,6 +1280,26 @@ fn nested_payload_response_sets_reject_reason_on_after_agent_response() {
         }),
     );
     assert!(load_state_for(&repo, "s13nest-a").reject_reason_seen);
+}
+
+#[test]
+fn emergency_review_gate_disable_cold_after_agent_response_persists_reject_reason_seen() {
+    let _env_clear = ReviewGateDisableEnvClearGuard::new();
+    let _rg_disable = ReviewGateDisableTestGuard::new();
+    let repo = fresh_repo();
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "afterAgentResponse",
+        &json!({
+            "session_id": "s-cold-ara",
+            "cwd": "/Users/joe/Documents/skill",
+            "response": "reject reason: small_task"
+        }),
+    );
+    assert!(
+        load_state_for(&repo, "s-cold-ara").reject_reason_seen,
+        "应急门控下仍以 `handle_after_agent_response` 写入 hook-state；无 beforeSubmit 冷启动亦应落盘 reject_reason_seen"
+    );
 }
 
 #[test]
@@ -1044,8 +1452,12 @@ fn continuity_followup_with_existing_hard_message_uses_additional_context_and_de
         )
         .expect("goal");
     let frame = crate::task_state::resolve_cursor_continuity_frame(&repo);
+    let hard_gate_followup = format!(
+        "router-rs REVIEW_GATE incomplete phase=0 {} {}",
+        REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+    );
     let mut out = json!({
-        "followup_message": "router-rs REVIEW_GATE incomplete phase=0 need=subagent",
+        "followup_message": hard_gate_followup.clone(),
         "additional_context": "AUTOPILOT_DRIVE: stale\nGoal: old"
     });
 
@@ -1054,7 +1466,7 @@ fn continuity_followup_with_existing_hard_message_uses_additional_context_and_de
 
     assert_eq!(
         out["followup_message"].as_str(),
-        Some("router-rs REVIEW_GATE incomplete phase=0 need=subagent")
+        Some(hard_gate_followup.as_str())
     );
     let ctx = out["additional_context"].as_str().unwrap_or("");
     assert!(ctx.contains("AUTOPILOT_DRIVE"), "{ctx}");
@@ -1167,6 +1579,58 @@ fn stop_hard_gate_does_not_inject_session_close_style_paragraph() {
 }
 
 #[test]
+fn review_gate_disabled_before_submit_emits_only_continue_true() {
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let payload = event("rg-off-before-submit", "hello");
+    let expected = json!({ "continue": true });
+    let _rg = ReviewGateDisableTestGuard::new();
+    let out_prompt = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    assert_eq!(
+        out_prompt, expected,
+        "beforeSubmitPrompt in review-gate-disabled mode must not attach before_submit nudges/state; got {out_prompt:?}"
+    );
+    let out_user = dispatch_cursor_hook_event(&repo, "userPromptSubmit", &payload);
+    assert_eq!(
+        out_user, expected,
+        "userPromptSubmit must normalize like beforeSubmitPrompt; got {out_user:?}"
+    );
+}
+
+#[test]
+fn review_gate_disabled_after_agent_response_updates_state_after_before_submit_seeded() {
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let sid = "aar-rg-disabled-parity";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    assert!(
+        !load_state_for(&repo, sid).reject_reason_seen,
+        "precondition: reject_reason not set by beforeSubmit alone"
+    );
+    let payload = json!({
+        "session_id": sid,
+        "cwd": "/Users/joe/Documents/skill",
+        "payload": { "response": "small_task" }
+    });
+    {
+        let _rg = ReviewGateDisableTestGuard::new();
+        assert_eq!(
+            dispatch_cursor_hook_event(&repo, "afterAgentResponse", &payload),
+            json!({}),
+            "afterAgentResponse shape unchanged under review-gate-disabled dispatch"
+        );
+    }
+    assert!(
+        load_state_for(&repo, sid).reject_reason_seen,
+        "reject_reason must persist when afterAgentResponse runs on emergency dispatch table"
+    );
+}
+
+#[test]
 fn session_close_style_nudge_disabled_by_env() {
     let _lock = crate::test_env_sync::process_env_lock();
     let prev = env::var_os("ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE");
@@ -1243,6 +1707,7 @@ fn review_gate_disabled_stop_still_merges_autopilot_drive() {
 
 #[test]
 fn stop_goal_and_rfv_emit_dual_continuity_followups() {
+    let _lock = crate::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let repo = fresh_repo();
     let tid = "stop-both";
@@ -1269,7 +1734,16 @@ fn stop_goal_and_rfv_emit_dual_continuity_followups() {
         )
         .expect("rfv");
 
-    let out = dispatch_cursor_hook_event(&repo, "stop", &event("stop-both", "hello"));
+    let cwd = repo.display().to_string();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": "stop-both",
+            "cwd": cwd,
+            "prompt": "hello",
+        }),
+    );
     let blob = hook_user_visible_blob(&out);
     assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
     // Goal+RFV 同时活跃时合并为单段 `AUTOPILOT_DRIVE`，RFV 信息压缩为尾注（见 `merge_continuity_followups`）。
@@ -1277,6 +1751,55 @@ fn stop_goal_and_rfv_emit_dual_continuity_followups() {
     assert!(
         blob.matches("AUTOPILOT_DRIVE").count() >= 1,
         "expected AUTOPILOT_DRIVE marker in merged continuity blob: {blob}"
+    );
+}
+
+/// Goal+RFV 合并为单段 `AUTOPILOT_DRIVE` 时须保留结构化外研 schema 指针行（出站前缀裁剪下更易存活）。
+#[test]
+fn stop_goal_and_rfv_merge_preserves_external_struct_schema_hint_line() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let _advisory_env = AdvisoryOperatorEnvClearGuard::new();
+    let repo = fresh_repo();
+    let tid = "stop-both-struct";
+    fs::create_dir_all(repo.join("artifacts/current").join(tid)).expect("mkdir");
+    fs::write(
+        repo.join("artifacts/current/active_task.json"),
+        format!(r#"{{"task_id":"{tid}"}}"#),
+    )
+    .expect("active");
+    fs::write(
+        repo
+            .join("artifacts/current")
+            .join(tid)
+            .join("GOAL_STATE.json"),
+        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+    )
+    .expect("goal");
+    fs::write(
+        repo
+            .join("artifacts/current")
+            .join(tid)
+            .join("RFV_LOOP_STATE.json"),
+        r#"{"schema_version":"router-rs-rfv-loop-v1","goal":"rfv-line","loop_status":"active","current_round":1,"max_rounds":3,"allow_external_research":true,"prefer_structured_external_research":true,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
+    )
+    .expect("rfv");
+
+    let cwd = repo.display().to_string();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": "stop-both-struct",
+            "cwd": cwd,
+            "prompt": "hello",
+        }),
+    );
+    let blob = hook_user_visible_blob(&out);
+    assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
+    assert!(
+        blob.contains(crate::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH),
+        "merged AUTOPILOT_DRIVE should retain external struct schema pointer: {blob}"
     );
 }
 
@@ -1305,7 +1828,7 @@ fn cursor_hook_output_policy_truncates_additional_context_under_env_budget() {
     assert!(
         s.starts_with("AUTOPILOT_HEAD")
             && s.contains("AUTOPILOT_DRIVE_MARKER")
-            && s.ends_with("..."),
+            && s.ends_with(super::CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX),
         "prefer prefix preservation: {s:?}"
     );
 }
@@ -1326,23 +1849,34 @@ fn cursor_hook_output_policy_truncates_followup_after_absurd_length() {
     }
     let s = out["followup_message"].as_str().expect("str");
     assert!(s.len() <= max_out, "truncated={}, max={}", s.len(), max_out);
-    assert!(s.ends_with("..."));
+    assert!(s.ends_with(super::CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX));
     assert!(s.starts_with('Q'));
 }
 
 #[test]
 fn cursor_hook_output_policy_is_noop_for_hard_gate_lines() {
+    let hard = format!(
+        "router-rs REVIEW_GATE incomplete phase=0 {} {}",
+        REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+    );
     let mut out = json!({
-        "followup_message": "router-rs REVIEW_GATE incomplete phase=0 need=subagent"
+        "followup_message": hard.clone()
     });
     apply_cursor_hook_output_policy(&mut out);
-    assert_eq!(
-        out["followup_message"],
-        json!("router-rs REVIEW_GATE incomplete phase=0 need=subagent")
-    );
+    assert_eq!(out["followup_message"], json!(hard));
     assert_eq!(out["router_rs_observation"]["gate"]["code"], "review_gate");
     assert_eq!(out["router_rs_observation"]["gate"]["blocking"], true);
 }
+
+#[test]
+fn cursor_hook_outbound_trunc_respects_byte_cap_and_marker() {
+    let body = "x".repeat(9000);
+    let max_out = 8192usize;
+    let got = super::truncate_cursor_hook_outbound_context(&body, max_out);
+    assert!(got.len() <= max_out, "len {} max {}", got.len(), max_out);
+    assert!(got.ends_with(super::CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX));
+}
+
 #[test]
 fn review_gate_disabled_post_tool_use_still_advances_phase_after_arm() {
     let repo = fresh_repo();
@@ -1460,9 +1994,59 @@ fn review_subagent_start_without_explicit_fork_false_does_not_promote_phase() {
     assert_eq!(state.subagent_start_count, 0);
     assert_eq!(state.subagent_stop_count, 0);
     let out = dispatch_cursor_hook_event(&repo, "stop", &event("s5-missing-fork", "继续"));
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
+}
+
+#[test]
+fn review_gate_stop_softens_after_max_nudges_env_cap() {
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("2");
+    let repo = fresh_repo();
+    let sid = "s-rg-stop-nudge-cap";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let out1 = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let fm1 = out1
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out1));
     assert!(
-        hook_user_visible_blob(&out).contains("router-rs REVIEW_GATE"),
-        "missing fork_context must keep review gate blocked; out={out:?}"
+        fm1.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
+        "first stop should keep full need= in followup_message; out1={out1:?}"
+    );
+
+    let out2 = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let fm2 = out2
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out2));
+    assert!(
+        fm2.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
+        "second stop still within cap=2; out2={out2:?}"
+    );
+
+    let out3 = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let fm3 = out3
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let blob3 = hook_user_visible_blob(&out3);
+    assert!(
+        fm3.contains("mode=soft_nag") && fm3.contains("router-rs REVIEW_GATE"),
+        "third stop should shorten followup_message; fm3={fm3:?}"
+    );
+    assert!(
+        !fm3.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
+        "full need= should leave followup_message after cap; fm3={fm3:?}"
+    );
+    assert!(
+        blob3.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
+        "full line should remain visible via additional_context; blob3={blob3:?}"
     );
 }
 
@@ -1649,6 +2233,63 @@ fn subagent_start_then_stop_promotes_to_phase3() {
     assert_eq!(state.subagent_stop_count, 1);
 }
 
+/// `subagentStart` 与随后同一 `subagent_id` 的 `PostToolUse` 不应对 **`id:`** multiset 双入队。
+#[test]
+fn review_gate_posttool_skips_duplicate_id_after_subagent_start() {
+    let repo = fresh_repo();
+    let sid = "s-dedupe-id";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "same-id"
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "functions.subagent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "fork_context": false,
+                "subagent_id": "same-id"
+            }
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(
+        mid.subagent_start_count, 1,
+        "PostTool must not bump subagent_start_count"
+    );
+    assert_eq!(
+        mid.review_subagent_pending_cycle_keys,
+        vec!["id:same-id".to_string()]
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "same-id"
+        }),
+    );
+    let end = load_state_for(&repo, sid);
+    assert_eq!(end.phase, 3);
+    assert_eq!(end.subagent_stop_count, 1);
+    assert!(end.review_subagent_pending_cycle_keys.is_empty());
+}
+
 #[test]
 fn subagent_stop_must_match_open_reviewer_cycle() {
     let repo = fresh_repo();
@@ -1675,6 +2316,131 @@ fn subagent_stop_must_match_open_reviewer_cycle() {
     let state = load_state_for(&repo, "s6c");
     assert_eq!(state.phase, 2);
     assert_eq!(state.subagent_stop_count, 0);
+}
+
+/// 两个不同 subagent id 并行 start：各自 stop 各核销一条 pending；**第二次** stop 排空 multiset 后才 phase 3。
+#[test]
+fn review_gate_two_distinct_subagent_ids_both_stops_clear_gate() {
+    let repo = fresh_repo();
+    let sid = "s-two-review-ids";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "review-a"
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "review-b"
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(mid.phase, 2);
+    assert_eq!(mid.review_subagent_pending_cycle_keys.len(), 2);
+
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "review-a"
+        }),
+    );
+    let after_first_stop = load_state_for(&repo, sid);
+    assert_eq!(after_first_stop.phase, 2);
+    assert_eq!(after_first_stop.subagent_stop_count, 0);
+    assert_eq!(after_first_stop.review_subagent_pending_cycle_keys.len(), 1);
+
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "review-b"
+        }),
+    );
+    let final_state = load_state_for(&repo, sid);
+    assert_eq!(final_state.phase, 3);
+    assert_eq!(final_state.subagent_stop_count, 1);
+    assert!(final_state.review_subagent_pending_cycle_keys.is_empty());
+}
+
+/// 无 subagent id 时 cycle key 均为同一 `lane:`；两次并行 start 压入两条 multiset 记录，需**两次** stop 才清门。
+#[test]
+fn review_gate_parallel_lane_only_keys_two_stops_clear_gate() {
+    let repo = fresh_repo();
+    let sid = "s-parallel-lane-only";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(mid.review_subagent_pending_cycle_keys.len(), 2);
+    assert_eq!(
+        mid.review_subagent_pending_cycle_keys[0],
+        mid.review_subagent_pending_cycle_keys[1]
+    );
+
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose"
+        }),
+    );
+    let after_one = load_state_for(&repo, sid);
+    assert_eq!(after_one.phase, 2);
+    assert_eq!(after_one.review_subagent_pending_cycle_keys.len(), 1);
+    assert_eq!(after_one.subagent_stop_count, 0);
+
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose"
+        }),
+    );
+    let state = load_state_for(&repo, sid);
+    assert_eq!(state.phase, 3);
+    assert!(state.review_subagent_pending_cycle_keys.is_empty());
+    assert_eq!(state.subagent_stop_count, 1);
 }
 
 #[test]
@@ -1747,10 +2513,7 @@ fn stop_without_subagent_emits_minimal_review_gate_line() {
     );
     let out = dispatch_cursor_hook_event(&repo, "stop", &event("s7", "继续"));
     let blob = hook_user_visible_blob(&out);
-    assert!(
-        blob.contains("router-rs REVIEW_GATE"),
-        "expected minimal review gate line; out={out:?}"
-    );
+    assert_followup_signals_review_gate_incomplete(&blob);
 }
 
 #[test]
@@ -2034,10 +2797,7 @@ fn review_armed_first_submit_injects_deep_default_nudge_without_legacy_tokens() 
     assert!(load_state_for(&repo, "s16").review_required);
     let second = dispatch_cursor_hook_event(&repo, "stop", &event("s16", "继续"));
     let blob = hook_user_visible_blob(&second);
-    assert!(
-        blob.contains("router-rs REVIEW_GATE"),
-        "Stop emits minimal review gate line; second={second:?} blob={blob:?}"
-    );
+    assert_followup_signals_review_gate_incomplete(&blob);
     assert!(
         !blob.contains(LEGACY_REVIEW_FOLLOWUP_TOKEN),
         "obsolete review prefix; blob={blob:?}"
@@ -2085,6 +2845,51 @@ fn goal_stop_followup_is_short_code_only() {
             "Stop must not dump full goal contract prose; second_msg={second_msg:?}"
         );
     }
+}
+
+#[test]
+fn stop_picks_assistant_goal_contract_from_messages_when_top_level_response_empty() {
+    let repo = fresh_repo();
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("s-msg-goal", "/autopilot finish wiring"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": "s-msg-goal",
+            "tool_name": "functions.subagent",
+            "tool_input": {"subagent_type": "general-purpose", "fork_context": false}
+        }),
+    );
+    let assistant = concat!(
+        "Goal: wire hook\n",
+        "Non-goals: expand scope\n",
+        "Validation commands: cargo test -q nl_route\n",
+        "Done when:\n",
+        "- a passes\n",
+        "- b passes\n",
+        "\n",
+        "Checkpoint: merged handler.\n",
+        "Verified: test passed.\n",
+    );
+    let stop_payload = json!({
+        "session_id": "s-msg-goal",
+        "cwd": "/Users/joe/Documents/skill",
+        "prompt": "continue",
+        "messages": [
+            {"role": "user", "content": "continue"},
+            {"role": "assistant", "content": assistant}
+        ]
+    });
+    let out = dispatch_cursor_hook_event(&repo, "stop", &stop_payload);
+    let msg = hook_user_visible_blob(&out);
+    assert!(
+        !msg.contains("router-rs AG_FOLLOWUP missing_parts=goal_contract"),
+        "assistant body only under messages[] must satisfy goal_contract; msg={msg:?}"
+    );
 }
 
 #[test]
@@ -2303,7 +3108,7 @@ fn post_tool_use_tool_input_type_field_satisfies_pre_goal() {
         &json!({
             "session_id": "s17d",
             "tool_name": "functions.subagent",
-            "tool_input": {"type": "explore", "fork_context": false}
+            "tool_input": {"type": "general-purpose", "fork_context": false}
         }),
     );
     assert!(
@@ -2326,7 +3131,7 @@ fn post_tool_use_heuristic_mcp_subagent_tool_name_satisfies_pre_goal() {
         &json!({
             "session_id": "s17mcp",
             "tool_name": "mcp_cursor_agent_subagent",
-            "tool_input": {"subagent_type": "explore", "fork_context": false}
+            "tool_input": {"subagent_type": "general-purpose", "fork_context": false}
         }),
     );
     assert!(load_state_for(&repo, "s17mcp").pre_goal_review_satisfied);
@@ -2348,7 +3153,7 @@ fn post_tool_use_nested_payload_tool_fields_satisfy_pre_goal() {
             "cwd": "/Users/joe/Documents/skill",
             "payload": {
                 "tool_name": "functions.subagent",
-                "tool_input": {"type": "explore", "fork_context": false}
+                "tool_input": {"type": "general-purpose", "fork_context": false}
             }
         }),
     );
@@ -2356,7 +3161,7 @@ fn post_tool_use_nested_payload_tool_fields_satisfy_pre_goal() {
 }
 
 #[test]
-fn post_tool_use_non_allowlisted_lane_field_satisfies_pre_goal() {
+fn post_tool_use_non_countable_lane_does_not_satisfy_pre_goal() {
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -2373,7 +3178,10 @@ fn post_tool_use_non_allowlisted_lane_field_satisfies_pre_goal() {
             "tool_input": {"lane": "my-custom-reviewer", "fork_context": false}
         }),
     );
-    assert!(load_state_for(&repo, "s-lane").pre_goal_review_satisfied);
+    assert!(
+        !load_state_for(&repo, "s-lane").pre_goal_review_satisfied,
+        "custom lane is not a countable deep reviewer lane for pre-goal"
+    );
 }
 
 #[test]
@@ -2608,7 +3416,7 @@ fn subagent_start_pre_goal_requires_typed_subagent() {
         &json!({
             "session_id": "s-sub-pre",
             "cwd": "/Users/joe/Documents/skill",
-            "subagent_type": "explore",
+            "subagent_type": "general-purpose",
             "tool_input": {"fork_context": false}
         }),
     );
@@ -2945,6 +3753,34 @@ fn handle_session_end_respects_kill_disable_env() {
 }
 
 #[test]
+fn session_start_operator_inject_off_skips_additional_context() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let prev_inject = env::var_os("ROUTER_RS_OPERATOR_INJECT");
+    env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+    let repo = fresh_repo();
+    fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir ac");
+    fs::write(
+        repo.join("artifacts/current/SESSION_SUMMARY.md"),
+        "would appear if inject on\n",
+    )
+    .expect("summary");
+    let payload = json!({
+        "session_id": "ss-inject-off",
+        "cwd": repo.display().to_string()
+    });
+    let out = dispatch_cursor_hook_event(&repo, "sessionStart", &payload);
+    let ctx = out["additional_context"].as_str().unwrap_or("");
+    assert!(
+        ctx.trim().is_empty(),
+        "ROUTER_RS_OPERATOR_INJECT=0 must skip SessionStart continuity advisory: {out:?}"
+    );
+    match prev_inject {
+        Some(v) => env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
+        None => env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+    }
+}
+
+#[test]
 fn session_start_additional_context_observes_router_rs_sessionstart_max_env() {
     let repo = fresh_repo();
     fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir ac");
@@ -2974,8 +3810,65 @@ fn session_start_additional_context_observes_router_rs_sessionstart_max_env() {
         &ctx[..ctx.len().min(80)]
     );
     assert!(
-        ctx.contains("SESSIONSTART_BUDGET_LINE"),
-        "prefix lines should survive truncation: {ctx:?}"
+        ctx.ends_with(super::CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX),
+        "expected UTF-8 byte cap truncation with fixed suffix: {ctx:?}"
+    );
+}
+
+#[test]
+fn session_start_prepends_active_focus_goal_mismatch_hint() {
+    let _rg = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let active_tid = "t-ss-empty";
+    let focus_tid = "t-ss-filled";
+    let cur = repo.join("artifacts/current");
+    fs::create_dir_all(cur.join(active_tid)).expect("mkdir active task");
+    fs::write(
+        cur.join("active_task.json"),
+        format!(r#"{{"task_id":"{active_tid}"}}"#),
+    )
+    .expect("active");
+    fs::write(
+        cur.join("focus_task.json"),
+        format!(r#"{{"task_id":"{focus_tid}"}}"#),
+    )
+    .expect("focus");
+    let focus_dir = cur.join(focus_tid);
+    fs::create_dir_all(&focus_dir).expect("mkdir focus task");
+    fs::write(
+        focus_dir.join("GOAL_STATE.json"),
+        serde_json::to_string_pretty(&json!({
+            "schema_version": "router-rs-autopilot-goal-v1",
+            "drive_until_done": true,
+            "status": "running",
+            "goal": "from-focus",
+            "non_goals": [],
+            "done_when": [],
+            "validation_commands": [],
+            "current_horizon": "",
+            "checkpoints": [],
+            "blocker": null,
+            "updated_at": "2026-01-01T00:00:00Z"
+        }))
+        .unwrap(),
+    )
+    .expect("goal");
+
+    let payload = json!({
+        "session_id": "ss-af-hint",
+        "cwd": repo.display().to_string(),
+    });
+    let out = dispatch_cursor_hook_event(&repo, "sessionStart", &payload);
+    let ctx = out["additional_context"]
+        .as_str()
+        .expect("additional_context");
+    assert!(
+        ctx.starts_with("连续性提示:"),
+        "hint must lead sections for SessionStart prefix truncation: {ctx:?}"
+    );
+    assert!(
+        ctx.contains(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH),
+        "full zh hint constant must appear: {ctx:?}"
     );
 }
 

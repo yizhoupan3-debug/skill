@@ -18,7 +18,7 @@ trigger_hints:
   - tsv
 metadata:
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - excel
     - spreadsheet

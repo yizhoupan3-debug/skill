@@ -29,7 +29,7 @@ runtime_requirements:
     - npx
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - slides
     - markdown

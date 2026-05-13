@@ -58,7 +58,7 @@ trigger_hints:
   - strict reviewer
 metadata:
   version: "4.5.1"
-  platforms: [codex]
+  platforms: [supported]
   tags: [paper, manuscript, review, reviewer, submission, gate-chain, top-journal]
 framework_roles:
   - detector

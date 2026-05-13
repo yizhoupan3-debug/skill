@@ -244,7 +244,7 @@ mod tests {
         let reg = load_runtime_registry_json(&root).expect("registry");
         for (host_id, tool) in pairs {
             assert!(
-                matches!(tool.as_str(), "codex" | "cursor" | "claude"),
+                matches!(tool.as_str(), "codex" | "cursor" | "claude" | "qoder"),
                 "unexpected mapping {host_id} -> {tool}"
             );
             assert_eq!(
@@ -262,6 +262,7 @@ mod tests {
         assert!(pairs.iter().any(|(host_id, _)| host_id == "codex-cli"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "cursor"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "claude-code"));
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "qoder"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
     }
 

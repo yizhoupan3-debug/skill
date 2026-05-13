@@ -13,6 +13,8 @@ trigger_hints:
   - plugin marketplace
   - local plugin
   - codex plugin
+metadata:
+  platforms: [codex]
 ---
 
 # Plugin Creator

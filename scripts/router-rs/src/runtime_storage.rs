@@ -12,6 +12,7 @@ use std::io::{ErrorKind, Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const O_NOFOLLOW_FLAG: i32 = 0o400000;
@@ -33,14 +34,21 @@ const RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION: &str = "runtime-checkpoin
 const DEFAULT_TRACE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
 const DEFAULT_TRACE_SERVICE_ROLE: &str = "trace-and-handoff";
 const DEFAULT_TRACE_SERVICE_PROJECTION: &str = "rust-native-projection";
-const DEFAULT_STATE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
-const DEFAULT_STATE_SERVICE_ROLE: &str = "durable-background-state";
-const DEFAULT_STATE_SERVICE_PROJECTION: &str = "rust-native-projection";
-const SQLITE_TABLE_NAME: &str = "runtime_storage_payloads";
+/// Single source of truth for the durable background-state service identity strings
+/// and the SQLite payload table name. `background_state` re-exports these via
+/// `use crate::runtime_storage::{...}` so renames cannot drift between the two files.
+pub(crate) const DEFAULT_STATE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
+pub(crate) const DEFAULT_STATE_SERVICE_ROLE: &str = "durable-background-state";
+pub(crate) const DEFAULT_STATE_SERVICE_PROJECTION: &str = "rust-native-projection";
+pub(crate) const SQLITE_TABLE_NAME: &str = "runtime_storage_payloads";
 const RUNTIME_BACKEND_FAMILY_CATALOG_SCHEMA_VERSION: &str =
     "runtime-persistence-backend-family-catalog-v1";
 const RUNTIME_BACKEND_FAMILY_PARITY_SCHEMA_VERSION: &str =
     "runtime-persistence-backend-family-parity-v1";
+
+/// Serialize `append_text` for the in-memory regression backend (no `flock`); parallel writers
+/// could otherwise interleave bytes on the same logical path.
+static MEMORY_APPEND_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeBackendCapabilities {
@@ -1273,6 +1281,13 @@ pub(crate) fn runtime_storage_operation(
                     filesystem_append_text(&path, &payload)?;
                 }
                 ResolvedStorageBackend::Memory => {
+                    let _memory_append_guard = MEMORY_APPEND_MUTEX
+                        .get_or_init(|| Mutex::new(()))
+                        .lock()
+                        .map_err(|_| {
+                            "runtime_storage memory append mutex poisoned (parallel append aborted)"
+                                .to_string()
+                        })?;
                     let artifact_path = memory_artifact_path(&path)?;
                     if let Some(parent) = artifact_path.parent() {
                         fs::create_dir_all(parent).map_err(|err| {

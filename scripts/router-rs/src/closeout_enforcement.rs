@@ -6,39 +6,6 @@ pub const CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION: &str =
     "router-rs-closeout-enforcement-response-v1";
 pub const CLOSEOUT_ENFORCEMENT_AUTHORITY: &str = "rust-closeout-enforcement";
 
-const COMPLETION_DETECT_EN: &[&str] = &["done", "finished", "completed", "succeeded", "passed"];
-
-/// 与 `cursor_hooks::completion_claimed_in_text` 对齐：中文用语义更完整的短语，避免「完成度」等误报。
-const COMPLETION_DETECT_ZH_PHRASES: &[&str] = &[
-    "已完成",
-    "已经完成",
-    "全部完成",
-    "完成了",
-    "验证通过",
-    "测试通过",
-    "审核通过",
-    "已通过",
-    "搞定",
-];
-
-/// 合约导出用：英文词 + 中文短语（供评估侧/人类对照）。
-const COMPLETION_KEYWORDS: &[&str] = &[
-    "done",
-    "finished",
-    "completed",
-    "succeeded",
-    "passed",
-    "已完成",
-    "已经完成",
-    "全部完成",
-    "完成了",
-    "验证通过",
-    "测试通过",
-    "审核通过",
-    "已通过",
-    "搞定",
-];
-
 const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", "not_run"];
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -343,7 +310,7 @@ pub fn closeout_enforcement_contract() -> Value {
         "authority": CLOSEOUT_ENFORCEMENT_AUTHORITY,
         "record_schema_version": CLOSEOUT_RECORD_SCHEMA_VERSION,
         "allowed_verification_statuses": ALLOWED_VERIFICATION_STATUSES,
-        "completion_keywords": COMPLETION_KEYWORDS,
+        "completion_keywords": crate::hook_common::completion_claim_keywords_export(),
         "rules": [
             "schema_version_mismatch",
             "task_id_context_mismatch",
@@ -518,19 +485,7 @@ fn append_closeout_violations(
 }
 
 fn summary_claims_completion(summary: &str) -> bool {
-    if summary.is_empty() {
-        return false;
-    }
-    let lower = summary.to_ascii_lowercase();
-    if COMPLETION_DETECT_EN
-        .iter()
-        .any(|kw| lower.contains(&kw.to_ascii_lowercase()))
-    {
-        return true;
-    }
-    COMPLETION_DETECT_ZH_PHRASES
-        .iter()
-        .any(|p| summary.contains(p))
+    crate::hook_common::contains_completion_claim_token(summary)
 }
 
 #[cfg(test)]

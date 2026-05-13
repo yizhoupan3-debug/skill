@@ -86,7 +86,7 @@ fn query_contains_whole_hyphenated_slug(query_text: &str, slug: &str) -> bool {
         let prev = query_text[..pos].chars().last();
         let next = query_text[pos + slug.len()..].chars().next();
         let prev_ok = prev.is_none_or(|c| !c.is_ascii_alphanumeric());
-        let next_ok = next.is_none_or(|c| !c.is_ascii_alphanumeric());
+        let next_ok = next.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-');
         if prev_ok && next_ok {
             return true;
         }
@@ -153,4 +153,25 @@ fn framework_alias_plain_paper_slug_claims(
         || query_token_list
             .iter()
             .any(|token| token == record.slug.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hyphenated_slug_rejects_extended_token_with_trailing_hyphen() {
+        assert!(!query_contains_whole_hyphenated_slug(
+            "paper-reviewer-notes for my draft",
+            "paper-reviewer"
+        ));
+        assert!(query_contains_whole_hyphenated_slug(
+            "用paper-reviewer改稿",
+            "paper-reviewer"
+        ));
+        assert!(query_contains_whole_hyphenated_slug(
+            "run paper-reviewer on section 2",
+            "paper-reviewer"
+        ));
+    }
 }

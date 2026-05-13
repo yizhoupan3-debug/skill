@@ -7,9 +7,14 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
+// `io::Write` only feeds the `#[cfg(test)] copy_text_to_clipboard` pbcopy stdin write.
+#[cfg(test)]
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
+// `Command`/`Stdio` only feed the `#[cfg(test)] copy_text_to_clipboard` helper in the
+// `runtime_ops.inc` fragment; gate the imports together so release builds stay quiet.
+#[cfg(test)]
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::OnceLock;

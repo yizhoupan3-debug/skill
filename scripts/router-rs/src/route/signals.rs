@@ -1,10 +1,105 @@
 //! Query heuristics and route context classification.
+//!
+//! ## Marker sources (do not duplicate without reason)
+//!
+//! - **JSON**: [`ROUTING_SIGNAL_MARKERS.json`](../../../configs/framework/ROUTING_SIGNAL_MARKERS.json)
+//!   — completion / supervisor strings, meta-routing anchors, and other lists loaded via
+//!   `routing_signal_markers_json()` helpers at the top of this module. Prefer adding **new
+//!   cross-cutting phrase lists** here when they are pure substring / token vocabulary shared
+//!   across many skills.
+//! - **Rust `has_*` functions**: domain-specific or scoring-coupled heuristics (often need
+//!   `normalize_text` / `text_matches_phrase` / `SkillRecord` context) stay as functions in this
+//!   file until a clear JSON migration path exists.
+//!
+//! Default rule: if the marker set is **large, stable vocabulary** reused broadly, put it in JSON;
+//! if it needs **Rust-only helpers or record-aware logic**, keep a `has_*` here and cross-link in
+//! `NL_ROUTE_ADJUSTMENTS.json` docs when relevant.
 use super::aliases::framework_alias_requires_explicit_call;
 use super::constants::ARTIFACT_GATE_PHRASES;
 use super::text::{normalize_text, text_matches_phrase};
 use super::types::{RouteContextPayload, SkillRecord};
 use regex::Regex;
+use serde_json::Value;
 use std::sync::OnceLock;
+
+const ROUTING_SIGNAL_MARKERS_EMBED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../configs/framework/ROUTING_SIGNAL_MARKERS.json"
+));
+
+fn routing_signal_markers_json() -> &'static Value {
+    static CELL: OnceLock<Value> = OnceLock::new();
+    CELL.get_or_init(|| {
+        let v: Value = serde_json::from_str(ROUTING_SIGNAL_MARKERS_EMBED)
+            .expect("ROUTING_SIGNAL_MARKERS.json must parse");
+        assert_eq!(
+            v.get("schema_version").and_then(Value::as_str),
+            Some("routing-signal-markers-v1"),
+            "ROUTING_SIGNAL_MARKERS schema_version mismatch"
+        );
+        v
+    })
+}
+
+fn string_list_field<'a>(root: &'a Value, key: &'static str) -> &'a Vec<Value> {
+    root.get(key)
+        .and_then(Value::as_array)
+        .unwrap_or_else(|| panic!("ROUTING_SIGNAL_MARKERS missing array field `{key}`"))
+}
+
+fn meta_routing_anchors() -> &'static [String] {
+    static CELL: OnceLock<Vec<String>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        let root = routing_signal_markers_json();
+        let arr = root
+            .pointer("/meta_routing_task/anchor_any_of_substrings")
+            .and_then(Value::as_array)
+            .expect("meta_routing_task.anchor_any_of_substrings");
+        arr.iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect()
+    })
+}
+
+fn meta_routing_markers() -> &'static [String] {
+    static CELL: OnceLock<Vec<String>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        let root = routing_signal_markers_json();
+        let arr = root
+            .pointer("/meta_routing_task/marker_any_of_substrings")
+            .and_then(Value::as_array)
+            .expect("meta_routing_task.marker_any_of_substrings");
+        arr.iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect()
+    })
+}
+
+fn completion_marker_strings() -> &'static [String] {
+    static CELL: OnceLock<Vec<String>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        string_list_field(
+            routing_signal_markers_json(),
+            "completion_execution_markers",
+        )
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect()
+    })
+}
+
+fn supervisor_marker_strings() -> &'static [String] {
+    static CELL: OnceLock<Vec<String>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        string_list_field(
+            routing_signal_markers_json(),
+            "supervisor_execution_markers",
+        )
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect()
+    })
+}
 
 fn github_pr_standalone_token_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -12,46 +107,15 @@ fn github_pr_standalone_token_regex() -> &'static Regex {
 }
 
 pub(crate) fn is_meta_routing_task(query_text: &str) -> bool {
-    (query_text.contains("skill")
-        || query_text.contains("skill.md")
-        || query_text.contains("runtime")
-        || query_text.contains("framework")
-        || query_text.contains("框架"))
-        && [
-            "路由",
-            "触发",
-            "routing",
-            "router",
-            "route",
-            "系统",
-            "入口",
-            "抽象",
-            "行为驱动",
-            "第一性原理",
-            "减法",
-            "轻量化",
-            "兼容层",
-            "胶水层",
-            "核查",
-            "合并",
-            "精简",
-            "清理",
-            "历史文件",
-            "旧文件",
-            "口径",
-            "contract",
-            "沉到 runtime",
-            "沉到runtime",
-            "减少入口",
-            "减入口",
-            "不损害功能",
-            "加重负担",
-            "没有用",
-            "runtime 轻量化",
-            "讨论-规划-执行-验证",
-        ]
+    let anchor_hit = meta_routing_anchors()
         .iter()
-        .any(|marker| query_text.contains(marker))
+        .any(|a| query_text.contains(a.as_str()));
+    if !anchor_hit {
+        return false;
+    }
+    meta_routing_markers()
+        .iter()
+        .any(|m| query_text.contains(m.as_str()))
 }
 
 pub(crate) fn has_checklist_execution_context(query_text: &str) -> bool {
@@ -367,16 +431,18 @@ pub(crate) fn can_be_fallback_owner(record: &SkillRecord) -> bool {
         )
 }
 
-/// High-precision Cursor Plan / 策划闸门 intent (aligned with `skills/plan-mode/SKILL.md` trigger_hints).
+/// High-precision **framework plan-mode** intent (aligned with `skills/plan-mode/SKILL.md`),
+/// host-neutral: not tied to Cursor product name.
 /// Used to keep delegation-gate admission from overriding the `plan-mode` owner on first-turn routing.
-pub(crate) fn has_cursor_plan_mode_owner_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub(crate) fn has_plan_mode_owner_context(query_text: &str, query_token_list: &[String]) -> bool {
     query_text.contains("cursor plan")
+        || query_text.contains("Cursor Plan")
+        || query_text.contains("CreatePlan")
+        || query_text.contains("plan_profile")
+        || query_text.contains("plan-mode")
+        || query_text.contains("skill/plan-mode")
         || query_text.contains("plan 模式")
         || query_text.contains("策划文档闸门")
-        || text_matches_phrase(query_token_list, "plan revision round")
         || text_matches_phrase(query_token_list, "可验收 todo")
         || text_matches_phrase(query_token_list, "subagent 审 plan")
         || text_matches_phrase(query_token_list, "gitx plan 收口")
@@ -1288,44 +1354,15 @@ pub(crate) fn has_diagramming_context(query_text: &str, query_token_list: &[Stri
     })
 }
 
-pub(crate) fn completion_execution_markers() -> [&'static str; 10] {
-    [
-        "gsd",
-        "get shit done",
-        "推进到底",
-        "别停",
-        "直接干完",
-        "一路做完",
-        "持续跑到收敛",
-        "给验证证据",
-        "给我验证证据",
-        "验证证据",
-    ]
-}
-
-pub(crate) fn supervisor_execution_markers() -> [&'static str; 9] {
-    [
-        ".supervisor_state.json",
-        "共享 continuity",
-        "shared continuity",
-        "多 lane 集成",
-        "主线程集成",
-        "integration supervisor",
-        "supervisor",
-        "长运行",
-        "状态持久化",
-    ]
-}
-
 pub(crate) fn build_route_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> RouteContextPayload {
-    let completion_requested = completion_execution_markers().iter().any(|marker| {
-        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
+    let completion_requested = completion_marker_strings().iter().any(|marker| {
+        query_text.contains(marker.as_str()) || text_matches_phrase(query_token_list, marker)
     });
-    let supervisor_required = supervisor_execution_markers().iter().any(|marker| {
-        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
+    let supervisor_required = supervisor_marker_strings().iter().any(|marker| {
+        query_text.contains(marker.as_str()) || text_matches_phrase(query_token_list, marker)
     });
     let delegation_candidate = has_bounded_subagent_context(query_text, query_token_list)
         || has_team_orchestration_context(query_text, query_token_list)

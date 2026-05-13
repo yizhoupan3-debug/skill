@@ -34,7 +34,7 @@ approval_required_tools:
   - git push
 metadata:
   version: "3.0.0"
-  platforms: [codex, cursor]
+  platforms: [supported]
   tags: [maintenance, docs, research-docs, git-tracking, cleanup, contracts, router-rs]
 risk: medium
 source: project

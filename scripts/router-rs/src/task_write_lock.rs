@@ -1,6 +1,6 @@
 //! Cross-process **advisory flock** for **continuity ledger** mutations under a repo’s
-//! `artifacts/current/**`: `GOAL_STATE.json`, `RFV_LOOP_STATE.json`, session artifact batch
-//! writes, and `EVIDENCE_INDEX.json` read-modify-write.
+//! `artifacts/current/**`: `GOAL_STATE.json`, `RFV_LOOP_STATE.json`, `STEP_LEDGER.jsonl` append,
+//! session artifact batch writes, and `EVIDENCE_INDEX.json` read-modify-write.
 //!
 //! Serialization for multiple hook processes is **`flock(2)`** on
 //! `artifacts/current/.router-rs.task-ledger.lock`. A legacy process-local `Mutex` is not used
@@ -11,6 +11,8 @@
 //!
 //! [`apply_task_ledger_mutation`] must stay consistent with per-path wrappers: **repo flock first**,
 //! then narrower locks such as `runtime_storage::acquire_runtime_path_lock` where applicable.
+//! The in-memory `runtime_storage` regression backend uses a process-local mutex for `append_text`
+//! only; it does **not** participate in the repo-wide task-ledger flock.
 
 use crate::router_env_flags::router_rs_task_ledger_flock_enabled;
 use fs2::FileExt;

@@ -31,7 +31,7 @@ trigger_hints:
   - 探索性分析
 metadata:
   version: "1.0.3"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - reproducibility
     - experiment-tracking

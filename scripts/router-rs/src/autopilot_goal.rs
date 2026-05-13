@@ -3,6 +3,7 @@
 
 use crate::atomic_write::write_atomic_json;
 use crate::framework_runtime::resolve_repo_root_arg;
+use crate::harness_context_signals::autopilot_state_signals_math;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
 };
@@ -10,7 +11,6 @@ use chrono::Utc;
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-autopilot-goal-v1";
@@ -29,10 +29,13 @@ pub fn read_active_task_id(repo_root: &Path) -> Option<String> {
     let path = repo_root.join("artifacts/current/active_task.json");
     let raw = fs::read_to_string(&path).ok()?;
     let data: Value = serde_json::from_str(&raw).ok()?;
-    data.get("task_id")
+    let t = data
+        .get("task_id")
         .and_then(Value::as_str)
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty())?;
+    crate::path_guard::safe_task_id_component(&t)?;
+    Some(t)
 }
 
 /// 从 `artifacts/current/focus_task.json` 读取 `task_id`（与 framework 指针一致，作 active 指针缺失时的回退）。
@@ -40,17 +43,49 @@ pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
     let path = repo_root.join("artifacts/current/focus_task.json");
     let raw = fs::read_to_string(&path).ok()?;
     let data: Value = serde_json::from_str(&raw).ok()?;
-    data.get("task_id")
+    let t = data
+        .get("task_id")
         .and_then(Value::as_str)
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty())?;
+    crate::path_guard::safe_task_id_component(&t)?;
+    Some(t)
 }
 
-pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> PathBuf {
-    repo_root
+fn parse_task_id_from_pointer_json(raw: &str) -> Option<String> {
+    let data: Value = serde_json::from_str(raw).ok()?;
+    let t = data
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+    crate::path_guard::safe_task_id_component(&t)?;
+    Some(t)
+}
+
+/// Read `active_task.json` and `focus_task.json` task ids in one back-to-back pair (smaller
+/// TOCTOU window than two independent helper calls). Used by [`crate::task_state::read_task_pointers`]
+/// and hydration entrypoints.
+pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<String>) {
+    let active_path = repo_root.join("artifacts/current/active_task.json");
+    let focus_path = repo_root.join("artifacts/current/focus_task.json");
+    let active_raw = fs::read_to_string(&active_path).ok();
+    let focus_raw = fs::read_to_string(&focus_path).ok();
+    let active_task_id = active_raw
+        .as_deref()
+        .and_then(parse_task_id_from_pointer_json);
+    let focus_task_id = focus_raw
+        .as_deref()
+        .and_then(parse_task_id_from_pointer_json);
+    (active_task_id, focus_task_id)
+}
+
+pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+    let tid = crate::path_guard::validate_task_id_component(task_id)?;
+    Ok(repo_root
         .join("artifacts/current")
-        .join(task_id)
-        .join(GOAL_STATE_FILENAME)
+        .join(tid)
+        .join(GOAL_STATE_FILENAME))
 }
 
 /// RFV 在同 task 上 `start`/`upsert` 时移除 GOAL（与 RFV 互斥）。
@@ -61,7 +96,10 @@ pub(crate) fn deactivate_goal_for_conflict_with_rfv(
     if task_id.trim().is_empty() {
         return Ok(false);
     }
-    let path = goal_state_path_for_task(repo_root, task_id);
+    if crate::path_guard::safe_task_id_component(task_id).is_none() {
+        return Ok(false);
+    }
+    let path = goal_state_path_for_task(repo_root, task_id)?;
     if !path.is_file() {
         return Ok(false);
     }
@@ -70,24 +108,82 @@ pub(crate) fn deactivate_goal_for_conflict_with_rfv(
     Ok(true)
 }
 
+/// `artifacts/current/<rel>/GOAL_STATE.json` 当 `rel` 为多段路径（仅测试诊断扫描用）；
+/// 每段须通过 [`crate::path_guard::safe_task_id_component`]，否则 `None`。
+fn goal_state_path_for_nested_under_current(repo_root: &Path, rel: &str) -> Option<PathBuf> {
+    let rel = rel.trim().trim_matches('/');
+    if rel.is_empty() {
+        return None;
+    }
+    let mut dir = repo_root.join("artifacts/current");
+    for seg in rel.split(['/', '\\']) {
+        let seg = seg.trim();
+        if seg.is_empty() || crate::path_guard::safe_task_id_component(seg).is_none() {
+            return None;
+        }
+        dir = dir.join(seg);
+    }
+    Some(dir.join(GOAL_STATE_FILENAME))
+}
+
 /// 能解析为 JSON 的 `GOAL_STATE` 才返回；读失败或非法 JSON 返回 `None`（便于换指针/扫描回退）。
 fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<(Value, String)> {
     if task_id.trim().is_empty() {
         return None;
     }
-    let path = goal_state_path_for_task(repo_root, task_id);
+    let path = match goal_state_path_for_task(repo_root, task_id) {
+        Ok(p) => p,
+        Err(_) => goal_state_path_for_nested_under_current(repo_root, task_id)?,
+    };
     if !path.is_file() {
         return None;
     }
     let raw = fs::read_to_string(&path).ok()?;
     let value: Value = serde_json::from_str(&raw).ok()?;
-    Some((value, task_id.trim().to_string()))
+    let tid_out = task_id
+        .trim()
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_string();
+    Some((value, tid_out))
 }
 
-#[allow(dead_code)]
+/// Cursor Stop/drive 门控回补：只依次尝试 `active_task.json`、`focus_task.json`。
+/// 历史 orphan goal 不能被当作当前任务续跑真源。
+pub fn read_goal_state_for_hydration(repo_root: &Path) -> Result<Option<(Value, String)>, String> {
+    let (active_task_id, focus_task_id) = read_task_pointer_pair(repo_root);
+    read_goal_state_for_hydration_from_pointer_ids(repo_root, &active_task_id, &focus_task_id)
+}
+
+/// Same semantics as [`read_goal_state_for_hydration`], but uses pointer ids from a single
+/// snapshot (e.g. paired with [`crate::task_state::resolve_task_view_with_pointers`]).
+pub fn read_goal_state_for_hydration_from_pointer_ids(
+    repo_root: &Path,
+    active_task_id: &Option<String>,
+    focus_task_id: &Option<String>,
+) -> Result<Option<(Value, String)>, String> {
+    if let Some(active) = active_task_id {
+        return Ok(read_goal_state_pair_if_valid(repo_root, active));
+    }
+    if let Some(focus) = focus_task_id {
+        return Ok(read_goal_state_pair_if_valid(repo_root, focus));
+    }
+    Ok(None)
+}
+
+/// 诊断 / 测试专用 mtime 扫描：picks the **newest** `GOAL_STATE.json` under `artifacts/current/**`.
+///
+/// 整个扫描链（包括下方 `discover_*` / `visit_*` / `GOAL_DISCOVER_MAX_DEPTH`）只在
+/// `hydration_ignores_orphan_goal_when_active_task_missing` 等单测里复活 orphan goal 用于负面断言。
+/// **绝不能**从 Cursor / Codex / Claude hook 的续跑路径调用：continuity 真源是
+/// [`read_goal_state_for_hydration`]（active → focus，不做 orphan mtime sweep）。
+#[cfg(test)]
+use std::time::SystemTime;
+
+#[cfg(test)]
 const GOAL_DISCOVER_MAX_DEPTH: usize = 8;
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn discover_goal_state_task_ids_under_current(
     repo_root: &Path,
 ) -> Result<Vec<(String, SystemTime)>, String> {
@@ -100,7 +196,7 @@ fn discover_goal_state_task_ids_under_current(
     Ok(out)
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn visit_goal_state_dirs(
     dir: &Path,
     current_root: &Path,
@@ -138,22 +234,8 @@ fn visit_goal_state_dirs(
     Ok(())
 }
 
-/// Cursor Stop/drive 门控回补：只依次尝试 `active_task.json`、`focus_task.json`。
-/// 历史 orphan goal 不能被当作当前任务续跑真源。
-pub fn read_goal_state_for_hydration(repo_root: &Path) -> Result<Option<(Value, String)>, String> {
-    if let Some(active) = read_active_task_id(repo_root) {
-        return Ok(read_goal_state_pair_if_valid(repo_root, &active));
-    }
-    if let Some(focus) = read_focus_task_id(repo_root) {
-        return Ok(read_goal_state_pair_if_valid(repo_root, &focus));
-    }
-    Ok(None)
-}
-
-/// 诊断/兼容用途：扫描 `artifacts/current/**/GOAL_STATE.json`，按 mtime 新者优先。
-/// 不用于 Cursor 当前任务 Stop/drive 门控，避免历史 orphan goal 误续跑。
-#[allow(dead_code)]
-pub fn read_goal_state_for_diagnostics_scan(
+#[cfg(test)]
+fn read_goal_state_for_diagnostics_scan(
     repo_root: &Path,
 ) -> Result<Option<(Value, String)>, String> {
     let mut candidates = discover_goal_state_task_ids_under_current(repo_root)?;
@@ -169,27 +251,19 @@ pub fn read_goal_state_for_diagnostics_scan(
     Ok(None)
 }
 
-fn json_exit_code_is_zero(v: &Value) -> bool {
-    v.as_i64() == Some(0) || v.as_u64() == Some(0)
-}
-
-fn evidence_entry_implies_success(entry: &Value) -> bool {
-    entry
-        .get("success")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        || entry
-            .get("exit_code")
-            .map(json_exit_code_is_zero)
-            .unwrap_or(false)
-}
-
 /// 指定 `task_id` 任务目录下 `EVIDENCE_INDEX.json`：是否存在非空 `artifacts`、是否至少有一条成功验证记录。
+/// 单条 artifact 的「成功」判定下沉到 [`crate::hook_common::evidence_index_entry_implies_success`]，
+/// 与 `rfv_loop` 共用一份口径。
 pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str) -> (bool, bool) {
     if task_id.trim().is_empty() {
         return (false, false);
     }
-    let goal_path = goal_state_path_for_task(repo_root, task_id);
+    if crate::path_guard::safe_task_id_component(task_id).is_none() {
+        return (false, false);
+    }
+    let Ok(goal_path) = goal_state_path_for_task(repo_root, task_id) else {
+        return (false, false);
+    };
     let Some(parent) = goal_path.parent() else {
         return (false, false);
     };
@@ -209,7 +283,9 @@ pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str)
     if arr.is_empty() {
         return (false, false);
     }
-    let any_ok = arr.iter().any(evidence_entry_implies_success);
+    let any_ok = arr
+        .iter()
+        .any(crate::hook_common::evidence_index_entry_implies_success);
     (true, any_ok)
 }
 
@@ -223,12 +299,16 @@ pub fn read_goal_state(
         }
         t.trim().to_string()
     } else {
-        let Some(t) = read_active_task_id(repo_root) else {
+        let (active, focus) = read_task_pointer_pair(repo_root);
+        let Some(t) = active.or(focus) else {
             return Ok(None);
         };
         t
     };
-    let path = goal_state_path_for_task(repo_root, &task_id);
+    crate::path_guard::validate_task_id_component(&task_id).map_err(|e| {
+        format!("framework_autopilot_goal: invalid task_id for GOAL_STATE path: {e}")
+    })?;
+    let path = goal_state_path_for_task(repo_root, &task_id)?;
     if !path.is_file() {
         return Ok(None);
     }
@@ -394,16 +474,22 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
 
     match operation.as_str() {
         "status" => {
-            let state = read_goal_state(&repo_root, task_id_override)?;
             let tid = if let Some(t) = task_id_override {
                 t.to_string()
             } else {
-                read_active_task_id(&repo_root).unwrap_or_default()
+                let (active, focus) = read_task_pointer_pair(&repo_root);
+                active.or(focus).unwrap_or_default()
             };
+            let read_override = match task_id_override {
+                Some(_) => task_id_override,
+                None if tid.is_empty() => None,
+                None => Some(tid.as_str()),
+            };
+            let state = read_goal_state(&repo_root, read_override)?;
             let path = if tid.is_empty() {
                 PathBuf::new()
             } else {
-                goal_state_path_for_task(&repo_root, &tid)
+                goal_state_path_for_task(&repo_root, &tid).unwrap_or_else(|_| PathBuf::new())
             };
             Ok(json!({
                 "ok": true,
@@ -421,6 +507,7 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                     "framework_autopilot_goal start requires task_id in payload or active_task.json"
                         .to_string()
                 })?;
+            crate::path_guard::validate_task_id_component(&task_id)?;
             let goal = payload
                 .get("goal")
                 .and_then(Value::as_str)
@@ -488,7 +575,7 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                     obj.insert("completion_gates".to_string(), cg.clone());
                 }
             }
-            let path = goal_state_path_for_task(&repo_root, &task_id);
+            let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
             let rfv_loop_superseded =
@@ -513,6 +600,7 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                     "framework_autopilot_goal checkpoint requires task_id or active_task.json"
                         .to_string()
                 })?;
+            crate::path_guard::validate_task_id_component(&task_id)?;
             let note = payload
                 .get("note")
                 .and_then(Value::as_str)
@@ -521,7 +609,7 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                 .ok_or_else(|| {
                     "framework_autopilot_goal checkpoint requires non-empty note".to_string()
                 })?;
-            let path = goal_state_path_for_task(&repo_root, &task_id);
+            let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let mut state = read_goal_state(&repo_root, Some(&task_id))?
                 .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
             let arr = state
@@ -694,7 +782,7 @@ fn clear_goal_state(repo_root: &Path, task_id_override: Option<&str>) -> Result<
         .ok_or_else(|| {
             "framework_autopilot_goal clear requires task_id or active_task.json".to_string()
         })?;
-    let path = goal_state_path_for_task(repo_root, &task_id);
+    let path = goal_state_path_for_task(repo_root, &task_id)?;
     let existed = path.is_file();
     if existed {
         fs::remove_file(&path).map_err(|err| format!("remove GOAL_STATE: {err}"))?;
@@ -720,7 +808,7 @@ fn resume_goal_running(
         .ok_or_else(|| {
             "framework_autopilot_goal requires task_id or active_task.json".to_string()
         })?;
-    let path = goal_state_path_for_task(repo_root, &task_id);
+    let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?
         .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
     let obj = state
@@ -756,7 +844,7 @@ fn set_terminal_flags(
         .ok_or_else(|| {
             "framework_autopilot_goal requires task_id or active_task.json".to_string()
         })?;
-    let path = goal_state_path_for_task(repo_root, &task_id);
+    let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?
         .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
     let obj = state
@@ -815,6 +903,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
     if !autopilot_drive_hook_enabled() {
         return None;
     }
+    crate::path_guard::safe_task_id_component(task_id)?;
     if !goal_state_requests_continuation(state) {
         return None;
     }
@@ -839,6 +928,10 @@ pub fn build_autopilot_drive_followup_message_from_state(
     let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
     if !nudges.autopilot_drive_compact_reasoning_depth.is_empty() {
         lines.push(nudges.autopilot_drive_compact_reasoning_depth.clone());
+    }
+    if autopilot_state_signals_math(state) && !nudges.math_reasoning_harness_line.trim().is_empty()
+    {
+        lines.push(nudges.math_reasoning_harness_line.clone());
     }
     lines.push("Done: `framework_autopilot_goal` complete/pause/block.".to_string());
     Some(lines.join("\n"))
@@ -928,6 +1021,21 @@ mod spoof_scrub_tests {
         let line =
             "RG-FOLLOWUP missing_parts=independent_subagent_or_reject_reason escalation=loop";
         assert_eq!(scrub_spoof_host_followup_lines(line).trim(), "");
+    }
+
+    /// User-reported imitation host line (underscore `RG_FOLLOWUP` + natural-language escalation tail).
+    #[test]
+    fn scrub_drops_rg_followup_escalation_natural_language_tail() {
+        let line = concat!(
+            "RG_FOLLOWUP missing_parts=independent_subagent_or_reject_reason ",
+            "escalation=This has already looped multiple times; do not silently continue."
+        );
+        let cleaned = scrub_spoof_host_followup_lines(line);
+        assert_eq!(
+            cleaned.trim(),
+            "",
+            "expected full line stripped: {cleaned:?}"
+        );
     }
 }
 
@@ -1082,7 +1190,7 @@ mod tests {
             "drive_until_done": true,
         }))
         .expect("start");
-        let path = goal_state_path_for_task(&repo, "cl-task");
+        let path = goal_state_path_for_task(&repo, "cl-task").expect("goal path");
         assert!(path.is_file());
         let out = framework_autopilot_goal(json!({
             "repo_root": rr,
@@ -1092,6 +1200,99 @@ mod tests {
         assert_eq!(out["ok"], json!(true));
         assert_eq!(out["removed"], json!(true));
         assert!(!path.is_file());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn drive_followup_appends_math_nudge_when_goal_signals_math() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-mathnudge-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("configs/framework")).expect("mkdir");
+        fs::write(
+            repo.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+            r#"{"schema_version":"harness-operator-nudges-v1","nudges":{"autopilot_drive_compact_reasoning_depth":"COMPACT_T","math_reasoning_harness_line":"MATH_LINE_TOKEN_UNIQUE"}}"#,
+        )
+        .expect("nudges");
+        std::env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        let st = json!({
+            "status": "running",
+            "goal": "用归纳法证明定理",
+            "drive_until_done": true,
+            "current_horizon": "",
+        });
+        let msg = build_autopilot_drive_followup_message_from_state(&repo, "t1", &st).expect("msg");
+        assert!(msg.contains("MATH_LINE_TOKEN_UNIQUE"), "{msg}");
+        assert!(msg.contains("COMPACT_T"), "{msg}");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn drive_followup_appends_math_nudge_when_validation_commands_only_math() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo =
+            std::env::temp_dir().join(format!("router-rs-autopilot-mathnudge-valcmd-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("configs/framework")).expect("mkdir");
+        fs::write(
+            repo.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+            r#"{"schema_version":"harness-operator-nudges-v1","nudges":{"autopilot_drive_compact_reasoning_depth":"COMPACT_T","math_reasoning_harness_line":"MATH_FROM_VALIDATION"}}"#,
+        )
+        .expect("nudges");
+        std::env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        let st = json!({
+            "status": "running",
+            "goal": "ship feature X",
+            "drive_until_done": true,
+            "current_horizon": "",
+            "validation_commands": ["python -c \"import sympy; print(0)\""]
+        });
+        let msg = build_autopilot_drive_followup_message_from_state(&repo, "t1", &st).expect("msg");
+        assert!(msg.contains("MATH_FROM_VALIDATION"), "{msg}");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn drive_followup_omits_math_nudge_when_goal_and_validation_are_non_math() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo =
+            std::env::temp_dir().join(format!("router-rs-autopilot-mathnudge-negative-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("configs/framework")).expect("mkdir");
+        fs::write(
+            repo.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+            r#"{"schema_version":"harness-operator-nudges-v1","nudges":{"autopilot_drive_compact_reasoning_depth":"COMPACT_T","math_reasoning_harness_line":"MATH_FROM_VALIDATION"}}"#,
+        )
+        .expect("nudges");
+        std::env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        let st = json!({
+            "status": "running",
+            "goal": "refactor hooks and tighten CI",
+            "drive_until_done": true,
+            "current_horizon": "",
+            "validation_commands": ["cargo test -q", "ruff check ."]
+        });
+        let msg = build_autopilot_drive_followup_message_from_state(&repo, "t1", &st).expect("msg");
+        assert!(
+            !msg.contains("MATH_FROM_VALIDATION"),
+            "unexpected math nudge in: {msg}"
+        );
+        assert!(!msg.contains("MATH_LINE"), "{msg}");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1509,21 +1710,20 @@ mod tests {
             .as_nanos();
         let repo = std::env::temp_dir().join(format!("router-rs-hydr-nested-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(repo.join("artifacts/current/ns/sub")).expect("mkdir");
+        fs::create_dir_all(repo.join("artifacts/current/orphan_slot")).expect("mkdir");
         fs::write(
-            repo.join("artifacts/current/ns/sub/GOAL_STATE.json"),
+            repo.join("artifacts/current/orphan_slot/GOAL_STATE.json"),
             r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"nested tid","status":"running","non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr");
         assert!(
             got.is_none(),
-            "nested orphan goal must not hydrate current task"
+            "orphan goal without active/focus pointers must not hydrate current task"
         );
-        let (_g, tid) = read_goal_state_for_diagnostics_scan(&repo)
-            .expect("diagnostic scan")
-            .expect("pair");
-        assert_eq!(tid, "ns/sub");
+        let scan = read_goal_state_for_diagnostics_scan(&repo).expect("diagnostic scan");
+        let (_g, tid) = scan.expect("expected diagnostics to find single-segment orphan");
+        assert_eq!(tid, "orphan_slot");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1622,7 +1822,7 @@ mod tests {
         assert_eq!(ag["rfv_loop_superseded"], json!(true));
         assert!(crate::rfv_loop::build_rfv_loop_followup_message(&repo).is_none());
 
-        let rfv_path = crate::rfv_loop::rfv_loop_state_path(&repo, "mx-task");
+        let rfv_path = crate::rfv_loop::rfv_loop_state_path(&repo, "mx-task").expect("rfv path");
         let raw = fs::read_to_string(&rfv_path).expect("read rfv");
         let v: Value = serde_json::from_str(&raw).expect("parse rfv");
         assert_eq!(v["loop_status"], json!("superseded"));

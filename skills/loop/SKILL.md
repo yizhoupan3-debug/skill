@@ -22,7 +22,7 @@ trigger_hints:
   - 渐进披露审查
 metadata:
   version: "1.0.1"
-  platforms: [codex, cursor]
+  platforms: [supported]
   tags: [loop, adversarial, review, progressive-disclosure, hooks]
 ---
 

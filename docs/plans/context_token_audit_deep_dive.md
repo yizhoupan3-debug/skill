@@ -12,7 +12,7 @@
 | 缺口主题 | 基线报告覆盖 | 本报告对应证据 |
 |----------|--------------|----------------|
 | **谁在什么相位写入模型侧上下文** | 仅习惯叙述 | `cursor_hooks/` / `codex_hooks.rs` 各事件分支；Codex `SessionStart` 调 `build_framework_continuity_digest_prompt(repo_root, 4)`（`codex_hooks.rs`） |
-| **合并后是否有字符上限** | 未区分宿主 | Codex：`codex_compact_contexts` + `truncate_codex_additional_context`，默认 **640** 字符（可调 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`，clamp **256–8192**）。Cursor：`merge_additional_context` **仅追加字符串**，**无**合并后总长度 cap（见 §3 风险） |
+| **合并阶段与出站 cap** | 基线未分宿主 / 未分合并与出站 | Codex：`codex_compact_contexts` + `truncate_codex_additional_context`，默认 **640** 字符（可调 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`，clamp **256–8192**）。Cursor：**handler 合并阶段** `merge_additional_context` **仅追加**，不设单独字节预算；**出站 stdout** 前由 `apply_cursor_hook_output_policy` + **`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`** 截断（前缀保留，见 [`harness_architecture.md` §4.2](../harness_architecture.md)、下文 **§2** / **§6 H8**） |
 | **SessionStart digest 行数上界** | 未写 | `continuity_digest.rs`：`max_lines` 经 `clamp(2, 4)` 限制；与传入参数（如 Codex 用 `4`）共同约束基线正文长度 |
 | **PostTool → 磁盘证据膨胀** | 提到 EVIDENCE 条数现象 | `framework_runtime/mod.rs`：`MAX_POST_TOOL_EVIDENCE_ARTIFACTS = 120`，超出 **drain 头部**；`command_preview` 截断 **2000** UTF-8 字符；关断：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` |
 | **大段 JSON 调试刮取** | 未提 | `cursor_hooks/`：`HOOK_JSON_STRING_SCRAPE_CAP = 2 * 1024 * 1024`（2MiB 级字符串拼接预算，属极端排障路径） |
@@ -27,16 +27,16 @@
 | 维度 | Codex | Cursor |
 |------|-------|--------|
 | **主要注入字段** | `hookSpecificOutput.additionalContext`（JSON 字符串） | `additional_context` 与/或 `followup_message`（由 `retired followup-channel toggle` 决定续跑类段落写哪字段） |
-| **合并策略** | `codex_compact_contexts`：段落 trim 后 **按全文小写 key 去重**，再 `join("\n")` | `merge_additional_context`：**直接 `\n\n` 追加**，整段再经 `scrub_spoof_host_followup_lines`；**无**总字符 cap |
-| **硬 cap** | 默认 **640** 字符；`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` 覆盖（256–8192）；超长在 **换行边界**截断 + `...` | 无统一 cap；错误输出路径 `MAX_ERROR_LINES = 20`（`truncate_lines`）；另有 `truncate_utf8_chars_local` 用于部分片段（如 goal 预览） |
+| **合并策略** | `codex_compact_contexts`：段落 trim 后 **按全文小写 key 去重**，再 `join("\n")` | `merge_additional_context`：**直接 `\n\n` 追加**，整段再经 `scrub_spoof_host_followup_lines`；**合并阶段**不设单独字节 cap（出站截断见「硬 cap」行） |
+| **硬 cap** | 默认 **640** 字符；`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` 覆盖（256–8192）；超长在 **换行边界**截断 + `...` | **出站 JSON**：`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`（UTF-8 字节上限，前缀保留，`review_gate::run_review_gate` → `apply_cursor_hook_output_policy`，见 harness §4.2）；错误输出路径 `MAX_ERROR_LINES = 20`（`truncate_lines`）；另有 `truncate_utf8_chars_local` 用于部分片段（如 goal 预览） |
 | **续跑段落刷新** | N/A（表结构不同） | `merge_hook_nudge_paragraph`：按段落首行前缀 **strip 再 append**（`AUTOPILOT_DRIVE` / `RFV_LOOP_CONTINUE` 等），减少重复堆叠 |
 | **SessionStart digest** | `build_framework_continuity_digest_prompt(..., 4)` + 后续与 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` 的整体截断 | Cursor 侧 digest 若合并进输出，同样受各相位 `merge_*` 行为约束（以实际 hook 分支为准） |
 
-**结论**：Codex 对 `additionalContext` 有 **明确上界**；Cursor 对 `additional_context` **依赖**「少合并 + SILENT 剥离 + 段落替换」而非总量 cap，长会话下 **理论上可线性增长**（若多路径反复 `merge_additional_context` 且未命中 SILENT 全剥）。
+**结论**：Codex 对 `additionalContext` 有 **明确上界**。Cursor：**合并链路**可随事件重复追加而变长。在 **Cursor hook 出站裁剪**路径生效时（`review_gate::run_review_gate` → `apply_cursor_hook_output_policy`，见 `harness_architecture` §4.2 与 §6 H8、**`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`**），**写入宿主前的 hook stdout** 仍有 UTF-8 字节上界；残余风险是 **前缀保留截断**丢掉尾部段落，而非在该路径下 **`additional_context` JSON 字段体积无上限**。仍应配合「少合并 + SILENT 剥离 + 段落替换」降噪。
 
 ### 2.1 Claude Code（`claude_hooks.rs`）
 
-与 Cursor/Codex 的「大块 continuity digest / 续跑」路径不同：Claude 侧 `add_context` 仅把 **短常量串** 写入 `hookSpecificOutput.additionalContext`（见 `add_context` 与 `SETTINGS_CHANGED_CONTEXT` / `FRAMEWORK_CHANGED_CONTEXT` / `AUTOMATION_CONTEXT`，约 [scripts/router-rs/src/claude_hooks.rs](../../scripts/router-rs/src/claude_hooks.rs) L10–L15、L100–L107、L159–L196）。**无** `codex_compact_contexts` 式去重、**无**与 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` 对等的本文件内截断；因文案长度固定为几句英文提示，**默认不构成**与 Cursor `merge_additional_context` 无界追加同级的 token 风险。PostTool 仅在「触达 settings 与/或 framework 守护路径」时合并上述短串。
+与 Cursor/Codex 的「大块 continuity digest / 续跑」路径不同：Claude 侧 `add_context` 仅把 **短常量串** 写入 `hookSpecificOutput.additionalContext`（见 `add_context` 与 `SETTINGS_CHANGED_CONTEXT` / `FRAMEWORK_CHANGED_CONTEXT` / `AUTOMATION_CONTEXT`，约 [scripts/router-rs/src/claude_hooks.rs](../../scripts/router-rs/src/claude_hooks.rs) L10–L15、L100–L107、L159–L196）。**无** `codex_compact_contexts` 式去重、**无**与 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` 对等的本文件内截断；因文案长度固定为几句英文提示，**默认不构成**与 Cursor 侧「handler 内 `merge_additional_context` 可多段增长 + 出站前 `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` 截断」同量级的 token 放大路径（对照上文 §2 表与 §6 H8）。PostTool 仅在「触达 settings 与/或 framework 守护路径」时合并上述短串。
 
 ---
 
@@ -106,12 +106,12 @@
 | H5 | digest | `continuity_digest` + SessionStart | 有连续性即有 | 基线 clamp **2–4** 行 + Goal 段 + depth hint | `retired verbose followup mode`；`HARNESS_OPERATOR_NUDGES` |
 | H6 | 续跑 | `autopilot_goal` / `rfv_loop` followup | drive/active 时 | compact 已较短；verbose 明显变长 | `retired verbose followup mode`；`ROUTER_RS_AUTOPILOT_DRIVE_HOOK` / `ROUTER_RS_RFV_LOOP_HOOK`；beforeSubmit opt-in 两变量 |
 | H7 | 磁盘 | `EVIDENCE_INDEX.json` | PostTool 默认追加 | **最多 120** 行 × preview≤2000 字符/行量级 | `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`；归档任务目录 |
-| H8 | Cursor 合并 | `merge_additional_context` | 各相位多次调用 | **无总 cap**（与 H6 叠加） | 依赖 SILENT、段落 strip；长期需观察是否需产品级 cap |
+| H8 | Cursor 合并 | `merge_additional_context` | 各相位多次调用 | **合并字符串可增长**；出站前由 `apply_cursor_hook_output_policy` 按 UTF-8 **字节上限**截断（前缀保留，见 harness §4.2）；与 H6 叠加时仍需关注 **较晚并入段先被砍掉** | `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`；`ROUTER_RS_OPERATOR_INJECT` |
 | H9 | 状态不一致 | `task_registry` vs `GOAL_STATE`（基线已记） | 视工作流 | 心智噪声 / 误续跑 **非**直接 token，但增加 followup 触发概率 | `complete` / `clear` + 对齐 registry |
 
 ### 6.2 P0 / P1 / P2 建议（仅调研结论）
 
-- **P0（优先核实）**：Cursor `additional_context` **无界追加**假设是否在长任务中成立；若成立，属于宿主适配层产品债。
+- **P0（已核实）**：Cursor `additional_context` 在 hook handler 合并阶段可多次增长；**出站 stdout 前**经 `review_gate::run_review_gate` → `apply_cursor_hook_output_policy` 施加 UTF-8 字节上限（默认见 `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`）。残余风险是 **前缀保留截断** 导致尾部 advisory 丢失（见 harness §4.2），而非无界 JSON。
 - **P1**：`EVIDENCE_INDEX` 满 120 后仍被 **整文件** 读入模型上下文的路径（agent 习惯 / 工具误用）。
 - **P2**：`retired verbose followup mode=1` 与 `HARNESS_OPERATOR_NUDGES` 全开时的 **文案乘法**（digest + Stop + beforeSubmit opt-in）。
 

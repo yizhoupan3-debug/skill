@@ -13,11 +13,39 @@ pub fn build_framework_continuity_digest_prompt(
     repo_root: &Path,
     max_lines: usize,
 ) -> Result<String, String> {
+    build_framework_continuity_digest_prompt_impl(repo_root, max_lines, false)
+}
+
+/// Like [`build_framework_continuity_digest_prompt`], but can omit the active/focus GOAL mismatch
+/// ZH line so a caller (e.g. Cursor SessionStart) may prepend it for prefix-truncation survival.
+pub fn build_framework_continuity_digest_prompt_ex(
+    repo_root: &Path,
+    max_lines: usize,
+    omit_active_focus_mismatch_line: bool,
+) -> Result<String, String> {
+    build_framework_continuity_digest_prompt_impl(
+        repo_root,
+        max_lines,
+        omit_active_focus_mismatch_line,
+    )
+}
+
+fn build_framework_continuity_digest_prompt_impl(
+    repo_root: &Path,
+    max_lines: usize,
+    omit_active_focus_mismatch_line: bool,
+) -> Result<String, String> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
     let task_view = crate::task_state::resolve_task_view(repo_root, None);
     let mut prompt = render_continuity_digest_prompt_base(&continuity, &contract, max_lines);
+    if !omit_active_focus_mismatch_line
+        && crate::task_state::task_view_has_active_goal_focus_mismatch_note(&task_view)
+    {
+        prompt.push_str("\n\n");
+        prompt.push_str(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH);
+    }
     if let Some(hint) = crate::task_state::depth_compliance_refresh_hint(&task_view) {
         prompt.push_str("\n\n");
         prompt.push_str(&hint);
@@ -37,7 +65,8 @@ pub fn build_framework_continuity_digest_prompt(
 /// GOAL 段落统一使用紧凑模板。
 ///
 /// GOAL 段落只保留状态、验收和证据锚点；长 nudge 留在文档/schema。
-/// digest 主线在 `build_framework_continuity_digest_prompt` 中追加 `task_state::depth_compliance_refresh_hint`。
+/// digest 主线在 `build_framework_continuity_digest_prompt` 中追加 `task_state::depth_compliance_refresh_hint`；
+/// 当 [`crate::task_state::task_view_has_active_goal_focus_mismatch_note`] 为真时再追加单行连续性运维提示（文案见 [`crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH`]）。
 fn format_goal_state_digest_section(repo_root: &Path, goal: &Value) -> String {
     format_goal_state_digest_section_compact(repo_root, goal)
 }
@@ -99,12 +128,39 @@ fn format_goal_state_digest_section_compact(_repo_root: &Path, goal: &Value) -> 
     lines.join("\n")
 }
 
+fn append_capped_bullet_section(
+    lines: &mut Vec<String>,
+    section_title: &str,
+    items: Vec<String>,
+    cap: usize,
+) {
+    if items.is_empty() {
+        return;
+    }
+    let total = items.len();
+    let take_n = cap.min(total);
+    lines.push(String::new());
+    lines.push(section_title.to_string());
+    lines.extend(
+        items
+            .into_iter()
+            .take(take_n)
+            .map(|item| format!("- {item}")),
+    );
+    if total > take_n {
+        lines.push(format!(
+            "- …（共 {total} 条，此处展示前 {take_n} 条；完整列表见 `router-rs framework snapshot`）"
+        ));
+    }
+}
+
 fn render_continuity_digest_prompt_base(
     continuity: &Value,
     contract: &Map<String, Value>,
     max_lines: usize,
 ) -> String {
-    let capped_max_lines = max_lines.clamp(2, 4);
+    // Per-section bullet list cap; at least 2. Callers may pass values above 4 (tests use 8).
+    let list_cap = max_lines.max(2);
     let state = value_text(continuity.get("state"));
     let task = value_text(continuity.get("task"));
     let phase = value_text(continuity.get("phase"));
@@ -264,12 +320,19 @@ fn render_continuity_digest_prompt_base(
         if !effect_line.is_empty() {
             lines.push(format!("- {effect_line}"));
         }
+        let total_ns = next_steps.len();
+        let take_ns = list_cap.min(total_ns);
         lines.extend(
             next_steps
                 .into_iter()
-                .take(capped_max_lines)
+                .take(take_ns)
                 .map(|item| format!("- {item}")),
         );
+        if total_ns > take_ns {
+            lines.push(format!(
+                "- …（共 {total_ns} 条，此处展示前 {take_ns} 条；完整列表见 `router-rs framework snapshot`）"
+            ));
+        }
         return lines.join("\n") + "\n";
     }
 
@@ -306,44 +369,16 @@ fn render_continuity_digest_prompt_base(
         lines.push(format!("路由：{}", join_lines(&route)));
     }
     if !remaining_tasks.is_empty() {
-        lines.push(String::new());
-        lines.push("剩余：".to_string());
-        lines.extend(
-            remaining_tasks
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|item| format!("- {item}")),
-        );
+        append_capped_bullet_section(&mut lines, "剩余：", remaining_tasks, list_cap);
     }
     if !next_steps.is_empty() {
-        lines.push(String::new());
-        lines.push("先做：".to_string());
-        lines.extend(
-            next_steps
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|item| format!("- {item}")),
-        );
+        append_capped_bullet_section(&mut lines, "先做：", next_steps, list_cap);
     }
     if !blockers.is_empty() {
-        lines.push(String::new());
-        lines.push("阻塞：".to_string());
-        lines.extend(
-            blockers
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|item| format!("- {item}")),
-        );
+        append_capped_bullet_section(&mut lines, "阻塞：", blockers, list_cap);
     }
     if can_resume && !anchors.is_empty() {
-        lines.push(String::new());
-        lines.push("恢复锚点：".to_string());
-        lines.extend(
-            anchors
-                .into_iter()
-                .take(capped_max_lines)
-                .map(|anchor| format!("- {anchor}")),
-        );
+        append_capped_bullet_section(&mut lines, "恢复锚点：", anchors, list_cap);
     }
     lines.join("\n") + "\n"
 }
@@ -390,5 +425,119 @@ mod digest_depth_self_check_tests {
             !joined.contains("1)"),
             "compact template should not emit numbered verbose checklist; got {joined:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod digest_active_focus_hint_tests {
+    use super::build_framework_continuity_digest_prompt;
+    use serde_json::json;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_repo(label: &str) -> std::path::PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("router-rs-digest-hint-{label}-{nonce}"))
+    }
+
+    #[test]
+    fn digest_appends_focus_goal_hint_when_task_view_notes_match() {
+        let tmp = unique_repo("pos");
+        let active_tid = "t-empty";
+        let focus_tid = "t-filled";
+        let cur = tmp.join("artifacts/current");
+        fs::create_dir_all(cur.join(active_tid)).unwrap();
+        fs::write(
+            cur.join("active_task.json"),
+            format!(r#"{{"task_id":"{active_tid}"}}"#),
+        )
+        .unwrap();
+        fs::write(
+            cur.join("focus_task.json"),
+            format!(r#"{{"task_id":"{focus_tid}"}}"#),
+        )
+        .unwrap();
+        let focus_dir = cur.join(focus_tid);
+        fs::create_dir_all(&focus_dir).unwrap();
+        fs::write(
+            focus_dir.join("GOAL_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-autopilot-goal-v1",
+                "drive_until_done": true,
+                "status": "running",
+                "goal": "g",
+                "non_goals": [],
+                "done_when": [],
+                "validation_commands": [],
+                "current_horizon": "",
+                "checkpoints": [],
+                "blocker": null,
+                "updated_at": "2026-01-01T00:00:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let prompt = build_framework_continuity_digest_prompt(&tmp, 8).expect("digest");
+        assert!(
+            prompt.contains("连续性提示:"),
+            "expected zh continuity hint line in prompt:\n{prompt}"
+        );
+        assert!(
+            prompt.contains("hydration"),
+            "expected hydration wording:\n{prompt}"
+        );
+        assert!(
+            !prompt.contains("## Active goal"),
+            "must not present focus GOAL as Active goal block:\n{prompt}"
+        );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn digest_omits_focus_goal_hint_when_active_has_goal() {
+        let tmp = unique_repo("neg");
+        let tid = "t1";
+        let cur = tmp.join("artifacts/current");
+        let task_dir = cur.join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            cur.join("active_task.json"),
+            format!(r#"{{"task_id":"{tid}"}}"#),
+        )
+        .unwrap();
+        fs::write(
+            cur.join("focus_task.json"),
+            format!(r#"{{"task_id":"other"}}"#),
+        )
+        .unwrap();
+        fs::write(
+            task_dir.join("GOAL_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-autopilot-goal-v1",
+                "drive_until_done": true,
+                "status": "running",
+                "goal": "ok",
+                "non_goals": [],
+                "done_when": [],
+                "validation_commands": [],
+                "current_horizon": "",
+                "checkpoints": [],
+                "blocker": null,
+                "updated_at": "2026-01-01T00:00:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let prompt = build_framework_continuity_digest_prompt(&tmp, 8).expect("digest");
+        assert!(
+            !prompt.contains("连续性提示:"),
+            "unexpected zh continuity hint when active GOAL ok:\n{prompt}"
+        );
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

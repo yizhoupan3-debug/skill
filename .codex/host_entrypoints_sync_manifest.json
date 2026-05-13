@@ -30,6 +30,11 @@
       "cursor": [
         "AGENTS.md",
         ".cursor/rules/*.mdc"
+      ],
+      "qoder": [
+        "AGENTS.md",
+        ".qoder/rules/framework.md",
+        ".qoder/settings.json"
       ]
     },
     "policy": "host-specific-agent-policy-v1",
@@ -38,7 +43,8 @@
       "codex-cli",
       "codex-app",
       "cursor",
-      "claude-code"
+      "claude-code",
+      "qoder"
     ]
   }
 }

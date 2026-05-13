@@ -14,7 +14,7 @@ trigger_hints:
   - diagnostic playbook
 metadata:
   version: "2.5.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - debugging
     - root-cause-analysis

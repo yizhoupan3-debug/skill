@@ -12,7 +12,7 @@
 
 - **分层 Workflow**：默认小中型任务用轻量五行证据 + 可验收 todo；跨模块/高风险/用户要求时升级 audit plan。review plan 仅在用户明确要求、深度 review 或高风险审计时触发；是否启用 subagent 仍受 `AGENTS.md` 执行梯子约束。
 - **Git 计划收口**：`execution` 末条以计划 vs 实际 + Git 状态证据为硬要求；宿主支持时可使用 [`skills/gitx/SKILL.md`](../../skills/gitx/SKILL.md) 的 **`/gitx plan`**（与 **`/gitx`** 同契约）。closeout 与 **`git diff --stat`** 习惯见同 skill **强例**及 [`plan_review_findings_round1.md`](plan_review_findings_round1.md)。
-- **深度代码审**：对抗式 / 整 PR 级 review 路由 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（verdict、P0–P2 符号锚点与本仓库 **强例**一致）。
+- **深度代码审**：对抗式 / 整 PR 级 review 路由 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（默认 findings 优先、P0–P2 符号锚点；单行 verdict 可选；与本仓库 **强例**一致）。
 - **审 plan 样例 findings**：[`plan_review_findings_round1.md`](plan_review_findings_round1.md) 演示本地主线程模拟独立视角对 execution plan 的只读 findings 形态；未实际启用 subagent。
 - **research→execution 第一性与继承面**（减法式交接、外部准入上限）：[`RESEARCH_plan_execution_handoff_first_principles.md`](RESEARCH_plan_execution_handoff_first_principles.md)；执行侧模板见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **执行计划继承面（research→execution）**。
 

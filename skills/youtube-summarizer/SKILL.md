@@ -22,7 +22,7 @@ trigger_hints:
   - transcription
 metadata:
   version: "1.2.1"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - youtube
     - summarization

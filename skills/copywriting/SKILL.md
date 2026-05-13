@@ -29,7 +29,7 @@ trigger_hints:
   - cold email copy
 metadata:
   version: "2.1.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - copywriting
     - marketing

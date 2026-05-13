@@ -1,10 +1,10 @@
 # Skill 分层路由详解
 
 > 这是扩展参考，不是默认入口。
-> 默认只看 `SKILL_ROUTING_RUNTIME.json`；不够再看 [SKILL_ROUTING_INDEX.md](file:///Users/joe/Documents/skill/skills/SKILL_ROUTING_INDEX.md)。
+> 默认只看 `SKILL_ROUTING_RUNTIME.json`；不够再看 [SKILL_ROUTING_INDEX.md](SKILL_ROUTING_INDEX.md)。
 > 只有 owner / overlay / reroute 仍有歧义时，才打开本页。
-> 协议细节见 [SKILL_FRAMEWORK_PROTOCOLS.md](file:///Users/joe/Documents/skill/skills/SKILL_FRAMEWORK_PROTOCOLS.md)
-> 维护约定见 [SKILL_MAINTENANCE_GUIDE.md](file:///Users/joe/Documents/skill/skills/SKILL_MAINTENANCE_GUIDE.md)
+> 协议细节见 [SKILL_FRAMEWORK_PROTOCOLS.md](SKILL_FRAMEWORK_PROTOCOLS.md)
+> 维护约定见 [SKILL_MAINTENANCE_GUIDE.md](SKILL_MAINTENANCE_GUIDE.md)
 
 适用场景：
 

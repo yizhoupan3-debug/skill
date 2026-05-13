@@ -20,6 +20,9 @@ struct Cli {
     json: bool,
     #[arg(long)]
     apply: bool,
+    /// Reject skills with empty `metadata.platforms` instead of expanding to all registry hosts.
+    #[arg(long)]
+    strict_host_platforms: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -168,8 +171,6 @@ const RUNTIME_RESEARCH_WORKFLOW_SLUGS: &[&str] = &[
     // `literature-synthesis` removed: ref-corpus work lives under `paper-workbench`; keep slug retired in policy tests.
     "research-engineer",
 ];
-const FALLBACK_FRAMEWORK_COMMANDS: &[&str] = &["autopilot", "deepinterview", "gitx", "update"];
-
 const DEFAULT_SURFACE_OWNERS: &[&str] = &[];
 const RESEARCH_LOADOUT_OWNERS: &[&str] = &[
     "research-workbench",
@@ -208,11 +209,24 @@ const OPS_OVERLAYS: &[&str] = &[];
 
 fn main() -> Result<(), String> {
     let args = Cli::parse();
+    let repo_root = args
+        .skills_root
+        .parent()
+        .unwrap_or(args.skills_root.as_path());
+    let supported_hosts = load_runtime_supported_hosts(repo_root)?;
     let source_manifest = load_source_manifest(&args.source_manifest)?;
     let docs = load_skill_documents(&args.skills_root)?;
     let skill_entries = collect_skill_entries(&args.skills_root, &docs, &source_manifest)?;
-    let bundle = compile_bundle(&args.skills_root, &docs, &skill_entries, &source_manifest)?;
-    validate_runtime_contract(&args.skills_root, &bundle)?;
+    let bundle = compile_bundle(
+        repo_root,
+        &args.skills_root,
+        &docs,
+        &skill_entries,
+        &source_manifest,
+        &supported_hosts,
+        args.strict_host_platforms,
+    )?;
+    validate_runtime_contract(&args.skills_root, &bundle, &supported_hosts)?;
 
     if args.apply {
         write_bundle(&args.skills_root, &bundle)?;
@@ -236,7 +250,11 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn validate_runtime_contract(skills_root: &Path, bundle: &SkillBundle) -> Result<(), String> {
+fn validate_runtime_contract(
+    skills_root: &Path,
+    bundle: &SkillBundle,
+    supported_hosts: &[String],
+) -> Result<(), String> {
     let repo_root = skills_root.parent().unwrap_or(skills_root);
     let manifest_skills = bundle
         .manifest
@@ -288,7 +306,7 @@ fn validate_runtime_contract(skills_root: &Path, bundle: &SkillBundle) -> Result
     let runtime_path_idx = *runtime_key_index
         .get("skill_path")
         .ok_or_else(|| "runtime missing skill_path key".to_string())?;
-    let framework_command_slugs = framework_command_runtime_rows(skills_root)?
+    let framework_command_slugs = framework_command_runtime_rows(repo_root, supported_hosts)?
         .into_iter()
         .filter_map(|row| row.as_array().and_then(|items| items.first()).cloned())
         .filter_map(|value| value.as_str().map(str::to_string))
@@ -427,14 +445,25 @@ fn read_framework_surface_policy(skills_root: &Path) -> Result<Option<Value>, St
     read_json(&path).map(Some)
 }
 
+fn load_runtime_supported_hosts(repo_root: &Path) -> Result<Vec<String>, String> {
+    let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+    let text = fs::read_to_string(&path)
+        .map_err(|err| format!("failed reading {}: {err}", path.display()))?;
+    host_platforms::supported_hosts_from_registry_text(&text)
+}
+
 fn compile_bundle(
+    repo_root: &Path,
     skills_root: &Path,
     docs: &[SkillDoc],
     skill_entries: &[SkillEntry],
     source_manifest: &Value,
+    supported_hosts: &[String],
+    strict_host_platforms: bool,
 ) -> Result<SkillBundle, String> {
-    let (registry, manifest) = build_registry_and_manifest(docs, skill_entries)?;
-    let framework_rows = framework_command_runtime_rows(skills_root)?;
+    let (registry, manifest) =
+        build_registry_and_manifest(docs, skill_entries, supported_hosts, strict_host_platforms)?;
+    let framework_rows = framework_command_runtime_rows(repo_root, supported_hosts)?;
     let shadow_map = build_shadow_map(skill_entries, source_manifest);
     let approval_policy = build_approval_policy(docs);
     let tiers = build_tier_catalog(&manifest);
@@ -442,7 +471,13 @@ fn compile_bundle(
     let framework_surface_policy =
         build_framework_surface_policy(&tiers, configured_surface_policy.as_ref());
     let index = build_index(&manifest, &framework_rows, &framework_surface_policy);
-    let plugin_catalog = build_plugin_catalog(docs, &manifest, &framework_rows)?;
+    let plugin_catalog = build_plugin_catalog(
+        docs,
+        &manifest,
+        &framework_rows,
+        supported_hosts,
+        strict_host_platforms,
+    )?;
     let routing_metadata = build_routing_metadata_catalog(docs, &manifest, &framework_rows);
     let runtime_index = build_runtime_index(&manifest, &framework_rows, &framework_surface_policy);
     let runtime_explain = build_runtime_explain(
@@ -738,6 +773,8 @@ fn infer_skill_source(
 fn build_registry_and_manifest(
     docs: &[SkillDoc],
     skill_entries: &[SkillEntry],
+    supported_hosts: &[String],
+    strict_host_platforms: bool,
 ) -> Result<(String, Value), String> {
     let selected_docs = select_manifest_docs(docs, skill_entries);
     let source_entries = skill_entries
@@ -795,6 +832,8 @@ fn build_registry_and_manifest(
         let trigger_hints = extract_trigger_hints(&doc.metadata, &description, &doc.body);
         let host_platforms = host_platforms::normalize_skill_host_platforms(
             &platforms_raw_from_skill_metadata(&doc.metadata),
+            supported_hosts,
+            strict_host_platforms,
         )
         .map_err(|e| format!("skill `{slug}`: {e}"))?;
         let summary = pick_runtime_summary(&doc.metadata, 80);
@@ -1017,23 +1056,29 @@ fn build_runtime_index(
     })
 }
 
-fn framework_command_runtime_rows(skills_root: &Path) -> Result<Vec<Value>, String> {
-    let repo_root = skills_root.parent().unwrap_or(skills_root);
+fn framework_command_runtime_rows(
+    repo_root: &Path,
+    supported_hosts: &[String],
+) -> Result<Vec<Value>, String> {
     let registry_path = repo_root
         .join("configs")
         .join("framework")
         .join("RUNTIME_REGISTRY.json");
-    if registry_path.is_file() {
-        let registry = read_json(&registry_path)?;
-        return framework_command_runtime_rows_from_registry(&registry);
+    if !registry_path.is_file() {
+        return Err(format!(
+            "RUNTIME_REGISTRY.json missing at {} (repo_root={}); skill-compiler requires registry as single source of truth for framework_command rows",
+            registry_path.display(),
+            repo_root.display()
+        ));
     }
-    Ok(FALLBACK_FRAMEWORK_COMMANDS
-        .iter()
-        .map(|slug| fallback_framework_command_runtime_row(slug))
-        .collect())
+    let registry = read_json(&registry_path)?;
+    framework_command_runtime_rows_from_registry(&registry, supported_hosts)
 }
 
-fn framework_command_runtime_rows_from_registry(registry: &Value) -> Result<Vec<Value>, String> {
+fn framework_command_runtime_rows_from_registry(
+    registry: &Value,
+    supported_hosts: &[String],
+) -> Result<Vec<Value>, String> {
     let commands = registry
         .get("framework_commands")
         .and_then(Value::as_object)
@@ -1048,7 +1093,11 @@ fn framework_command_runtime_rows_from_registry(registry: &Value) -> Result<Vec<
         let command = commands
             .get(&slug)
             .ok_or_else(|| format!("runtime registry missing command `{slug}`"))?;
-        rows.push(framework_command_runtime_row(&slug, command));
+        rows.push(framework_command_runtime_row(
+            &slug,
+            command,
+            supported_hosts,
+        ));
     }
     Ok(rows)
 }
@@ -1057,7 +1106,7 @@ fn framework_command_hidden_from_skill_surface(slug: &str) -> bool {
     matches!(slug, "team")
 }
 
-fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
+fn framework_command_runtime_row(slug: &str, command: &Value, supported_hosts: &[String]) -> Value {
     let summary = command
         .get("lineage")
         .and_then(|lineage| lineage.get("description"))
@@ -1081,6 +1130,7 @@ fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
         .and_then(Value::as_str)
         .map(str::to_string)
         .unwrap_or_else(|| format!("skills/{slug}/SKILL.md"));
+    let host_arr: Vec<Value> = supported_hosts.iter().cloned().map(Value::String).collect();
     json!([
         slug,
         "L0",
@@ -1091,42 +1141,17 @@ fn framework_command_runtime_row(slug: &str, command: &Value) -> Value {
         trigger_hints,
         "P1",
         skill_path,
-        ["codex-cli", "codex-app", "cursor", "claude-code"],
+        host_arr,
         "framework_command"
     ])
-}
-
-fn fallback_framework_command_runtime_row(slug: &str) -> Value {
-    let command = match slug {
-        "autopilot" => json!({
-            "skill_path": "skills/autopilot/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/autopilot"]},
-            "lineage": {"description": "Run the local framework autopilot supervisor entrypoint."}
-        }),
-        "deepinterview" => json!({
-            "skill_path": "skills/deepinterview/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/deepinterview"]},
-            "lineage": {"description": "Run the local framework deepinterview entrypoint."}
-        }),
-        "gitx" => json!({
-            "skill_path": "skills/gitx/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/gitx", "gitx"]},
-            "lineage": {"description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."}
-        }),
-        "update" => json!({
-            "skill_path": "skills/update/SKILL.md",
-            "interaction_invariants": {"explicit_entrypoints": ["/update"]},
-            "lineage": {"description": "Refresh tracked codegen: host projections, skill bundles, then contract tests."}
-        }),
-        _ => json!({}),
-    };
-    framework_command_runtime_row(slug, &command)
 }
 
 fn build_plugin_catalog(
     docs: &[SkillDoc],
     manifest: &Value,
     framework_rows: &[Value],
+    supported_hosts: &[String],
+    strict_host_platforms: bool,
 ) -> Result<Value, String> {
     let doc_lookup = docs
         .iter()
@@ -1147,7 +1172,13 @@ fn build_plugin_catalog(
         let metadata = doc_lookup.get(slug.as_str()).map(|doc| &doc.metadata);
         skills.insert(
             slug.clone(),
-            build_skill_plugin_record(&slug, row, metadata)?,
+            build_skill_plugin_record(
+                &slug,
+                row,
+                metadata,
+                supported_hosts,
+                strict_host_platforms,
+            )?,
         );
     }
     for row in framework_rows.iter().filter_map(Value::as_array) {
@@ -1157,7 +1188,7 @@ fn build_plugin_catalog(
         }
         skills.insert(
             slug.clone(),
-            build_framework_command_plugin_record(&slug, row),
+            build_framework_command_plugin_record(&slug, row, supported_hosts),
         );
     }
     Ok(json!({
@@ -1210,6 +1241,8 @@ fn build_skill_plugin_record(
     slug: &str,
     row: &[Value],
     metadata: Option<&HashMap<String, Value>>,
+    supported_hosts: &[String],
+    strict_host_platforms: bool,
 ) -> Result<Value, String> {
     let allowed_tools =
         metadata.map_or_else(Vec::new, |meta| normalize_list(meta.get("allowed_tools")));
@@ -1222,8 +1255,12 @@ fn build_skill_plugin_record(
     let raw_platforms: Vec<String> = metadata
         .map(platforms_raw_from_skill_metadata)
         .unwrap_or_default();
-    let platforms = host_platforms::normalize_skill_host_platforms(&raw_platforms)
-        .map_err(|e| format!("skill `{slug}`: {e}"))?;
+    let platforms = host_platforms::normalize_skill_host_platforms(
+        &raw_platforms,
+        supported_hosts,
+        strict_host_platforms,
+    )
+    .map_err(|e| format!("skill `{slug}`: {e}"))?;
     let network_access = metadata
         .and_then(|meta| optional_string_field(meta, "network_access"))
         .unwrap_or_else(|| "unspecified".to_string());
@@ -1284,7 +1321,12 @@ fn build_skill_plugin_record(
     }))
 }
 
-fn build_framework_command_plugin_record(slug: &str, row: &[Value]) -> Value {
+fn build_framework_command_plugin_record(
+    slug: &str,
+    row: &[Value],
+    supported_hosts: &[String],
+) -> Value {
+    let host_platforms: Vec<Value> = supported_hosts.iter().cloned().map(Value::String).collect();
     json!({
         "slug": slug,
         "kind": "framework_command",
@@ -1311,7 +1353,7 @@ fn build_framework_command_plugin_record(slug: &str, row: &[Value]) -> Value {
             "approval_required": false
         },
         "host_support": {
-            "platforms": ["codex-cli", "codex-app", "cursor", "claude-code"],
+            "platforms": host_platforms,
             "projection": "explicit-entrypoint"
         },
         "test_fixtures": {
@@ -1423,9 +1465,7 @@ fn row_session_start_for_route_metadata(row: &[Value]) -> String {
 fn row_trigger_hints_value_for_route_metadata(row: &[Value]) -> Value {
     match compiled_route_row_layout(row) {
         CompiledRouteRowLayout::ManifestSkill => {
-            if row.len() > 9 {
-                value_at(row, 7)
-            } else if row.len() > 7 {
+            if row.len() > 7 {
                 value_at(row, 7)
             } else {
                 value_at(row, 6)
@@ -2548,6 +2588,20 @@ mod tests {
         root
     }
 
+    /// Closed-set hosts for temp compile fixtures (registry-driven rows come from workspace repo_root).
+    fn unit_test_supported_hosts() -> Vec<String> {
+        vec![
+            "claude-code".to_string(),
+            "codex-app".to_string(),
+            "codex-cli".to_string(),
+            "cursor".to_string(),
+        ]
+    }
+
+    fn workspace_repo_root_for_tests() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
     fn write_skill(skill_dir: &Path, name: &str) {
         fs::create_dir_all(skill_dir).expect("create skill dir");
         fs::write(
@@ -2633,19 +2687,22 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let (_, manifest) = build_registry_and_manifest(&docs, &entries).expect("manifest");
-        let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
+        let sh = unit_test_supported_hosts();
+        let (_, manifest) =
+            build_registry_and_manifest(&docs, &entries, &sh, false).expect("manifest");
+        let framework_rows = framework_command_runtime_rows(&workspace_repo_root_for_tests(), &sh)
+            .expect("framework rows");
         let tiers = build_tier_catalog(&manifest);
         let surface_policy = build_framework_surface_policy(&tiers, None);
-        let plugin_catalog =
-            build_plugin_catalog(&docs, &manifest, &framework_rows).expect("plugin catalog");
+        let plugin_catalog = build_plugin_catalog(&docs, &manifest, &framework_rows, &sh, false)
+            .expect("plugin catalog");
         let routing_metadata = build_routing_metadata_catalog(&docs, &manifest, &framework_rows);
         let runtime = build_runtime_index(&manifest, &framework_rows, &surface_policy);
         let shadow_map = build_shadow_map(&entries, &source_manifest);
 
         assert_eq!(
             plugin_catalog["skills"]["sample-skill"]["host_support"]["platforms"],
-            json!(["codex-app", "codex-cli"])
+            json!(["claude-code", "codex-app", "codex-cli", "cursor"])
         );
 
         assert_eq!(
@@ -2670,11 +2727,17 @@ mod tests {
         assert_eq!(runtime["keys"][7], json!("priority"));
         assert_eq!(shadow_map["winning_rule"], json!("highest-position-wins"));
         assert!(manifest["skills"][0][7].is_array());
-        assert_eq!(manifest["skills"][0][11], json!(["codex-app", "codex-cli"]));
+        assert_eq!(
+            manifest["skills"][0][11],
+            json!(["claude-code", "codex-app", "codex-cli", "cursor"])
+        );
         assert_eq!(manifest["skills"][0][12], json!("skill"));
         assert!(runtime["skills"][0][6].is_array());
         assert_eq!(runtime["skills"][0][7], json!("P2"));
-        assert_eq!(runtime["skills"][0][9], json!(["codex-app", "codex-cli"]));
+        assert_eq!(
+            runtime["skills"][0][9],
+            json!(["claude-code", "codex-app", "codex-cli", "cursor"])
+        );
         assert_eq!(runtime["skills"][0][10], json!("skill"));
         assert_eq!(
             plugin_catalog["plugin_abi_version"],
@@ -2720,7 +2783,9 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let (_, manifest) = build_registry_and_manifest(&docs, &entries).expect("manifest");
+        let (_, manifest) =
+            build_registry_and_manifest(&docs, &entries, &unit_test_supported_hosts(), false)
+                .expect("manifest");
 
         assert_eq!(manifest["skills"].as_array().map(Vec::len), Some(1));
         assert_eq!(manifest["skills"][0][0], json!("skill-a"));
@@ -2752,8 +2817,16 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let bundle =
-            compile_bundle(&skills_root, &docs, &entries, &source_manifest).expect("compile");
+        let bundle = compile_bundle(
+            &workspace_repo_root_for_tests(),
+            &skills_root,
+            &docs,
+            &entries,
+            &source_manifest,
+            &unit_test_supported_hosts(),
+            false,
+        )
+        .expect("compile");
 
         assert_eq!(
             bundle.runtime_explain["summary"]["sparse_mode"],
@@ -2837,8 +2910,16 @@ mod tests {
         });
         let entries =
             collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
-        let bundle =
-            compile_bundle(&skills_root, &docs, &entries, &source_manifest).expect("compile");
+        let bundle = compile_bundle(
+            &workspace_repo_root_for_tests(),
+            &skills_root,
+            &docs,
+            &entries,
+            &source_manifest,
+            &unit_test_supported_hosts(),
+            false,
+        )
+        .expect("compile");
 
         assert_eq!(bundle.manifest["skills"].as_array().map(Vec::len), Some(5));
         assert!(!bundle.manifest["skills"]
@@ -2899,7 +2980,11 @@ mod tests {
                 }
             })),
         );
-        let framework_rows = framework_command_runtime_rows(&skills_root).expect("framework rows");
+        let framework_rows = framework_command_runtime_rows(
+            &workspace_repo_root_for_tests(),
+            &unit_test_supported_hosts(),
+        )
+        .expect("framework rows");
         let configured_runtime = build_runtime_index(
             &bundle.manifest,
             &framework_rows,

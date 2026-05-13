@@ -1,3 +1,9 @@
+/// 从完整 RFV followup 文案中提取结构化外研 schema 指针行（若存在），供 Goal+RFV 合并进 `AUTOPILOT_DRIVE` 时保留（原实现只取首行会丢掉该行）。
+fn rfv_external_struct_schema_hint_line(rfv_msg: &str) -> Option<&str> {
+    let needle = crate::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH;
+    rfv_msg.lines().map(str::trim).find(|l| l.contains(needle))
+}
+
 /// 与 `.cursor/hook-state` 锁无关：只读合并 continuity 续跑，避免门控降级或应急短路时 goal/RFV 静默消失。
 fn merge_continuity_followups(
     repo_root: &Path,
@@ -15,10 +21,12 @@ fn merge_continuity_followups(
                 .strip_prefix("RFV_LOOP_CONTINUE:")
                 .map(str::trim)
                 .unwrap_or(stripped);
-            let merged = if note.is_empty() {
-                format!("{ap_msg}\nAlso: RFV active")
-            } else {
-                format!("{ap_msg}\nAlso: RFV active ({note})")
+            let struct_hint = rfv_external_struct_schema_hint_line(&rfv_msg);
+            let merged = match (note.is_empty(), struct_hint) {
+                (true, Some(h)) => format!("{ap_msg}\nAlso: RFV active\n{h}"),
+                (true, None) => format!("{ap_msg}\nAlso: RFV active"),
+                (false, Some(h)) => format!("{ap_msg}\nAlso: RFV active ({note})\n{h}"),
+                (false, None) => format!("{ap_msg}\nAlso: RFV active ({note})"),
             };
             crate::autopilot_goal::merge_hook_nudge_paragraph(
                 output,
@@ -88,8 +96,11 @@ fn finalize_stop_hook_outputs(
     repo_root: &Path,
     output: &mut Value,
     frame: &crate::task_state::CursorContinuityFrame,
+    skip_continuity_merge: bool,
 ) {
-    merge_continuity_followups(repo_root, output, frame);
+    if !skip_continuity_merge {
+        merge_continuity_followups(repo_root, output, frame);
+    }
     merge_session_close_style_nudge_when_soft_terminal(output);
 }
 
@@ -123,38 +134,15 @@ fn build_rfv_loop_followup_using_frame(
     crate::rfv_loop::build_rfv_loop_followup_message(repo_root)
 }
 
-fn merge_continuity_followups_before_submit(
-    _repo_root: &Path,
-    _output: &mut Value,
-    _frame: &crate::task_state::CursorContinuityFrame,
-) {
-    // beforeSubmit 侧的 Goal/RFV 续跑注入已退役；续跑只保留在必要事件的单一路径。
-}
-
+/// Assistant 回复文本侧的完成宣称检测：先剥离引文 / 代码块 / URL，再交由 `hook_common`
+/// 的单一 token 表扫描，与 `closeout_enforcement::summary_claims_completion` 共用一份关键词
+/// 集合，避免漂移。中文使用多字短语，避开「完成度 / 讨论完成任务拆分」等子串误报。
 fn completion_claimed_in_text(text: &str) -> bool {
     if text.trim().is_empty() {
         return false;
     }
-    // Keep English + Chinese phrases aligned with closeout enforcement completion detection.
-    // Chinese uses multi-character phrases to avoid substring hits inside unrelated words (e.g. 「完成度」).
-    const EN: &[&str] = &["done", "finished", "completed", "passed", "succeeded"];
-    const ZH_PHRASES: &[&str] = &[
-        "已完成",
-        "已经完成",
-        "全部完成",
-        "完成了",
-        "验证通过",
-        "测试通过",
-        "审核通过",
-        "已通过",
-        "搞定",
-    ];
     let sanitized = strip_quoted_or_codeblock_or_url(text);
-    let lower = sanitized.to_ascii_lowercase();
-    if EN.iter().any(|kw| lower.contains(&kw.to_ascii_lowercase())) {
-        return true;
-    }
-    ZH_PHRASES.iter().any(|p| sanitized.contains(p))
+    crate::hook_common::contains_completion_claim_token(&sanitized)
 }
 
 fn closeout_followup_for_completion_claim(
@@ -206,7 +194,6 @@ violations={}\nmissing_evidence={}\n\
 /// Strict closeout：**助手回复文本**中出现完成宣称且存在 `active_task` 时的硬 Stop 文案（与 `dispatch`/`handle_stop` 共用，避免分叉）。
 ///
 /// `Err(evaluator)` 与 `Ok(Some(..))` 均返回 `Some`；未宣称完成、`Ok(None)` 或无 task 时返回 `None`。
-#[allow(dead_code)] // false positive: callers live in other `include!` fragments of the same `cursor_hooks` module.
 fn stop_hard_closeout_followup_for_assistant_response(
     repo_root: &Path,
     response_text: &str,
@@ -225,23 +212,6 @@ fn stop_hard_closeout_followup_for_assistant_response(
 }
 
 pub const STATE_VERSION: u32 = 3;
-
-fn subagent_types() -> &'static [&'static str] {
-    &[
-        "generalpurpose",
-        "explore",
-        "shell",
-        "browser-use",
-        "browseruse",
-        "cursor-guide",
-        "cursorguide",
-        "ci-investigator",
-        "ciinvestigator",
-        "best-of-n-runner",
-        "bestofnrunner",
-        "explorer",
-    ]
-}
 
 fn subagent_tool_names() -> &'static [&'static str] {
     &[
@@ -308,33 +278,7 @@ fn fork_context_from_tool(event: &Value, tool_input: &Value) -> Option<bool> {
     fork_context_from_values(tool_input, Some(event))
 }
 
-fn counts_as_independent_context_fork(fork: Option<bool>) -> bool {
-    independent_context_fork(fork)
-}
-
-fn fork_context_explicit_false(fork: Option<bool>) -> bool {
-    independent_context_fork(fork)
-}
-
-fn has_goal_contract_signal(text: &str) -> bool {
-    // A "goal contract" should be hard to satisfy by accident. Historically we matched any one
-    // keyword (Goal / Done when / Validation / ...), which made it too easy for a one-liner to
-    // count as a full contract and prematurely satisfy the goal gate.
-    //
-    // New rule (Cursor): require a structured, non-empty contract with:
-    // - Goal
-    // - Non-goals
-    // - Done when (with >=2 acceptance items)
-    // - Validation commands (non-empty)
-    //
-    // Support both English and Chinese headings.
-    if goal_contract_re().is_match(text) {
-        // Keep legacy keyword match as a weak signal, but only after passing the strong check
-        // below. This preserves backwards compatibility for callers that only gate on this bool.
-    }
-    has_structured_goal_contract(text)
-}
-
+/// Goal gate：须同时满足 Goal、Non-goals、Validation commands 行内标题非空，且 Done when 至少两条（英/中标题均可）。
 fn has_structured_goal_contract(text: &str) -> bool {
     let goal_ok =
         nonempty_inline_heading_any(text, "Goal") || nonempty_inline_heading_any(text, "目标");
@@ -471,16 +415,13 @@ fn cursor_subagent_type_pair(tool_input: &Value, event: &Value) -> (String, Stri
     )
 }
 
-fn typed_subagent_in_allowlist(sub_type: &str, agent_type: &str) -> bool {
-    (!sub_type.is_empty() && subagent_types().contains(&sub_type))
-        || (!agent_type.is_empty() && subagent_types().contains(&agent_type))
-}
-
-/// `/autopilot` pre-goal：白名单 **或** 任一非空 lane/agent 字段即视为已起 sidecar（宿主常发自定义 lane 名）。
+/// `/autopilot` pre-goal：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
+/// `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 应急开启时退化为「任一带名 lane/agent 字段」以免应急路径过严。
 fn pre_goal_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
-    typed_subagent_in_allowlist(sub_type, agent_type)
-        || !sub_type.is_empty()
-        || !agent_type.is_empty()
+    if cursor_review_gate_disabled_by_env() {
+        return !sub_type.is_empty() || !agent_type.is_empty();
+    }
+    review_subagent_kind_ok(sub_type, agent_type)
 }
 
 fn review_subagent_kind_ok_loose_when_cursor_gate_disabled(

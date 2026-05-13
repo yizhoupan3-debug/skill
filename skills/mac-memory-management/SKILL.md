@@ -22,7 +22,7 @@ trigger_hints:
   - Mac 训练吞吐优化
 metadata:
   version: "1.2.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - mac
     - apple-silicon

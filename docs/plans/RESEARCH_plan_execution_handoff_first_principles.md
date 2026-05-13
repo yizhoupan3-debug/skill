@@ -57,7 +57,7 @@
 
 **可选 handoff 形态（仅建议，本调研不改代码）**
 
-1. **`## 执行计划继承面`（≤15 行）** 写在 **execution** `.plan.md` 正文最前（在分节 todos 前）：字段固定为 `继承自: <path>#锚点`、**Goal / Non-goals / 不变量 / 已否决方案 / 外部准入表（可空）**；execution 的每条 todo 在 `content` 首行或 Done 中标注 `继承: <research 问题 id>`。依赖：作者纪律；Verify 可用 `rg "继承自|继承:" .cursor/plans/<execution>.plan.md`。
+1. **`## 执行计划继承面`（≤15 行）**（现行契约与 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md)、[`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) 第 **5** 条一致）：放在第二个 `---`（YAML frontmatter **闭合行**，非正文 Markdown 横线 `---`）**之后**的正文内，且须位于**任意**正文 Markdown checkbox / 其它分节任务叙述**之前**；**继承指针**（表头与 skill **执行计划继承面** 表一致）：一行 `docs/plans/<file>.md#锚` 或 `.cursor/plans/<research>.plan.md`（路径须真实或可检；与下文 **合成** §第一性最小交接集 第 1 条同义）；其后字段为 **Goal / Non-goals / 不变量 / 已否决方案 / 外部准入表（可空）**；execution 的每条 todo 在 `content` 首行或 Done 中标注 `继承: <research 问题 id>`。依赖：作者纪律；Verify 可用 `rg "继承指针|继承:" .cursor/plans/<execution>.plan.md`。（本 Q3 调研稿旧版曾将插入位置写成「全文最前、早于 YAML 外第一段任务叙述」；已与 frontmatter 闭合行及 checkbox 顺序的真源对齐，避免混淆。）
 2. **侧车 findings 文件**：research 收口时写 `docs/plans/<topic>_research_closeout.md` 仅含矩阵与结论；execution `overview` 单行链到该文件。依赖：多一文件；适合长调研。
 
 ---

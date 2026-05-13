@@ -1,0 +1,635 @@
+{
+  "schema_version": "nl-route-adjustments-v1",
+  "docs": "NL hot-route suppress/boost rules (data-driven). Global phrase markers: configs/framework/ROUTING_SIGNAL_MARKERS.json.",
+  "pre_framework_alias_rules": [
+    {
+      "when": {
+        "signal": "is_meta_routing_task"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."
+      },
+      "record": {
+        "slug": "systematic-debugging"
+      }
+    },
+    {
+      "when": {
+        "not": {
+          "signal": "should_route_to_gh_fix_ci"
+        }
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: gh-fix-ci requires CI/failing-check wording without a non-GitHub CI provider."
+      },
+      "record": {
+        "slug": "gh-fix-ci"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "is_meta_routing_task"
+          },
+          {
+            "not": {
+              "any": [
+                {
+                  "signal": "has_parallel_execution_context"
+                },
+                {
+                  "signal": "has_team_orchestration_context"
+                },
+                {
+                  "signal": "has_bounded_subagent_context"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: skill-system routing reviews stay on skill-framework-developer unless explicit parallel lanes are requested."
+      },
+      "record": {
+        "slug": "agent-swarm-orchestration"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_scientific_figure_plotting_context"
+          },
+          {
+            "not": {
+              "signal": "has_rendered_visual_evidence_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: code-generated scientific figure work should route to scientific-figure-plotting before visual or raster-image lanes."
+      },
+      "record": {
+        "slugs": [
+          "visual-review",
+          "image-generated"
+        ]
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "is_meta_routing_task"
+          },
+          {
+            "not": {
+              "signal": "has_rendered_visual_evidence_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: framework/runtime routing reviews should not route to visual-review without concrete rendered visual evidence."
+      },
+      "record": {
+        "slug": "visual-review"
+      }
+    },
+    {
+      "when": {
+        "signal": "is_meta_routing_task"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: meta-routing repair request should not be treated as artifact work."
+      },
+      "record": {
+        "gate_lower": "artifact"
+      }
+    },
+    {
+      "when": {
+        "any": [
+          {
+            "signal": "has_beamer_slide_context"
+          },
+          {
+            "signal": "has_source_slide_format_context"
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: explicit Beamer/Markdown/Slidev/Marp/HTML slide source wording should route to the narrower slide-source owner."
+      },
+      "record": {
+        "slug": "slides"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_systematic_debug_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 60.0,
+        "reason": "Systematic-debugging boost applied: explicit bug, root-cause, failure, or regression-test diagnostic wording detected."
+      },
+      "record": {
+        "slug": "systematic-debugging"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_scientific_figure_plotting_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 70.0,
+        "reason": "Scientific-figure boost applied: code-generated paper or publication figure wording detected."
+      },
+      "record": {
+        "slug": "scientific-figure-plotting"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_skill_creator_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 70.0,
+        "reason": "Skill-creator boost applied: concrete skill authoring or SKILL.md revision wording detected."
+      },
+      "record": {
+        "slug": "skill-creator"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_skill_installer_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 70.0,
+        "reason": "Skill-installer boost applied: skill installation or import wording detected."
+      },
+      "record": {
+        "slug": "skill-installer"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_skill_framework_maintenance_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 70.0,
+        "reason": "Skill-framework boost applied: skill-library maintenance or skill-quality repair wording detected."
+      },
+      "record": {
+        "slug": "skill-framework-developer"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_prose_naturalization_context"
+          },
+          {
+            "not": {
+              "signal": "has_paper_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 52.0,
+        "reason": "Documentation-engineering polish boost applied: prose naturalization or sentence-level AI-flavor audit detected."
+      },
+      "record": {
+        "slug": "documentation-engineering"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_copywriting_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 56.0,
+        "reason": "Copywriting boost applied: conversion-oriented UX or marketing copy wording detected."
+      },
+      "record": {
+        "slug": "copywriting"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_diagramming_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 72.0,
+        "reason": "Diagramming boost applied: explicit Mermaid/Graphviz or text-diagram wording detected."
+      },
+      "record": {
+        "slug": "diagramming"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_beamer_slide_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 86.0,
+        "reason": "Ppt-beamer boost applied: explicit LaTeX Beamer slide-source wording detected."
+      },
+      "record": {
+        "slug": "ppt-beamer"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_source_slide_format_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 86.0,
+        "reason": "Source-slide-formats boost applied: explicit Markdown/Slidev/Marp/HTML slide-source wording detected."
+      },
+      "record": {
+        "slug": "source-slide-formats"
+      }
+    }
+  ],
+  "post_framework_alias_rules": [
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "paper_skill_requires_context"
+          },
+          {
+            "not": {
+              "signal": "has_paper_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: paper skills require explicit paper or manuscript context."
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_paper_context"
+          },
+          {
+            "not": {
+              "signal": "has_github_pr_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: paper review or revision requests without explicit GitHub/PR context should stay on paper lanes."
+      },
+      "record": {
+        "slug": "gh-address-comments"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_pr_triage_summary_context"
+          },
+          {
+            "not": {
+              "signal": "has_sentry_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: PR triage summaries should not route to production-error triage."
+      },
+      "record": {
+        "slug": "sentry"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_prose_naturalization_context"
+          },
+          {
+            "not": {
+              "signal": "has_design_contract_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: prose naturalization should not route through the design artifact gate."
+      },
+      "record": {
+        "slug": "design-md"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_copywriting_context"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: UX marketing or microcopy wording belongs to copywriting, not native-app debugging."
+      },
+      "record": {
+        "slug": "native-app-debugging"
+      }
+    },
+    {
+      "when": {
+        "signal": "should_defer_to_artifact_gate"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: generic artifact intake should hit the artifact gate before a narrower owner."
+      }
+    },
+    {
+      "when": {
+        "signal": "should_suppress_non_target_artifact_gate"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: artifact wording targets a different canonical artifact gate."
+      }
+    },
+    {
+      "when": {
+        "signal": "should_prefer_design_contract_over_artifact"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: reusable design contract must precede slide authoring."
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_ref_first_workflow_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 42.0,
+        "reason": "Paper-workbench boost applied: target-journal ref-first manuscript workflow detected."
+      },
+      "record": {
+        "slug": "paper-workbench"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_pr_triage_summary_context"
+          },
+          {
+            "not": {
+              "signal": "has_ci_failure_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 54.0,
+        "reason": "GitHub source-gate boost applied: lightweight PR triage or digest wording detected."
+      },
+      "record": {
+        "slug": "gh-address-comments"
+      }
+    },
+    {
+      "when": {
+        "signal": "should_route_to_gh_fix_ci"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 48.0,
+        "reason": "GitHub CI gate boost applied: CI or failing-check workflow wording detected."
+      },
+      "record": {
+        "slug": "gh-fix-ci"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_workbench_frontdoor_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 54.0,
+        "reason": "Paper-workbench boost applied: manuscript front-door workflow or next-step triage detected."
+      },
+      "record": {
+        "slug": "paper-workbench"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_review_judgment_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 36.0,
+        "reason": "Paper-workbench boost applied: paper review judgment with optional external calibration detected."
+      },
+      "record": {
+        "slug": "paper-workbench"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_figure_layout_review_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 38.0,
+        "reason": "Paper-reviewer boost applied: figure/layout-only paper review slice detected."
+      },
+      "record": {
+        "slug": "paper-reviewer"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_logic_evidence_review_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 72.0,
+        "reason": "Paper-reviewer boost applied: claim/evidence alignment review requested."
+      },
+      "record": {
+        "slug": "paper-reviewer"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_paper_review_judgment_context"
+          },
+          {
+            "query_contains": "别润色"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 74.0,
+        "reason": "Paper-reviewer boost applied: claim/evidence review-only paper judgment requested."
+      },
+      "record": {
+        "slug": "paper-reviewer"
+      }
+    },
+    {
+      "record": {
+        "slug": "paper-reviser"
+      },
+      "when": {
+        "signal": "has_paper_direct_revision_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 82.0,
+        "reason": "Paper-reviser boost applied: direct reviewer-comment manuscript revision requested."
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_writing_context"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: bounded manuscript prose polish should route to paper-writing, not paper-reviewer."
+      },
+      "record": {
+        "slug": "paper-reviewer"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_writing_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Paper-writing boost applied: bounded manuscript prose polish or storyline wording detected."
+      },
+      "record": {
+        "slug": "paper-writing"
+      }
+    },
+    {
+      "when": {
+        "signal": "is_meta_routing_task"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 60.0,
+        "reason": "Skill-framework boost applied: skill-system routing, behavior protocol, subtraction, or abstraction wording detected."
+      },
+      "record": {
+        "slug": "skill-framework-developer"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_runtime_lightweighting_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 74.0,
+        "reason": "Skill-framework boost applied: runtime lightweighting, compatibility-layer, glue-layer, or entrypoint-reduction wording detected."
+      },
+      "record": {
+        "slug": "skill-framework-developer"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_design_contract_negation_context"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: query explicitly says a design-system contract is not needed."
+      },
+      "record": {
+        "slug": "design-md"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_design_output_audit_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 44.0,
+        "reason": "Design-md audit boost applied: UI drift, anti-pattern, or acceptance verdict wording detected."
+      },
+      "record": {
+        "slug": "design-md"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_design_workflow_protocol_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 44.0,
+        "reason": "Design-md workflow boost applied: durable design artifact workflow wording detected."
+      },
+      "record": {
+        "slug": "design-md"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_design_reference_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 74.0,
+        "reason": "Design-md reference boost applied: named-product reference source grounding requested."
+      },
+      "record": {
+        "slug": "design-md"
+      }
+    }
+  ]
+}

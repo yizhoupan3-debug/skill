@@ -57,7 +57,7 @@ framework_contracts:
   emits_verification_results: false
 metadata:
   version: "3.3.1"
-  platforms: [codex, cursor]
+  platforms: [supported]
   tags:
     - codex
     - cursor

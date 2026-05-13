@@ -4,8 +4,7 @@
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `CursorContinuityFrame`).
 
 use crate::autopilot_goal::{
-    goal_state_requests_continuation, read_active_task_id, read_focus_task_id, read_goal_state,
-    task_evidence_artifacts_summary_for_task,
+    goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task,
 };
 use crate::rfv_loop::{
     read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
@@ -17,10 +16,62 @@ use std::path::Path;
 
 pub const RESOLVED_TASK_VIEW_SCHEMA_VERSION: &str = "router-rs-resolved-task-view-v1";
 
+/// When present in [`ResolvedTaskView::resolution_notes`], `active_task.json` resolves to a task
+/// with no readable `GOAL_STATE.json`, while `focus_task.json` names another task that **does**
+/// have a valid goal file. [`crate::autopilot_goal::read_goal_state_for_hydration`] still does not
+/// fall back to focus; callers may surface this for diagnostics only.
+pub const RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL: &str =
+    "continuity:active_goal_missing_focus_has_goal";
+
+/// Suffix for [`depth_compliance_refresh_hint`] when `ROUTER_RS_DEPTH_SCORE_MODE` is not `strict`
+/// yet structured external-research rounds are present advisory counters only for the third depth point.
+pub const DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH: &str =
+    " · legacy第三分不含「仅外研结构化轮次」；d3需GOAL checkpoint或RFV对抗轮，或设ROUTER_RS_DEPTH_SCORE_MODE=strict";
+
+/// Zh line appended to Codex continuity digest and Cursor SessionStart when
+/// [`task_view_has_active_goal_focus_mismatch_note`] is true (same bytes as legacy digest string).
+pub const CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH: &str = concat!(
+    "连续性提示: active 任务无可用 GOAL，但 `focus_task` 另有 GOAL；hydration 不自动回退。",
+    "请核对 `artifacts/current/active_task.json` 或运行 `framework task-state-resolve`。",
+);
+
+/// Pushes [`RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL`] when appropriate. Active may still
+/// have RFV or other task-scoped state with no readable GOAL; the note is about pointers vs
+/// hydration, not "autopilot-only".
+fn maybe_note_active_goal_missing_focus_has_goal(
+    repo_root: &Path,
+    pointers: &TaskPointers,
+    resolved_task_id: &str,
+    goal_state: Option<&Value>,
+    notes: &mut Vec<String>,
+) {
+    let Some(active_id) = pointers.active_task_id.as_deref() else {
+        return;
+    };
+    if resolved_task_id != active_id {
+        return;
+    }
+    if goal_state.is_some() {
+        return;
+    }
+    let Some(focus_id) = pointers.focus_task_id.as_deref() else {
+        return;
+    };
+    if focus_id == active_id {
+        return;
+    }
+    let Ok(Some(_)) = read_goal_state(repo_root, Some(focus_id)) else {
+        return;
+    };
+    notes.push(format!(
+        "{RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL} active={active_id} focus={focus_id}"
+    ));
+}
+
 /// Single disk snapshot for Cursor **beforeSubmit** / **stop** continuity + gate hydrate.
 ///
-/// - `pointer_view`：`resolve_task_view`（override 无 → active → focus），供续跑合并时与 `active_task` 对齐缓存。
-/// - `hydration_goal`：与 `read_goal_state_for_hydration` 一致（active → focus；不扫 orphan），供 `AG_FOLLOWUP` hydrate。
+/// - `pointer_view`：`resolve_task_view_with_pointers`（override 无 → active → focus），供续跑合并时与 `active_task` 对齐缓存。
+/// - `hydration_goal`：与 `read_goal_state_for_hydration_from_pointer_ids` 一致（active → focus；不扫 orphan），供 `AG_FOLLOWUP` hydrate；与 `pointer_view` 共用同一 [`read_task_pointers`] 快照。
 #[derive(Debug, Clone)]
 pub struct CursorContinuityFrame {
     pub pointer_view: ResolvedTaskView,
@@ -29,10 +80,15 @@ pub struct CursorContinuityFrame {
 
 /// beforeSubmit / Stop 入口：一次构建指针视图 + hydration 目标对。
 pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFrame {
-    let pointer_view = resolve_task_view(repo_root, None);
-    let hydration_goal = crate::autopilot_goal::read_goal_state_for_hydration(repo_root)
-        .ok()
-        .flatten();
+    let pointers = read_task_pointers(repo_root);
+    let pointer_view = resolve_task_view_with_pointers(repo_root, None, pointers.clone());
+    let hydration_goal = crate::autopilot_goal::read_goal_state_for_hydration_from_pointer_ids(
+        repo_root,
+        &pointers.active_task_id,
+        &pointers.focus_task_id,
+    )
+    .ok()
+    .flatten();
     CursorContinuityFrame {
         pointer_view,
         hydration_goal,
@@ -43,6 +99,15 @@ pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFram
 pub struct TaskPointers {
     pub active_task_id: Option<String>,
     pub focus_task_id: Option<String>,
+}
+
+/// `active_task.json` / `focus_task.json` 一次成对读取（比两次独立 open 的半态窗口更小）。
+pub fn read_task_pointers(repo_root: &Path) -> TaskPointers {
+    let (active_task_id, focus_task_id) = crate::autopilot_goal::read_task_pointer_pair(repo_root);
+    TaskPointers {
+        active_task_id,
+        focus_task_id,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -218,6 +283,13 @@ pub struct ResolvedTaskView {
     pub resolution_notes: Vec<String>,
 }
 
+/// True when [`ResolvedTaskView::resolution_notes`] carries the active/focus GOAL observability short code.
+pub fn task_view_has_active_goal_focus_mismatch_note(view: &ResolvedTaskView) -> bool {
+    view.resolution_notes
+        .iter()
+        .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL))
+}
+
 fn rfv_loop_active(state: &Value) -> bool {
     state
         .get("loop_status")
@@ -267,11 +339,17 @@ fn push_resolution_read_err(notes: &mut Vec<String>, prefix: &'static str, err: 
 /// `task_id` resolution: `task_id_override` (non-empty) > `active_task.json` > `focus_task.json`.
 /// Does **not** scan `**/GOAL_STATE.json` by mtime (see design doc).
 pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> ResolvedTaskView {
-    let pointers = TaskPointers {
-        active_task_id: read_active_task_id(repo_root),
-        focus_task_id: read_focus_task_id(repo_root),
-    };
+    let pointers = read_task_pointers(repo_root);
+    resolve_task_view_with_pointers(repo_root, task_id_override, pointers)
+}
 
+/// Like [`resolve_task_view`], but uses a caller-supplied [`TaskPointers`] snapshot (e.g. paired
+/// with [`read_goal_state_for_hydration_from_pointer_ids`] in [`resolve_cursor_continuity_frame`]).
+pub fn resolve_task_view_with_pointers(
+    repo_root: &Path,
+    task_id_override: Option<&str>,
+    pointers: TaskPointers,
+) -> ResolvedTaskView {
     let tid = task_id_override
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -332,6 +410,14 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
         &mut resolution_notes,
     );
 
+    maybe_note_active_goal_missing_focus_has_goal(
+        repo_root,
+        &pointers,
+        task_id.as_str(),
+        goal_state.as_ref(),
+        &mut resolution_notes,
+    );
+
     ResolvedTaskView {
         schema_version: RESOLVED_TASK_VIEW_SCHEMA_VERSION.to_string(),
         task_id: Some(task_id.clone()),
@@ -371,6 +457,9 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
             " · 外研strict通过轮次={}",
             dc.rfv_external_strict_ok_round_count
         ));
+    }
+    if dc.rfv_external_deep_structured_round_count > 0 && !router_rs_depth_score_mode_strict() {
+        out.push_str(DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH);
     }
     Some(out)
 }
@@ -478,7 +567,10 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
+    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static DEPTH_SCORE_MODE_ENV_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     fn unique_repo(label: &str) -> std::path::PathBuf {
         let nonce = SystemTime::now()
@@ -490,6 +582,12 @@ mod tests {
 
     fn write_active(tmp: &Path, id: &str) {
         let p = tmp.join("artifacts/current/active_task.json");
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, format!(r#"{{"task_id":"{id}"}}"#)).unwrap();
+    }
+
+    fn write_focus(tmp: &Path, id: &str) {
+        let p = tmp.join("artifacts/current/focus_task.json");
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, format!(r#"{{"task_id":"{id}"}}"#)).unwrap();
     }
@@ -545,6 +643,90 @@ mod tests {
         assert!(!ev.has_successful_verification);
         let hint = depth_compliance_refresh_hint(&v).expect("hint");
         assert!(hint.contains("深度信号") && hint.contains("d0/3"));
+        assert!(
+            !v.resolution_notes.iter().any(|n| {
+                n.starts_with(super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL)
+            }),
+            "unexpected focus-has-goal note when active has GOAL: {:?}",
+            v.resolution_notes
+        );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn active_missing_goal_focus_has_goal_emits_continuity_note() {
+        let tmp = unique_repo("af-focus");
+        let active_tid = "t-no-goal";
+        let focus_tid = "t-has-goal";
+        write_active(&tmp, active_tid);
+        write_focus(&tmp, focus_tid);
+        fs::create_dir_all(tmp.join("artifacts/current").join(active_tid)).unwrap();
+        let focus_dir = tmp.join("artifacts/current").join(focus_tid);
+        fs::create_dir_all(&focus_dir).unwrap();
+        fs::write(
+            focus_dir.join("GOAL_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-autopilot-goal-v1",
+                "drive_until_done": true,
+                "status": "running",
+                "goal": "from focus",
+                "non_goals": [],
+                "done_when": [],
+                "validation_commands": [],
+                "current_horizon": "",
+                "checkpoints": [],
+                "blocker": null,
+                "updated_at": "2026-01-01T00:00:00Z"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        assert_eq!(v.task_id.as_deref(), Some(active_tid));
+        assert!(v.goal_state.is_none());
+        let needle = format!(
+            "{} active={active_tid} focus={focus_tid}",
+            super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL
+        );
+        assert!(
+            v.resolution_notes.iter().any(|n| n == &needle),
+            "notes={:?}",
+            v.resolution_notes
+        );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn override_to_focus_skips_active_focus_goal_note_even_when_active_empty() {
+        let tmp = unique_repo("af-override");
+        let active_tid = "t-no-goal";
+        let focus_tid = "t-has-goal";
+        write_active(&tmp, active_tid);
+        write_focus(&tmp, focus_tid);
+        fs::create_dir_all(tmp.join("artifacts/current").join(active_tid)).unwrap();
+        let focus_dir = tmp.join("artifacts/current").join(focus_tid);
+        fs::create_dir_all(&focus_dir).unwrap();
+        fs::write(
+            focus_dir.join("GOAL_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "drive_until_done": false,
+                "status": "running",
+                "goal": "g"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, Some(focus_tid));
+        assert_eq!(v.task_id.as_deref(), Some(focus_tid));
+        assert!(
+            !v.resolution_notes.iter().any(|n| {
+                n.starts_with(super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL)
+            }),
+            "override resolves focus id — must not emit active/focus hydration mismatch note: {:?}",
+            v.resolution_notes
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -660,6 +842,9 @@ mod tests {
 
     #[test]
     fn depth_score_strict_mode_counts_falsification_for_third_point() {
+        let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
+            .lock()
+            .expect("depth score mode env mutex poisoned");
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict");
         let tmp = unique_repo("strict-fals");
@@ -702,6 +887,11 @@ mod tests {
 
     #[test]
     fn depth_compliance_counts_structured_external_research_rounds() {
+        let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
+            .lock()
+            .expect("depth score mode env mutex poisoned");
+        let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
+        std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE");
         let tmp = unique_repo("ext-deep");
         let tid = "t-ext";
         write_active(&tmp, tid);
@@ -730,12 +920,62 @@ mod tests {
 
         let hint = depth_compliance_refresh_hint(&v).expect("hint");
         assert!(hint.contains("结构化外研轮次=1"));
+        assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
+        match prior_depth {
+            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
+            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+        }
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn depth_refresh_hint_legacy_external_note_suppressed_when_strict_score_mode_env() {
+        let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
+            .lock()
+            .expect("depth score mode env mutex poisoned");
+        let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
+        std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict");
+        let tmp = unique_repo("ext-deep-strict-note");
+        let tid = "t-ext-note";
+        write_active(&tmp, tid);
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("RFV_LOOP_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "loop_status": "active",
+                "goal": "g",
+                "max_rounds": 3,
+                "current_round": 2,
+                "rounds": [
+                    {"round": 1, "verify_result": "PASS", "external_research": {"claims": [{"x": 1}]}},
+                    {"round": 2, "verify_result": "FAIL"}
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let v = resolve_task_view(&tmp, None);
+        let hint = depth_compliance_refresh_hint(&v).expect("hint");
+        assert!(!hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
+
+        match prior {
+            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
+            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+        }
         let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn depth_compliance_counts_external_strict_ok_when_flag_true() {
+        let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
+            .lock()
+            .expect("depth score mode env mutex poisoned");
+        let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
+        std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE");
         let tmp = unique_repo("ext-strict");
         let tid = "t-ext-st";
         write_active(&tmp, tid);
@@ -781,7 +1021,12 @@ mod tests {
 
         let hint = depth_compliance_refresh_hint(&v).expect("hint");
         assert!(hint.contains("外研strict通过轮次=1"));
+        assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
+        match prior_depth {
+            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
+            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+        }
         let _ = fs::remove_dir_all(&tmp);
     }
 

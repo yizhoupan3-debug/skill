@@ -835,11 +835,29 @@ fn upsert_worker(store: &mut SessionSupervisorStore, worker: WorkerSessionRecord
 }
 
 fn resolve_state_path(payload: &Value) -> Result<PathBuf, String> {
-    if let Some(path) = optional_non_empty_string(payload, "state_path") {
-        return Ok(PathBuf::from(path));
-    }
     let cwd = std::env::current_dir().map_err(|err| format!("read current_dir failed: {err}"))?;
-    Ok(cwd.join("artifacts/session_supervisor/state.json"))
+    let default = cwd.join("artifacts/session_supervisor/state.json");
+    if let Some(path) = optional_non_empty_string(payload, "state_path") {
+        let pb = PathBuf::from(&path);
+        let candidate = if pb.is_absolute() {
+            pb
+        } else {
+            cwd.join(&path)
+        };
+        let temp = std::env::temp_dir();
+        let under_cwd = candidate.strip_prefix(&cwd).is_ok();
+        let under_tmp = candidate.strip_prefix(&temp).is_ok();
+        if !under_cwd && !under_tmp {
+            return Err(format!(
+                "state_path must be under cwd {} or system temp {}",
+                cwd.display(),
+                temp.display()
+            ));
+        }
+        Ok(candidate)
+    } else {
+        Ok(default)
+    }
 }
 
 fn now_from_payload(payload: &Value) -> Result<String, String> {

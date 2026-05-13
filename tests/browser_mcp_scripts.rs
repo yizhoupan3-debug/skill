@@ -617,9 +617,7 @@ fn run_launcher(
         args.push((*arg).into());
     }
     let output_path = repo_root.join("fake-router-output.json");
-    let mut command = Command::new(
-        repo_root.join("scripts/router-rs/target/release/router-rs"),
-    );
+    let mut command = Command::new(repo_root.join("scripts/router-rs/target/release/router-rs"));
     command
         .args(&args)
         .current_dir(repo_root)

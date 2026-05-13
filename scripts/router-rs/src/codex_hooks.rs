@@ -639,6 +639,14 @@ fn codex_prompt_text(event: &Value) -> String {
     String::new()
 }
 
+fn codex_first_nonempty_prompt_line(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+        .to_string()
+}
+
 fn codex_tool_name(event: &Value) -> String {
     event
         .get("tool_name")
@@ -699,18 +707,19 @@ fn codex_subagent_lane_bits_from_kind(kind: Option<&str>) -> (bool, bool) {
     (review_lane, parallel_lane)
 }
 
-fn codex_tool_fork_context(tool_input: &Value) -> Option<bool> {
-    fork_context_from_values(tool_input, None)
+fn codex_tool_fork_context(tool_input: &Value, event: &Value) -> Option<bool> {
+    fork_context_from_values(tool_input, Some(event))
 }
 
 /// 与 Cursor `REVIEW_GATE` 深度 lane 对齐：`general-purpose` / `best-of-n-runner`（已 normalize）且显式 `fork_context=false`。
 fn codex_deep_independent_reviewer_evidence(
     recognized_kind: Option<&str>,
     tool_input: &Value,
+    event: &Value,
 ) -> bool {
     independent_reviewer_evidence(
         recognized_kind.is_some_and(is_deep_review_gate_lane_normalized),
-        codex_tool_fork_context(tool_input),
+        codex_tool_fork_context(tool_input, event),
     )
 }
 
@@ -722,9 +731,11 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
         if normalized.is_empty() {
             continue;
         }
-        let key = normalized.to_ascii_lowercase();
-        if dedup.insert(key) {
-            unique.push(normalized.to_string());
+        // Deduplicate on exact trimmed text only. Prior ASCII-lowercase keys incorrectly merged
+        // distinct lines that differed only by case or subtle spelling.
+        let key = normalized.to_string();
+        if dedup.insert(key.clone()) {
+            unique.push(key);
         }
     }
     if unique.is_empty() {
@@ -778,7 +789,9 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         contexts.push(warning);
     }
     if facts.review_required && !facts.review_override {
-        contexts.push("Review gate: start an independent reviewer subagent first (`fork_context=false`), then synthesize findings locally. Codex records observed independent reviewer evidence; read-only intent must remain explicit in the lane prompt.".to_string());
+        contexts.push(
+            "Review gate: start a read-only independent reviewer subagent with explicit `fork_context=false` (`subagent_type` must be **`general-purpose`** or **`best-of-n-runner`** for countable evidence — `explore` does not qualify), then synthesize findings locally. Codex records observed independent reviewer evidence; read-only intent must remain explicit in the lane prompt.".to_string(),
+        );
     }
     let additional_context = codex_compact_contexts(contexts);
     if additional_context.is_none() {
@@ -807,7 +820,16 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
     match with_codex_state_lock(repo_root, event, |loaded| {
         let mut state = match loaded {
             Some(value) => value,
-            None => return Err("state_missing".to_string()),
+            None => {
+                let prompt = codex_prompt_text(event);
+                let facts = ReviewGateFacts::from_prompt(&prompt);
+                CodexLifecycleContextState {
+                    seq: 1,
+                    review_required: facts.review_required,
+                    review_override: facts.review_override,
+                    ..CodexLifecycleContextState::default()
+                }
+            }
         };
         state.generic_subagent_seen = true;
         let recognized = codex_recognized_subagent_kind(&tool_input);
@@ -825,7 +847,7 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
             state.parallel_lane_seen = true;
         }
         state.review_subagent_seen = true;
-        if codex_deep_independent_reviewer_evidence(recognized.as_deref(), &tool_input) {
+        if codex_deep_independent_reviewer_evidence(recognized.as_deref(), &tool_input, event) {
             state.independent_review_subagent_seen = true;
         }
         Ok((Some(state), ()))
@@ -898,7 +920,7 @@ fn try_write_continuity_checkpoint_on_codex_stop(repo_root: &Path, event: &Value
         return;
     }
     let text = codex_prompt_text(event);
-    let task_line = text.lines().next().unwrap_or("").trim().to_string();
+    let task_line = codex_first_nonempty_prompt_line(&text);
     let summary_body = if text.trim().is_empty() {
         "Stop hook automatic checkpoint. Stop payload had no user prompt text; refine SESSION_SUMMARY manually or rely on prior turns.".to_string()
     } else {
@@ -1439,6 +1461,18 @@ fn mode_status(status: &'static str, mode: InstallMode) -> &'static str {
     }
 }
 
+/// Codex-side atomic write: thin wrapper on top of [`crate::atomic_write::write_atomic_text_to_temp`].
+///
+/// Two intentional differences vs [`crate::atomic_write::write_atomic_text`]:
+///
+/// 1. A `#[cfg(test)]` failure-injection seam (`FORCE_ATOMIC_WRITE_FAIL`) so the installer's
+///    error-handling paths stay covered without faking filesystem failures.
+/// 2. A unique hidden temp filename (`.<stem>.tmp-<pid>-<nanos>-<nonce>`). Codex installs run
+///    against shared `~/.codex` paths where concurrent writers (multiple agents / sessions)
+///    can collide on a plain `<ext>.tmp` sidecar; the unique nonce + pid scheme avoids that.
+///
+/// The actual durable-write algorithm (write → fsync → rename → fsync parent) lives in
+/// `atomic_write`, so there is **one** source of truth for the IO sequence.
 fn write_atomic_text(path: &Path, text: &str) -> Result<(), String> {
     #[cfg(test)]
     if FORCE_ATOMIC_WRITE_FAIL.with(|flag| flag.get()) {
@@ -2244,6 +2278,14 @@ mod tests {
     use std::path::Path;
 
     #[test]
+    fn codex_first_nonempty_prompt_line_skips_leading_blank_lines() {
+        assert_eq!(
+            super::codex_first_nonempty_prompt_line("\n  \nreal task\nmore"),
+            "real task"
+        );
+    }
+
+    #[test]
     fn protected_generated_paths_match_lexical_variants() {
         assert_eq!(normalize_repo_relative_path("./AGENTS.md"), "AGENTS.md");
         assert_eq!(
@@ -2836,6 +2878,7 @@ mod tests {
                 .unwrap_or_default();
             assert!(ctx.contains("Review gate:"));
             assert!(ctx.contains("fork_context=false"));
+            assert!(ctx.contains("general-purpose") && ctx.contains("best-of-n-runner"));
             if !ctx.is_empty() {
                 assert!(ctx.len() <= codex_additional_context_max_bytes());
             }
@@ -2893,10 +2936,12 @@ mod tests {
             )
             .expect("write summary");
 
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
             std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
             let out = handle_codex_session_start(&repo, &json!({"source":"startup"}))
                 .expect("session start output");
             std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
             let ctx = out["hookSpecificOutput"]["additionalContext"]
                 .as_str()
                 .expect("additionalContext");
@@ -3090,12 +3135,14 @@ mod tests {
             // codex_additional_context_max_bytes clamps to [256, 8192]; use the
             // floor so the assertions exercise the real budget rather than a
             // value that the clamp silently rewrites.
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
             std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
             let line1 = format!("{}{}", "A".repeat(24), ": L1");
             let line2 = format!("{}{}", "C".repeat(24), ": L2");
             let line3 = "B".repeat(240);
             let ctx = codex_compact_contexts(vec![format!("{line1}\n{line2}\n{line3}")]).unwrap();
             std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
             assert!(ctx.ends_with("..."));
             assert!(
                 ctx.matches('\n').count() >= 1,
@@ -3104,12 +3151,28 @@ mod tests {
             assert!(ctx.len() <= 256);
         }
 
+        #[test]
+        fn codex_compact_contexts_dedup_requires_exact_trim_match() {
+            let a = "Repo: /path/A";
+            let b = "repo: /path/B";
+            let ctx = codex_compact_contexts(vec![a.to_string(), b.to_string()]).expect("ctx");
+            assert!(
+                ctx.contains(a),
+                "distinct lines must not merge on ASCII case: {ctx:?}"
+            );
+            assert!(
+                ctx.contains(b),
+                "distinct lines must not merge on ASCII case: {ctx:?}"
+            );
+        }
+
         /// Multi-segment `codex_compact_contexts` join order is preserved when the
         /// combined string is truncated (SessionStart budget). Complements
         /// `additional_context_truncates_on_newline_preference_under_small_budget`
         /// (single blob + newline preference inside one segment).
         #[test]
         fn codex_compact_contexts_preserves_join_order_under_small_budget() {
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
             std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
             let part1 = "CODEX_JOIN_ORDER_MARK_FIRST:alpha";
             let part2 = "CODEX_JOIN_ORDER_MARK_SECOND:beta";
@@ -3117,6 +3180,7 @@ mod tests {
             let ctx = codex_compact_contexts(vec![part1.to_string(), part2.to_string(), part3])
                 .expect("expected combined contexts");
             std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
+            std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
             assert!(ctx.len() <= 256, "len={}", ctx.len());
             assert!(ctx.ends_with("..."));
             assert!(
@@ -3183,6 +3247,94 @@ mod tests {
             });
             let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
             assert!(out.is_none());
+            let state = codex_load_state(&repo, &post)
+                .unwrap()
+                .expect("lazy hook-state");
+            assert!(state.generic_subagent_seen);
+            assert!(
+                !state.independent_review_subagent_seen,
+                "explore must not satisfy deep independent reviewer ledger"
+            );
+        }
+
+        #[test]
+        fn post_tool_use_without_prior_state_persists_independent_deep_reviewer() {
+            let repo = fresh_repo();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-no-ups-deep",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            assert!(out.is_none());
+            let state = codex_load_state(&repo, &post).unwrap().expect("state");
+            assert!(state.independent_review_subagent_seen);
+            assert!(
+                !state.review_required,
+                "lazy init without UPS/prompt: review gate stays unarmed (facts from empty prompt)"
+            );
+        }
+
+        #[test]
+        fn lazy_post_tool_deep_reviewer_allows_stop_without_codex_review_block() {
+            let repo = fresh_repo();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-lazy-stop-contract",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            assert!(run_codex_review_subagent_gate(&repo, &post)
+                .unwrap()
+                .is_none());
+            let loaded = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(loaded.independent_review_subagent_seen);
+            assert!(!loaded.review_required);
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-lazy-stop-contract",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":""
+            });
+            assert!(
+                run_codex_review_subagent_gate(&repo, &stop).unwrap().is_none(),
+                "CODEX_REVIEW_GATE blocks only when review_required arms the gate first; out should not block here"
+            );
+        }
+
+        #[test]
+        fn post_tool_use_observes_fork_context_on_event_root() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-event-fork",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-event-fork",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "fork_context": false,
+                "tool_input":{"subagent_type":"general-purpose"}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-event-fork",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(
+                out.is_none(),
+                "event-root fork_context should satisfy independent reviewer; out={out:?}"
+            );
         }
 
         #[test]

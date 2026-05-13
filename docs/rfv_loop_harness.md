@@ -21,7 +21,12 @@
 - `max_rounds` 在 Rust 侧有 **硬上限 1000**（防止误填天文数字）；超过会截断并在响应中带 `warning`。
 - **Cursor**：若 `.cursor/hooks.json` 接入 `router-rs cursor hook`，且 **`RFV_LOOP_STATE.json`** 中 **`loop_status=active`**，Stop / beforeSubmit 可合并 **RFV_LOOP_CONTINUE** 跟进；preCompact 可附带一行 RFV 摘要。关闭注入：`ROUTER_RS_RFV_LOOP_HOOK=0`。
 
-可与宏任务 **`GOAL_STATE.json`** / `framework_autopilot_goal` 同目录并用：目标级续跑 + 轮次级质量闭环。
+**GOAL（`GOAL_STATE.json` / `framework_autopilot_goal`）与 RFV 账本的关系**：
+
+- 同一目录 `artifacts/current/<task_id>/` **可以**先后或交替出现 `GOAL_STATE.json` 与 `RFV_LOOP_STATE.json` 文件。
+- **不能**在同一任务上「双 macro **同时要求续跑**」：`GOAL` 处于需要续跑的 running/drive、且 **`RFV_LOOP_STATE.loop_status=active`** 时，`resolve_task_view` 会得到 **Conflict**（`autopilot_goal_and_rfv_loop_both_active`），真源：[`scripts/router-rs/src/task_state.rs`](../scripts/router-rs/src/task_state.rs) 的 `classify_control_mode`。
+- **`framework_rfv_loop` `operation: start`** 会摘掉同任务的 `GOAL_STATE.json`，真源：`deactivate_goal_for_conflict_with_rfv`（[`scripts/router-rs/src/autopilot_goal.rs`](../scripts/router-rs/src/autopilot_goal.rs)）。
+- 编排上：**二选一作为主控制面**，或先做 RFV 多轮账本、或先做 Autopilot GOAL；需要切换时重建/显式收口另一套账本，避免误认为「可与 RFV active 并行续跑 GOAL macro」。
 
 ### 迁移说明（`prefer_structured_external_research` 默认）
 

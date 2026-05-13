@@ -23,7 +23,7 @@ trigger_hints:
   - UI 设计规范
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - design-system
     - design-md

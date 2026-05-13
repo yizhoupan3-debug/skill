@@ -1190,6 +1190,7 @@ pub(crate) fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> Stri
     } else {
         lines.push("- For each major claim, include at least two independent evidence anchors and one uncertainty note when evidence is incomplete.".to_string());
         lines.push("- If verification_required or evidence_required is true, treat missing evidence as an explicit blocker instead of silently concluding.".to_string());
+        lines.push("- Auditable multi-round external research belongs in ledger `RFV_LOOP_STATE.json` via stdio op `framework_rfv_loop`; read `docs/rfv_loop_harness.md` / `docs/references/rfv-loop/external-research-harness.md`; hooks never auto-create that ledger.".to_string());
     }
     let prompt_reasons = payload
         .reasons
@@ -1301,6 +1302,44 @@ impl ResearchMode {
     }
 }
 
+/// `external research` alone matches many integration/API strings; require a second research cue.
+fn external_research_phrase_signals_deep(lower: &str) -> bool {
+    if !lower.contains("external research") {
+        return false;
+    }
+    lower.contains("调研")
+        || lower.contains("文献")
+        || lower.contains("审计")
+        || lower.contains("ledger")
+        || lower.contains("rfv")
+        || lower.contains("外研")
+        || lower.contains("literature")
+        || lower.contains("unknowns")
+        || lower.contains("contradiction")
+        || lower.contains("auditable")
+        || lower.contains("research-grade")
+        || lower.contains("research grade")
+        || lower.contains("科研级")
+        || lower.contains("deep dive")
+}
+
+/// Narrow host-neutral cues for Execute deep shaping (substring match; ASCII segments may be lowercased).
+pub(crate) fn payload_text_signals_deep_research(text: &str) -> bool {
+    text.contains("/autopilot-deep")
+        || text.contains("/autopilot deep")
+        || text.contains("深度调研")
+        || text.contains("深度研究")
+        || text.contains("deep research")
+        || text.contains("deep dive")
+        || text.contains("literature review")
+        || text.contains("literature-review")
+        || text.contains("文献调研")
+        || external_research_phrase_signals_deep(text)
+        || text.contains("research-grade")
+        || text.contains("research grade")
+        || text.contains("科研级调研")
+}
+
 fn normalize_research_mode_token(value: &str) -> Option<ResearchMode> {
     let lowered = value.trim().to_ascii_lowercase();
     if lowered.is_empty() {
@@ -1329,11 +1368,7 @@ fn infer_research_mode(payload: &ExecuteRequestPayload) -> ResearchMode {
         return mode;
     }
     let task = payload.task.trim().to_ascii_lowercase();
-    if task.contains("/autopilot-deep")
-        || task.contains("/autopilot deep")
-        || task.contains("深度调研")
-        || task.contains("深度研究")
-    {
+    if payload_text_signals_deep_research(&task) {
         return ResearchMode::Deep;
     }
     if task.contains("/autopilot-quick")
@@ -1348,7 +1383,7 @@ fn infer_research_mode(payload: &ExecuteRequestPayload) -> ResearchMode {
             return mode;
         }
         let lowered = reason.to_ascii_lowercase();
-        if lowered.contains("深度调研") || lowered.contains("deep research") {
+        if payload_text_signals_deep_research(&lowered) {
             return ResearchMode::Deep;
         }
     }
@@ -1745,8 +1780,10 @@ pub(crate) fn required_non_empty_string(
         .ok_or_else(|| format!("{context} requires non-empty {key}"))
 }
 
-// Retained for integration tests; retired top-level continuity refresh CLI path was removed.
-#[allow(dead_code)]
+// Retained for integration tests (`main_tests.rs::copy_text_to_clipboard`); retired top-level
+// continuity refresh CLI path was removed. Gated `#[cfg(test)]` to make the "test-only" intent
+// machine-checked: prod builds neither emit nor link it.
+#[cfg(test)]
 pub(crate) fn copy_text_to_clipboard(text: &str) -> Result<Value, String> {
     if let Ok(path_value) = std::env::var("ROUTER_RS_CLIPBOARD_PATH") {
         let path = PathBuf::from(path_value);

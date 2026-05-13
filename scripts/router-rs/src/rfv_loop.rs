@@ -3,6 +3,8 @@
 use crate::atomic_write::write_atomic_json;
 use crate::autopilot_goal::read_active_task_id;
 use crate::framework_runtime::resolve_repo_root_arg;
+use crate::harness_context_signals::rfv_state_signals_math;
+use crate::harness_operator_nudges::ResolvedHarnessNudges;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
     router_rs_rfv_external_struct_hint_enabled,
@@ -14,6 +16,9 @@ use std::path::{Path, PathBuf};
 
 pub const RFV_LOOP_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
 pub const RFV_LOOP_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
+/// Repo-relative path; keep in sync with `cursor_hooks` merge logic that surfaces this substring.
+pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
+    "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
 const MAX_ROUNDS_HARD_CAP: u64 = 1000;
 /// `retrieval_trace` prose fields must be at least this many **trimmed** chars under strict mode.
 pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
@@ -468,19 +473,20 @@ fn enforce_rfv_close_gates(
 }
 
 /// EVIDENCE_INDEX 行视为「成功验证」：`success==true` 或 `exit_code==0`。
+/// 实际规则下沉到 [`crate::hook_common::evidence_index_entry_implies_success`]，与 `autopilot_goal`
+/// 共用一份口径（避免历史上的两套独立判定函数）。
 fn evidence_row_is_success(row: &Value) -> bool {
-    if row.get("success").and_then(Value::as_bool) == Some(true) {
-        return true;
-    }
-    matches!(row.get("exit_code").and_then(|v| v.as_i64()), Some(0))
-        || matches!(row.get("exit_code").and_then(|v| v.as_u64()), Some(0))
+    crate::hook_common::evidence_index_entry_implies_success(row)
 }
 
 /// 读取同任务目录下的 `EVIDENCE_INDEX.json`；非法 / 缺失视为空。
 fn read_evidence_index_artifacts(repo_root: &Path, task_id: &str) -> Vec<Value> {
+    let Ok(tid) = crate::path_guard::validate_task_id_component(task_id) else {
+        return Vec::new();
+    };
     let path = repo_root
         .join("artifacts/current")
-        .join(task_id)
+        .join(tid)
         .join("EVIDENCE_INDEX.json");
     let Ok(raw) = fs::read_to_string(&path) else {
         return Vec::new();
@@ -565,11 +571,12 @@ fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> PathBuf {
-    repo_root
+pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+    let tid = crate::path_guard::validate_task_id_component(task_id)?;
+    Ok(repo_root
         .join("artifacts/current")
-        .join(task_id)
-        .join(RFV_LOOP_STATE_FILENAME)
+        .join(tid)
+        .join(RFV_LOOP_STATE_FILENAME))
 }
 
 /// Autopilot 在同 task 上 `start`/`upsert`/`resume` 时结束 RFV 的 `loop_status=active`（与 GOAL 互斥；保留文件并标记 `superseded`）。
@@ -580,7 +587,10 @@ pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
     if task_id.trim().is_empty() {
         return Ok(false);
     }
-    let path = rfv_loop_state_path(repo_root, task_id);
+    if crate::path_guard::safe_task_id_component(task_id).is_none() {
+        return Ok(false);
+    }
+    let path = rfv_loop_state_path(repo_root, task_id)?;
     if !path.is_file() {
         return Ok(false);
     }
@@ -620,7 +630,9 @@ pub fn read_rfv_loop_state(
         };
         t
     };
-    let path = rfv_loop_state_path(repo_root, &task_id);
+    crate::path_guard::validate_task_id_component(&task_id)
+        .map_err(|e| format!("framework_rfv_loop: invalid task_id for RFV_LOOP_STATE path: {e}"))?;
+    let path = rfv_loop_state_path(repo_root, &task_id)?;
     if !path.is_file() {
         return Ok(None);
     }
@@ -741,7 +753,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             let path = if tid.is_empty() {
                 PathBuf::new()
             } else {
-                rfv_loop_state_path(&repo_root, &tid)
+                rfv_loop_state_path(&repo_root, &tid).unwrap_or_else(|_| PathBuf::new())
             };
             Ok(json!({
                 "ok": true,
@@ -759,6 +771,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                     "framework_rfv_loop start requires task_id in payload or active_task.json"
                         .to_string()
                 })?;
+            crate::path_guard::validate_task_id_component(&task_id)?;
             let goal = payload
                 .get("goal")
                 .and_then(Value::as_str)
@@ -853,7 +866,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 }
             }
 
-            let path = rfv_loop_state_path(&repo_root, &task_id);
+            let path = rfv_loop_state_path(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
             let goal_state_cleared =
@@ -885,7 +898,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                     "framework_rfv_loop append_round requires task_id or active_task.json"
                         .to_string()
                 })?;
-            let path = rfv_loop_state_path(&repo_root, &task_id);
+            crate::path_guard::validate_task_id_component(&task_id)?;
+            let path = rfv_loop_state_path(&repo_root, &task_id)?;
             let mut state = read_rfv_loop_state(&repo_root, Some(&task_id))?
                 .ok_or_else(|| format!("RFV_LOOP_STATE missing at {}", path.display()))?;
 
@@ -1094,7 +1108,11 @@ fn rfv_loop_requests_continuation(state: &Value) -> bool {
         .unwrap_or(false)
 }
 
-fn append_rfv_external_struct_hint_if_applicable(lines: &mut Vec<String>, state: &Value) {
+fn append_rfv_external_struct_hint_if_applicable(
+    lines: &mut Vec<String>,
+    state: &Value,
+    nudges: &ResolvedHarnessNudges,
+) {
     if !router_rs_rfv_external_struct_hint_enabled() {
         return;
     }
@@ -1115,7 +1133,22 @@ fn append_rfv_external_struct_hint_if_applicable(lines: &mut Vec<String>, state:
     if !last_round_missing_external_structured_research(state) {
         return;
     }
-    lines.push("External research: fill structured `external_research`; schema `configs/framework/RFV_EXTERNAL_RESEARCH.schema.json`.".to_string());
+    let struct_line = {
+        let t = nudges.rfv_loop_external_struct_hint_line.trim();
+        if t.is_empty() {
+            format!(
+                "External research: fill structured `external_research`; schema `{}`.",
+                RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH
+            )
+        } else {
+            t.to_string()
+        }
+    };
+    lines.push(struct_line);
+    let retr = nudges.retrieval_trace_harness_line.trim();
+    if !retr.is_empty() {
+        lines.push(retr.to_string());
+    }
 }
 
 fn rfv_followup_compact_line(text: &str, max_chars: usize) -> String {
@@ -1140,6 +1173,7 @@ pub fn build_rfv_loop_followup_message_from_state(
     if !rfv_loop_hook_enabled() {
         return None;
     }
+    crate::path_guard::safe_task_id_component(task_id)?;
     if !rfv_loop_requests_continuation(state) {
         return None;
     }
@@ -1172,7 +1206,10 @@ pub fn build_rfv_loop_followup_message_from_state(
     if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
         lines.push(nudges.rfv_loop_continue_reasoning_depth.clone());
     }
-    append_rfv_external_struct_hint_if_applicable(&mut lines, state);
+    if rfv_state_signals_math(state) && !nudges.math_reasoning_harness_line.trim().is_empty() {
+        lines.push(nudges.math_reasoning_harness_line.clone());
+    }
+    append_rfv_external_struct_hint_if_applicable(&mut lines, state, &nudges);
     Some(lines.join("\n"))
 }
 
@@ -1289,12 +1326,12 @@ mod tests {
             "registry nudge should append; msg={msg:?}"
         );
         assert!(
-            !msg.contains("检索"),
-            "long retrieval nudge should stay out of default hook output; msg={msg:?}"
+            msg.contains("检索"),
+            "allow_external defaults prefer_structured; last round missing structured ER -> retrieval_trace nudge; msg={msg:?}"
         );
         assert!(
             !msg.contains("数理"),
-            "math nudge stays out of default hook output; msg={msg:?}"
+            "math-shaped goal absent; math nudge should not append; msg={msg:?}"
         );
 
         let _ = fs::remove_dir_all(&repo);
@@ -1329,7 +1366,7 @@ mod tests {
     }
 
     #[test]
-    fn rfv_followup_omits_long_math_when_context_is_math_shaped() {
+    fn rfv_followup_includes_math_nudge_when_context_is_math_shaped() {
         let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let repo = std::env::temp_dir().join("router-rs-rfv-math-nudge");
         let _ = fs::remove_dir_all(&repo);
@@ -1352,7 +1389,7 @@ mod tests {
         });
         let msg = build_rfv_loop_followup_message_from_state(&repo, "rfv-task", &state)
             .expect("followup");
-        assert!(!msg.contains("数理"), "{msg}");
+        assert!(msg.contains("数理"), "{msg}");
         assert!(!msg.contains("检索"), "{msg}");
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1494,7 +1531,8 @@ mod tests {
             "drive_until_done": true,
         }))
         .expect("goal start");
-        let gpath = crate::autopilot_goal::goal_state_path_for_task(&repo, "rfv-mx");
+        let gpath =
+            crate::autopilot_goal::goal_state_path_for_task(&repo, "rfv-mx").expect("gpath");
         assert!(gpath.is_file());
         assert!(crate::autopilot_goal::build_autopilot_drive_followup_message(&repo).is_some());
 
@@ -1731,7 +1769,7 @@ mod tests {
         }))
         .expect("start");
 
-        let path = rfv_loop_state_path(&repo, "t-leg");
+        let path = rfv_loop_state_path(&repo, "t-leg").expect("path");
         let mut v: Value =
             serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("parse");
         v.as_object_mut()
@@ -2232,6 +2270,127 @@ mod tests {
         let gs = out["rfv_loop_state"].as_object().expect("obj");
         assert_eq!(gs.get("loop_status"), Some(&json!("closed")));
         assert_eq!(gs["rounds"].as_array().map(|a| a.len()), Some(1));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn rfv_followup_injects_math_retrieval_struct_nudges_when_applicable() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let prior_ext = std::env::var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT").ok();
+        std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT");
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-nudgeinject-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("configs/framework")).expect("mkdir");
+        fs::write(
+            repo.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+            r#"{"schema_version":"harness-operator-nudges-v1","nudges":{"rfv_loop_continue_reasoning_depth":"DEPTH_TEST_TOKEN","math_reasoning_harness_line":"MATH_TEST_TOKEN","retrieval_trace_harness_line":"RETR_TEST_TOKEN","rfv_loop_external_struct_hint_line":"STRUCT_TEST_TOKEN"}}"#,
+        )
+        .expect("nudges");
+        std::env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+
+        let state = json!({
+            "loop_status": "active",
+            "goal": "证明主要定理",
+            "current_round": 1u64,
+            "max_rounds": 5u64,
+            "allow_external_research": true,
+            "prefer_structured_external_research": true,
+            "rounds": [{"verify_result": "PASS", "external_research": null}],
+            "verify_commands": ["cargo test -q"],
+        });
+        let msg = build_rfv_loop_followup_message_from_state(&repo, "tid", &state).expect("msg");
+        assert!(msg.contains("MATH_TEST_TOKEN"), "msg={msg}");
+        assert!(msg.contains("DEPTH_TEST_TOKEN"), "msg={msg}");
+        assert!(msg.contains("STRUCT_TEST_TOKEN"), "msg={msg}");
+        assert!(msg.contains("RETR_TEST_TOKEN"), "msg={msg}");
+
+        match prior_ext {
+            Some(v) => std::env::set_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT", v),
+            None => std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT"),
+        }
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn rfv_followup_skips_math_nudge_when_goal_not_math() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let prior_ext = std::env::var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT").ok();
+        std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT");
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-nomath-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("configs/framework")).expect("mkdir");
+        fs::write(
+            repo.join("configs/framework/HARNESS_OPERATOR_NUDGES.json"),
+            r#"{"schema_version":"harness-operator-nudges-v1","nudges":{"math_reasoning_harness_line":"MATH_SHOULD_NOT_APPEAR","rfv_loop_continue_reasoning_depth":"D"}}"#,
+        )
+        .expect("nudges");
+        std::env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+
+        let state = json!({
+            "loop_status": "active",
+            "goal": "fix clippy warnings",
+            "current_round": 1u64,
+            "max_rounds": 5u64,
+            "allow_external_research": false,
+            "verify_commands": ["cargo clippy -q"],
+        });
+        let msg = build_rfv_loop_followup_message_from_state(&repo, "tid", &state).expect("msg");
+        assert!(!msg.contains("MATH_SHOULD_NOT_APPEAR"), "msg={msg}");
+
+        match prior_ext {
+            Some(v) => std::env::set_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT", v),
+            None => std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT"),
+        }
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn rfv_followup_external_struct_falls_back_to_english_when_nudge_empty() {
+        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let prior_ext = std::env::var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT").ok();
+        std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT");
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-rfv-exten-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        std::env::remove_var("ROUTER_RS_HARNESS_OPERATOR_NUDGES");
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+
+        let state = json!({
+            "loop_status": "active",
+            "goal": "research",
+            "current_round": 1u64,
+            "max_rounds": 5u64,
+            "allow_external_research": true,
+            "prefer_structured_external_research": true,
+            "rounds": [{"verify_result": "PASS", "external_research": null}],
+        });
+        let msg = build_rfv_loop_followup_message_from_state(&repo, "tid", &state).expect("msg");
+        assert!(
+            msg.contains("External research: fill structured"),
+            "msg={msg}"
+        );
+        assert!(
+            msg.contains(RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH),
+            "msg={msg}"
+        );
+
+        match prior_ext {
+            Some(v) => std::env::set_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT", v),
+            None => std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT"),
+        }
         let _ = fs::remove_dir_all(&repo);
     }
 }
