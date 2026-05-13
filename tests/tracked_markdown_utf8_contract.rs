@@ -39,8 +39,7 @@ fn git_tracked_markdown_doc_and_skill_surfaces_are_valid_utf8() {
             continue;
         }
         scanned += 1;
-        std::fs::read_to_string(&path)
-            .unwrap_or_else(|err| panic!("{}: {err}", path.display()));
+        std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()));
     }
 
     assert!(

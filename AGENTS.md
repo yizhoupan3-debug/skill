@@ -9,7 +9,7 @@
 | 跨宿主执行协议、语言约束、收口原则 | 仓库根 `AGENTS.md` |
 | 连续性 harness 结构、hook 数据流、开关矩阵、为何刻意不兼容 | `docs/harness_architecture.md` |
 | skill 热路由入口 | `skills/SKILL_ROUTING_RUNTIME.json` |
-| skill 冷元数据 / explain / plugin catalog | `skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json` |
+| skill 冷元数据 / explain / plugin catalog（**非**热路由 hot path 读物；由 `skill-compiler-rs`、`tests/policy_contracts.rs`、`.githooks/pre-commit`、`tests/host_integration.rs` 等编译器 / 契约 / CI 链路消费） | `skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json` |
 | framework command / host registry | `configs/framework/RUNTIME_REGISTRY.json` |
 | 程序化 schema 与校验 | `configs/framework/*.json` + `scripts/router-rs/src/**` |
 | hook 实际注入、拦截与投影 | 各宿主 `hooks.json` + `scripts/router-rs/src/*hooks*.rs`、`host_integration.rs` |
@@ -73,7 +73,7 @@
 - 主线程始终负责上下文判断、阻塞项、共享决策、集成与最终验证。
 - Codex CLI 及未加载 Cursor rules 的环境：默认主线程本地执行；只有用户显式要求 subagent、delegation、parallel agent work、多 agent、分路、分头、并行，或显式调用 `/autopilot` 时，才进入 bounded sidecar admission。
 - review 请求是独立上下文授权：深度 / 全面 / 全仓 / 跨模块 / PR 级 review 必须先启动只读 `fork_context=false` reviewer subagent，再由主线程整合；不得用模型自写拒因跳过，只有用户明确要求不用子代理时除外。**各宿主默认可清点的深度 reviewer lane 分列**见 [`docs/harness_architecture.md`](docs/harness_architecture.md) **§5.0**（勿假设三宿主使用同一 `subagent_type` 字符串）。
-- 用户请求 **review / 代码审查**（代码与改动面）且**未被更窄 owner 抢占**（例如纯截图或 UI 视觉证据、手稿/论文主线、仅 GitHub PR review comment 处置作为第一目标）时，**默认**遵循 [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)：**verdict-first**、**严重程度证据门槛**、从技能内透镜目录 **自选 lane** 并在已选维度内系统化穷尽；并行只读子代理按所选 lens 拆分整合。**勿**在 `AGENTS.md` 维护第二份 lens 清单。
+- 用户请求 **review / 代码审查**（代码与改动面）且**未被更窄 owner 抢占**（例如纯截图或 UI 视觉证据、手稿/论文主线、仅 GitHub PR review comment 处置作为第一目标）时，**默认**遵循 [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)：**默认产出以 severity 排序的 findings 为主（verdict 至多一行可选）**，**宿主可见答复默认不得**在首条 `[P0]`/`[P1]`/`[P2]`/caveat 式 finding 之前堆砌**小结表**、**分类叙事**或等价长铺垫（与 skill **Compact envelope** 一致）；**严重程度证据门槛**、从技能内透镜目录 **自选 lane** 并在已选维度内系统化穷尽；并行只读子代理按所选 lens 拆分整合。**勿**在 `AGENTS.md` 维护第二份 lens 清单。
 - Cursor 工作区的 review gate / 执行偏好差异由 `.cursor/rules/*.mdc` 补充；这些文件只保留 Cursor 独有硬约束与差异。
 - 适合 subagent：高噪音搜索、日志整理、独立风险审查、互不重叠的文件级实现。
 - 不适合 subagent：小任务、共享上下文重、顺序依赖、写入范围重叠、验证缺失、用户要求本地处理。

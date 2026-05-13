@@ -12,6 +12,8 @@
 | `unknowns` | 否（基线） | `null` 或对象数组；每项 `question`、`why_insufficient` | **必须出现 `unknowns` 键**；值为 **`[]` 或 `null`**（禁止省略键） |
 | `quantitative_replays` | 否 | 省略 / `null` / 字符串 `"none"`（大小写不敏感），或非空对象数组（`dataset_or_source_id`、`version_or_snapshot`、`window`、`replay_command`） | 不变 |
 
-**宿主提示（可选）**：在 RFV active、**`allow_external_research`**、**`prefer_structured_external_research=true`**（`start` 持久化）且上一轮缺 `external_research` 时，`RFV_LOOP_CONTINUE` 只追加短提示和 schema 路径；**`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT=0`** 关闭。RFV 也会在外研开启时追加检索 / `retrieval_trace` 短句；长版 strict 说明保留在本文件和 schema 中。深度合规 rollup：`task_state` 的 **`rfv_external_deep_structured_round_count`**（有对象即计数）与 **`rfv_external_strict_ok_round_count`**（仅当任务 `external_research_strict` 为真且该轮 blob 通过 strict 校验时递增）。
+**宿主提示（可选）**：在 RFV active、**`allow_external_research`**、**`prefer_structured_external_research=true`**（`start` 持久化）且上一轮缺 `external_research` 时，`RFV_LOOP_CONTINUE` 只追加短提示和 schema 路径；**`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT=0`** 关闭。RFV 也会在外研开启时追加检索 / `retrieval_trace` 短句；长版 strict 说明保留在本文件和 schema 中。深度合规 rollup：`task_state` 的 **`rfv_external_deep_structured_round_count`**（有对象即计数）与 **`rfv_external_strict_ok_round_count`**（仅当任务 `external_research_strict` 为真且该轮 blob 通过 strict 校验时递增）。**账本式外研路径**与 Execute `research_mode=deep`/Plan `plan_profile` 的职责分工（不自动合并）见 [`docs/harness_architecture.md`](../../harness_architecture.md) — **Closeout 与深度** → **深度调研：三轨对齐**。
+
+**与 `RUNTIME_REGISTRY.json` 的关系**：`framework_commands.autopilot.research_contract`（含 `deep` 字段）为宿主/文档侧**叙事契约**；`router-rs` 的 Execute live 塑形**不**在运行时读取该 JSON，真源为 [`scripts/router-rs/src/cli/runtime_ops.inc`](../../../scripts/router-rs/src/cli/runtime_ops.inc) 中 `build_live_execute_prompt` 的内嵌英文条款。改 deep 叙事时请同步该文件（`tests/policy_contracts.rs` 中有防漂移断言）。
 
 **See also**: [lane-templates.md](lane-templates.md)（External research 深度模式）、[reasoning-depth-contract.md](reasoning-depth-contract.md)、[rfv_loop_harness.md](../../rfv_loop_harness.md)。

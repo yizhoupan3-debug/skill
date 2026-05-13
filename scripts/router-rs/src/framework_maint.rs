@@ -146,7 +146,7 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String>
     )?;
     let mut tools = Vec::new();
     for (_host_id, tool) in pairs {
-        if tool == "claude" {
+        if tool == "claude" || tool == "qoder" {
             continue;
         }
         if !tools.contains(&tool) {
@@ -162,6 +162,7 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
             "codex" => verify_codex_hooks(repo_root.to_path_buf())?,
             "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
             "claude" => verify_claude_projection(repo_root)?,
+            "qoder" => verify_qoder_projection(repo_root)?,
             other => {
                 return Err(format!(
                     "installable projection tool `{other}` has no maint verifier"
@@ -281,6 +282,53 @@ fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
         }
     }
     eprintln!("verify_claude_projection: ok");
+    Ok(())
+}
+
+fn verify_qoder_projection(repo_root: &Path) -> Result<(), String> {
+    let rule = repo_root.join(".qoder/rules/framework.md");
+    let settings = repo_root.join(".qoder/settings.json");
+    let manifest = repo_root.join(".qoder/.framework-projection.json");
+    for path in [&rule, &settings, &manifest] {
+        if !path.is_file() {
+            return Err(format!(
+                "verify_qoder_projection: missing {}",
+                path.display()
+            ));
+        }
+    }
+    let rule_text = fs::read_to_string(&rule).map_err(|e| e.to_string())?;
+    if !rule_text.contains("host_projection: qoder") {
+        return Err(
+            "verify_qoder_projection: .qoder/rules/framework.md must declare qoder projection"
+                .to_string(),
+        );
+    }
+    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
+    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
+    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("qoder") {
+        return Err(
+            "verify_qoder_projection: .qoder/.framework-projection.json must declare qoder"
+                .to_string(),
+        );
+    }
+    let settings_text = fs::read_to_string(&settings).map_err(|e| e.to_string())?;
+    let settings_json: Value = serde_json::from_str(&settings_text).map_err(|e| e.to_string())?;
+    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+        let has_hook = settings_json
+            .get("hooks")
+            .and_then(|hooks| hooks.get(event))
+            .map(|value| {
+                value.to_string().contains("router-rs") && value.to_string().contains("qoder hook")
+            })
+            .unwrap_or(false);
+        if !has_hook {
+            return Err(format!(
+                "verify_qoder_projection: .qoder/settings.json missing router-rs hook for {event}"
+            ));
+        }
+    }
+    eprintln!("verify_qoder_projection: ok");
     Ok(())
 }
 
@@ -477,9 +525,11 @@ fn verify_runtime_skill_paths(
                 "verify_codex_hooks: {label} must not reference generated surface paths: {path}"
             ));
         }
-        if !root.join(path).is_file() {
+        let resolved = crate::path_guard::join_repo_relative_under_root(root, path)?;
+        if !resolved.is_file() {
             return Err(format!(
-                "verify_codex_hooks: {label} references missing skill_path {path} under {}",
+                "verify_codex_hooks: {label} references missing skill_path {} under {}",
+                resolved.display(),
                 root.display()
             ));
         }
@@ -964,7 +1014,10 @@ fn untracked_keyword_markers(
         if !include_path(&lower_path) {
             continue;
         }
-        let full_path = repo_root.join(path);
+        let Ok(full_path) = crate::path_guard::join_repo_relative_under_root(repo_root, path)
+        else {
+            continue;
+        };
         if !full_path.is_file() {
             continue;
         }

@@ -8,7 +8,7 @@ description: |
   'HTML 邮件', 'Outlook 兼容', 'MJML', 'React Email', 'email 排版'.
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - email
     - html-email

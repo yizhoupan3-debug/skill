@@ -22,6 +22,10 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: ClaudeCommand,
     },
+    Qoder {
+        #[command(subcommand)]
+        command: QoderCommand,
+    },
     Trace {
         #[command(subcommand)]
         command: TraceCommand,
@@ -149,7 +153,12 @@ pub(crate) enum FrameworkCommand {
         command: MaintSubcommand,
     },
     Snapshot(FrameworkSnapshotCommand),
+    /// Human-readable workspace checks (paths, hooks, Codex sync hint).
+    Doctor(RepoRootCommand),
     ContractSummary(RepoRootCommand),
+    /// Host-neutral alias for full host-entrypoint materialization (same as `codex sync --repo-root`).
+    #[command(name = "sync-entrypoints", visible_alias = "sync_entrypoints")]
+    SyncEntrypoints(RepoRootCommand),
     PromptCompression(JsonInputCommand),
     Statusline(RepoRootCommand),
     SessionArtifactWrite(JsonInputCommand),
@@ -165,6 +174,9 @@ pub(crate) enum FrameworkCommand {
     /// Append or summarize task-scoped `STEP_LEDGER.jsonl` recovery records.
     StepLedger(JsonInputCommand),
     HostIntegration(ForwardedArgsCommand),
+    /// Print sorted JSON array of `NL_SIGNAL_REGISTRY` signal names (align `NL_ROUTE_ADJUSTMENTS.json` with Rust).
+    #[command(hide = true)]
+    NlRouteSignalRegistryContract,
     Contracts,
 }
 
@@ -186,6 +198,11 @@ pub(crate) enum CursorCommand {
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum ClaudeCommand {
     Hook(ClaudeHookCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum QoderCommand {
+    Hook(QoderHookCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -365,6 +382,14 @@ pub(crate) struct CursorHookCommand {
 
 #[derive(Args, Debug, Clone)]
 pub(crate) struct ClaudeHookCommand {
+    #[arg(long)]
+    pub(crate) event: String,
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct QoderHookCommand {
     #[arg(long)]
     pub(crate) event: String,
     #[arg(long)]

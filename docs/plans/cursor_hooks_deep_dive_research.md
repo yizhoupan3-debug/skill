@@ -119,22 +119,22 @@ title: Cursor Hook 深度调研报告
 | `beforeSubmitPrompt` | `BeforeSubmitPrompt` | `beforesubmitprompt` | `handle_before_submit` | 解析 review / delegation / autopilot 触发；推进 `review-subagent-<key>.json`；按需注入 pre-goal 提示与续跑 |
 | **（同上）** | `UserPromptSubmit`（别名） | `userpromptsubmit` | `handle_before_submit`（同分支） | 与上面共用，对应 official `beforeSubmitPrompt` 的 matcher 值 |
 | `stop` | `Stop` | `stop` | `handle_stop` | 消费状态：缺 review subagent 证据→ `REVIEW_GATE`；缺 goal → `AG_FOLLOWUP`；声明完成但缺 closeout → `CLOSEOUT_FOLLOWUP` |
-| `postToolUse` | `PostToolUse` | `posttooluse` | `handle_post_tool_use` | 当工具是 subagent lane 时推进 phase；写 `EVIDENCE_INDEX.json`（验证类命令）；可选 rust-lint 注入 `additional_context` |
+| `postToolUse` | `PostToolUse` | `posttooluse` | `handle_post_tool_use` | 当工具是 subagent lane 且 review armed 时 `bump_phase(2)` 并入 multiset（`push_review_pending_cycle_key`，**不**递增 `subagent_start_count`）；写 `EVIDENCE_INDEX.json`（验证类命令）；可选 rust-lint 注入 `additional_context` |
 | `beforeShellExecution` | `BeforeShellExecution` | `beforeshellexecution` | `handle_before_shell_execution` | 入队 `pending_shells`（terminal 归属账本）；返回 `{"continue":true,"permission":"allow"}` |
 | `afterShellExecution` | `AfterShellExecution` | `aftershellexecution` | `handle_after_shell_execution` | 配对 pending shell；扩展 `owned_pids` 账本；返回 `{}` |
 | `subagentStart` | `SubagentStart` | `subagentstart` | `handle_subagent_start` | `active_subagent_count++`；armed 时 `bump_phase(2)` 与 `subagent_start_count++`；超并发上限时返回 `permission:"deny"` |
-| `subagentStop` | `SubagentStop` | `subagentstop` | `handle_subagent_stop` | armed 且 phase≥2 时 `bump_phase(3)` 与 `subagent_stop_count++` |
+| `subagentStop` | `SubagentStop` | `subagentstop` | `handle_subagent_stop` | review armed 且 multiset 命中时移除一条 pending；pending 空则 `bump_phase(3)` 且 `subagent_stop_count++` |
 | `afterFileEdit` | `AfterFileEdit` | `afterfileedit` | `handle_after_file_edit` | 仅对 `.rs` 文件调用 `rustfmt --edition 2021`；返回 `{}` |
 | `preCompact` | `PreCompact` | `precompact` | `handle_pre_compact` | 写门控快照 + 上下文用量进 `additional_context` / `user_message`；可合并 RFV `precompact_hint` |
 | `sessionEnd` | `SessionEnd` | `sessionend` | `handle_session_end` | 清扫 `.cursor/hook-state/` 中本模块前缀文件；终止本会话 terminal 账本登记的 PID |
-| **（无 hooks.json 绑定）** | — | `afteragentresponse` | `handle_after_agent_response` | 仅在 review_gate disabled **以外**的路径里激活；解析 reject_reason / goal contract|progress|verify-or-block 信号写状态 |
+| **（无 hooks.json 绑定）** | — | `afteragentresponse` | `handle_after_agent_response` | 常态与 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 应急分支**均**派发；解析 reject_reason / goal contract|progress|verify-or-block 信号写 `.cursor/hook-state` |
 | 其它未识别事件名 | 任何 | `_ => json!({})` | — | 安全 fallback：返回空对象，不影响会话 |
 
 **`router-rs cursor hook --event=` 实参覆盖测试与代码事实**（直接证据）：
 - `cli/args.inc` 定义 `CursorHookCommand { event: String, repo_root: Option<PathBuf> }`（行 333–338）。
 - `cli/dispatch_body.txt::dispatch_cursor_command` 把 `CursorCommand::Hook(command)` 路由到 `run_review_gate(&command.event, command.repo_root.as_deref())`。
 - `review_gate.rs::run_review_gate` 把 event 字符串直接传入 `dispatch_cursor_hook_event` 不做大小写转换；归一化发生在 `dispatch_cursor_hook_event` 自身。
-- `dispatch_cursor_hook_event`（[`dispatch.rs`](../../scripts/router-rs/src/cursor_hooks/dispatch.rs)；旧单行号已失效）首先 `event_name.trim().to_lowercase()`，然后**根据 `cursor_review_gate_disabled_by_env()` 切到两套 match 表**：禁用时跳过 review gate 路径并保留续跑（`merge_continuity_followups_*`），常态下走完整门控。
+- `dispatch_cursor_hook_event`（[`dispatch.rs`](../../scripts/router-rs/src/cursor_hooks/dispatch.rs)；旧单行号已失效）首先 `event_name.trim().to_lowercase()`，然后**根据 `cursor_review_gate_disabled_by_env()` 切两套 match 表**：应急表下 `beforeSubmitPrompt`/`userPromptSubmit` **仅**返回 `{"continue":true}`（不跑 `handle_before_submit`、不写 hook-state）；`afterAgentResponse` 亦派发 `handle_after_agent_response`；其余事件仍各自 `handle_*`（多者可写 hook-state）。`Stop` 仍进 `handle_stop`，在取 `.cursor/hook-state` 锁前返回，并经 `finalize_stop_hook_outputs` 合并续跑/软收口（与常态共用该函数）。详见 [`harness_architecture.md`](../harness_architecture.md) §5.0「Cursor 应急关闭审稿门控」。
 
 ---
 
@@ -167,7 +167,7 @@ title: Cursor Hook 深度调研报告
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | unset → 默认 **8**；`0`/`false`/`off`/`no` 关闭自动放行 | `maybe_autopilot_pre_goal_nag_cap_release` | 达到上限时自动 `pre_goal_review_satisfied=true` 并注入"已达上限"放行文案 | `cursor_hooks/` |
 | `retired followup-channel toggle` | 关 | 所有续跑/门控注入位置 | 关：写 `additional_context`；开：写 `followup_message` | `router_env_flags.rs` L41–49 |
 | `retired silent-mode branch` | 关 | 所有 handler 出站（`strip_cursor_hook_user_visible_nags` / `apply_cursor_hook_output_policy`） | 整段剥离续跑/nudge；**例外保留**：含 `CLOSEOUT_FOLLOWUP` / `AG_FOLLOWUP` / `REVIEW_GATE` / `PAPER_ADVERSARIAL_HOOK` / `pre-goal 提示已达上限` / `hook-state 锁不可用` 字样的 followup | `cursor_hooks/`；harness §8 L135 |
-| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | `dispatch_cursor_hook_event` 切到应急表 | 仅短路 review/delegation 门控；续跑仍合并；Stop 仍触发 closeout | `cursor_hooks/`；harness §8 L136 |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | `dispatch_cursor_hook_event` 切到应急表 | **beforeSubmit**：仅 `continue:true`；**afterAgentResponse**/PostTool/subagent 等多事件仍写 hook-state（与常态同源 handler）；**Stop**：取锁前返回 + `finalize_stop_hook_outputs`（续跑/SESSION_CLOSE_STYLE）；closeout 仍按代码 | `dispatch.rs`；harness §5.0 / §8 |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | **关**（opt-in） | beforeSubmit 论文类提示合并对抗短段 | 开且命中启发式时 followup/additional_context 含 `PAPER_ADVERSARIAL_HOOK` 段；受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束 | `paper_adversarial_hook.rs` L6/L17；harness §8 L137 |
 | `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | unset → 与运行时 `MAX_CONCURRENT_SUBAGENTS_LIMIT` 契约一致；`0` 关闭计数限流 | subagentStart | 超限时返回 `permission:"deny" + user_message`（包含建议关闭限流的文案） | `cursor_hooks/`、L1924–L1934 |
 | `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 内置默认（见代码） | `reset_stale_active_subagents` | 超期 active subagent 不再阻塞新启动 | `cursor_hooks/` |
@@ -209,8 +209,8 @@ stateDiagram-v2
     P0_idle --> P1_goal_armed: BeforeSubmitPrompt\nis_autopilot_entrypoint\nstate.goal_required = true
     P0_idle --> P0_idle: BeforeSubmitPrompt\nother prompts\n(may set delegation / overrides)
 
-    P1_review_armed --> P2_subagent_open: SubagentStart\nreview_hard_armed\nbump_phase(2)\n+ subagent_start_count
-    P1_review_armed --> P2_subagent_open: PostToolUse\ntool_name_matches_subagent_lane && pre_goal_kind\nbump_phase(2)\n+ subagent_start_count
+    P1_review_armed --> P2_subagent_open: SubagentStart\nreview_hard_armed\nbump_phase(2)\n+ subagent_start_count\n+ multiset push
+    P1_review_armed --> P2_subagent_open: PostToolUse\nreview_hard_armed\nbump_phase(2)\nmultiset push only\n(no subagent_start_count)
 
     P2_subagent_open --> P3_evidence_complete: SubagentStop\nreview_hard_armed && phase>=2\nbump_phase(3)\n+ subagent_stop_count
     P2_subagent_open --> P2_subagent_open: SubagentStop\nphase<2 (premature)\nno bump
@@ -248,14 +248,14 @@ stateDiagram-v2
 | 节点 / 边 | 关键函数（`scripts/router-rs/src/cursor_hooks/`） |
 |---|---|
 | `BeforeSubmitPrompt` | `handle_before_submit`、`is_review_prompt`、`is_autopilot_entrypoint_prompt`、`is_parallel_delegation_prompt`、`framework_prompt_arms_delegation`、`has_review_override`、`has_override`、`has_delegation_override`、`saw_reject_reason`、`maybe_autopilot_pre_goal_nag_cap_release` |
-| `SubagentStart` | `handle_subagent_start``subagent_limit_denial`、`reset_stale_active_subagents`、`fork_context_from_tool`、`counts_as_independent_context_fork`、`cursor_subagent_type_pair`、`pre_goal_subagent_kind_ok`、`review_hard_armed`、`bump_phase` |
+| `SubagentStart` | `handle_subagent_start``subagent_limit_denial`、`reset_stale_active_subagents`、`fork_context_from_tool`、`independent_context_fork`、`cursor_subagent_type_pair`、`pre_goal_subagent_kind_ok`、`review_hard_armed`、`bump_phase` |
 | `SubagentStop` | `handle_subagent_stop``review_hard_armed`、`bump_phase` |
 | `PostToolUse` | `handle_post_tool_use``tool_name_matches_subagent_lane`、`synthetic_post_tool_evidence_shape`、`try_append_post_tool_shell_evidence`、`maybe_run_cursor_rust_lint` |
-| `AfterAgentResponse`（非 hooks.json 绑定，仅 dispatch 拉起） | `handle_after_agent_response``hook_event_signal_text`、`has_goal_contract_signal`、`has_goal_progress_signal`、`has_goal_verify_or_block_signal`、`clear_review_gate_escalation_counters` |
+| `AfterAgentResponse`（非 hooks.json 绑定，仅 dispatch 拉起） | `handle_after_agent_response``hook_event_signal_text`、`has_structured_goal_contract`、`has_goal_progress_signal`、`has_goal_verify_or_block_signal`、`clear_review_gate_escalation_counters` |
 | `Stop` | `handle_stop``completion_claimed_in_text`、`closeout_followup_for_completion_claim`、`review_stop_followup_needed`、`review_stop_followup_line`、`goal_is_satisfied`、`goal_stop_followup_line`、`merge_continuity_followups`、`hydrate_goal_gate_from_disk` |
 | `SessionStart` | `handle_session_start``maybe_init_session_terminal_ledger`、`read_file_head_lines`、`read_json_value_strict` |
 | `SessionEnd` | `handle_session_end``sweep_review_gate_state_dir`、`review_gate_state_file_owned_by_module`、`terminate_stale_terminal_processes` |
-| 续跑合并 | `merge_continuity_followups``merge_continuity_followups_before_submit``build_merged_continuity_block_for_before_submit``crate::autopilot_goal::merge_hook_nudge_paragraph` |
+| 续跑合并（Stop/`finalize_stop_hook_outputs` 等路径） | `merge_continuity_followups`、`crate::autopilot_goal::merge_hook_nudge_paragraph`；beforeSubmit 侧已无独立续跑合并桩 |
 | 出站策略 | `strip_cursor_hook_user_visible_nags`（cursor_hook_silent 模式下保留例外）、`apply_cursor_hook_output_policy`、`scrub_followup_fields_in_hook_output`（`autopilot_goal`） |
 | review 触发 regex | `scripts/router-rs/src/review_routing_signals.rs::review_gate_compiled_regexes`（来自 `configs/framework/REVIEW_ROUTING_SIGNALS.json`，13 条 regex；坏条目跳过，全坏回退内置 literals） |
 
@@ -263,7 +263,7 @@ stateDiagram-v2
 
 1. **SessionStart**：写 `session-terminals-<key>.json` baseline；注入 briefing；不触动 review state（只 lazy 创建）。
 2. **BeforeSubmitPrompt**：取 `prompt_text` + `hook_event_signal_text` → 检查 review / delegation / autopilot / override / reject_reason → 写 `review-subagent-<key>.json`（`save_state`）→ 仅在 pre_goal 缺失且 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` 显式开启时合并 pre-goal 段；按 `retired beforeSubmit AUTOPILOT_DRIVE opt-in` / `retired beforeSubmit RFV opt-in` 合并续跑（默认关闭，跳过）；按 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` 合并论文对抗段。
-3. **SubagentStart / PostToolUse**：在 review armed 时 `bump_phase(2)`；在 goal 需要 pre-goal 时若是 independent_fork 子代理 lane，把 `pre_goal_review_satisfied=true`。
+3. **SubagentStart / PostToolUse**：在 review armed 时 `bump_phase(2)` 并入 multiset；**仅 `SubagentStart`** 递增 `subagent_start_count`。在 goal 需要 pre-goal 时若是 independent_fork 子代理 lane，把 `pre_goal_review_satisfied=true`。
 4. **AfterAgentResponse**：扫信号文本写 `goal_contract_seen / goal_progress_seen / goal_verify_or_block_seen / reject_reason_seen`；若宿主版本未触发该事件，Stop 仍会兜底重扫一次响应文本。
 5. **SubagentStop**：在 review armed 且 phase≥2 时 `bump_phase(3)`。
 6. **Stop**：四岔决策——

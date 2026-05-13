@@ -14,7 +14,7 @@ use super::runtime_ops::{
 use crate::browser_mcp::{
     resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
 };
-use crate::claude_hooks::run_claude_hook_cli;
+use crate::claude_hooks::{run_claude_hook_cli, run_qoder_hook_cli};
 use crate::closeout_enforcement::{
     closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
@@ -32,7 +32,7 @@ use crate::framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
     build_framework_prompt_compression_envelope, build_framework_runtime_snapshot_envelope,
     build_framework_statusline, framework_hook_evidence_append, resolve_repo_root_arg,
-    write_framework_session_artifacts, FrameworkAliasBuildOptions,
+    run_framework_doctor, write_framework_session_artifacts, FrameworkAliasBuildOptions,
 };
 use crate::harness_contract::{harness_contract, lint_skill_contracts};
 use crate::hook_policy::{evaluate_hook_policy, hook_policy_contract, HookPolicyEvaluateRequest};

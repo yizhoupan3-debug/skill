@@ -3,7 +3,7 @@ name: sentry
 description: Inspect Sentry production errors and issue evidence read-only.
 metadata:
   version: "2.1.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - sentry
     - production-errors

@@ -5,10 +5,15 @@ alwaysApply: true
 
 # Review Subagent Gate（仅 Cursor）
 
-跨宿主 review 叙事、拒因集合与收口原则见 `AGENTS.md`。本文件只保留 Cursor 独有硬约束：
+跨宿主 review 叙事、拒因集合与收口原则见 [AGENTS.md](../../AGENTS.md)。本文件只保留 Cursor 独有硬约束：
 
 - 深度 / 跨模块 / PR 级 review 在 Cursor 上由 `router-rs` hook 维护独立上下文证据链。
+- **默认并行多路**：细则见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)；`beforeSubmit` **只注入一行**路径指针，避免长段 checklist 进宿主上下文。
+- **可数 `REVIEW_GATE` 的深度 subagent lane**（须与显式 `fork_context=false` 组合）在本宿主仅为 **`general-purpose`** 与 **`best-of-n-runner`**（及 `normalize_subagent_type` 等价名）；**`explore`/CI/guide 等不计入**——与 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)、[`docs/harness_architecture.md`](../../docs/harness_architecture.md) **第 5.0 节（Review gate）**一致。
 - 宿主硬门控以 `.cursor/hook-state` 和 Stop 上的 `router-rs REVIEW_GATE` 单行短码为真源。
+- **禁止自拟仿机读续跑行**：对用户可见回复中，**不得**自行输出**无 `router-rs ` 前缀**的仿 **`RG_FOLLOWUP` / `AG_FOLLOWUP` / `*_FOLLOWUP`** 且带 `missing_parts=` / `escalation=` 的整行（除非逐字引用用户粘贴）；**允许**在解释中引用宿主真形 **`router-rs REVIEW_GATE …`**、**`router-rs AG_FOLLOWUP …`**。需要提示用户时改用自然语言指向 hook 注入的上述行，或请用户在**下一轮用户消息单独一行**写允许的拒因 token（**`RG_FOLLOWUP` 粘贴不是合法清门路径**；清门用 **`rg_clear`** 或 **`AGENTS.md` 拒因 token** 等，见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)）。仿造行与真源区分见 [`docs/harness_architecture.md`](../../docs/harness_architecture.md) **§4.3**。
 - review lane 必须只读：输出 findings、风险、缺测与证据锚点；不改代码、不顺手修复。
-- **透镜与 lane 自选**、输出形状（含 **Scope / Lenses / Omitted**）以 [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md) 为准；本规则不复制 lens 表。
+- **透镜与 lane 自选**、回复默认 **compact findings（按优先级）** 与仅在用户明确要求时的 **叙事/全报告体**（含 Scope/Lenses/Omitted 等），均以 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md) 为准；本规则不复制 lens 表。
+- **宿主可见信封（compact）**：对用户可见的「代码 / 改动面深度审」综述（不限于 reviewer subagent 合并结果），**默认**在 **可选** **至多两行**前缀（**`Scope:`** 可选；若有则最多再接 **一行** **`Out of scope:`**，规则见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md) **Compact envelope**）之后，**立刻**进入 **`[P0]` / `[P1]` / `[P2]` / `Caveat:`** 序列；**无 `Scope:`** 时 **首行**即须为 **`[P0]`–`[P2]`** 或 **`Caveat:`**（**`Caveat:`** 与带降级说明的 **`[P2]`** 在 skill 中等价）；**禁止**在首条 **`[P0]`–`[P2]`** 或 **`Caveat:`** 之前写 Markdown **表格**、「小结 / 分类 / 属于哪一类 / 归因」类标题或长引言铺底（前缀两行除外）。
+- **叙事体例外**：仅当用户显式要 PR 述职、Lens 表、分类矩阵等 **或** 走该 skill 的 **full report profile** 时才允许 preamble 与小节；「全面 review」「有什么问题」等含糊措辞本身**不**升格为叙事体。
 - 用户明确要求避免 subagent 时，本 gate 不适用。

@@ -27,82 +27,8 @@ struct Loaded {
 
 static LOADED: OnceLock<Loaded> = OnceLock::new();
 
-/// Fallback mirrors embedded JSON / prior `hook_common::review_patterns` literals.
-fn fallback_review_gate_pattern_strings() -> &'static [&'static str] {
-    &[
-        r"(?i)\b(code|security|architecture|architect)\s+review\b",
-        r"(?i)\breview\s+this\s+(pr|pull request)\b",
-        r"(?i)\breview\s+(my\s+)?(pr|pull request)\b",
-        r"(?i)\b(pr|pull request)\s+review\b",
-        r"(?i)\breview\s+(code|security|architecture)\b",
-        r"(?im)^\s*review\b.*\bagain\b",
-        r"(?i)\bfocus on finding\b.*\bproblems\b",
-        r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维)\s*review.*(代码|安全|架构|仓库|全仓|repo|repository|cross[- ]module|回归风险|架构风险|实现质量|严重程度|findings|severity|路由系统|skill\s*边界|PR|pull request)",
-        r"(?i)^\s*(深度|全面|全仓|仓库级|跨模块|多模块|多维)\s*review\s*$",
-        r"(?i)review.*(仓库|全仓|跨模块|多模块|严重程度|findings|severity|repo|repository|cross[- ]module|回归风险|架构风险|实现质量|路由系统|skill\s*边界)",
-        r"(?i)(深度|全面|全仓|仓库级|跨模块|多模块|多维).*(审查|审核|审计|评审).*(代码|安全|架构|仓库|全仓|回归风险|架构风险|实现质量|严重程度|路由系统|skill\s*边界|PR|pull request|合并请求)",
-        r"(?i)(审查|审核|审计|评审).*(仓库|全仓|跨模块|多模块|严重程度|回归风险|架构风险|实现质量|路由系统|skill\s*边界)",
-        r"(?i)(代码审查|安全审查|架构审查|审查这个\s*PR|审查这段代码)",
-        r"(?i)(审查|评审|审核).*(PR|pull request|合并请求)",
-        r"(?i)^\s*review\s*$",
-        r"(?i)^\s*代码审查\s*$",
-        r"(?i)^\s*code\s+review\s*$",
-    ]
-}
-
-fn fallback_parallel_review_candidate() -> ParallelReviewCandidateFile {
-    ParallelReviewCandidateFile {
-        review_markers: vec![
-            "review".to_string(),
-            "code review".to_string(),
-            "审查".to_string(),
-            "审核".to_string(),
-            "审计".to_string(),
-            "评审".to_string(),
-            "代码 review".to_string(),
-            "代码审查".to_string(),
-            "架构审查".to_string(),
-            "安全审查".to_string(),
-        ],
-        breadth_markers: vec![
-            "深度".to_string(),
-            "全面".to_string(),
-            "全量".to_string(),
-            "全仓".to_string(),
-            "仓库级".to_string(),
-            "整个仓库".to_string(),
-            "这个仓库".to_string(),
-            "repo-wide".to_string(),
-            "codebase-wide".to_string(),
-            "跨模块".to_string(),
-            "多模块".to_string(),
-            "多维".to_string(),
-            "多方向".to_string(),
-            "多假设".to_string(),
-            "第一性原理".to_string(),
-            "多余入口".to_string(),
-            "不必要抽象".to_string(),
-        ],
-        scope_markers: vec![
-            "仓库".to_string(),
-            "repo".to_string(),
-            "codebase".to_string(),
-            "代码库".to_string(),
-            "架构".to_string(),
-            "architecture".to_string(),
-            "系统".to_string(),
-            "路由".to_string(),
-            "skill".to_string(),
-            "模块".to_string(),
-            "边界".to_string(),
-            "实现质量".to_string(),
-            "bug".to_string(),
-            "风险".to_string(),
-            "findings".to_string(),
-        ],
-    }
-}
-
+/// 编译 JSON 中的 `review_gate_regexes` 字符串列表。无效条目会被跳过并打 `eprintln`，
+/// 与 `embedded_review_routing_json_compiles_completely` 测试一同保证 JSON 改动不会静默退化。
 fn compile_review_gate_regexes(patterns: &[String]) -> Vec<Regex> {
     let mut out = Vec::with_capacity(patterns.len());
     for (index, pattern) in patterns.iter().enumerate() {
@@ -116,39 +42,27 @@ fn compile_review_gate_regexes(patterns: &[String]) -> Vec<Regex> {
     out
 }
 
-fn compile_review_gate_from_str_slices(patterns: &[&str]) -> Vec<Regex> {
-    patterns
-        .iter()
-        .map(|p| Regex::new(p).expect("fallback review gate regex must compile (sync with JSON)"))
-        .collect()
-}
-
-fn try_load_from_embedded_json() -> Option<Loaded> {
-    let parsed: ReviewRoutingSignalsFile = serde_json::from_str(EMBEDDED_JSON).ok()?;
+/// 解析编译期嵌入的 `configs/framework/REVIEW_ROUTING_SIGNALS.json` 为运行时 `Loaded`。
+/// JSON 由 `include_str!` 静态嵌入；解析失败或可编译 regex 为空 = 仓库自身契约破损，
+/// 走 panic 让 CI / 启动期立即失败，避免历史上的「fallback 静默退化」第二真源。
+fn load_from_embedded_json() -> Loaded {
+    let parsed: ReviewRoutingSignalsFile = serde_json::from_str(EMBEDDED_JSON).expect(
+        "embedded configs/framework/REVIEW_ROUTING_SIGNALS.json must parse; check JSON syntax",
+    );
     let review_gate_regexes = compile_review_gate_regexes(&parsed.review_gate_regexes);
-    if review_gate_regexes.is_empty() {
-        return None;
-    }
-    Some(Loaded {
+    assert!(
+        !review_gate_regexes.is_empty(),
+        "embedded REVIEW_ROUTING_SIGNALS.json compiled to zero review_gate regexes; \
+         check pattern syntax (see eprintln traces from compile_review_gate_regexes)"
+    );
+    Loaded {
         review_gate_regexes,
         parallel_review_candidate: parsed.parallel_review_candidate,
-    })
-}
-
-fn load_or_fallback() -> Loaded {
-    if let Some(loaded) = try_load_from_embedded_json() {
-        return loaded;
-    }
-    Loaded {
-        review_gate_regexes: compile_review_gate_from_str_slices(
-            fallback_review_gate_pattern_strings(),
-        ),
-        parallel_review_candidate: fallback_parallel_review_candidate(),
     }
 }
 
 fn loaded() -> &'static Loaded {
-    LOADED.get_or_init(load_or_fallback)
+    LOADED.get_or_init(load_from_embedded_json)
 }
 
 /// Compiled review-gate heuristics (same semantics as former `hook_common::review_patterns`).
@@ -186,6 +100,28 @@ mod tests {
         assert!(!parsed.parallel_review_candidate.review_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.breadth_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.scope_markers.is_empty());
+    }
+
+    /// Guard against the kind of silent regex drop that the old `fallback_*` second source of truth
+    /// used to paper over: every JSON pattern must compile, and every parallel-review marker bucket
+    /// must remain populated. Failing here = JSON edit broke runtime behaviour.
+    #[test]
+    fn embedded_review_routing_json_compiles_completely() {
+        let parsed: ReviewRoutingSignalsFile =
+            serde_json::from_str(EMBEDDED_JSON).expect("embedded REVIEW_ROUTING_SIGNALS.json");
+        let compiled = compile_review_gate_regexes(&parsed.review_gate_regexes);
+        assert_eq!(
+            compiled.len(),
+            parsed.review_gate_regexes.len(),
+            "one or more review_gate_regexes failed to compile; the SSOT cleanup expects 100% compile rate"
+        );
+        let parallel = &parsed.parallel_review_candidate;
+        assert!(!parallel.review_markers.is_empty(), "review_markers empty");
+        assert!(
+            !parallel.breadth_markers.is_empty(),
+            "breadth_markers empty"
+        );
+        assert!(!parallel.scope_markers.is_empty(), "scope_markers empty");
     }
 
     #[test]

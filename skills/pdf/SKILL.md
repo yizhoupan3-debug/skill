@@ -14,7 +14,7 @@ trigger_hints:
   - reportlab
 metadata:
   version: "2.1.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - pdf
     - rendering

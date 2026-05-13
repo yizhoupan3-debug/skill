@@ -84,9 +84,7 @@ fn builtin_defaults() -> ResolvedHarnessNudges {
             .to_string(),
         math_reasoning_harness_line: String::new(),
         retrieval_trace_harness_line: String::new(),
-        rfv_loop_external_struct_hint_line:
-            "外研结构化：本轮 `append_round` 需填 `external_research`，按 `RFV_EXTERNAL_RESEARCH.schema.json` 覆盖 sources、contradiction_sweep、queries_used、unknowns。"
-                .to_string(),
+        rfv_loop_external_struct_hint_line: String::new(),
     }
 }
 

@@ -22,7 +22,7 @@ runtime_requirements:
     - pdftoppm
 metadata:
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - docx
     - word

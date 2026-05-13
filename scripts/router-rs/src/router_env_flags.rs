@@ -1,18 +1,22 @@
 //! `ROUTER_RS_*` 连续性/续跑类开关：保留真正改变行为边界的少量闸门。
 //!
-//! 当前仍由环境变量驱动的开关：
+//! **清单真源**：宿主可见语义与默认值以仓库根 [`docs/harness_architecture.md`](../../docs/harness_architecture.md) **§5 开关面**表格为准；下列为本模块 **提供读取 helper** 或在注释中高频交叉引用的子集。其余变量（连续性 PostTool、Codex checkpoint、Cursor review/subagent cap、CLI/host_integration/runtime_storage/maint 等）在对应源文件中直读 `std::env::var`，仍以 harness §5 表为准。
+//!
+//! Helper 映射：
 //! - `ROUTER_RS_OPERATOR_INJECT`
-//! - `ROUTER_RS_HARNESS_OPERATOR_NUDGES`
+//! - `ROUTER_RS_HARNESS_OPERATOR_NUDGES`（未在本文件展开；见 harness §5）
 //! - `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`
-//! - `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK`
+//! - `ROUTER_RS_DEPTH_SCORE_MODE`
 //! - `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`
 //! - `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` → [`router_rs_cursor_hook_state_legacy_full_sweep_enabled`]
 //! - `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` → [`router_rs_cursor_pre_goal_strict_disk_enabled`]
 //! - `ROUTER_RS_TASK_LEDGER_FLOCK` → [`router_rs_task_ledger_flock_enabled`]（跨进程账本 flock，默认启用）
-//! - `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` → [`router_rs_cursor_hook_outbound_context_max_bytes`]
+//! - `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` → [`router_rs_cursor_hook_outbound_context_max_bytes`]（出站 UTF-8 **字节**上限）
 //! - `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` → [`router_rs_cursor_sessionstart_context_max_bytes`]
-//! - `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE`：Stop 软收尾提示（`SESSION_CLOSE_STYLE`）；`0`/`false`/`off`/`no` 关闭
-//! - `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` → Codex：`UserPromptSubmit`/`PostToolUse`/`Stop` 无稳定会话键时 block（见 `codex_hooks.rs`）
+//! - `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE`：Stop 软收尾提示（`SESSION_CLOSE_STYLE`）；`0`/`false`/`off`/`no` 关闭（见 `frag_01_continuity_intent.rs`）
+//! - `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`（未在本文件展开 helper；见 `codex_hooks.rs`）
+//!
+//! **散落直读（仅索引）**：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE`、`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT`、`ROUTER_RS_CLOSEOUT_ENFORCEMENT`、`ROUTER_RS_CURSOR_*`（review gate disable、**`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** → [`router_rs_cursor_review_gate_stop_max_nudges_cap`]、pre-goal max nudges、open subagent cap/stale、session namespace、workspace root、terminal kill）、`ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX(_BYTES)`、`ROUTER_RS_CLAUDE_*`、`ROUTER_RS_CLIPBOARD_PATH`、`ROUTER_RS_STORAGE_ROOT`、`ROUTER_RS_BIN`、`ROUTER_RS_GENERATOR_TIMEOUT_SECONDS`、`ROUTER_RS_SHARED_TARGET`、`ROUTER_RS_UPDATE_*` — 见 harness §5 与各模块 `std::env::var`。
 //!
 //! 已退役的文案/投影分叉开关在代码层固定为关闭，不再暴露环境变量入口。
 
@@ -121,6 +125,43 @@ pub fn router_rs_cursor_sessionstart_context_max_bytes() -> usize {
     )
 }
 
+const ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str =
+    "ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES";
+
+/// Cursor `Stop`：在 `REVIEW_GATE` 仍未满足时，**连续多少轮**仍输出完整 `need=`/`hint=` 行到 `followup_message`；超过后降级为短 `followup_message` + `additional_context` 承载完整行，并跳过与 `AUTOPILOT_DRIVE`/`RFV` 的 Stop 合并以免双叠。
+///
+/// - **未设置**（非 test）：默认 **8**。
+/// - `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES=0` / `false` / `off` / `no`：**关闭**降频（每轮 Stop 仍输出完整硬行，严格）。
+/// - 正整数：自定义「完整硬行」次数上限。
+///
+/// **单测**：未设置变量时返回 **`None`（严格、不降级）**，避免并行用例依赖默认 cap。
+pub fn router_rs_cursor_review_gate_stop_max_nudges_cap() -> Option<u32> {
+    #[cfg(test)]
+    {
+        let Ok(raw) = env::var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV) else {
+            return None;
+        };
+        let t = raw.trim().to_ascii_lowercase();
+        if matches!(t.as_str(), "" | "0" | "false" | "off" | "no") {
+            return None;
+        }
+        t.parse::<u32>().ok().filter(|v| *v >= 1)
+    }
+    #[cfg(not(test))]
+    {
+        match env::var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV) {
+            Err(_) => Some(8),
+            Ok(raw) => {
+                let t = raw.trim().to_ascii_lowercase();
+                if matches!(t.as_str(), "" | "0" | "false" | "off" | "no") {
+                    return None;
+                }
+                t.parse::<u32>().ok().filter(|v| *v >= 1).or(Some(8))
+            }
+        }
+    }
+}
+
 fn parse_router_rs_usize_clamped(
     env_key: &'static str,
     default_val: usize,
@@ -222,6 +263,26 @@ mod tests {
         assert!(super::router_rs_depth_score_mode_strict());
         env::set_var(key, "legacy");
         assert!(!super::router_rs_depth_score_mode_strict());
+        match prev {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+
+    #[test]
+    fn review_gate_stop_max_nudges_unset_in_tests_means_strict_none() {
+        let _g = lock_env();
+        let key = ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV;
+        let prev = env::var_os(key);
+        env::remove_var(key);
+        assert!(super::router_rs_cursor_review_gate_stop_max_nudges_cap().is_none());
+        env::set_var(key, "3");
+        assert_eq!(
+            super::router_rs_cursor_review_gate_stop_max_nudges_cap(),
+            Some(3)
+        );
+        env::set_var(key, "0");
+        assert!(super::router_rs_cursor_review_gate_stop_max_nudges_cap().is_none());
         match prev {
             Some(v) => env::set_var(key, v),
             None => env::remove_var(key),

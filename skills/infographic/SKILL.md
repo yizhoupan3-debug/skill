@@ -24,7 +24,7 @@ trigger_hints:
   - data visualization
 metadata:
   version: "1.0.1"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - infographic
     - html

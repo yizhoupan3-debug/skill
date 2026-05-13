@@ -27,7 +27,7 @@ trigger_hints:
   - power analysis
 metadata:
   version: "1.0.2"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - statistics
     - hypothesis-testing

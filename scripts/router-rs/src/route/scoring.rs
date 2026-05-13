@@ -11,181 +11,26 @@ use std::collections::HashSet;
 
 pub(crate) fn score_route_candidate<'a>(
     record: &'a SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    query_tokens: &HashSet<String>,
+    query_text: &'a str,
+    query_token_list: &'a [String],
+    query_tokens: &'a HashSet<String>,
     first_turn: bool,
 ) -> RouteCandidate<'a> {
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
 
-    if record.slug == "systematic-debugging" && is_meta_routing_task(query_text) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "gh-fix-ci" && !should_route_to_gh_fix_ci(query_text, query_token_list) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: gh-fix-ci requires CI/failing-check wording without a non-GitHub CI provider."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "agent-swarm-orchestration"
-        && is_meta_routing_task(query_text)
-        && !has_parallel_execution_context(query_text, query_token_list)
-        && !has_team_orchestration_context(query_text, query_token_list)
-        && !has_bounded_subagent_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: skill-system routing reviews stay on skill-framework-developer unless explicit parallel lanes are requested."
-                    .to_string(),
-            ],
-        };
-    }
-    if matches!(record.slug.as_str(), "visual-review" | "image-generated")
-        && has_scientific_figure_plotting_context(query_text, query_token_list)
-        && !has_rendered_visual_evidence_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: code-generated scientific figure work should route to scientific-figure-plotting before visual or raster-image lanes."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "visual-review"
-        && is_meta_routing_task(query_text)
-        && !has_rendered_visual_evidence_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: framework/runtime routing reviews should not route to visual-review without concrete rendered visual evidence."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.gate_lower == "artifact" && is_meta_routing_task(query_text) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: meta-routing repair request should not be treated as artifact work."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "slides"
-        && (has_beamer_slide_context(query_text, query_token_list)
-            || has_source_slide_format_context(query_text, query_token_list))
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: explicit Beamer/Markdown/Slidev/Marp/HTML slide source wording should route to the narrower slide-source owner."
-                    .to_string(),
-            ],
-        };
+    if let Some(done) = super::nl_route_adjustments::apply_nl_pre_framework_alias_rules(
+        record,
+        query_text,
+        query_token_list,
+        query_tokens,
+        first_turn,
+        &mut score,
+        &mut reasons,
+    ) {
+        return done;
     }
     let _checklist_execution_context = has_checklist_execution_context(query_text);
-    if record.slug == "systematic-debugging"
-        && has_systematic_debug_context(query_text, query_token_list)
-    {
-        score += 60.0;
-        reasons.push(
-            "Systematic-debugging boost applied: explicit bug, root-cause, failure, or regression-test diagnostic wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "scientific-figure-plotting"
-        && has_scientific_figure_plotting_context(query_text, query_token_list)
-    {
-        score += 70.0;
-        reasons.push(
-            "Scientific-figure boost applied: code-generated paper or publication figure wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "skill-creator" && has_skill_creator_context(query_text, query_token_list) {
-        score += 70.0;
-        reasons.push(
-            "Skill-creator boost applied: concrete skill authoring or SKILL.md revision wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "skill-installer" && has_skill_installer_context(query_text, query_token_list)
-    {
-        score += 70.0;
-        reasons.push(
-            "Skill-installer boost applied: skill installation or import wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "skill-framework-developer"
-        && has_skill_framework_maintenance_context(query_text, query_token_list)
-    {
-        score += 70.0;
-        reasons.push(
-            "Skill-framework boost applied: skill-library maintenance or skill-quality repair wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "documentation-engineering"
-        && has_prose_naturalization_context(query_text, query_token_list)
-        && !has_paper_context(query_text, query_token_list)
-    {
-        score += 52.0;
-        reasons.push(
-            "Documentation-engineering polish boost applied: prose naturalization or sentence-level AI-flavor audit detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "copywriting" && has_copywriting_context(query_text, query_token_list) {
-        score += 56.0;
-        reasons.push(
-            "Copywriting boost applied: conversion-oriented UX or marketing copy wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "diagramming" && has_diagramming_context(query_text, query_token_list) {
-        score += 72.0;
-        reasons.push(
-            "Diagramming boost applied: explicit Mermaid/Graphviz or text-diagram wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "ppt-beamer" && has_beamer_slide_context(query_text, query_token_list) {
-        score += 86.0;
-        reasons.push(
-            "Ppt-beamer boost applied: explicit LaTeX Beamer slide-source wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "source-slide-formats"
-        && has_source_slide_format_context(query_text, query_token_list)
-    {
-        score += 86.0;
-        reasons.push(
-            "Source-slide-formats boost applied: explicit Markdown/Slidev/Marp/HTML slide-source wording detected."
-                .to_string(),
-        );
-    }
     let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
     let token_budget_pressure = has_token_budget_pressure(query_text, query_token_list);
     let team_orchestration_context = has_team_orchestration_context(query_text, query_token_list)
@@ -236,247 +81,20 @@ pub(crate) fn score_route_candidate<'a>(
             ],
         };
     }
-    if paper_skill_requires_context(&record.slug)
-        && !has_paper_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: paper skills require explicit paper or manuscript context."
-                    .to_string(),
-            ],
-        };
-    }
-    if matches!(record.slug.as_str(), "gh-address-comments")
-        && has_paper_context(query_text, query_token_list)
-        && !has_github_pr_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: paper review or revision requests without explicit GitHub/PR context should stay on paper lanes."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "sentry"
-        && has_pr_triage_summary_context(query_text, query_token_list)
-        && !has_sentry_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: PR triage summaries should not route to production-error triage."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "design-md"
-        && has_prose_naturalization_context(query_text, query_token_list)
-        && !has_design_contract_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: prose naturalization should not route through the design artifact gate."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "native-app-debugging"
-        && has_copywriting_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: UX marketing or microcopy wording belongs to copywriting, not native-app debugging."
-                    .to_string(),
-            ],
-        };
-    }
-    if should_defer_to_artifact_gate(record, query_text, query_token_list) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: generic artifact intake should hit the artifact gate before a narrower owner."
-                    .to_string(),
-            ],
-        };
-    }
-    if should_suppress_non_target_artifact_gate(record, query_text, query_token_list) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: artifact wording targets a different canonical artifact gate."
-                    .to_string(),
-            ],
-        };
-    }
-    if should_prefer_design_contract_over_artifact(record, query_text, query_token_list) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: reusable design contract must precede slide authoring.".to_string(),
-            ],
-        };
-    }
-    if record.slug == "paper-workbench"
-        && has_paper_ref_first_workflow_context(query_text, query_token_list)
-    {
-        score += 42.0;
-        reasons.push(
-            "Paper-workbench boost applied: target-journal ref-first manuscript workflow detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "gh-address-comments"
-        && has_pr_triage_summary_context(query_text, query_token_list)
-        && !has_ci_failure_context(query_text, query_token_list)
-    {
-        score += 54.0;
-        reasons.push(
-            "GitHub source-gate boost applied: lightweight PR triage or digest wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "gh-fix-ci" && should_route_to_gh_fix_ci(query_text, query_token_list) {
-        score += 48.0;
-        reasons.push(
-            "GitHub CI gate boost applied: CI or failing-check workflow wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "paper-workbench"
-        && has_paper_workbench_frontdoor_context(query_text, query_token_list)
-    {
-        score += 54.0;
-        reasons.push(
-            "Paper-workbench boost applied: manuscript front-door workflow or next-step triage detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "paper-workbench"
-        && has_paper_review_judgment_context(query_text, query_token_list)
-    {
-        score += 36.0;
-        reasons.push(
-            "Paper-workbench boost applied: paper review judgment with optional external calibration detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "paper-reviewer"
-        && has_paper_figure_layout_review_context(query_text, query_token_list)
-    {
-        score += 38.0;
-        reasons.push(
-            "Paper-reviewer boost applied: figure/layout-only paper review slice detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "paper-reviewer"
-        && has_paper_logic_evidence_review_context(query_text, query_token_list)
-    {
-        score += 72.0;
-        reasons.push(
-            "Paper-reviewer boost applied: claim/evidence alignment review requested.".to_string(),
-        );
-    }
-    if record.slug == "paper-reviewer"
-        && has_paper_review_judgment_context(query_text, query_token_list)
-        && query_text.contains("别润色")
-    {
-        score += 74.0;
-        reasons.push(
-            "Paper-reviewer boost applied: claim/evidence review-only paper judgment requested."
-                .to_string(),
-        );
-    }
-    if record.slug == "paper-reviser"
-        && has_paper_direct_revision_context(query_text, query_token_list)
-    {
-        score += 82.0;
-        reasons.push(
-            "Paper-reviser boost applied: direct reviewer-comment manuscript revision requested."
-                .to_string(),
-        );
-    }
-    if record.slug == "paper-reviewer" && has_paper_writing_context(query_text, query_token_list) {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: bounded manuscript prose polish should route to paper-writing, not paper-reviewer."
-                    .to_string(),
-            ],
-        };
-    }
-    if record.slug == "paper-writing" && has_paper_writing_context(query_text, query_token_list) {
-        score += 40.0;
-        reasons.push(
-            "Paper-writing boost applied: bounded manuscript prose polish or storyline wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "skill-framework-developer" && is_meta_routing_task(query_text) {
-        score += 60.0;
-        reasons.push(
-            "Skill-framework boost applied: skill-system routing, behavior protocol, subtraction, or abstraction wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "skill-framework-developer"
-        && has_runtime_lightweighting_context(query_text, query_token_list)
-    {
-        score += 74.0;
-        reasons.push(
-            "Skill-framework boost applied: runtime lightweighting, compatibility-layer, glue-layer, or entrypoint-reduction wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "design-md"
-        && has_design_contract_negation_context(query_text, query_token_list)
-    {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: query explicitly says a design-system contract is not needed."
-                    .to_string(),
-            ],
-        };
+    if let Some(done) = super::nl_route_adjustments::apply_nl_post_framework_alias_rules(
+        record,
+        query_text,
+        query_token_list,
+        query_tokens,
+        first_turn,
+        &mut score,
+        &mut reasons,
+    ) {
+        return done;
     }
     let design_output_audit_context = has_design_output_audit_context(query_text, query_token_list);
     let design_workflow_protocol_context =
         has_design_workflow_protocol_context(query_text, query_token_list);
-    if record.slug == "design-md" && design_output_audit_context {
-        score += 44.0;
-        reasons.push(
-            "Design-md audit boost applied: UI drift, anti-pattern, or acceptance verdict wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "design-md" && design_workflow_protocol_context {
-        score += 44.0;
-        reasons.push(
-            "Design-md workflow boost applied: durable design artifact workflow wording detected."
-                .to_string(),
-        );
-    }
-    if record.slug == "design-md" && has_design_reference_context(query_text, query_token_list) {
-        score += 74.0;
-        reasons.push(
-            "Design-md reference boost applied: named-product reference source grounding requested."
-                .to_string(),
-        );
-    }
     if record.slug == "design-md"
         && has_design_contract_context(query_text, query_token_list)
         && !design_output_audit_context
@@ -757,7 +375,7 @@ pub(crate) fn pick_owner<'a>(
         .filter(|candidate| {
             candidate.record.slug == "agent-swarm-orchestration"
                 && candidate.score >= 60.0
-                && !has_cursor_plan_mode_owner_context(query_text, query_token_list)
+                && !has_plan_mode_owner_context(query_text, query_token_list)
         })
         .cloned()
     {
@@ -831,9 +449,8 @@ pub(crate) fn pick_owner<'a>(
         layer_rank(&left.record.layer)
             .cmp(&layer_rank(&right.record.layer))
             .then_with(|| {
-                right
-                    .score
-                    .partial_cmp(&left.score)
+                finite_route_score(right.score)
+                    .partial_cmp(&finite_route_score(left.score))
                     .unwrap_or(Ordering::Equal)
             })
             .then_with(|| {
@@ -848,14 +465,29 @@ pub(crate) fn route_candidate_cmp(
     left: &RouteCandidate<'_>,
     right: &RouteCandidate<'_>,
 ) -> Ordering {
-    right
-        .score
-        .partial_cmp(&left.score)
+    let left_s = finite_route_score(left.score);
+    let right_s = finite_route_score(right.score);
+    right_s
+        .partial_cmp(&left_s)
         .unwrap_or(Ordering::Equal)
         .then_with(|| {
             priority_rank(&left.record.priority).cmp(&priority_rank(&right.record.priority))
         })
         .then_with(|| left.record.slug.cmp(&right.record.slug))
+}
+
+fn finite_route_score(score: f64) -> f64 {
+    if score.is_nan() {
+        return f64::NEG_INFINITY;
+    }
+    if score.is_infinite() {
+        return if score.is_sign_positive() {
+            f64::MAX
+        } else {
+            f64::NEG_INFINITY
+        };
+    }
+    score
 }
 
 pub(crate) fn pick_overlay(

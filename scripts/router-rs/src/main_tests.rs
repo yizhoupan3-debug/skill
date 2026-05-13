@@ -8,7 +8,7 @@ use crate::cli::runtime_ops::LiveExecuteResult;
 use crate::route::RouteDecision;
 use crate::route::{
     evaluate_routing_cases, load_records_cached_for_stdio_with_default_runtime_path,
-    load_routing_eval_cases, read_json, value_to_string,
+    load_routing_eval_cases, read_json, value_to_string, ROUTE_POLICY_SCHEMA_VERSION,
 };
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -4595,7 +4595,103 @@ fn live_execute_prompt_builder_uses_deep_mode_contract_when_requested() {
     assert!(prompt.contains("Execution mode: deep."));
     assert!(prompt.contains("Use a deep-research structure"));
     assert!(prompt.contains("at least two independent evidence anchors"));
+    assert!(prompt.contains("Auditable multi-round external research belongs in ledger"));
     assert!(!prompt.contains("Keep the default reply short;"));
+}
+
+#[test]
+fn live_execute_infer_deep_from_task_deep_dive_phrase() {
+    let mut payload = sample_execute_request();
+    payload.dry_run = false;
+    payload.prompt_preview = None;
+    payload.task = "please do a deep dive on tokenizer failure modes".to_string();
+    payload.selected_skill = "documentation-engineering".to_string();
+
+    let prompt = build_live_execute_prompt(&payload);
+
+    assert!(prompt.contains("Execution mode: deep."));
+    assert!(prompt.contains("Auditable multi-round external research belongs in ledger"));
+}
+
+#[test]
+fn live_execute_infer_deep_from_reason_literature_review_phrase() {
+    let mut payload = sample_execute_request();
+    payload.dry_run = false;
+    payload.prompt_preview = None;
+    payload.task = "summarize the migration path".to_string();
+    payload.selected_skill = "research-workbench".to_string();
+    payload.reasons = vec!["lane: literature review".to_string()];
+
+    let prompt = build_live_execute_prompt(&payload);
+
+    assert!(prompt.contains("Execution mode: deep."));
+}
+
+#[test]
+fn live_execute_infer_deep_from_reason_depth_research_zh_only() {
+    let mut payload = sample_execute_request();
+    payload.dry_run = false;
+    payload.prompt_preview = None;
+    payload.task = "summarize the migration path".to_string();
+    payload.selected_skill = "research-workbench".to_string();
+    payload.reasons = vec!["用户要求：深度研究".to_string()];
+
+    let prompt = build_live_execute_prompt(&payload);
+
+    assert!(prompt.contains("Execution mode: deep."));
+}
+
+#[test]
+fn live_execute_infer_quick_when_task_is_bare_external_research_api() {
+    let mut payload = sample_execute_request();
+    payload.dry_run = false;
+    payload.prompt_preview = None;
+    payload.task = "Wire up the external research API client.".to_string();
+    payload.selected_skill = "documentation-engineering".to_string();
+
+    let prompt = build_live_execute_prompt(&payload);
+
+    assert!(prompt.contains("Execution mode: quick."));
+    assert!(prompt.contains("Keep the default reply short;"));
+}
+
+#[test]
+fn live_execute_infer_quick_when_external_research_with_stack_trace_only() {
+    let mut payload = sample_execute_request();
+    payload.dry_run = false;
+    payload.prompt_preview = None;
+    payload.task = "Investigate failure: external research module prints stack trace".to_string();
+    payload.selected_skill = "documentation-engineering".to_string();
+
+    let prompt = build_live_execute_prompt(&payload);
+
+    assert!(prompt.contains("Execution mode: quick."));
+}
+
+#[test]
+fn live_execute_infer_quick_when_external_research_with_structured_logging_jargon() {
+    let mut payload = sample_execute_request();
+    payload.dry_run = false;
+    payload.prompt_preview = None;
+    payload.task = "Wire external research client with structured logging for ops.".to_string();
+    payload.selected_skill = "documentation-engineering".to_string();
+
+    let prompt = build_live_execute_prompt(&payload);
+
+    assert!(prompt.contains("Execution mode: quick."));
+}
+
+#[test]
+fn live_execute_infer_deep_when_external_research_plus_literature_cue() {
+    let mut payload = sample_execute_request();
+    payload.dry_run = false;
+    payload.prompt_preview = None;
+    payload.task = "external research literature review for the safety claim".to_string();
+    payload.selected_skill = "documentation-engineering".to_string();
+
+    let prompt = build_live_execute_prompt(&payload);
+
+    assert!(prompt.contains("Execution mode: deep."));
 }
 
 #[test]

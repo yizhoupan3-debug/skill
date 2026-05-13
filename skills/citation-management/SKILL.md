@@ -19,7 +19,7 @@ trigger_hints:
   - GB/T 7714
 metadata:
   version: "2.3.2"
-  platforms: [codex]
+  platforms: [supported]
   tags: [citation, bibliography, bibtex, reference, doi, academic]
 risk: low
 source: local

@@ -31,7 +31,7 @@ runtime_requirements:
     - rsvg-convert
 metadata:
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - beamer
     - latex

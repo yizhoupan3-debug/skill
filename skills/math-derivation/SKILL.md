@@ -10,7 +10,7 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 routing_priority: P2
-session_start: n/a
+session_start: preferred
 user-invocable: false
 disable-model-invocation: true
 short_description: Execute rigorous mathematical derivations and proofs
@@ -27,7 +27,7 @@ trigger_hints:
   - 线性代数证明
 metadata:
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - mathematics
     - proof

@@ -212,6 +212,13 @@ mod tests {
 
         assert!(entries.is_empty());
     }
+
+    #[test]
+    fn truncate_ts_chars_handles_short_and_utf8() {
+        assert_eq!(truncate_ts_chars("abc", 19), "abc");
+        let s = "α".repeat(8);
+        assert_eq!(truncate_ts_chars(&s, 3), "ααα");
+    }
 }
 
 fn entry_is_recent(entry: &JournalEntry, cutoff: DateTime<Utc>) -> bool {
@@ -571,6 +578,10 @@ fn generate_manifest(
     Ok(())
 }
 
+fn truncate_ts_chars(ts: &str, max_chars: usize) -> String {
+    ts.chars().take(max_chars).collect()
+}
+
 fn dump_skill(journal: PathBuf, skill: String) -> anyhow::Result<()> {
     let entries = load_entries_parallel(&journal)?;
     println!("--- Evolution Path for Skill: `{}` ---", skill);
@@ -580,7 +591,7 @@ fn dump_skill(journal: PathBuf, skill: String) -> anyhow::Result<()> {
             count += 1;
             println!(
                 "[{}] R={:5} S={} | Task: {}",
-                &e.ts[..19],
+                truncate_ts_chars(&e.ts, 19),
                 e.reroute,
                 e.struggle,
                 e.task
@@ -678,7 +689,7 @@ fn sync_feedback(journal: PathBuf, feedback: PathBuf, dry_run: bool) -> anyhow::
     for e in entries.iter().filter(|e| e.reroute || e.struggle > 0) {
         let line = format!(
             "| {} | `{}` | `{}` | {} |",
-            &e.ts[..10],
+            truncate_ts_chars(&e.ts, 10),
             e.final_skill,
             e.init,
             e.reason

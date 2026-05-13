@@ -18,7 +18,7 @@ trigger_hints:
   - artifact tool
 metadata:
   version: "2.7.0"
-  platforms: [codex]
+  platforms: [supported]
   tags: [powerpoint, ppt, pptx, slides, presentation, rust-ppt, proxy]
 risk: medium
 source: local

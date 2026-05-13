@@ -11,6 +11,7 @@ pub struct ReviewGateState {
     pub active_subagent_count: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_subagent_last_started_at: Option<String>,
+    /// 仅统计 **`SubagentStart`** 上 qualifying review 入队次数；**`PostToolUse`**  multiset 入队不递增（与 `review_subagent_pending_cycle_keys` 长度不同步属刻意）。
     pub subagent_start_count: u32,
     pub subagent_stop_count: u32,
     pub followup_count: u32,
@@ -38,6 +39,9 @@ pub struct ReviewGateState {
     pub review_subagent_cycle_open: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review_subagent_cycle_key: Option<String>,
+    /// 武装 review gate 后，每次 qualifying subagent **start**（PostToolUse / subagentStart）压入一条 cycle key（multiset）；qualifying **stop** 命中时**移除一条**同 key 记录，**仅当**本队列为空时升相位 3 并记 `subagent_stop_count`。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub review_subagent_pending_cycle_keys: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
 }
@@ -106,6 +110,21 @@ fn is_user_message_role(obj: &serde_json::Map<String, Value>) -> bool {
     matches!(role.as_str(), "user" | "human")
 }
 
+fn is_assistant_message_role(obj: &serde_json::Map<String, Value>) -> bool {
+    let role = obj
+        .get("role")
+        .or_else(|| obj.get("type"))
+        .or_else(|| obj.get("kind"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    matches!(
+        role.as_str(),
+        "assistant" | "ai" | "model" | "bot" | "agent"
+    )
+}
+
 fn message_body_text(obj: &serde_json::Map<String, Value>) -> Option<String> {
     for key in ["content", "text", "body", "value"] {
         match obj.get(key)? {
@@ -171,6 +190,43 @@ fn prompt_from_nested_messages(event: &Value) -> String {
     String::new()
 }
 
+/// `Stop` / 部分宿主事件不把助手正文放在顶层 `response` / `content`；与 `prompt_from_nested_messages`
+/// 对称，从 `messages`（及嵌套 payload）**逆序**取最后一条助手消息，避免 `signal_text` 缺助手段导致
+/// `has_structured_goal_contract` 永远失败、反复注入 `AG_FOLLOWUP missing_parts=goal_contract`。
+fn agent_response_from_nested_messages(event: &Value) -> String {
+    if let Some(obj) = event.as_object() {
+        for key in [
+            "messages",
+            "conversationMessages",
+            "chatMessages",
+            "history",
+        ] {
+            if let Some(Value::Array(arr)) = obj.get(key) {
+                for item in arr.iter().rev() {
+                    let Some(msg) = item.as_object() else {
+                        continue;
+                    };
+                    if !is_assistant_message_role(msg) {
+                        continue;
+                    }
+                    if let Some(t) = message_body_text(msg) {
+                        return t;
+                    }
+                }
+            }
+        }
+        for nest in HOOK_EVENT_NESTED {
+            if let Some(nested) = obj.get(*nest) {
+                let s = agent_response_from_nested_messages(nested);
+                if !s.trim().is_empty() {
+                    return s;
+                }
+            }
+        }
+    }
+    String::new()
+}
+
 fn agent_response_text(event: &Value) -> String {
     const KEYS: &[&str] = &[
         "response",
@@ -181,7 +237,11 @@ fn agent_response_text(event: &Value) -> String {
         "message",
         "output",
     ];
-    first_nonempty_event_str(event, KEYS)
+    let direct = first_nonempty_event_str(event, KEYS);
+    if !direct.trim().is_empty() {
+        return direct;
+    }
+    agent_response_from_nested_messages(event)
 }
 
 /// 从整棵 hook JSON 抓取字符串（深度与总字节上限），仅用于显式兼容 fallback。

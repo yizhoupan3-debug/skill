@@ -22,7 +22,7 @@ risk: medium
 source: project
 metadata:
   version: "1.2.0"
-  platforms: [codex, cursor]
+  platforms: [supported]
   tags:
     - autopilot
     - alias
@@ -52,6 +52,7 @@ router-rs framework alias autopilot
 - **本地链自检（verify-local-chain）**：
   - `.cursor/hooks.json` 存在且指向可用的 **`router-rs`**（通常为 release 构建产物）。
   - `artifacts/current/` 对本会话可写（continuity / goal 写入所需）。
+- **与深度 review / Plan 串联**：默认 **review-only**（[`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)）与 **写入 / `/autopilot`** 分两阶段；不要在同一条用户消息里把「深度审稿」与 **`/autopilot` 入口**绑在一起——Cursor `beforeSubmit` 会因 `review_arms_for_gate` 排除 autopilot 入口而**不**在本回合新武装 `REVIEW_GATE`。操作者速查见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)（「混用时的实际武装顺序」）。
 
 ## 2. 「一口气」= 连续推进，不是单轮魔法
 

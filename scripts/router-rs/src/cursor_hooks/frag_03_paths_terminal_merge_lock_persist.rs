@@ -362,8 +362,27 @@ fn empty_state() -> ReviewGateState {
         lane_intent_matches: None,
         review_subagent_cycle_open: false,
         review_subagent_cycle_key: None,
+        review_subagent_pending_cycle_keys: Vec::new(),
         updated_at: None,
     }
+}
+
+fn sync_review_cycle_legacy_fields(state: &mut ReviewGateState) {
+    state.review_subagent_cycle_open = !state.review_subagent_pending_cycle_keys.is_empty();
+    state.review_subagent_cycle_key = state.review_subagent_pending_cycle_keys.last().cloned();
+}
+
+fn hydrate_legacy_review_cycles_into_pending(state: &mut ReviewGateState) {
+    if !state.review_subagent_pending_cycle_keys.is_empty() {
+        sync_review_cycle_legacy_fields(state);
+        return;
+    }
+    if state.review_subagent_cycle_open {
+        if let Some(k) = state.review_subagent_cycle_key.clone() {
+            state.review_subagent_pending_cycle_keys.push(k);
+        }
+    }
+    sync_review_cycle_legacy_fields(state);
 }
 
 fn migrate_v1(raw: &Value) -> ReviewGateState {
@@ -479,7 +498,30 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
         {
             base.pre_goal_review_satisfied = v;
         }
+        if let Some(arr) = obj
+            .get("review_subagent_pending_cycle_keys")
+            .and_then(Value::as_array)
+        {
+            base.review_subagent_pending_cycle_keys = arr
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|s| s.to_string())
+                .collect();
+        }
+        if let Some(v) = obj
+            .get("review_subagent_cycle_open")
+            .and_then(Value::as_bool)
+        {
+            base.review_subagent_cycle_open = v;
+        }
+        if let Some(Value::String(v)) = obj.get("review_subagent_cycle_key") {
+            let t = v.trim();
+            if !t.is_empty() {
+                base.review_subagent_cycle_key = Some(t.to_string());
+            }
+        }
     }
+    hydrate_legacy_review_cycles_into_pending(&mut base);
     base.version = STATE_VERSION;
     Ok(Some(base))
 }

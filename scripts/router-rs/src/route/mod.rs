@@ -8,6 +8,7 @@ mod eval;
 mod gate_hints;
 #[cfg(test)]
 mod metadata_tests;
+mod nl_route_adjustments;
 mod policy;
 mod records;
 mod routing;
@@ -22,6 +23,7 @@ pub(crate) use constants::{
     ROUTE_POLICY_SCHEMA_VERSION, ROUTE_REPORT_SCHEMA_VERSION, ROUTE_RESOLUTION_SCHEMA_VERSION,
     ROUTE_SNAPSHOT_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
+pub(crate) use nl_route_adjustments::nl_route_signal_registry_names_json;
 pub(crate) use policy::{build_route_diff_report, build_route_policy, build_route_resolution};
 #[cfg(test)]
 pub(crate) use records::load_records_cached_for_stdio_with_default_runtime_path;

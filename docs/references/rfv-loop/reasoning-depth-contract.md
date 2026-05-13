@@ -104,5 +104,7 @@
 
 - **契约长文**：[math-reasoning-harness.md](math-reasoning-harness.md)（中间对象、CAS/SMT、依赖图、反事实探针）。
 - **Lane 模板**：[lane-templates.md](lane-templates.md) 中「数理 / STEM 专项」各 lane。
-- **宿主续跑短句**：RFV / AUTOPILOT 默认只输出紧凑状态、证据锚点与必要 schema 路径；RFV 会在外研开启时追加 **`retrieval_trace_harness_line`**，在数学 / checker 语境命中时追加 **`math_reasoning_harness_line`**。文案真源为 `configs/framework/HARNESS_OPERATOR_NUDGES.json`。
+- **宿主续跑短句**：RFV / AUTOPILOT 默认只输出紧凑状态、证据锚点与必要 schema 路径。以下行来自 `configs/framework/HARNESS_OPERATOR_NUDGES.json`，且受 `ROUTER_RS_OPERATOR_INJECT` 与 `ROUTER_RS_HARNESS_OPERATOR_NUDGES`（及 RFV 外研 struct 子闸 `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`）约束；对应字段为空则不追加该行。
+  - **`math_reasoning_harness_line`**：当 `router-rs` 的 `harness_context_signals` 判定 RFV 的 `goal` / `verify_commands` 或 Autopilot 的 `goal` / **`validation_commands`** 命中「数理 / 形式化 checker」启发式，且配置行非空时，在 **`RFV_LOOP_CONTINUE`** / **`AUTOPILOT_DRIVE`** 续跑文案中追加。
+  - **`rfv_loop_external_struct_hint_line`** 与 **`retrieval_trace_harness_line`**：当 RFV 账本满足 `allow_external_research` + `prefer_structured_external_research`、且上一轮 `append_round` 仍缺结构化 `external_research` 对象、`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT` 未关时：先追加 struct 提示行（配置为空则回退英文 schema 一行），再在非空时追加 `retrieval_trace_harness_line`。
 - **结构化落盘与外研单行提示**：参见 [external-research-harness.md](external-research-harness.md)。

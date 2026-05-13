@@ -7,7 +7,7 @@
 - [ ] **每条** `todos[].content` 在同一条字符串内包含四元组（动作、范围、Done when、Verify），禁止仅阶段名。
 - [ ] **`plan_profile`**（与 `name` / `overview` / `todos` 同级）：**缺省或 `execution`** → 标准实现计划；**`research`** → 仅只读调研 todo，见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **Plan profile**。
 - [ ] **`overview` profile 声明**（与 SKILL **CreatePlan 输出契约 §0** 对齐）：
-  - **`research`**：`overview` 含调研期 **Non-goals** 硬声明——**不修改** tracked 源码 / 配置 / 测试 / CI 工作流 / 依赖锁文件，实现另开 `plan_profile: execution` 计划；如使用「仅回写本 `.plan.md`」窄例外，须在同一 `overview` 单句声明。
+  - **`research`**：`overview` 含调研期 **Non-goals** 硬声明——**不修改** tracked 源码 / 配置 / 测试 / CI 工作流 / 依赖锁文件，实现另开 `plan_profile: execution` 计划；如使用窄例外（执行期**仅**回写结论文档 / plan 以记录结论），须在 `overview` **同一单句**列出允许路径集合（`.cursor/plans/<本文件>.plan.md` 仅为常见示例）；末条 `Verify` 仍须约束 `git status --porcelain` 与之一致。
   - **`execution`（缺省）**：`overview` 有一句标明**本计划允许**按 todos 修改代码 / 配置 / 测试等实现面资产，并由末条完成计划 vs 实际 + Git 状态证据收口；宿主支持时可使用 **`/gitx plan`**。
 - [ ] **`overview` 调研范围句**（见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **调研范围（Research scope）与能力联动**）：**默认**须标明仅仓库内只读（不默认对外网络检索）；若用户要求「外部 / 网络 / 官方 cross-check」，须标明 **仓库内 + 外部只读并行**，且至少一条 todo 的 `Verify` 能核对外部来源（URL + 日期/版本）；**不得**用外部摘要替代仓库内检索 todo。
 - [ ] **最后一条** todo（依 profile）：
@@ -17,8 +17,8 @@
 
 ## `execution`：继承调研（有前置 research 或结论文档时）
 
-- [ ] 正文在 todos 前有 **`## 执行计划继承面`** 标题，字段见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **执行计划继承面（research→execution）**（继承指针、Goal/Non-goals 各一行、不变量、已否决、矩阵映射、**外部准入表或显式「无」**）。
-- [ ] **继承指针** 链到真实 `docs/plans/*.md` 或 `.cursor/plans/*.plan.md`（勿写虚构路径）；无前置调研时可省略本节，或首行写 **`继承指针：无（无前置调研）`**。
+- [ ] 在第二个 `---`（YAML frontmatter **闭合行**，非正文 Markdown 横线 `---`）**之后**的正文内须有 **`## 执行计划继承面`**，且须位于**任意**正文 Markdown checkbox / 其它分节任务叙述**之前**；字段见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **执行计划继承面（research→execution）**（继承指针、Goal/Non-goals 各一行、不变量、已否决、矩阵映射、**外部准入表或显式「无」**）。与 Cursor alwaysApply 硬自检一致见 [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) 第 **5** 条。
+- [ ] **继承指针** 链到真实 `docs/plans/*.md` 或 `.cursor/plans/*.plan.md`（勿写虚构路径）；无前置调研时可省略本节，或在 **`## 执行计划继承面`** 小节内写一行 **`继承指针：无（无前置调研）`**。
 - [ ] **`overview` 与继承面分工**：背景与结论**链**调研文档，**禁止**把 research 或外部长文整段贴进 `overview`（减法：overview 以 profile 声明 + 短链为主）。
 
 ## 起草每条 todo 时

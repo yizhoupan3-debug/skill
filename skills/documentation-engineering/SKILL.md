@@ -32,7 +32,7 @@ approval_required_tools:
   - git push
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - documentation
     - readme

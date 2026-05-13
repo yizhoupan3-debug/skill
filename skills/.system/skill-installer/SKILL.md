@@ -14,6 +14,7 @@ trigger_hints:
   - github skill
 metadata:
   short-description: Install curated skills from openai/skills or other repos
+  platforms: [codex]
 ---
 
 # Skill Installer

@@ -8,7 +8,7 @@ description: |
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
-session_start: n/a
+session_start: preferred
 user-invocable: false
 disable-model-invocation: true
 trigger_hints:
@@ -29,7 +29,7 @@ runtime_requirements:
     - scienceplots
 metadata:
   version: "1.2.0"
-  platforms: [codex]
+  platforms: [supported]
   tags: [scientific-figures, plotting, matplotlib, seaborn, publication, charts]
 risk: medium
 source: local

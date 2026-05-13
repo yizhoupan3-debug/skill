@@ -33,7 +33,7 @@ trigger_hints:
   - .latexmkrc
 metadata:
   version: "2.1.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - latex
     - compile

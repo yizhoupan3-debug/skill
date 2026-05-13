@@ -5,15 +5,16 @@ alwaysApply: true
 
 # CreatePlan 产出规范（Cursor）
 
-调用 **CreatePlan** 生成或更新 **`.plan.md`** 时，产出物必须满足 [`skills/plan-mode/SKILL.md`](skills/plan-mode/SKILL.md) 中的 **CreatePlan 输出契约** 与 **Todo 可执行性**（四元组、YAML/正文对齐、分支与 `Blocked by`）。
+调用 **CreatePlan** 生成或更新 **`.plan.md`** 时，产出物必须满足 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) 中的 **CreatePlan 输出契约** 与 **Todo 可执行性**（四元组、YAML/正文对齐、分支与 `Blocked by`）。
 
 **调用后自检（硬）**
 
 1. 每条 frontmatter `todos[].content` 在同一条字符串内可见：**动作**、**范围（1–3 路径）**、**Done when**、**Verify**。
-2. **`overview` 与 `todos` 最后一条**（依 **`plan_profile`**，缺省等同 **`execution`**，见 [`skills/plan-mode/SKILL.md`](skills/plan-mode/SKILL.md)）：
-   - **`execution`（缺省）**：`overview` 须有一句标明**本计划允许**按 todos 修改代码 / 配置 / 测试等实现面资产，并由末条完成计划 vs 实际 + Git 状态证据收口；末条 `Verify` 硬要求 Git 状态证据（如 `git status --short --branch`、`git diff --stat`）；宿主支持时可包含 **`/gitx plan`**（与 **`/gitx`** 同契约，见 `skills/gitx/SKILL.md`）；`Done when` 可客观判定（逐项对照、未做项有原因）。
-   - **`research`**（调研专用，frontmatter 须 `plan_profile: research`）：`overview` 须含**调研期零实现面改动**硬声明（**不修改** tracked 源码 / 配置 / 测试 / CI 工作流 / 依赖锁文件；实现另开 `plan_profile: execution` 计划），如使用「仅回写本 `.plan.md`」窄例外须在同一 `overview` 单句显式声明；末条 `Verify` **不得**将 **`/gitx plan`** 作为必需项，须含 **`git status --porcelain`** 约束（为空或仅含本 `.plan.md`）与「对照正文约定节 + YAML `todos`」的可客观判定表述；`Done when` 覆盖问题矩阵结论文或 **open gap**。
+2. **`overview` 与 `todos` 最后一条**（依 **`plan_profile`**，缺省等同 **`execution`**，见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md)）：
+   - **`execution`（缺省）**：`overview` 须有一句标明**本计划允许**按 todos 修改代码 / 配置 / 测试等实现面资产，并由末条完成计划 vs 实际 + Git 状态证据收口；末条 `Verify` 硬要求 Git 状态证据（如 `git status --short --branch`、`git diff --stat`）；宿主支持时可包含 **`/gitx plan`**（与 **`/gitx`** 同契约，见 [`skills/gitx/SKILL.md`](../../skills/gitx/SKILL.md)）；`Done when` 可客观判定（逐项对照、未做项有原因）。
+   - **`research`**（调研专用，frontmatter 须 `plan_profile: research`）：`overview` 须含**调研期零实现面改动**硬声明（**不修改** tracked 源码 / 配置 / 测试 / CI 工作流 / 依赖锁文件；实现另开 `plan_profile: execution` 计划），如使用「仅回写指定结论文档 / plan 路径」窄例外须在同一 `overview` **单句**显式声明允许路径集合；末条 `Verify` **不得**将 **`/gitx plan`** 作为必需项，须含 **`git status --porcelain`** 约束（为空或输出**仅**含 `overview` 已声明允许的上述路径）与「对照正文约定节 + YAML `todos`」的可客观判定表述；`Done when` 覆盖问题矩阵结论文或 **open gap**。
 3. 正文若有 checkbox：与 YAML `todos` 的 **id / 顺序 / 验收**一致。
 4. **不要**假定 skill 路由或 hook 会改写 plan 文件；不合规则**直接编辑**该 `.plan.md` 补齐后再交付用户。
+5. **`execution`（缺省）且存在前置 `plan_profile: research` 文档、等价调研结论文档或外部合成材料时**：在第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**的正文区域内须有固定标题 **`## 执行计划继承面`**，且须出现在**任意正文 Markdown checkbox 清单或其它分节任务叙述之前**（可与正文首个 `#` 标题相邻）；**不得**把该节写入 YAML frontmatter。字段与行数上限以仓库根 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) **执行计划继承面（research→execution）** 为真源，本规则不展开全文。无此前置材料时可省略该节，或在 **`## 执行计划继承面`** 小节内写一行等价于「无前置调研 / 无继承指针」的声明。
 
 主路径**不**用 hook 生成或修补 plan 正文；与 CreatePlan 真源冲突时以磁盘 plan + 本规则为准。

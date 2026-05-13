@@ -1,4 +1,7 @@
-use crate::runtime_storage::{acquire_runtime_path_lock, runtime_backend_capabilities};
+use crate::runtime_storage::{
+    acquire_runtime_path_lock, runtime_backend_capabilities, DEFAULT_STATE_SERVICE_AUTHORITY,
+    DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE, SQLITE_TABLE_NAME,
+};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -15,9 +18,6 @@ const BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION: &str =
     "runtime-background-state-control-plane-v1";
 const BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION: &str =
     "runtime-background-session-takeover-arbitration-v1";
-const DEFAULT_STATE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
-const DEFAULT_STATE_SERVICE_ROLE: &str = "durable-background-state";
-const DEFAULT_STATE_SERVICE_PROJECTION: &str = "rust-native-projection";
 const DEFAULT_BACKGROUND_JOB_MULTITASK_STRATEGY: &str = "reject";
 const DEFAULT_BACKGROUND_JOB_ATTEMPT: i64 = 1;
 const DEFAULT_BACKGROUND_JOB_RETRY_COUNT: i64 = 0;
@@ -26,7 +26,6 @@ const DEFAULT_BACKGROUND_JOB_BACKOFF_BASE_SECONDS: f64 = 0.0;
 const DEFAULT_BACKGROUND_JOB_BACKOFF_MULTIPLIER: f64 = 2.0;
 const DEFAULT_MAX_BACKGROUND_JOBS: usize = 16;
 const MAX_BACKGROUND_JOBS_LIMIT: usize = 64;
-const SQLITE_TABLE_NAME: &str = "runtime_storage_payloads";
 
 /// Reap window for jobs whose status is still active (queued/running/...) but
 /// whose `updated_at` heartbeat has gone silent. Such jobs are typically

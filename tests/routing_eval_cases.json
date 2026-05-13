@@ -566,6 +566,39 @@
       "expected_owner": "experiment-reproducibility",
       "expected_overlay": null,
       "notes": "预注册边界与偏离记录优先路由 experiment-reproducibility"
+    },
+    {
+      "id": "route-013-math-derivation-proof",
+      "category": "should-trigger",
+      "task": "请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。",
+      "focus_skill": "math-derivation",
+      "expected_owner": "math-derivation",
+      "expected_overlay": null,
+      "expected_layer": "L4",
+      "first_turn": true,
+      "notes": "纯定理证明/数学推导优先 math-derivation，不与 research-workbench 抢路由"
+    },
+    {
+      "id": "route-014-scientific-figure-plotting",
+      "category": "should-trigger",
+      "task": "用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。",
+      "focus_skill": "scientific-figure-plotting",
+      "expected_owner": "scientific-figure-plotting",
+      "expected_overlay": null,
+      "expected_layer": "L4",
+      "first_turn": true,
+      "notes": "代码生成论文级科研图走 scientific-figure-plotting"
+    },
+    {
+      "id": "route-015-research-workbench-ablation",
+      "category": "should-trigger",
+      "task": "帮我设计实验：两组 ablation 怎么做，baseline 和控制变量怎么定。",
+      "focus_skill": "research-workbench",
+      "expected_owner": "research-workbench",
+      "expected_overlay": null,
+      "expected_layer": "L2",
+      "first_turn": true,
+      "notes": "实验/ablation 编排仍走 research-workbench；与纯数学 do_not_use 不冲突"
     }
   ]
 }

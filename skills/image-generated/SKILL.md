@@ -21,7 +21,7 @@ trigger_hints:
 source: local
 metadata:
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - image-generated
     - openai

@@ -1,10 +1,13 @@
-fn handle_after_file_edit(_repo_root: &Path, event: &Value) -> Value {
+fn handle_after_file_edit(repo_root: &Path, event: &Value) -> Value {
     let path = event.get("file_path").and_then(Value::as_str).unwrap_or("");
     let p = PathBuf::from(path);
     if p.extension().and_then(|e| e.to_str()) != Some("rs") {
         return json!({});
     }
     if !p.is_file() {
+        return json!({});
+    }
+    if !crate::path_guard::path_is_within_repo_root(repo_root, &p) {
         return json!({});
     }
     if which::which("rustfmt").is_err() {

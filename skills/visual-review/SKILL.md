@@ -20,7 +20,7 @@ trigger_hints:
   - 图表导出
 metadata:
   version: "2.2.1"
-  platforms: [codex]
+  platforms: [supported]
   tags: [visual, review, screenshot, screenshot-ui, chart, accessibility, evidence]
 framework_roles:
   - gate

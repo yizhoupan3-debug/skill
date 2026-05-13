@@ -29,8 +29,8 @@ allowed_tools:
 approval_required_tools:
   - git push
 metadata:
-  version: "1.0.0"
-  platforms: [codex]
+  version: "1.0.3"
+  platforms: [supported]
   tags:
     - git
     - git-closeout
@@ -98,6 +98,10 @@ bridge_behavior: mobile_complete_once
 3. **风险收口**：策略/契约、hook、路由、skill 等跨界改动，核对是否与 `AGENTS.md` / runtime 真源冲突；有怀疑处先 **fix** 再提交，不把「待定风险」带进 push。
 4. **验证记录**：收口说明里要带 **通过的命令摘要**（或明确 blocker）；避免「未跑测试却声称完成」。
 5. **并行审阅**：在 Cursor 上若拆 reviewer lane，约定输出为 **可操作性发现项**（问题位置 + 建议修复方向），由收口执行面合并决策与落地修改（见上文 **并行 reviewer lane**）。
+
+### 对用户可见的深度审结论（对齐 code-review-deep compact）
+
+收口线程里若以自然语言汇报 **diff/代码深度审** 结果：**默认 findings 全局按 P0→P1→P2→caveat 排序**，每条紧贴路径/锚点、影响与最小验证或修复方向；**单行 verdict、`test/repro gap` 仅可选**，且置于 findings **之后**（勿双套叙事）。与 `skills/code-review-deep/SKILL.md` **Compact envelope** 一致：**禁止**在首条 **`[P0]`–`[P2]`** 或 **`Caveat:`** 之前使用 Markdown **表格**或「小结 / 分类」类标题。不要默认铺开 Scope/Lenses/Omitted 长块；叙事体、按 lens 分段或 PR 述职仅在用户明确要求时启用，并按 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) **full report profile**。纯对抗式审稿仍以该 skill 为真源。
 
 ## Execution tiers
 

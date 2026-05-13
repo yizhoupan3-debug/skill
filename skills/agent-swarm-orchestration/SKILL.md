@@ -24,8 +24,8 @@ trigger_hints:
   - multi-agent workflow
   - 多 agent 执行
 metadata:
-  version: "1.1.1"
-  platforms: [codex]
+  version: "1.1.2"
+  platforms: [supported]
   tags:
     - agent
     - swarm
@@ -99,6 +99,7 @@ This gate is about **admitting delegation when bounded parallelism beats local e
 3. allow write delegation only for disjoint, lane-local scopes
 4. for broad reviews, split independent reviewer lanes when the lane boundaries are clear
 5. fall back to local-supervisor queue when spawning is blocked or not worth it
+6. **code / diff 「深度审稿」宿主可见收口**：并入主线程时**默认用 findings 优先级呈现**（与 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) compact 一致）：全局 severity 排序、少叠床架屋；按需再引用各 sidecar 的 lane 标签，不要为了「看起来专业」复述多段 Lens 前言。
 
 ## Spawn Admission
 

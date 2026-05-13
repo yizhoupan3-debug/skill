@@ -1,0 +1,78 @@
+{
+  "schema_version": "router-rs-hook-observation-rules-v1",
+  "router_rs_tokens": {
+    "REVIEW_GATE": "review_gate",
+    "CODEX_REVIEW_GATE": "codex_review_gate",
+    "CLAUDE_REVIEW_GATE": "claude_review_gate",
+    "QODER_REVIEW_GATE": "qoder_review_gate",
+    "AG_FOLLOWUP": "ag_followup"
+  },
+  "unknown_router_rs_token_code": "unknown_router_rs",
+  "followup_first_line_rules": [
+    {
+      "starts_with": "CLOSEOUT_FOLLOWUP",
+      "code": "closeout_followup",
+      "human_prefix": { "kind": "trimmed_line", "max_chars": 120 }
+    },
+    {
+      "starts_with": "router-rs ",
+      "code_from_router_rs_leader": true,
+      "human_prefix": { "kind": "router_rs_leader" }
+    },
+    {
+      "starts_with_any": ["router-rs：", "router-rs:"],
+      "code": "hook_state_degraded",
+      "human_prefix": { "kind": "trimmed_line", "max_chars": 120 }
+    }
+  ],
+  "additional_context_line_rules": [
+    {
+      "priority": 0,
+      "starts_with": "CLOSEOUT_FOLLOWUP",
+      "code": "closeout_followup",
+      "human_prefix": { "kind": "trimmed_line", "max_chars": 120 },
+      "stop_scan_after_match": true
+    },
+    {
+      "priority": 1,
+      "starts_with": "router-rs ",
+      "code_from_router_rs_leader": true,
+      "human_prefix": { "kind": "router_rs_leader" },
+      "stop_scan_after_match": false
+    },
+    {
+      "priority": 1,
+      "starts_with_any": ["router-rs：", "router-rs:"],
+      "code": "hook_state_degraded",
+      "human_prefix": { "kind": "trimmed_line", "max_chars": 120 },
+      "stop_scan_after_match": false
+    },
+    {
+      "priority": 2,
+      "or": [
+        { "starts_with": "AUTOPILOT_DRIVE" },
+        { "contains": "AUTOPILOT_DRIVE:" }
+      ],
+      "code": "autopilot_drive",
+      "human_prefix": { "kind": "literal", "text": "AUTOPILOT_DRIVE" },
+      "stop_scan_after_match": false
+    },
+    {
+      "priority": 3,
+      "contains": "RFV_LOOP_CONTINUE",
+      "code": "rfv_loop_continue",
+      "human_prefix": { "kind": "literal", "text": "RFV_LOOP_CONTINUE" },
+      "stop_scan_after_match": false
+    },
+    {
+      "priority": 5,
+      "or": [
+        { "starts_with": "SESSION_CLOSE_STYLE" },
+        { "contains": "SESSION_CLOSE_STYLE:" }
+      ],
+      "code": "session_close_style",
+      "human_prefix": { "kind": "literal", "text": "SESSION_CLOSE_STYLE" },
+      "stop_scan_after_match": false
+    }
+  ]
+}

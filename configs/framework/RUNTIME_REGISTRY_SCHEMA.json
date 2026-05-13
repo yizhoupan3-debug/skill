@@ -5,7 +5,8 @@
     "codex-cli",
     "codex-app",
     "cursor",
-    "claude-code"
+    "claude-code",
+    "qoder"
   ],
   "projection_status_values": [
     "implemented",
@@ -22,10 +23,25 @@
   "install_tools": [
     "codex",
     "cursor",
-    "claude"
+    "claude",
+    "qoder"
   ],
   "framework_command_required_fields": [
     "canonical_owner",
     "skill_path"
-  ]
+  ],
+  "harness_capability_policy": {
+    "core_always": [
+      "hot_runtime_routing",
+      "l2_continuity_contract"
+    ],
+    "cli_agent_hook_baseline": [
+      "closeout_evidence_hooks",
+      "review_gate_router_observation"
+    ]
+  },
+  "harness_capability_exception_status_values": [
+    "unsupported"
+  ],
+  "registry_review_gate_notes": "RUNTIME_REGISTRY.json must include review_gate.deep_gate_lanes (non-empty string array). Consumed by router-rs for Cursor/Codex REVIEW_GATE countable lanes."
 }

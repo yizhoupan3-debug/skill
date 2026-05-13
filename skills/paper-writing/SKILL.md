@@ -47,7 +47,7 @@ trigger_hints:
   - "edit_scope: refactor"
 metadata:
   version: "2.14.0"
-  platforms: [codex]
+  platforms: [supported]
   tags: [paper, writing, rewrite, abstract, introduction, caption, rebuttal]
 framework_roles:
   - executor

@@ -13,7 +13,8 @@
       "codex-cli",
       "codex-app",
       "cursor",
-      "claude-code"
+      "claude-code",
+      "qoder"
     ],
     "shared_system_source": "skills",
     "metadata": {
@@ -48,6 +49,16 @@
           ".claude/rules/framework.md",
           ".claude/settings.json"
         ]
+      },
+      "qoder": {
+        "install_tool": "qoder",
+        "projection_status": "implemented",
+        "installable": true,
+        "host_entrypoints": [
+          "AGENTS.md",
+          ".qoder/rules/framework.md",
+          ".qoder/settings.json"
+        ]
       }
     }
   },
@@ -58,6 +69,14 @@
       "user_dir": "${CODEX_HOME}/skills",
       "source_dir": "skills"
     }
+  },
+  "review_gate": {
+    "deep_gate_lanes": [
+      "general-purpose",
+      "generalpurpose",
+      "best-of-n-runner",
+      "bestofnrunner"
+    ]
   },
   "framework_commands": {
     "autopilot": {
@@ -210,18 +229,21 @@
       "host_entrypoints": {
         "codex-cli": "/autopilot",
         "cursor": "/autopilot",
-        "claude-code": "/autopilot"
+        "claude-code": "/autopilot",
+        "qoder": "/autopilot"
       },
       "entrypoint_modes": {
         "quick": {
           "codex-cli": "/autopilot-quick",
           "cursor": "/autopilot-quick",
-          "claude-code": "/autopilot-quick"
+          "claude-code": "/autopilot-quick",
+          "qoder": "/autopilot-quick"
         },
         "deep": {
           "codex-cli": "/autopilot-deep",
           "cursor": "/autopilot-deep",
-          "claude-code": "/autopilot-deep"
+          "claude-code": "/autopilot-deep",
+          "qoder": "/autopilot-deep"
         }
       },
       "interaction_invariants": {
@@ -249,7 +271,8 @@
           "requires_uncertainty_register": true,
           "requires_counter_evidence": true,
           "auto_continue_on_length_finish": true
-        }
+        },
+        "runtime_note": "router-rs Execute live prompt does not load this object; keep narrative aligned with scripts/router-rs/src/cli/runtime_ops.inc and tests/policy_contracts.rs (research_contract vs execute prompt drift guard)."
       },
       "lineage": {
         "source": "repo-native",
@@ -262,7 +285,8 @@
       "host_entrypoints": {
         "codex-cli": "/team",
         "cursor": "/team",
-        "claude-code": "/team"
+        "claude-code": "/team",
+        "qoder": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -309,7 +333,8 @@
       "host_entrypoints": {
         "codex-cli": "/deepinterview",
         "cursor": "/deepinterview",
-        "claude-code": "/deepinterview"
+        "claude-code": "/deepinterview",
+        "qoder": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -329,7 +354,8 @@
       "host_entrypoints": {
         "codex-cli": "/gitx",
         "cursor": "/gitx",
-        "claude-code": "/gitx"
+        "claude-code": "/gitx",
+        "qoder": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -350,7 +376,8 @@
       "host_entrypoints": {
         "codex-cli": "/update",
         "cursor": "/update",
-        "claude-code": "/update"
+        "claude-code": "/update",
+        "qoder": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -405,6 +432,12 @@
         "codex resume --last",
         "codex resume <session_id>"
       ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
+      ],
       "capabilities": [
         "artifact_contract",
         "mcp_servers",
@@ -424,6 +457,18 @@
       "profile_id": "codex_app_profile",
       "host_id": "codex-app",
       "transport": "codex-desktop-app",
+      "harness_capability_exceptions": [
+        {
+          "cap": "closeout_evidence_hooks",
+          "status": "unsupported",
+          "rationale": "Codex desktop app thread host does not install the same file-projected hook bundle as codex-cli; closeout/evidence hooks are not materialized on this transport."
+        },
+        {
+          "cap": "review_gate_router_observation",
+          "status": "unsupported",
+          "rationale": "Review gate router observation is not projected for codex-app; use codex-cli for hook-level REVIEW_GATE-style semantics."
+        }
+      ],
       "context_files": [
         "AGENTS.md"
       ],
@@ -435,6 +480,10 @@
       },
       "resume_command_examples": [
         "Continue in the same Codex app thread"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract"
       ],
       "capabilities": [
         "artifact_contract",
@@ -477,6 +526,12 @@
         "在 Cursor 中继续当前会话",
         "在同一工作区重新打开 Agent 对话"
       ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
+      ],
       "capabilities": [
         "artifact_contract",
         "mcp_servers",
@@ -502,6 +557,44 @@
       "session_supervisor_driver": "unsupported",
       "resume_command_examples": [
         "Continue in Claude Code in this workspace"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
+        "framework_alias_entrypoints",
+        "hard_gate_hooks"
+      ]
+    },
+    "qoder": {
+      "profile_id": "qoder_profile",
+      "host_id": "qoder",
+      "transport": "qoder-ide",
+      "context_files": [
+        "AGENTS.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "project",
+          "relative": ".qoder/settings.json"
+        }
+      ],
+      "session_supervisor_driver": "unsupported",
+      "resume_command_examples": [
+        "在 Qoder 插件中继续当前会话",
+        "在同一工作区重新打开 Agent 对话"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
       ],
       "capabilities": [
         "artifact_contract",

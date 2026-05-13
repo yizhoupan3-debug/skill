@@ -4,12 +4,14 @@ use common::{
     assert_success, cargo_manifest_command, json_from_output, project_root, read_json, read_text,
     router_rs_json, run, seed_framework_markers,
 };
+use regex::Regex;
 use serde_json::{Map, Value};
 use skill_compiler::host_platforms;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 use tempfile::tempdir;
 
 const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
@@ -311,7 +313,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
-        serde_json::json!(["codex-cli", "codex-app", "cursor", "claude-code"])
+        serde_json::json!(["codex-cli", "codex-app", "cursor", "claude-code", "qoder"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
@@ -331,6 +333,14 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
             "AGENTS.md",
             ".claude/rules/framework.md",
             ".claude/settings.json"
+        ])
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["qoder"],
+        serde_json::json!([
+            "AGENTS.md",
+            ".qoder/rules/framework.md",
+            ".qoder/settings.json"
         ])
     );
     assert_eq!(
@@ -750,6 +760,8 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "code-review-deep",
         "statistical-analysis",
         "experiment-reproducibility",
+        "math-derivation",
+        "scientific-figure-plotting",
         "openai-docs",
         "pdf",
         "skill-framework-developer",
@@ -774,7 +786,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     assert!(
-        slugs.len() <= 25,
+        slugs.len() <= 27,
         "hot runtime surface should stay bounded; got {}",
         slugs.len()
     );
@@ -882,8 +894,11 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
         let skill_path = root.join(record["skill_path"].as_str().expect("skill_path"));
         let meta = parse_skill_md_frontmatter_map(&skill_path);
         let raw = raw_platforms_from_skill_frontmatter(&meta);
-        let normalized = host_platforms::normalize_skill_host_platforms(&raw)
-            .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
+        let mut supported_ids: Vec<String> = allowed.iter().cloned().collect();
+        supported_ids.sort();
+        let normalized =
+            host_platforms::normalize_skill_host_platforms(&raw, &supported_ids, false)
+                .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
         let from_catalog: Vec<String> = platforms
             .iter()
             .map(|v| v.as_str().expect("platform").to_string())
@@ -908,11 +923,19 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
         .map(|v| v.as_str().expect("host id").to_string())
         .collect();
 
-    let normalized = host_platforms::normalize_skill_host_platforms(&[
-        "codex".to_string(),
-        "cursor".to_string(),
-        "claude".to_string(),
-    ])
+    let mut supported: Vec<String> = allowed.iter().cloned().collect();
+    supported.sort();
+
+    let normalized = host_platforms::normalize_skill_host_platforms(
+        &[
+            "codex".to_string(),
+            "cursor".to_string(),
+            "claude".to_string(),
+            "qoder".to_string(),
+        ],
+        &supported,
+        false,
+    )
     .expect("stock aliases should normalize");
     let normalized_set: HashSet<String> = normalized.into_iter().collect();
 
@@ -920,6 +943,44 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
         normalized_set, allowed,
         "host_platforms alias coverage must stay aligned with RUNTIME_REGISTRY.host_targets.supported"
     );
+}
+
+/// Host-agnostic hot-route skills must list every closed-set host id; Codex-installer-only skills are exempt.
+const HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS: &[&str] = &["plugin-creator", "skill-installer"];
+
+#[test]
+fn hot_runtime_skill_records_cover_all_supported_hosts() {
+    let root = project_root();
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let supported: Vec<String> = registry["host_targets"]["supported"]
+        .as_array()
+        .expect("host_targets.supported")
+        .iter()
+        .map(|v| v.as_str().expect("host id").to_string())
+        .collect();
+    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let skills = runtime["skills"].as_array().expect("runtime skills");
+    for row in skills.iter().filter_map(Value::as_array) {
+        let slug = row.get(0).and_then(|v| v.as_str()).expect("slug");
+        if HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS.contains(&slug) {
+            continue;
+        }
+        let platforms = row
+            .get(9)
+            .and_then(|v| v.as_array())
+            .expect("host_platforms");
+        let set: HashSet<String> = platforms
+            .iter()
+            .filter_map(|p| p.as_str().map(str::to_string))
+            .collect();
+        for host in &supported {
+            assert!(
+                set.contains(host),
+                "hot runtime skill `{slug}` must include host_platform `{host}` (set `metadata.platforms: [supported]` or list all ids); exempt slugs: {:?}",
+                HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS
+            );
+        }
+    }
 }
 
 #[test]
@@ -1206,6 +1267,410 @@ fn runtime_provider_registry_declares_component_plugin_lanes() {
 }
 
 #[test]
+fn runtime_registry_host_projections_split_harness_capabilities() {
+    let schema = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY_SCHEMA.json"));
+    let policy = schema
+        .get("harness_capability_policy")
+        .and_then(Value::as_object)
+        .expect("RUNTIME_REGISTRY_SCHEMA must define harness_capability_policy");
+    let core_always: Vec<&str> = policy["core_always"]
+        .as_array()
+        .expect("harness_capability_policy.core_always")
+        .iter()
+        .map(|v| v.as_str().expect("core_always token"))
+        .collect();
+    let hook_baseline: Vec<&str> = policy["cli_agent_hook_baseline"]
+        .as_array()
+        .expect("harness_capability_policy.cli_agent_hook_baseline")
+        .iter()
+        .map(|v| v.as_str().expect("cli_agent_hook_baseline token"))
+        .collect();
+    assert!(
+        !core_always.is_empty(),
+        "harness_capability_policy.core_always must be non-empty"
+    );
+    assert!(
+        !hook_baseline.is_empty(),
+        "harness_capability_policy.cli_agent_hook_baseline must be non-empty"
+    );
+    let allowed_exception_status: HashSet<&str> = schema
+        ["harness_capability_exception_status_values"]
+        .as_array()
+        .expect("schema harness_capability_exception_status_values")
+        .iter()
+        .map(|v| v.as_str().expect("exception status token"))
+        .collect();
+
+    let runtime = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let projections = runtime["host_projections"]
+        .as_object()
+        .expect("host_projections");
+
+    for (host_id, proj) in projections {
+        let harness = proj
+            .get("harness_capabilities")
+            .and_then(Value::as_array)
+            .unwrap_or_else(|| panic!("{host_id}: missing harness_capabilities"));
+        assert!(
+            !harness.is_empty(),
+            "{host_id}: harness_capabilities must be non-empty"
+        );
+        for cap in harness {
+            let s = cap.as_str().expect("harness capability must be string");
+            assert!(!s.is_empty(), "{host_id}: empty harness token");
+            assert_ne!(
+                s, "mcp_servers",
+                "{host_id}: mcp_servers belongs in product capabilities, not harness_capabilities"
+            );
+        }
+        let harness_set: BTreeSet<_> = harness.iter().filter_map(|v| v.as_str()).collect();
+
+        for token in &core_always {
+            assert!(
+                harness_set.contains(token),
+                "{host_id}: harness_capabilities must include `{token}` (core baseline)"
+            );
+        }
+
+        let exceptions = proj
+            .get("harness_capability_exceptions")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut exempt_hook: BTreeSet<String> = BTreeSet::new();
+        for ex in &exceptions {
+            let obj = ex.as_object().unwrap_or_else(|| {
+                panic!("{host_id}: harness_capability_exceptions entries must be objects")
+            });
+            let cap = obj
+                .get("cap")
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| panic!("{host_id}: harness_capability_exceptions.cap required"));
+            let status = obj
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| {
+                    panic!("{host_id}: harness_capability_exceptions.status required for cap={cap}")
+                });
+            let rationale = obj.get("rationale").and_then(Value::as_str).unwrap_or("");
+            assert!(
+                !rationale.trim().is_empty(),
+                "{host_id}: harness_capability_exceptions[{cap}] must include non-empty rationale"
+            );
+            assert!(
+                allowed_exception_status.contains(status),
+                "{host_id}: unknown harness_capability_exceptions.status `{status}` for cap={cap}"
+            );
+            assert!(
+                hook_baseline.contains(&cap),
+                "{host_id}: may only declare exceptions for cli_agent_hook_baseline tokens, not `{cap}`"
+            );
+            assert!(
+                !core_always.contains(&cap),
+                "{host_id}: core harness tokens cannot be listed in harness_capability_exceptions"
+            );
+            assert!(
+                exempt_hook.insert(cap.to_string()),
+                "{host_id}: duplicate harness_capability_exceptions.cap `{cap}`"
+            );
+        }
+
+        for cap in &hook_baseline {
+            if exempt_hook.contains(*cap) {
+                assert!(
+                    !harness_set.contains(cap),
+                    "{host_id}: `{cap}` is listed as unsupported in harness_capability_exceptions and must not appear in harness_capabilities"
+                );
+            } else {
+                assert!(
+                    harness_set.contains(cap),
+                    "{host_id}: harness_capabilities must include `{cap}` or declare it under harness_capability_exceptions"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn routing_signal_markers_json_unique_nonempty_lists() {
+    let v = read_json(&project_root().join("configs/framework/ROUTING_SIGNAL_MARKERS.json"));
+    assert_eq!(
+        v.get("schema_version").and_then(Value::as_str),
+        Some("routing-signal-markers-v1")
+    );
+    fn assert_no_dupes(arr: &Value, ctx: &str) {
+        let a = arr
+            .as_array()
+            .unwrap_or_else(|| panic!("{ctx} must be array"));
+        let mut seen = HashSet::new();
+        for item in a {
+            let s = item
+                .as_str()
+                .unwrap_or_else(|| panic!("{ctx} must be string list"));
+            assert!(!s.is_empty(), "{ctx} empty string");
+            assert!(
+                seen.insert(s.to_string()),
+                "{ctx} duplicate substring `{s}`"
+            );
+        }
+    }
+    let m = v.get("meta_routing_task").expect("meta_routing_task");
+    assert_no_dupes(
+        m.get("anchor_any_of_substrings")
+            .expect("anchor_any_of_substrings"),
+        "meta_routing_task.anchor_any_of_substrings",
+    );
+    assert_no_dupes(
+        m.get("marker_any_of_substrings")
+            .expect("marker_any_of_substrings"),
+        "meta_routing_task.marker_any_of_substrings",
+    );
+    assert_no_dupes(
+        &v["completion_execution_markers"],
+        "completion_execution_markers",
+    );
+    assert_no_dupes(
+        &v["supervisor_execution_markers"],
+        "supervisor_execution_markers",
+    );
+}
+
+#[test]
+fn hook_observation_rules_json_schema_version() {
+    let v =
+        read_json(&project_root().join("configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json"));
+    assert_eq!(
+        v.get("schema_version").and_then(Value::as_str),
+        Some("router-rs-hook-observation-rules-v1")
+    );
+}
+
+/// Loads `NL_SIGNAL_REGISTRY` names from the built `router-rs` binary (no regex scan of Rust source).
+fn nl_route_registry_signal_names() -> &'static HashSet<String> {
+    static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        let repo = project_root();
+        let manifest = repo.join("scripts/router-rs/Cargo.toml");
+        let output = Command::new("cargo")
+            .current_dir(&repo)
+            .args([
+                "run",
+                "-q",
+                "--manifest-path",
+                manifest.to_str().expect("manifest path utf-8"),
+                "--",
+                "framework",
+                "nl-route-signal-registry-contract",
+            ])
+            .output()
+            .unwrap_or_else(|e| {
+                panic!("cargo run router-rs framework nl-route-signal-registry-contract: {e}");
+            });
+        assert!(
+            output.status.success(),
+            "nl-route-signal-registry-contract failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let raw = String::from_utf8_lossy(&output.stdout);
+        let arr: Vec<String> = serde_json::from_str(raw.trim())
+            .expect("nl-route-signal-registry-contract stdout must be a JSON string array");
+        assert!(!arr.is_empty(), "NL_SIGNAL_REGISTRY dump must be non-empty");
+        arr.into_iter().collect()
+    })
+}
+
+fn nl_policy_signal_allowed(name: &str) -> bool {
+    nl_route_registry_signal_names().contains(name)
+}
+
+fn nl_policy_collect_signals_from_when(when: &Value, out: &mut HashSet<String>, ctx: &str) {
+    match when {
+        Value::Bool(_) => {}
+        Value::Object(map) => {
+            if map.is_empty() {
+                panic!("{ctx}: when must not be an empty object");
+            }
+            for k in map.keys() {
+                assert!(
+                    matches!(
+                        k.as_str(),
+                        "all" | "any" | "not" | "signal" | "query_contains" | "first_turn"
+                    ),
+                    "{ctx}: when has unknown key `{k}`"
+                );
+            }
+            if let Some(arr) = map.get("all").and_then(Value::as_array) {
+                assert_eq!(map.len(), 1, "{ctx}: when.all must be the sole object key");
+                for (i, sub) in arr.iter().enumerate() {
+                    nl_policy_collect_signals_from_when(sub, out, &format!("{ctx}.all[{i}]"));
+                }
+                return;
+            }
+            if let Some(arr) = map.get("any").and_then(Value::as_array) {
+                assert_eq!(map.len(), 1, "{ctx}: when.any must be the sole object key");
+                for (i, sub) in arr.iter().enumerate() {
+                    nl_policy_collect_signals_from_when(sub, out, &format!("{ctx}.any[{i}]"));
+                }
+                return;
+            }
+            if map.contains_key("not") {
+                assert_eq!(map.len(), 1, "{ctx}: when.not must be the sole object key");
+                let inner = map.get("not").expect("not present");
+                nl_policy_collect_signals_from_when(inner, out, &format!("{ctx}.not"));
+                return;
+            }
+            assert_eq!(
+                map.len(),
+                1,
+                "{ctx}: when leaf must have exactly one key among signal/query_contains/first_turn"
+            );
+            if let Some(s) = map.get("signal").and_then(Value::as_str) {
+                assert!(
+                    nl_policy_signal_allowed(s),
+                    "{ctx}: signal `{s}` not in nl_route_adjustments NL_SIGNAL_REGISTRY"
+                );
+                out.insert(s.to_string());
+                return;
+            }
+            assert!(
+                map.get("query_contains").and_then(Value::as_str).is_some()
+                    || map.get("first_turn").and_then(Value::as_bool).is_some(),
+                "{ctx}: when leaf must be query_contains or first_turn"
+            );
+        }
+        other => panic!("{ctx}: when must be bool or object, got {other:?}"),
+    }
+}
+
+fn nl_policy_validate_rule(rule: &Value, ctx: &str) {
+    let obj = rule
+        .as_object()
+        .unwrap_or_else(|| panic!("{ctx}: rule must be object"));
+    for k in obj.keys() {
+        assert!(
+            matches!(k.as_str(), "record" | "when" | "action"),
+            "{ctx}: unknown rule key `{k}`"
+        );
+    }
+    let action = obj
+        .get("action")
+        .unwrap_or_else(|| panic!("{ctx}: missing action"));
+    let aobj = action
+        .as_object()
+        .unwrap_or_else(|| panic!("{ctx}: action must be object"));
+    for k in aobj.keys() {
+        assert!(
+            matches!(k.as_str(), "type" | "reason" | "delta"),
+            "{ctx}: unknown action key `{k}`"
+        );
+    }
+    let ty = aobj
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("{ctx}: action.type required"));
+    match ty {
+        "suppress" | "boost" => {}
+        other => panic!("{ctx}: unknown action.type `{other}`"),
+    }
+    if let Some(rec) = obj.get("record") {
+        if !rec.is_null() {
+            let robj = rec
+                .as_object()
+                .unwrap_or_else(|| panic!("{ctx}: record must be object or null"));
+            for k in robj.keys() {
+                assert!(
+                    matches!(k.as_str(), "slug" | "slugs" | "gate_lower"),
+                    "{ctx}: unknown record key `{k}`"
+                );
+            }
+        }
+    }
+    let mut signals = HashSet::new();
+    match obj.get("when") {
+        None => {}
+        Some(w) => nl_policy_collect_signals_from_when(w, &mut signals, &format!("{ctx}.when")),
+    }
+    let _ = signals;
+}
+
+fn nl_policy_validate_rule_list(rules: &[Value], label: &str) {
+    for (i, rule) in rules.iter().enumerate() {
+        nl_policy_validate_rule(rule, &format!("{label}[{i}]"));
+    }
+}
+
+#[test]
+fn nl_route_adjustments_json_schema_version() {
+    let v = read_json(&project_root().join("configs/framework/NL_ROUTE_ADJUSTMENTS.json"));
+    let root = v
+        .as_object()
+        .expect("NL_ROUTE_ADJUSTMENTS root must be object");
+    for k in root.keys() {
+        assert!(
+            matches!(
+                k.as_str(),
+                "schema_version"
+                    | "docs"
+                    | "pre_framework_alias_rules"
+                    | "post_framework_alias_rules"
+            ),
+            "NL_ROUTE_ADJUSTMENTS: unknown root key `{k}`"
+        );
+    }
+    assert_eq!(
+        v.get("schema_version").and_then(Value::as_str),
+        Some("nl-route-adjustments-v1")
+    );
+    let pre = v["pre_framework_alias_rules"]
+        .as_array()
+        .expect("pre_framework_alias_rules must be array");
+    let post = v["post_framework_alias_rules"]
+        .as_array()
+        .expect("post_framework_alias_rules must be array");
+    nl_policy_validate_rule_list(pre, "pre_framework_alias_rules");
+    nl_policy_validate_rule_list(post, "post_framework_alias_rules");
+
+    let mut used_signals = HashSet::new();
+    for (label, arr) in [("pre", pre.as_slice()), ("post", post.as_slice())] {
+        for (ri, rule) in arr.iter().enumerate() {
+            if let Some(w) = rule.get("when") {
+                nl_policy_collect_signals_from_when(
+                    w,
+                    &mut used_signals,
+                    &format!("{label}_rules[{ri}].when"),
+                );
+            }
+        }
+    }
+    let allow = nl_route_registry_signal_names();
+    for s in &used_signals {
+        assert!(
+            allow.contains(s.as_str()),
+            "used signal `{s}` must appear in nl_route_adjustments NL_SIGNAL_REGISTRY"
+        );
+    }
+    for reg in allow.iter() {
+        assert!(
+            used_signals.contains(reg),
+            "NL_SIGNAL_REGISTRY entry `{reg}` is never referenced in NL_ROUTE_ADJUSTMENTS.json"
+        );
+    }
+}
+
+#[test]
+fn runtime_registry_review_gate_deep_lanes_non_empty() {
+    let v = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let lanes = v["review_gate"]["deep_gate_lanes"]
+        .as_array()
+        .expect("review_gate.deep_gate_lanes must be array");
+    assert!(
+        !lanes.is_empty(),
+        "review_gate.deep_gate_lanes must list Cursor/Codex countable review lanes"
+    );
+}
+
+#[test]
 fn document_only_provider_lanes_do_not_become_installable_hosts() {
     let registry =
         read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
@@ -1245,6 +1710,16 @@ fn runtime_registry_schema_covers_execution_critical_fields_only() {
     assert_eq!(
         schema["schema_version"],
         "framework-runtime-registry-schema-v1"
+    );
+    assert!(
+        schema.get("harness_capability_policy").is_some(),
+        "schema must define harness_capability_policy for host harness baseline tests"
+    );
+    assert!(
+        schema
+            .get("harness_capability_exception_status_values")
+            .is_some(),
+        "schema must define harness_capability_exception_status_values"
     );
     let allowed_hosts = schema["host_ids"]
         .as_array()
@@ -1391,6 +1866,44 @@ fn framework_aliases_reference_manifest_skills() {
                 "framework alias {alias} execution_owners references missing slug {slug}"
             );
         }
+    }
+}
+
+/// `research_contract` is narrative for hosts/docs; router-rs Execute embeds deep prompt text in
+/// `runtime_ops.inc` instead of parsing this JSON at runtime.
+#[test]
+fn autopilot_research_contract_deep_narrative_stays_aligned_with_execute_prompt() {
+    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let deep = registry
+        .get("framework_commands")
+        .and_then(|fc| fc.get("autopilot"))
+        .and_then(|ap| ap.get("research_contract"))
+        .and_then(|rc| rc.get("deep"))
+        .expect("framework_commands.autopilot.research_contract.deep");
+    assert_eq!(
+        deep.get("requires_multi_source_validation"),
+        Some(&serde_json::Value::Bool(true))
+    );
+    assert_eq!(
+        deep.get("requires_counter_evidence"),
+        Some(&serde_json::Value::Bool(true))
+    );
+    assert_eq!(
+        deep.get("requires_uncertainty_register"),
+        Some(&serde_json::Value::Bool(true))
+    );
+    let inc = read_text(&project_root().join("scripts/router-rs/src/cli/runtime_ops.inc"));
+    const DEEP_PROMPT_ANCHORS: &[&str] = &[
+        "Key findings, Evidence, Counter-evidence",
+        "at least two independent evidence anchors",
+        "Open risks",
+        "framework_rfv_loop",
+    ];
+    for needle in DEEP_PROMPT_ANCHORS {
+        assert!(
+            inc.contains(needle),
+            "deep execute prompt missing anchor {needle:?}"
+        );
     }
 }
 

@@ -11,18 +11,24 @@ mod codex_hooks;
 mod cursor_hooks;
 mod eval_route;
 mod execution_contract;
+mod formal_toolchain;
 mod framework_host_targets;
 mod framework_maint;
 mod framework_profile;
 mod framework_runtime;
+mod harness_context_signals;
 mod harness_contract;
 mod harness_operator_nudges;
 mod hook_common;
+mod hook_observation_rules;
 mod hook_policy;
 mod hook_posttool_normalize;
 mod host_entrypoint_sync;
 mod host_integration;
+mod lane_normalize;
 mod paper_adversarial_hook;
+mod path_guard;
+mod registry_review_gate;
 mod review_gate;
 mod review_gate_engine;
 mod review_routing_signals;
@@ -69,7 +75,7 @@ use execution_contract::{
 #[cfg(test)]
 use framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 #[cfg(test)]
-use route::{ROUTE_POLICY_SCHEMA_VERSION, ROUTE_REPORT_SCHEMA_VERSION};
+use route::ROUTE_REPORT_SCHEMA_VERSION;
 
 use clap::Parser;
 

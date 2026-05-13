@@ -1,5 +1,8 @@
 //! Named **task ledger** mutations (phase 2.5): single dispatch surface over autopilot goal, RFV loop,
-//! session artifact batch write, and hook evidence append — all already serialized by `task_write_lock`.
+//! session artifact batch write, and hook evidence append.
+//!
+//! Writers serialize through **repo-root `flock`** on `artifacts/current/.router-rs.task-ledger.lock`
+//! (see [`crate::task_write_lock`]), not a cross-process `std::sync::Mutex`.
 //!
 //! See `docs/task_state_unified_resolve.md`.
 
@@ -48,7 +51,7 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
     }
 }
 
-/// Dispatch without taking an extra lock (each handler already uses `task_write_lock` where needed).
+/// Dispatch without taking an extra outer lock (`apply_task_ledger_mutation` is invoked inside handlers where needed).
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, String> {
     match cmd {
         TaskLedgerCommand::AutopilotGoal(p) => crate::autopilot_goal::framework_autopilot_goal(p),

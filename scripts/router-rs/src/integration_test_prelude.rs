@@ -1,7 +1,10 @@
 //! Re-exports for `main_tests` (crate root stays intentionally thin after CLI split).
-#![allow(unused_imports)]
+//!
+//! Each symbol below is actually referenced by at least one test in `main_tests.rs`
+//! (see `rg -c '\\b<symbol>\\b' src/main_tests.rs`). Drop the global `allow(unused_imports)`
+//! so a future drift (re-export of a truly dead symbol) surfaces as a compile warning
+//! rather than rotting silently behind the wildcard pull-in.
 
-pub(crate) use serde_json::{json, Map, Value};
 pub(crate) use std::collections::HashSet;
 pub(crate) use std::fs;
 pub(crate) use std::path::{Path, PathBuf};
@@ -35,8 +38,7 @@ pub(crate) use crate::framework_runtime::{
 pub(crate) use crate::route::{
     build_route_diff_report, build_route_policy, build_route_snapshot, load_records,
     load_records_cached_for_stdio, load_records_from_manifest, route_task, search_skills,
-    RouteSnapshotEnvelopePayload, ROUTE_AUTHORITY, ROUTE_POLICY_SCHEMA_VERSION,
-    ROUTE_SNAPSHOT_SCHEMA_VERSION,
+    RouteSnapshotEnvelopePayload, ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
 };
 pub(crate) use crate::runtime_envelope_ids::{
     BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION, DEFAULT_MAX_BACKGROUND_JOBS,

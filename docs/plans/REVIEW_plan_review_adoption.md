@@ -2,15 +2,17 @@
 
 **范围**：[`scripts/router-rs/src/closeout_enforcement.rs`](../../scripts/router-rs/src/closeout_enforcement.rs)（L1–L120 及 schema 叙事）、[`scripts/router-rs/src/rfv_loop.rs`](../../scripts/router-rs/src/rfv_loop.rs)（验证枚举与 external research strict 入口）。**姿态**：hostile-but-fair，review-only。
 
-## verdict
-
-`ship with caveats`：契约层设计清晰（`deny_unknown_fields`、显式枚举），但本次只读切片未追到所有调用方，也未运行测试；因此高等级结论只保留有代码锚点与缺测证据支撑的风险，无法证明调用链可达的项降级为 caveat/open question。
+正文顺序示范 **[`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md) compact default**：先 severity 全局排序的 findings，`verdict` 单行收口放后。
 
 ## P0–P2（带位置）
 
 - **P1**（correctness）：`ALLOWED_VERIFY_RESULTS` 将 `verify_result` 限制为 PASS/FAIL/SKIPPED/UNKNOWN（`rfv_loop.rs` L22–L24）；若宿主未来引入新状态字符串，**旧二进制**会硬拒——需 semver/迁移说明与兼容测试（锚点：`ALLOWED_VERIFY_RESULTS`；证据类型：代码锚点 + 缺测场景）。
 - **P2**（correctness / ops）：`evaluate_closeout_record_value` 对 `CloseoutRecord` 反序列化失败直接返回 Err（L107–L111）；本切片未追到调用方是否会重试或吞错，故不能列 P0。建议固定错误串契约并确认响应层如何区分 schema 拒识与 IO/序列化错误（锚点：`evaluate_closeout_record_value`, `evaluate_closeout_record`；证据类型：代码锚点 + open call-chain gap）。
 - **Open question**（security / abuse）：`COMPLETION_KEYWORDS` 与中文完成词用于完成态检测（`closeout_enforcement.rs` L9–L18）；若上游把用户可控长文本直接匹配关键词，可能误判「已完成」。本切片未证明输入可达，因此先作为 open question，需追踪调用路径后再定级（锚点：`COMPLETION_KEYWORDS`）。
+
+## verdict（单行，跟在 findings 后）
+
+`ship with caveats`：契约层设计清晰（`deny_unknown_fields`、显式枚举），但本次只读切片未追到所有调用方，也未运行测试；因此高等级结论只保留有代码锚点与缺测证据支撑的风险，无法证明调用链可达的项降级为 caveat/open question。
 
 ## test_repro_gap
 
@@ -33,6 +35,8 @@
 - 若调用链证明关键词检测直接处理用户可控文本，`COMPLETION_KEYWORDS` 可升级为 P1/P2 并补复现。
 
 ---
+
+以下 **Lane_*** 节为可选用附录（等价于叙事/述职体中的按维度补充）；与用户对话若走 **compact**，可只给出上文 findings + 单行 verdict + test gap。
 
 ## Lane_correctness
 

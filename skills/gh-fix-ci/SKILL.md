@@ -3,7 +3,7 @@ name: gh-fix-ci
 description: Triage and fix failing GitHub Actions PR checks with gh-source-gate.
 metadata:
   version: "2.0.0"
-  platforms: [codex]
+  platforms: [supported]
   tags:
     - github
     - ci

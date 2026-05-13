@@ -60,7 +60,7 @@ pub(crate) fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &
     }
     if let Err(e) = sync_task_state_aggregate(repo_root, task_id) {
         eprintln!(
-            "[router-rs] TASK_STATE.json aggregate sync failed (task_id={}): {}",
+            "[router-rs] TASK_STATE_AGGREGATE_SYNC_FAILED task_id={} err={}",
             task_id.trim(),
             e
         );

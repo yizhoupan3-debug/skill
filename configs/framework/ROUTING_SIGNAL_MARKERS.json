@@ -1,0 +1,68 @@
+{
+  "schema_version": "routing-signal-markers-v1",
+  "meta_routing_task": {
+    "anchor_any_of_substrings": [
+      "skill",
+      "skill.md",
+      "runtime",
+      "framework",
+      "框架"
+    ],
+    "marker_any_of_substrings": [
+      "路由",
+      "触发",
+      "routing",
+      "router",
+      "route",
+      "系统",
+      "入口",
+      "抽象",
+      "行为驱动",
+      "第一性原理",
+      "减法",
+      "轻量化",
+      "兼容层",
+      "胶水层",
+      "核查",
+      "合并",
+      "精简",
+      "清理",
+      "历史文件",
+      "旧文件",
+      "口径",
+      "contract",
+      "沉到 runtime",
+      "沉到runtime",
+      "减少入口",
+      "减入口",
+      "不损害功能",
+      "加重负担",
+      "没有用",
+      "runtime 轻量化",
+      "讨论-规划-执行-验证"
+    ]
+  },
+  "completion_execution_markers": [
+    "gsd",
+    "get shit done",
+    "推进到底",
+    "别停",
+    "直接干完",
+    "一路做完",
+    "持续跑到收敛",
+    "给验证证据",
+    "给我验证证据",
+    "验证证据"
+  ],
+  "supervisor_execution_markers": [
+    ".supervisor_state.json",
+    "共享 continuity",
+    "shared continuity",
+    "多 lane 集成",
+    "主线程集成",
+    "integration supervisor",
+    "supervisor",
+    "长运行",
+    "状态持久化"
+  ]
+}
