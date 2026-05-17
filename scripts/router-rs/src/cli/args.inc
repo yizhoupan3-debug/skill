@@ -22,6 +22,11 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: ClaudeCommand,
     },
+    #[command(name = "claude-desktop")]
+    ClaudeDesktop {
+        #[command(subcommand)]
+        command: ClaudeDesktopCommand,
+    },
     Qoder {
         #[command(subcommand)]
         command: QoderCommand,
@@ -198,6 +203,19 @@ pub(crate) enum CursorCommand {
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum ClaudeCommand {
     Hook(ClaudeHookCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum ClaudeDesktopCommand {
+    /// Run MCP stdio agent loop (skills, evidence, closeout advisory).
+    #[command(name = "agent")]
+    Agent(ClaudeDesktopAgentCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct ClaudeDesktopAgentCommand {
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug, Clone)]

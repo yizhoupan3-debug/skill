@@ -14,6 +14,7 @@ use super::runtime_ops::{
 use crate::browser_mcp::{
     resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
 };
+use crate::claude_desktop_hooks::run_claude_desktop_mcp_loop;
 use crate::claude_hooks::{run_claude_hook_cli, run_qoder_hook_cli};
 use crate::closeout_enforcement::{
     closeout_enforcement_contract, evaluate_closeout_record_value,

@@ -4,6 +4,7 @@ mod atomic_write;
 mod autopilot_goal;
 mod background_state;
 mod browser_mcp;
+mod claude_desktop_hooks;
 mod claude_hooks;
 mod cli;
 mod closeout_enforcement;

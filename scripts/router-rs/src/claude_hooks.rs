@@ -12,7 +12,6 @@ use crate::review_gate_engine::{
     fork_context_from_values, independent_reviewer_evidence, review_gate_blocks_stop,
     ReviewGateFacts,
 };
-use regex::Regex;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::cell::Cell;
@@ -84,12 +83,6 @@ impl StdioAgentHookHost {
         }
     }
 
-    fn home_guard_hints(self) -> &'static [&'static str] {
-        match self {
-            Self::ClaudeCode => CLAUDE_HOME_GUARD_HINTS,
-            Self::Qoder => QODER_HOME_GUARD_HINTS,
-        }
-    }
 
     fn user_config_dir_leaf(self) -> &'static str {
         match self {
@@ -220,9 +213,6 @@ const FRAMEWORK_CHANGED_CONTEXT: &str =
     "Framework routing/runtime files changed; run the targeted Rust contract tests before finishing.";
 const SETTINGS_CHANGED_CONTEXT: &str =
     "Hook/settings files changed; validate JSON and run the agent hook contract tests before finishing.";
-const AUTOMATION_CONTEXT: &str =
-    "Automation requests such as 'from now on', 'whenever', or 'before/after' must be implemented through settings hooks, not memory alone.";
-
 /// **仅当** 对应宿主 `ROUTER_RS_*_REVIEW_GATE_DISABLE` 为 `1` / `true` / `yes` / `on`（大小写不敏感）时跳过
 /// review gate；unset、空串及其它值保持启用（与 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` **同形**：`router_rs_env_enabled_default_false`）。
 fn agent_review_gate_disabled() -> bool {
@@ -249,9 +239,6 @@ const RETIRED_SURFACE_PATHS: &[&str] = &[
     ".agents",
     "plugins/skill-framework-native/.mcp.json",
 ];
-/// Bash segment hints that indicate writes targeting user-global Claude config (not repo `.claude/` policy).
-const CLAUDE_HOME_GUARD_HINTS: &[&str] = &["~/.claude/"];
-const QODER_HOME_GUARD_HINTS: &[&str] = &["~/.qoder/"];
 /// Pre-89ece4c the stdio agent hook accepted kebab-case commands only; CLI adds PascalCase aliases
 /// aligned with Codex hook spelling (`PreToolUse`, `Stop`, …)。
 pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
@@ -432,9 +419,6 @@ fn block_stop(reason: &str) -> Option<Value> {
 }
 
 fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
-    if let Some(reason) = dangerous_bash_reason(payload) {
-        return deny_pre_tool_use(reason);
-    }
     for path in payload_relative_paths(repo_root, payload) {
         if is_retired_surface(&path) {
             return deny_pre_tool_use(format!(
@@ -454,28 +438,6 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
         if is_host_private_path(&path) {
             return deny_pre_tool_use(format!(
                 "Blocked direct mutation of host-private agent state {path}; project policy must live in repo settings or Rust runtime code."
-            ));
-        }
-    }
-    if let Some(path) = bash_write_target(payload) {
-        if is_retired_surface(&path) {
-            return deny_pre_tool_use(format!(
-                "Blocked shell mutation of retired generated surface {path}; use the Rust host-entrypoint sync path instead."
-            ));
-        }
-        if is_generated_entrypoint(&path) {
-            return deny_pre_tool_use(format!(
-                "Blocked shell mutation of generated host entrypoint {path}; use the Rust host-entrypoint sync path instead."
-            ));
-        }
-        if is_framework_guarded_path(&path) {
-            return deny_pre_tool_use(format!(
-                "Blocked shell mutation of framework routing/runtime file {path}; use the Rust host-entrypoint sync or routing path instead."
-            ));
-        }
-        if is_host_private_path(&path) {
-            return deny_pre_tool_use(format!(
-                "Blocked shell mutation of host-private agent state {path}; keep shared policy in project settings."
             ));
         }
     }
@@ -518,9 +480,6 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
                 "Review gate: start an observed independent reviewer lane first (`fork_context=false`), then synthesize findings locally. The hook records independent reviewer evidence when the payload proves the lane and fork setting.",
             );
         }
-    }
-    if prompt_mentions_automation(prompt) {
-        return add_context("UserPromptSubmit", AUTOMATION_CONTEXT);
     }
     None
 }
@@ -968,49 +927,6 @@ fn clear_touch_state(repo_root: &Path, payload: &Value) {
     let _ = fs::remove_file(legacy_touch_state_path(repo_root));
 }
 
-fn prompt_mentions_automation(prompt: &str) -> bool {
-    let lowered = prompt.to_ascii_lowercase();
-    [
-        "from now on",
-        "whenever",
-        "every time",
-        "each time",
-        "before ",
-        "after ",
-        "每次",
-        "以后",
-        "从现在起",
-        " whenever ",
-    ]
-    .iter()
-    .any(|needle| lowered.contains(needle))
-}
-
-fn dangerous_bash_reason(payload: &Value) -> Option<String> {
-    if payload.get("tool_name").and_then(Value::as_str) != Some("Bash") {
-        return None;
-    }
-    let command = bash_command(payload)?;
-    if let Some(reason) = crate::hook_policy::dangerous_bash_reason(command) {
-        return Some(reason);
-    }
-    let lowered = command.to_ascii_lowercase();
-    let supplemental: &[(&str, &str)] = &[
-        (r"\bmkfs\.", "filesystem formatting command"),
-        (r":\(\)\s*\{\s*:\|:&\s*\};:", "fork bomb"),
-        (r"\bgit\s+branch\s+-d\b", "git branch deletion"),
-    ];
-    for (pattern, label) in supplemental {
-        if Regex::new(pattern)
-            .ok()
-            .map(|regex| regex.is_match(&lowered))
-            .unwrap_or(false)
-        {
-            return Some(format!("Blocked dangerous shell command: {label}."));
-        }
-    }
-    None
-}
 
 fn payload_relative_paths(repo_root: &Path, payload: &Value) -> Vec<String> {
     let mut paths = HashSet::new();
@@ -1071,33 +987,6 @@ fn is_path_key(key: &str) -> bool {
     )
 }
 
-fn bash_write_target(payload: &Value) -> Option<String> {
-    if payload.get("tool_name").and_then(Value::as_str) != Some("Bash") {
-        return None;
-    }
-    let command = bash_command(payload)?;
-    for segment in split_bash_segments(command) {
-        let looks_mutating = bash_command_looks_mutating(&segment);
-        for hint in RETIRED_SURFACE_PATHS
-            .iter()
-            .chain(
-                active_stdio_agent_hook_host()
-                    .generated_entrypoint_paths()
-                    .iter(),
-            )
-            .chain(active_stdio_agent_hook_host().home_guard_hints().iter())
-        {
-            if !segment.contains(hint) {
-                continue;
-            }
-            if looks_mutating || bash_segment_redirects_to_hint(&segment, hint) {
-                return Some((*hint).to_string());
-            }
-        }
-    }
-    None
-}
-
 fn bash_command(payload: &Value) -> Option<&str> {
     payload
         .get("tool_input")
@@ -1107,58 +996,7 @@ fn bash_command(payload: &Value) -> Option<&str> {
         .and_then(Value::as_str)
 }
 
-fn split_bash_segments(command: &str) -> Vec<String> {
-    Regex::new(r"\s*(?:&&|\|\||;|\|)\s*")
-        .ok()
-        .map(|regex| {
-            regex
-                .split(command)
-                .filter_map(|segment| {
-                    let trimmed = segment.trim();
-                    (!trimmed.is_empty()).then(|| trimmed.to_string())
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| vec![command.trim().to_string()])
-}
 
-fn bash_command_looks_mutating(command: &str) -> bool {
-    [
-        r"^\s*(mv|cp|install|touch|rm|unlink|truncate|mkdir)\b",
-        r"^\s*ln\b[^\n]*\s-[^\n]*[fs][^\n]*\b",
-        r"^\s*git\s+(checkout\s+--|restore\b)",
-        r"\bsed\s+-i\b",
-        r"\bperl\s+-pi\b",
-        r"\bpython3?\s+-c\b",
-        r"\bnode\s+-e\b",
-        r"\bruby\s+-e\b",
-        r"\btee\b",
-        r"\bdd\b",
-    ]
-    .iter()
-    .any(|pattern| {
-        Regex::new(pattern)
-            .ok()
-            .map(|regex| regex.is_match(command))
-            .unwrap_or(false)
-    })
-}
-
-fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
-    let escaped = regex::escape(hint);
-    [
-        format!(r#"(>>?|>\|)\s*['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
-        format!(r#"\btee\b(?:\s+-a)?\s+['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
-        format!(r#"\bdd\b[^\n;&|]*\bof=['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
-    ]
-    .iter()
-    .any(|pattern| {
-        Regex::new(pattern)
-            .ok()
-            .map(|regex| regex.is_match(segment))
-            .unwrap_or(false)
-    })
-}
 
 fn is_retired_surface(path: &str) -> bool {
     RETIRED_SURFACE_PATHS
@@ -1276,15 +1114,6 @@ fn payload_text(payload: &Value) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn denies_dangerous_bash() {
-        let payload = json!({
-            "tool_name": "Bash",
-            "tool_input": { "command": "git reset --hard HEAD" }
-        });
-        let output = run_pre_tool_use(Path::new("/repo"), &payload).unwrap();
-        assert_eq!(output["hookSpecificOutput"]["permissionDecision"], "deny");
-    }
 
     #[test]
     fn silent_for_safe_read_only_bash() {
