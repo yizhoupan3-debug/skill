@@ -1718,6 +1718,16 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
         home_root: qoder_home_root_string,
         explicit_home: qoder_home_explicit,
     },
+    HostProjectionAdapter {
+        tool: "claude-desktop",
+        host_id: "claude-desktop",
+        aliases: &[],
+        install: install_claude_desktop_projection,
+        status: claude_desktop_projection_status,
+        remove: remove_claude_desktop_projection,
+        home_root: claude_home_root_string,
+        explicit_home: claude_home_explicit,
+    },
 ];
 
 fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
@@ -2445,6 +2455,200 @@ fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
+
+
+fn install_claude_desktop_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
+    // Claude Desktop uses MCP protocol (via mcp.json), not shell hooks.
+    let mcp_target = claude_desktop_mcp_target(roots, scope);
+    let claude_md_target = claude_desktop_claude_md_target(roots, scope);
+    let mcp_changed = write_claude_desktop_mcp_json(&mcp_target, roots)?;
+    let md_changed = write_claude_desktop_claude_md(&claude_md_target, roots, scope)?;
+    let manifest_changed = write_claude_desktop_projection_manifest(
+        roots, scope, &mcp_target, &claude_md_target,
+    )?;
+    Ok(json!({
+        "status": "installed",
+        "changed": mcp_changed || md_changed || manifest_changed,
+        "scope": scope,
+        "mcp_config": {
+            "scope": scope,
+            "path": mcp_target.to_string_lossy(),
+            "changed": mcp_changed,
+        },
+        "claude_md": {
+            "scope": scope,
+            "path": claude_md_target.to_string_lossy(),
+            "changed": md_changed,
+        },
+    }))
+}
+
+fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    Ok(json!({
+        "ready": roots.project_root.join(".claude/mcp.json").exists(),
+        "status": "projection-status",
+        "mcp_config": {
+            "exists": roots.project_root.join(".claude/mcp.json").exists(),
+        },
+        "claude_md": {
+            "exists": roots.project_root.join(".claude/CLAUDE.md").exists(),
+        },
+    }))
+}
+
+fn remove_claude_desktop_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    dry_run: bool,
+) -> Result<Value, String> {
+    let mcp_target = claude_desktop_mcp_target(roots, scope);
+    let claude_md_target = claude_desktop_claude_md_target(roots, scope);
+    let manifest_path = projection_manifest_path(roots, "claude-desktop", scope);
+
+    let mut changed = false;
+    let mut would_change = false;
+    let mut removed_paths = Vec::new();
+    let mut would_remove_paths = Vec::new();
+
+    for (target, label) in [(&mcp_target, "mcp_config"), (&claude_md_target, "claude_md")] {
+        let managed = projection_manifest_ownership(
+            &manifest_path, "claude-desktop", scope, target,
+        ).map(|o| o.owns_projection_file).unwrap_or(false);
+        if target.exists() && managed {
+            if !dry_run {
+                let _ = std::fs::remove_file(target);
+                removed_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
+            }
+            changed = true;
+            if dry_run {
+                would_remove_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
+            }
+        }
+        would_change = true;
+    }
+
+    let manifest_managed = projection_manifest_ownership(
+        &manifest_path, "claude-desktop", scope, &mcp_target,
+    ).map(|o| o.managed).unwrap_or(false);
+    if manifest_managed {
+        if !dry_run {
+            let _ = std::fs::remove_file(&manifest_path);
+        }
+        changed = true;
+    }
+
+    Ok(json!({
+        "status": if dry_run && would_change { "would-remove" } else if changed { "removed" } else { "not-installed-or-user-owned" },
+        "changed": changed,
+        "dry_run": dry_run,
+        "scope": scope,
+        "removed_paths": removed_paths,
+        "would_remove_paths": would_remove_paths,
+    }))
+}
+
+fn claude_desktop_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.claude_home_root.join("mcp.json")
+    } else {
+        roots.project_root.join(".claude/mcp.json")
+    }
+}
+
+fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.claude_home_root.join("CLAUDE.md")
+    } else {
+        roots.project_root.join(".claude/CLAUDE.md")
+    }
+}
+
+fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+    let exe = cargo_router_rs_executable(&roots.framework_root)
+        .or_else(|| which::which("router-rs").ok());
+    let command = exe
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "router-rs".to_string());
+    json!({
+        "command": command,
+        "args": ["claude-desktop", "agent", "--repo-root", "${workspaceRoot}"],
+        "type": "stdio",
+        "description": "Framework continuity, skill routing, closeout advisory",
+    })
+}
+
+fn write_claude_desktop_mcp_json(path: &Path, roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() { payload = json!({}); }
+    let servers = payload
+        .as_object_mut()
+        .ok_or_else(|| "mcp.json root must be an object".to_string())?;
+    let mcp_servers = servers
+        .entry("mcpServers".to_string())
+        .or_insert_with(|| json!({}));
+    if !mcp_servers.is_object() { *mcp_servers = json!({}); }
+    let entries = mcp_servers
+        .as_object_mut()
+        .ok_or_else(|| "mcpServers must be an object".to_string())?;
+    entries.insert("router-rs-framework".to_string(), claude_desktop_mcp_server_payload(roots));
+    write_json_if_changed(path, &payload)
+}
+
+fn write_claude_desktop_claude_md(path: &Path, roots: &ResolvedProjectionRoots, scope: &str) -> Result<bool, String> {
+    let runtime_rel = skills_source_rel(&roots.framework_root)
+        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
+        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
+    let content = format!(
+        "<!-- managed_by: skill-framework -->
+         <!-- projection_id: claude-desktop-self-discipline -->
+         <!-- host_projection: claude-desktop -->
+         <!-- install_scope: {scope} -->
+
+         # Claude Desktop 自律指引
+
+         MCP 服务器 `router-rs-framework` 提供技能路由、连续性证据和 closeout 检查。
+
+         ## 与 CLI 的区别
+
+         - Desktop 使用 MCP 协议，无工具拦截能力
+         - 所有门控为 **advisory**（建议性），非硬阻止
+         - 收尾前调用 `closeout_gate` tool 自检
+         - 执行验证命令后调用 `record_evidence` tool 追加证据
+
+         ## 共享数据
+
+         `artifacts/current/` 与 CLI 共用，切换宿主时 continuity 无缝延续。
+
+         ## 路由
+
+         Start from AGENTS.md, route via `{runtime_rel}`.
+"
+    );
+    write_text_if_changed(path, &content)
+}
+
+fn write_claude_desktop_projection_manifest(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    mcp_path: &Path,
+    claude_md_path: &Path,
+) -> Result<bool, String> {
+    write_json_if_changed(
+        &projection_manifest_path(roots, "claude-desktop", scope),
+        &json!({
+            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
+            "managed_by": "skill-framework",
+            "host_projection": "claude-desktop",
+            "scope": scope,
+            "files": [mcp_path.to_string_lossy(), claude_md_path.to_string_lossy()],
+        }),
+    )
+}
+
 fn qoder_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.qoder_home_root.join("rules").join("framework.md")
@@ -2969,6 +3173,13 @@ fn projection_manifest_path(
         ("qoder", _) => roots
             .project_root
             .join(".qoder")
+            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+        ("claude-desktop", "user") => roots
+            .claude_home_root
+            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+        ("claude-desktop", _) => roots
+            .project_root
+            .join(".claude")
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
         _ => roots.project_root.join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
     }
@@ -4481,6 +4692,7 @@ mod tests {
                 "cursor".to_string(),
                 "claude".to_string(),
                 "qoder".to_string(),
+                "claude-desktop".to_string(),
             ]
         );
     }
