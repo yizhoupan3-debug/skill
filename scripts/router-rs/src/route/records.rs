@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::SystemTime;
 
 use super::constants::{PARALLEL_RECORD_SCAN_MIN, RECORDS_CACHE_MAX_KEYS};
@@ -235,9 +235,9 @@ fn route_metadata_sidecar(
         .or_else(|| manifest_path.and_then(route_metadata_sidecar_path))
 }
 
-fn records_cache_state() -> &'static Mutex<RecordsCacheState> {
-    static RECORDS_CACHE: OnceLock<Mutex<RecordsCacheState>> = OnceLock::new();
-    RECORDS_CACHE.get_or_init(|| Mutex::new(RecordsCacheState::default()))
+fn records_cache_state() -> &'static RwLock<RecordsCacheState> {
+    static RECORDS_CACHE: OnceLock<RwLock<RecordsCacheState>> = OnceLock::new();
+    RECORDS_CACHE.get_or_init(|| RwLock::new(RecordsCacheState::default()))
 }
 
 fn evict_records_cache_over_capacity(state: &mut RecordsCacheState) {
@@ -277,7 +277,7 @@ pub(crate) fn load_records_cached_for_stdio_resolved(
 
     {
         let state = records_cache_state()
-            .lock()
+            .read()
             .map_err(|_| "route records cache lock poisoned".to_string())?;
         if let Some(entry) = state.map.get(&key) {
             if entry.runtime_mtime == runtime_mtime
@@ -297,7 +297,7 @@ pub(crate) fn load_records_cached_for_stdio_resolved(
         records: Arc::clone(&records),
     };
     let mut state = records_cache_state()
-        .lock()
+        .write()
         .map_err(|_| "route records cache lock poisoned".to_string())?;
     let is_new_key = !state.map.contains_key(&key);
     state.map.insert(key.clone(), entry);
