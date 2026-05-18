@@ -341,6 +341,9 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Va
         "record_evidence" => tool_record_evidence(arguments, repo_root),
         "session_checkpoint" => tool_session_checkpoint(arguments, repo_root),
         "closeout_gate" => tool_closeout_gate(arguments, repo_root),
+        "rfv_loop_status" => tool_rfv_loop_status(arguments, repo_root),
+        "rfv_loop_manage" => tool_rfv_loop_manage(arguments, repo_root),
+        "goal_state_manage" => tool_goal_state_manage(arguments, repo_root),
         "goal_state_read" => tool_goal_state_read(arguments, repo_root),
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
@@ -726,6 +729,136 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
             ],
         },
     })
+}
+
+
+fn tool_rfv_loop_status(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let task_id = arguments.get("task_id").and_then(Value::as_str);
+    let state = crate::rfv_loop::read_rfv_loop_state(repo_root, task_id)?;
+    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
+}
+
+fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let operation = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: operation")?;
+    let task_id = arguments.get("task_id").and_then(Value::as_str);
+
+    // repo_root is a &Path, convert to string for the payload
+    let repo_root_str = repo_root.to_string_lossy().to_string();
+
+    let mut payload = json!({
+        "repo_root": repo_root_str,
+        "operation": operation,
+    });
+    if let Some(tid) = task_id {
+        payload["task_id"] = json!(tid);
+    }
+
+    // Per-operation required fields
+    match operation {
+        "start" => {
+            let goal = arguments
+                .get("goal")
+                .and_then(Value::as_str)
+                .ok_or("start requires 'goal'")?;
+            payload["goal"] = json!(goal);
+            if let Some(mr) = arguments.get("max_rounds").and_then(Value::as_u64) {
+                payload["max_rounds"] = json!(mr);
+            }
+            if let Some(er) = arguments.get("allow_external_research").and_then(Value::as_bool) {
+                payload["allow_external_research"] = json!(er);
+            }
+        }
+        "append_round" => {
+            let round = arguments
+                .get("round")
+                .and_then(Value::as_u64)
+                .ok_or("append_round requires 'round'")?;
+            let review_summary = arguments
+                .get("review_summary")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'review_summary'")?;
+            let fix_summary = arguments
+                .get("fix_summary")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'fix_summary'")?;
+            let verify_result = arguments
+                .get("verify_result")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'verify_result'")?;
+            let supervisor_decision = arguments
+                .get("supervisor_decision")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'supervisor_decision'")?;
+            let reason = arguments
+                .get("reason")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'reason'")?;
+            payload["round"] = json!(round);
+            payload["review_summary"] = json!(review_summary);
+            payload["fix_summary"] = json!(fix_summary);
+            payload["verify_result"] = json!(verify_result);
+            payload["supervisor_decision"] = json!(supervisor_decision);
+            payload["reason"] = json!(reason);
+        }
+        _ => return Err(format!("Unknown RFV loop operation: {operation}")),
+    }
+
+    let result = crate::rfv_loop::framework_rfv_loop(payload)?;
+    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+}
+
+fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let operation = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: operation")?;
+    let task_id = arguments.get("task_id").and_then(Value::as_str);
+
+    let repo_root_str = repo_root.to_string_lossy().to_string();
+
+    let mut payload = json!({
+        "repo_root": repo_root_str,
+        "operation": operation,
+    });
+    if let Some(tid) = task_id {
+        payload["task_id"] = json!(tid);
+    }
+
+    match operation {
+        "start" => {
+            let goal = arguments
+                .get("goal")
+                .and_then(Value::as_str)
+                .ok_or("start requires 'goal'")?;
+            payload["goal"] = json!(goal);
+            if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
+                payload["non_goals"] = json!(ng);
+            }
+            if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
+                payload["done_when"] = json!(dw);
+            }
+            if let Some(vc) = arguments.get("validation_commands").and_then(Value::as_array) {
+                payload["validation_commands"] = json!(vc);
+            }
+        }
+        "checkpoint" => {
+            let note = arguments
+                .get("note")
+                .and_then(Value::as_str)
+                .ok_or("checkpoint requires 'note'")?;
+            payload["note"] = json!(note);
+        }
+        "pause" | "resume" | "complete" | "clear" => {
+            // No additional required args
+        }
+        _ => return Err(format!("Unknown goal operation: {operation}")),
+    }
+
+    let result = crate::autopilot_goal::framework_autopilot_goal(payload)?;
+    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
