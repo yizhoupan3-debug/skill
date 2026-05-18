@@ -264,11 +264,16 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         });
     }
 
-    // R9 (task-scoped depth / `GOAL_STATE.completion_gates` alignment): **deferred** — needs
-    // `task_id`→ledger policy resolution and `CLOSEOUT_RECORD` serde/schema lockstep; use GOAL
-    // `complete` + RFV `append_round` close_gates (explicit close **and** max_rounds cap close)
-    // instead — contract: `docs/references/rfv-loop/reasoning-depth-contract.md`; ADR:
-    // `docs/plans/ADR_rfv_close_gates_max_rounds.md`.
+    // TODO(R9-tech-debt): task-scoped depth / `GOAL_STATE.completion_gates` alignment
+    // Status: deferred (filed 2026-05-19 during continuity system review)
+    // Blocked by: (1) GOAL completion_gates ledger policy resolution,
+    //             (2) CLOSEOUT_RECORD serde/schema lockstep coordination
+    // Workaround: Use GOAL `complete` + RFV `append_round` close_gates instead
+    // References:
+    //   - Contract: docs/references/rfv-loop/reasoning-depth-contract.md
+    //   - ADR: docs/plans/ADR_rfv_close_gates_max_rounds.md
+    // Expected behavior when implemented: closeout gate should check min_depth_score
+    //   from GOAL_STATE.completion_gates against depth_compliance_aggregate output
 
     // R7 (depth review P0-B): verification_status=passed but record carries no command evidence
     // and the optional EvidenceContext (when supplied by orchestrator) shows no successful

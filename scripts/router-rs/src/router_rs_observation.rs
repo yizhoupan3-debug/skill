@@ -13,8 +13,6 @@ pub enum HookObservationHost {
     Codex,
     /// Claude Code hook JSON (`router-rs claude hook`).
     ClaudeCode,
-    /// Qoder IDE Agent hook JSON (`router-rs qoder hook`).
-    Qoder,
 }
 
 fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<GateClassified> {
@@ -50,7 +48,7 @@ fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String
                 .map(|s| s.to_string());
             (followup, additional)
         }
-        HookObservationHost::ClaudeCode | HookObservationHost::Qoder => {
+        HookObservationHost::ClaudeCode => {
             let followup = output
                 .get("stopReason")
                 .or_else(|| output.get("systemMessage"))
@@ -138,8 +136,8 @@ fn compute_blocking(output: &Value, gate: Option<&GateClassified>) -> bool {
 
     match gate.map(|g| g.code.as_str()) {
         Some(
-            "review_gate" | "codex_review_gate" | "claude_review_gate" | "qoder_review_gate"
-            | "ag_followup" | "closeout_followup" | "subagent_limit",
+            "review_gate" | "codex_review_gate" | "claude_review_gate" | "ag_followup"
+            | "closeout_followup" | "subagent_limit",
         ) => {
             if continue_true {
                 base
@@ -187,7 +185,6 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
         HookObservationHost::Cursor => "cursor",
         HookObservationHost::Codex => "codex",
         HookObservationHost::ClaudeCode => "claude-code",
-        HookObservationHost::Qoder => "qoder",
     };
 
     if output.get("contract_guard").is_some()
@@ -329,20 +326,6 @@ mod tests {
         assert_eq!(o["gate"]["code"], "claude_review_gate");
         assert_eq!(o["gate"]["blocking"], true);
     }
-
-    #[test]
-    fn qoder_stop_classifies_qoder_review_gate() {
-        let v = json!({
-            "continue": false,
-            "decision": "block",
-            "stopReason": "router-rs QODER_REVIEW_GATE incomplete: run subagent",
-        });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Qoder);
-        assert_eq!(o["host"], "qoder");
-        assert_eq!(o["gate"]["code"], "qoder_review_gate");
-        assert_eq!(o["gate"]["blocking"], true);
-    }
-
     #[test]
     fn golden_unknown_router_rs_token_in_followup() {
         let v = json!({

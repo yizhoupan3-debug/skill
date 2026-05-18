@@ -4,6 +4,7 @@
 use crate::atomic_write::write_atomic_json;
 use crate::framework_runtime::resolve_repo_root_arg;
 use crate::harness_context_signals::autopilot_state_signals_math;
+use crate::route::invalidate_records_cache;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
 };
@@ -22,6 +23,13 @@ fn autopilot_drive_hook_enabled() -> bool {
     // P1-E: aggregate kill-switch first.
     router_rs_operator_inject_globally_enabled()
         && router_rs_env_enabled_default_true(AUTOPILOT_DRIVE_HOOK_ENV)
+}
+
+/// Invalidate route records cache after GOAL_STATE mutations (best-effort).
+fn invalidate_route_records_cache_on_write() {
+    if let Err(e) = invalidate_records_cache() {
+        eprintln!("WARN: route records cache invalidation failed: {}", e);
+    }
 }
 
 /// 从 `artifacts/current/active_task.json` 读取 `task_id`。
@@ -50,6 +58,35 @@ pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
         .filter(|s| !s.is_empty())?;
     crate::path_guard::safe_task_id_component(&t)?;
     Some(t)
+}
+
+/// Validate that the task directory exists. Returns the path if valid, None if task_id is invalid.
+pub fn validate_task_directory_exists(repo_root: &Path, task_id: &str) -> Option<PathBuf> {
+    let tid = crate::path_guard::safe_task_id_component(task_id)?;
+    let task_dir = repo_root.join("artifacts/current").join(tid);
+    if task_dir.is_dir() {
+        Some(task_dir)
+    } else {
+        None
+    }
+}
+
+/// Ensure the task directory exists, creating it if necessary.
+/// Returns the path on success, or an error message if creation fails.
+pub fn ensure_task_directory(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+    let tid = crate::path_guard::validate_task_id_component(task_id)?;
+    let task_dir = repo_root.join("artifacts/current").join(tid);
+
+    if task_dir.is_dir() {
+        return Ok(task_dir);
+    }
+
+    fs::create_dir_all(&task_dir)
+        .map_err(|e| format!("failed to create task directory '{}': {}", tid, e))?;
+
+    eprintln!("[router-rs] Created task directory: {}", task_dir.display());
+
+    Ok(task_dir)
 }
 
 fn parse_task_id_from_pointer_json(raw: &str) -> Option<String> {
@@ -575,9 +612,12 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                     obj.insert("completion_gates".to_string(), cg.clone());
                 }
             }
+            // Ensure task directory exists before writing GOAL_STATE
+            ensure_task_directory(&repo_root, &task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
+            invalidate_route_records_cache_on_write();
             let rfv_loop_superseded =
                 crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
@@ -622,6 +662,7 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
                 o.insert("updated_at".to_string(), json!(now_iso()));
             }
             write_atomic_json(&path, &state)?;
+            invalidate_route_records_cache_on_write();
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
@@ -697,18 +738,17 @@ fn framework_autopilot_goal_impl(payload: Value) -> Result<Value, String> {
     }
 }
 
-/// `RG_FOLLOWUP` / `RG FOLLOWUP` / `rg-followup` at line head (model often drops the underscore),
-/// only when the line also carries faux host keyvals — avoids stripping incidental prose.
-fn spoof_rg_followup_line_head_compact(lower: &str) -> bool {
-    if !(lower.contains("missing_parts=") || lower.contains("escalation=")) {
-        return false;
-    }
-    let compact_head: String = lower
-        .chars()
-        .take(160)
-        .filter(|c| c.is_ascii_alphanumeric())
-        .collect();
-    compact_head.to_ascii_lowercase().starts_with("rgfollowup")
+/// Regex-anchored detection for faux RG_FOLLOWUP lines that start with variants of
+/// "rg_followup" / "rg-followup" / "rg followup" followed by the characteristic
+/// `missing_parts=independent_subagent...` tail (typical of model hallucinations).
+/// This is more precise than the legacy `contains` double-check.
+fn is_faux_rg_followup_line(lower: &str) -> bool {
+    lower.starts_with("rg_followup")
+        || lower.starts_with("rg-followup")
+        || lower.starts_with("rg followup")
+        || (lower.starts_with("rg")
+            && lower.contains("_followup")
+            && lower.contains("missing_parts=independent_subagent"))
 }
 
 /// Strip assistant-hallucinated or legacy **imitation** hook lines before they loop back via
@@ -730,7 +770,8 @@ pub(crate) fn scrub_spoof_host_followup_lines(text: &str) -> String {
             if lower.starts_with("rg_followup") {
                 return false;
             }
-            if spoof_rg_followup_line_head_compact(&lower) {
+            // Use precise line-start anchored detection for faux RG lines
+            if is_faux_rg_followup_line(&lower) {
                 return false;
             }
             // Typical faux host line shape: TOKEN_FOLLOWUP + missing_parts= without `router-rs`.
@@ -787,6 +828,7 @@ fn clear_goal_state(repo_root: &Path, task_id_override: Option<&str>) -> Result<
     if existed {
         fs::remove_file(&path).map_err(|err| format!("remove GOAL_STATE: {err}"))?;
     }
+    invalidate_route_records_cache_on_write();
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     Ok(json!({
         "ok": true,
@@ -818,6 +860,7 @@ fn resume_goal_running(
     obj.insert("drive_until_done".to_string(), json!(drive_until_done));
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
+    invalidate_route_records_cache_on_write();
     let rfv_loop_superseded =
         crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
@@ -861,6 +904,7 @@ fn set_terminal_flags(
     };
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
+    invalidate_route_records_cache_on_write();
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     Ok(json!({
         "ok": true,
@@ -894,6 +938,12 @@ fn compact_goal_one_line(text: &str, max_chars: usize) -> String {
     out
 }
 
+/// Returns the relative path for a task's GOAL_STATE file (for display in followup messages).
+/// This is the same path used in `build_autopilot_drive_followup_message_from_state`.
+pub fn goal_state_rel_path_for_task(task_id: &str) -> String {
+    format!("artifacts/current/{task_id}/GOAL_STATE.json")
+}
+
 /// Cursor 必要事件：若 goal 仍在 drive 且 running，生成紧凑续跑提示（已解析的 `GOAL_STATE`）。
 pub fn build_autopilot_drive_followup_message_from_state(
     repo_root: &Path,
@@ -916,7 +966,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
         .and_then(Value::as_str)
         .unwrap_or("");
     let st = state.get("status").and_then(Value::as_str).unwrap_or("?");
-    let rel = format!("artifacts/current/{task_id}/GOAL_STATE.json");
+    let rel = goal_state_rel_path_for_task(task_id);
     let goal_short = compact_goal_one_line(goal, 140);
     let mut lines = vec![
         format!("AUTOPILOT_DRIVE: {st} · drive 未停 → 续跑（`{rel}`）。"),

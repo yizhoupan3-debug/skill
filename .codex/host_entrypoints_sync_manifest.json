@@ -25,16 +25,15 @@
         ".claude/rules/framework.md",
         ".claude/settings.json"
       ],
+      "claude-desktop": [
+        "AGENTS.md",
+        ".claude/CLAUDE.md"
+      ],
       "codex-app": "AGENTS.md",
       "codex-cli": "AGENTS.md",
       "cursor": [
         "AGENTS.md",
         ".cursor/rules/*.mdc"
-      ],
-      "qoder": [
-        "AGENTS.md",
-        ".qoder/rules/framework.md",
-        ".qoder/settings.json"
       ]
     },
     "policy": "host-specific-agent-policy-v1",
@@ -44,7 +43,7 @@
       "codex-app",
       "cursor",
       "claude-code",
-      "qoder"
+      "claude-desktop"
     ]
   }
 }

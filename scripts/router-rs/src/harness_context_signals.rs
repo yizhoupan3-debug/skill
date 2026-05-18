@@ -29,6 +29,13 @@ pub fn text_signals_math_or_formal_checker(s: &str) -> bool {
         "不等式",
         "收敛",
         "极限",
+        "符号计算",
+        "可满足性",
+        "模型检验",
+        "程序分析",
+        "形式化",
+        "不动点",
+        "递归",
     ];
     if ZH.iter().any(|k| s.contains(k)) {
         return true;
@@ -116,6 +123,18 @@ mod tests {
     fn zh_keywords_trigger() {
         assert!(text_signals_math_or_formal_checker("证明不等式"));
         assert!(text_signals_math_or_formal_checker(" 定理 "));
+    }
+
+    #[test]
+    fn zh_keywords_extended() {
+        // New keywords for formal methods
+        assert!(text_signals_math_or_formal_checker("符号计算验证"));
+        assert!(text_signals_math_or_formal_checker("可满足性问题"));
+        assert!(text_signals_math_or_formal_checker("模型检验工具"));
+        assert!(text_signals_math_or_formal_checker("程序分析报告"));
+        assert!(text_signals_math_or_formal_checker("形式化方法"));
+        assert!(text_signals_math_or_formal_checker("不动点理论"));
+        assert!(text_signals_math_or_formal_checker("递归函数分析"));
     }
 
     #[test]

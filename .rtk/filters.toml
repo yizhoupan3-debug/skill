@@ -21,3 +21,67 @@ input = """
 compiled 109 skills
 """
 expected = "compiled 109 skills"
+
+[filters.cargo-build]
+description = "Compact cargo build output"
+match_command = "^cargo\\s+build"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*Compiling\\s+",
+  "^\\s*Finished\\s+",
+]
+max_lines = 30
+on_empty = "cargo build: ok"
+
+[filters.cargo-test]
+description = "Compact cargo test output"
+match_command = "^cargo\\s+test"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*Compiling\\s+",
+  "^\\s*Finished\\s+",
+  "^\\s*Running\\s+",
+  "^test result: ok",
+]
+max_lines = 50
+on_empty = "cargo test: ok"
+
+[filters.cargo-check]
+description = "Compact cargo check output"
+match_command = "^cargo\\s+check"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*Compiling\\s+",
+  "^\\s*Finished\\s+",
+]
+max_lines = 30
+on_empty = "cargo check: ok"
+
+[filters.npm-test]
+description = "Compact npm test output"
+match_command = "^npm\\s+test"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*>\\s+",
+  "^\\s*\\d+\\s+passing",
+  "^\\s*Test Suites:",
+]
+max_lines = 40
+on_empty = "npm test: ok"
+
+[filters.pytest]
+description = "Compact pytest output"
+match_command = "^pytest\\s+"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*collected\\s+",
+  "^\\s*=====.*=====.*=====$",
+]
+max_lines = 50
+on_empty = "pytest: ok"
+
+[filters.git-log]
+description = "Compact git log output"
+match_command = "^git\\s+log"
+max_lines = 20
+on_empty = "git log: empty"

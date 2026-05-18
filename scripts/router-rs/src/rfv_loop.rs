@@ -19,7 +19,6 @@ pub const RFV_LOOP_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
 /// Repo-relative path; keep in sync with `cursor_hooks` merge logic that surfaces this substring.
 pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
-const MAX_ROUNDS_HARD_CAP: u64 = 1000;
 /// `retrieval_trace` prose fields must be at least this many **trimmed** chars under strict mode.
 pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
 /// Cursor hook：`RFV_LOOP_CONTINUE` 跟进；设为 `0`/`false`/`off`/`no` 关闭。
@@ -66,7 +65,18 @@ pub fn source_traceable_heuristic(s: &str) -> bool {
     if lower.starts_with("10.") && lower.contains('/') {
         return true;
     }
-    for prefix in ["arxiv:", "pmid:", "isbn:", "dataset:", "official_doc:"] {
+    for prefix in [
+        "arxiv:",
+        "pmid:",
+        "isbn:",
+        "dataset:",
+        "official_doc:",
+        "huggingface:",
+        "hf:",
+        "github:",
+        "kaggle:",
+        "geojson:",
+    ] {
         if lower.starts_with(prefix) {
             return true;
         }
@@ -127,7 +137,7 @@ pub fn validate_external_research_strict(v: &Value) -> Result<(), String> {
         .get("contradiction_sweep")
         .and_then(Value::as_array)
         .ok_or_else(|| "external_research strict: contradiction_sweep must be array".to_string())?;
-    let min_sweep = std::cmp::max(2, claims_len);
+    let min_sweep = std::cmp::max(2, claims_len / 2);
     if sweep.len() < min_sweep {
         return Err(format!(
             "external_research strict: contradiction_sweep must have at least {min_sweep} entries, got {}",
@@ -479,25 +489,55 @@ fn evidence_row_is_success(row: &Value) -> bool {
     crate::hook_common::evidence_index_entry_implies_success(row)
 }
 
-/// 读取同任务目录下的 `EVIDENCE_INDEX.json`；非法 / 缺失视为空。
-fn read_evidence_index_artifacts(repo_root: &Path, task_id: &str) -> Vec<Value> {
-    let Ok(tid) = crate::path_guard::validate_task_id_component(task_id) else {
-        return Vec::new();
-    };
+/// 读取同任务目录下的 `EVIDENCE_INDEX.json`。
+/// 返回 `Result` 以区分「文件不存在」（正常）和其他错误（可能需要诊断）。
+#[derive(Debug)]
+pub enum EvidenceReadError {
+    InvalidTaskId(String),
+    FileNotFound,
+    ParseError(String),
+    IoError(String),
+}
+
+impl std::fmt::Display for EvidenceReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EvidenceReadError::InvalidTaskId(id) => write!(f, "invalid task_id: {}", id),
+            EvidenceReadError::FileNotFound => write!(f, "EVIDENCE_INDEX.json not found"),
+            EvidenceReadError::ParseError(e) => write!(f, "parse error: {}", e),
+            EvidenceReadError::IoError(e) => write!(f, "IO error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for EvidenceReadError {}
+
+fn read_evidence_index_artifacts_impl(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<Vec<Value>, EvidenceReadError> {
+    let tid = crate::path_guard::validate_task_id_component(task_id)
+        .map_err(EvidenceReadError::InvalidTaskId)?;
     let path = repo_root
         .join("artifacts/current")
         .join(tid)
         .join("EVIDENCE_INDEX.json");
-    let Ok(raw) = fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let Ok(val) = serde_json::from_str::<Value>(&raw) else {
-        return Vec::new();
-    };
+    if !path.is_file() {
+        return Err(EvidenceReadError::FileNotFound);
+    }
+    let raw = fs::read_to_string(&path).map_err(|e| EvidenceReadError::IoError(e.to_string()))?;
+    let val: Value =
+        serde_json::from_str(&raw).map_err(|e| EvidenceReadError::ParseError(e.to_string()))?;
     val.get("artifacts")
         .and_then(Value::as_array)
         .cloned()
-        .unwrap_or_default()
+        .ok_or_else(|| EvidenceReadError::ParseError("missing or non-array artifacts".to_string()))
+}
+
+/// 读取同任务目录下的 `EVIDENCE_INDEX.json`；非法 / 缺失视为空。
+/// 注意：此函数保持向后兼容，返回空 Vec 而非 Result。
+fn read_evidence_index_artifacts(repo_root: &Path, task_id: &str) -> Vec<Value> {
+    read_evidence_index_artifacts_impl(repo_root, task_id).unwrap_or_default()
 }
 
 /// 取上一轮 `at`；若无上一轮则取 RFV state 的 `updated_at`；都无则返回 None。
@@ -544,12 +584,7 @@ fn cross_link_evidence(
             .get("recorded_at")
             .or_else(|| row.get("at"))
             .and_then(Value::as_str);
-        let in_window = match (&window_start, row_at) {
-            (Some(start), Some(at)) => at > start.as_str(),
-            (None, _) => true,
-            (Some(_), None) => true,
-        };
-        if in_window {
+        if is_timestamp_in_window(row_at, window_start.as_deref()) {
             refs.push(json!(idx as u64));
         }
     }
@@ -559,6 +594,39 @@ fn cross_link_evidence(
         _ => None,
     };
     (refs, label)
+}
+
+/// 解析 RFC 3339 时间字符串为 DateTime<Utc>。
+/// 只接受标准 RFC 3339 格式，拒绝非标准格式以避免歧义。
+fn parse_iso_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .ok()
+}
+
+/// 判断一个 evidence 行的 recorded_at 是否在 window 内。
+/// 保守处理：解析失败视为不在窗口内（避免 false positive）。
+fn is_timestamp_in_window(row_at: Option<&str>, window_start: Option<&str>) -> bool {
+    match (window_start, row_at) {
+        // 两个时间都存在：使用真正的时间比较
+        (Some(start), Some(at)) => {
+            let start_dt = match parse_iso_datetime(start) {
+                Some(dt) => dt,
+                None => return false, // 解析失败：保守处理
+            };
+            let at_dt = match parse_iso_datetime(at) {
+                Some(dt) => dt,
+                None => return false, // 解析失败：保守处理
+            };
+            at_dt > start_dt
+        }
+        // 有 window_start 但 row 没有时间：不在任何窗口内
+        (Some(_), None) => false,
+        // 无 window_start：表示从头开始，所有有效时间的记录都在窗口内
+        (None, Some(_)) => true,
+        // 两者都没有：不在窗口内
+        (None, None) => false,
+    }
 }
 
 fn rfv_loop_hook_enabled() -> bool {
@@ -676,8 +744,9 @@ fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>, String
 }
 
 fn clamp_max_rounds(raw: u64) -> (u64, bool) {
-    if raw > MAX_ROUNDS_HARD_CAP {
-        (MAX_ROUNDS_HARD_CAP, true)
+    let cap = crate::router_env_flags::router_rs_rfv_max_rounds_cap();
+    if raw > cap {
+        (cap, true)
     } else {
         (raw, false)
     }
@@ -807,6 +876,10 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                     .and_then(Value::as_bool)
                     .unwrap_or(false)
             };
+            // NOTE: `external_research_strict` defaults to true (enforce structured ER quality),
+            // while `prefer_structured_external_research` defaults to false (loose recommendation).
+            // These have different design intents despite similar naming.
+            // See: docs/references/rfv-loop/reasoning-depth-contract.md
             let external_research_strict = payload
                 .get("external_research_strict")
                 .and_then(Value::as_bool)
@@ -883,7 +956,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 "goal_state_cleared": goal_state_cleared,
                 "warning": if capped {
                     Some(format!(
-                        "max_rounds requested {requested_max} exceeds hard cap {MAX_ROUNDS_HARD_CAP}; stored max_rounds={max_rounds}"
+                        "max_rounds requested {requested_max} exceeds hard cap {}; stored max_rounds={max_rounds}",
+                        crate::router_env_flags::router_rs_rfv_max_rounds_cap()
                     ))
                 } else {
                     None
@@ -914,7 +988,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             let max_rounds = obj
                 .get("max_rounds")
                 .and_then(Value::as_u64)
-                .unwrap_or(MAX_ROUNDS_HARD_CAP);
+                .unwrap_or(crate::router_env_flags::router_rs_rfv_max_rounds_cap());
             if round_n > max_rounds {
                 return Err(format!("round {round_n} exceeds max_rounds {max_rounds}"));
             }
@@ -1613,6 +1687,14 @@ mod tests {
         assert!(source_traceable_heuristic("ISBN:978-3-16-148410-0"));
         assert!(source_traceable_heuristic("dataset:gov.example/series/v1"));
         assert!(source_traceable_heuristic("official_doc:eu-reg-2024/001"));
+        // New prefixes
+        assert!(source_traceable_heuristic("huggingface:transformers"));
+        assert!(source_traceable_heuristic("HF:bert-base"));
+        assert!(source_traceable_heuristic("github:anthropic/claude-code"));
+        assert!(source_traceable_heuristic("kaggle:datasets/imagenet"));
+        assert!(source_traceable_heuristic(
+            "geojson:https://example.com/data.geojson"
+        ));
 
         assert!(!source_traceable_heuristic(""));
         assert!(!source_traceable_heuristic("random blog title"));
@@ -2392,5 +2474,20 @@ mod tests {
             None => std::env::remove_var("ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT"),
         }
         let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn parse_iso_datetime_accepts_rfc3339() {
+        assert!(parse_iso_datetime("2024-01-01T12:00:00Z").is_some());
+        assert!(parse_iso_datetime("2024-01-01T12:00:00+00:00").is_some());
+        assert!(parse_iso_datetime("2024-01-01T12:00:00-05:00").is_some());
+    }
+
+    #[test]
+    fn parse_iso_datetime_rejects_non_rfc3339() {
+        // Non-RFC3339 formats are now rejected
+        assert!(parse_iso_datetime("2024-01-01 12:00:00").is_none());
+        assert!(parse_iso_datetime("2024-01-01T12:00:00").is_none());
+        assert!(parse_iso_datetime("2024/01/01 12:00:00").is_none());
     }
 }

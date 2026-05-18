@@ -235,13 +235,14 @@ pub fn depth_compliance_aggregate(
     if evidence_ok {
         score += 1;
     }
-    // Third point: legacy = checkpoints OR adversarial round. `ROUTER_RS_DEPTH_SCORE_MODE=strict`
-    // also counts falsification tests and (when task strict) external_research strict-pass rounds.
-    let third_legacy = c.goal_checkpoint_count > 0 || c.rfv_adversarial_round_count > 0;
+    // Third point: checkpoints OR adversarial round OR strict external research. Legacy mode now counts
+    // structured external research (strict_task + strict-pass rounds) to ensure pure external research
+    // tasks can achieve full score. strict mode additionally counts falsification tests.
+    let third_legacy = c.goal_checkpoint_count > 0
+        || c.rfv_adversarial_round_count > 0
+        || (strict_task && c.rfv_external_strict_ok_round_count > 0);
     let third = if router_rs_depth_score_mode_strict() {
-        third_legacy
-            || c.rfv_falsification_test_count > 0
-            || (strict_task && c.rfv_external_strict_ok_round_count > 0)
+        third_legacy || c.rfv_falsification_test_count > 0
     } else {
         third_legacy
     };

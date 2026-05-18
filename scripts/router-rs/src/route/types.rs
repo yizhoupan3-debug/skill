@@ -83,6 +83,7 @@ pub(crate) struct RouteCandidate<'a> {
 pub(crate) struct RecordsCacheKey {
     pub(crate) runtime_path: Option<PathBuf>,
     pub(crate) manifest_path: Option<PathBuf>,
+    pub(crate) metadata_sidecar_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]

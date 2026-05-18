@@ -380,7 +380,7 @@ pub fn normalize_subagent_type(value: Option<&str>) -> String {
 
 /// 已 `normalize_subagent_type` 后的 lane：**Cursor / Codex** 默认为可清点 **`REVIEW_GATE` / CODEX_STOP 独立审稿** 的深度子代理 lane（与 `fork_context=false` 组合使用）。
 ///
-/// **不是** Claude/Qoder stdio-agent reviewer lane 的超集（Claude 另含 review/critic 等）；勿把本函数结果套到 Claude 门控。
+/// **不是** Claude stdio-agent reviewer lane 的超集（Claude 另含 review/critic 等）；勿把本函数结果套到 Claude 门控。
 pub fn is_deep_review_gate_lane_normalized(lane: &str) -> bool {
     crate::registry_review_gate::is_deep_review_gate_lane_from_registry(lane)
 }

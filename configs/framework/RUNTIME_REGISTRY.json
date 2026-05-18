@@ -14,7 +14,6 @@
       "codex-app",
       "cursor",
       "claude-code",
-      "qoder",
       "claude-desktop"
     ],
     "shared_system_source": "skills",
@@ -49,16 +48,6 @@
           "AGENTS.md",
           ".claude/rules/framework.md",
           ".claude/settings.json"
-        ]
-      },
-      "qoder": {
-        "install_tool": "qoder",
-        "projection_status": "implemented",
-        "installable": true,
-        "host_entrypoints": [
-          "AGENTS.md",
-          ".qoder/rules/framework.md",
-          ".qoder/settings.json"
         ]
       },
       "claude-desktop": {
@@ -240,20 +229,20 @@
         "codex-cli": "/autopilot",
         "cursor": "/autopilot",
         "claude-code": "/autopilot",
-        "qoder": "/autopilot"
+        "claude-desktop": "/autopilot"
       },
       "entrypoint_modes": {
         "quick": {
           "codex-cli": "/autopilot-quick",
           "cursor": "/autopilot-quick",
           "claude-code": "/autopilot-quick",
-          "qoder": "/autopilot-quick"
+          "claude-desktop": "/autopilot-quick"
         },
         "deep": {
           "codex-cli": "/autopilot-deep",
           "cursor": "/autopilot-deep",
           "claude-code": "/autopilot-deep",
-          "qoder": "/autopilot-deep"
+          "claude-desktop": "/autopilot-deep"
         }
       },
       "interaction_invariants": {
@@ -296,7 +285,7 @@
         "codex-cli": "/team",
         "cursor": "/team",
         "claude-code": "/team",
-        "qoder": "/team"
+        "claude-desktop": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -344,7 +333,7 @@
         "codex-cli": "/deepinterview",
         "cursor": "/deepinterview",
         "claude-code": "/deepinterview",
-        "qoder": "/deepinterview"
+        "claude-desktop": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -365,7 +354,7 @@
         "codex-cli": "/gitx",
         "cursor": "/gitx",
         "claude-code": "/gitx",
-        "qoder": "/gitx"
+        "claude-desktop": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -387,7 +376,7 @@
         "codex-cli": "/update",
         "cursor": "/update",
         "claude-code": "/update",
-        "qoder": "/update"
+        "claude-desktop": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -582,23 +571,34 @@
         "hard_gate_hooks"
       ]
     },
-    "qoder": {
-      "profile_id": "qoder_profile",
-      "host_id": "qoder",
-      "transport": "qoder-ide",
+    "claude-desktop": {
+      "profile_id": "claude_desktop_profile",
+      "host_id": "claude-desktop",
+      "transport": "mcp-stdio",
       "context_files": [
         "AGENTS.md"
       ],
       "settings_paths": [
         {
           "scope": "project",
-          "relative": ".qoder/settings.json"
+          "relative": ".claude/settings.json"
+        },
+        {
+          "scope": "user",
+          "host_root": "claude-desktop",
+          "relative": "settings.json"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "user",
+          "host_root": "claude-desktop",
+          "relative": "mcp.json"
         }
       ],
       "session_supervisor_driver": "unsupported",
       "resume_command_examples": [
-        "在 Qoder 插件中继续当前会话",
-        "在同一工作区重新打开 Agent 对话"
+        "Continue in the same Claude Desktop thread"
       ],
       "harness_capabilities": [
         "hot_runtime_routing",
@@ -608,6 +608,7 @@
       ],
       "capabilities": [
         "artifact_contract",
+        "mcp_servers",
         "workspace_bootstrap",
         "interactive_agent_chat",
         "framework_alias_entrypoints",

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "router-rs-framework": {
+      "args": [
+        "claude-desktop",
+        "agent",
+        "--repo-root",
+        "${workspaceRoot}"
+      ],
+      "command": "${env.HOME}/.local/bin/router-rs",
+      "description": "Framework continuity, skill routing, closeout advisory",
+      "type": "stdio"
+    }
+  }
+}

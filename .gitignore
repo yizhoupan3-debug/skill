@@ -92,3 +92,5 @@ opencode.jsonc
 
 # Private local aggregator; do not publish
 codex-aggregator/
+$TMPDIR/
+.cargo-target/

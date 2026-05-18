@@ -1,12 +1,11 @@
 mod common;
+mod host_platforms;
 
 use common::{
     assert_success, cargo_manifest_command, json_from_output, project_root, read_json, read_text,
     router_rs_json, run, seed_framework_markers,
 };
-use regex::Regex;
 use serde_json::{Map, Value};
-use skill_compiler::host_platforms;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -313,7 +312,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
-        serde_json::json!(["codex-cli", "codex-app", "cursor", "claude-code", "qoder"])
+        serde_json::json!(["codex-cli", "codex-app", "cursor", "claude-code", "claude-desktop"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
@@ -336,12 +335,8 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         ])
     );
     assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["qoder"],
-        serde_json::json!([
-            "AGENTS.md",
-            ".qoder/rules/framework.md",
-            ".qoder/settings.json"
-        ])
+        manifest["shared_system"]["host_entrypoints"]["claude-desktop"],
+        serde_json::json!(["AGENTS.md", ".claude/CLAUDE.md"])
     );
     assert_eq!(
         manifest["shared_system"]["policy"],
@@ -931,7 +926,7 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
             "codex".to_string(),
             "cursor".to_string(),
             "claude".to_string(),
-            "qoder".to_string(),
+            "claude-desktop".to_string(),
         ],
         &supported,
         false,
@@ -961,7 +956,7 @@ fn hot_runtime_skill_records_cover_all_supported_hosts() {
     let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
     let skills = runtime["skills"].as_array().expect("runtime skills");
     for row in skills.iter().filter_map(Value::as_array) {
-        let slug = row.get(0).and_then(|v| v.as_str()).expect("slug");
+        let slug = row.first().and_then(|v| v.as_str()).expect("slug");
         if HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS.contains(&slug) {
             continue;
         }

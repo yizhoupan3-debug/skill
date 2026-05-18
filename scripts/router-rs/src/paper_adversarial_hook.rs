@@ -30,9 +30,14 @@ pub(crate) fn cursor_paper_adversarial_hook_requested() -> bool {
     router_rs_operator_inject_globally_enabled() && router_rs_env_enabled_default_false(ENV_HOOK)
 }
 
-/// 轻量启发：倾向少漏报论文任务、少误伤纯工程 PR/Cargo 对话。
+/// 轻量启发：倾向少漏报论文任务、少误伤纯工程 PR/Cargo 对话与纯 ML/CS 技术讨论。
 pub(crate) fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
+    let has_zh_paper = text.contains("论文") || text.contains("手稿");
+    let has_en_paper = lower.contains("manuscript") || lower.contains("rebuttal");
+    let has_paper_signal = has_zh_paper || has_en_paper;
+
+    // 工程噪声过滤（纯 CI/PR/代码操作）
     let code_only_noise = (lower.contains("pull request")
         || lower.contains(".github/workflows")
         || lower.contains("cargo test")
@@ -40,12 +45,25 @@ pub(crate) fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
         || lower.contains("cargo fmt")
         || lower.contains("clippy")
         || lower.contains("rustfmt"))
-        && !text.contains("论文")
-        && !text.contains("手稿")
-        && !lower.contains("manuscript")
-        && !lower.contains("rebuttal");
+        && !has_paper_signal;
 
     if code_only_noise {
+        return false;
+    }
+
+    // 纯 ML/CS 技术讨论过滤（不含论文关键词时）
+    let tech_ml_noise = {
+        let tech_tokens = [
+            "training", "model architecture", "loss function", "hyperparameter",
+            "embedding", "backpropagation", "dataset", "inference",
+        ];
+        tech_tokens.iter().filter(|k| lower.contains(*k)).count() >= 2
+            && !has_paper_signal
+            && !text.contains("审稿")
+            && !text.contains("投稿")
+            && !text.contains("reviewer comment")
+    };
+    if tech_ml_noise {
         return false;
     }
 
@@ -87,7 +105,19 @@ pub(crate) fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
     let weak = [
         "latex", "appendix", "theorem", "lemma", "baseline", "ablation", "novelty", "claim",
     ];
-    weak.iter().filter(|k| lower.contains(*k)).count() >= 4
+    let mut weak_count = weak.iter().filter(|k| lower.contains(*k)).count() as isize;
+
+    // Anti-signal: ML/CS 行话在无强信号时降权，减少纯技术讨论误触发
+    let anti_signals = [
+        "transformer", "attention", "convolution", "normalization",
+        "optimizer", "gradient descent", "batch size", "learning rate",
+    ];
+    let anti_hits = anti_signals.iter().filter(|k| lower.contains(*k)).count();
+    if anti_hits >= 2 && !has_paper_signal && !text.contains("审稿") {
+        weak_count -= 2;
+    }
+
+    weak_count >= 5
 }
 
 pub(crate) fn resolve_paper_adversarial_block(repo_root: &Path) -> String {
@@ -162,12 +192,35 @@ mod tests {
     }
 
     #[test]
-    fn weak_signals_need_four_hits() {
+    fn weak_signals_need_five_hits() {
         assert!(!prompt_signals_paper_manuscript_work(
             "compare baseline ablation novelty metrics in training logs"
         ));
+        // 4 weak hits (baseline, ablation, novelty, claim) below threshold of 5
+        assert!(!prompt_signals_paper_manuscript_work(
+            "baseline, ablation, novelty, claim"
+        ));
+        // 5 weak hits (appendix, baseline, ablation, novelty, claim) meets threshold
         assert!(prompt_signals_paper_manuscript_work(
-            "compare baseline ablation novelty claim metrics in appendix table"
+            "appendix: baseline ablation novelty claim metrics"
+        ));
+    }
+
+    #[test]
+    fn ml_tech_discussion_suppressed() {
+        assert!(!prompt_signals_paper_manuscript_work(
+            "The training loss uses a transformer architecture with layer normalization and attention"
+        ));
+        assert!(!prompt_signals_paper_manuscript_work(
+            "our model uses convolution with batch normalization and gradient descent optimizer"
+        ));
+    }
+
+    #[test]
+    fn ml_tech_with_paper_keyword_not_suppressed() {
+        // "审稿意见" + "手稿" are strong signals despite ML tech tokens
+        assert!(prompt_signals_paper_manuscript_work(
+            "请根据审稿意见修改这篇手稿的 baseline 和 ablation 实验设计"
         ));
     }
 

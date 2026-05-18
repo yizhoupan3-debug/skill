@@ -16,13 +16,16 @@ trigger_hints:
   - 官方文档
 metadata:
   version: "1.0.0"
-  platforms: [supported]
+  platforms: [codex-cli, codex-app]
   tags:
     - openai
     - documentation
     - api
     - codex
     - mcp
+  mcp_required:
+    - openaiDeveloperDocs
+    - description: "Requires openaiDeveloperDocs MCP from https://developers.openai.com/mcp"
 allowed_tools:
   - browser
 approval_required_tools:

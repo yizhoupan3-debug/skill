@@ -33,9 +33,9 @@ fn strip_inline_yaml_hash_comment(s: &str) -> &str {
 /// `alwaysApply: true` / `True` / quoted `true` (ASCII), optional `# …` tail; does not accept yes/on/1.
 fn always_apply_value_is_true(raw_val: &str) -> bool {
     let mut v = raw_val.trim();
-    if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') {
-        v = &v[1..v.len() - 1];
-    } else if v.len() >= 2 && v.starts_with('\'') && v.ends_with('\'') {
+    if v.len() >= 2
+        && ((v.starts_with('"') && v.ends_with('"')) || (v.starts_with('\'') && v.ends_with('\'')))
+    {
         v = &v[1..v.len() - 1];
     }
     let v = strip_inline_yaml_hash_comment(v);

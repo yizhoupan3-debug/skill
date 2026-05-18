@@ -103,16 +103,18 @@ pub(crate) fn search_skills(records: &[SkillRecord], query: &str, limit: usize) 
 }
 
 pub(crate) fn filter_records_for_host(
-    records: Vec<SkillRecord>,
+    records: impl AsRef<[SkillRecord]>,
     host_id: Option<&str>,
 ) -> Result<Vec<SkillRecord>, String> {
     let Some(host_id) = host_id.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(records);
+        return Ok(records.as_ref().to_vec());
     };
     let host_id = host_id.to_ascii_lowercase();
+    let original_len = records.as_ref().len();
     let mut saw_host = false;
-    let filtered = records
-        .into_iter()
+    let filtered: Vec<SkillRecord> = records
+        .as_ref()
+        .iter()
         .filter(|record| {
             if record.record_kind == "framework_command" {
                 return true;
@@ -124,7 +126,17 @@ pub(crate) fn filter_records_for_host(
             saw_host |= allowed;
             allowed
         })
-        .collect::<Vec<_>>();
+        .cloned()
+        .collect();
+
+    // 当所有记录都被过滤掉时，记录警告
+    if filtered.is_empty() && original_len > 0 {
+        eprintln!(
+            "[router-rs warning] host_id={} filtered all {} records (saw_host={})",
+            host_id, original_len, saw_host
+        );
+    }
+
     if !saw_host {
         return Err(format!(
             "host-aware routing has no skill records for host_id `{host_id}`; host_platforms metadata is missing or the host id is unsupported"
@@ -206,6 +218,10 @@ pub(crate) fn route_task(
     };
 
     if viable.is_empty() {
+        eprintln!(
+            "[router-rs route] NO SKILL HIT: query=\"{}\" session_id=\"{}\"",
+            query, session_id
+        );
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill."
                 .to_string(),
@@ -233,9 +249,11 @@ pub(crate) fn route_task(
             ),
         });
     }
-    if viable
-        .iter()
-        .all(|candidate| is_overlay_record(candidate.record))
+    // 只有多个元素全部是 overlay 才返回 no-hit；单元素 overlay 应该正常路由
+    if viable.len() > 1
+        && viable
+            .iter()
+            .all(|candidate| is_overlay_record(candidate.record))
     {
         let fallback_reasons = compact_route_reasons(&[
             "Only overlay signals matched; native runtime should proceed without loading a primary skill."
@@ -268,6 +286,13 @@ pub(crate) fn route_task(
 
     let selected = pick_owner(viable, &normalized_query, &query_token_list);
     if selected.score < layer_threshold(&selected.record.layer) {
+        eprintln!(
+            "[router-rs route] BELOW THRESHOLD: query=\"{}\" selected={} score={:.2} threshold={:.2}",
+            query,
+            selected.record.slug,
+            selected.score,
+            layer_threshold(&selected.record.layer)
+        );
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill."
                 .to_string(),

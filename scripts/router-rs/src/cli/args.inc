@@ -27,10 +27,6 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: ClaudeDesktopCommand,
     },
-    Qoder {
-        #[command(subcommand)]
-        command: QoderCommand,
-    },
     Trace {
         #[command(subcommand)]
         command: TraceCommand,
@@ -118,6 +114,38 @@ pub(crate) enum MaintSubcommand {
     /// Print `export CODEX_HOME=…` / `CURSOR_HOME=…` for repo-local session homes.
     PrintLocalHomes(MaintRepoArgs),
     InstallCodexUserHooks(InstallCodexUserHooksArgs),
+    /// Check task pointers, registry consistency, and identify orphan directories.
+    ContinuityAudit(MaintRepoArgs),
+    /// Clean stale hook-state files older than TTL (default 7 days).
+    CleanHookState(CleanHookStateArgs),
+    /// Clean orphan task directories not referenced by any pointer or registry.
+    CleanOrphans(CleanOrphansArgs),
+}
+
+/// Clean hook-state files by age.
+#[derive(Args, Debug, Clone)]
+pub(crate) struct CleanHookStateArgs {
+    #[arg(long)]
+    pub(crate) framework_root: Option<PathBuf>,
+    /// Only print what would be deleted without actually deleting.
+    #[arg(long, default_value = "false")]
+    pub(crate) dry_run: bool,
+    /// Delete files older than N days (default: 7).
+    #[arg(long)]
+    pub(crate) older_than_days: Option<u64>,
+}
+
+/// Clean orphan task directories.
+#[derive(Args, Debug, Clone)]
+pub(crate) struct CleanOrphansArgs {
+    #[arg(long)]
+    pub(crate) framework_root: Option<PathBuf>,
+    /// Only print what would be deleted without actually deleting.
+    #[arg(long, default_value = "false")]
+    pub(crate) dry_run: bool,
+    /// Delete directories older than N days (default: 30).
+    #[arg(long)]
+    pub(crate) older_than_days: Option<u64>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -216,11 +244,6 @@ pub(crate) enum ClaudeDesktopCommand {
 pub(crate) struct ClaudeDesktopAgentCommand {
     #[arg(long)]
     pub(crate) repo_root: Option<PathBuf>,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub(crate) enum QoderCommand {
-    Hook(QoderHookCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -400,14 +423,6 @@ pub(crate) struct CursorHookCommand {
 
 #[derive(Args, Debug, Clone)]
 pub(crate) struct ClaudeHookCommand {
-    #[arg(long)]
-    pub(crate) event: String,
-    #[arg(long)]
-    pub(crate) repo_root: Option<PathBuf>,
-}
-
-#[derive(Args, Debug, Clone)]
-pub(crate) struct QoderHookCommand {
     #[arg(long)]
     pub(crate) event: String,
     #[arg(long)]

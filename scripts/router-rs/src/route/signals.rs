@@ -701,6 +701,35 @@ pub(crate) fn has_paper_context(query_text: &str, query_token_list: &[String]) -
     })
 }
 
+/// True when the query is about reviewing/checking a mathematical proof or derivation,
+/// without a full-paper/manuscript context. Helps route pure math-review to `math-derivation`
+/// instead of `paper-reviewer`.
+pub(crate) fn has_math_review_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let math_review_markers = [
+        "审一下这个证明",
+        "审这个证明",
+        "审一下推导",
+        "证明是否正确",
+        "推导是否正确",
+        "证明有没有漏洞",
+        "推导有没有漏洞",
+        "check this proof",
+        "review this proof",
+        "verify this derivation",
+        "数学推导审查",
+        "证明审查",
+    ];
+    let has_math_review = math_review_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    });
+    if !has_math_review {
+        return false;
+    }
+    // Exclude when there's a full paper context (those route to paper-reviewer)
+    !has_paper_context(query_text, query_token_list)
+}
+
 pub(crate) fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool {
     query_text.contains(&normalize_text("github"))
         || text_matches_phrase(query_token_list, "github")

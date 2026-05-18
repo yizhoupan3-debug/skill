@@ -7,12 +7,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 fn pick_router_rs_under_target_dir(base: &Path) -> Option<PathBuf> {
-    for candidate in [base.join("debug/router-rs"), base.join("release/router-rs")] {
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
+    [base.join("debug/router-rs"), base.join("release/router-rs")]
+        .into_iter()
+        .find(|candidate| candidate.is_file())
 }
 
 /// Align with `host_integration::cargo_router_rs_executable`: same `cargo metadata` target dir
@@ -107,7 +104,7 @@ pub fn write_text(path: &Path, content: &str) {
 pub fn seed_framework_markers(root: &Path) {
     write_text(
         &root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_targets":{"policy":"shared-rust-core-explicit-host-projections","supported":["codex-cli","codex-app","cursor","claude-code","qoder"],"shared_system_source":"skills","metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]},"qoder":{"install_tool":"qoder","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".qoder/rules/framework.md",".qoder/settings.json"]}}},"host_projections":{"codex-cli":{"profile_id":"codex_profile","host_id":"codex-cli","transport":"native-codex","capabilities":["external_session_supervisor"],"session_supervisor_driver":"codex_driver","session_supervisor_status":{"supported":true}},"codex-app":{"profile_id":"codex_app_profile","host_id":"codex-app","transport":"codex-desktop-app","capabilities":["thread_destination"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"cursor":{"profile_id":"cursor_profile","host_id":"cursor","transport":"cursor-agent","capabilities":[],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"claude-code":{"profile_id":"claude_profile","host_id":"claude-code","transport":"anthropic-claude-code","capabilities":[],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_targets":{"policy":"shared-rust-core-explicit-host-projections","supported":["codex-cli","codex-app","cursor","claude-code","claude-desktop"],"shared_system_source":"skills","metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]},"claude-desktop":{"install_tool":"claude-desktop","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/CLAUDE.md"]}}},"host_projections":{"codex-cli":{"profile_id":"codex_profile","host_id":"codex-cli","transport":"native-codex","capabilities":["external_session_supervisor"],"session_supervisor_driver":"codex_driver","session_supervisor_status":{"supported":true}},"codex-app":{"profile_id":"codex_app_profile","host_id":"codex-app","transport":"codex-desktop-app","capabilities":["thread_destination"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"cursor":{"profile_id":"cursor_profile","host_id":"cursor","transport":"cursor-agent","capabilities":[],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"claude-code":{"profile_id":"claude_profile","host_id":"claude-code","transport":"anthropic-claude-code","capabilities":[],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"claude-desktop":{"profile_id":"claude_desktop_profile","host_id":"claude-desktop","transport":"mcp-stdio","capabilities":["artifact_contract","mcp_servers","workspace_bootstrap","interactive_agent_chat","framework_alias_entrypoints"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}}}}"#,
     );
     write_text(
         &root.join("scripts/router-rs/Cargo.toml"),
@@ -247,17 +244,14 @@ fn resolve_router_rs_binary() -> Option<PathBuf> {
             return Some(path);
         }
     }
-    for candidate in [
+    [
         root.join("scripts/router-rs/target/debug/router-rs"),
         root.join("scripts/router-rs/target/release/router-rs"),
         root.join("target/debug/router-rs"),
         root.join("target/release/router-rs"),
-    ] {
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
 }
 
 pub fn router_rs_json(args: &[&str]) -> Value {

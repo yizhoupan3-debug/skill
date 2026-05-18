@@ -6,7 +6,7 @@
     "codex-app",
     "cursor",
     "claude-code",
-    "qoder"
+    "claude-desktop"
   ],
   "projection_status_values": [
     "implemented",
@@ -24,7 +24,7 @@
     "codex",
     "cursor",
     "claude",
-    "qoder"
+    "claude-desktop"
   ],
   "framework_command_required_fields": [
     "canonical_owner",

@@ -288,4 +288,33 @@ mod tests {
             None => env::remove_var(key),
         }
     }
+
+    #[test]
+    fn rfv_max_rounds_cap_defaults_and_clamped() {
+        let _g = lock_env();
+        let prev = env::var_os("ROUTER_RS_RFV_MAX_ROUNDS_CAP");
+        env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP");
+        assert_eq!(super::router_rs_rfv_max_rounds_cap(), 1000);
+        env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "500");
+        assert_eq!(super::router_rs_rfv_max_rounds_cap(), 500);
+        env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "20000");
+        assert_eq!(super::router_rs_rfv_max_rounds_cap(), 10000); // clamped to max
+        match prev {
+            Some(v) => env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", v),
+            None => env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP"),
+        }
+    }
+}
+
+/// `ROUTER_RS_RFV_MAX_ROUNDS_CAP`: RFV 循环最大轮次硬上限。
+///
+/// 默认 **1000**；可运行时调整，上限 10000 以防止极端值。
+pub fn router_rs_rfv_max_rounds_cap() -> u64 {
+    const MAX_CAP: u64 = 10000;
+    const DEFAULT: u64 = 1000;
+    env::var("ROUTER_RS_RFV_MAX_ROUNDS_CAP")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .map(|n| n.min(MAX_CAP))
+        .unwrap_or(DEFAULT)
 }

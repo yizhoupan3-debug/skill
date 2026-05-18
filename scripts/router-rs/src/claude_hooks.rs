@@ -1,5 +1,4 @@
 //! Claude Code（Anthropic CLI）hooks：`router-rs claude hook --event=… --repo-root …`。
-//! **Qoder IDE** Agent hooks 复用同一 stdin/stdout 协议：`router-rs qoder hook …`（见 `run_qoder_hook`）。
 //! 历史版本接口快照：`git show 89ece4c^:scripts/router-rs/src/claude_hooks.rs`（事件：`pre-tool-use`、`user-prompt-submit`、`post-tool-use`、`stop`；CLI 亦接受 `PreToolUse` 等 PascalCase 别名，与 Codex hook 拼写对齐）。
 //!
 //! **误接 Cursor hook stdin**：仅在 stdin JSON 呈现结构化 Cursor envelope（顶层非空 `cursor_version` 字符串 + `workspace_roots` 数组 + 非空 `hook_event_name` 或 `hookEventName`）时整条静默；
@@ -23,85 +22,72 @@ use std::path::{Component, Path, PathBuf};
 
 const CLAUDE_HOOK_STATE_UNREADABLE: &str =
     "router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
-const QODER_HOOK_STATE_UNREADABLE: &str =
-    "router-rs QODER_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
 
-/// 与 Claude Code 共享 hook JSON 协议；通过 thread-local 切换 `.claude` / `.qoder` 等宿主差异。
+/// 与 Claude Code 共享 hook JSON 协议；通过 thread-local 切换 `.claude` 等宿主差异。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StdioAgentHookHost {
     ClaudeCode,
-    Qoder,
 }
 
 impl StdioAgentHookHost {
     fn state_dir(self) -> &'static str {
         match self {
             Self::ClaudeCode => ".claude",
-            Self::Qoder => ".qoder",
         }
     }
 
     fn hook_state_unreadable(self) -> &'static str {
         match self {
             Self::ClaudeCode => CLAUDE_HOOK_STATE_UNREADABLE,
-            Self::Qoder => QODER_HOOK_STATE_UNREADABLE,
         }
     }
 
     fn review_gate_disable_env(self) -> &'static str {
         match self {
             Self::ClaudeCode => "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
-            Self::Qoder => "ROUTER_RS_QODER_REVIEW_GATE_DISABLE",
         }
     }
 
     fn session_namespace_env(self) -> &'static str {
         match self {
             Self::ClaudeCode => "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
-            Self::Qoder => "ROUTER_RS_QODER_SESSION_NAMESPACE",
         }
     }
 
     fn log_label(self) -> &'static str {
         match self {
             Self::ClaudeCode => "claude",
-            Self::Qoder => "qoder",
         }
     }
 
     fn settings_guarded_paths(self) -> &'static [&'static str] {
         match self {
             Self::ClaudeCode => SETTINGS_GUARDED_PATHS_CLAUDE,
-            Self::Qoder => SETTINGS_GUARDED_PATHS_QODER,
         }
     }
 
     fn generated_entrypoint_paths(self) -> &'static [&'static str] {
         match self {
             Self::ClaudeCode => GENERATED_ENTRYPOINT_PATHS_CLAUDE,
-            Self::Qoder => GENERATED_ENTRYPOINT_PATHS_QODER,
         }
     }
-
 
     fn user_config_dir_leaf(self) -> &'static str {
         match self {
             Self::ClaudeCode => ".claude",
-            Self::Qoder => ".qoder",
         }
     }
 
     fn review_gate_incomplete_stop_reason(self) -> &'static str {
         match self {
             Self::ClaudeCode => "router-rs CLAUDE_REVIEW_GATE incomplete: run an observed independent reviewer lane with explicit fork_context=false before closing this review turn.",
-            Self::Qoder => "router-rs QODER_REVIEW_GATE incomplete: run an observed independent reviewer lane with explicit fork_context=false before closing this review turn.",
+
         }
     }
 
     fn validate_settings_stop_reason(self) -> &'static str {
         match self {
             Self::ClaudeCode => "Validate Claude hook/settings JSON before ending this turn.",
-            Self::Qoder => "Validate Qoder hook/settings JSON before ending this turn.",
         }
     }
 }
@@ -230,10 +216,7 @@ const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
 
 const SETTINGS_GUARDED_PATHS_CLAUDE: &[&str] =
     &[".claude/settings.json", ".claude/settings.local.json"];
-const SETTINGS_GUARDED_PATHS_QODER: &[&str] =
-    &[".qoder/settings.json", ".qoder/settings.local.json"];
 const GENERATED_ENTRYPOINT_PATHS_CLAUDE: &[&str] = &["AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md"];
-const GENERATED_ENTRYPOINT_PATHS_QODER: &[&str] = &["AGENTS.md", ".qoder/rules/framework.md"];
 const RETIRED_SURFACE_PATHS: &[&str] = &[
     ".codex/hooks.json",
     ".agents",
@@ -243,17 +226,6 @@ const RETIRED_SURFACE_PATHS: &[&str] = &[
 /// aligned with Codex hook spelling (`PreToolUse`, `Stop`, …)。
 pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
     with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
-        let canonical = canonical_stdio_agent_hook_command(command)?;
-        let payload = read_stdin_payload()?;
-        Ok(dispatch_stdio_agent_hook_payload(
-            canonical, repo_root, &payload,
-        ))
-    })
-}
-
-/// Qoder IDE / JetBrains 插件 Agent hooks：`router-rs qoder hook --event=… --repo-root …`。
-pub fn run_qoder_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
-    with_stdio_agent_hook_host(StdioAgentHookHost::Qoder, || {
         let canonical = canonical_stdio_agent_hook_command(command)?;
         let payload = read_stdin_payload()?;
         Ok(dispatch_stdio_agent_hook_payload(
@@ -294,22 +266,6 @@ pub fn run_claude_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<
     crate::router_rs_observation::attach_router_rs_observation(
         &mut output,
         crate::router_rs_observation::HookObservationHost::ClaudeCode,
-    );
-    let serialized = serde_json::to_string(&output).map_err(|e| e.to_string())?;
-    let mut stdout = std::io::stdout();
-    stdout
-        .write_all(format!("{serialized}\n").as_bytes())
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// `router-rs qoder hook --event=… --repo-root …` — stdin JSON → Qoder Agent hook response JSON (line-delimited).
-pub fn run_qoder_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
-    let repo_root = crate::framework_runtime::resolve_repo_root_arg(cli_repo_root)?;
-    let mut output = run_qoder_hook(event, &repo_root)?;
-    crate::router_rs_observation::attach_router_rs_observation(
-        &mut output,
-        crate::router_rs_observation::HookObservationHost::Qoder,
     );
     let serialized = serde_json::to_string(&output).map_err(|e| e.to_string())?;
     let mut stdout = std::io::stdout();
@@ -927,7 +883,6 @@ fn clear_touch_state(repo_root: &Path, payload: &Value) {
     let _ = fs::remove_file(legacy_touch_state_path(repo_root));
 }
 
-
 fn payload_relative_paths(repo_root: &Path, payload: &Value) -> Vec<String> {
     let mut paths = HashSet::new();
     collect_payload_paths(payload, &mut paths);
@@ -995,8 +950,6 @@ fn bash_command(payload: &Value) -> Option<&str> {
         .or_else(|| payload.get("command"))
         .and_then(Value::as_str)
 }
-
-
 
 fn is_retired_surface(path: &str) -> bool {
     RETIRED_SURFACE_PATHS
@@ -1113,7 +1066,6 @@ fn payload_text(payload: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn silent_for_safe_read_only_bash() {
@@ -1344,62 +1296,6 @@ mod tests {
             Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
             None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
         }
-        let _ = fs::remove_dir_all(repo);
-    }
-
-    #[test]
-    fn qoder_review_prompt_uses_qoder_state_and_stop_reason() {
-        let _env = crate::test_env_sync::process_env_lock();
-        let prev_disable = std::env::var_os("ROUTER_RS_QODER_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_QODER_REVIEW_GATE_DISABLE");
-        let repo = unique_test_repo("qoder-review-gate-block");
-        let payload = json!({ "session_id": "qoder-review", "prompt": "深度 review 这个 PR" });
-
-        with_stdio_agent_hook_host(StdioAgentHookHost::Qoder, || {
-            let context = run_user_prompt_submit(&repo, &payload).expect("review context");
-            assert!(context["hookSpecificOutput"]["additionalContext"]
-                .as_str()
-                .unwrap_or("")
-                .contains("fork_context=false"));
-            assert!(repo.join(".qoder").is_dir());
-            assert!(!repo.join(".claude/review_gate_").exists());
-
-            let stop = run_stop(&repo, &json!({ "session_id": "qoder-review" }))
-                .expect("qoder stop block");
-            assert_eq!(stop["decision"], "block");
-            assert!(stop["stopReason"]
-                .as_str()
-                .unwrap_or("")
-                .contains("QODER_REVIEW_GATE"));
-        });
-
-        match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_QODER_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_QODER_REVIEW_GATE_DISABLE"),
-        }
-        let _ = fs::remove_dir_all(repo);
-    }
-
-    #[test]
-    fn qoder_settings_validation_uses_qoder_paths() {
-        let repo = unique_test_repo("qoder-settings-validated");
-        let session = json!({ "session_id": "qoder-settings-ok" });
-
-        with_stdio_agent_hook_host(StdioAgentHookHost::Qoder, || {
-            persist_touch_state(&repo, &session, true, false, false, false);
-            let payload = json!({
-                "session_id": "qoder-settings-ok",
-                "tool_name": "Bash",
-                "tool_input": { "command": "jq empty .qoder/settings.json" },
-                "exit_code": 0
-            });
-
-            assert!(run_post_tool_use(&repo, &payload).is_none());
-            assert!(run_stop(&repo, &session).is_none());
-            assert!(!touch_state_path(&repo, &session).exists());
-            assert!(!repo.join(".claude").join("hook_state.json").exists());
-        });
-
         let _ = fs::remove_dir_all(repo);
     }
 
@@ -1679,7 +1575,10 @@ mod tests {
             "must not silent_success on partial envelope; got {output:?}"
         );
         assert!(
-            output["hookSpecificOutput"]["permissionDecision"].as_str().unwrap_or("").contains("deny"),
+            output["hookSpecificOutput"]["permissionDecision"]
+                .as_str()
+                .unwrap_or("")
+                .contains("deny"),
             "expected deny decision; got {output:?}"
         );
         let _ = fs::remove_dir_all(repo);
@@ -1723,7 +1622,10 @@ mod tests {
             "expected PreToolUse decision for framework guarded path; got {output:?}"
         );
         assert!(
-            output["hookSpecificOutput"]["permissionDecision"].as_str().unwrap_or("").contains("deny"),
+            output["hookSpecificOutput"]["permissionDecision"]
+                .as_str()
+                .unwrap_or("")
+                .contains("deny"),
             "expected deny decision; got {output:?}"
         );
         let _ = fs::remove_dir_all(repo);

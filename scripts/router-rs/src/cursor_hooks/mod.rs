@@ -5,6 +5,7 @@ use crate::hook_common::{
 use crate::review_gate_engine::{
     fork_context_from_values, independent_context_fork, review_gate_armed,
 };
+use crate::review_output_lint::{lint_review_output, LintSeverity};
 use crate::runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT;
 use chrono::{DateTime, Utc};
 use fs2::FileExt;

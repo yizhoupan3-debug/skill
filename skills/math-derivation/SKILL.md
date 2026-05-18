@@ -11,10 +11,11 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: false
-disable-model-invocation: true
+user-invocable: true
+disable-model-invocation: false
 short_description: Execute rigorous mathematical derivations and proofs
 trigger_hints:
+  - $math-derivation
   - 数学推导
   - 定理证明
   - 公式推导
@@ -74,6 +75,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
   - "prove that this series converges"
   - "推导 KKT 条件"
   - "证明这个算子的谱分解"
+  - "审一下这个证明是否正确" (纯数学证明审查，非整篇论文上下文)
 
 ## Do not use
 
@@ -117,6 +119,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 12. **Theorem hypothesis verification**: Before applying any named theorem, explicitly verify that all its hypotheses are satisfied in the current context.
 13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Provide checker output / a runnable command, or mark the verification gap.
 14. **Counterexample probe**: For research-grade critique, attempt at least one counterexample or boundary probe before accepting the claim.
+15. **GOAL/RFV completion gates (harness integration)**: When operating under a `GOAL_STATE` or `RFV_LOOP_STATE`, set `completion_gates: { require_successful_evidence_row: true, min_depth_score: 1 }` to programmatically enforce the checker-backed standard. Without these gates, the harness cannot distinguish verified output from prose. See `docs/references/rfv-loop/math-reasoning-harness.md` and `docs/references/rfv-loop/reasoning-depth-contract.md`.
 
 ## Output template
 

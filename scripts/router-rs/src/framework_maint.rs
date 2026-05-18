@@ -36,11 +36,31 @@ pub(crate) fn dispatch(command: MaintSubcommand) -> Result<(), String> {
             print_local_homes(repo_from_maint_repo_args(&args)?)
         }
         MaintSubcommand::InstallCodexUserHooks(args) => install_codex_user_hooks(args),
+        MaintSubcommand::ContinuityAudit(args) => {
+            let root = repo_from_maint_repo_args(&args)?;
+            crate::framework_runtime::run_continuity_audit(&root).map(|_| ())
+        }
+        MaintSubcommand::CleanHookState(args) => {
+            let root = repo_from_framework_root_arg(args.framework_root.as_deref())?;
+            let dry_run = args.dry_run;
+            let ttl_days = args.older_than_days.unwrap_or(7);
+            clean_hook_state_files(&root, dry_run, ttl_days)
+        }
+        MaintSubcommand::CleanOrphans(args) => {
+            let root = repo_from_framework_root_arg(args.framework_root.as_deref())?;
+            let dry_run = args.dry_run;
+            let ttl_days = args.older_than_days.unwrap_or(30);
+            clean_orphan_directories(&root, dry_run, ttl_days)
+        }
     }
 }
 
 fn repo_from_maint_repo_args(args: &MaintRepoArgs) -> Result<PathBuf, String> {
     Ok(resolve_maint_roots(args.framework_root.as_deref(), None)?.0)
+}
+
+fn repo_from_framework_root_arg(framework_root: Option<&Path>) -> Result<PathBuf, String> {
+    Ok(resolve_maint_roots(framework_root, None)?.0)
 }
 
 fn repo_from_update_audit_args(args: &UpdateAuditArgs) -> Result<PathBuf, String> {
@@ -146,7 +166,7 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String>
     )?;
     let mut tools = Vec::new();
     for (_host_id, tool) in pairs {
-        if tool == "claude" || tool == "qoder" {
+        if tool == "claude" {
             continue;
         }
         if !tools.contains(&tool) {
@@ -162,7 +182,6 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
             "codex" => verify_codex_hooks(repo_root.to_path_buf())?,
             "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
             "claude" => verify_claude_projection(repo_root)?,
-            "qoder" => verify_qoder_projection(repo_root)?,
             other => {
                 return Err(format!(
                     "installable projection tool `{other}` has no maint verifier"
@@ -282,53 +301,6 @@ fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
         }
     }
     eprintln!("verify_claude_projection: ok");
-    Ok(())
-}
-
-fn verify_qoder_projection(repo_root: &Path) -> Result<(), String> {
-    let rule = repo_root.join(".qoder/rules/framework.md");
-    let settings = repo_root.join(".qoder/settings.json");
-    let manifest = repo_root.join(".qoder/.framework-projection.json");
-    for path in [&rule, &settings, &manifest] {
-        if !path.is_file() {
-            return Err(format!(
-                "verify_qoder_projection: missing {}",
-                path.display()
-            ));
-        }
-    }
-    let rule_text = fs::read_to_string(&rule).map_err(|e| e.to_string())?;
-    if !rule_text.contains("host_projection: qoder") {
-        return Err(
-            "verify_qoder_projection: .qoder/rules/framework.md must declare qoder projection"
-                .to_string(),
-        );
-    }
-    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
-    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("qoder") {
-        return Err(
-            "verify_qoder_projection: .qoder/.framework-projection.json must declare qoder"
-                .to_string(),
-        );
-    }
-    let settings_text = fs::read_to_string(&settings).map_err(|e| e.to_string())?;
-    let settings_json: Value = serde_json::from_str(&settings_text).map_err(|e| e.to_string())?;
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-        let has_hook = settings_json
-            .get("hooks")
-            .and_then(|hooks| hooks.get(event))
-            .map(|value| {
-                value.to_string().contains("router-rs") && value.to_string().contains("qoder hook")
-            })
-            .unwrap_or(false);
-        if !has_hook {
-            return Err(format!(
-                "verify_qoder_projection: .qoder/settings.json missing router-rs hook for {event}"
-            ));
-        }
-    }
-    eprintln!("verify_qoder_projection: ok");
     Ok(())
 }
 
@@ -676,7 +648,6 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         "rust_cli_tools",
         "host_integration",
         "browser_mcp_scripts",
-        "codex_aggregator_rustification",
     ];
     for suite in DEFAULT_SUITES {
         run_cargo(&fw, &["test", "--test", suite])?;
@@ -1196,6 +1167,224 @@ fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
     if !status.success() {
         return Err(format!("router-rs {} failed: {status}", args.join(" ")));
     }
+    Ok(())
+}
+
+/// Clean hook-state files older than TTL days.
+fn clean_hook_state_files(repo_root: &Path, dry_run: bool, ttl_days: u64) -> Result<(), String> {
+    let hook_state_dir = repo_root.join(".cursor").join("hook-state");
+
+    if !hook_state_dir.is_dir() {
+        println!("No .cursor/hook-state directory found. Nothing to clean.");
+        return Ok(());
+    }
+
+    let cutoff = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs()
+        .saturating_sub(ttl_days * 24 * 60 * 60);
+
+    let mut files_to_clean: Vec<(std::path::PathBuf, u64)> = Vec::new();
+    let mut kept: usize = 0;
+
+    let entries = fs::read_dir(&hook_state_dir).map_err(|e| e.to_string())?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+
+        // Only clean review-subagent-*.json and session-terminals-*.json files
+        let is_target = name.starts_with("review-subagent-")
+            || name.starts_with("session-terminals-")
+            || name.starts_with("adversarial-loop-")
+            || name.starts_with(".tmp-");
+
+        if !is_target {
+            kept += 1;
+            continue;
+        }
+
+        let mtime = fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        if mtime < cutoff {
+            files_to_clean.push((path, mtime));
+        } else {
+            kept += 1;
+        }
+    }
+
+    if files_to_clean.is_empty() {
+        println!(
+            "No hook-state files older than {} days. {} files kept.",
+            ttl_days, kept
+        );
+        return Ok(());
+    }
+
+    println!(
+        "Found {} hook-state file(s) older than {} days ({} kept):",
+        files_to_clean.len(),
+        ttl_days,
+        kept
+    );
+
+    for (path, mtime) in &files_to_clean {
+        let age_days = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - mtime)
+            / 86400;
+        println!("  - {} ({} days old)", path.display(), age_days);
+    }
+
+    if dry_run {
+        println!("\nDry-run mode: no files were deleted.");
+        println!("To actually delete: run without --dry-run");
+    } else {
+        println!("\nDeleting {} file(s)...", files_to_clean.len());
+        for (path, _) in &files_to_clean {
+            if let Err(e) = fs::remove_file(path) {
+                eprintln!("  Failed to delete {}: {}", path.display(), e);
+            }
+        }
+        println!("Done. {} file(s) deleted.", files_to_clean.len());
+    }
+
+    Ok(())
+}
+
+/// Clean orphan task directories not referenced by any pointer or registry.
+fn clean_orphan_directories(repo_root: &Path, dry_run: bool, ttl_days: u64) -> Result<(), String> {
+    let current_dir = repo_root.join("artifacts/current");
+
+    if !current_dir.is_dir() {
+        println!("No artifacts/current directory found. Nothing to clean.");
+        return Ok(());
+    }
+
+    // Gather referenced task IDs from pointers and registry
+    let mut referenced_ids = std::collections::HashSet::new();
+
+    // From active_task.json
+    if let Some(active) = crate::autopilot_goal::read_active_task_id(repo_root) {
+        referenced_ids.insert(active);
+    }
+
+    // From focus_task.json
+    if let Some(focus) = crate::autopilot_goal::read_focus_task_id(repo_root) {
+        referenced_ids.insert(focus);
+    }
+
+    // From task_registry.json
+    let registry_path = current_dir.join("task_registry.json");
+    if registry_path.is_file() {
+        if let Ok(raw) = fs::read_to_string(&registry_path) {
+            if let Ok(registry) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(tasks) = registry.get("tasks").and_then(|t| t.as_array()) {
+                    for task in tasks {
+                        if let Some(id) = task.get("task_id").and_then(|v| v.as_str()) {
+                            referenced_ids.insert(id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Find orphan directories
+    let cutoff = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs()
+        .saturating_sub(ttl_days as u64 * 24 * 60 * 60);
+
+    let mut orphans: Vec<(PathBuf, u64)> = Vec::new();
+
+    let entries = fs::read_dir(&current_dir).map_err(|e| e.to_string())?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+
+        // Skip known non-task items
+        if name.starts_with('.') {
+            continue;
+        }
+
+        // Skip if referenced by any pointer or registry
+        if referenced_ids.contains(name) {
+            continue;
+        }
+
+        // Check age
+        let mtime = fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        if mtime < cutoff {
+            orphans.push((path, mtime));
+        }
+    }
+
+    if orphans.is_empty() {
+        println!(
+            "No orphan task directories older than {} days found.",
+            ttl_days
+        );
+        return Ok(());
+    }
+
+    println!(
+        "Found {} orphan task directory(ies) older than {} days:",
+        orphans.len(),
+        ttl_days
+    );
+
+    for (path, mtime) in &orphans {
+        let age_days = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - mtime)
+            / 86400;
+        println!("  - {} ({} days old)", path.display(), age_days);
+    }
+
+    if dry_run {
+        println!("\nDry-run mode: no directories were deleted.");
+        println!("To actually delete: run without --dry-run");
+    } else {
+        println!("\nDeleting {} directory(ies)...", orphans.len());
+        for (path, _) in &orphans {
+            if let Err(e) = fs::remove_dir_all(path) {
+                eprintln!("  Failed to delete {}: {}", path.display(), e);
+            }
+        }
+        println!("Done. {} directory(ies) deleted.", orphans.len());
+    }
+
     Ok(())
 }
 

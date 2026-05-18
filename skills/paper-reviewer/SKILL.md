@@ -120,6 +120,7 @@ Default posture:
 - The user wants the front door for a paper task -> use `$paper-workbench`
 - The user wants the paper changed now -> use `$paper-reviser`
 - The user wants only local wording polish -> use `$paper-writing`
+- The user wants pure mathematical proof/derivation verification without a full paper context -> use `$math-derivation` (note: `$math-derivation` enforces a checker-backed verification standard that this skill does not)
 
 ## User-facing modes
 

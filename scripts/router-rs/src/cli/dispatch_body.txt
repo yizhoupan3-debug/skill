@@ -35,8 +35,7 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Codex { command } => dispatch_codex_command(command),
         RouterCommand::Claude { command } => dispatch_claude_command(command),
-                RouterCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
-        RouterCommand::Qoder { command } => dispatch_qoder_command(command),
+        RouterCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
         RouterCommand::Cursor { command } => dispatch_cursor_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
@@ -224,15 +223,6 @@ fn dispatch_claude_desktop_command(command: ClaudeDesktopCommand) -> Result<(), 
         }
     }
 }
-
-fn dispatch_qoder_command(command: QoderCommand) -> Result<(), String> {
-    match command {
-        QoderCommand::Hook(command) => {
-            run_qoder_hook_cli(&command.event, command.repo_root.as_deref())
-        }
-    }
-}
-
 fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
     match command {
         TraceCommand::RecordEvent(command) => {

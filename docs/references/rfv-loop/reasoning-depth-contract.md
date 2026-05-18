@@ -58,6 +58,17 @@
 
 将 closeout 记录与「某 `task_id` 上声明的 depth 策略」对齐的 **R9** 规则当前 **明确推迟**：`CloseoutRecord` 为 `deny_unknown_fields` 封闭 schema，引入任务级策略需全链路 schema + 解析任务指针；现阶段用 **`completion_gates` / `close_gates`** 在 GOAL complete / RFV close 上硬拦即可。参见 `closeout_enforcement.rs` 内 R9 注释。
 
+### Depth score formula（参考）
+
+`depth_score` 是 `0..=3` 的整数值，由 `task_state.rs` → `depth_compliance_aggregate` 计算：
+
+- **第 1 分**：≥1 轮 RFV `verify_result == "PASS"`
+- **第 2 分**：`EVIDENCE_INDEX` 至少一条成功行（`success==true` 或 `exit_code==0`）
+- **第 3 分**（legacy 默认）：Goal checkpoint > 0 **或** adversarial round > 0 **或** (strict_task && strict 外研轮 > 0)
+- **第 3 分**（`ROUTER_RS_DEPTH_SCORE_MODE=strict`）：以上所有 + falsification_test > 0
+
+Advisory rollup 由 `DepthCompliance` 结构体持有；`completion_gates` / `close_gates` 的 `min_depth_score` 字段读取同一分值。三个计分路径互不替代。
+
 ---
 
 ## 反模式

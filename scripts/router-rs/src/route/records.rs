@@ -204,9 +204,11 @@ pub(crate) fn load_records_cached_for_stdio_with_default_runtime_path(
 }
 
 fn records_cache_key(runtime_path: Option<&Path>, manifest_path: Option<&Path>) -> RecordsCacheKey {
+    let metadata_sidecar = route_metadata_sidecar(runtime_path, manifest_path);
     RecordsCacheKey {
         runtime_path: runtime_path.map(Path::to_path_buf),
         manifest_path: manifest_path.map(Path::to_path_buf),
+        metadata_sidecar_path: metadata_sidecar,
     }
 }
 
@@ -243,10 +245,16 @@ fn records_cache_state() -> &'static RwLock<RecordsCacheState> {
 fn evict_records_cache_over_capacity(state: &mut RecordsCacheState) {
     while state.map.len() > RECORDS_CACHE_MAX_KEYS {
         let Some(candidate) = state.fifo.pop_front() else {
-            let Some(arbitrary) = state.map.keys().next().cloned() else {
-                break;
-            };
-            state.map.remove(&arbitrary);
+            // 当 fifo 耗尽，按文件 mtime 淘汰最旧的条目（LRU by file age）
+            let oldest_key = state
+                .map
+                .iter()
+                .map(|(k, v)| (k.clone(), min_entry_mtime(v).unwrap_or(u64::MAX)))
+                .min_by_key(|(_, mtime)| *mtime)
+                .map(|(k, _)| k);
+            if let Some(key) = oldest_key {
+                state.map.remove(&key);
+            }
             continue;
         };
         if state.map.remove(&candidate).is_none() {
@@ -254,6 +262,47 @@ fn evict_records_cache_over_capacity(state: &mut RecordsCacheState) {
             continue;
         }
     }
+}
+
+/// Returns the effective "age" of a cache entry based on its mtimes.
+/// None mtimes are treated as u64::MAX (oldest/evict-first).
+fn min_entry_mtime(entry: &RecordsCacheEntry) -> Option<u64> {
+    use std::time::SystemTime;
+    [
+        entry.runtime_mtime,
+        entry.manifest_mtime,
+        entry.metadata_mtime,
+    ]
+    .into_iter()
+    .filter_map(|t| {
+        t.and_then(|st| st.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+    })
+    .min()
+}
+
+/// Invalidate all records cache entries (full flush).
+pub(crate) fn invalidate_records_cache() -> Result<(), String> {
+    let mut state = records_cache_state()
+        .write()
+        .map_err(|_| "route records cache lock poisoned".to_string())?;
+    state.map.clear();
+    state.fifo.clear();
+    Ok(())
+}
+
+/// Invalidate cache entry for specific paths.
+pub(crate) fn invalidate_records_cache_for_paths(
+    runtime_path: Option<&Path>,
+    manifest_path: Option<&Path>,
+) -> Result<(), String> {
+    let key = records_cache_key(runtime_path, manifest_path);
+    let mut state = records_cache_state()
+        .write()
+        .map_err(|_| "route records cache lock poisoned".to_string())?;
+    state.map.remove(&key);
+    state.fifo.retain(|k| k != &key);
+    Ok(())
 }
 
 pub(crate) fn load_records_cached_for_stdio(

@@ -472,6 +472,18 @@
     },
     {
       "when": {
+        "signal": "has_math_review_context"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: pure math proof/derivation review should route to math-derivation, not paper-reviewer."
+      },
+      "record": {
+        "slug": "paper-reviewer"
+      }
+    },
+    {
+      "when": {
         "signal": "has_paper_figure_layout_review_context"
       },
       "action": {

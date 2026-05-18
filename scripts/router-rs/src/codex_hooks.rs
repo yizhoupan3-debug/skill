@@ -814,6 +814,9 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
     }
     let tool_name = codex_tool_name(event);
     let tool_input = codex_tool_input(event);
+    if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &tool_name) {
+        eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
+    }
     if !saw_subagent_codex(&tool_name, &tool_input) {
         return None;
     }

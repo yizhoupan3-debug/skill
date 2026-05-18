@@ -593,74 +593,6 @@ fn install_skills_claude_target_installs_only_claude() {
 }
 
 #[test]
-fn install_skills_qoder_target_installs_only_qoder() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-
-    let result = host_integration_json(&[
-        "install-skills",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--bootstrap-output-dir",
-        tmp.path().join("bootstrap").to_str().unwrap(),
-        "qoder",
-    ]);
-
-    assert_eq!(result["success"], true);
-    assert_eq!(result["results"]["qoder"]["status"], "installed");
-    assert!(repo_root.join(".qoder/rules/framework.md").exists());
-    assert!(repo_root.join(".qoder/.framework-projection.json").exists());
-    let settings_path = repo_root.join(".qoder/settings.json");
-    assert!(settings_path.exists());
-    let settings = read_json(&settings_path);
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-        let entries = settings["hooks"][event].as_array().unwrap_or_else(|| {
-            panic!("expected Qoder settings hook entries for {event}: {settings:?}")
-        });
-        assert!(
-            entries
-                .iter()
-                .any(|entry| entry.to_string().contains("router-rs")
-                    && entry.to_string().contains("qoder hook --help")
-                    && entry.to_string().contains(&format!("--event={event}"))),
-            "expected managed router-rs Qoder hook for {event}: {entries:?}"
-        );
-    }
-    let pre_tool_command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-        .as_str()
-        .expect("qoder hook command");
-    assert!(
-        pre_tool_command.contains("HOOK_PAYLOAD")
-            && pre_tool_command.contains("QODER_PROJECT_ROOT")
-            && pre_tool_command.contains(".qoder/router-rs-hook.env")
-            && pre_tool_command.contains("qoder hook --event=PreToolUse")
-            && !pre_tool_command.contains("claude hook"),
-        "Qoder hook command must use Qoder-specific projection wiring: {pre_tool_command}"
-    );
-    let manifest = read_json(&repo_root.join(".qoder/.framework-projection.json"));
-    assert_eq!(manifest["host_projection"], "qoder");
-    assert!(manifest["files"].as_array().unwrap().iter().any(|path| path
-        .as_str()
-        .unwrap_or_default()
-        .ends_with(".qoder/settings.json")));
-    assert!(!repo_root.join(".claude/settings.json").exists());
-    assert!(!repo_root.join(".claude/rules/framework.md").exists());
-    assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
-    assert!(!repo_root.join(".codex/prompts/framework.md").exists());
-}
-
-#[test]
 fn project_scope_all_does_not_install_claude_projection() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
@@ -741,60 +673,6 @@ fn remove_claude_projection_removes_managed_settings_hooks() {
     assert!(!repo_root
         .join(".claude/.framework-projection.json")
         .exists());
-    let settings = read_json(&settings_path);
-    assert_eq!(settings["theme"], "dark");
-    assert!(settings.get("hooks").is_none());
-}
-
-#[test]
-fn remove_qoder_projection_removes_managed_settings_hooks() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    seed_framework_markers(&repo_root);
-
-    let install = host_integration_json(&[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "qoder",
-    ]);
-    assert_eq!(install["results"]["qoder"]["status"], "installed");
-
-    let settings_path = repo_root.join(".qoder/settings.json");
-    let mut settings = read_json(&settings_path);
-    settings["theme"] = json!("dark");
-    write_json(&settings_path, &settings);
-
-    let removed = host_integration_json(&[
-        "remove",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "qoder",
-    ]);
-
-    assert_eq!(removed["results"]["qoder"]["status"], "removed");
-    assert_eq!(
-        removed["results"]["qoder"]["settings"]["removed_events"],
-        json!(["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"])
-    );
-    assert!(!repo_root.join(".qoder/rules/framework.md").exists());
-    assert!(!repo_root.join(".qoder/.framework-projection.json").exists());
-    assert!(!repo_root.join(".claude/settings.json").exists());
     let settings = read_json(&settings_path);
     assert_eq!(settings["theme"], "dark");
     assert!(settings.get("hooks").is_none());
@@ -2157,7 +2035,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["supported"],
-        json!(["codex-cli", "codex-app", "cursor", "claude-code", "qoder"])
+        json!(["codex-cli", "codex-app", "cursor", "claude-code"])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["codex-cli"]["install_tool"],
@@ -2189,18 +2067,6 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
             "AGENTS.md",
             ".claude/rules/framework.md",
             ".claude/settings.json"
-        ])
-    );
-    assert_eq!(
-        payload["host_targets"]["metadata"]["qoder"]["install_tool"],
-        "qoder"
-    );
-    assert_eq!(
-        payload["host_targets"]["metadata"]["qoder"]["host_entrypoints"],
-        json!([
-            "AGENTS.md",
-            ".qoder/rules/framework.md",
-            ".qoder/settings.json"
         ])
     );
     assert!(payload.get("mcp_clients").is_none());

@@ -229,7 +229,14 @@ fn sync_host_entrypoint_file(
 ) -> Result<(), String> {
     let destination = crate::path_guard::join_repo_relative_under_root(target_root, relative)?;
     let existing = fs::read(&destination).ok();
-    let changed = existing.as_deref() != Some(desired);
+
+    // 对 JSON 文件进行语义比较，消除格式差异导致的误判
+    let changed = if is_json_file(relative) {
+        semantic_json_changed(&existing, desired)
+    } else {
+        existing.as_deref() != Some(desired)
+    };
+
     if changed && apply {
         let text = std::str::from_utf8(desired).map_err(|_| {
             format!("host entrypoint {relative} payload must be UTF-8 text for atomic write")
@@ -249,6 +256,33 @@ fn sync_host_entrypoint_file(
         &destination,
     ));
     Ok(())
+}
+
+/// 检查文件是否为 JSON 文件
+fn is_json_file(relative: &str) -> bool {
+    relative.ends_with(".json") || relative.contains("manifest") || relative.contains("config")
+}
+
+/// 对两个 JSON 内容进行语义比较
+fn semantic_json_changed(existing: &Option<Vec<u8>>, desired: &[u8]) -> bool {
+    let desired_str = match std::str::from_utf8(desired) {
+        Ok(s) => s,
+        Err(_) => return true, // 无法解析视为变更
+    };
+
+    let existing_str = match existing.as_ref().and_then(|b| std::str::from_utf8(b).ok()) {
+        Some(s) => s,
+        None => return true, // 文件不存在视为变更
+    };
+
+    // 解析并重新序列化后比较，消除格式差异
+    match (
+        serde_json::from_str::<serde_json::Value>(desired_str),
+        serde_json::from_str::<serde_json::Value>(existing_str),
+    ) {
+        (Ok(desired_val), Ok(existing_val)) => desired_val != existing_val,
+        _ => existing.as_deref() != Some(desired), // 解析失败时回退到字节比较
+    }
 }
 
 fn extend_report_array(report: &mut Value, key: &str, items: Vec<String>) -> Result<(), String> {
@@ -376,7 +410,7 @@ mod tests {
         let registry_json = registry_dir.join("RUNTIME_REGISTRY.json");
         fs::write(
             &registry_json,
-            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code","qoder"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]},"qoder":{"install_tool":"qoder","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".qoder/rules/framework.md",".qoder/settings.json"]}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
         )
         .unwrap();
         assert!(
@@ -454,7 +488,7 @@ mod tests {
         fs::create_dir_all(&registry_dir).unwrap();
         fs::write(
             registry_dir.join("RUNTIME_REGISTRY.json"),
-            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code","qoder"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]},"qoder":{"install_tool":"qoder","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".qoder/rules/framework.md",".qoder/settings.json"]}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
         )
         .unwrap();
         fs::write(sibling.join("AGENTS.md"), "local sibling policy\n").unwrap();

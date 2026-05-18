@@ -2,56 +2,6 @@
   "schema_version": "framework-generated-artifacts-manifest-v1",
   "generated_artifacts": [
     {
-      "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_REGISTRY.md",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_INDEX.md",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_MANIFEST.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_RUNTIME.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_PLUGIN_CATALOG.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_METADATA.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_HEALTH_MANIFEST.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
-      "path": "skills/SKILL_APPROVAL_POLICY.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply",
-      "compare": "byte-for-byte"
-    },
-    {
       "path": "AGENTS.md",
       "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"",
       "compare": "byte-for-byte"
@@ -75,6 +25,58 @@
       "path": ".claude/settings.json",
       "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
       "compare": "normalized-text"
+    },
+    {
+      "path": ".claude/CLAUDE.md",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
+      "compare": "normalized-text"
+    },
+    {
+      "path": ".claude/mcp.json",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
+      "compare": "normalized-text"
+    }
+  ],
+  "_deprecated_entries": [
+    {
+      "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_REGISTRY.md",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_INDEX.md",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+    },
+    {
+      "path": "skills/SKILL_MANIFEST.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_RUNTIME.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+    },
+    {
+      "path": "skills/SKILL_ROUTING_METADATA.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+    },
+    {
+      "path": "skills/SKILL_HEALTH_MANIFEST.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+    },
+    {
+      "path": "skills/SKILL_APPROVAL_POLICY.json",
+      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
+      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
     }
   ]
 }

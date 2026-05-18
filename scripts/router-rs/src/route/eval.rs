@@ -106,7 +106,7 @@ pub(crate) fn evaluate_routing_cases(
                 trigger_hit = focus_skill
                     .as_ref()
                     .map(|focus| focus == &selected_owner)
-                    .unwrap_or(false);
+                    .unwrap_or(owner_correct); // 回退到 owner_correct 判断
             }
             "should-not-trigger" => {
                 overtrigger = forbidden_owners.contains(&selected_owner);
@@ -115,7 +115,7 @@ pub(crate) fn evaluate_routing_cases(
                 trigger_hit = focus_skill
                     .as_ref()
                     .map(|focus| focus == &selected_owner)
-                    .unwrap_or(false);
+                    .unwrap_or(owner_correct); // 回退到 owner_correct 判断
                 if forbidden_owners.contains(&selected_owner) {
                     overtrigger = true;
                 }

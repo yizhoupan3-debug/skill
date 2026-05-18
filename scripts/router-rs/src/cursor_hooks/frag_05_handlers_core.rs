@@ -649,6 +649,29 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             }
         }
     };
+    // Advisory: lint review output format (compact envelope checks)
+    // Runs on every Stop regardless of gate state; findings go to additional_context as soft hints.
+    if !response_text.trim().is_empty() && response_text.contains("[P") {
+        let lint_findings = lint_review_output(&response_text);
+        if !lint_findings.is_empty() {
+            let warning_count = lint_findings
+                .iter()
+                .filter(|f| f.severity == LintSeverity::Warning)
+                .count();
+            if warning_count > 0 {
+                let msg = format!(
+                    "review-output-lint: {} compact envelope warning(s) — check `skills/code-review-deep/SKILL.md` §Compact envelope",
+                    warning_count
+                );
+                crate::autopilot_goal::merge_hook_nudge_paragraph(
+                    &mut output,
+                    &msg,
+                    "review-output-lint",
+                    false,
+                );
+            }
+        }
+    }
     finalize_stop_hook_outputs(repo_root, &mut output, &frame, skip_continuity_merge);
     release_state_lock(&mut lock);
     output

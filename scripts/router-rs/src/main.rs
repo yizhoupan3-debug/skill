@@ -38,15 +38,17 @@ mod route;
 mod router_env_flags;
 mod router_rs_observation;
 mod router_self;
+mod review_output_lint;
 mod runtime_envelope_ids;
 mod runtime_storage;
+mod session_call_tracker;
 mod session_supervisor;
 mod skill_repo;
 mod stdio_transport;
 mod step_ledger;
 mod task_command;
-mod task_state;
-mod task_state_aggregate;
+pub(crate) mod task_state;
+pub(crate) mod task_state_aggregate;
 mod task_write_lock;
 mod trace_runtime;
 
@@ -91,3 +93,7 @@ mod test_env_sync;
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "claude_desktop_hooks_tests.rs"]
+mod claude_desktop_hooks_tests;

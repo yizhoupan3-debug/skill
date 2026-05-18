@@ -121,6 +121,15 @@ fn nl_sig_has_github_pr_context(
     has_github_pr_context(query_text, query_token_list)
 }
 
+fn nl_sig_has_math_review_context(
+    _record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    _query_tokens: &HashSet<String>,
+) -> bool {
+    has_math_review_context(query_text, query_token_list)
+}
+
 fn nl_sig_has_paper_context(
     _record: &SkillRecord,
     query_text: &str,
@@ -409,6 +418,10 @@ const NL_SIGNAL_REGISTRY: &[NlSignalEntry] = &[
     NlSignalEntry {
         name: "has_github_pr_context",
         eval: nl_sig_has_github_pr_context,
+    },
+    NlSignalEntry {
+        name: "has_math_review_context",
+        eval: nl_sig_has_math_review_context,
     },
     NlSignalEntry {
         name: "has_paper_context",

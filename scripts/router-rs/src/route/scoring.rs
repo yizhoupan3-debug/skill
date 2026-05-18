@@ -287,19 +287,20 @@ pub(crate) fn score_route_candidate<'a>(
             "layout",
             "chart",
             "视觉",
+            "switch",
+            "切换",
+            "组件",
+            "component",
         ];
         if !visual_evidence_markers
             .iter()
             .any(|marker| query_text.contains(marker))
         {
-            return RouteCandidate {
-                record,
-                score: 0.0,
-                reasons: vec![
-                    "Suppressed: visual-review requires visible evidence, not a generic review token."
-                        .to_string(),
-                ],
-            };
+            // 降权而非完全压制
+            score *= 0.5;
+            reasons.push(
+                "Visual-review weak match: no explicit visual evidence, reduced score.".to_string(),
+            );
         }
     }
 
@@ -335,7 +336,7 @@ pub(crate) fn score_route_candidate<'a>(
     }
 
     if is_overlay_record(record) && score > 0.0 {
-        score *= 0.15;
+        score *= 0.5; // 从 0.15 调整到 0.5，更合理的降权
         reasons.push(format!(
             "Owner suppression applied: {} is overlay-only.",
             record.slug

@@ -609,9 +609,21 @@ fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Va
             .cloned()
             .unwrap_or_else(|| Value::Array(Vec::new())),
     );
+    let evidence_rows = super::normalize_evidence_index(input.evidence_payload);
+    let evidence_success_count = evidence_rows
+        .iter()
+        .filter(|row| {
+            row.get("success").and_then(Value::as_bool) == Some(true)
+                || row.get("exit_code").and_then(Value::as_i64) == Some(0)
+        })
+        .count();
     payload.insert(
         "evidence_count".to_string(),
-        Value::from(super::normalize_evidence_index(input.evidence_payload).len()),
+        Value::from(evidence_rows.len()),
+    );
+    payload.insert(
+        "evidence_count_successful".to_string(),
+        Value::from(evidence_success_count),
     );
     if let Some(contract) = input
         .execution_contract

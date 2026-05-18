@@ -44,7 +44,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 清门依赖宿主载荷，常见卡点：
 
 - **`fork_context` / `forkContext`**：须能解析为逻辑 **`false`**（典型为 JSON **布尔** `false`、可走布尔字符串表中的 `"false"` / `"0"` 等，或 JSON **整数** **`0`**）。**整数 `1`** 解析为 **`true`**（非独立 fork）；其它 **Number** 与**字段缺失**均不为 `false`。仍推荐宿主使用 **JSON 布尔**。
-- **Lane**：可清点深度 lane 仅为 **`general-purpose`** 与 **`best-of-n-runner`**（及归一化等价名）；**`explore` 等不计入**。  
+- **Lane**：可清点深度 lane 仅含注册在 `configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes` 中的值（当前：`general-purpose`、`best-of-n-runner` 及归一化等价名；**`explore` 等不计入**）。权威列表见 `docs/host_adapter_contract.md` §0.1，本文件不维护第二份枚举。  
 - **Multiset 与双事件**：`review_subagent_pending_cycle_keys` 由 qualifying **`subagentStart`** / **`PostToolUse`** 入队，由 **`subagentStop`** 逐条核销至空才清门；同一 **`id:`** 若 `subagentStart` 已入队，随后同 id 的 `PostToolUse` **不重复入队**（见 `frag_05_handlers_core.rs` 的 `push_review_pending_cycle_key`）。并行仅 `lane:` 且无稳定 id 时仍依赖 multiset 中多条相同 key。  
 - **Stop 单行提示**：若见 `router-rs REVIEW_GATE incomplete` 与 `need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false`，按该 `need=` 检查子代理载荷；尾缀 `hint=` 为可读排障补充，不改变 `need=` 语义。若同一门控多轮 `Stop` 仍卡，完整 `need=`/`hint=` 可能在 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`**（默认 8）之后被降级到 `additional_context`，`followup_message` 仅保留短 `mode=soft_nag` 行（见 [harness_architecture.md](harness_architecture.md) 环境变量表）。
 
