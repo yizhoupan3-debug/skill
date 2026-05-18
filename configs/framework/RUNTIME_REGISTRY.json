@@ -14,7 +14,8 @@
       "codex-app",
       "cursor",
       "claude-code",
-      "qoder"
+      "qoder",
+      "claude-desktop"
     ],
     "shared_system_source": "skills",
     "metadata": {
@@ -58,6 +59,15 @@
           "AGENTS.md",
           ".qoder/rules/framework.md",
           ".qoder/settings.json"
+        ]
+      },
+      "claude-desktop": {
+        "install_tool": "claude-desktop",
+        "projection_status": "implemented",
+        "installable": true,
+        "host_entrypoints": [
+          "AGENTS.md",
+          ".claude/CLAUDE.md"
         ]
       }
     }

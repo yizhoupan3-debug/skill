@@ -4672,7 +4672,7 @@ mod tests {
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         assert!(
-            err.contains("Supported tools: codex, cursor, claude, qoder, codex-app"),
+            err.contains("Supported tools: codex, cursor, claude, qoder, claude-desktop, codex-app"),
             "{err}"
         );
         assert!(err.contains("codex-cli"), "{err}");
