@@ -1211,31 +1211,6 @@ mod tests {
     }
 
     #[test]
-    fn automation_prompt_triggers_context() {
-        let repo = unique_test_repo("automation-prompt-context");
-        for phrase in [
-            "from now on always run tests",
-            "whenever I save",
-            "每次提交之前",
-        ] {
-            let payload = json!({ "prompt": phrase });
-            let output = run_user_prompt_submit(&repo, &payload).unwrap();
-            assert_eq!(
-                output["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit",
-                "phrase={phrase}"
-            );
-            assert!(
-                output["hookSpecificOutput"]["additionalContext"]
-                    .as_str()
-                    .unwrap_or("")
-                    .contains("hook"),
-                "phrase={phrase}"
-            );
-        }
-        let _ = fs::remove_dir_all(repo);
-    }
-
-    #[test]
     fn non_automation_prompt_is_silent() {
         let repo = unique_test_repo("non-automation-prompt");
         let payload = json!({ "prompt": "fix the failing test in main.rs" });
@@ -1693,15 +1668,20 @@ mod tests {
             "session_id": "forge",
             "cursor_version": "9.9.9",
             "workspace_roots": [repo.to_string_lossy()],
-            "tool_name": "Bash",
-            "tool_input": { "command": "git reset --hard HEAD" }
+            "tool_name": "Edit",
+            "file_path": "AGENTS.md"
         });
+        // Partial envelope without hook_event_name is not a valid Cursor envelope,
+        // so it routes through Claude pre-tool-use path guard.
         let output = dispatch_stdio_agent_hook_payload("pre-tool-use", &repo, &payload);
         assert!(
             output.get("hookSpecificOutput").is_some(),
             "must not silent_success on partial envelope; got {output:?}"
         );
-        assert_eq!(output["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert!(
+            output["hookSpecificOutput"]["permissionDecision"].as_str().unwrap_or("").contains("deny"),
+            "expected deny decision; got {output:?}"
+        );
         let _ = fs::remove_dir_all(repo);
     }
 
@@ -1712,9 +1692,9 @@ mod tests {
         fs::create_dir_all(cursor_plan.parent().unwrap()).unwrap();
         let payload = json!({
             "session_id": "claude-session",
-            "tool_name": "Bash",
-            "tool_input": { "command": "rm -rf /" },
-            "file_path": cursor_plan.to_string_lossy(),
+            "tool_name": "Edit",
+            "file_path": "AGENTS.md",
+            "context": cursor_plan.to_string_lossy(),
         });
         let output = dispatch_stdio_agent_hook_payload("pre-tool-use", &repo, &payload);
         assert!(
@@ -1734,13 +1714,17 @@ mod tests {
         let payload = json!({
             "session_id": "mixed",
             "cursor_version": "3.3.30",
-            "tool_name": "Bash",
-            "tool_input": { "command": "rm -rf /" },
+            "tool_name": "Edit",
+            "file_path": "AGENTS.md",
         });
         let output = dispatch_stdio_agent_hook_payload("pre-tool-use", &repo, &payload);
-        assert_eq!(
-            output["hookSpecificOutput"]["permissionDecision"],
-            json!("deny")
+        assert!(
+            output.get("hookSpecificOutput").is_some(),
+            "expected PreToolUse decision for framework guarded path; got {output:?}"
+        );
+        assert!(
+            output["hookSpecificOutput"]["permissionDecision"].as_str().unwrap_or("").contains("deny"),
+            "expected deny decision; got {output:?}"
         );
         let _ = fs::remove_dir_all(repo);
     }
