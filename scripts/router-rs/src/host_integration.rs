@@ -49,14 +49,12 @@ const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 7] = [
     "plan-mode",
     "update",
 ];
-const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
+const REQUIRED_GENERATED_ARTIFACTS: [&str; 13] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
     "skills/SKILL_ROUTING_INDEX.md",
     "skills/SKILL_MANIFEST.json",
     "skills/SKILL_ROUTING_RUNTIME.json",
-    "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
-    "skills/SKILL_PLUGIN_CATALOG.json",
     "skills/SKILL_ROUTING_METADATA.json",
     "skills/SKILL_HEALTH_MANIFEST.json",
     "skills/SKILL_APPROVAL_POLICY.json",
@@ -202,7 +200,6 @@ enum Commands {
         #[arg(long)]
         claude_home: Option<PathBuf>,
         #[arg(long)]
-        qoder_home: Option<PathBuf>,
         #[arg(long)]
         to: Vec<String>,
         #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
@@ -244,8 +241,6 @@ struct ProjectionCommand {
     #[arg(long)]
     claude_home: Option<PathBuf>,
     #[arg(long)]
-    qoder_home: Option<PathBuf>,
-    #[arg(long)]
     home: Option<PathBuf>,
     #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
     scope: String,
@@ -270,8 +265,6 @@ struct ProjectionStatusCommand {
     #[arg(long)]
     claude_home: Option<PathBuf>,
     #[arg(long)]
-    qoder_home: Option<PathBuf>,
-    #[arg(long)]
     home: Option<PathBuf>,
 }
 
@@ -283,7 +276,6 @@ struct ResolvedProjectionRoots {
     codex_home_root: PathBuf,
     cursor_home_root: PathBuf,
     claude_home_root: PathBuf,
-    qoder_home_root: PathBuf,
 }
 
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
@@ -372,13 +364,13 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             codex_home,
             cursor_home,
             claude_home,
-            qoder_home,
             to,
             scope,
             bootstrap_output_dir,
             skip_default_bootstrap,
             command,
             tools,
+            ..
         } => {
             let _ = (bootstrap_output_dir, skip_default_bootstrap);
             let selected = install_skills_projection_tools(&command, &tools, &to);
@@ -389,7 +381,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 codex_home,
                 cursor_home,
                 claude_home,
-                qoder_home,
                 home,
                 scope,
                 to: selected,
@@ -406,7 +397,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         codex_home: projection_command.codex_home.clone(),
                         cursor_home: projection_command.cursor_home.clone(),
                         claude_home: projection_command.claude_home.clone(),
-                        qoder_home: projection_command.qoder_home.clone(),
                         home: projection_command.home.clone(),
                     })?
                 }
@@ -613,7 +603,6 @@ fn resolve_projection_roots(
     codex_home: Option<&Path>,
     cursor_home: Option<&Path>,
     claude_home: Option<&Path>,
-    qoder_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
@@ -622,7 +611,6 @@ fn resolve_projection_roots(
     let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
     let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
     let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
-    let qoder_home_root = resolve_host_home(qoder_home, shared_home, "QODER_HOME", ".qoder")?;
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
@@ -630,7 +618,6 @@ fn resolve_projection_roots(
         codex_home_root,
         cursor_home_root,
         claude_home_root,
-        qoder_home_root,
     })
 }
 
@@ -1451,7 +1438,6 @@ fn projection_install_command(
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
-        command.qoder_home.as_deref(),
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1475,7 +1461,6 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
-        command.qoder_home.as_deref(),
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
@@ -1509,7 +1494,6 @@ fn projection_remove_or_cleanup_command(
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
-        command.qoder_home.as_deref(),
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1661,7 +1645,7 @@ fn default_projection_tools_for_scope(
 ) -> Result<Vec<String>, String> {
     let mut tools = registry_projection_tools(framework_root)?;
     if canonical_scope(scope)? == "project" {
-        tools.retain(|tool| tool != "claude" && tool != "qoder");
+        tools.retain(|tool| tool != "claude");
     }
     Ok(tools)
 }
@@ -1707,16 +1691,6 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
         remove: remove_claude_projection,
         home_root: claude_home_root_string,
         explicit_home: claude_home_explicit,
-    },
-    HostProjectionAdapter {
-        tool: "qoder",
-        host_id: "qoder",
-        aliases: &[],
-        install: install_qoder_projection,
-        status: qoder_projection_status,
-        remove: remove_qoder_projection,
-        home_root: qoder_home_root_string,
-        explicit_home: qoder_home_explicit,
     },
     HostProjectionAdapter {
         tool: "claude-desktop",
@@ -1866,14 +1840,6 @@ fn cursor_home_explicit(command: &ProjectionCommand) -> bool {
 
 fn claude_home_explicit(command: &ProjectionCommand) -> bool {
     command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some()
-}
-
-fn qoder_home_root_string(roots: &ResolvedProjectionRoots) -> String {
-    roots.qoder_home_root.to_string_lossy().into_owned()
-}
-
-fn qoder_home_explicit(command: &ProjectionCommand) -> bool {
-    command.qoder_home.is_some() || std::env::var_os("QODER_HOME").is_some()
 }
 
 fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
@@ -2455,8 +2421,6 @@ fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
-
-
 fn install_claude_desktop_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -2466,9 +2430,8 @@ fn install_claude_desktop_projection(
     let claude_md_target = claude_desktop_claude_md_target(roots, scope);
     let mcp_changed = write_claude_desktop_mcp_json(&mcp_target, roots)?;
     let md_changed = write_claude_desktop_claude_md(&claude_md_target, roots, scope)?;
-    let manifest_changed = write_claude_desktop_projection_manifest(
-        roots, scope, &mcp_target, &claude_md_target,
-    )?;
+    let manifest_changed =
+        write_claude_desktop_projection_manifest(roots, scope, &mcp_target, &claude_md_target)?;
     Ok(json!({
         "status": "installed",
         "changed": mcp_changed || md_changed || manifest_changed,
@@ -2487,14 +2450,22 @@ fn install_claude_desktop_projection(
 }
 
 fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    // H5 FIX: Check both project scope and user scope paths
+    let project_mcp_path = roots.project_root.join(".claude/mcp.json");
+    let project_claude_md_path = roots.project_root.join(".claude/CLAUDE.md");
+    let user_mcp_path = roots.claude_home_root.join("mcp.json");
+    let user_claude_md_path = roots.claude_home_root.join("CLAUDE.md");
+
     Ok(json!({
-        "ready": roots.project_root.join(".claude/mcp.json").exists(),
+        "ready": project_mcp_path.exists() || user_mcp_path.exists(),
         "status": "projection-status",
         "mcp_config": {
-            "exists": roots.project_root.join(".claude/mcp.json").exists(),
+            "project_scope": project_mcp_path.exists(),
+            "user_scope": user_mcp_path.exists(),
         },
         "claude_md": {
-            "exists": roots.project_root.join(".claude/CLAUDE.md").exists(),
+            "project_scope": project_claude_md_path.exists(),
+            "user_scope": user_claude_md_path.exists(),
         },
     }))
 }
@@ -2513,26 +2484,32 @@ fn remove_claude_desktop_projection(
     let mut removed_paths = Vec::new();
     let mut would_remove_paths = Vec::new();
 
-    for (target, label) in [(&mcp_target, "mcp_config"), (&claude_md_target, "claude_md")] {
-        let managed = projection_manifest_ownership(
-            &manifest_path, "claude-desktop", scope, target,
-        ).map(|o| o.owns_projection_file).unwrap_or(false);
+    for (target, label) in [
+        (&mcp_target, "mcp_config"),
+        (&claude_md_target, "claude_md"),
+    ] {
+        let managed =
+            projection_manifest_ownership(&manifest_path, "claude-desktop", scope, target)
+                .map(|o| o.owns_projection_file)
+                .unwrap_or(false);
+        // H7 FIX: Only set would_change if a file would actually be removed
         if target.exists() && managed {
             if !dry_run {
                 let _ = std::fs::remove_file(target);
                 removed_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
             }
             changed = true;
+            would_change = true;
             if dry_run {
                 would_remove_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
             }
         }
-        would_change = true;
     }
 
-    let manifest_managed = projection_manifest_ownership(
-        &manifest_path, "claude-desktop", scope, &mcp_target,
-    ).map(|o| o.managed).unwrap_or(false);
+    let manifest_managed =
+        projection_manifest_ownership(&manifest_path, "claude-desktop", scope, &mcp_target)
+            .map(|o| o.managed)
+            .unwrap_or(false);
     if manifest_managed {
         if !dry_run {
             let _ = std::fs::remove_file(&manifest_path);
@@ -2577,28 +2554,42 @@ fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
         "command": command,
         "args": ["claude-desktop", "agent", "--repo-root", "${workspaceRoot}"],
         "type": "stdio",
-        "description": "Framework continuity, skill routing, closeout advisory",
+        "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory",
     })
 }
 
-fn write_claude_desktop_mcp_json(path: &Path, roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+fn write_claude_desktop_mcp_json(
+    path: &Path,
+    roots: &ResolvedProjectionRoots,
+) -> Result<bool, String> {
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
-    if !payload.is_object() { payload = json!({}); }
+    if !payload.is_object() {
+        payload = json!({});
+    }
     let servers = payload
         .as_object_mut()
         .ok_or_else(|| "mcp.json root must be an object".to_string())?;
     let mcp_servers = servers
         .entry("mcpServers".to_string())
         .or_insert_with(|| json!({}));
-    if !mcp_servers.is_object() { *mcp_servers = json!({}); }
+    if !mcp_servers.is_object() {
+        *mcp_servers = json!({});
+    }
     let entries = mcp_servers
         .as_object_mut()
         .ok_or_else(|| "mcpServers must be an object".to_string())?;
-    entries.insert("router-rs-framework".to_string(), claude_desktop_mcp_server_payload(roots));
+    entries.insert(
+        "router-rs-framework".to_string(),
+        claude_desktop_mcp_server_payload(roots),
+    );
     write_json_if_changed(path, &payload)
 }
 
-fn write_claude_desktop_claude_md(path: &Path, roots: &ResolvedProjectionRoots, scope: &str) -> Result<bool, String> {
+fn write_claude_desktop_claude_md(
+    path: &Path,
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<bool, String> {
     let runtime_rel = skills_source_rel(&roots.framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
@@ -2610,14 +2601,57 @@ fn write_claude_desktop_claude_md(path: &Path, roots: &ResolvedProjectionRoots, 
 
          # Claude Desktop 自律指引
 
-         MCP 服务器 `router-rs-framework` 提供技能路由、连续性证据和 closeout 检查。
+         MCP 服务器 `router-rs-framework` 提供技能路由、连续性证据、goal/RFV 管理、closeout 检查和框架运行时快照。
+
+         ## 可用工具
+
+         - `framework_digest` — 会话连续性摘要（会话开头调用一次）
+         - `framework_snapshot` — 完整框架运行时快照（含连续性视图、task state、evidence、goal state）
+         - `skill_route` — 自然语言路由到对应 skill
+         - `record_evidence` — 执行验证命令后记录证据
+         - `session_checkpoint` — 写入 SESSION_SUMMARY 检查点
+         - `goal_state_manage` — 管理 Goal：start / checkpoint / pause / resume / complete / clear
+         - `goal_state_read` — 读取当前 Goal 状态
+         - `rfv_loop_status` — 查看 RFV 循环状态
+         - `rfv_loop_manage` — 管理 RFV 循环：start / append_round
+         - `closeout_gate` — 收尾前自检
+         - `closeout_record_write` — 写入 closeout record 并验证
+
+         ## 推荐工作流
+
+         1. 开始会话：调用 `framework_digest` 获得连续性摘要
+         2. 路由：用 `skill_route` 找到对应 skill 路径
+         3. 开始任务：用 `goal_state_manage operation=start` 创建 Goal
+         4. 执行与验证：每步验证后调用 `record_evidence`
+         5. 检查点：阶段性调用 `goal_state_manage operation=checkpoint`
+         6. 多轮调研：用 `rfv_loop_manage` 管理 RFV 循环
+         7. 收尾：调用 `closeout_gate` 自检，然后 `goal_state_manage operation=complete`
+
+         ## MCP 协议限制
+
+         Desktop 使用 MCP stdio 协议，与 Claude Code CLI 的 shell hook 有以下差异：
+
+         ### 无法实现的特性
+
+         - **无工具拦截**：MCP 不支持 PreToolUse，无法在执行前拦截危险命令
+         - **无硬门控**：Stop/UserPromptSubmit hard block 降级为 advisory（建议性提示）
+         - **无 shell hook**：无法使用 router-rs-hook.sh 等 shell 拦截机制
+
+         ### 自律要求
+
+         - 请在执行 `Bash` 工具前评估命令安全性
+         - 收尾前务必调用 `closeout_gate` 自检
+         - 定期调用 `session_checkpoint` 保存进度
+         - 使用 `record_evidence` 记录验证结果
 
          ## 与 CLI 的区别
 
-         - Desktop 使用 MCP 协议，无工具拦截能力
-         - 所有门控为 **advisory**（建议性），非硬阻止
-         - 收尾前调用 `closeout_gate` tool 自检
-         - 执行验证命令后调用 `record_evidence` tool 追加证据
+         | 特性 | Claude Code CLI | Claude Desktop |
+         |------|-----------------|----------------|
+         | 工具拦截 | PreToolUse hook | 不可用 |
+         | 硬门控 | Stop/UserPromptSubmit | advisory |
+         | 证据追加 | PostToolUse 自动 | 需手动调用 |
+         | 检查点 | Stop 自动写入 | 需手动调用 |
 
          ## 共享数据
 
@@ -2647,341 +2681,6 @@ fn write_claude_desktop_projection_manifest(
             "files": [mcp_path.to_string_lossy(), claude_md_path.to_string_lossy()],
         }),
     )
-}
-
-fn qoder_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.qoder_home_root.join("rules").join("framework.md")
-    } else {
-        roots
-            .project_root
-            .join(".qoder")
-            .join("rules")
-            .join("framework.md")
-    }
-}
-
-fn qoder_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.qoder_home_root.join("settings.json")
-    } else {
-        roots.project_root.join(".qoder").join("settings.json")
-    }
-}
-
-fn build_router_rs_qoder_hook_command(event: &str) -> String {
-    let missing_binary_fallback = "printf \"%s\\n\" \"{\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"router-rs binary unavailable for Qoder hook\\\",\\\"suppressOutput\\\":true}\"; exit 1";
-    format!(
-        "/usr/bin/env bash -lc 'HOOK_PAYLOAD=\"$(cat)\"; QODER_PROJECT_ROOT=\"${{QODER_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; if [[ -r \"$QODER_PROJECT_ROOT/.qoder/router-rs-hook.env\" ]]; then set -a; . \"$QODER_PROJECT_ROOT/.qoder/router-rs-hook.env\"; set +a; fi; ROUTER_RS_BIN=\"\"; for candidate in \"$QODER_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" \"$QODER_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" \"$QODER_PROJECT_ROOT/target/release/router-rs\" \"$QODER_PROJECT_ROOT/target/debug/router-rs\" \"$(command -v router-rs 2>/dev/null || true)\"; do if [ -n \"$candidate\" ] && [ -x \"$candidate\" ] && \"$candidate\" qoder hook --help >/dev/null 2>&1; then ROUTER_RS_BIN=\"$candidate\"; break; fi; done; if [ ! -x \"$ROUTER_RS_BIN\" ]; then {missing_binary_fallback}; fi; printf \"%s\" \"$HOOK_PAYLOAD\" | \"$ROUTER_RS_BIN\" qoder hook --event={event} --repo-root \"$QODER_PROJECT_ROOT\"'"
-    )
-}
-
-fn managed_qoder_hook_entry(event: &str) -> Value {
-    json!({
-        "matcher": "",
-        "hooks": [{
-            "type": "command",
-            "command": build_router_rs_qoder_hook_command(event),
-        }]
-    })
-}
-
-fn value_contains_router_rs_qoder_hook(value: &Value) -> bool {
-    match value {
-        Value::String(s) => s.contains("router-rs") && s.contains("qoder hook"),
-        Value::Array(items) => items.iter().any(value_contains_router_rs_qoder_hook),
-        Value::Object(map) => map.values().any(value_contains_router_rs_qoder_hook),
-        _ => false,
-    }
-}
-
-fn merge_qoder_settings_hooks(existing: Option<Value>) -> Result<Value, String> {
-    let mut root = match existing {
-        Some(Value::Object(map)) => map,
-        Some(_) => return Err("Qoder settings root must be a JSON object".to_string()),
-        None => Map::new(),
-    };
-    let mut hooks = match root.remove("hooks") {
-        Some(Value::Object(map)) => map,
-        Some(_) => return Err("Qoder settings `hooks` must be a JSON object".to_string()),
-        None => Map::new(),
-    };
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-        let mut entries = hooks
-            .remove(event)
-            .and_then(|value| value.as_array().cloned())
-            .unwrap_or_default();
-        entries.retain(|entry| !value_contains_router_rs_qoder_hook(entry));
-        entries.push(managed_qoder_hook_entry(event));
-        hooks.insert(event.to_string(), Value::Array(entries));
-    }
-    root.insert("hooks".to_string(), Value::Object(hooks));
-    Ok(Value::Object(root))
-}
-
-fn install_qoder_settings_hooks(settings_path: &Path) -> Result<bool, String> {
-    let existing = read_json_if_exists(settings_path)?;
-    let merged = merge_qoder_settings_hooks(existing)?;
-    write_json_if_changed(settings_path, &merged)
-}
-
-fn install_qoder_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
-    let target = qoder_entrypoint_target(roots, scope);
-    let settings_path = qoder_settings_target(roots, scope);
-    let changed = write_text_if_changed(&target, &render_qoder_framework_entrypoint(roots, scope))?;
-    let hooks_changed = install_qoder_settings_hooks(&settings_path)?;
-    let manifest_changed = write_qoder_projection_manifest(roots, scope, &target, &settings_path)?;
-    Ok(json!({
-        "status": "installed",
-        "changed": changed || hooks_changed || manifest_changed,
-        "scope": scope,
-        "prompts": {
-            "framework": {
-                "scope": scope,
-                "path": target.to_string_lossy(),
-                "logical_entrypoint": "$framework",
-                "native_representation": "markdown-rule",
-            }
-        },
-        "hooks": {
-            "managed": true,
-            "path": settings_path.to_string_lossy(),
-            "changed": hooks_changed,
-            "events": ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"],
-        },
-        "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
-    }))
-}
-
-fn qoder_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_target = qoder_entrypoint_target(roots, "project");
-    let user_target = qoder_entrypoint_target(roots, "user");
-    let project_settings = qoder_settings_target(roots, "project");
-    let user_settings = qoder_settings_target(roots, "user");
-    Ok(json!({
-        "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
-        "status": "projection-status",
-        "prompts": {
-            "framework": {
-                "project": qoder_projection_file_status(&project_target)?,
-                "user": qoder_projection_file_status(&user_target)?,
-            }
-        },
-        "manifest": {
-            "project": projection_manifest_status(&projection_manifest_path(roots, "qoder", "project"))?,
-            "user": projection_manifest_status(&projection_manifest_path(roots, "qoder", "user"))?,
-        },
-        "hooks": {
-            "project": qoder_settings_hook_status(&project_settings)?,
-            "user": qoder_settings_hook_status(&user_settings)?,
-        },
-    }))
-}
-
-fn remove_qoder_projection(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    dry_run: bool,
-) -> Result<Value, String> {
-    let target = qoder_entrypoint_target(roots, scope);
-    let settings_path = qoder_settings_target(roots, scope);
-    let manifest_path = projection_manifest_path(roots, "qoder", scope);
-    let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "qoder", scope, &target)?;
-    let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
-    let changed = if !dry_run && would_remove_projection {
-        fs::remove_file(&target).map_err(|err| err.to_string())?;
-        true
-    } else {
-        false
-    };
-    let would_remove_manifest = manifest_ownership.managed;
-    let manifest_removed = if !dry_run && would_remove_manifest {
-        fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
-        true
-    } else {
-        false
-    };
-    let settings_removal = remove_qoder_settings_hooks(&settings_path, dry_run)?;
-    let any_changed = changed || manifest_removed || settings_removal.changed;
-    let would_remove_any =
-        would_remove_projection || would_remove_manifest || settings_removal.would_change;
-    let mut removed_paths =
-        removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
-    if settings_removal.removed_file {
-        if let Some(paths) = removed_paths.as_array_mut() {
-            paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
-        }
-    }
-    let mut would_remove_paths = removed_projection_paths(
-        would_remove_projection,
-        &target,
-        would_remove_manifest,
-        &manifest_path,
-    );
-    if settings_removal.would_remove_file {
-        if let Some(paths) = would_remove_paths.as_array_mut() {
-            paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
-        }
-    }
-    Ok(json!({
-        "status": if dry_run && would_remove_any { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
-        "changed": any_changed,
-        "dry_run": dry_run,
-        "scope": scope,
-        "removed_paths": removed_paths,
-        "would_remove_paths": would_remove_paths,
-        "settings": {
-            "path": settings_path.to_string_lossy(),
-            "changed": settings_removal.changed,
-            "would_change": dry_run && settings_removal.would_change,
-            "removed_file": settings_removal.removed_file,
-            "would_remove_file": dry_run && settings_removal.would_remove_file,
-            "removed_events": settings_removal.removed_events,
-        },
-        "skipped_user_owned_paths": if would_remove_projection || !target.exists() { json!([]) } else { json!([target.to_string_lossy()]) },
-    }))
-}
-
-fn remove_qoder_settings_hooks(
-    settings_path: &Path,
-    dry_run: bool,
-) -> Result<AgentSettingsRemoval, String> {
-    let Some(Value::Object(mut root)) = read_json_if_exists(settings_path)? else {
-        return Ok(AgentSettingsRemoval::default());
-    };
-    let Some(hooks_value) = root.remove("hooks") else {
-        return Ok(AgentSettingsRemoval::default());
-    };
-    let Value::Object(mut hooks) = hooks_value else {
-        root.insert("hooks".to_string(), hooks_value);
-        return Ok(AgentSettingsRemoval::default());
-    };
-
-    let mut removed_events = Vec::new();
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-        let Some(value) = hooks.remove(event) else {
-            continue;
-        };
-        let Value::Array(entries) = value else {
-            hooks.insert(event.to_string(), value);
-            continue;
-        };
-        let original_len = entries.len();
-        let retained = entries
-            .into_iter()
-            .filter(|entry| !value_contains_router_rs_qoder_hook(entry))
-            .collect::<Vec<_>>();
-        if retained.len() != original_len {
-            removed_events.push(event.to_string());
-        }
-        if !retained.is_empty() {
-            hooks.insert(event.to_string(), Value::Array(retained));
-        }
-    }
-
-    if removed_events.is_empty() {
-        root.insert("hooks".to_string(), Value::Object(hooks));
-        return Ok(AgentSettingsRemoval::default());
-    }
-
-    if !hooks.is_empty() {
-        root.insert("hooks".to_string(), Value::Object(hooks));
-    }
-    let remove_file = root.is_empty();
-    if !dry_run {
-        if remove_file {
-            fs::remove_file(settings_path).map_err(|err| err.to_string())?;
-        } else {
-            write_json_if_changed(settings_path, &Value::Object(root))?;
-        }
-    }
-    Ok(AgentSettingsRemoval {
-        changed: !dry_run,
-        would_change: true,
-        removed_file: !dry_run && remove_file,
-        would_remove_file: remove_file,
-        removed_events,
-    })
-}
-
-fn render_qoder_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
-    let runtime_rel = skills_source_rel(&roots.framework_root)
-        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
-        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
-    format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: qoder -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
-    )
-}
-
-fn write_qoder_projection_manifest(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    command_path: &Path,
-    settings_path: &Path,
-) -> Result<bool, String> {
-    write_json_if_changed(
-        &projection_manifest_path(roots, "qoder", scope),
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "managed_by": "skill-framework",
-            "host_projection": "qoder",
-            "scope": scope,
-            "files": [command_path.to_string_lossy(), settings_path.to_string_lossy()],
-            "settings": {
-                "managed_key_paths": [
-                    "hooks.PreToolUse",
-                    "hooks.UserPromptSubmit",
-                    "hooks.PostToolUse",
-                    "hooks.Stop"
-                ],
-            }
-        }),
-    )
-}
-
-fn qoder_settings_hook_status(path: &Path) -> Result<Value, String> {
-    let payload = read_json_if_exists(path)?;
-    let mut managed_events = Vec::new();
-    if let Some(Value::Object(root)) = payload.as_ref() {
-        if let Some(Value::Object(hooks)) = root.get("hooks") {
-            for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-                if hooks
-                    .get(event)
-                    .map(value_contains_router_rs_qoder_hook)
-                    .unwrap_or(false)
-                {
-                    managed_events.push(event);
-                }
-            }
-        }
-    }
-    Ok(json!({
-        "path": path.to_string_lossy(),
-        "exists": path.exists(),
-        "managed": managed_events.len() == 4,
-        "managed_events": managed_events,
-    }))
-}
-
-fn qoder_projection_file_status(path: &Path) -> Result<Value, String> {
-    let content = read_text_if_exists(path)?;
-    let marker_managed = content
-        .as_deref()
-        .map(is_managed_projection_content)
-        .unwrap_or(false);
-    let verified = marker_managed
-        && content
-            .as_deref()
-            .map(|content| content.contains("host_projection: qoder"))
-            .unwrap_or(false);
-    Ok(json!({
-        "path": path.to_string_lossy(),
-        "exists": path.exists(),
-        "managed": verified,
-        "verification": if verified { "verified" } else if marker_managed { "unknown" } else { "unmanaged" },
-        "marker_managed": marker_managed,
-    }))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3166,13 +2865,6 @@ fn projection_manifest_path(
         ("claude-code", _) => roots
             .project_root
             .join(".claude")
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("qoder", "user") => roots
-            .qoder_home_root
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("qoder", _) => roots
-            .project_root
-            .join(".qoder")
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
         ("claude-desktop", "user") => roots
             .claude_home_root
@@ -3520,7 +3212,6 @@ fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> 
             "codex".to_string(),
             "cursor".to_string(),
             "claude".to_string(),
-            "qoder".to_string(),
         ]
     });
     if !tools.iter().any(|tool| tool == "codex-app") {
@@ -4627,24 +4318,6 @@ mod tests {
             .join("..")
             .join("..")
     }
-
-    #[test]
-    fn build_router_rs_qoder_hook_command_sources_optional_env_file() {
-        let cmd = build_router_rs_qoder_hook_command("Stop");
-        assert!(
-            cmd.contains(".qoder/router-rs-hook.env"),
-            "expected optional hook env injection path segment: {cmd}"
-        );
-        assert!(
-            cmd.contains("set -a"),
-            "expected set -a for env sourcing: {cmd}"
-        );
-        assert!(
-            cmd.contains("qoder hook --event=Stop"),
-            "expected qoder hook dispatch: {cmd}"
-        );
-    }
-
     #[test]
     fn build_router_rs_claude_hook_command_sources_optional_env_file() {
         let cmd = build_router_rs_claude_hook_command("Stop");
@@ -4668,16 +4341,14 @@ mod tests {
 
         assert_eq!(canonical_tool_name("codex-cli", &root).unwrap(), "codex");
         assert_eq!(canonical_tool_name("claude-code", &root).unwrap(), "claude");
-        assert_eq!(canonical_tool_name("qoder", &root).unwrap(), "qoder");
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         assert!(
-            err.contains("Supported tools: codex, cursor, claude, qoder, claude-desktop, codex-app"),
+            err.contains("Supported tools: codex, cursor, claude, claude-desktop, codex-app"),
             "{err}"
         );
         assert!(err.contains("codex-cli"), "{err}");
         assert!(err.contains("claude-code"), "{err}");
-        assert!(err.contains("qoder"), "{err}");
     }
 
     #[test]
@@ -4691,7 +4362,6 @@ mod tests {
                 "codex".to_string(),
                 "cursor".to_string(),
                 "claude".to_string(),
-                "qoder".to_string(),
                 "claude-desktop".to_string(),
             ]
         );

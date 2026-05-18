@@ -152,7 +152,7 @@ fn closeout_followup_for_completion_claim(
     if !crate::framework_runtime::closeout_programmatic_enforcement_enabled() {
         return Ok(None);
     }
-    let record_path = crate::framework_runtime::closeout_record_path_for_task(repo_root, task_id);
+    let record_path = crate::framework_runtime::closeout_record_path_for_task(repo_root, task_id)?;
     if !record_path.is_file() {
         return Ok(Some(format!(
             "CLOSEOUT_FOLLOWUP task_id={task_id} reason=missing_record path={}\n\

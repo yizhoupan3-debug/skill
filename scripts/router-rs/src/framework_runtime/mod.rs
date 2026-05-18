@@ -45,7 +45,7 @@ pub use constants::{
 pub use continuity_digest::{
     build_framework_continuity_digest_prompt, build_framework_continuity_digest_prompt_ex,
 };
-pub use framework_doctor::run_framework_doctor;
+pub use framework_doctor::{run_continuity_audit, run_framework_doctor};
 pub use prompt_compression::build_framework_prompt_compression_envelope;
 pub use repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
@@ -470,7 +470,7 @@ fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, 
     write_text_if_changed_unlocked(path, &serialized)
 }
 
-fn current_local_timestamp() -> String {
+pub(crate) fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
@@ -641,6 +641,21 @@ pub fn build_automatic_continuity_checkpoint_payload(
     task_line: &str,
     summary_text: &str,
 ) -> Value {
+    build_automatic_continuity_checkpoint_payload_with_task_id(
+        repo_root,
+        task_line,
+        summary_text,
+        None,
+    )
+}
+
+/// 带可选 task_id 的版本（用于 Desktop MCP session_checkpoint tool）。
+pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
+    repo_root: &Path,
+    task_line: &str,
+    summary_text: &str,
+    task_id: Option<&str>,
+) -> Value {
     let output_dir = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
     let task = if task_line.trim().is_empty() {
         "session-checkpoint".to_string()
@@ -653,7 +668,7 @@ pub fn build_automatic_continuity_checkpoint_payload(
     } else {
         truncate_utf8_chars(summary_text.trim(), 8000)
     };
-    json!({
+    let mut payload = json!({
         "output_dir": output_dir.to_string_lossy(),
         "repo_root": repo_root.to_string_lossy(),
         "task": task,
@@ -668,7 +683,13 @@ pub fn build_automatic_continuity_checkpoint_payload(
         "trace_metadata": {
             "checkpoint_kind": "automatic_stop_hook",
         }
-    })
+    });
+    if let Some(tid) = task_id.filter(|s| !s.is_empty()) {
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("task_id".to_string(), serde_json::json!(tid));
+        }
+    }
+    payload
 }
 
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
@@ -771,7 +792,7 @@ fn resolve_evidence_append_task_id(
         .or_else(|| crate::autopilot_goal::read_focus_task_id(repo_root))
 }
 
-fn append_evidence_index_merged_row(
+pub(crate) fn append_evidence_index_merged_row(
     repo_root: &Path,
     task_id_override: Option<&str>,
     entry: Map<String, Value>,
@@ -779,19 +800,31 @@ fn append_evidence_index_merged_row(
     if !continuity_post_tool_evidence_env_enabled() {
         return Ok(());
     }
-    // Pass 1 (no flock): skip early when continuity isn't ready — avoids serializing unrelated
-    // PostTool churn on `.router-rs.task-ledger.lock`.
-    let resolved_pre = resolve_evidence_append_task_id(repo_root, task_id_override);
-    let snapshot_pre = load_framework_runtime_view(repo_root, None, resolved_pre.as_deref());
-    if !continuity_session_ready_for_evidence_append(&snapshot_pre) {
-        return Ok(());
-    }
 
-    let _ledger = crate::task_write_lock::acquire_task_ledger_repo_lock(repo_root)?;
-    // Pass 2 (under flock): reconcile readiness after concurrent writers may flip pointers/summary.
+    // 解析 entry 中的签名字段用于去重（精确去重：command_preview + recorded_at）
+    let entry_signature = entry
+        .get("command_preview")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_default();
+    let entry_recorded_at = entry
+        .get("recorded_at")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_default();
+
+    // 只获取 evidence path lock，移除 task_ledger_repo_lock 避免潜在死锁
     let resolved_task_id = resolve_evidence_append_task_id(repo_root, task_id_override);
     let snapshot = load_framework_runtime_view(repo_root, None, resolved_task_id.as_deref());
     if !continuity_session_ready_for_evidence_append(&snapshot) {
+        eprintln!(
+            "[router-rs] warning: evidence append skipped — no active continuity session \
+             (no active/focus task pointer and no SESSION_SUMMARY at {})",
+            snapshot
+                .current_root
+                .join(SESSION_SUMMARY_FILENAME)
+                .display()
+        );
         return Ok(());
     }
 
@@ -799,13 +832,29 @@ fn append_evidence_index_merged_row(
     if let Some(parent) = evidence_path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
     }
-    // Cross-process lock: evidence append is read-modify-write and must not lose updates
-    // when Cursor/Codex hooks (or parallel tests) race on the same task directory.
+
+    // 单一锁：evidence path flock 保护 read-modify-write 原子性
     let _evidence_lock = crate::runtime_storage::acquire_runtime_path_lock(&evidence_path)?;
 
     let existing = read_json_strict(&evidence_path)?;
     let mut rows: Vec<Map<String, Value>> = normalize_evidence_index(&existing);
-    rows.push(entry);
+
+    // 精确去重：基于 command_preview + recorded_at
+    let is_duplicate = rows.iter().any(|row| {
+        let sig_cmd = row
+            .get("command_preview")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let sig_at = row
+            .get("recorded_at")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        sig_cmd == entry_signature && sig_at == entry_recorded_at
+    });
+    if !is_duplicate {
+        rows.push(entry);
+    }
+
     if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
         let drain = rows.len() - MAX_POST_TOOL_EVIDENCE_ARTIFACTS;
         rows.drain(0..drain);
@@ -904,7 +953,7 @@ fn tool_name_is_shell_like(name: &str) -> bool {
         || n == "pwsh"
 }
 
-fn shell_command_looks_like_verification(command: &str) -> bool {
+pub(crate) fn shell_command_looks_like_verification(command: &str) -> bool {
     let c = command.to_ascii_lowercase();
     // Original (Rust / Python / JS test runners + lint).
     c.contains("cargo test")
@@ -942,6 +991,10 @@ fn shell_command_looks_like_verification(command: &str) -> bool {
         || c.contains("mypy")
         || c.contains("deno test")
         || c.contains("bun test")
+        // pnpm / bun tooling.
+        || c.contains("pnpm lint")
+        || c.contains("pnpm check")
+        || c.contains("bun lint")
         // TypeScript / JS tooling (no `test` keyword).
         || c.contains("tsc --noemit")
         || c.contains("tsc -p")
@@ -956,6 +1009,11 @@ fn shell_command_looks_like_verification(command: &str) -> bool {
         || c.contains("mvn test")
         || c.contains("mvn verify")
         || c.contains("mvn package")
+        // Mobile / Dart / Swift tooling.
+        || c.contains("flutter test")
+        || c.contains("swift test")
+        || c.contains("swift build")
+        || c.contains("dart analyze")
         // E2E / cross-runner test frameworks.
         || c.contains("playwright test")
         || c.contains("nx test")
@@ -1070,11 +1128,41 @@ pub fn closeout_programmatic_enforcement_enabled() -> bool {
 }
 
 /// Default location for a task's closeout record.
-pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> PathBuf {
-    repo_root
+pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+    // SECURITY: Validate task_id to prevent path traversal attacks.
+    // Only allow alphanumeric characters, hyphens, and underscores.
+    let sanitized = task_id.trim();
+    if sanitized.is_empty() {
+        return Err("task_id cannot be empty".to_string());
+    }
+    if !sanitized
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "task_id contains invalid characters (only alphanumeric, hyphen, underscore allowed): {:?}",
+            sanitized
+        ));
+    }
+
+    let path = repo_root
         .join("artifacts")
         .join("closeout")
-        .join(format!("{}.json", task_id.trim()))
+        .join(format!("{}.json", sanitized));
+
+    // SECURITY: Verify the resolved path is still within the expected directory.
+    // This prevents any remaining path traversal attempts (e.g., via symlinks).
+    let closeout_dir = repo_root.join("artifacts").join("closeout");
+    let canonical_path = std::fs::canonicalize(&path)
+        .or_else(|_| std::fs::canonicalize(&closeout_dir).map(|p| p.join(format!("{}.json", sanitized))));
+    if let Ok(canonical) = canonical_path {
+        let canonical_dir = std::fs::canonicalize(&closeout_dir).map_err(|e| format!("failed to canonicalize closeout directory: {}", e))?;
+        if !canonical.starts_with(&canonical_dir) {
+            return Err("path traversal detected".to_string());
+        }
+    }
+
+    Ok(path)
 }
 
 /// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.
@@ -1117,19 +1205,23 @@ fn in_ci_like_environment() -> bool {
     match std::env::var("CI") {
         Ok(v) => {
             let t = v.trim().to_ascii_lowercase();
-            !t.is_empty() && !matches!(t.as_str(), "0" | "false" | "off" | "no")
+            !t.is_empty() && !is_false_ci_value(&t)
         }
         Err(_) => false,
     }
+}
+
+#[inline]
+fn is_false_ci_value(s: &str) -> bool {
+    s == "0" || s == "false" || s == "off" || s == "no"
 }
 
 fn closeout_enforcement_disabled_by_env() -> bool {
     match std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") {
         Ok(v) => {
             let t = v.trim().to_ascii_lowercase();
-            matches!(t.as_str(), "0" | "false" | "off" | "no")
+            is_false_ci_value(&t)
         }
-        // 未设置：本地个人场景默认软门禁；CI/GitHub Actions 默认硬门禁（团队/审计友好）。
         Err(_) => !in_ci_like_environment(),
     }
 }

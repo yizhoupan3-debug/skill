@@ -10,17 +10,186 @@
 //! 与 CLI 共享同一 L2/L3 数据源（连续性 digest、evidence、goal state、路由），
 //! 但出站形态为 MCP JSON-RPC 响应，非 hook JSON。
 
+use crate::cli::route_task_with_manifest_fallback;
 use crate::framework_runtime::{
-    build_automatic_continuity_checkpoint_payload,
+    build_automatic_continuity_checkpoint_payload_with_task_id,
     build_framework_continuity_digest_prompt, build_framework_runtime_snapshot_envelope,
-    resolve_repo_root_arg, try_append_post_tool_shell_evidence,
+    resolve_repo_root_arg,
 };
-use crate::route::{load_records, route_task};
+use crate::route::{filter_records_for_host, load_records_cached_for_stdio};
+use crate::session_call_tracker::{
+    check_anomalies, init_tracker, read_tracker_state, record_tool_call,
+};
 use crate::task_state::resolve_task_view;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
+
+/// Cache entry for framework_digest responses (5 second TTL).
+struct DigestCache {
+    content: String,
+    expires_at: Instant,
+}
+
+impl DigestCache {
+    fn is_valid(&self) -> bool {
+        Instant::now() < self.expires_at
+    }
+}
+
+/// Cache entry for framework_snapshot responses (30 second TTL).
+struct SnapshotCache {
+    content: String,
+    expires_at: Instant,
+}
+
+impl SnapshotCache {
+    fn is_valid(&self) -> bool {
+        Instant::now() < self.expires_at
+    }
+}
+
+/// Rate limiter state for tool call frequency control.
+pub(crate) struct RateLimiter {
+    last_call: HashMap<String, Instant>,
+    min_interval: Duration,
+}
+
+impl RateLimiter {
+    pub(crate) fn new(min_interval_ms: u64) -> Self {
+        RateLimiter {
+            last_call: HashMap::new(),
+            min_interval: Duration::from_millis(min_interval_ms),
+        }
+    }
+
+    pub(crate) fn check_and_record(&mut self, tool_name: &str) -> Result<(), String> {
+        let now = Instant::now();
+        if let Some(last) = self.last_call.get(tool_name) {
+            if now.duration_since(*last) < self.min_interval {
+                return Err(format!(
+                    "Rate limit exceeded for {}. Wait {}ms between calls.",
+                    tool_name,
+                    self.min_interval.as_millis()
+                ));
+            }
+        }
+        self.last_call.insert(tool_name.to_string(), now);
+        Ok(())
+    }
+}
+
+// Global caches and rate limiter (session-scoped via OnceLock)
+static DIGEST_CACHE: OnceLock<Arc<std::sync::Mutex<Option<DigestCache>>>> = OnceLock::new();
+static SNAPSHOT_CACHE: OnceLock<Arc<std::sync::Mutex<Option<SnapshotCache>>>> = OnceLock::new();
+static TASK_VIEW_CACHE: OnceLock<
+    Arc<std::sync::Mutex<Option<(crate::task_state::ResolvedTaskView, Instant)>>>,
+> = OnceLock::new();
+static RATE_LIMITER: OnceLock<Arc<std::sync::Mutex<RateLimiter>>> = OnceLock::new();
+
+/// Poison-safe lock helper that recovers from mutex poisoning.
+/// Returns the guard, or None if lock acquisition failed.
+macro_rules! poison_safe_lock {
+    ($mutex:expr) => {{
+        match $mutex.lock() {
+            Ok(guard) => Some(guard),
+            Err(poisoned) => {
+                eprintln!(
+                    "[router-rs warning] mutex poisoned, recovering (thread panicked while holding lock)"
+                );
+                Some(poisoned.into_inner())
+            }
+        }
+    }};
+}
+
+fn get_digest_cache() -> &'static Arc<std::sync::Mutex<Option<DigestCache>>> {
+    DIGEST_CACHE.get_or_init(|| Arc::new(std::sync::Mutex::new(None)))
+}
+
+fn get_snapshot_cache() -> &'static Arc<std::sync::Mutex<Option<SnapshotCache>>> {
+    SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::Mutex::new(None)))
+}
+
+fn get_task_view_cache(
+) -> &'static Arc<std::sync::Mutex<Option<(crate::task_state::ResolvedTaskView, Instant)>>> {
+    TASK_VIEW_CACHE.get_or_init(|| Arc::new(std::sync::Mutex::new(None)))
+}
+
+fn get_rate_limiter() -> &'static Arc<std::sync::Mutex<RateLimiter>> {
+    RATE_LIMITER.get_or_init(|| Arc::new(std::sync::Mutex::new(RateLimiter::new(100))))
+}
+
+/// Get digest cache TTL from environment variable.
+/// Default: 5 seconds. Env: ROUTER_RS_DESKTOP_DIGEST_CACHE_TTL_SECS
+fn digest_cache_ttl_secs() -> u64 {
+    static CACHED: OnceLock<u64> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("ROUTER_RS_DESKTOP_DIGEST_CACHE_TTL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(5)
+    })
+}
+
+/// Get snapshot cache TTL from environment variable.
+/// Default: 30 seconds. Env: ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS
+fn snapshot_cache_ttl_secs() -> u64 {
+    static CACHED: OnceLock<u64> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(30)
+    })
+}
+
+/// Get task view cache TTL from environment variable.
+/// Default: 5 seconds. Env: ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS
+fn task_view_cache_ttl_secs() -> u64 {
+    static CACHED: OnceLock<u64> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(5)
+    })
+}
+
+/// Get cached task view with configurable TTL (default 5 seconds).
+fn get_cached_task_view(repo_root: &Path) -> crate::task_state::ResolvedTaskView {
+    let ttl_secs = task_view_cache_ttl_secs();
+    {
+        let cache = get_task_view_cache();
+        if let Some(guard) = poison_safe_lock!(cache) {
+            if let Some((ref view, ref expires_at)) = *guard {
+                if Instant::now() < *expires_at {
+                    return view.clone();
+                }
+            }
+        }
+    }
+
+    // Cache miss: recompute
+    let view = resolve_task_view(repo_root, None);
+
+    // Update cache with configurable TTL
+    {
+        let cache = get_task_view_cache();
+        if let Some(mut guard) = poison_safe_lock!(cache) {
+            *guard = Some((view.clone(), Instant::now() + Duration::from_secs(ttl_secs)));
+        }
+    }
+
+    view
+}
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "router-rs-framework";
@@ -28,7 +197,7 @@ const SERVER_VERSION: &str = "0.1.0-rust";
 const MAX_MCP_CONTENT_LENGTH: usize = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum McpTransportMode {
+pub(crate) enum McpTransportMode {
     ContentLength,
     NewlineDelimited,
 }
@@ -45,6 +214,15 @@ fn run_mcp_stdio<R: BufRead, W: Write>(
     mut output: W,
     repo_root: &Path,
 ) -> Result<(), String> {
+    // 初始化 session tracker（session 级别，只执行一次）
+    // 注意：init_tracker 失败不会阻塞 MCP 服务，因为某些环境可能不支持 tracker 文件
+    if let Err(e) = init_tracker(repo_root) {
+        eprintln!(
+            "[router-rs warning] init_tracker failed: session call tracking may not work. \
+             Error: {}. This is non-fatal for MCP operation.",
+            e
+        );
+    }
     let mut transport_mode = None;
     while let Some(message) = read_mcp_message(&mut input, &mut transport_mode)? {
         if let Some(response) = handle_mcp_request(&message, repo_root) {
@@ -76,11 +254,18 @@ fn read_mcp_message<R: BufRead>(
         }
     }
 
-    if first_line
-        .to_ascii_lowercase()
-        .starts_with("content-length:")
-    {
+    let lower = first_line.to_ascii_lowercase();
+    // HTTP headers may have optional whitespace (OWS) before the colon per RFC 7230
+    let has_content_length = lower.starts_with("content-length:") || lower.starts_with("content-length :");
+    if has_content_length {
+        let previous_mode = *transport_mode;
         *transport_mode = Some(McpTransportMode::ContentLength);
+
+        // Log transport mode changes (only on first switch for debugging)
+        if previous_mode.is_none() {
+            eprintln!("[router-rs info] MCP transport mode: Content-Length");
+        }
+
         let content_length = parse_content_length(&first_line)?;
         if content_length > MAX_MCP_CONTENT_LENGTH {
             return Err(format!(
@@ -103,25 +288,39 @@ fn read_mcp_message<R: BufRead>(
         input
             .read_exact(&mut body)
             .map_err(|err| format!("read MCP body failed: {err}"))?;
-        return String::from_utf8(body)
+        // Strip UTF-8 BOM if present (some clients send it)
+        let body = body.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&body);
+        return String::from_utf8(body.to_vec())
             .map(Some)
             .map_err(|err| format!("decode MCP body failed: {err}"));
     }
 
-    if transport_mode.is_none() {
-        *transport_mode = Some(McpTransportMode::NewlineDelimited);
+    // NOTE: 不再锁定传输模式。每次读取都重新检测 Content-Length 头，
+    // 允许客户端在会话中切换传输模式（如先发 newline 探测，再切 Content-Length）。
+    // NewlineDelimited mode
+    let previous_mode = *transport_mode;
+    if previous_mode.is_none() {
+        eprintln!("[router-rs info] MCP transport mode: NewlineDelimited");
     }
     Ok(Some(first_line.trim_end().to_string()))
 }
 
 fn parse_content_length(line: &str) -> Result<usize, String> {
-    let (_, value) = line
-        .split_once(':')
-        .ok_or_else(|| format!("invalid MCP header: {line}"))?;
-    value
-        .trim()
+    // Handle both "Content-Length:" and "Content-Length :" (OWS)
+    // Note: line may contain trailing \r\n from read_line
+    let lower = line.to_ascii_lowercase();
+    let value_str = if lower.starts_with("content-length :") {
+        // Skip "content-length :" (15 chars) and the trailing \r\n
+        line[15..].trim().trim_start_matches(':').trim()
+    } else if lower.starts_with("content-length:") {
+        // Skip "content-length:" (14 chars) and the trailing \r\n
+        line[14..].trim().trim_start_matches(':').trim()
+    } else {
+        return Err(format!("invalid Content-Length header: {}", line));
+    };
+    value_str
         .parse::<usize>()
-        .map_err(|err| format!("invalid MCP content length '{value}': {err}"))
+        .map_err(|err| format!("invalid MCP content length '{value_str}': {err}"))
 }
 
 fn write_mcp_response<W: Write>(
@@ -133,12 +332,8 @@ fn write_mcp_response<W: Write>(
         .map_err(|err| format!("serialize MCP response failed: {err}"))?;
     match transport_mode {
         McpTransportMode::ContentLength => {
-            write!(
-                output,
-                "Content-Length: {}\r\n\r\n{encoded}",
-                encoded.len()
-            )
-            .map_err(|err| format!("write MCP response failed: {err}"))?;
+            write!(output, "Content-Length: {}\r\n\r\n{encoded}", encoded.len())
+                .map_err(|err| format!("write MCP response failed: {err}"))?;
         }
         McpTransportMode::NewlineDelimited => {
             writeln!(output, "{encoded}")
@@ -148,7 +343,7 @@ fn write_mcp_response<W: Write>(
     Ok(())
 }
 
-fn handle_mcp_request(message: &str, repo_root: &Path) -> Option<Value> {
+pub(crate) fn handle_mcp_request(message: &str, repo_root: &Path) -> Option<Value> {
     let request: Value = match serde_json::from_str(message) {
         Ok(v) => v,
         Err(err) => {
@@ -164,13 +359,14 @@ fn handle_mcp_request(message: &str, repo_root: &Path) -> Option<Value> {
     match method {
         "initialize" => Some(handle_initialize(id)),
         "notifications/initialized" => None,
+        "notifications/cancelled" => None, // Per JSON-RPC spec, notifications should not receive responses
         "tools/list" => Some(handle_tools_list(id)),
         "tools/call" => Some(handle_tools_call(id, &request, repo_root)),
         "prompts/list" => Some(handle_prompts_list(id)),
         "prompts/get" => Some(handle_prompts_get(id, &request, repo_root)),
         "resources/list" => Some(handle_resources_list(id, repo_root)),
         "resources/read" => Some(handle_resources_read(id, &request, repo_root)),
-        "ping" => Some(json!({"jsonrpc": "2.0", "id": id, "result": {}})),
+        "ping" => id.map(|id| json!({"jsonrpc": "2.0", "id": id, "result": {}})),
         _ => Some(json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -198,7 +394,7 @@ fn handle_initialize(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_tools_list(id: Option<Value>) -> Value {
+pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -317,6 +513,120 @@ fn handle_tools_list(id: Option<Value>) -> Value {
                         },
                     },
                 },
+                {
+                    "name": "rfv_loop_status",
+                    "description": "查看 RFV 循环状态。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "task_id": {
+                                "type": "string",
+                                "description": "task id，默认当前 active task",
+                            },
+                        },
+                    },
+                },
+                {
+                    "name": "rfv_loop_manage",
+                    "description": "管理 RFV 循环：start / append_round。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["start", "append_round"],
+                                "description": "操作类型",
+                            },
+                            "task_id": {
+                                "type": "string",
+                                "description": "task id，默认当前 active task",
+                            },
+                            "round": {
+                                "type": "object",
+                                "description": "round 对象（append_round 时需要）",
+                            },
+                        },
+                        "required": ["operation"],
+                    },
+                },
+                {
+                    "name": "closeout_record_write",
+                    "description": "写入并验证 closeout record。写入 artifacts/closeout/<task_id>.json 并返回验证结果。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "task_id": {
+                                "type": "string",
+                                "description": "task id",
+                            },
+                            "summary": {
+                                "type": "string",
+                                "description": "任务摘要",
+                            },
+                            "verification_status": {
+                                "type": "string",
+                                "enum": ["passed", "failed", "partial", "not_run"],
+                                "description": "验证状态",
+                            },
+                            "changed_files": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "变更的文件列表",
+                            },
+                            "commands_run": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "command": {"type": "string"},
+                                        "exit_code": {"type": "integer"},
+                                        "duration_ms": {"type": "integer"},
+                                    },
+                                },
+                                "description": "执行的命令列表",
+                            },
+                            "blockers": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "risks": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "notes": {
+                                "type": "string",
+                            },
+                        },
+                        "required": ["task_id", "summary", "verification_status"],
+                    },
+                },
+                {
+                    "name": "goal_state_manage",
+                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear"],
+                                "description": "操作类型",
+                            },
+                            "task_id": {
+                                "type": "string",
+                                "description": "task id，默认当前 active task",
+                            },
+                            "goal": {
+                                "type": "string",
+                                "description": "goal 内容（start 时需要）",
+                            },
+                            "note": {
+                                "type": "string",
+                                "description": "备注信息",
+                            },
+                        },
+                        "required": ["operation"],
+                    },
+                },
             ],
         },
     })
@@ -325,14 +635,31 @@ fn handle_tools_list(id: Option<Value>) -> Value {
 fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
-    let tool_name = params
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or("");
+    let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let default_args = json!({});
-    let arguments = params
-        .get("arguments")
-        .unwrap_or(&default_args);
+    let arguments = params.get("arguments").unwrap_or(&default_args);
+
+    // Check rate limit before processing
+    {
+        let limiter = get_rate_limiter();
+        if let Some(mut guard) = poison_safe_lock!(limiter) {
+            if let Err(e) = guard.check_and_record(tool_name) {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "content": [{ "type": "text", "text": format!("Rate limit: {}. Consider batching operations.", e) }],
+                        "isError": true,
+                    },
+                });
+            }
+        }
+    }
+
+    // Track every tool call for anomaly detection.
+    if let Err(e) = record_tool_call(repo_root, tool_name) {
+        eprintln!("[router-rs warning] record_tool_call failed: {e}");
+    }
 
     let result = match tool_name {
         "framework_digest" => tool_framework_digest(arguments, repo_root),
@@ -345,17 +672,30 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Va
         "rfv_loop_manage" => tool_rfv_loop_manage(arguments, repo_root),
         "goal_state_manage" => tool_goal_state_manage(arguments, repo_root),
         "goal_state_read" => tool_goal_state_read(arguments, repo_root),
+        "closeout_record_write" => tool_closeout_record_write(arguments, repo_root),
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
 
     match result {
-        Ok(content) => json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": {
-                "content": [{ "type": "text", "text": content }],
-            },
-        }),
+        Ok(content) => {
+            // Check for anomalies and append warnings if detected
+            let warnings = check_anomalies(repo_root).unwrap_or_default();
+
+            let final_content = if warnings.is_empty() {
+                content
+            } else {
+                let warning_text = warnings.join("; ");
+                format!("{}\n\n[Session Warning] {}", content, warning_text)
+            };
+
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "content": [{ "type": "text", "text": final_content }],
+                },
+            })
+        }
         Err(err) => json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -373,12 +713,84 @@ fn tool_framework_digest(arguments: &Value, repo_root: &Path) -> Result<String, 
         .and_then(Value::as_u64)
         .unwrap_or(40)
         .clamp(1, 120) as usize;
-    build_framework_continuity_digest_prompt(repo_root, max_lines)
+
+    let ttl_secs = digest_cache_ttl_secs();
+    // Try to read from cache (configurable TTL, default 5 seconds)
+    {
+        let cache = get_digest_cache();
+        if let Some(guard) = poison_safe_lock!(cache) {
+            if let Some(ref cached) = *guard {
+                if cached.is_valid() {
+                    return Ok(cached.content.clone());
+                }
+            }
+        }
+    }
+
+    // Cache miss: recompute
+    let content = build_framework_continuity_digest_prompt(repo_root, max_lines)?;
+
+    // Update cache with configurable TTL
+    {
+        let cache = get_digest_cache();
+        if let Some(mut guard) = poison_safe_lock!(cache) {
+            *guard = Some(DigestCache {
+                content: content.clone(),
+                expires_at: Instant::now() + Duration::from_secs(ttl_secs),
+            });
+        }
+    }
+
+    Ok(content)
 }
 
 fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
+    let ttl_secs = snapshot_cache_ttl_secs();
+    // Try to read from cache (configurable TTL, default 30 seconds)
+    {
+        let cache = get_snapshot_cache();
+        if let Some(guard) = poison_safe_lock!(cache) {
+            if let Some(ref cached) = *guard {
+                if cached.is_valid() {
+                    return Ok(cached.content.clone());
+                }
+            }
+        }
+    }
+
+    // Cache miss: recompute
     let envelope = build_framework_runtime_snapshot_envelope(repo_root, None, None)?;
-    serde_json::to_string_pretty(&envelope).map_err(|e| e.to_string())
+    let content = serde_json::to_string_pretty(&envelope).map_err(|e| e.to_string())?;
+
+    // Update cache with configurable TTL
+    {
+        let cache = get_snapshot_cache();
+        if let Some(mut guard) = poison_safe_lock!(cache) {
+            *guard = Some(SnapshotCache {
+                content: content.clone(),
+                expires_at: Instant::now() + Duration::from_secs(ttl_secs),
+            });
+        }
+    }
+
+    Ok(content)
+}
+
+/// Invalidate evidence-dependent caches (digest and snapshot).
+/// Called after record_evidence or session_checkpoint to ensure stale data isn't served.
+fn invalidate_evidence_caches() {
+    // Clear digest cache
+    if let Some(mut guard) = poison_safe_lock!(get_digest_cache()) {
+        *guard = None;
+    }
+    // Clear snapshot cache
+    if let Some(mut guard) = poison_safe_lock!(get_snapshot_cache()) {
+        *guard = None;
+    }
+    // Clear task view cache
+    if let Some(mut guard) = poison_safe_lock!(get_task_view_cache()) {
+        *guard = None;
+    }
 }
 
 fn tool_skill_route(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -386,8 +798,31 @@ fn tool_skill_route(arguments: &Value, repo_root: &Path) -> Result<String, Strin
         .get("query")
         .and_then(Value::as_str)
         .ok_or("Missing required argument: query")?;
-    let records = load_records(Some(repo_root), None)?;
-    let decision = route_task(&records, query, "session", false, true)?;
+
+    // Dynamically determine first_turn: true only if no routing tools have been called yet.
+    // This prevents stale routing behavior on subsequent calls within the same session.
+    let first_turn = read_tracker_state(repo_root)
+        .map(|state| {
+            let per_tool = state.get("per_tool").and_then(|v| v.as_object());
+            let has_routing = per_tool
+                .map(|m| m.contains_key("framework_digest") || m.contains_key("skill_route"))
+                .unwrap_or(false);
+            !has_routing
+        })
+        .unwrap_or(true); // Default to first_turn=true on error
+
+    let records = load_records_cached_for_stdio(Some(repo_root), None)?;
+    let records = filter_records_for_host(records.as_ref(), Some("claude-desktop"))?;
+    let decision = route_task_with_manifest_fallback(
+        &records,
+        Some(repo_root),
+        None,
+        Some("claude-desktop"),
+        query,
+        "session",
+        true, // allow_overlay: true
+        first_turn,
+    )?;
     if decision.selected_skill == "none" || decision.selected_skill.is_empty() {
         return Ok(json!({
             "routed": false,
@@ -406,7 +841,7 @@ fn tool_skill_route(arguments: &Value, repo_root: &Path) -> Result<String, Strin
     .to_string())
 }
 
-fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(crate) fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Value>, String> {
     let tool_name = arguments
         .get("tool_name")
         .and_then(Value::as_str)
@@ -416,25 +851,70 @@ fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, S
         .and_then(Value::as_str)
         .ok_or("Missing required argument: command")?;
     let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
-    let output = arguments
-        .get("output")
-        .and_then(Value::as_str);
+    let output = arguments.get("output").and_then(Value::as_str);
 
-    let mut synthetic = json!({
-        "tool_name": tool_name,
-        "tool_input": { "command": command },
-    });
+    let mut entry = Map::new();
+    entry.insert("kind".to_string(), json!("mcp_record_evidence"));
+    entry.insert("source".to_string(), json!("mcp_record_evidence"));
+    entry.insert("tool_name".to_string(), json!(tool_name));
+    entry.insert("command_preview".to_string(), json!(command));
+    entry.insert(
+        "recorded_at".to_string(),
+        json!(crate::framework_runtime::current_local_timestamp()),
+    );
     if let Some(ec) = exit_code {
-        synthetic["exit_code"] = json!(ec);
+        entry.insert("exit_code".to_string(), json!(ec));
+        entry.insert("success".to_string(), json!(ec == 0));
     }
-
-    try_append_post_tool_shell_evidence(repo_root, &synthetic, "mcp_record_evidence")?;
     if let Some(text) = output {
-        let trimmed = text.chars().take(2000).collect::<String>();
-        Ok(format!("Evidence recorded: {tool_name} '{command}' -> exit={exit_code:?}\n{trimmed}"))
-    } else {
-        Ok(format!("Evidence recorded: {tool_name} '{command}' -> exit={exit_code:?}"))
+        let max_chars = evidence_output_max_chars();
+        let trimmed: String = text.chars().take(max_chars).collect();
+        entry.insert("output".to_string(), json!(trimmed));
     }
+    Ok(entry)
+}
+
+fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let entry = build_evidence_entry(arguments)?;
+    let tool_name = entry.get("tool_name").and_then(Value::as_str).map(str::to_string);
+    let tool_name_display = tool_name.as_deref().unwrap_or("");
+    let command = entry.get("command_preview").and_then(Value::as_str).map(str::to_string);
+    let command_display = command.as_deref().unwrap_or("");
+    let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
+    let output = arguments.get("output").and_then(Value::as_str);
+
+    crate::framework_runtime::append_evidence_index_merged_row(repo_root, None, entry)?;
+
+    // H2 FIX: Invalidate caches after evidence is written to ensure fresh data on next read
+    invalidate_evidence_caches();
+
+    let exit_display = exit_code
+        .map(|ec| ec.to_string())
+        .unwrap_or_else(|| "null".to_string());
+    if let Some(text) = output {
+        let max_chars = evidence_output_max_chars();
+        let trimmed = text.chars().take(max_chars).collect::<String>();
+        Ok(format!(
+            "Evidence recorded: {tool_name_display} '{command_display}' -> exit={exit_display}\n{trimmed}"
+        ))
+    } else {
+        Ok(format!(
+            "Evidence recorded: {tool_name_display} '{command_display}' -> exit={exit_display}"
+        ))
+    }
+}
+
+/// 获取 evidence output 的最大字符数配置。
+/// 默认 2000 字符，可通过 `ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS` 环境变量覆盖。
+fn evidence_output_max_chars() -> usize {
+    static CACHED: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(2000)
+    })
 }
 
 fn tool_session_checkpoint(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -451,16 +931,20 @@ fn tool_session_checkpoint(arguments: &Value, repo_root: &Path) -> Result<String
                 .collect()
         })
         .unwrap_or_default();
-    let _task_id = arguments
-        .get("task_id")
-        .and_then(Value::as_str);
+    let task_id = arguments.get("task_id").and_then(Value::as_str);
 
-    let payload = build_automatic_continuity_checkpoint_payload(
+    let payload = build_automatic_continuity_checkpoint_payload_with_task_id(
         repo_root,
         summary,
         &next_actions.join(", "),
+        task_id,
     );
-    let _ = crate::framework_runtime::write_framework_session_artifacts(payload);
+    crate::framework_runtime::write_framework_session_artifacts(payload)
+        .map_err(|e| format!("Checkpoint write failed: {e}"))?;
+
+    // H2 FIX: Invalidate caches after checkpoint is written to ensure fresh data on next read
+    invalidate_evidence_caches();
+
     Ok(format!(
         "Checkpoint written: summary={}, next_actions_count={}",
         summary.chars().count(),
@@ -479,32 +963,143 @@ fn tool_closeout_gate(_arguments: &Value, repo_root: &Path) -> Result<String, St
         findings.push("goal_state: present".to_string());
     }
 
-    let evidence_count = task_view
+    let evidence_success = task_view
         .evidence
         .as_ref()
-        .map(|e| if e.evidence_rows_non_empty { 1u64 } else { 0u64 })
-        .unwrap_or(0);
-    if evidence_count == 0 {
-        findings.push("evidence: no EVIDENCE_INDEX records".to_string());
+        .map(|e| e.has_successful_verification)
+        .unwrap_or(false);
+    if !evidence_success {
+        findings.push("evidence: no successful EVIDENCE_INDEX records".to_string());
     } else {
-        findings.push(format!("evidence: {evidence_count} records"));
+        findings.push("evidence: successful records present".to_string());
     }
 
-    let has_summary = task_view.resolution_notes.iter().any(|n| n.contains("checkpoint") || n.contains("summary"));
+    let has_summary = task_view
+        .resolution_notes
+        .iter()
+        .any(|n| n.contains("checkpoint") || n.contains("summary"));
     if !has_summary {
         findings.push("checkpoint: no SESSION_SUMMARY".to_string());
     } else {
         findings.push("checkpoint: SESSION_SUMMARY present".to_string());
     }
 
-    let all_clear = goal_present && evidence_count > 0 && has_summary;
+    let all_clear = goal_present && evidence_success && has_summary;
     let verdict = if all_clear {
         "PASS: all closeout gates satisfied (advisory)"
     } else {
         "ADVISORY: some gates not satisfied (MCP cannot hard-block, self-discipline required)"
     };
 
-    Ok(format!("[Closeout Gate] {verdict}\n\n{}", findings.join("\n")))
+    Ok(format!(
+        "[Closeout Gate] {verdict}\n\n{}",
+        findings.join("\n")
+    ))
+}
+
+fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let task_id = arguments
+        .get("task_id")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: task_id")?;
+    let summary = arguments
+        .get("summary")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: summary")?;
+    let verification_status = arguments
+        .get("verification_status")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: verification_status")?;
+
+    let mut record = Map::new();
+    record.insert(
+        "schema_version".to_string(),
+        json!(crate::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION),
+    );
+    record.insert("task_id".to_string(), json!(task_id));
+    record.insert(
+        "ended_at".to_string(),
+        json!(crate::framework_runtime::current_local_timestamp()),
+    );
+    record.insert("summary".to_string(), json!(summary));
+    record.insert("verification_status".to_string(), json!(verification_status));
+
+    if let Some(files) = arguments.get("changed_files").and_then(Value::as_array) {
+        record.insert("changed_files".to_string(), json!(files));
+    }
+    if let Some(cmds) = arguments.get("commands_run").and_then(Value::as_array) {
+        record.insert("commands_run".to_string(), json!(cmds));
+    }
+    if let Some(blockers) = arguments.get("blockers").and_then(Value::as_array) {
+        if !blockers.is_empty() {
+            record.insert("blockers".to_string(), json!(blockers));
+        }
+    }
+    if let Some(risks) = arguments.get("risks").and_then(Value::as_array) {
+        if !risks.is_empty() {
+            record.insert("risks".to_string(), json!(risks));
+        }
+    }
+    if let Some(notes) = arguments.get("notes").and_then(Value::as_str) {
+        if !notes.is_empty() {
+            record.insert("notes".to_string(), json!(notes));
+        }
+    }
+
+    // Ensure parent directory exists
+    let record_path =
+        crate::framework_runtime::closeout_record_path_for_task(repo_root, task_id)
+            .map_err(|e| format!("invalid task_id: {e}"))?;
+    if let Some(parent) = record_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("create closeout directory failed: {e}"))?;
+    }
+
+    // Write the record
+    let content = serde_json::to_string_pretty(&record).map_err(|e| e.to_string())?;
+    fs::write(&record_path, &content)
+        .map_err(|e| format!("write closeout record failed: {e}"))?;
+
+    // Evaluate the record
+    let eval_result =
+        crate::framework_runtime::evaluate_closeout_record_file_for_task(
+            repo_root,
+            task_id,
+            &record_path,
+        );
+    let eval = match eval_result {
+        Ok(v) => v,
+        Err(e) => json!({"error": e}),
+    };
+
+    let closeout_allowed = eval
+        .get("closeout_allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let violations: Vec<String> = eval
+        .get("violations")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .map(|v| {
+                    let rule = v.get("rule").and_then(Value::as_str).unwrap_or("unknown");
+                    let detail = v
+                        .get("detail")
+                        .and_then(Value::as_str)
+                        .unwrap_or("no detail");
+                    format!("[{rule}] {detail}")
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let result = json!({
+        "closeout_allowed": closeout_allowed,
+        "record_path": record_path.to_string_lossy().to_string(),
+        "violations": violations,
+    });
+
+    Ok(serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?)
 }
 
 fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -553,10 +1148,7 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
 fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
-    let prompt_name = params
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or("");
+    let prompt_name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let default_args = json!({});
     let arguments = params.get("arguments").unwrap_or(&default_args);
 
@@ -588,18 +1180,15 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> V
                  Framework root: scripts/router-rs/"
             )
         }
-        "review_gate" => {
-            "[Review Gate -- Claude Desktop advisory]\n\n\
+        "review_gate" => "[Review Gate -- Claude Desktop advisory]\n\n\
              This host uses MCP transport, no shell hook observation.\n\n\
              When user requests review:\n\
              1) Use subagent with fork_context=false for independent reviewer\n\
              2) If no subagent, decompose review dimensions locally\n\
              3) Call closeout_gate after review\n\n\
              Desktop review gate is advisory only."
-                .to_string()
-        }
-        "closeout_checklist" => {
-            "[Closeout Checklist]\n\n\
+            .to_string(),
+        "closeout_checklist" => "[Closeout Checklist]\n\n\
              Before ending task:\n\
              - [ ] GOAL_STATE exists\n\
              - [ ] EVIDENCE_INDEX has >=1 record\n\
@@ -607,8 +1196,7 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> V
              - [ ] Verification evidence recorded\n\
              - [ ] Blockers in NEXT_ACTIONS\n\n\
              Call closeout_gate for machine-readable check."
-                .to_string()
-        }
+            .to_string(),
         _ => format!("Unknown prompt: {prompt_name}"),
     };
 
@@ -631,7 +1219,7 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> V
 }
 
 fn handle_resources_list(id: Option<Value>, repo_root: &Path) -> Value {
-    let task_view = resolve_task_view(repo_root, None);
+    let task_view = get_cached_task_view(repo_root);
 
     let mut resources = vec![
         json!({
@@ -651,7 +1239,13 @@ fn handle_resources_list(id: Option<Value>, repo_root: &Path) -> Value {
     let evidence_count = task_view
         .evidence
         .as_ref()
-        .map(|e| if e.evidence_rows_non_empty { 1u64 } else { 0u64 })
+        .map(|e| {
+            if e.evidence_rows_non_empty {
+                1u64
+            } else {
+                0u64
+            }
+        })
         .unwrap_or(0);
     if evidence_count > 0 {
         resources.push(json!({
@@ -659,6 +1253,18 @@ fn handle_resources_list(id: Option<Value>, repo_root: &Path) -> Value {
             "name": "Evidence Index",
             "description": format!("evidence index ({evidence_count} records)"),
             "mimeType": "application/json",
+        }));
+    }
+
+    // session_summary is always listed as a resource if SESSION_SUMMARY.md exists
+    let current = repo_root.join("artifacts/current");
+    let summary_path = current.join("SESSION_SUMMARY.md");
+    if summary_path.is_file() {
+        resources.push(json!({
+            "uri": "framework://session_summary",
+            "name": "Session Summary",
+            "description": "session checkpoint summary",
+            "mimeType": "text/markdown",
         }));
     }
 
@@ -672,26 +1278,27 @@ fn handle_resources_list(id: Option<Value>, repo_root: &Path) -> Value {
 fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
-    let uri = params
-        .get("uri")
-        .and_then(Value::as_str)
-        .unwrap_or("");
+    let uri = params.get("uri").and_then(Value::as_str).unwrap_or("");
 
     let (text, mime_type) = match uri {
         "framework://active_task" => {
-            let task_view = resolve_task_view(repo_root, None);
+            let task_view = get_cached_task_view(repo_root);
             let content = json!({
                 "active_task_id": task_view.pointers.active_task_id,
                 "focus_task_id": task_view.pointers.focus_task_id,
                 "known_task_ids": Vec::<String>::new(),
             });
-            (serde_json::to_string_pretty(&content).unwrap_or_default(),
-             "application/json")
+            (
+                serde_json::to_string_pretty(&content).unwrap_or_default(),
+                "application/json",
+            )
         }
         "framework://goal_state" => {
             let state = crate::autopilot_goal::read_goal_state(repo_root, None);
-            (serde_json::to_string_pretty(&state).unwrap_or_default(),
-             "application/json")
+            (
+                serde_json::to_string_pretty(&state).unwrap_or_default(),
+                "application/json",
+            )
         }
         "framework://evidence_index" => {
             let current = repo_root.join("artifacts/current");
@@ -731,7 +1338,6 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
     })
 }
 
-
 fn tool_rfv_loop_status(arguments: &Value, repo_root: &Path) -> Result<String, String> {
     let task_id = arguments.get("task_id").and_then(Value::as_str);
     let state = crate::rfv_loop::read_rfv_loop_state(repo_root, task_id)?;
@@ -742,7 +1348,7 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, S
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: operation")?;
+        .ok_or("Missing required argument: operation (string)")?;
     let task_id = arguments.get("task_id").and_then(Value::as_str);
 
     // repo_root is a &Path, convert to string for the payload
@@ -762,12 +1368,15 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, S
             let goal = arguments
                 .get("goal")
                 .and_then(Value::as_str)
-                .ok_or("start requires 'goal'")?;
+                .ok_or("start requires 'goal' argument (string)")?;
             payload["goal"] = json!(goal);
             if let Some(mr) = arguments.get("max_rounds").and_then(Value::as_u64) {
                 payload["max_rounds"] = json!(mr);
             }
-            if let Some(er) = arguments.get("allow_external_research").and_then(Value::as_bool) {
+            if let Some(er) = arguments
+                .get("allow_external_research")
+                .and_then(Value::as_bool)
+            {
                 payload["allow_external_research"] = json!(er);
             }
         }
@@ -775,35 +1384,45 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, S
             let round = arguments
                 .get("round")
                 .and_then(Value::as_u64)
-                .ok_or("append_round requires 'round'")?;
+                .ok_or("append_round requires 'round' argument (integer)")?;
+            payload["round"] = json!(round);
+
+            // Validate required string arguments with specific error messages
             let review_summary = arguments
                 .get("review_summary")
                 .and_then(Value::as_str)
-                .ok_or("append_round requires 'review_summary'")?;
+                .ok_or("append_round requires 'review_summary' argument (string)")?;
+            payload["review_summary"] = json!(review_summary);
+
             let fix_summary = arguments
                 .get("fix_summary")
                 .and_then(Value::as_str)
-                .ok_or("append_round requires 'fix_summary'")?;
+                .ok_or("append_round requires 'fix_summary' argument (string)")?;
+            payload["fix_summary"] = json!(fix_summary);
+
             let verify_result = arguments
                 .get("verify_result")
                 .and_then(Value::as_str)
-                .ok_or("append_round requires 'verify_result'")?;
+                .ok_or("append_round requires 'verify_result' argument (string)")?;
+            payload["verify_result"] = json!(verify_result);
+
             let supervisor_decision = arguments
                 .get("supervisor_decision")
                 .and_then(Value::as_str)
-                .ok_or("append_round requires 'supervisor_decision'")?;
+                .ok_or("append_round requires 'supervisor_decision' argument (string)")?;
+            payload["supervisor_decision"] = json!(supervisor_decision);
+
             let reason = arguments
                 .get("reason")
                 .and_then(Value::as_str)
-                .ok_or("append_round requires 'reason'")?;
-            payload["round"] = json!(round);
-            payload["review_summary"] = json!(review_summary);
-            payload["fix_summary"] = json!(fix_summary);
-            payload["verify_result"] = json!(verify_result);
-            payload["supervisor_decision"] = json!(supervisor_decision);
+                .ok_or("append_round requires 'reason' argument (string)")?;
             payload["reason"] = json!(reason);
         }
-        _ => return Err(format!("Unknown RFV loop operation: {operation}")),
+        _ => {
+            return Err(format!(
+                "Unknown RFV loop operation: {operation}. Valid operations: start, append_round"
+            ))
+        }
     }
 
     let result = crate::rfv_loop::framework_rfv_loop(payload)?;
@@ -832,7 +1451,7 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
             let goal = arguments
                 .get("goal")
                 .and_then(Value::as_str)
-                .ok_or("start requires 'goal'")?;
+                .ok_or("start requires 'goal' argument (string)")?;
             payload["goal"] = json!(goal);
             if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
                 payload["non_goals"] = json!(ng);
@@ -840,7 +1459,10 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
             if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
                 payload["done_when"] = json!(dw);
             }
-            if let Some(vc) = arguments.get("validation_commands").and_then(Value::as_array) {
+            if let Some(vc) = arguments
+                .get("validation_commands")
+                .and_then(Value::as_array)
+            {
                 payload["validation_commands"] = json!(vc);
             }
         }
@@ -848,17 +1470,122 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
             let note = arguments
                 .get("note")
                 .and_then(Value::as_str)
-                .ok_or("checkpoint requires 'note'")?;
+                .ok_or("checkpoint requires 'note' argument (string)")?;
             payload["note"] = json!(note);
+        }
+        "append_round" => {
+            // append_round is handled in rfv_loop, not here
+            return Err(
+                "append_round is not a valid goal_state_manage operation. \
+                 Use rfv_loop_manage with operation=append_round instead.".to_string(),
+            );
         }
         "pause" | "resume" | "complete" | "clear" => {
             // No additional required args
         }
-        _ => return Err(format!("Unknown goal operation: {operation}")),
+        _ => return Err(format!("Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear")),
     }
 
     let result = crate::autopilot_goal::framework_autopilot_goal(payload)?;
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+}
+
+// =============================================================================
+// Test helper functions (used by integration tests in claude_desktop_hooks_tests.rs)
+// =============================================================================
+
+#[cfg(test)]
+pub(crate) fn tool_goal_state_manage_test_helper(
+    arguments: &Value,
+    operation: &str,
+) -> Result<String, String> {
+    // Create a temp repo path for testing
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "router-rs-claude-desktop-test-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::create_dir_all(&path);
+
+    let mut args_with_op = arguments.clone();
+    args_with_op["operation"] = json!(operation);
+
+    let result = tool_goal_state_manage(&args_with_op, &path);
+    let _ = std::fs::remove_dir_all(&path);
+    result
+}
+
+#[cfg(test)]
+pub(crate) fn tool_record_evidence_test_helper(
+    arguments: &Value,
+    repo_path: &Path,
+) -> Result<String, String> {
+    tool_record_evidence(arguments, repo_path)
+}
+
+#[cfg(test)]
+pub(crate) fn read_evidence_index(path: &Path) -> Result<serde_json::Value, String> {
+    let evidence_path = path.join("artifacts/current/EVIDENCE_INDEX.json");
+    let content = std::fs::read_to_string(&evidence_path)
+        .map_err(|e| format!("Read EVIDENCE_INDEX failed: {e}"))?;
+    serde_json::from_str(&content).map_err(|e| format!("Parse EVIDENCE_INDEX failed: {e}"))
+}
+
+#[cfg(test)]
+pub(crate) fn tool_closeout_record_write_for_test(
+    arguments: &Value,
+    repo_path: &Path,
+) -> Result<String, String> {
+    tool_closeout_record_write(arguments, repo_path)
+}
+
+#[cfg(test)]
+pub(crate) fn tool_rfv_loop_manage_test_helper(
+    arguments: &Value,
+    operation: &str,
+) -> Result<String, String> {
+    // Create a temp repo path for testing
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "router-rs-claude-desktop-test-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::create_dir_all(&path);
+
+    let mut args_with_op = arguments.clone();
+    args_with_op["operation"] = json!(operation);
+
+    let result = tool_rfv_loop_manage(&args_with_op, &path);
+    let _ = std::fs::remove_dir_all(&path);
+    result
+}
+
+#[cfg(test)]
+pub(crate) fn get_digest_ttl_for_test() -> u64 {
+    digest_cache_ttl_secs()
+}
+
+#[cfg(test)]
+pub(crate) fn get_snapshot_ttl_for_test() -> u64 {
+    snapshot_cache_ttl_secs()
+}
+
+#[cfg(test)]
+pub(crate) fn get_task_view_ttl_for_test() -> u64 {
+    task_view_cache_ttl_secs()
+}
+
+#[cfg(test)]
+pub(crate) fn read_mcp_message_test_helper<R: std::io::BufRead>(
+    input: &mut R,
+    transport_mode: &mut Option<McpTransportMode>,
+) -> Result<Option<String>, String> {
+    read_mcp_message(input, transport_mode)
+}
+
+#[cfg(test)]
+pub(crate) fn init_tracker_for_test(path: &std::path::Path) -> Result<(), String> {
+    crate::session_call_tracker::init_tracker(path)
 }
 
 #[cfg(test)]
@@ -894,23 +1621,31 @@ mod tests {
     fn tools_list_returns_all_expected_tools() {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
-        let names: Vec<&str> = tools
-            .iter()
-            .map(|t| t["name"].as_str().unwrap())
-            .collect();
-        assert!(names.contains(&"framework_digest"));
-        assert!(names.contains(&"framework_snapshot"));
-        assert!(names.contains(&"skill_route"));
-        assert!(names.contains(&"record_evidence"));
-        assert!(names.contains(&"session_checkpoint"));
-        assert!(names.contains(&"closeout_gate"));
-        assert!(names.contains(&"goal_state_read"));
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert_eq!(names.len(), 11, "expected 11 tools, got: {:?}", names);
+        for tool in &[
+            "framework_digest",
+            "framework_snapshot",
+            "skill_route",
+            "record_evidence",
+            "session_checkpoint",
+            "closeout_gate",
+            "closeout_record_write",
+            "goal_state_read",
+            "rfv_loop_status",
+            "rfv_loop_manage",
+            "goal_state_manage",
+        ] {
+            assert!(names.contains(tool), "missing tool: {tool}");
+        }
     }
 
     #[test]
     fn prompts_list_returns_all_expected_prompts() {
         let response = handle_prompts_list(Some(json!(1)));
-        let prompts = response["result"]["prompts"].as_array().expect("prompts array");
+        let prompts = response["result"]["prompts"]
+            .as_array()
+            .expect("prompts array");
         let names: Vec<&str> = prompts
             .iter()
             .map(|p| p["name"].as_str().unwrap())
