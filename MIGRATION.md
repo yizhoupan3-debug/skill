@@ -3,7 +3,8 @@
 - **唯一可写 skill 源**：`/Users/joe/Developer/skill/skills/`
 - **Codex 全局**：`~/.codex/skills` → `artifacts/codex-skill-surface/skills`
 - **Agents 全局**：`~/.agents/skills` → 同上 surface
-- **冻结（勿再维护 live）**：`/Users/joe/Documents/skill/`、`~/skills_backup`（已删）
+- **已删除（2026-05-19 激进清理）**：`~/Documents/skill`、`~/Documents/skill.nosync` 及同批空壳/无关目录；勿再引用。`~/skills_backup` 此前已删。
+- **生成物漂移检测**：`router-rs` 仍把历史路径 `/Users/joe/Documents/skill` 当作 forbidden marker，用于拒绝陈旧 bootstrap/投影。
 
 ## 日常维护
 
