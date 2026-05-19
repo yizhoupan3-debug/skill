@@ -2,8 +2,8 @@
 name: gsd
 description: |
   GSD (Global Skill Development) lifecycle commands for end-to-end project management.
-  Pre-execution (/gsd-new-project, /gsd-plan-phase, /gsd-discuss-phase): core docs only, no code fixes.
-  /gsd-execute-phase is the first phase allowed to change product code.
+  Pre-execution (/gsd-new-project, /gsd-discuss-phase, /gsd-plan-phase): doc-only per phase-boundaries.md.
+  Execution+ (/gsd-execute-phase, /gsd-verify-work, /gsd-ship): implementation and evidence.
   Use when the user invokes /gsd, /gsd-new-project, /gsd-plan-phase, /gsd-execute-phase,
   /gsd-verify-work, /gsd-discuss-phase, or /gsd-ship.
 routing_layer: L0
@@ -28,44 +28,32 @@ metadata:
 
 # GSD - Global Skill Development
 
-GSD provides end-to-end development lifecycle management through 6 commands.
+Repo-native GSD augments [official get-shit-done](https://github.com/gsd-build/get-shit-done) semantics — see `references/OFFICIAL_GSD_ALIGNMENT.md`.
 
-## Commands
+**Hard contract**: `shared/phase-boundaries.md` — pre-execution must not mutate product code.
 
-| Command | Description | Phase |
-|---------|-------------|-------|
-| /gsd-new-project | Start new project with deep exploration + adversarial review | Exploration |
-| /gsd-plan-phase | Create ROADMAP.md and wave plan | Planning |
-| /gsd-execute-phase | Execute all phases in waves with multi-agent | Execution |
-| /gsd-verify-work | Verify work with evidence-driven approach | Verification |
-| /gsd-discuss-phase | Architecture decisions and ADR documentation | Discussion |
-| /gsd-ship | Final delivery gate with adversarial review + multi-worktree | Delivery |
+## Commands (official order at harness level)
+
+| Command | Zone | Description |
+|---------|------|-------------|
+| /gsd-new-project | Pre-exec | Exploration, REQUIREMENTS, risks, GOAL_STATE (`planned`, `drive_until_done: false`) |
+| /gsd-discuss-phase | Pre-exec | ADRs / architecture decisions (upstream: per-phase CONTEXT before plan) |
+| /gsd-plan-phase | Pre-exec | ROADMAP.md, WAVE_STATE (`planned`) |
+| /gsd-execute-phase | Execution | Waves, multi-agent, may set `drive_until_done: true` |
+| /gsd-verify-work | Execution | Evidence-driven verification |
+| /gsd-ship | Execution | Delivery gate + adversarial review |
 
 ## Core Principles
 
-1. **Docs Before Code**: Pre-execution phases produce core documents only — no product code changes (see [phase-boundaries.md](shared/phase-boundaries.md))
-2. **Adversarial First**: Review from day one on **documents**; code adversarial review starts at ship / post-execute
-3. **Evidence-Driven**: Every verification must produce EVIDENCE_INDEX entries (execution+ runs commands; pre-execution logs doc/review evidence)
-4. **One-Breath Execution**: Don't ask user at every step, execute through waves — **only after** `/gsd-execute-phase` starts
-5. **Multi-Agent**: Subagent-dense, main thread lightweight (≤40% context); pre-execution subagents must be read-only
-6. **Multi-Host**: Works on Desktop MCP, CLI, Codex, Cursor
-
-## Phase Mutation Policy
-
-| Command | Output | Mutate repo code? |
-|---------|--------|-------------------|
-| /gsd-new-project | REQUIREMENTS, ARCHITECTURE, risks, GOAL_STATE (draft) | **No** |
-| /gsd-plan-phase | ROADMAP, WAVE_STATE (planned) | **No** |
-| /gsd-discuss-phase | ADR, decision docs | **No** |
-| /gsd-execute-phase | Implementation | **Yes** |
-| /gsd-verify-work | Evidence from tests/quality | Read + fix only if verify fails |
-| /gsd-ship | Merge, gates, code RFV | **Yes** |
-
-**Hard rule**: If the active command is not execute / verify / ship, do not edit `src/`, tests, configs, or run fix/build to heal the repo.
+1. **Adversarial First**: Review from day one, not just before ship
+2. **Evidence-Driven**: Every verification must produce EVIDENCE_INDEX entries
+3. **One-Breath Execution**: Don't ask user at every step during execute-phase only
+4. **Multi-Agent**: Subagent-dense, main thread lightweight (≤40% context)
+5. **Multi-Host**: Works on Desktop MCP, CLI, Codex, Cursor
 
 ## State Files
 
-- `GOAL_STATE.json` - Macro goal contract
+- `GOAL_STATE.json` - Macro goal contract (planning until execute-phase)
 - `RFV_LOOP_STATE.json` - Multi-round adversarial loop ledger
 - `EVIDENCE_INDEX.json` - Verification command execution records
 - `WAVE_STATE.json` - Wave execution state
@@ -73,11 +61,13 @@ GSD provides end-to-end development lifecycle management through 6 commands.
 
 ## Quick Start
 
-1. `/gsd-new-project <project description>` - Exploration + **core docs only** (no code)
-2. `/gsd-plan-phase` - ROADMAP + wave plan (**no code**)
-3. `/gsd-execute-phase` - **First phase allowed to change product code**
-4. `/gsd-verify-work` - Verify results
-5. `/gsd-discuss-phase` - Make architecture decisions
-6. `/gsd-ship` - Deliver with adversarial review
+1. `/gsd-new-project <description>` — core docs only, **no product code**
+2. `/gsd-discuss-phase` — ADRs / decisions (doc-only)
+3. `/gsd-plan-phase` — ROADMAP + wave plan (doc-only)
+4. `/gsd-execute-phase` — implementation (explicit entry to coding)
+5. `/gsd-verify-work` — verify with evidence
+6. `/gsd-ship` — deliver with adversarial review
+
+For multi-phase work, repeat steps 2–5 per phase (see alignment doc).
 
 See individual command SKILLs for detailed usage.

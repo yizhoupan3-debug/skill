@@ -22,12 +22,14 @@
         "install_tool": "codex",
         "projection_status": "implemented",
         "installable": true,
+        "default_framework_command": "gsd",
         "host_entrypoints": "AGENTS.md"
       },
       "cursor": {
         "install_tool": "cursor",
         "projection_status": "implemented",
         "installable": true,
+        "default_framework_command": "gsd",
         "host_entrypoints": [
           "AGENTS.md",
           ".cursor/rules/*.mdc"

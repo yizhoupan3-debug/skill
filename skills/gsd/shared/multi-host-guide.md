@@ -24,14 +24,19 @@ GSD commands work across Desktop MCP, CLI, Codex, and Cursor.
 
 **Integration**: Via `configs/framework/claude-router-rs-hook.sh` → `router-rs claude hook`
 **State Files**: Same filesystem under `artifacts/current/`
-**Default workflow**: GSD lifecycle (`/gsd-new-project` … `/gsd-ship`); `/autopilot` remains opt-in legacy goal execution
+**Default workflow (all hosts)**: GSD lifecycle (`/gsd-new-project` … `/gsd-ship`); `/autopilot` remains opt-in legacy goal execution
 
 ### CLI-Specific Notes
 
 - Hooks auto-inject continuity context on `UserPromptSubmit` / `Stop`
-- `/gsd*` and `/autopilot` entries arm `GOAL_STATE` persistence (shared with Cursor)
+- **Execution-zone** `/gsd-execute-phase`, `/gsd-verify-work`, `/gsd-ship`, and `/autopilot` arm goal drive; **pre-exec** `/gsd-new-project`, `/gsd-plan-phase`, `/gsd-discuss-phase` do **not** (see `phase-boundaries.md`)
 - `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=1` enables goal drive on Cursor; Claude uses the same artifact layout
 - `ROUTER_RS_RFV_LOOP_HOOK=1` enables RFV continuation hints where the host injects them
+
+## Default framework (all hosts)
+
+- **GSD is the default lifecycle** on every closed-set host (`codex-cli`, `cursor`, `claude-code`, `claude-desktop`). Entrypoints are registered in `RUNTIME_REGISTRY.json` → `framework_commands.gsd`.
+- Host **projection** (`.claude/rules/framework.md`, `~/.cursor/rules/framework.mdc`, `.codex/prompts/framework.md`) and root `AGENTS.md` all state the same GSD chain; host-specific differences are **hooks/MCP only**, not a different default workflow.
 
 ## Codex
 
@@ -41,6 +46,7 @@ GSD commands work across Desktop MCP, CLI, Codex, and Cursor.
 
 ### Codex-Specific Notes
 
+- **Same default GSD lifecycle**; `/gsd` aliases registered for `codex-cli`
 - Use `rust-session-supervisor` / tmux for long sessions
 - Hooks inject goal/RFV hints at SessionStart
 - `build_framework_continuity_digest_prompt` appends GOAL_STATE
@@ -53,6 +59,7 @@ GSD commands work across Desktop MCP, CLI, Codex, and Cursor.
 
 ### Cursor-Specific Notes
 
+- **Same default GSD lifecycle** as other hosts; use `/gsd-*` commands explicitly when starting work
 - No tmux supervisor, rely on `artifacts/current` continuity
 - Hooks inject `AUTOPILOT_DRIVE` and `RFV_LOOP_CONTINUE` hints
 - `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` disables autopilot drive
@@ -66,23 +73,6 @@ Regardless of host, GSD commands:
 3. Update goal/RFV state files
 4. Use stdio JSON for router-rs operations
 
-## Host Detection
+## Host detection
 
-Check environment for host type:
-
-```bash
-# Desktop MCP
-if [ -n "$ROUTER_RS_MCP_MODE" ]; then
-    # Use MCP tools
-fi
-
-# CLI
-if command -v rtk &> /dev/null; then
-    # Use rtk hooks
-fi
-
-# Codex/Cursor
-if [ -f ".cursor/hooks.json" ]; then
-    # Use Cursor hooks
-fi
-```
+**Do not** infer capabilities from filenames alone. Closed-set host ids live in `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`. Per-host install scope and unsupported caps: `docs/hosts/*.md` and `host_projections.*.harness_capability_exceptions`.

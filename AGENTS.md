@@ -69,7 +69,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root
 
 ## Skill Routing
 
-- **Claude Code 默认生命周期**：GSD（`/gsd-new-project` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-discuss-phase` → `/gsd-ship`），见 `skills/gsd/SKILL.md`。`/autopilot` 仍为 opt-in 的 goal-style 连续执行入口（`skills/autopilot/SKILL.md`）。
+- **默认生命周期（全闭集宿主）**：GSD（`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`）。**Pre-execution 三命令仅文档/制品，禁止改产品代码**（`skills/gsd/shared/phase-boundaries.md`）；与官方 [get-shit-done](https://github.com/gsd-build/get-shit-done) 对照见 `skills/gsd/references/OFFICIAL_GSD_ALIGNMENT.md`。`configs/framework/RUNTIME_REGISTRY.json` → `framework_commands.gsd` 对 `codex-cli` / `cursor` / `claude-code` / `claude-desktop` 均已注册。`/autopilot` 仍为 opt-in 的 goal-style 连续执行入口（`skills/autopilot/SKILL.md`）。
 - 第一入口是当前生效 skill root 下的 `skills/SKILL_ROUTING_RUNTIME.json`。
 - 产品/IDE 内「Autopilot」文案通常不等同于本仓库 `skills/autopilot` 的 `/autopilot` harness；以该 skill 与 `docs/harness_architecture.md` 为准。
 - 命中 skill 后，只读 runtime 记录里的 `skill_path` 对应文件；这就是合规读取 skill，不等于禁止使用 skill。
@@ -87,6 +87,18 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root
 - **降噪与应急**：`ROUTER_RS_CURSOR_HOOK_SILENT=1` 可压制非必要提示（但合规/硬阻塞类提示仍应可见）；完整开关矩阵与语义以 `docs/harness_architecture.md` 为准。
 
 ## Host Boundaries
+
+### 宿主差异指针（非第二份能力表）
+
+能力真源仅为 `configs/framework/RUNTIME_REGISTRY.json`（`harness_capabilities` + `harness_capability_exceptions`）。下列为 **操作入口**，成功标准 **不是** 三端文件字节级同步。
+
+| 闭集宿主 id | 操作手册 | Framework 安装 scope | Hook 硬门控 |
+|-------------|----------|----------------------|-------------|
+| `cursor` | `docs/hosts/cursor.md` | framework **user**；hooks **project** | ✓（Agent 面） |
+| `codex-cli` | `docs/hosts/codex-cli.md` | **project** `.codex/*` + user skill surface | ✓ |
+| `claude-code` | `docs/hosts/claude.md` | **project** `.claude/*` | ✓（含 PreToolUse deny） |
+| `claude-desktop` | `docs/hosts/claude.md` | MCP user config | △ advisory only |
+| `codex-app` | registry only | `installable: false` | — |
 
 - `AGENTS.md` 负责跨宿主通用执行协议；Cursor hook 行为由相应宿主自己的 hook 配置定义。
 - **Cursor（`router-rs cursor hook`）机读续跑/门控短码的真源示例**：`**AG_FOLLOWUP**`（Stop 上对未满足 autopilot goal 时由宿主注入 **`router-rs AG_FOLLOWUP`** 起头的单行短码）、`**REVIEW_GATE**`（Stop 上对未满足 review 子代理证据链时 **`router-rs REVIEW_GATE`**）、`**AUTOPILOT_DRIVE**`、`**RFV_LOOP_CONTINUE**`、`**CLOSEOUT_FOLLOWUP**` 等（以实际 `followup_message` / `additional_context` 为准）。**不要**在可见回复中自拟多段仿宿主的长篇机读排版；若某段看起来像 hook 却从未由宿主注入 **`router-rs …`** 起头的单行，应视为**非真源**。（已废止的双字母+FOLLOWUP 前缀与自拟「键值对式」仿真机读同样不是宿主注入。）确需清门仍只用 **单独一行**拒因 token（见 **Execution Ladder**）。
@@ -125,6 +137,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root
 - **Codex CLI 及未加载上述 Cursor 规则的环境**：默认由主线程本地执行；只有用户显式要求 subagent、delegation、parallel agent work、多 agent、分路、分头、并行，或显式调用 `/autopilot` / `/team` 时，才进入 bounded sidecar admission。
 - review 请求是独立上下文授权：深度 / 全面 / 全仓 / 跨模块 / PR 级 review 必须先启动只读 `fork_context=false` reviewer subagent，再由主线程整合；不得用模型自写拒因跳过，只有用户明确要求不用子代理时除外。**各宿主默认可清点的深度 reviewer lane 分列**见 [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) **§0.1**（数据真源 `configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes`；勿假设三宿主使用同一 `subagent_type` 字符串）。
 - 用户请求 **review / 代码审查**（代码与改动面）且**未被更窄 owner 抢占**（例如纯截图或 UI 视觉证据、手稿/论文主线、仅 GitHub PR review comment 处置作为第一目标）时，**默认**遵循 [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)：**默认产出以 severity 排序的 findings 为主（verdict 至多一行可选）**，**宿主可见答复默认不得**在首条 `[P0]`/`[P1]`/`[P2]`/caveat 式 finding 之前堆砌**小结表**、**分类叙事**或等价长铺垫（与 skill **Compact envelope** 一致）；**严重程度证据门槛**、从技能内透镜目录 **自选 lane** 并在已选维度内系统化穷尽；并行只读子代理按所选 lens 拆分整合。**勿**在 `AGENTS.md` 维护第二份 lens 清单。
+- **Review 与执行解耦（硬性）**：纯 review 回合**只找 findings**——**禁止**默认改代码、补测试、跑修复、提交、开 PR、推进 `/autopilot` / `/gsd-execute-phase` / `$gitx` / `$loop`，也**禁止**在 findings 后以「顺手修掉」收尾。只有用户**显式**要求按 findings 修复、实现、合并、提交或点名执行 owner 时，才离开 review-only。含糊的「review 一下」**不**构成执行授权；GSD 默认生命周期**不**覆盖纯 review 请求。
 
 - 主线程始终负责上下文判断、阻塞项、共享决策、集成与最终验证。
 - 若用户显式调用 `/autopilot`，默认进入“自动编排 + 连续执行”模式：先做 bounded sidecar 准入，再在宿主允许范围内并发分路，由主线程集成，直到完成或遇到明确 blocker。
@@ -138,7 +151,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root
 - 优先在同一轮并发启动；只传必要上下文、禁止范围、输出契约和验证要求；发现依赖关系后再把剩余工作回收成串行，不要反过来一开始就全部串行化。
 - 写入型 worker 只能改明确 disjoint 的文件或模块，且不得修改共享连续性 artifact。
 - 只有用户显式调用 `/team`，或 worker 需要互相协作、共享任务列表、相互质询时，才升级到 team orchestration。
-- 默认采用 goal-style 执行循环（plan → implement → verify → repair → closeout）；除非用户要求只给方案，否则不要停在 planning 阶段。
+- 默认采用 goal-style 执行循环（plan → implement → verify → repair → closeout）；除非用户要求只给方案，否则不要停在 planning 阶段。**纯 review 回合除外**（见上条 review-only）。
 
 ## Closeout
 

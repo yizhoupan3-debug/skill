@@ -1,0 +1,49 @@
+# Codex CLI 宿主操作手册
+
+**权威能力矩阵**：`configs/framework/RUNTIME_REGISTRY.json` → `host_projections.codex-cli`  
+**接入契约**：`docs/host_adapter_contract.md`  
+**官方文档**：[Hooks](https://developers.openai.com/codex/hooks) · [AGENTS.md](https://developers.openai.com/codex/guides/agents-md)
+
+## 安装 scope
+
+| 组件 | Scope | 路径 |
+|------|-------|------|
+| `AGENTS.md`、`.codex/hooks.json` | **Project**（trusted project） | 仓库根 |
+| Framework prompt 快照 | **Project** | `.codex/prompts/framework.md` |
+| 全局 skill surface | **User** | `$CODEX_HOME/skills` → 仓库 `artifacts/codex-skill-surface/skills` |
+
+## 何时跑 `codex sync` / `sync-entrypoints`
+
+**要跑**：改了 `router-rs` 嵌入的 AGENTS 文本、Codex hook 模板、或需重材料化 `.codex/*` 入口。  
+**不要跑**：仅为刷新 Cursor user `framework.mdc`（用 `host-integration install --to cursor --scope user`）。  
+**不要**把 sync 当作「三端强行对齐」的默认日常步骤。
+
+```bash
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
+# 或
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
+```
+
+磁盘上 **已存在** 的 `AGENTS.md` 不应被旧二进制 bootstrap 覆盖（官方近源优先）。
+
+## 默认工作流
+
+与全宿主相同：**GSD** 默认链；`/autopilot` 为 opt-in goal-style 连续执行。
+
+## Hook 能力
+
+- 多层 hook **全部加载、并发**；项目 hook 需 trusted project
+- PostTool / Stop / SessionStart → 证据与 continuity digest
+- REVIEW_GATE lane 闭集与 Cursor 相同（registry）
+
+## 独有
+
+- **`session_supervisor`** / tmux 长会话（见 `rust-session-supervisor` skill）
+- `$CODEX_HOME/skills` 为 **26 pinned** surface，≠ 全量 60 on-disk skills
+
+## 自检
+
+```bash
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-codex-hooks
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate
+```

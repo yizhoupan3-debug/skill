@@ -2,11 +2,20 @@
 
 All interaction with router-rs framework happens via stdio JSON.
 
-## Goal Operations
+## Goal Operations (phase-aware)
+
+| Phase zone | `drive_until_done` on `start` |
+|------------|-------------------------------|
+| Pre-execution (`new-project`, `plan-phase`, `discuss-phase`) | **`false`**; `status`: `planned` or `draft` |
+| Execution+ (`execute-phase`, `verify-work`, `ship`) | **`true`** when using continuous goal drive |
+| `/autopilot` only | **`true`** |
 
 ```bash
-# Start goal
-printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<path>","goal":"<goal>","non_goals":["<ng1>"],"done_when":["<dw1>"],"validation_commands":["<vc1>"],"drive_until_done":true}}' | router-rs --stdio-json
+# Pre-execution: planning contract only (new-project example)
+printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<path>","goal":"<goal>","non_goals":["<ng1>"],"done_when":["<dw1>"],"validation_commands":["<vc1>"],"drive_until_done":false,"status":"planned"}}' | router-rs --stdio-json
+
+# Execution+: start goal drive
+printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<path>","goal":"<goal>","non_goals":["<ng1>"],"done_when":["<dw1>"],"validation_commands":["<vc1>"],"drive_until_done":true,"status":"running"}}' | router-rs --stdio-json
 
 # Checkpoint
 printf '%s\n' '{"id":2,"op":"framework_autopilot_goal","payload":{"operation":"checkpoint","repo_root":"<path>","note":"<note>"}}' | router-rs --stdio-json

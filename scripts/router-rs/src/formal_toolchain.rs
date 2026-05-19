@@ -4,12 +4,33 @@
 //!
 //! Callers must pass `command.to_ascii_lowercase()` (or equivalent) as `c`.
 
+fn ascii_lower_contains_word_token(c: &str, token: &str) -> bool {
+    if token.is_empty() {
+        return false;
+    }
+    let bytes = c.as_bytes();
+    let tlen = token.len();
+    let mut i = 0;
+    while i + tlen <= bytes.len() {
+        if &c[i..i + tlen] == token {
+            let before_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
+            let after_ok =
+                i + tlen == bytes.len() || !bytes[i + tlen].is_ascii_alphanumeric();
+            if before_ok && after_ok {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
 /// True when `c` (already ASCII-lowercased) contains narrow formal-tool tokens
 /// (SymPy, Z3, Lean, Coq, Lake, Isabelle, Agda, Idris) aligned with verification-command detection.
 pub(crate) fn ascii_lower_contains_formal_toolchain_tokens(c: &str) -> bool {
     c.contains("sympy")
         || c.contains("z3")
-        || c.contains("lean")
+        || ascii_lower_contains_word_token(c, "lean")
         || c.contains("coqc")
         || c.contains("coqchk")
         || c.contains("lake build")
@@ -62,8 +83,9 @@ mod tests {
         assert!(!ascii_lower_contains_formal_toolchain_tokens(&lc(
             "echo hello"
         )));
-        // Note: "leaning" now matches via contains("lean") since it's often used in
-        // Lean-related contexts; the test intentionally does NOT test "leaning" here.
+        assert!(!ascii_lower_contains_formal_toolchain_tokens(&lc(
+            "leaning tower"
+        )));
     }
 
     #[test]

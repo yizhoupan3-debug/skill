@@ -1,9 +1,10 @@
 ---
 name: gsd-plan-phase
 description: |
-  Create ROADMAP.md and wave plan for project execution. DOCS ONLY — no product code changes.
-  Use after /gsd-new-project completes adversarial review.
-  Defines verification commands for later; does not run them to fix the repo.
+  Create ROADMAP.md and wave plan for project execution.
+  Use after /gsd-discuss-phase (or /gsd-new-project if discuss was skipped with user ack).
+  Pre-execution: obey shared/phase-boundaries.md — no product code.
+  Provides RFV-based planning, wave decomposition, and verification command definition.
 routing_layer: L1
 routing_owner: owner
 routing_gate: evidence
@@ -18,23 +19,16 @@ trigger_hints:
   - wave plan
   - phase breakdown
 metadata:
-  version: "0.2.0"
+  version: "0.1.0"
   platforms: [supported]
   tags: [gsd, planning, roadmap, waves]
 ---
 
 # gsd-plan-phase
 
+**Hard boundary**: Read `../shared/phase-boundaries.md`. This phase is **pre-execution** — doc-only under `artifacts/current/<task_id>/`.
+
 Create ROADMAP.md and wave plan based on REQUIREMENTS.md.
-
-## HARD: Planning Only (No Implementation)
-
-Still **pre-execution**. Produce ROADMAP + WAVE_STATE only.
-
-**Must read**: [../shared/phase-boundaries.md](../shared/phase-boundaries.md)
-
-- Define verification commands in ROADMAP — **do not run them** to fix the repo
-- If discovery finds broken build/tests, document in ROADMAP risks — do not patch code
 
 ## Pre-Conditions
 
@@ -80,17 +74,17 @@ Wave 2: [Phase 3, Phase 4] - Integration + Polish
 Wave 3: [Phase 5] - Testing + Documentation
 ```
 
-### Step 4: Define Verification Commands (Planned, Not Executed)
+### Step 4: Define Verification Commands
 
-For each phase, **name** commands for execute-phase / verify-work — do **not** run them during plan-phase:
+For each phase, define specific verification commands:
 
-| Phase | Verification Commands (execute later) |
-|-------|--------------------------------------|
+| Phase | Verification Commands |
+|-------|---------------------|
 | Foundation | `cargo check`, `cargo test --lib` |
-| Core | `cargo test`, integration tests |
-| Integration | e2e / smoke tests |
+| Core | `cargo test`, `integration tests` |
+| Integration | `e2e tests`, `smoke tests` |
 | Polish | `clippy`, `fmt`, `audit` |
-| Testing | coverage, docs build |
+| Testing | `coverage`, `docs build` |
 
 ### Step 5: Write ROADMAP.md
 
@@ -149,10 +143,4 @@ printf '%s\n' '{"id":1,"op":"framework_rfv_loop","payload":{"operation":"start",
 
 ## Next Step
 
-After planning, stop and wait for explicit `/gsd-execute-phase` — **first command allowed to modify product code**.
-
-## Anti-Patterns
-
-- Don't run `cargo test` / `cargo clippy` to "validate the plan" by fixing the repo
-- Don't scaffold modules or edit source during planning
-- Don't set WAVE_STATE `global_status` to `running` — use `planned` only
+After planning, proceed to `/gsd-execute-phase`.

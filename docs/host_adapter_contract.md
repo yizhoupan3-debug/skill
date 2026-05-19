@@ -64,7 +64,7 @@
 
 **闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；hooks 通过 **`router-rs claude-desktop agent`**，投影安装 **`router-rs framework install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。两者在 Rust 里共享 host-neutral stdio-agent hook 协议实现，但 host id、投影路径（`.claude/*` / `.claude-desktop/*`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。
 
-**单行指针**：跨 Cursor 工作区接入步骤见仓库根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）；操作核对清单见 [`docs/plans/cursor_cross_workspace_operator_checklist.md`](plans/cursor_cross_workspace_operator_checklist.md)（archived stub → `.cursor/plans/`）。
+**单行指针**：跨 Cursor 工作区接入步骤见仓库根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）。**分宿主操作手册（≤1 页）**：[`docs/hosts/cursor.md`](hosts/cursor.md)、[`docs/hosts/codex-cli.md`](hosts/codex-cli.md)、[`docs/hosts/claude.md`](hosts/claude.md)。历史清单 [`docs/plans/cursor_cross_workspace_operator_checklist.md`](plans/cursor_cross_workspace_operator_checklist.md) 为 archived stub，运行时以 hosts 手册为准。
 
 **Cursor 投影 scope**：`framework.mdc` 与 browser MCP 规则仅安装到 **user** scope（`~/.cursor/rules/`）；仓库内保留 `.cursor/hooks.json` 与项目级 harness 配置。`framework maint refresh-host-projections` 对 `cursor` 使用 `--scope user`，其它 installable 宿主仍为 `project`。
 

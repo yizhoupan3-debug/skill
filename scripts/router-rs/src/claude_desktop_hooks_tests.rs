@@ -6,12 +6,17 @@
 mod desktop_mcp_tests {
     use serde_json::json;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static DESKTOP_TEST_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
 
     fn test_repo_dir() -> PathBuf {
+        let seq = DESKTOP_TEST_DIR_SEQ.fetch_add(1, Ordering::Relaxed);
         let mut path = std::env::temp_dir();
         path.push(format!(
-            "router-rs-test-evidence-{}",
-            std::process::id()
+            "router-rs-test-evidence-{}-{}",
+            std::process::id(),
+            seq
         ));
         let _ = std::fs::create_dir_all(path.join("artifacts/current"));
         let _ = std::fs::write(
@@ -457,13 +462,27 @@ mod rate_limiter_tests {
 
 #[cfg(test)]
 mod json_parse_error_tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static DESKTOP_TEST_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_test_repo_dir() -> std::path::PathBuf {
+        let seq = DESKTOP_TEST_DIR_SEQ.fetch_add(1, Ordering::Relaxed);
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "router-rs-test-evidence-{}-{}",
+            std::process::id(),
+            seq
+        ));
+        path
+    }
+
     // M5 FIX: Add JSON parse error path tests
 
     #[test]
     fn malformed_json_returns_parse_error() {
         // Test that malformed JSON returns -32700 error code
-        let mut path = std::env::temp_dir();
-        path.push(format!("router-rs-test-evidence-{}", std::process::id()));
+        let path = unique_test_repo_dir();
         let _ = std::fs::create_dir_all(path.join("artifacts/current"));
         let _ = std::fs::write(path.join("artifacts/current/active_task.json"), r#"{"task_id": "test-task"}"#);
         let _ = std::fs::write(path.join("artifacts/current/SESSION_SUMMARY.md"), "# Test Session\n");
@@ -486,8 +505,7 @@ mod json_parse_error_tests {
     #[test]
     fn valid_json_missing_method_returns_error() {
         // Test that valid JSON but missing method field returns appropriate error
-        let mut path = std::env::temp_dir();
-        path.push(format!("router-rs-test-evidence-{}", std::process::id()));
+        let path = unique_test_repo_dir();
         let _ = std::fs::create_dir_all(path.join("artifacts/current"));
         let _ = std::fs::write(path.join("artifacts/current/active_task.json"), r#"{"task_id": "test-task"}"#);
         let _ = std::fs::write(path.join("artifacts/current/SESSION_SUMMARY.md"), "# Test Session\n");

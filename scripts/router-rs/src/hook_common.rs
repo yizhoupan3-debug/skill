@@ -242,12 +242,29 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
         .into_owned()
 }
 
-fn framework_goal_entry_re() -> &'static Regex {
+fn framework_goal_drive_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/(?:autopilot|gsd(?:-[a-z0-9-]+)?)\b").expect("invalid regex")
+        // Pre-execution GSD (`new-project`, `plan-phase`, `discuss-phase`) must NOT arm
+        // `goal_required` / drive_until_done — see skills/gsd/shared/phase-boundaries.md.
+        Regex::new(r"(?i)(^|\s)/(?:autopilot|gsd-(?:execute-phase|verify-work|ship))\b")
+            .expect("invalid regex")
     })
 }
+
+fn gsd_pre_execution_entry_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)(^|\s)/gsd-(?:new-project|plan-phase|discuss-phase)\b")
+            .expect("invalid regex")
+    })
+}
+
+/// Hook nudge for GSD pre-execution commands (read-only product surface).
+pub const GSD_PRE_EXECUTION_HOOK_NUDGE: &str = "GSD pre-execution (/gsd-new-project, /gsd-plan-phase, /gsd-discuss-phase): product repo is READ-ONLY per skills/gsd/shared/phase-boundaries.md. Write only under artifacts/current/<task_id>/ and allowed planning docs. Do not set drive_until_done:true, do not run fix/build/test on product code, and do not spawn implementation agents until /gsd-execute-phase.";
+
+/// Hook nudge when execution-zone goal drive is armed.
+pub const GSD_GOAL_DRIVE_HOOK_NUDGE: &str = "Framework goal drive (/gsd-execute-phase, /gsd-verify-work, /gsd-ship, or /autopilot): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched GSD or autopilot skill_path.";
 
 fn framework_non_goal_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -257,9 +274,14 @@ fn framework_non_goal_entry_re() -> &'static Regex {
     })
 }
 
-/// `/autopilot` or `/gsd*` — arms goal continuity gates (Cursor hooks; shared heuristic).
+/// `/autopilot` or execution-zone `/gsd-*` — arms goal continuity gates (Cursor hooks).
 pub fn is_framework_goal_entry_prompt(text: &str) -> bool {
-    framework_goal_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+    framework_goal_drive_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+}
+
+/// `/gsd-new-project`, `/gsd-plan-phase`, `/gsd-discuss-phase` — planning only; never goal drive.
+pub fn is_gsd_pre_execution_entry_prompt(text: &str) -> bool {
+    gsd_pre_execution_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
 pub fn is_autopilot_entrypoint_prompt(text: &str) -> bool {
@@ -520,6 +542,21 @@ mod tests {
             ),
             "host-hook debugging complaints should not arm the shared deep-review gate"
         );
+    }
+
+    #[test]
+    fn gsd_pre_execution_does_not_arm_goal_drive_entry() {
+        assert!(is_gsd_pre_execution_entry_prompt("please /gsd-new-project on this idea"));
+        assert!(is_gsd_pre_execution_entry_prompt("/gsd-plan-phase"));
+        assert!(is_gsd_pre_execution_entry_prompt("  /gsd-discuss-phase  "));
+        assert!(!is_framework_goal_entry_prompt("/gsd-new-project"));
+        assert!(!is_framework_goal_entry_prompt("/gsd-plan-phase"));
+        assert!(!is_framework_goal_entry_prompt("/gsd-discuss-phase"));
+        assert!(is_framework_goal_entry_prompt("/gsd-execute-phase"));
+        assert!(is_framework_goal_entry_prompt("/gsd-verify-work"));
+        assert!(is_framework_goal_entry_prompt("/gsd-ship"));
+        assert!(is_framework_goal_entry_prompt("/autopilot"));
+        assert!(!is_gsd_pre_execution_entry_prompt("/gsd-execute-phase"));
     }
 
     #[test]

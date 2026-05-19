@@ -2306,6 +2306,9 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     if let Some(note) = pre_goal_auto_release_note {
         merge_additional_context(&mut output, note);
     }
+    if crate::hook_common::is_gsd_pre_execution_entry_prompt(&text) {
+        merge_additional_context(&mut output, crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE);
+    }
     crate::paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(
         repo_root,
         &mut output,

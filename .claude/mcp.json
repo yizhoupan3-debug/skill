@@ -7,7 +7,7 @@
         "--repo-root",
         "${workspaceRoot}"
       ],
-      "command": "${env.HOME}/.local/bin/router-rs",
+      "command": "/tmp/skill-cargo-target/debug/router-rs",
       "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory",
       "type": "stdio"
     }

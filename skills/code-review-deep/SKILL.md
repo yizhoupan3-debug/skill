@@ -57,6 +57,7 @@ Judgment-focused review for code and change sets **without** rewriting by defaul
 
 ## Default posture
 
+- **Findings-only by default (hard stop)**: On a review request, **do not** edit files, add tests, run fix commits, open PRs, or continue into implement / autopilot / gitx / loop / GSD execute unless the user **explicitly** exits review-only in the same or a follow-up message (e.g. fix these findings, implement, merge, commit). End with findings (+ optional one-line verdict), not execution.
 - Assume a **hostile but fair** reviewer: maximize plausible failure under real abuse, regressions,
   flaky ops, closest prior API expectations, dependency churn, or incomplete tests.
 - **Analysis standard is unchanged**: still choose lenses internally, still exhaust findings **within each lens you selected**, still apply the severity evidence gate below. **Compact default output means less prose in chat, not shallower reasoning.**

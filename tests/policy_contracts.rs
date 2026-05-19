@@ -160,9 +160,21 @@ fn plan_mode_keeps_review_optional_and_review_only() {
         "review lane 必须只读",
         "输出 findings、风险、缺测与证据锚点",
         "不改代码",
+        "review 默认不执行",
     ] {
         assert!(review_gate.contains(marker), "missing marker: {marker}");
     }
+
+    let agents = read_text(&project_root().join("AGENTS.md"));
+    for marker in ["Review 与执行解耦", "只找 findings", "纯 review 回合除外"] {
+        assert!(agents.contains(marker), "missing AGENTS marker: {marker}");
+    }
+
+    let code_review = read_text(&project_root().join("skills/code-review-deep/SKILL.md"));
+    assert!(
+        code_review.contains("Findings-only by default"),
+        "code-review-deep must forbid default execution on review"
+    );
 }
 
 #[test]

@@ -23,6 +23,8 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
 const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
 const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
+const FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH: &str = "**Default lifecycle (all supported hosts): GSD** (`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`). Pre-execution commands are doc-only (no product code); see `skills/gsd/shared/phase-boundaries.md` and `skills/gsd/references/OFFICIAL_GSD_ALIGNMENT.md`. `/autopilot` remains opt-in legacy goal-style execution (`skills/autopilot/SKILL.md`).";
+const FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH: &str = "**Code review default (all hosts): findings-only.** Review / 代码审查 / audit of code or a change set delivers severity-sorted findings only — no default edits, fixes, commits, or autopilot/GSD-execute/gitx/loop continuation unless the user explicitly asks to implement or fix. See `skills/code-review-deep/SKILL.md`.";
 const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
     "framework-generated-artifacts-manifest-v1";
 const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(300);
@@ -2105,7 +2107,8 @@ fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathB
 
 fn build_router_rs_claude_hook_command(event: &str) -> String {
     format!(
-        "/usr/bin/env bash \"${{SKILL_FRAMEWORK_ROOT:-${{CLAUDE_PROJECT_ROOT:-$PWD}}}}/configs/framework/claude-router-rs-hook.sh\" {event}"
+        "/usr/bin/env bash -c 'ROOT=\"${{CLAUDE_PROJECT_ROOT:-$PWD}}\"; FW=\"${{SKILL_FRAMEWORK_ROOT:-$ROOT}}\"; if [[ -r \"$ROOT/.claude/router-rs-hook.env\" ]]; then set -a; . \"$ROOT/.claude/router-rs-hook.env\"; set +a; fi; exec \"$FW/configs/framework/claude-router-rs-hook.sh\" {event}'",
+        event = event
     )
 }
 
@@ -2360,7 +2363,9 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n**Default lifecycle on Claude: GSD** (`/gsd-new-project` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-discuss-phase` → `/gsd-ship`). `/autopilot` remains opt-in legacy goal-style execution (`skills/autopilot/SKILL.md`).\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        gsd = FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH,
+        review = FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH,
     )
 }
 
@@ -2912,7 +2917,9 @@ fn write_codex_projection_manifest(
 
 fn render_codex_framework_entrypoint(_roots: &ResolvedProjectionRoots, scope: &str) -> String {
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
+        gsd = FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH,
+        review = FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH,
     )
 }
 
@@ -3115,7 +3122,9 @@ fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        gsd = FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH,
+        review = FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH,
     )
 }
 

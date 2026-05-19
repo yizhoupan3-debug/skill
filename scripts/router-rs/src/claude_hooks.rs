@@ -406,11 +406,11 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
         .or_else(|| payload.get("user_prompt"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    if crate::hook_common::is_gsd_pre_execution_entry_prompt(prompt) {
+        return add_context("UserPromptSubmit", crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE);
+    }
     if crate::hook_common::is_framework_goal_entry_prompt(prompt) {
-        return add_context(
-            "UserPromptSubmit",
-            "Framework goal entry (/gsd* or /autopilot): persist `artifacts/current/<task_id>/GOAL_STATE.json` and follow the matched GSD or autopilot skill_path before large edits.",
-        );
+        return add_context("UserPromptSubmit", crate::hook_common::GSD_GOAL_DRIVE_HOOK_NUDGE);
     }
     if !agent_review_gate_disabled() && (is_review_prompt(prompt) || has_override(prompt)) {
         let mut state = match load_review_gate_disk(repo_root, payload) {
