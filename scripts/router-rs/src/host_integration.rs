@@ -49,7 +49,7 @@ const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 7] = [
     "plan-mode",
     "update",
 ];
-const REQUIRED_GENERATED_ARTIFACTS: [&str; 13] = [
+const REQUIRED_GENERATED_ARTIFACTS: [&str; 12] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
     "skills/SKILL_ROUTING_INDEX.md",
@@ -60,7 +60,6 @@ const REQUIRED_GENERATED_ARTIFACTS: [&str; 13] = [
     "skills/SKILL_APPROVAL_POLICY.json",
     "AGENTS.md",
     ".codex/host_entrypoints_sync_manifest.json",
-    ".cursor/rules/framework.mdc",
     ".claude/rules/framework.md",
     ".claude/settings.json",
 ];
@@ -912,7 +911,6 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
     matches!(
         path,
         ".codex/host_entrypoints_sync_manifest.json"
-            | ".cursor/rules/framework.mdc"
             | ".claude/rules/framework.md"
             | ".claude/settings.json"
             | ".claude/CLAUDE.md"
@@ -1776,6 +1774,16 @@ fn canonical_scope(scope: &str) -> Result<&'static str, String> {
     }
 }
 
+/// Cursor framework rules (`framework.mdc`) and browser MCP projection are **user-scope only**.
+/// Project repos keep `.cursor/hooks.json` and harness gate rules locally.
+fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str, String> {
+    if projection_adapter(tool).is_some_and(|adapter| adapter.tool == "cursor") {
+        let _ = canonical_scope(scope)?;
+        return Ok("user");
+    }
+    canonical_scope(scope)
+}
+
 fn install_projection_tool(
     roots: &ResolvedProjectionRoots,
     tool: &str,
@@ -1785,7 +1793,8 @@ fn install_projection_tool(
         return Ok(non_installable_projection_result("codex-app", scope));
     }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
-    (adapter.install)(roots, scope)
+    let effective_scope = projection_scope_for_tool(tool, scope)?;
+    (adapter.install)(roots, effective_scope)
 }
 
 fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
@@ -1806,7 +1815,8 @@ fn remove_projection_tool(
         return Ok(non_installable_projection_result("codex-app", scope));
     }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
-    (adapter.remove)(roots, scope, dry_run)
+    let effective_scope = projection_scope_for_tool(tool, scope)?;
+    (adapter.remove)(roots, effective_scope, dry_run)
 }
 
 fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
@@ -1946,22 +1956,20 @@ fn install_cursor_projection(
 }
 
 fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_target = cursor_entrypoint_target(roots, "project");
     let user_target = cursor_entrypoint_target(roots, "user");
     Ok(json!({
-        "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
+        "ready": managed_projection_file_exists(&user_target)?,
         "status": "projection-status",
         "rules": {
             "framework": {
-                "project": cursor_projection_file_status(&project_target)?,
                 "user": cursor_projection_file_status(&user_target)?,
             }
         },
         "manifest": {
-            "project": projection_manifest_status(&projection_manifest_path(roots, "cursor", "project"))?,
             "user": projection_manifest_status(&projection_manifest_path(roots, "cursor", "user"))?,
         },
         "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
+        "policy": "user-scope-only",
     }))
 }
 

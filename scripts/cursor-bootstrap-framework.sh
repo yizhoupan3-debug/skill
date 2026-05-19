@@ -16,7 +16,7 @@ Options:
                          directory containing this script's ../.. when script lives
                          under <framework>/scripts/)
   --project-root DIR     Project to modify (default: $PWD)
-  --with-cursor-rules    Symlink .cursor/rules -> <framework>/.cursor/rules
+  --with-cursor-rules    Symlink harness gate rules only (not framework.mdc; install that user-wide via host-integration)
   --with-configs         Symlink configs/ -> <framework>/configs (推荐：与框架根目录
                          共享 HARNESS_OPERATOR_NUDGES 等；否则 hooks 仅用内置默认)
   --force                Overwrite .cursor/hooks.json even if it differs from template

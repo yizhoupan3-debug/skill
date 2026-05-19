@@ -512,7 +512,8 @@ fn install_skills_cursor_target_installs_only_cursor() {
 
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["cursor"]["status"], "installed");
-    assert!(repo_root.join(".cursor/rules/framework.mdc").exists());
+    assert!(home.join(".cursor/rules/framework.mdc").exists());
+    assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/framework.md").exists());
 }
 
@@ -628,7 +629,8 @@ fn project_scope_all_does_not_install_claude_projection() {
     assert_eq!(result["results"]["cursor"]["status"], "installed");
     assert!(result["results"].get("claude").is_none());
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
-    assert!(repo_root.join(".cursor/rules/framework.mdc").exists());
+    assert!(home.join(".cursor/rules/framework.mdc").exists());
+    assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".claude/settings.json").exists());
     assert!(!repo_root.join(".claude/rules/framework.md").exists());
 }
@@ -1246,7 +1248,6 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         "skills/SKILL_APPROVAL_POLICY.json",
         "AGENTS.md",
         ".codex/host_entrypoints_sync_manifest.json",
-        ".cursor/rules/framework.mdc",
     ] {
         assert!(
             status["generated_artifacts"]

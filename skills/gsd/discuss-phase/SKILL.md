@@ -17,7 +17,7 @@ trigger_hints:
   - ADR
   - discuss design
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   platforms: [supported]
   tags: [gsd, architecture, ADR, decisions]
 ---
@@ -25,6 +25,12 @@ metadata:
 # gsd-discuss-phase
 
 Make architecture decisions with adversarial loop and document as ADRs.
+
+## HARD: ADRs Only (No Implementation)
+
+Pre-execution unless explicitly run **after** execute-phase for post-hoc decisions. Write ADR / STATE / risk docs only — no code spikes or refactors.
+
+**Must read**: [../shared/phase-boundaries.md](../shared/phase-boundaries.md)
 
 ## Purpose
 
@@ -160,3 +166,4 @@ After decisions made, return to `/gsd-execute-phase` or `/gsd-verify-work`.
 - Don't ignore risks
 - Don't skip ADR documentation
 - Don't skip RFV loop for significant decisions
+- Don't prototype in `src/` or "try" libraries in the repo during discuss-phase

@@ -14,11 +14,23 @@ just publish    # 或：ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 … update-one-sh
 just doctor
 ```
 
+## Cursor：framework 规则仅用户级
+
+- **`framework.mdc`** 只安装到 **`$CURSOR_HOME/rules/`**（默认 `~/.cursor/rules/framework.mdc`），**不要**在业务仓库维护项目级副本。
+- 一次性（或升级后）在 framework 仓执行：
+
+```bash
+cd "$SKILL_FRAMEWORK_ROOT"
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+  framework host-integration install --framework-root "$PWD" --project-root "$PWD" \
+  --artifact-root "$PWD/artifacts" --scope user --to cursor
+```
+
 ## 其它 Cursor 项目接入
 
 ```bash
 cd /path/to/project
 "$SKILL_FRAMEWORK_ROOT/scripts/cursor-bootstrap-framework.sh" \
-  --framework-root "$SKILL_FRAMEWORK_ROOT" \
-  --with-cursor-rules --with-configs
+  --framework-root "$SKILL_FRAMEWORK_ROOT" --with-configs
+# 可选：--with-cursor-rules 仅 symlink harness gate 规则（不含 framework.mdc）
 ```

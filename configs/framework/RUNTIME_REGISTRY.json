@@ -624,7 +624,8 @@
         "workspace_bootstrap",
         "interactive_agent_chat",
         "host_resume_entrypoint",
-        "framework_alias_entrypoints"
+        "framework_alias_entrypoints",
+        "post_edit_format_hooks"
       ]
     },
     "claude-code": {
@@ -689,17 +690,26 @@
       ],
       "harness_capabilities": [
         "hot_runtime_routing",
-        "l2_continuity_contract",
-        "closeout_evidence_hooks",
-        "review_gate_router_observation"
+        "l2_continuity_contract"
       ],
       "capabilities": [
         "artifact_contract",
         "mcp_servers",
         "workspace_bootstrap",
         "interactive_agent_chat",
-        "framework_alias_entrypoints",
-        "hard_gate_hooks"
+        "framework_alias_entrypoints"
+      ],
+      "harness_capability_exceptions": [
+        {
+          "cap": "closeout_evidence_hooks",
+          "status": "unsupported",
+          "rationale": "Claude Desktop MCP transport cannot install PreToolUse hard gates; evidence and checkpoints are advisory via MCP tools only."
+        },
+        {
+          "cap": "review_gate_router_observation",
+          "status": "unsupported",
+          "rationale": "Desktop MCP has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
+        }
       ]
     }
   }

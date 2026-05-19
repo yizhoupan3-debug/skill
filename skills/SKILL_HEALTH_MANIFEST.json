@@ -1928,7 +1928,7 @@
       "status": "healthy"
     }
   },
-  "source": "generated-by-skill-compiler-rs",
+  "source": "router-rs-framework-skills",
   "status": "healthy",
   "summary": {
     "checked_records": 79,

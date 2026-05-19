@@ -12,11 +12,6 @@
       "compare": "byte-for-byte"
     },
     {
-      "path": ".cursor/rules/framework.mdc",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to cursor",
-      "compare": "normalized-text"
-    },
-    {
       "path": ".claude/rules/framework.md",
       "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
       "compare": "normalized-text"
@@ -42,13 +37,18 @@
       "compare": "byte-for-byte"
     },
     {
+      "path": "skills/SKILL_TIERS.json",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write",
+      "compare": "byte-for-byte"
+    },
+    {
       "path": "skills/SKILL_ROUTING_REGISTRY.md",
-      "generator": "true",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "normalized-text"
     },
     {
       "path": "skills/SKILL_ROUTING_INDEX.md",
-      "generator": "true",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "normalized-text"
     },
     {
@@ -89,44 +89,9 @@
   ],
   "_deprecated_entries": [
     {
-      "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_REGISTRY.md",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_INDEX.md",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
-    },
-    {
-      "path": "skills/SKILL_MANIFEST.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_RUNTIME.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
-    },
-    {
-      "path": "skills/SKILL_ROUTING_METADATA.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
-    },
-    {
-      "path": "skills/SKILL_HEALTH_MANIFEST.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
-    },
-    {
-      "path": "skills/SKILL_APPROVAL_POLICY.json",
-      "generator": "cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...",
-      "reason": "skill-compiler-rs deleted in f3c4bd5; generator unavailable"
+      "path": "scripts/skill-compiler-rs/",
+      "generator": "removed f3c4bd5",
+      "reason": "Replaced by router-rs framework skills validate|refresh"
     }
   ]
 }

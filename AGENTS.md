@@ -9,7 +9,7 @@
 | 跨宿主叙述性协议（语言、路由约定、Continuity、Execution Ladder 叙事、Closeout 软规范等） | 仓库根 `AGENTS.md` |
 | Cursor 上是否默认 subagent 等**执行面**默认值 | `AGENTS.md` + `.cursor/rules/execution-subagent-gate.mdc`、`review-subagent-gate.mdc`（alwaysApply；`.mdc` 只保留与 Codex 默认的**差异**） |
 | Codex hook 投影中的策略快照 | `AGENTS.md` 磁盘文件是编辑真源；`codex sync` 只用编译期嵌入文本 bootstrap 缺失文件，既有 `AGENTS.md` 不应被旧二进制覆盖 |
-| Cursor framework projection（`.cursor/rules/framework.mdc` 等托管规则） | 由 `router-rs framework install --to cursor` 经 `host_integration.rs` 渲染；与 Codex `host_entrypoints_sync_manifest.json` 中声明的 Cursor host entrypoints 是不同生命周期，**不**由 `codex sync` 管理 |
+| Cursor framework projection（**用户级** `~/.cursor/rules/framework.mdc`） | 由 `router-rs framework host-integration install --to cursor --scope user` 渲染；项目仓只保留 `.cursor/hooks.json` 与 harness gate 规则；**不**由 `codex sync` 管理 |
 | skill 命中路径与 trigger | `skills/SKILL_ROUTING_RUNTIME.json`（及 runtime 声明的 fallback manifest）；勿用 slug 猜路径 |
 | 框架命令 / CLI 注册 | `configs/framework/RUNTIME_REGISTRY.json`（与相关生成、校验流程） |
 | 程序化 schema（如 closeout record） | `configs/framework/*.json` 与 `router-rs` 中对应校验（常需同改并有测试） |

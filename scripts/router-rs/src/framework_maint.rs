@@ -140,6 +140,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
         projection_tools.push(claude);
     }
     for tool in &projection_tools {
+        let scope = if tool == "cursor" { "user" } else { "project" };
         run_router(
             &fw,
             &[
@@ -153,7 +154,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
                 "--artifact-root",
                 art.to_string_lossy().as_ref(),
                 "--scope",
-                "project",
+                scope,
                 "--to",
                 tool.as_str(),
             ],
@@ -162,7 +163,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
 
     verify_installable_projections(&fw, &installable_tools)?;
     eprintln!(
-        "ok: refreshed installable project-level projections: {}",
+        "ok: refreshed installable host projections (cursor=user scope, others=project): {}",
         installable_tools.join(", ")
     );
     Ok(())

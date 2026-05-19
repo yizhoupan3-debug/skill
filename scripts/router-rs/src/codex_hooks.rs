@@ -236,7 +236,7 @@ impl Drop for CodexStateLock {
 /// camelCase per Codex *Common input fields*), then env fallbacks operators may set.
 ///
 /// Does **not** include the per-invocation fallback (`codex_session_key` adds that); see
-/// [`docs/plans/RESEARCH_codex_hooks_official_crosscheck.md`](../../../docs/plans/RESEARCH_codex_hooks_official_crosscheck.md).
+/// [`docs/plans/RESEARCH_codex_hooks_official_crosscheck.md`](../../../docs/plans/RESEARCH_codex_hooks_official_crosscheck.md) (archived stub; see `docs/plans/README.md`).
 fn codex_stable_session_raw(event: &Value) -> Option<String> {
     fn trimmed_nonempty(value: &str) -> Option<String> {
         let t = value.trim();

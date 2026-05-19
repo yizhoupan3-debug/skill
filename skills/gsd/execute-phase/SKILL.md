@@ -18,7 +18,7 @@ trigger_hints:
   - execute phases
   - run waves
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   platforms: [supported]
   tags: [gsd, execution, multi-agent, waves]
 ---
@@ -26,6 +26,14 @@ metadata:
 # gsd-execute-phase
 
 Execute all phases in waves with one-breath, multi-agent pattern.
+
+## HARD: First Phase That May Change Product Code
+
+Do not modify `src/`, tests, or build config **before** this command is explicitly invoked.
+
+Pre-execution docs-only rules: [../shared/phase-boundaries.md](../shared/phase-boundaries.md)
+
+On start: set `GOAL_STATE.json` `status` → `running`, `drive_until_done` → `true` (if using autopilot stdio).
 
 ## Philosophy
 

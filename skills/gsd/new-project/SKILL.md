@@ -2,10 +2,10 @@
 name: gsd-new-project
 description: |
   Start new project with deep exploration and mandatory adversarial review.
+  DOCS ONLY: produces core artifacts under artifacts/current/<task_id>/ — no product code changes.
   Use when the user invokes /gsd-new-project or wants to start a new project.
-  Provides 5-layer exploration funnel: problem definition, constraint scan, risk assessment,
-  competitive analysis, and architecture sketch. After REQUIREMENTS.md draft,
-  triggers mandatory 2-round RFV adversarial review.
+  Provides 5-layer exploration funnel; RFV revises REQUIREMENTS/ARCHITECTURE only until plan-phase.
+  Code implementation starts only at /gsd-execute-phase.
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
@@ -18,7 +18,7 @@ trigger_hints:
   - start new project
   - new project exploration
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   platforms: [supported]
   tags: [gsd, exploration, requirements]
 ---
@@ -26,6 +26,21 @@ metadata:
 # gsd-new-project
 
 Start new project with deep exploration and mandatory adversarial review.
+
+## HARD: Docs Only (No Implementation)
+
+This command ends at **core planning documents**. It does **not** implement features or fix the codebase.
+
+**Must read**: [../shared/phase-boundaries.md](../shared/phase-boundaries.md)
+
+| Allowed | Forbidden |
+|---------|-----------|
+| Write `artifacts/current/<task_id>/` core docs + state JSON | Edit `src/`, tests, configs, lockfiles |
+| Read-only repo exploration (grep, read, readonly subagents) | `cargo fix`, scaffold, dependency changes |
+| RFV revises REQUIREMENTS / ARCHITECTURE / risks | RFV that patches product source |
+| EVIDENCE_INDEX: exploration + doc-review notes | Running ROADMAP verification commands to heal build |
+
+**Next command that may touch code**: `/gsd-execute-phase` only.
 
 ## Pre-Conditions
 
@@ -84,17 +99,19 @@ Draft high-level architecture:
 
 **Output**: Architecture diagram (ASCII) + module list
 
-## Output Artifacts
+## Output Artifacts (Core Docs Only)
 
-After exploration, generate:
+After exploration, generate **only** these (no other repo writes):
 
 | Artifact | Location | Description |
 |----------|----------|-------------|
 | REQUIREMENTS.md | artifacts/current/<task_id>/ | Complete requirements document |
 | ARCHITECTURE.md | artifacts/current/<task_id>/ | Architecture sketch |
 | RISK_REGISTER.md | artifacts/current/<task_id>/ | Risk register |
-| GOAL_STATE.json | artifacts/current/<task_id>/ | Macro goal contract |
-| EVIDENCE_INDEX.json | artifacts/current/<task_id>/ | Exploration evidence |
+| GOAL_STATE.json | artifacts/current/<task_id>/ | Planning contract (`status`: `planned`, `drive_until_done`: **false**) |
+| EVIDENCE_INDEX.json | artifacts/current/<task_id>/ | Exploration / doc-review evidence (not test-run logs) |
+
+Do **not** create implementation files, stubs, or “quick fixes” in the product tree.
 
 ## REQUIRED: Mandatory Adversarial Review
 
@@ -102,13 +119,13 @@ After exploration, generate:
 
 **Trigger**: Immediately start adversarial review before proceeding to planning
 
-**Process**:
-1. Call `code-review-deep` for read-only review of REQUIREMENTS.md
+**Process** (documentation RFV only):
+1. Call `code-review-deep` in **review-only** mode on REQUIREMENTS.md + ARCHITECTURE.md (no code rewrite)
 2. Start RFV loop with 2 rounds:
-   - Round 1: Internal review lane (read-only subagent)
-   - Round 2: External research lane (competitive comparison)
-3. Each round: findings → fix → verify
-4. Review passes only when P0/P1 findings are zero
+   - Round 1: Internal review lane (**readonly** subagent)
+   - Round 2: External research lane (competitive comparison → update docs)
+3. Each round: findings → **revise documents** → verify (re-read docs; checklist; no `cargo test` on repo)
+4. Review passes only when P0/P1 **documentation** findings are zero or accepted with rationale in REQUIREMENTS.md
 
 **Review Focus**:
 - Requirements completeness (all user stories covered?)
@@ -121,11 +138,11 @@ After exploration, generate:
 ## Stdio Operations
 
 ```bash
-# Start goal after exploration
-printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<path>","goal":"<goal from exploration>","non_goals":["<non-goals>"],"done_when":["<done-when conditions>"],"validation_commands":["<validation commands>"],"drive_until_done":true}}' | router-rs --stdio-json
+# Draft goal contract only — do NOT start autopilot execution
+printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<path>","goal":"<goal from exploration>","non_goals":["<non-goals>"],"done_when":["<done-when conditions>"],"validation_commands":["<planned commands — not run in new-project>"],"drive_until_done":false,"status":"planned"}}' | router-rs --stdio-json
 
-# Start RFV for adversarial review
-printf '%s\n' '{"id":2,"op":"framework_rfv_loop","payload":{"operation":"start","repo_root":"<path>","goal":"Review REQUIREMENTS.md for completeness","max_rounds":2,"allow_external_research":true,"review_scope":"requirements","verify_commands":["cat REQUIREMENTS.md"],"stop_when":["P0 findings zero","P1 findings zero"]}}' | router-rs --stdio-json
+# RFV on documents only (fix_scope = artifacts/current/<task_id>/*.md)
+printf '%s\n' '{"id":2,"op":"framework_rfv_loop","payload":{"operation":"start","repo_root":"<path>","goal":"Review REQUIREMENTS.md for completeness","max_rounds":2,"allow_external_research":true,"review_scope":"artifacts/current/<task_id>/REQUIREMENTS.md","fix_scope":"artifacts/current/<task_id>/","verify_commands":["cat artifacts/current/<task_id>/REQUIREMENTS.md"],"stop_when":["P0 doc findings zero","P1 doc findings zero"]}}' | router-rs --stdio-json
 ```
 
 ## Next Step
@@ -135,6 +152,8 @@ After adversarial review passes, proceed to `/gsd-plan-phase`.
 ## Anti-Patterns to Avoid
 
 - Don't rush to implementation before exploration is complete
+- **Don't fix build/test/lint failures in this phase** — record as risks or ROADMAP inputs for execute-phase
 - Don't skip adversarial review even if "time is short"
 - Don't assume existing solutions don't exist without checking
 - Don't skip risk identification "we can figure it out later"
+- Don't set `drive_until_done: true` or spawn implementation agents here
