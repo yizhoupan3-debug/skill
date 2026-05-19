@@ -1,0 +1,43 @@
+{
+  "schema_version": "closeout-record-v1",
+  "task_id": "harness-minimal-gsd",
+  "started_at": "2026-05-19T23:40:00+08:00",
+  "ended_at": "2026-05-19T17:00:00+08:00",
+  "summary": "GSD-only execution spine shipped: /autopilot retired from routing/registry; GSD_GOAL_CONTINUE replaces AUTOPILOT_DRIVE; docs/plan-mode/gsd skills aligned; verify-work PASS; goal completed.",
+  "verification_status": "passed",
+  "changed_files": [
+    "skills/SKILL_ROUTING_RUNTIME.json",
+    "configs/framework/RUNTIME_REGISTRY.json",
+    "configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json",
+    "scripts/router-rs/src/hook_common.rs",
+    "scripts/router-rs/src/autopilot_goal.rs",
+    "scripts/router-rs/src/cursor_hooks/",
+    "scripts/router-rs/src/host_integration.rs",
+    "AGENTS.md",
+    "docs/harness_architecture.md",
+    "docs/hosts/cursor.md",
+    "skills/plan-mode/SKILL.md",
+    "skills/gsd/ship/SKILL.md",
+    "skills/gsd/verify-work/SKILL.md",
+    "skills/autopilot/SKILL.md",
+    "skills/_archived/autopilot/SKILL.md"
+  ],
+  "commands_run": [
+    {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},
+    {"command": "cargo test --test policy_contracts", "exit_code": 0},
+    {"command": "! rg '/autopilot' skills/SKILL_ROUTING_RUNTIME.json configs/framework/RUNTIME_REGISTRY.json", "exit_code": 0},
+    {"command": "framework_autopilot_goal complete task_id=harness-minimal-gsd", "exit_code": 0}
+  ],
+  "artifacts_checked": [
+    {"path": "artifacts/current/harness-minimal-gsd/VERIFY_REPORT.md", "exists": true},
+    {"path": "artifacts/current/harness-minimal-gsd/RETIREMENT_LOG.md", "exists": true},
+    {"path": "artifacts/current/harness-minimal-gsd/GATE_SMOKE.md", "exists": true},
+    {"path": "artifacts/current/harness-minimal-gsd/WAVE_STATE.json", "exists": true}
+  ],
+  "blockers": [],
+  "risks": [
+    "artifacts/current/* gitignored — task SESSION_SUMMARY local only; closeout JSON is repo-tracked pointer",
+    "Multi-worktree RFV ship loop skipped; covered by ADR-007 unit/integration tests"
+  ],
+  "notes": "closeout_gate equivalent: goal completed + evidence artifacts[] + SESSION_SUMMARY.md"
+}

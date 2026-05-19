@@ -61,16 +61,19 @@ Verify all work results with evidence-driven approach.
 | README | exists + current | N/A |
 | CHANGELOG | exists + updated | N/A |
 
-### 4. Schema Drift
+### 4. Schema / plan drift
 
-Detect changes between:
-- REQUIREMENTS.md (what we planned)
-- Implementation (what we built)
+Detect divergence between task artifacts and implementation.
+
+**Note:** `router-rs schema-drift baseline` is **not** implemented; use the harness bundle below.
 
 ```bash
-# Compare expected vs actual
-diff <(grep "schema\|model\|struct" REQUIREMENTS.md) \
-     <(grep "schema\|model\|struct" src/**/*.rs)
+TASK=artifacts/current/<task_id>
+# Plan vs ROADMAP / REQUIREMENTS headings (lightweight)
+diff -u <(rg -n '^## |^### ' "$TASK/REQUIREMENTS.md" 2>/dev/null || true) \
+        <(rg -n '^## |^### ' "$TASK/ROADMAP.md" 2>/dev/null || true) || true
+# EVIDENCE_INDEX machine rollup expects `artifacts[]` (not only `entries[]`)
+test -f "$TASK/EVIDENCE_INDEX.json" && python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('artifacts'), 'missing artifacts[] for router-rs rollup'" "$TASK/EVIDENCE_INDEX.json"
 ```
 
 ## Evidence Protocol
