@@ -40,7 +40,7 @@ See `skills/gsd/shared/phase-boundaries.md`:
 | Pre-execution | `new-project`, `discuss-phase`, `plan-phase` | **READ-ONLY** |
 | Execution+ | `execute-phase`, `verify-work`, `ship` | Allowed per ROADMAP/gates |
 
-**Hooks** (`hook_common.rs`): only execution-zone `/gsd-*` and `/autopilot` arm `goal_required`; pre-execution injects `GSD_PRE_EXECUTION_HOOK_NUDGE` on prompt submit.
+**Hooks** (`hook_common.rs`): only execution-zone `/gsd-execute-phase`, `/gsd-verify-work`, `/gsd-ship` arm `goal_required`; pre-execution injects `GSD_PRE_EXECUTION_HOOK_NUDGE` on prompt submit.
 
 ## Known gaps (augment backlog, not forks)
 
@@ -61,7 +61,7 @@ Repeat discuss → plan → execute → verify **per phase** when following upst
 
 ## Anti-patterns (root cause: “early coding”)
 
-1. Treating `/gsd-new-project` as `/autopilot` (goal drive) — **fixed in hooks**: pre-exec no longer sets `goal_required`.
+1. Treating `/gsd-new-project` as execution-zone goal drive — **fixed in hooks**: pre-exec no longer sets `goal_required`.
 2. `drive_until_done: true` in pre-exec stdio — **forbidden** in `phase-boundaries.md` and `new-project/SKILL.md`.
 3. Vague user prompt + default GSD narrative without explicit phase — agent jumps to implementation. **Mitigation**: require explicit `/gsd-execute-phase` before product edits; hooks nudge on pre-exec only.
 4. RFV “fix” round touching `src/` during new-project — **forbidden**; doc-only fix scope.

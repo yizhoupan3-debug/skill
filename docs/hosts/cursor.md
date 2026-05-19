@@ -30,15 +30,15 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 
 - **Agent 面**：`beforeSubmitPrompt`、`stop`、`subagentStart`/`subagentStop`、`postToolUse` 等 → `router-rs cursor hook`
 - **REVIEW_GATE 可清点 lane**（仅）：`general-purpose`、`best-of-n-runner`（registry `review_gate.deep_gate_lanes`）
-- **Goal drive**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship`、`/autopilot` — **不是** `/gsd-new-project` 等 pre-exec 命令
+- **Goal drive**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` — **不是** `/gsd-new-project` 等 pre-exec 命令（`/autopilot` 已退役）
 - **Fail-closed**：关键事件经 `cursor-router-rs-hook.sh`；`beforeSubmit` 对 plan 文件无可靠 Plan/Agent 模式信号
 
 ## 常用 env
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` | 关闭 Stop 续跑注入 |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal 提示 |
+| `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` | 关闭 Stop 续跑注入（兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（绑定 `/gsd-execute-phase`） |
 | `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 压制非必要 hook 文案 |
 
 ## 自检

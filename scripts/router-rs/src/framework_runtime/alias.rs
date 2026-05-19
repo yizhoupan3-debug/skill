@@ -1,4 +1,4 @@
-//! Framework command alias envelopes (`/autopilot`, `deepinterview`, …).
+//! Framework command alias envelopes (`/gsd-execute-phase`, `deepinterview`, …).
 
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -137,7 +137,7 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
 
 fn build_framework_alias_routing_hints(alias_name: &str, alias_record: &Value) -> Value {
     match alias_name {
-        "autopilot" => json!({
+        "gsd" => json!({
             "reroute_when_ambiguous": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
             "reroute_when_root_cause_unknown": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
             "entrypoint_modes": alias_value_at_path(alias_record, &["entrypoint_modes"])
@@ -295,17 +295,17 @@ fn build_framework_alias_entry_contract(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
-    let execution_ready = alias_name == "autopilot"
+    let execution_ready = alias_name == "gsd"
         && continuity_state == "active"
         && !task.is_empty()
         && !next_actions.is_empty()
         && missing_recovery_anchors.is_empty();
     let needs_recovery =
-        alias_name == "autopilot" && matches!(continuity_state.as_str(), "stale" | "inconsistent");
-    let needs_verification = alias_name == "autopilot"
+        alias_name == "gsd" && matches!(continuity_state.as_str(), "stale" | "inconsistent");
+    let needs_verification = alias_name == "gsd"
         && evidence_missing
         && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES);
-    let needs_debugging = alias_name == "autopilot"
+    let needs_debugging = alias_name == "gsd"
         && !blockers.is_empty()
         && blockers.iter().any(|item| {
             let lowered = item.to_ascii_lowercase();
@@ -314,11 +314,11 @@ fn build_framework_alias_entry_contract(
                 || lowered.contains("根因")
                 || lowered.contains("重复")
         });
-    let needs_clarification = alias_name == "autopilot"
+    let needs_clarification = alias_name == "gsd"
         && continuity_state == "missing"
         && task.is_empty()
         && next_actions.is_empty();
-    let execution_readiness = if alias_name == "autopilot" {
+    let execution_readiness = if alias_name == "gsd" {
         if needs_recovery {
             "needs_recovery"
         } else if needs_verification {
@@ -330,14 +330,14 @@ fn build_framework_alias_entry_contract(
         } else if execution_ready {
             "ready_to_execute"
         } else {
-            "continue_autopilot"
+            "continue_gsd_execution"
         }
     } else {
         "use-alias-default"
     };
     let mut route_rules = Vec::new();
     let summary = match alias_name {
-        "autopilot" => {
+        "gsd" => {
             let ambiguous = alias_record_text(alias_record, &["reroute_when_ambiguous"]);
             let root_cause = alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]);
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
@@ -354,7 +354,7 @@ fn build_framework_alias_entry_contract(
                     missing_recovery_anchors.join(", ")
                 ));
             }
-            "进入 autopilot。本仓原生执行流启动，状态、恢复和续跑都走本地 Rust/continuity。"
+            "进入 GSD 执行流（/gsd-execute-phase）。本仓原生执行流启动，状态、恢复和续跑都走本地 Rust/continuity。"
                 .to_string()
         }
         "deepinterview" => {
@@ -363,7 +363,7 @@ fn build_framework_alias_entry_contract(
             route_rules.push(format!("主 owner -> `{owner}`"));
             route_rules.push("每轮只问一个问题".to_string());
             route_rules.push("先查仓库证据，再问用户".to_string());
-            route_rules.push("清晰度过线后 handoff 到 `autopilot`".to_string());
+            route_rules.push("清晰度过线后 handoff 到 `/gsd-execute-phase`".to_string());
             if !review_lanes.is_empty() {
                 route_rules.push(format!("review lanes -> {}", review_lanes.join(", ")));
             }
@@ -451,7 +451,7 @@ fn build_framework_alias_state_machine(
         })
         .unwrap_or_default();
     let (current_state, recommended_action, resume_mode, resume_reason) =
-        if alias_name == "autopilot" {
+        if alias_name == "gsd" {
             match state.as_str() {
                 "active"
                     if evidence_missing
@@ -545,8 +545,8 @@ fn build_framework_alias_state_machine(
             }
         };
     let handoff = match alias_name {
-        "autopilot" => json!({
-            "default_mode": "stay-in-autopilot",
+        "gsd" => json!({
+            "default_mode": "stay-in-gsd-execution",
             "rules": [
                 {
                     "when": "task is still ambiguous",
@@ -570,7 +570,7 @@ fn build_framework_alias_state_machine(
                 },
                 {
                     "when": "clarity is high enough to execute",
-                    "target": "autopilot",
+                    "target": "gsd",
                     "action": "handoff_to_execution",
                 }
             ]
@@ -583,7 +583,7 @@ fn build_framework_alias_state_machine(
     let mut resume = Map::new();
     resume.insert("allowed".to_string(), Value::Bool(can_resume));
     resume.insert("mode".to_string(), Value::String(resume_mode.clone()));
-    if alias_name == "autopilot" {
+    if alias_name == "gsd" {
         resume.insert(
             "missing_recovery_anchors".to_string(),
             Value::Array(

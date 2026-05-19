@@ -1,0 +1,32 @@
+{
+  "schema_version": "closeout-record-v1",
+  "task_id": "triad-surface-optimize",
+  "started_at": "2026-05-19T23:15:00+08:00",
+  "ended_at": "2026-05-20T02:15:00+08:00",
+  "summary": "四宿主 AGENTS/rules/hooks 表面优化：AGENTS 瘦身、Codex launcher hooks、Cursor rules 去重、Desktop CLAUDE/MCP 文档；verify-work PASS（769+88 tests）；SessionStart 字节未 live 抽样。",
+  "verification_status": "passed",
+  "changed_files": [
+    "AGENTS.md",
+    "configs/framework/codex-router-rs-hook.sh",
+    "scripts/router-rs/src/hook_common.rs",
+    "scripts/router-rs/src/cursor_hooks/",
+    "scripts/router-rs/src/host_integration.rs",
+    "docs/hosts/claude-desktop.md",
+    "docs/references/AGENTS_OPERATOR_SURFACE.md",
+    "artifacts/codex-skill-surface/",
+    "artifacts/current/triad-surface-optimize/"
+  ],
+  "commands_run": [
+    {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0, "note": "769 passed"},
+    {"command": "cargo test --test policy_contracts", "exit_code": 0, "note": "88 passed"},
+    {"command": "framework maint verify-cursor-hooks", "exit_code": 0},
+    {"command": "framework maint verify-codex-hooks", "exit_code": 0},
+    {"command": "framework host-integration status", "exit_code": 0}
+  ],
+  "artifacts_checked": [
+    {"path": "artifacts/current/triad-surface-optimize/VERIFICATION_REPORT.md", "exists": true},
+    {"path": "artifacts/current/triad-surface-optimize/SURFACE_DRIFT_AUDIT.md", "exists": true},
+    {"path": "artifacts/current/triad-surface-optimize/EVIDENCE_INDEX.json", "exists": true}
+  ],
+  "notes": "P0.6 SessionStart byte reduction deferred to live sampling; schema-drift CLI N/A."
+}

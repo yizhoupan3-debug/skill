@@ -1,4 +1,4 @@
-/// 从完整 RFV followup 文案中提取结构化外研 schema 指针行（若存在），供 Goal+RFV 合并进 `AUTOPILOT_DRIVE` 时保留（原实现只取首行会丢掉该行）。
+/// 从完整 RFV followup 文案中提取结构化外研 schema 指针行（若存在），供 Goal+RFV 合并进 `GSD_GOAL_CONTINUE` 时保留（原实现只取首行会丢掉该行）。
 fn rfv_external_struct_schema_hint_line(rfv_msg: &str) -> Option<&str> {
     let needle = crate::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH;
     rfv_msg.lines().map(str::trim).find(|l| l.contains(needle))
@@ -14,7 +14,7 @@ fn merge_continuity_followups(
     let rfv = build_rfv_loop_followup_using_frame(repo_root, frame);
     match (autopilot, rfv) {
         (Some(ap_msg), Some(rfv_msg)) if !ap_msg.is_empty() && !rfv_msg.is_empty() => {
-            // Goal + RFV 同时活跃：只保留 **一条** `AUTOPILOT_DRIVE` 段落，把 RFV 压缩成尾注，
+            // Goal + RFV 同时活跃：只保留 **一条** `GSD_GOAL_CONTINUE` 段落，把 RFV 压缩成尾注，
             // 避免再插第二段 `RFV_LOOP_CONTINUE` 头行（token 与 scan 噪声双高）。
             let stripped = rfv_msg.lines().next().map(str::trim).unwrap_or("");
             let note = stripped
@@ -31,7 +31,7 @@ fn merge_continuity_followups(
             crate::autopilot_goal::merge_hook_nudge_paragraph(
                 output,
                 &merged,
-                "AUTOPILOT_DRIVE",
+                crate::autopilot_goal::GSD_GOAL_CONTINUE_PARAGRAPH_PREFIX,
                 false,
             );
         }
@@ -39,7 +39,7 @@ fn merge_continuity_followups(
             crate::autopilot_goal::merge_hook_nudge_paragraph(
                 output,
                 &msg,
-                "AUTOPILOT_DRIVE",
+                crate::autopilot_goal::GSD_GOAL_CONTINUE_PARAGRAPH_PREFIX,
                 false,
             );
         }
@@ -1129,10 +1129,15 @@ fn hook_lock_unavailable_notice_json() -> Value {
     })
 }
 
-/// `/autopilot` 与 `/gsd*` 拉起 goal 门控；`/autopilot` opt-in 保留。
-fn is_autopilot_goal_entry_prompt(prompt: &str, signal_text: &str) -> bool {
+/// GSD execution-zone commands arm goal continuity gates (`/gsd-execute-phase|verify-work|ship`).
+fn is_framework_goal_drive_entry_prompt(prompt: &str, signal_text: &str) -> bool {
     let _ = signal_text;
     crate::hook_common::is_framework_goal_entry_prompt(prompt)
+}
+
+#[allow(dead_code)]
+fn is_autopilot_goal_entry_prompt(prompt: &str, signal_text: &str) -> bool {
+    is_framework_goal_drive_entry_prompt(prompt, signal_text)
 }
 
 /// 显式委托/并行入口走 bounded sidecar gate；goal 入口（`/autopilot`、`/gsd*`）只走 goal 机。
@@ -1806,8 +1811,8 @@ fn bump_phase(state: &mut ReviewGateState, target: u32) {
     state.phase = state.phase.max(target);
 }
 
-fn autopilot_pre_goal_followup_message() -> String {
-    "Autopilot (/autopilot)：先写清 Goal 契约与验证口径；需要时再并行分工与证据索引（建议，非硬门槛）。确为小任务请**单独一行**拒因 token（如 small_task），不要自拟仿宿主 `router-rs …` 续跑行。"
+fn gsd_pre_goal_followup_message() -> String {
+    "GSD execute (/gsd-execute-phase)：先写清 Goal 契约与验证口径（`GOAL_STATE.json`）；需要时再并行分工与证据索引（建议，非硬门槛）。确为小任务请**单独一行**拒因 token（如 small_task），不要自拟仿宿主 `router-rs …` 续跑行。"
         .to_string()
 }
 
@@ -2151,13 +2156,13 @@ fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
     let text = prompt_text(event);
     let signal_text = hook_event_signal_text(event, &text, "");
     let review = is_review_prompt(&text);
-    let autopilot_entrypoint = is_autopilot_goal_entry_prompt(&text, &signal_text);
-    let review_arms = review && !autopilot_entrypoint;
+    let goal_drive_entrypoint = is_framework_goal_drive_entry_prompt(&text, &signal_text);
+    let review_arms = review && !goal_drive_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let overridden = has_override(&text);
 
-    let strong_constraint = (review_arms || delegation || autopilot_entrypoint) && !overridden;
+    let strong_constraint = (review_arms || delegation || goal_drive_entrypoint) && !overridden;
     if strong_constraint {
         return (
             false,
@@ -2177,13 +2182,13 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
     let response_text = agent_response_text(event);
     let signal_text = hook_event_signal_text(event, &text, &response_text);
     let review = is_review_prompt(&text);
-    let autopilot_entrypoint = is_autopilot_goal_entry_prompt(&text, &signal_text);
-    let review_arms = review && !autopilot_entrypoint;
+    let goal_drive_entrypoint = is_framework_goal_drive_entry_prompt(&text, &signal_text);
+    let review_arms = review && !goal_drive_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let overridden = has_override(&text) || saw_reject_reason(&signal_text, &text);
 
-    let strong_constraint = (review_arms || delegation || autopilot_entrypoint) && !overridden;
+    let strong_constraint = (review_arms || delegation || goal_drive_entrypoint) && !overridden;
     if strong_constraint {
         return "router-rs：hook-state 锁不可用，本轮须严格 review/委托/autopilot 证据。合并前请修复锁/权限并重试，或 subagent/拒因。".to_string();
     }
@@ -2193,7 +2198,7 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
 const CURSOR_DEEP_REVIEW_DEFAULT_NUDGE: &str = "深度审稿：`skills/code-review-deep/SKILL.md`（默认≥2 路只读并行；lane 仅 general-purpose / best-of-n-runner；每路 JSON 布尔 fork_context=false）。";
 
 /// 同一条用户提交里同时出现 review 信号与 `/autopilot` 入口时追加；与 `review_arms_for_gate` 语义对齐。
-const CURSOR_REVIEW_AUTOPILOT_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 `/autopilot` 或 `/gsd*` 入口；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 GSD/autopilot 入口）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
+const CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 GSD 执行区入口（`/gsd-execute-phase` 等）；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/gsd-execute-phase`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
 
 /// 将一条 `review_subagent_cycle_key` 压入 multiset 并同步 legacy 字段。
 ///
@@ -2240,8 +2245,8 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let text = prompt_text(event);
     let signal_text = hook_event_signal_text(event, &text, "");
     let review = is_review_prompt(&text);
-    let autopilot_entrypoint = is_autopilot_goal_entry_prompt(&text, &signal_text);
-    let review_arms_for_gate = review && !autopilot_entrypoint;
+    let goal_drive_entrypoint = is_framework_goal_drive_entry_prompt(&text, &signal_text);
+    let review_arms_for_gate = review && !goal_drive_entrypoint;
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let user_gate_override = has_override(&text);
@@ -2250,7 +2255,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     state.review_required = state.review_required || review_arms_for_gate;
     state.review_override = state.review_override || user_gate_override;
     state.delegation_override = state.delegation_override || user_gate_override;
-    state.goal_required = state.goal_required || autopilot_entrypoint;
+    state.goal_required = state.goal_required || goal_drive_entrypoint;
     state.goal_contract_seen =
         state.goal_contract_seen || has_structured_goal_contract(&signal_text);
     state.goal_progress_seen = state.goal_progress_seen || has_goal_progress_signal(&signal_text);
@@ -2266,7 +2271,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         clear_review_gate_escalation_counters(&mut state);
     }
     hydrate_goal_gate_from_disk(repo_root, &mut state, false, &frame);
-    if review || delegation || autopilot_entrypoint {
+    if review || delegation || goal_drive_entrypoint {
         state.last_prompt = Some(text.chars().take(500).collect());
     }
 
@@ -2289,17 +2294,17 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     {
         merge_additional_context(&mut output, CURSOR_DEEP_REVIEW_DEFAULT_NUDGE);
     }
-    if review && autopilot_entrypoint && !cursor_review_gate_disabled_by_env() {
-        merge_additional_context(&mut output, CURSOR_REVIEW_AUTOPILOT_SAME_ROUND_NUDGE);
+    if review && goal_drive_entrypoint && !cursor_review_gate_disabled_by_env() {
+        merge_additional_context(&mut output, CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE);
     }
     if needs_autopilot_pre_goal {
         // 仅计入总 follow-up 次数；不要把 goal_followup_count 算进去，否则首次 stop 会误判成「非首条」而跳过完整 goal 提示。
         state.followup_count += 1;
-        let pre = autopilot_pre_goal_followup_message();
+        let pre = gsd_pre_goal_followup_message();
         crate::autopilot_goal::merge_hook_nudge_paragraph(
             &mut output,
             &pre,
-            "Autopilot (/autopilot)",
+            "GSD execute (/gsd-execute-phase)",
             false,
         );
     }

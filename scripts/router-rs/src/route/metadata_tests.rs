@@ -577,7 +577,7 @@ mod route_metadata_tests {
 
         let loaded = load_records(None, Some(&manifest_path)).expect("load records");
         assert!(
-            loaded.iter().any(|record| record.slug == "autopilot"),
+            loaded.iter().any(|record| record.slug == "gsd"),
             "default runtime hot index should be preferred when available"
         );
         assert!(

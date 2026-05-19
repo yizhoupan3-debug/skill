@@ -15,8 +15,8 @@
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 28,
-    "hot_skill_count": 28,
+    "full_skill_count": 27,
+    "hot_skill_count": 27,
     "kind": "hot",
     "policy": "session-start required gates plus allowlisted first-turn control owners plus explicit framework command aliases; route/search may load the fallback manifest after runtime-owned skills have been excluded."
   },
@@ -727,31 +727,6 @@
       "skill"
     ],
     [
-      "autopilot",
-      "L0",
-      "owner",
-      "none",
-      "n/a",
-      "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor.",
-      [
-        "/autopilot",
-        "/autopilot-quick",
-        "/autopilot-deep",
-        "/autopilot quick",
-        "/autopilot deep"
-      ],
-      "P1",
-      "skills/autopilot/SKILL.md",
-      [
-        "claude-code",
-        "claude-desktop",
-        "codex-app",
-        "codex-cli",
-        "cursor"
-      ],
-      "framework_command"
-    ],
-    [
       "deepinterview",
       "L0",
       "owner",
@@ -818,7 +793,7 @@
     [
       "gsd",
       "L0",
-      "gate",
+      "owner",
       "none",
       "n/a",
       "GSD lifecycle commands for end-to-end project management with adversarial review and multi-agent execution.",

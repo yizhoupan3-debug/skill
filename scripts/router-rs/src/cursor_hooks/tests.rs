@@ -497,7 +497,7 @@ fn autopilot_entry_does_not_arm_delegation_or_review_from_fix_copy() {
         "beforeSubmitPrompt",
         &event(
             "ap-del",
-            "/autopilot address all review findings from the last pass",
+            "/gsd-execute-phase address all review findings from the last pass",
         ),
     );
     let state = load_state_for(&repo, "ap-del");
@@ -518,7 +518,7 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let repo = fresh_repo();
     let sid = "s-dual-review-autopilot-hint";
-    let prompt = "请全面review这个仓库 /autopilot 修复刚发现的问题";
+    let prompt = "请全面review这个仓库 /gsd-execute-phase 修复刚发现的问题";
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
     assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
     let ac = out
@@ -580,7 +580,7 @@ fn stop_completion_claim_requires_closeout_record_when_strict_enabled() {
         &json!({
             "session_id": "s-closeout-1",
             "cwd": repo.display().to_string(),
-            "prompt": "/autopilot do thing"
+            "prompt": "/gsd-execute-phase do thing"
         }),
     );
     assert!(
@@ -648,7 +648,7 @@ fn stop_completion_claim_allows_when_closeout_record_passes() {
         &json!({
             "session_id": "s-closeout-2",
             "cwd": repo.display().to_string(),
-            "prompt": "/autopilot do thing"
+            "prompt": "/gsd-execute-phase do thing"
         }),
     );
 
@@ -742,7 +742,7 @@ fn autopilot_skips_pre_goal_nag_when_goal_state_on_disk() {
     let out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ap-disk", "/autopilot 继续实现"),
+        &event("ap-disk", "/gsd-execute-phase 继续实现"),
     );
     assert!(
         load_state_for(&repo, "ap-disk").pre_goal_review_satisfied,
@@ -753,7 +753,7 @@ fn autopilot_skips_pre_goal_nag_when_goal_state_on_disk() {
         .and_then(Value::as_str)
         .unwrap_or_default();
     assert!(
-        !msg.contains("Autopilot (/autopilot)") && !msg.contains("independent-context"),
+        !msg.contains("GSD execute (/gsd-execute-phase)") && !msg.contains("independent-context"),
         "pre-goal nag should be skipped when GOAL_STATE exists; msg={msg:?}"
     );
 
@@ -791,7 +791,7 @@ fn autopilot_pre_goal_strict_disk_skips_hydrate_pre_goal_on_before_submit() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ap-disk-strict", "/autopilot 继续实现"),
+        &event("ap-disk-strict", "/gsd-execute-phase 继续实现"),
     );
     assert!(
         !load_state_for(&repo, "ap-disk-strict").pre_goal_review_satisfied,
@@ -839,7 +839,7 @@ fn stop_goal_gate_hydrates_from_goal_state_and_evidence_without_keywords() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ev-gate", "/autopilot finish fixes"),
+        &event("ev-gate", "/gsd-execute-phase finish fixes"),
     );
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -976,7 +976,7 @@ fn stop_goal_gate_hydrates_running_goal_without_checkpoints_or_keywords() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("run-gate", "/autopilot continue"),
+        &event("run-gate", "/gsd-execute-phase continue"),
     );
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -1020,7 +1020,7 @@ fn stop_goal_gate_hydrates_when_goal_state_omits_status_field() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ns-gate", "/autopilot continue"),
+        &event("ns-gate", "/gsd-execute-phase continue"),
     );
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -1456,7 +1456,7 @@ fn stop_lock_failure_still_surfaces_autopilot_drive() {
     let blob = hook_user_visible_blob(&out);
     assert!(blob.contains("锁不可用"), "{blob}");
     assert!(
-        blob.contains("AUTOPILOT_DRIVE"),
+        blob.contains("GSD_GOAL_CONTINUE"),
         "lock failure should keep active drive visible; blob={blob}"
     );
 }
@@ -1486,7 +1486,7 @@ fn continuity_followup_with_existing_hard_message_uses_additional_context_and_de
     );
     let mut out = json!({
         "followup_message": hard_gate_followup.clone(),
-        "additional_context": "AUTOPILOT_DRIVE: stale\nGoal: old"
+        "additional_context": "GSD_GOAL_CONTINUE: stale\nGoal: old"
     });
 
     merge_continuity_followups(&repo, &mut out, &frame);
@@ -1497,10 +1497,10 @@ fn continuity_followup_with_existing_hard_message_uses_additional_context_and_de
         Some(hard_gate_followup.as_str())
     );
     let ctx = out["additional_context"].as_str().unwrap_or("");
-    assert!(ctx.contains("AUTOPILOT_DRIVE"), "{ctx}");
+    assert!(ctx.contains("GSD_GOAL_CONTINUE"), "{ctx}");
     assert!(ctx.contains("drive while hard message exists"), "{ctx}");
     assert!(!ctx.contains("Goal: old"), "{ctx}");
-    assert_eq!(ctx.matches("AUTOPILOT_DRIVE").count(), 1, "{ctx}");
+    assert_eq!(ctx.matches("GSD_GOAL_CONTINUE").count(), 1, "{ctx}");
 }
 
 #[test]
@@ -1531,7 +1531,7 @@ fn before_submit_does_not_merge_goal_or_rfv_continuity() {
         .expect("rfv");
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event("merge-t", "hello"));
     let msg = hook_user_visible_blob(&out);
-    assert!(!msg.contains("AUTOPILOT_DRIVE"), "{msg}");
+    assert!(!msg.contains("GSD_GOAL_CONTINUE"), "{msg}");
     assert!(!msg.contains("RFV_LOOP_CONTINUE"), "{msg}");
     assert!(!msg.contains("## 续跑"), "{msg}");
 }
@@ -1567,7 +1567,7 @@ fn stop_active_goal_continuity_uses_additional_context_by_default() {
         .get("additional_context")
         .and_then(Value::as_str)
         .unwrap_or("");
-    assert!(ctx.contains("AUTOPILOT_DRIVE"), "{ctx}");
+    assert!(ctx.contains("GSD_GOAL_CONTINUE"), "{ctx}");
     assert!(ctx.contains("default additional context drive"), "{ctx}");
     assert!(
         ctx.contains("SESSION_CLOSE_STYLE"),
@@ -1727,11 +1727,11 @@ fn review_gate_disabled_stop_still_merges_autopilot_drive() {
         dispatch_cursor_hook_event(&repo, "stop", &event("sg1", "hi"))
     };
     let blob = hook_user_visible_blob(&out);
-    assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
+    assert!(blob.contains("GSD_GOAL_CONTINUE"), "{blob}");
 
     apply_cursor_hook_output_policy(&mut out);
     let preserved = hook_user_visible_blob(&out);
-    assert!(preserved.contains("AUTOPILOT_DRIVE"), "{preserved}");
+    assert!(preserved.contains("GSD_GOAL_CONTINUE"), "{preserved}");
 }
 
 #[test]
@@ -1774,16 +1774,16 @@ fn stop_goal_and_rfv_emit_dual_continuity_followups() {
         }),
     );
     let blob = hook_user_visible_blob(&out);
-    assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
-    // Goal+RFV 同时活跃时合并为单段 `AUTOPILOT_DRIVE`，RFV 信息压缩为尾注（见 `merge_continuity_followups`）。
+    assert!(blob.contains("GSD_GOAL_CONTINUE"), "{blob}");
+    // Goal+RFV 同时活跃时合并为单段 `GSD_GOAL_CONTINUE`，RFV 信息压缩为尾注（见 `merge_continuity_followups`）。
     assert!(blob.contains("RFV") || blob.contains("rfv-line"), "{blob}");
     assert!(
-        blob.matches("AUTOPILOT_DRIVE").count() >= 1,
-        "expected AUTOPILOT_DRIVE marker in merged continuity blob: {blob}"
+        blob.matches("GSD_GOAL_CONTINUE").count() >= 1,
+        "expected GSD_GOAL_CONTINUE marker in merged continuity blob: {blob}"
     );
 }
 
-/// Goal+RFV 合并为单段 `AUTOPILOT_DRIVE` 时须保留结构化外研 schema 指针行（出站前缀裁剪下更易存活）。
+/// Goal+RFV 合并为单段 `GSD_GOAL_CONTINUE` 时须保留结构化外研 schema 指针行（出站前缀裁剪下更易存活）。
 #[test]
 fn stop_goal_and_rfv_merge_preserves_external_struct_schema_hint_line() {
     let _lock = crate::test_env_sync::process_env_lock();
@@ -1825,10 +1825,10 @@ fn stop_goal_and_rfv_merge_preserves_external_struct_schema_hint_line() {
         }),
     );
     let blob = hook_user_visible_blob(&out);
-    assert!(blob.contains("AUTOPILOT_DRIVE"), "{blob}");
+    assert!(blob.contains("GSD_GOAL_CONTINUE"), "{blob}");
     assert!(
         blob.contains(crate::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH),
-        "merged AUTOPILOT_DRIVE should retain external struct schema pointer: {blob}"
+        "merged GSD_GOAL_CONTINUE should retain external struct schema pointer: {blob}"
     );
 }
 
@@ -2839,7 +2839,7 @@ fn goal_stop_followup_is_short_code_only() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17", "/autopilot 完成任务"),
+        &event("s17", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -2882,7 +2882,7 @@ fn stop_picks_assistant_goal_contract_from_messages_when_top_level_response_empt
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-msg-goal", "/autopilot finish wiring"),
+        &event("s-msg-goal", "/gsd-execute-phase finish wiring"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -2930,10 +2930,13 @@ fn autopilot_before_submit_prompts_pre_goal_review_when_opt_in() {
     let out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17b", "/autopilot 完成任务"),
+        &event("s17b", "/gsd-execute-phase 完成任务"),
     );
     let msg = hook_user_visible_blob(&out);
-    assert!(msg.contains("Autopilot (/autopilot)"), "surface={msg:?}");
+    assert!(
+        msg.contains("GSD execute (/gsd-execute-phase)") || msg.contains("Autopilot"),
+        "surface={msg:?}"
+    );
     match prev {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", v),
         None => env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED"),
@@ -2951,7 +2954,7 @@ fn autopilot_pre_goal_auto_releases_when_nag_cap_reached() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("cap-nag", "/autopilot smoke"),
+        &event("cap-nag", "/gsd-execute-phase smoke"),
     );
     let mid = load_state_for(&repo, "cap-nag");
     assert_eq!(mid.pre_goal_nag_count, 1);
@@ -2979,7 +2982,7 @@ fn deep_json_strings_satisfy_pre_goal_reject_on_before_submit() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("deep-s1", "/autopilot 任务"),
+        &event("deep-s1", "/gsd-execute-phase 任务"),
     );
     let deep = json!({
         "session_id": "deep-s1",
@@ -3028,7 +3031,7 @@ fn before_submit_reject_reason_token_in_user_prompt_satisfies_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17e", "/autopilot 第一轮"),
+        &event("s17e", "/gsd-execute-phase 第一轮"),
     );
     let out = dispatch_cursor_hook_event(
             &repo,
@@ -3046,7 +3049,7 @@ fn before_submit_reject_reason_token_in_user_prompt_satisfies_pre_goal() {
         .and_then(Value::as_str)
         .unwrap_or_default();
     assert!(
-        !msg.contains("Autopilot (/autopilot)") && !msg.contains("independent-context reviewer"),
+        !msg.contains("GSD execute (/gsd-execute-phase)") && !msg.contains("independent-context reviewer"),
         "reject_reason on submit should skip pre-goal nag; msg={msg:?}"
     );
 }
@@ -3057,7 +3060,7 @@ fn nested_payload_prompt_reject_reason_satisfies_pre_goal_before_submit() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17nest", "/autopilot 第一轮"),
+        &event("s17nest", "/gsd-execute-phase 第一轮"),
     );
     let nested = json!({
         "session_id": "s17nest",
@@ -3086,7 +3089,7 @@ fn nested_payload_prompt_reject_reason_updates_stop_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17stop-n", "/autopilot 任务"),
+        &event("s17stop-n", "/gsd-execute-phase 任务"),
     );
     let nested_stop = json!({
         "session_id": "s17stop-n",
@@ -3105,7 +3108,7 @@ fn post_tool_use_fork_context_true_does_not_satisfy_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17c", "/autopilot 完成任务"),
+        &event("s17c", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3129,7 +3132,7 @@ fn post_tool_use_tool_input_type_field_satisfies_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17d", "/autopilot 完成任务"),
+        &event("s17d", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3152,7 +3155,7 @@ fn post_tool_use_heuristic_mcp_subagent_tool_name_satisfies_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17mcp", "/autopilot 完成任务"),
+        &event("s17mcp", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3172,7 +3175,7 @@ fn post_tool_use_nested_payload_tool_fields_satisfy_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17nest-tu", "/autopilot 完成任务"),
+        &event("s17nest-tu", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3195,7 +3198,7 @@ fn post_tool_use_non_countable_lane_does_not_satisfy_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-lane", "/autopilot 完成任务"),
+        &event("s-lane", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3219,7 +3222,7 @@ fn post_tool_use_fork_context_string_true_blocks_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-fkstr", "/autopilot 完成任务"),
+        &event("s-fkstr", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3396,7 +3399,7 @@ fn autopilot_pre_goal_persists_when_session_id_only_nested_in_payload() {
         "cwd": cwd,
         "payload": {
             "sessionId": sid,
-            "prompt": "/autopilot 完成任务"
+            "prompt": "/gsd-execute-phase 完成任务"
         }
     });
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &before);
@@ -3424,7 +3427,7 @@ fn subagent_start_pre_goal_requires_typed_subagent() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-sub-pre", "/autopilot 完成任务"),
+        &event("s-sub-pre", "/gsd-execute-phase 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,

@@ -17,12 +17,22 @@ pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-autopilot-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
 const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
-const AUTOPILOT_DRIVE_HOOK_ENV: &str = "ROUTER_RS_AUTOPILOT_DRIVE_HOOK";
+pub const GSD_GOAL_CONTINUE_PARAGRAPH_PREFIX: &str = "GSD_GOAL_CONTINUE";
+/// Legacy paragraph prefix stripped when refreshing hook output (retired `/autopilot` era).
+pub const LEGACY_AUTOPILOT_DRIVE_PARAGRAPH_PREFIX: &str = "AUTOPILOT_DRIVE";
 
-fn autopilot_drive_hook_enabled() -> bool {
-    // P1-E: aggregate kill-switch first.
+const GSD_GOAL_CONTINUE_HOOK_ENV: &str = "ROUTER_RS_GSD_GOAL_CONTINUE_HOOK";
+const LEGACY_AUTOPILOT_DRIVE_HOOK_ENV: &str = "ROUTER_RS_AUTOPILOT_DRIVE_HOOK";
+
+pub fn gsd_goal_continue_hook_enabled() -> bool {
     router_rs_operator_inject_globally_enabled()
-        && router_rs_env_enabled_default_true(AUTOPILOT_DRIVE_HOOK_ENV)
+        && (router_rs_env_enabled_default_true(GSD_GOAL_CONTINUE_HOOK_ENV)
+            || router_rs_env_enabled_default_true(LEGACY_AUTOPILOT_DRIVE_HOOK_ENV))
+}
+
+#[allow(dead_code)]
+fn autopilot_drive_hook_enabled() -> bool {
+    gsd_goal_continue_hook_enabled()
 }
 
 /// Invalidate route records cache after GOAL_STATE mutations (best-effort).
@@ -808,10 +818,10 @@ pub(crate) fn strip_followup_paragraphs_with_line_prefix(
 ) -> String {
     text.split("\n\n")
         .filter(|seg| {
-            !seg.lines()
-                .next()
-                .map(|l| l.trim_start().starts_with(first_line_prefix))
-                .unwrap_or(false)
+            !seg.lines().any(|l| {
+                let t = l.trim_start();
+                t.starts_with(first_line_prefix) || t.contains(first_line_prefix)
+            })
         })
         .collect::<Vec<_>>()
         .join("\n\n")
@@ -951,7 +961,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
     task_id: &str,
     state: &Value,
 ) -> Option<String> {
-    if !autopilot_drive_hook_enabled() {
+    if !gsd_goal_continue_hook_enabled() {
         return None;
     }
     crate::path_guard::safe_task_id_component(task_id)?;
@@ -970,7 +980,7 @@ pub fn build_autopilot_drive_followup_message_from_state(
     let rel = goal_state_rel_path_for_task(task_id);
     let goal_short = compact_goal_one_line(goal, 140);
     let mut lines = vec![
-        format!("AUTOPILOT_DRIVE: {st} · drive 未停 → 续跑（`{rel}`）。"),
+        format!("router-rs GSD_GOAL_CONTINUE: {st} · drive 未停 → 续跑（`{rel}`）。"),
         format!("Goal: {goal_short}"),
     ];
     if !horizon.is_empty() {
@@ -1100,7 +1110,25 @@ pub(crate) fn merge_autopilot_drive_followup(repo_root: &Path, output: &mut Valu
     if msg.is_empty() {
         return;
     }
-    merge_hook_nudge_paragraph(output, &msg, "AUTOPILOT_DRIVE", false);
+    let cleaned = output
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .map(|existing| {
+            let t = strip_followup_paragraphs_with_line_prefix(
+                existing,
+                GSD_GOAL_CONTINUE_PARAGRAPH_PREFIX,
+            );
+            strip_followup_paragraphs_with_line_prefix(&t, LEGACY_AUTOPILOT_DRIVE_PARAGRAPH_PREFIX)
+        })
+        .unwrap_or_default();
+    if let Some(obj) = output.as_object_mut() {
+        if cleaned.is_empty() {
+            obj.remove("additional_context");
+        } else {
+            obj.insert("additional_context".into(), Value::String(cleaned));
+        }
+    }
+    merge_hook_nudge_paragraph(output, &msg, GSD_GOAL_CONTINUE_PARAGRAPH_PREFIX, false);
 }
 
 #[cfg(test)]
@@ -1151,7 +1179,7 @@ mod tests {
         assert!(st["goal_state"].is_object());
 
         let msg = build_autopilot_drive_followup_message(&repo).expect("drive msg");
-        assert!(msg.contains("AUTOPILOT_DRIVE"));
+        assert!(msg.contains("GSD_GOAL_CONTINUE"));
         assert!(
             msg.contains("深度") && msg.contains("证据链"),
             "compact autopilot nudge from registry; msg={msg:?}"
@@ -1396,7 +1424,7 @@ mod tests {
         assert_eq!(running[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
         assert!(build_autopilot_drive_followup_message(&repo)
             .expect("drive after resume")
-            .contains("AUTOPILOT_DRIVE"));
+            .contains("GSD_GOAL_CONTINUE"));
         let _ = fs::remove_dir_all(&repo);
     }
 

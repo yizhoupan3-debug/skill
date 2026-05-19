@@ -79,30 +79,6 @@
       "source": "manifest",
       "status": "healthy"
     },
-    "manifest:autopilot": {
-      "checks": [
-        {
-          "id": "skill_path_declared_safe",
-          "passed": true
-        },
-        {
-          "id": "plugin_record_present",
-          "passed": true
-        },
-        {
-          "id": "routing_metadata_present",
-          "passed": true
-        },
-        {
-          "id": "trigger_surface_nonempty_or_optional",
-          "passed": true
-        }
-      ],
-      "skill_path": "skills/autopilot/SKILL.md",
-      "slug": "autopilot",
-      "source": "manifest",
-      "status": "healthy"
-    },
     "manifest:citation-management": {
       "checks": [
         {
@@ -1276,30 +1252,6 @@
       ],
       "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
       "slug": "agent-swarm-orchestration",
-      "source": "runtime",
-      "status": "healthy"
-    },
-    "runtime:autopilot": {
-      "checks": [
-        {
-          "id": "skill_path_declared_safe",
-          "passed": true
-        },
-        {
-          "id": "plugin_record_present",
-          "passed": true
-        },
-        {
-          "id": "routing_metadata_present",
-          "passed": true
-        },
-        {
-          "id": "trigger_surface_nonempty_or_optional",
-          "passed": true
-        }
-      ],
-      "skill_path": "skills/autopilot/SKILL.md",
-      "slug": "autopilot",
       "source": "runtime",
       "status": "healthy"
     },

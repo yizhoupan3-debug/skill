@@ -113,33 +113,6 @@
       "selection_reason": "explicit framework entrypoint or fallback-only owner",
       "slug": "assignment-compliance"
     },
-    "autopilot": {
-      "fallback_policy": {
-        "mode": "explicit-or-fallback"
-      },
-      "gate_policy": {
-        "mode": "owner"
-      },
-      "intent_tags": [
-        "owner:owner",
-        "gate:none",
-        "session_start:n/a"
-      ],
-      "negative_triggers": [],
-      "overlay_policy": {
-        "mode": "primary-or-gate",
-        "primary_allowed": true
-      },
-      "positive_triggers": [
-        "/autopilot",
-        "/autopilot-quick",
-        "/autopilot-deep",
-        "/autopilot quick",
-        "/autopilot deep"
-      ],
-      "selection_reason": "explicit framework entrypoint or fallback-only owner",
-      "slug": "autopilot"
-    },
     "citation-management": {
       "fallback_policy": {
         "mode": "eligible-in-runtime"

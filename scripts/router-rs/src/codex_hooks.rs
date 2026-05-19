@@ -1527,10 +1527,9 @@ fn hook_event_status_message(event_name: &str) -> &'static str {
 }
 
 fn build_install_hook_command(_repo_root: &Path, event: &str) -> String {
-    let audit_command = format!("--event={event}");
-    let missing_binary_fallback = "printf '%s\\n' '{{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Codex hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}}'; exit 1";
+    let _ = _repo_root;
     format!(
-        "/usr/bin/env bash -lc 'CODEX_PROJECT_ROOT=\"${{CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; RS_BIN=\"\"; if [ -n \"${{ROUTER_RS_BIN:-}}\" ] && [ -x \"${{ROUTER_RS_BIN}}\" ]; then RS_BIN=\"${{ROUTER_RS_BIN}}\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/release/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/target/release/router-rs\"; elif [ -x \"$CODEX_PROJECT_ROOT/target/debug/router-rs\" ]; then RS_BIN=\"$CODEX_PROJECT_ROOT/target/debug/router-rs\"; else RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; if [ ! -x \"$RS_BIN\" ]; then {missing_binary_fallback}; fi; \"$RS_BIN\" codex hook {audit_command} --repo-root \"$CODEX_PROJECT_ROOT\"'"
+        "/usr/bin/env bash \"${{SKILL_FRAMEWORK_ROOT:-${{CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}}}/configs/framework/codex-router-rs-hook.sh\" {event}"
     )
 }
 
@@ -2543,7 +2542,8 @@ mod tests {
             let text = fs::read_to_string(codex_home.join("hooks.json")).unwrap();
             assert!(!text.contains("review_subagent_gate.py"));
             assert!(text.contains("echo keep"));
-            assert!(text.contains("codex hook --event=UserPromptSubmit"));
+            assert!(text.contains("codex-router-rs-hook.sh"));
+            assert!(text.contains("UserPromptSubmit"));
             assert_eq!(
                 payload["hooks_json"]["removed_legacy_entries"].as_u64(),
                 Some(2)
@@ -2585,11 +2585,11 @@ mod tests {
         fn hook_command_format_pure_router_rs_binary() {
             let repo_root = Path::new("/Users/joe/Developer/skill");
             let stop_command = build_install_hook_command(repo_root, "Stop");
-            assert!(stop_command.contains("codex hook --event=Stop"));
-            assert!(stop_command.contains("router-rs binary unavailable for Codex hook"));
+            assert!(stop_command.contains("codex-router-rs-hook.sh\" Stop"));
+            assert!(!stop_command.contains("codex hook --event=Stop"));
             assert!(!stop_command.contains("/Users/joe/Developer/skill"));
             let pre_tool_command = build_install_hook_command(repo_root, "PreToolUse");
-            assert!(pre_tool_command.contains("codex hook --event=PreToolUse"));
+            assert!(pre_tool_command.contains("codex-router-rs-hook.sh\" PreToolUse"));
             assert!(!pre_tool_command.contains("codex hook pre-tool-use"));
         }
 
@@ -2599,7 +2599,7 @@ mod tests {
             let command = build_install_hook_command(repo_root, "UserPromptSubmit");
             assert!(!command.contains("/tmp/repo-with-"));
             assert!(command.contains("git rev-parse --show-toplevel"));
-            assert!(command.contains("exit 1"));
+            assert!(command.contains("codex-router-rs-hook.sh"));
             let status = Command::new("bash")
                 .arg("-n")
                 .arg("-c")

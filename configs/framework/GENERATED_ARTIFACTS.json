@@ -2,6 +2,11 @@
   "schema_version": "framework-generated-artifacts-manifest-v1",
   "generated_artifacts": [
     {
+      "path": ".codex/prompts/framework.md",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
+      "compare": "normalized-text"
+    },
+    {
       "path": "AGENTS.md",
       "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
       "compare": "byte-for-byte"

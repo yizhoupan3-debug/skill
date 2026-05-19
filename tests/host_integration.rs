@@ -188,7 +188,7 @@ fn install_native_integration_is_idempotent() {
         &surface_root.join("systematic-debugging"),
         &repo_root.join("skills/systematic-debugging")
     ));
-    assert_framework_alias_skill(&surface_root, "autopilot");
+    assert_framework_alias_skill(&surface_root, "gsd");
     assert!(
         !surface_root.join("team/SKILL.md").exists(),
         "team must remain a framework alias, not a visible Codex skill surface"
@@ -1971,7 +1971,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
             },
             "host_projections": {"codex-cli": {"profile_id": "repo-codex"}},
             "workspace_bootstrap_defaults": {"skills": {"source_rel": "repo-skills"}},
-            "framework_commands": {"autopilot": {"canonical_owner": "repo-owner"}}
+            "framework_commands": {"gsd": {"canonical_owner": "repo-owner"}}
         }))
         .unwrap(),
     );
@@ -1981,7 +1981,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
         "repo-codex"
     );
     assert_eq!(
-        payload["framework_commands"]["autopilot"]["canonical_owner"],
+        payload["framework_commands"]["gsd"]["canonical_owner"],
         "repo-owner"
     );
 }
@@ -1990,32 +1990,27 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
 fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let payload = runtime_registry(&project_root());
     let aliases = &payload["framework_commands"];
-    assert_eq!(aliases["autopilot"]["canonical_owner"], "autopilot");
+    assert!(aliases.get("autopilot").is_none());
+    assert_eq!(aliases["gsd"]["canonical_owner"], "gsd");
     assert_eq!(
-        aliases["autopilot"]["host_entrypoints"]["codex-cli"],
-        "/autopilot"
+        aliases["gsd"]["host_entrypoints"]["codex-cli"],
+        "/gsd"
     );
     assert_eq!(
-        aliases["autopilot"]["host_entrypoints"]["cursor"],
-        "/autopilot"
+        aliases["gsd"]["host_entrypoints"]["cursor"],
+        "/gsd"
     );
     assert_eq!(
-        aliases["autopilot"]["entrypoint_modes"]["quick"]["codex-cli"],
-        "/autopilot-quick"
+        aliases["gsd"]["entrypoint_modes"]["execute"]["codex-cli"],
+        "/gsd-execute-phase"
     );
-    assert_eq!(
-        aliases["autopilot"]["entrypoint_modes"]["deep"]["cursor"],
-        "/autopilot-deep"
-    );
-    let autopilot_entrypoints = aliases["autopilot"]["interaction_invariants"]
-        ["explicit_entrypoints"]
+    let gsd_entrypoints = aliases["gsd"]["interaction_invariants"]["explicit_entrypoints"]
         .as_array()
-        .expect("autopilot explicit_entrypoints should be an array");
-    assert!(autopilot_entrypoints.contains(&json!("/autopilot")));
-    assert!(autopilot_entrypoints.contains(&json!("/autopilot-quick")));
-    assert!(autopilot_entrypoints.contains(&json!("/autopilot-deep")));
+        .expect("gsd explicit_entrypoints should be an array");
+    assert!(gsd_entrypoints.contains(&json!("/gsd-execute-phase")));
+    assert!(gsd_entrypoints.contains(&json!("/gsd-ship")));
     assert_eq!(
-        aliases["autopilot"]["interaction_invariants"]["implicit_route_policy"],
+        aliases["gsd"]["interaction_invariants"]["implicit_route_policy"],
         "never"
     );
     assert_eq!(
@@ -2090,87 +2085,19 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         ])
     );
     assert!(payload.get("mcp_clients").is_none());
-    let autopilot = &aliases["autopilot"];
-    assert_eq!(autopilot["lineage"]["source"], "repo-native");
-    assert!(autopilot["implementation_bar"]
+    let gsd = &aliases["gsd"];
+    assert_eq!(gsd["lineage"]["source"], "repo-native");
+    assert!(gsd["implementation_bar"]
         .as_array()
         .unwrap()
-        .contains(&json!("resume-and-recovery-required")));
-    assert_eq!(
-        autopilot["autonomy_contract"]["auto_agent_orchestration"]["enabled"],
-        true
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["auto_agent_orchestration"]["max_parallel_lanes"],
-        5
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["run_to_completion"],
-        "until-done-or-blocked"
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["requires_non_goals_definition"],
-        true
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["never_stop_at_plan_only"],
-        true
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]
-            ["allow_network_research_for_unknowns"],
-        true
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["pause_requires_explicit_resume"],
-        true
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface"],
-        json!(["goal_start", "goal_pause", "goal_resume", "goal_clear"])
-    );
-    // control_surface: host interprets NL; Rust persists goal state + optional drive hook.
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface_implementation"]
-            ["owner"],
-        "hybrid_host_plus_rust_persistence"
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface_implementation"]
-            ["status"],
-        "rust_stdio_goal_store_plus_cursor_followup"
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["control_surface_implementation"]
-            ["rust_runtime_coverage"],
-        "goal_persistence_and_drive_hook"
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["lifecycle_states_implementation"]
-            ["owner"],
-        "host_agent_layer"
-    );
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]["lifecycle_states_implementation"]
-            ["rust_runtime_coverage"],
-        "job_lifecycle_only"
-    );
-    // Lock the pause-scope clarification so resume_due rate-limit auto-resume
-    // is documented as out of scope for "pause_requires_explicit_resume".
-    assert_eq!(
-        autopilot["autonomy_contract"]["goal_style_execution"]
-            ["pause_requires_explicit_resume_scope"]["applies_to"],
-        json!(["goal_lifecycle_pause"])
-    );
-    assert!(autopilot["autonomy_contract"]["goal_style_execution"]
-        ["pause_requires_explicit_resume_scope"]["excludes"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("rate_limit_resume_due")));
-    assert_eq!(
-        autopilot["reroute_when_root_cause_unknown"],
-        "deepinterview"
-    );
+        .contains(&json!("evidence-driven-verification")));
+    let gp = gsd["goal_persistence"].as_object().expect("goal_persistence");
+    assert!(gp
+        .get("continuation_hook_leader")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .contains("GSD_GOAL_CONTINUE"));
+    assert_eq!(gsd["reroute_when_root_cause_unknown"], "deepinterview");
 }
 
 #[test]

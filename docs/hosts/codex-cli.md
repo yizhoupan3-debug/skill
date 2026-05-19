@@ -28,7 +28,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 
 ## 默认工作流
 
-与全宿主相同：**GSD** 默认链；`/autopilot` 为 opt-in goal-style 连续执行。
+与全宿主相同：**GSD** 默认链；执行区 `/gsd-execute-phase` 启动 goal-style 连续执行（`/autopilot` 已退役）。
 
 ## Hook 能力
 

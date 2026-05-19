@@ -1782,7 +1782,7 @@ fn write_framework_alias_registry_fixture(repo_root: &Path) {
 }
 
 #[test]
-fn framework_alias_builds_compact_autopilot_payload() {
+fn framework_alias_builds_compact_gsd_payload() {
     let repo_root = std::env::temp_dir().join(format!(
         "router-rs-alias-fixture-{}",
         SystemTime::now()
@@ -1810,7 +1810,7 @@ fn framework_alias_builds_compact_autopilot_payload() {
         .expect("write evidence index");
     fs::write(
         task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["autopilot"]}"#,
+        r#"{"task":"active bootstrap repair","matched_skills":["gsd"]}"#,
     )
     .expect("write trace metadata");
     write_framework_alias_registry_fixture(&repo_root);
@@ -1837,7 +1837,7 @@ fn framework_alias_builds_compact_autopilot_payload() {
 
     let payload = build_framework_alias_envelope(
         &repo_root,
-        "autopilot",
+        "gsd",
         FrameworkAliasBuildOptions {
             max_lines: 4,
             compact: false,
@@ -1858,10 +1858,10 @@ fn framework_alias_builds_compact_autopilot_payload() {
         payload["schema_version"],
         json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
     );
-    assert_eq!(alias["name"], json!("autopilot"));
-    assert_eq!(alias["host_entrypoint"], json!("/autopilot"));
+    assert_eq!(alias["name"], json!("gsd"));
+    assert_eq!(alias["host_entrypoint"], json!("/gsd"));
     assert_eq!(alias["compact"], json!(false));
-    assert!(prompt.contains("进入 autopilot"));
+    assert!(prompt.contains("GSD"));
     assert!(prompt.contains("本地 Rust"));
     assert!(prompt.contains("路由："));
     assert_eq!(
@@ -1968,7 +1968,7 @@ fn framework_alias_builds_compact_deepinterview_payload() {
     assert_eq!(alias["canonical_owner"], json!("deepinterview"));
     assert_eq!(
         alias["state_machine"]["handoff"]["rules"][1]["target"],
-        json!("autopilot")
+        json!("gsd")
     );
     assert_eq!(
         alias["entry_contract"]["route_rules"][0],
@@ -2042,7 +2042,7 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
         .expect("write evidence index");
     fs::write(
         task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["autopilot"]}"#,
+        r#"{"task":"active bootstrap repair","matched_skills":["gsd"]}"#,
     )
     .expect("write trace metadata");
     write_framework_alias_registry_fixture(&repo_root);
@@ -2069,7 +2069,7 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
 
     let payload = build_framework_alias_envelope(
         &repo_root,
-        "autopilot",
+        "gsd",
         FrameworkAliasBuildOptions {
             max_lines: 3,
             compact: true,
@@ -3036,24 +3036,25 @@ fn framework_command_aliases_require_literal_entrypoints() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
-    assert!(records.iter().any(|record| record.slug == "autopilot"));
+    assert!(records.iter().any(|record| record.slug == "gsd"));
+    assert!(!records.iter().any(|record| record.slug == "autopilot"));
     assert!(records.iter().any(|record| record.slug == "deepinterview"));
     assert!(records.iter().any(|record| record.slug == "gitx"));
     assert!(records.iter().any(|record| record.slug == "update"));
     assert!(!records.iter().any(|record| record.slug == "team"));
 
-    let autopilot = route_task_with_manifest_fallback(
+    let gsd_exec = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
         None,
         None,
-        "/autopilot",
-        "alias-autopilot",
+        "/gsd-execute-phase",
+        "alias-gsd-exec",
         true,
         true,
     )
-    .expect("route explicit autopilot alias");
-    assert_eq!(autopilot.selected_skill, "autopilot");
+    .expect("route explicit gsd execute alias");
+    assert_eq!(gsd_exec.selected_skill, "gsd");
 
     let team_alias = crate::framework_runtime::build_framework_alias_envelope(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),

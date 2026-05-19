@@ -8,7 +8,6 @@ All interaction with router-rs framework happens via stdio JSON.
 |------------|-------------------------------|
 | Pre-execution (`new-project`, `plan-phase`, `discuss-phase`) | **`false`**; `status`: `planned` or `draft` |
 | Execution+ (`execute-phase`, `verify-work`, `ship`) | **`true`** when using continuous goal drive |
-| `/autopilot` only | **`true`** |
 
 ```bash
 # Pre-execution: planning contract only (new-project example)

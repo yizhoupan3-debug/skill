@@ -24,13 +24,13 @@ GSD commands work across Desktop MCP, CLI, Codex, and Cursor.
 
 **Integration**: Via `configs/framework/claude-router-rs-hook.sh` → `router-rs claude hook`
 **State Files**: Same filesystem under `artifacts/current/`
-**Default workflow (all hosts)**: GSD lifecycle (`/gsd-new-project` … `/gsd-ship`); `/autopilot` remains opt-in legacy goal execution
+**Default workflow (all hosts)**: GSD lifecycle (`/gsd-new-project` … `/gsd-ship`); `/autopilot` retired — use `/gsd-execute-phase` for goal drive
 
 ### CLI-Specific Notes
 
 - Hooks auto-inject continuity context on `UserPromptSubmit` / `Stop`
-- **Execution-zone** `/gsd-execute-phase`, `/gsd-verify-work`, `/gsd-ship`, and `/autopilot` arm goal drive; **pre-exec** `/gsd-new-project`, `/gsd-plan-phase`, `/gsd-discuss-phase` do **not** (see `phase-boundaries.md`)
-- `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=1` enables goal drive on Cursor; Claude uses the same artifact layout
+- **Execution-zone** `/gsd-execute-phase`, `/gsd-verify-work`, `/gsd-ship` arm goal drive; **pre-exec** `/gsd-new-project`, `/gsd-plan-phase`, `/gsd-discuss-phase` do **not** (see `phase-boundaries.md`)
+- `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=1` enables goal continue on Cursor Stop (legacy env `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` still read)
 - `ROUTER_RS_RFV_LOOP_HOOK=1` enables RFV continuation hints where the host injects them
 
 ## Default framework (all hosts)
@@ -61,8 +61,8 @@ GSD commands work across Desktop MCP, CLI, Codex, and Cursor.
 
 - **Same default GSD lifecycle** as other hosts; use `/gsd-*` commands explicitly when starting work
 - No tmux supervisor, rely on `artifacts/current` continuity
-- Hooks inject `AUTOPILOT_DRIVE` and `RFV_LOOP_CONTINUE` hints
-- `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0` disables autopilot drive
+- Hooks inject `GSD_GOAL_CONTINUE` and `RFV_LOOP_CONTINUE` hints
+- `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` disables goal continue injection
 
 ## Universal Patterns
 

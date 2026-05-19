@@ -133,7 +133,7 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
             }
         }
     }
-    let stubs: [(&str, Value); 7] = [
+    let stubs: [(&str, Value); 8] = [
         (
             "skills/SKILL_PLUGIN_CATALOG.json",
             json!({
@@ -165,6 +165,15 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
                 "schema_version": "skill-health-manifest-v1",
                 "source_of_truth": false,
                 "skills": {}
+            }),
+        ),
+        (
+            "skills/SKILL_APPROVAL_POLICY.json",
+            json!({
+                "schema_version": "skill-approval-policy-v1",
+                "source_of_truth": false,
+                "derived_from": "skills/SKILL_MANIFEST.json",
+                "policies": {}
             }),
         ),
         (

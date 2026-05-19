@@ -86,216 +86,16 @@
     ]
   },
   "framework_commands": {
-    "autopilot": {
-      "canonical_owner": "autopilot",
-      "skill_path": "skills/autopilot/SKILL.md",
-      "reroute_when_ambiguous": "deepinterview",
-      "reroute_when_root_cause_unknown": "deepinterview",
-      "official_workflow": {
-        "phases": [
-          "expansion",
-          "planning",
-          "execution",
-          "qa",
-          "validation",
-          "cleanup"
-        ]
-      },
-      "implementation_bar": [
-        "root-cause-first-when-unknown",
-        "verification-evidence-required",
-        "resume-and-recovery-required",
-        "converge-until-bounded-scope-clean",
-        "horizon-slice-macro-goals-with-exit-criteria-each-slice",
-        "no-chat-turn-without-continuity-delta-when-task-active",
-        "prefer-autopilot-deep-when-external-claims-drive-the-critical-path"
-      ],
-      "local_adaptations": [
-        "store execution state in rust-session-supervisor plus continuity artifacts",
-        "store specs and plans in artifacts/current task-local bootstrap outputs",
-        "use deepinterview as the first-class clarification gate for vague requests",
-        "treat each turn as a bus cycle: read alias+continuity then mutate repo then refresh SESSION_SUMMARY and NEXT_ACTIONS",
-        "for goals larger than one context window: chain horizons; each horizon ends with explicit next_actions for cold resume"
-      ],
-      "autonomy_contract": {
-        "auto_agent_orchestration": {
-          "enabled": true,
-          "default_mode": "bounded-sidecar-first",
-          "spawn_policy": "admit-when-lanes-are-clear",
-          "max_parallel_lanes": 5,
-          "preferred_parallel_lanes": 3,
-          "join_policy": "fan-out-fan-in-with-disjoint-writes",
-          "user_visible_style": {
-            "prefer_compact_orchestration_prompts": true,
-            "avoid_subagent_process_narration": true
-          },
-          "require_reject_reason_when_not_spawning": true,
-          "reject_reasons": [
-            "small_task",
-            "shared_context_heavy",
-            "write_scope_overlap",
-            "next_step_blocked",
-            "verification_missing",
-            "token_overhead_dominates"
-          ]
-        },
-        "goal_style_execution": {
-          "enabled": true,
-          "run_to_completion": "until-done-or-blocked",
-          "requires_done_definition": true,
-          "requires_non_goals_definition": true,
-          "loop": [
-            "plan",
-            "implement",
-            "verify",
-            "repair",
-            "closeout"
-          ],
-          "lifecycle_states": [
-            "goal_defined",
-            "running",
-            "paused",
-            "blocked",
-            "verification_pending",
-            "completed"
-          ],
-          "lifecycle_states_implementation": {
-            "owner": "host_agent_layer",
-            "rust_runtime_coverage": "job_lifecycle_only",
-            "status": "host_owned_no_rust_native_state_machine",
-            "rationale": "Rust runtime tracks worker/job lifecycle (queued/running/interrupted/...). The goal-level six-state machine listed above is owned by the host agent layer (codex/cursor LLM + hooks). Treat the list as a host-side contract, not a Rust enum."
-          },
-          "control_surface": [
-            "goal_start",
-            "goal_pause",
-            "goal_resume",
-            "goal_clear"
-          ],
-          "control_surface_implementation": {
-            "owner": "hybrid_host_plus_rust_persistence",
-            "rust_runtime_coverage": "goal_persistence_and_drive_hook",
-            "status": "rust_stdio_goal_store_plus_cursor_followup",
-            "rationale": "Host still interprets goal_start/pause/resume/clear in natural language. Rust exposes stdio op `framework_autopilot_goal` (operations: start|status|checkpoint|pause|resume|complete|block|clear) persisting `artifacts/current/<task_id>/GOAL_STATE.json`. When `drive_until_done` is true and `status=running`, Cursor hooks merge an AUTOPILOT_DRIVE followup on stop/beforeSubmit (including hook-state lock failure and ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE) so sessions do not silently end. Disable hook injection with ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0. Cursor review gate: `/autopilot` does not arm `delegation_required` (avoids legacy incorrect review-followup parallel-lane evidence stacked on goal); `/autopilot` prompts suppress `review_required` from review-findings-style wording; persisted `GOAL_STATE` marks pre-goal satisfied so execution continuation is not blocked by the pre-goal reviewer nag."
-          },
-          "never_stop_at_plan_only": true,
-          "allow_network_research_for_unknowns": true,
-          "require_source_citation_for_external_claims": true,
-          "requires_checkpoint_log_each_loop": true,
-          "pause_requires_explicit_resume": true,
-          "pause_requires_explicit_resume_scope": {
-            "applies_to": [
-              "goal_lifecycle_pause"
-            ],
-            "excludes": [
-              "rate_limit_resume_due",
-              "worker_session_resume"
-            ],
-            "rationale": "The 'no implicit resume' rule applies to user-initiated goal pauses only. Rust-side worker mechanisms such as rate-limit backoff resume (session_supervisor::resume_due) and worker takeover claims continue to operate automatically; they are bounded retries of an already-running goal, not new goal starts."
-          },
-          "checkpoint_artifacts": [
-            "SESSION_SUMMARY.md",
-            "NEXT_ACTIONS.json",
-            "EVIDENCE_INDEX.json",
-            "GOAL_STATE.json"
-          ]
-        }
-      },
-      "execution_owners": [
-        "autopilot",
-        "deepinterview"
-      ],
-      "decision_contract": {
-        "execute_when": [
-          "task is concrete enough to implement",
-          "acceptance criteria are already bounded",
-          "next actions are specific enough to continue"
-        ],
-        "clarify_when": [
-          "task is still ambiguous",
-          "user intent would materially change the implementation"
-        ],
-        "debug_when": [
-          "root cause is still unknown",
-          "the same failure pattern repeats without a validated explanation"
-        ],
-        "resume_when": [
-          "continuity state is active and recovery anchors are present"
-        ],
-        "refresh_when": [],
-        "repair_when": [
-          "continuity state is inconsistent"
-        ],
-        "start_new_task_when": [
-          "current continuity is completed and should stay historical"
-        ],
-        "verify_when": [
-          "implementation changed but evidence is still missing",
-          "verification status is not yet passed or completed"
-        ]
-      },
-      "host_entrypoints": {
-        "codex-cli": "/autopilot",
-        "cursor": "/autopilot",
-        "claude-code": "/autopilot",
-        "claude-desktop": "/autopilot"
-      },
-      "entrypoint_modes": {
-        "quick": {
-          "codex-cli": "/autopilot-quick",
-          "cursor": "/autopilot-quick",
-          "claude-code": "/autopilot-quick",
-          "claude-desktop": "/autopilot-quick"
-        },
-        "deep": {
-          "codex-cli": "/autopilot-deep",
-          "cursor": "/autopilot-deep",
-          "claude-code": "/autopilot-deep",
-          "claude-desktop": "/autopilot-deep"
-        }
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/autopilot",
-          "/autopilot-quick",
-          "/autopilot-deep",
-          "/autopilot quick",
-          "/autopilot deep"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "research_contract": {
-        "quick": {
-          "target": "fast-check",
-          "default_output_style": "compact",
-          "max_rounds": 1
-        },
-        "deep": {
-          "target": "deep-research",
-          "default_output_style": "evidence-ledger",
-          "requires_multi_source_validation": true,
-          "minimum_independent_sources_per_major_claim": 2,
-          "requires_uncertainty_register": true,
-          "requires_counter_evidence": true,
-          "auto_continue_on_length_finish": true
-        },
-        "runtime_note": "router-rs Execute live prompt does not load this object; keep narrative aligned with scripts/router-rs/src/cli/runtime_ops.inc and tests/policy_contracts.rs (research_contract vs execute prompt drift guard)."
-      },
-      "lineage": {
-        "source": "repo-native",
-        "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
-      }
-    },
     "gsd": {
       "canonical_owner": "gsd",
       "skill_path": "skills/gsd/SKILL.md",
       "official_workflow": {
         "phases": [
           "exploration",
+          "discussion",
           "planning",
           "execution",
           "verification",
-          "discussion",
           "delivery"
         ]
       },
@@ -318,6 +118,12 @@
           "claude-code": "/gsd-new-project",
           "claude-desktop": "/gsd-new-project"
         },
+        "discuss": {
+          "codex-cli": "/gsd-discuss-phase",
+          "cursor": "/gsd-discuss-phase",
+          "claude-code": "/gsd-discuss-phase",
+          "claude-desktop": "/gsd-discuss-phase"
+        },
         "plan": {
           "codex-cli": "/gsd-plan-phase",
           "cursor": "/gsd-plan-phase",
@@ -336,12 +142,6 @@
           "claude-code": "/gsd-verify-work",
           "claude-desktop": "/gsd-verify-work"
         },
-        "discuss": {
-          "codex-cli": "/gsd-discuss-phase",
-          "cursor": "/gsd-discuss-phase",
-          "claude-code": "/gsd-discuss-phase",
-          "claude-desktop": "/gsd-discuss-phase"
-        },
         "ship": {
           "codex-cli": "/gsd-ship",
           "cursor": "/gsd-ship",
@@ -354,10 +154,10 @@
         "explicit_entrypoints": [
           "/gsd",
           "/gsd-new-project",
+          "/gsd-discuss-phase",
           "/gsd-plan-phase",
           "/gsd-execute-phase",
           "/gsd-verify-work",
-          "/gsd-discuss-phase",
           "/gsd-ship"
         ],
         "implicit_route_policy": "never"
@@ -365,6 +165,21 @@
       "lineage": {
         "source": "repo-native",
         "description": "GSD lifecycle commands for exploration through ship with adversarial review."
+      },
+      "reroute_when_ambiguous": "deepinterview",
+      "reroute_when_root_cause_unknown": "deepinterview",
+      "goal_persistence": {
+        "stdio_op": "framework_autopilot_goal",
+        "artifact": "artifacts/current/<task_id>/GOAL_STATE.json",
+        "execution_entrypoints": [
+          "/gsd-execute-phase",
+          "/gsd-verify-work",
+          "/gsd-ship"
+        ],
+        "continuation_hook_leader": "router-rs GSD_GOAL_CONTINUE",
+        "disable_hook_env": "ROUTER_RS_GSD_GOAL_CONTINUE_HOOK",
+        "legacy_disable_hook_env": "ROUTER_RS_AUTOPILOT_DRIVE_HOOK",
+        "rationale": "Macro goal drive is GSD execution-zone only. `/autopilot` retired. When drive_until_done and status=running, Cursor hooks inject GSD_GOAL_CONTINUE on Stop (and on hook-state lock failure paths that preserve continuity). Pre-execution GSD commands do not arm goal_required."
       }
     },
     "team": {
@@ -409,7 +224,7 @@
       "local_adaptations": [
         "store interview progress in continuity artifacts and task-local bootstrap outputs",
         "use live repo evidence first for brownfield clarification before asking the user",
-        "handoff into local autopilot and rust-session-supervisor after clarity is sufficient"
+        "handoff into GSD execute-phase (`/gsd-execute-phase`) and rust-session-supervisor after clarity is sufficient"
       ],
       "review_lanes": [
         "deepinterview",

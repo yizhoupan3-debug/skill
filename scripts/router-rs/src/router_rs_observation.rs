@@ -282,10 +282,10 @@ mod tests {
     fn classifies_autopilot_from_additional_only() {
         let v = json!({
             "continue": true,
-            "additional_context": "AUTOPILOT_DRIVE: stale\nGoal: x",
+            "additional_context": "GSD_GOAL_CONTINUE: stale\nGoal: x",
         });
         let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
-        assert_eq!(o["gate"]["code"], "autopilot_drive");
+        assert_eq!(o["gate"]["code"], "gsd_goal_continue");
         assert_eq!(o["gate"]["blocking"], false);
     }
 
@@ -295,7 +295,7 @@ mod tests {
             "continue": true,
             "session_id": "sess-1",
             "task_id": "task-9",
-            "additional_context": "AUTOPILOT_DRIVE: x",
+            "additional_context": "GSD_GOAL_CONTINUE: x",
         });
         let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
         assert_eq!(o["correlation"]["session_id"], "sess-1");
@@ -350,7 +350,7 @@ mod tests {
     fn golden_closeout_followup_wins_in_additional() {
         let v = json!({
             "continue": true,
-            "additional_context": "CLOSEOUT_FOLLOWUP please\nAUTOPILOT_DRIVE: x",
+            "additional_context": "CLOSEOUT_FOLLOWUP please\nGSD_GOAL_CONTINUE: x",
         });
         let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
         assert_eq!(o["gate"]["code"], "closeout_followup");

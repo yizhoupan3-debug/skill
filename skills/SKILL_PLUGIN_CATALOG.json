@@ -226,65 +226,6 @@
         "routing_eval_cases": "tests/routing_eval_cases.json"
       }
     },
-    "autopilot": {
-      "capabilities": {
-        "allowed_tools": [],
-        "approval_required_tools": [],
-        "artifact_outputs": [],
-        "network_access": "local",
-        "routing_gate": "none",
-        "routing_layer": "L0",
-        "routing_owner": "owner"
-      },
-      "dependencies": {
-        "allowed_tools": [],
-        "artifact_outputs": [],
-        "runtime_refs": [
-          "configs/framework/RUNTIME_REGISTRY.json"
-        ],
-        "skill_paths": [
-          "skills/autopilot/SKILL.md"
-        ]
-      },
-      "entrypoint": "explicit-framework-command",
-      "host_support": {
-        "platforms": [
-          "claude-code",
-          "codex-app",
-          "codex-cli",
-          "cursor"
-        ],
-        "projection": "explicit-entrypoint"
-      },
-      "kind": "framework_command",
-      "lifecycle": {
-        "retirement": {
-          "removal_policy": "remove explicit entrypoints from RUNTIME_REGISTRY before deleting surfaced command skill",
-          "replacement": null,
-          "state": "active"
-        },
-        "source": "framework-registry",
-        "source_position": 100,
-        "status": "active"
-      },
-      "risk": {
-        "approval_required": false,
-        "destructive_risk": "command-dependent",
-        "priority": "P1"
-      },
-      "skill_path": "skills/autopilot/SKILL.md",
-      "slug": "autopilot",
-      "test_fixtures": {
-        "contract_tests": [
-          "framework_aliases_reference_manifest_skills"
-        ],
-        "health_checks": [
-          "plugin_record_present",
-          "routing_metadata_present"
-        ],
-        "routing_eval_cases": "tests/routing_eval_cases.json"
-      }
-    },
     "citation-management": {
       "capabilities": {
         "allowed_tools": [],

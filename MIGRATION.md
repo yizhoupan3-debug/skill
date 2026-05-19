@@ -18,7 +18,7 @@ just doctor
 ## 默认工作流（全宿主）
 
 - **GSD** 为默认生命周期（`/gsd-new-project` … `/gsd-ship`），已在 `RUNTIME_REGISTRY` 为 `codex-cli` / `cursor` / `claude-code` / `claude-desktop` 注册；`AGENTS.md` 与各宿主 framework 投影文案一致。
-- `/autopilot` 仍为 opt-in。
+- `/autopilot` 已退役；连续执行请用 `/gsd-execute-phase`（见 `skills/_archived/autopilot/SKILL.md`）。
 
 ## Cursor：framework 规则仅用户级
 

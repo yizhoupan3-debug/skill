@@ -7,6 +7,7 @@
 | 跨宿主语言、执行梯子、review 清门叙事、Git 边界、Knowledge hygiene | 仓库根 [`AGENTS.md`](../AGENTS.md)（对应章节见下表） | Cursor alwaysApply [`.cursor/rules/*.mdc`](../.cursor/rules/) **只写宿主硬差异**；须含指向 [`harness_policy_map.md`](harness_policy_map.md)、[`AGENTS.md`](../AGENTS.md)、[`harness_architecture.md`](harness_architecture.md) 的 markdown 链接。**CI**（[`tests/policy_cursor_rules_links.rs`](../tests/policy_cursor_rules_links.rs)）**仅**校验：`alwaysApply: true` 且首段 frontmatter 可被该测试解析闭合的 `.mdc`；目录内其它 `.mdc` 不在此项内。CI 还约定：链接须形如 `](url)` 且 `url` 满足相对指针形（`../`、`./`、`docs/`、或路径段中的 `/docs/`）；枚举规则文件时 `read_dir` **只扫 `.cursor/rules/` 一层**（不递归子目录）；**正文不要写独占行 `alwaysApply:`**（避免「opening `---` 后缺闭合 `---`」的畸形分支误判）。 |
 | 五层模型、证据流、续跑/门控、`ROUTER_RS_*` 语义与默认值 | [`harness_architecture.md`](harness_architecture.md)（尤其 **§5 开关面**） | [`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs) 仅提供 **helper 子集** + 注释索引；散落 `std::env::var` 仍以 harness §5 为准 |
 | Skill 命中路径与 trigger | [`skills/SKILL_ROUTING_RUNTIME.json`](../skills/SKILL_ROUTING_RUNTIME.json) 的 `skill_path` | 各 `skills/**/SKILL.md` **不得**顶替 `AGENTS.md` 的总协议；命中后只读该 skill，不把 skill 全文当「第二 AGENTS」 |
+| 验证命令成功/失败（机读） | [`artifacts/current/<task_id>/EVIDENCE_INDEX.json`](../artifacts/current/) | 聊天复述、Plan todo 勾选、GOAL checkpoint 文本**不能**单独充当 ship 证据 |
 | 深度 review 产出形状（compact envelope、lane） | [`skills/code-review-deep/SKILL.md`](../skills/code-review-deep/SKILL.md) | `AGENTS.md` Execution Ladder 只指向该 skill，不复制 lens 表 |
 | Cursor Plan / CreatePlan 契约 | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md) | [`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc) 保留 CreatePlan 硬自检条（宿主工具差异） |
 | 运维「低噪声 / solo」开关组合 | 仍以 harness §5 **逐变量**为裁判 | [`operator_profiles.md`](operator_profiles.md) 仅给 **可复制 profile**，默认值以 harness 表为准 |
@@ -16,7 +17,7 @@
 | 主题 | `AGENTS.md` 节 |
 |------|----------------|
 | 语言（简体中文默认） | [Language](../AGENTS.md#language) |
-| Subagent / `/autopilot` / 拒因 token | [Execution Ladder](../AGENTS.md#execution-ladder) |
+| Subagent / GSD 执行区 / 拒因 token | [Execution Ladder](../AGENTS.md#execution-ladder) |
 | Review 默认与 skill 路由 | 同上节 + [Skill Routing](../AGENTS.md#skill-routing) |
 | Closeout / 证据 | [Closeout](../AGENTS.md#closeout) |
 | 连续性工件目录 | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## Continuity artifacts（跨会话接力）`（避免各渲染器中文锚点不一致） |

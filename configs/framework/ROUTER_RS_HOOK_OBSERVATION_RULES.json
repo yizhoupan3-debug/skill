@@ -72,16 +72,22 @@
       "priority": 2,
       "or": [
         {
+          "starts_with": "GSD_GOAL_CONTINUE"
+        },
+        {
+          "contains": "GSD_GOAL_CONTINUE:"
+        },
+        {
           "starts_with": "AUTOPILOT_DRIVE"
         },
         {
           "contains": "AUTOPILOT_DRIVE:"
         }
       ],
-      "code": "autopilot_drive",
+      "code": "gsd_goal_continue",
       "human_prefix": {
         "kind": "literal",
-        "text": "AUTOPILOT_DRIVE"
+        "text": "GSD_GOAL_CONTINUE"
       },
       "stop_scan_after_match": false
     },

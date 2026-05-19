@@ -10,7 +10,7 @@
 
 **手稿技能（paper-workbench 栈）**：论文前门与专科 lane 的可读契约以仓库 `skills/` 下对应 `SKILL.md` 与 reference 为内容真源；**安装与宿主投影**不以某一 IDE 为专属——闭集宿主列表与安装工具名以 **`configs/framework/RUNTIME_REGISTRY.json`** 为准，落地到 Cursor/Codex 等工作区时使用 **`router-rs framework install --to <host>`**（实现见 `host_integration.rs`）。技能栈索引见 [`../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md)。
 
-**解绑与共同沉降验收**（可勾选）：[`docs/plans/EXECUTION_harness_decouple_sink_checklist.md`](plans/EXECUTION_harness_decouple_sink_checklist.md) — 与减法全盘 [`docs/plans/harness_subtraction_first_principles_audit_checklist.md`](plans/harness_subtraction_first_principles_audit_checklist.md)、PR 合并门槛 [`docs/plans/EXECUTION_harness_pr_review_checklist.md`](plans/EXECUTION_harness_pr_review_checklist.md) 互补。
+**解绑与共同沉降验收**：历史清单已归档为 stub（见 [`docs/plans/README.md`](plans/README.md)）；运行时以本文 §3.1 工程清单、[harness_architecture.md](harness_architecture.md) 与 `router-rs framework maint update-audit` 为准。
 
 ## 快速路径（我要接新宿主）
 
@@ -195,7 +195,7 @@
 | 位置 | 硬编码内容 | 建议 |
 |------|------------|------|
 | [`scripts/router-rs/src/framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs) | `refresh_host_projections` 从 `RUNTIME_REGISTRY` 派生 installable host projection tools；`codex-app` 这类 runtime-supported / non-installable host 不进入安装遍历 | 新增宿主时必须提供 maint verifier，或在 registry 中标记 `installable=false` 并给出 unsupported reason |
-| [`scripts/router-rs/src/session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | `classify_rate_limit_block` 仅接受 `codex` / `codex-cli`；`build_driver_command` 仅组装 Codex CLI；`driver_id_for_host` 非 codex 映射为 `unknown_driver` | 当前明确为 **Codex driver only**；为新 CLI 宿主补 driver / 限速模式前，registry 必须继续标记 `session_supervisor_driver=unsupported`（单表复核与 grep 锚点见 [`EXECUTION_harness_decouple_sink_checklist.md`](plans/EXECUTION_harness_decouple_sink_checklist.md) §4） |
+| [`scripts/router-rs/src/session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | `classify_rate_limit_block` 仅接受 `codex` / `codex-cli`；`build_driver_command` 仅组装 Codex CLI；`driver_id_for_host` 非 codex 映射为 `unknown_driver` | 当前明确为 **Codex driver only**；为新 CLI 宿主补 driver / 限速模式前，registry 必须继续标记 `session_supervisor_driver=unsupported` |
 | [`scripts/router-rs/src/framework_profile.rs`](../scripts/router-rs/src/framework_profile.rs) | **已收敛**：`build_profile_bundle` 从 `RUNTIME_REGISTRY.host_projections` 派生 `host_payloads`；保留 `codex_profile` / `full_codex_profile` 作为 Codex 兼容输出 | 新宿主若需要 profile payload，优先补 `host_projections` 与 contract tests；不要新增 Codex-only profile compiler 分支 |
 | [`scripts/router-rs/src/hook_posttool_normalize.rs`](../scripts/router-rs/src/hook_posttool_normalize.rs) | Cursor `postToolUse` stdin → `try_append_post_tool_shell_evidence` 形状的 crate 级归一化（依赖 `cursor_hooks` 字段抽取 helper） | Codex 仍直连 append；terminal / rust-lint 等 Cursor 专有分支仍在 `cursor_hooks` |
 

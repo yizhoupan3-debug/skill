@@ -13,5 +13,5 @@ pub fn process_env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
-        .expect("router-rs test process env lock poisoned")
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }

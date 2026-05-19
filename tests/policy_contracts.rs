@@ -78,7 +78,7 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "web-scraping",
 ];
 
-const FRAMEWORK_COMMAND_IDS: &[&str] = &["autopilot", "deepinterview", "gitx", "update"];
+const FRAMEWORK_COMMAND_IDS: &[&str] = &["gsd", "deepinterview", "gitx", "update"];
 
 fn retired_runtime_owned_skill_slugs() -> HashSet<&'static str> {
     RETIRED_RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
@@ -437,20 +437,20 @@ fn codex_user_skill_surface_stays_lightweight_and_explicit() {
         "surface loaded too many skills: {}",
         skills.len()
     );
-    assert!(skills.iter().any(|item| item.as_str() == Some("autopilot")));
+    assert!(skills.iter().any(|item| item.as_str() == Some("gsd")));
     assert!(skills.iter().any(|item| item.as_str() == Some("gitx")));
     assert!(skills
         .iter()
         .any(|item| item.as_str() == Some("deepinterview")));
     assert!(!skills.iter().any(|item| item.as_str() == Some("team")));
     assert!(!skills.iter().any(|item| item.as_str() == Some("refresh")));
-    assert!(surface_root.join("autopilot/SKILL.md").exists());
+    assert!(!skills.iter().any(|item| item.as_str() == Some("autopilot")));
+    assert!(surface_root.join("gsd/SKILL.md").exists());
     assert!(surface_root.join("gitx/SKILL.md").exists());
     assert!(surface_root.join("deepinterview/SKILL.md").exists());
     assert!(!surface_root.join("team/SKILL.md").exists());
-    let autopilot = read_text(&surface_root.join("autopilot/SKILL.md"));
-    assert!(autopilot.contains("`/autopilot`"));
-    assert!(!autopilot.contains("`$autopilot`"));
+    let gsd = read_text(&surface_root.join("gsd/SKILL.md"));
+    assert!(gsd.contains("/gsd-execute-phase") || gsd.contains("/gsd-new-project"));
 }
 
 #[test]
@@ -1894,39 +1894,28 @@ fn framework_aliases_reference_manifest_skills() {
 /// `research_contract` is narrative for hosts/docs; router-rs Execute embeds deep prompt text in
 /// `runtime_ops.inc` instead of parsing this JSON at runtime.
 #[test]
-fn autopilot_research_contract_deep_narrative_stays_aligned_with_execute_prompt() {
+fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
-    let deep = registry
+    let gp = registry
+        .get("framework_commands")
+        .and_then(|fc| fc.get("gsd"))
+        .and_then(|g| g.get("goal_persistence"))
+        .expect("framework_commands.gsd.goal_persistence");
+    let eps = gp
+        .get("execution_entrypoints")
+        .and_then(|v| v.as_array())
+        .expect("execution_entrypoints array");
+    assert!(eps.iter().any(|v| v.as_str() == Some("/gsd-execute-phase")));
+    assert!(
+        gp.get("continuation_hook_leader")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("GSD_GOAL_CONTINUE")
+    );
+    assert!(registry
         .get("framework_commands")
         .and_then(|fc| fc.get("autopilot"))
-        .and_then(|ap| ap.get("research_contract"))
-        .and_then(|rc| rc.get("deep"))
-        .expect("framework_commands.autopilot.research_contract.deep");
-    assert_eq!(
-        deep.get("requires_multi_source_validation"),
-        Some(&serde_json::Value::Bool(true))
-    );
-    assert_eq!(
-        deep.get("requires_counter_evidence"),
-        Some(&serde_json::Value::Bool(true))
-    );
-    assert_eq!(
-        deep.get("requires_uncertainty_register"),
-        Some(&serde_json::Value::Bool(true))
-    );
-    let inc = read_text(&project_root().join("scripts/router-rs/src/cli/runtime_ops.inc"));
-    const DEEP_PROMPT_ANCHORS: &[&str] = &[
-        "Key findings, Evidence, Counter-evidence",
-        "at least two independent evidence anchors",
-        "Open risks",
-        "framework_rfv_loop",
-    ];
-    for needle in DEEP_PROMPT_ANCHORS {
-        assert!(
-            inc.contains(needle),
-            "deep execute prompt missing anchor {needle:?}"
-        );
-    }
+        .is_none());
 }
 
 /// 防止 framework 命令的 `skill_path` 再次指回仅存在于生成投影下的路径（裸 clone 会断链）。
@@ -1949,12 +1938,14 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
         }
     }
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
-    let autopilot = &registry["framework_commands"]["autopilot"];
+    let gsd = &registry["framework_commands"]["gsd"];
     assert_eq!(
-        autopilot["skill_path"]
-            .as_str()
-            .expect("autopilot skill_path"),
-        "skills/autopilot/SKILL.md"
+        gsd["skill_path"].as_str().expect("gsd skill_path"),
+        "skills/gsd/SKILL.md"
+    );
+    assert!(
+        registry["framework_commands"].get("autopilot").is_none(),
+        "autopilot framework_command must be removed"
     );
     assert_eq!(
         registry["framework_commands"]["team"]["canonical_owner"], "agent-swarm-orchestration",
@@ -2101,7 +2092,7 @@ fn installed_project_hooks_are_router_rs_managed() {
     }
     let hook_text = hooks.to_string();
     assert!(hook_text.contains("router-rs"));
-    assert!(hook_text.contains("codex hook --event="));
+    assert!(hook_text.contains("codex-router-rs-hook.sh"));
     assert!(!hook_text.contains("scripts/codex_hook_entrypoint.sh"));
     assert!(!hook_text.contains("sessionEnd"));
     let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));

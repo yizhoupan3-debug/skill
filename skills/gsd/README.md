@@ -1,5 +1,15 @@
 # GSD Skills - Hot Manifest
 
+## S / M / L 档位（叙事深度）
+
+| 档位 | 何时用 | 工件 |
+|------|--------|------|
+| **S** | 单文件/单 bug，用户已给清验收 | 口头 goal + 1 条验证命令即可；可跳过完整 ROADMAP |
+| **M** | 单模块特性（默认） | `REQUIREMENTS.md` + `ROADMAP.md` + `WAVE_STATE.json` |
+| **L** | 跨模块/多宿主 harness 变更 | 上列 + ADR + `RISK_REGISTER.md` + 全量 `cargo test` |
+
+**Plan 正交**：Cursor `.cursor/plans/*.plan.md` 与 `artifacts/current/<task>/ROADMAP.md` 互指；ROADMAP 为 execute 机读真源（见 `skills/gsd/plan-phase/SKILL.md`）。
+
 ## Routing
 
 Skills are registered in `SKILL_ROUTING_RUNTIME.json` (L0-L2 hot skills) and `SKILL_MANIFEST.json` (full cold manifest).

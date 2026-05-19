@@ -1569,8 +1569,8 @@ mod tests {
             json!("unsupported")
         );
         assert_eq!(
-            bundle.host_payloads["cursor"]["framework_alias_entrypoints"]["autopilot"],
-            json!("/autopilot")
+            bundle.host_payloads["cursor"]["framework_alias_entrypoints"]["gsd"],
+            json!("/gsd")
         );
         assert_eq!(
             bundle.host_payloads["claude-code"]["framework_alias_entrypoints"]["gitx"],

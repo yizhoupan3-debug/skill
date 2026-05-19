@@ -131,7 +131,7 @@ Evidence:
 
 ## Next Step
 
-After verification, proceed to `/gsd-discuss-phase` or `/gsd-ship`.
+After verification for the current phase, proceed to `/gsd-ship` or the next phase's `/gsd-discuss-phase` (per-phase discuss → plan → execute → verify).
 
 ## Anti-Patterns
 
