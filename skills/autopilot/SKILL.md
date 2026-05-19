@@ -48,11 +48,11 @@ router-rs framework alias autopilot
 ### 1.1 与 Cursor / IDE 文案区分 + 前置条件
 
 - **IDE / 产品内的「Autopilot」≠ 本仓库的 `/autopilot` harness**：除非本仓库的 **L4** hook 管线（含 **`router-rs`**）已按宿主装好并生效；否则不要把两者当成同一套能力。
-- **分层指针**：L5 连续性文档见 [`docs/harness_architecture.md`](../../docs/harness_architecture.md)；Cursor 侧 hook 挂载见仓库根 **`.cursor/hooks.json`**（与 L4/L3/L2 职责分界以该文档为准，此处不重复全文）。
+- **分层指针**：L5 连续性文档见 `harness_architecture.md@{$FRAMEWORK_DOCS_GIT_REF}`；Cursor 侧 hook 挂载见仓库根 **`.cursor/hooks.json`**（与 L4/L3/L2 职责分界以该文档为准，此处不重复全文）。
 - **本地链自检（verify-local-chain）**：
   - `.cursor/hooks.json` 存在且指向可用的 **`router-rs`**（通常为 release 构建产物）。
   - `artifacts/current/` 对本会话可写（continuity / goal 写入所需）。
-- **与深度 review / Plan 串联**：默认 **review-only**（[`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)）与 **写入 / `/autopilot`** 分两阶段；不要在同一条用户消息里把「深度审稿」与 **`/autopilot` 入口**绑在一起——Cursor `beforeSubmit` 会因 `review_arms_for_gate` 排除 autopilot 入口而**不**在本回合新武装 `REVIEW_GATE`。操作者速查见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)（「混用时的实际武装顺序」）。
+- **与深度 review / Plan 串联**：默认 **review-only**（`code-review-deep/SKILL.md@{$FRAMEWORK_DOCS_GIT_REF}`）与 **写入 / `/autopilot`** 分两阶段；不要在同一条用户消息里把「深度审稿」与 **`/autopilot` 入口**绑在一起——Cursor `beforeSubmit` 会因 `review_arms_for_gate` 排除 autopilot 入口而**不**在本回合新武装 `REVIEW_GATE`。操作者速查见 `framework_operator_primer.md@{$FRAMEWORK_DOCS_GIT_REF}`（「混用时的实际武装顺序」）。
 
 ## 2. 「一口气」= 连续推进，不是单轮魔法
 
@@ -148,9 +148,9 @@ printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"repo_root":"'
 - `start/upsert` 会写入 `requires_completion_evidence`（默认等于 `drive_until_done`；`drive_until_done=true` 时不可关闭）。`pause` / `resume` 不会改变该完成证据门。
 - **真完成**必须调用 `complete`，且 `requires_completion_evidence=true` 时必须已有当前 task 的成功 `EVIDENCE_INDEX.json` 记录；否则用 `pause` 或 `block`，不要用无证据完成态收口。当前任务 hydration 只认非空 `active_task.json` 指针；active 缺失时才回退 `focus_task.json`，active 损坏不会回退旧 focus。
 
-多轮 **review → fix → verify** 大轮次（含外部调研并行 lane）的字段与 lane 契约见 harness 参考 [`rfv_loop_harness.md`](../docs/rfv_loop_harness.md)（**非热 skill 路由**）；用户侧对抗式渐进披露见 [`loop`](../loop/SKILL.md)。轮次账本使用 **`framework_rfv_loop`**（`RFV_LOOP_STATE.json`，与 `GOAL_STATE.json` 同任务目录）。
+多轮 **review → fix → verify** 大轮次（含外部调研并行 lane）的字段与 lane 契约见 harness 参考 `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`（**非热 skill 路由**）；用户侧对抗式渐进披露见 `loop/SKILL.md@{$FRAMEWORK_DOCS_GIT_REF}`。轮次账本使用 **`framework_rfv_loop`**（`RFV_LOOP_STATE.json`，与 `GOAL_STATE.json` 同任务目录）。
 
-**推理深度真源**：分工 + 可执行验证 + 可审计链的具体契约见 [`reasoning-depth-contract.md`](../docs/references/rfv-loop/reasoning-depth-contract.md)。**数理 / STEM** 见 [`math-reasoning-harness.md`](../docs/references/rfv-loop/math-reasoning-harness.md)（宿主短句：`HARNESS_OPERATOR_NUDGES.json` 的 **`math_reasoning_harness_line`**）。**深度外研 / 检索** 同契约 §B：`retrieval_trace` + contradiction sweep（宿主短句：**`retrieval_trace_harness_line`**）。Autopilot 同样适用——`Validation commands` 必须给出可执行命令；声称完成前须有 `EVIDENCE_INDEX` 成功行或显式 blocker。
+**推理深度真源**：分工 + 可执行验证 + 可审计链的具体契约见 `references/rfv-loop/reasoning-depth-contract.md@{$FRAMEWORK_DOCS_GIT_REF}`。**数理 / STEM** 见 `references/rfv-loop/math-reasoning-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`（宿主短句：`HARNESS_OPERATOR_NUDGES.json` 的 **`math_reasoning_harness_line`**）。**深度外研 / 检索** 同契约 §B：`retrieval_trace` + contradiction sweep（宿主短句：**`retrieval_trace_harness_line`**）。Autopilot 同样适用——`Validation commands` 必须给出可执行命令；声称完成前须有 `EVIDENCE_INDEX` 成功行或显式 blocker。
 
 **Codex SessionStart continuity digest**（`build_framework_continuity_digest_prompt`，与 `framework snapshot` / `contract-summary` 同源读模型）会在 **`prompt` 文本末尾拼接整段 `GOAL_STATE` 约束**、追加 `HARNESS_OPERATOR_NUDGES` 中的「推理深度」一句，并附带「**深度自检三问**」（来自 reasoning-depth-contract）——目标从「纯文件」变成 **会话注入里可直接执行的 checklist**；机器可读字段用 **`router-rs framework task-state-resolve`** 或读磁盘 `GOAL_STATE.json`。
 

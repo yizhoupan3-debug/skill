@@ -145,8 +145,8 @@ result "verified", "严审通过", or "research-grade" on prose alone.
 
 ## Cross-references
 
-- RFV research harness: [`../../docs/rfv_loop_harness.md`](../../docs/rfv_loop_harness.md)
-- External research harness: [`../../docs/references/rfv-loop/external-research-harness.md`](../../docs/references/rfv-loop/external-research-harness.md)
-- Math reasoning harness: [`../../docs/references/rfv-loop/math-reasoning-harness.md`](../../docs/references/rfv-loop/math-reasoning-harness.md)
+- RFV research harness: `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
+- External research harness: `references/rfv-loop/external-research-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
+- Math reasoning harness: `references/rfv-loop/math-reasoning-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - Reproducibility minimum record: [`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)
