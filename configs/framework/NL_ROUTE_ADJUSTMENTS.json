@@ -150,6 +150,27 @@
     },
     {
       "when": {
+        "all": [
+          {
+            "signal": "has_systematic_debug_context"
+          },
+          {
+            "not": {
+              "signal": "has_rendered_visual_evidence_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: bug/root-cause/TDD diagnostic wording should route to systematic-debugging, not visual-review without rendered evidence."
+      },
+      "record": {
+        "slug": "visual-review"
+      }
+    },
+    {
+      "when": {
         "signal": "has_scientific_figure_plotting_context"
       },
       "action": {

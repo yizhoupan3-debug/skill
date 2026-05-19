@@ -271,6 +271,11 @@ pub(crate) fn has_systematic_debug_context(query_text: &str, query_token_list: &
         "traceback",
         "error",
         "tdd workflow",
+        "tdd",
+        "定位根因",
+        "修这个 bug",
+        "fix login",
+        "login bug",
     ]
     .iter()
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))

@@ -573,6 +573,13 @@ fn runtime_gate_blocks_manifest_owner(
         return false;
     }
 
+    if hot_decision.selected_skill == "visual-review"
+        && full_decision.selected_skill == "systematic-debugging"
+        && should_retry_with_manifest(hot_decision)
+    {
+        return false;
+    }
+
     if full_decision.selected_skill == "skill-framework-developer"
         && full_decision.score > hot_decision.score
         && has_non_generic_manifest_signal(full_decision)
@@ -709,5 +716,50 @@ mod should_retry_with_manifest_tests {
     fn systematic_debugging_low_score_retries_via_threshold() {
         let decision = make_decision("systematic-debugging", 30.0, "L1", "four_step");
         assert!(should_retry_with_manifest(&decision));
+    }
+
+    #[test]
+    fn visual_review_hot_does_not_block_manifest_systematic_debugging() {
+        let mut hot = make_decision("visual-review", 14.0, "L3", "four_step");
+        hot.reasons.push("Visual-review weak match: no explicit visual evidence, reduced score.".to_string());
+        let mut full = make_decision("systematic-debugging", 72.0, "L2", "four_step");
+        full.reasons.push("Routing gate matched: bug.".to_string());
+        full.reasons.push(
+            "Systematic-debugging boost applied: explicit bug, root-cause, failure, or regression-test diagnostic wording detected.".to_string(),
+        );
+        let runtime_records = vec![SkillRecord {
+            slug: "visual-review".to_string(),
+            skill_path: Some("skills/visual-review/SKILL.md".to_string()),
+            layer: "L3".to_string(),
+            owner: "gate".to_string(),
+            gate: "evidence".to_string(),
+            priority: "P1".to_string(),
+            session_start: "required".to_string(),
+            summary: String::new(),
+            slug_lower: "visual-review".to_string(),
+            owner_lower: "gate".to_string(),
+            gate_lower: "evidence".to_string(),
+            session_start_lower: "required".to_string(),
+            gate_phrases: vec!["bug".to_string()],
+            trigger_hints: vec![],
+            name_tokens: HashSet::new(),
+            keyword_tokens: HashSet::new(),
+            alias_tokens: HashSet::new(),
+            do_not_use_tokens: HashSet::new(),
+            framework_alias_entrypoints: vec![],
+            metadata_positive_triggers: vec![],
+            host_platforms: vec![],
+            record_kind: "skill".to_string(),
+            primary_allowed: true,
+            fallback_policy_mode: "eligible-in-runtime".to_string(),
+        }];
+        assert!(should_retry_with_manifest(&hot));
+        assert!(should_accept_manifest_fallback(
+            &hot,
+            &full,
+            &runtime_records,
+            true,
+            false,
+        ));
     }
 }
