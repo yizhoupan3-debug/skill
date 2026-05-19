@@ -27,11 +27,8 @@ jobs:
             --journal skills/.evolution_journal.jsonl \
             --manifest skills/SKILL_MANIFEST.json \
             --json > /tmp/audit.json
-          cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
-            --skills-root skills \
-            --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-            --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
-            --apply
+          cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+            framework skills refresh --framework-root "$PWD" --write
 
       - name: Commit manifest changes
         run: |

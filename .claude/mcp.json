@@ -8,7 +8,7 @@
         "${workspaceRoot}"
       ],
       "command": "${env.HOME}/.local/bin/router-rs",
-      "description": "Framework continuity, skill routing, closeout advisory",
+      "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory",
       "type": "stdio"
     }
   }

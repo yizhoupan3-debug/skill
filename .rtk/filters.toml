@@ -1,8 +1,8 @@
 schema_version = 1
 
-[filters.skill-compiler-rs]
-description = "Compact Rust skill compiler runs while preserving compiler errors and summaries"
-match_command = "^cargo\\s+run\\b.*scripts/skill-compiler-rs/Cargo\\.toml"
+[filters.framework-skills]
+description = "Compact router-rs framework skills validate/refresh output"
+match_command = "^cargo\\s+run\\b.*framework\\s+skills\\s+(validate|refresh)"
 strip_ansi = true
 strip_lines_matching = [
   "^\\s*Compiling\\s+",
@@ -10,17 +10,17 @@ strip_lines_matching = [
   "^\\s*Running\\s+",
 ]
 max_lines = 80
-on_empty = "skill compiler: ok"
+on_empty = "framework skills: ok"
 
-[[tests.skill-compiler-rs]]
+[[tests.framework-skills]]
 name = "strips cargo wrapper noise"
 input = """
-   Compiling skill-compiler-rs v0.1.0 (/repo/scripts/skill-compiler-rs)
+   Compiling router-rs v0.1.0 (/repo/scripts/router-rs)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
-     Running `scripts/skill-compiler-rs/target/debug/skill-compiler-rs --apply`
-compiled 109 skills
+     Running `scripts/router-rs/target/debug/router-rs framework skills validate`
+framework skills validate: ok
 """
-expected = "compiled 109 skills"
+expected = "framework skills validate: ok"
 
 [filters.cargo-build]
 description = "Compact cargo build output"

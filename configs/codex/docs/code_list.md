@@ -246,7 +246,7 @@ codex-aggregator/
     | CPA-4-SG-A | http://127.0.0.1:8320/v1 |
     | CPA-5-SG-B | http://127.0.0.1:8321/v1 |
     | CPA-6-TW | http://127.0.0.1:8322/v1 |
-  - 创建 Combo "plus-6"：加权 Round-Robin（修正19/34），fallback → iFlow/Kiro:
+  - 创建 Combo "plus-6"：加权 Round-Robin（修正19/34），fallback → 备用 Provider:
     ```json
     { "strategy": "weighted-round-robin",
       "providers": [

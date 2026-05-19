@@ -2,7 +2,7 @@
 
 ## Motivation & Context
 
-用户需要将多个 OpenAI Plus 订阅账号聚合为一个统一的 OpenAI 兼容 API，供本地 Codex App / Antigravity / Cursor 等 AI Coding 工具使用。核心诉求：**长期稳定运行，账号绝不被封**。
+用户需要将多个 OpenAI Plus 订阅账号聚合为一个统一的 OpenAI 兼容 API，供本地 Codex App / Cursor 等 AI Coding 工具使用。核心诉求：**长期稳定运行，账号绝不被封**。
 
 ### 调研背景 (2026-03-23 深度调研)
 
@@ -69,7 +69,7 @@ udp:      true
 ### 架构总览
 
 ```
-Codex App / Antigravity / Cursor
+Codex App / Cursor
          │
          │ http://localhost:20128/v1  (统一入口)
          ▼
@@ -177,7 +177,7 @@ utls   utls   utls   utls   utls   utls
    - degraded 状态时 Email + Dashboard 双告警
 
 3. **Fallback 容灾链** (OmniRoute Combo)
-   - CPA-A (Plus 账号 1) → CPA-B (Plus 账号 2) → 免费 Provider (iFlow/Kiro)
+   - CPA-A (Plus 账号 1) → CPA-B (Plus 账号 2) → 免费 Provider 备用链
    - 当所有 Plus 账号都熔断时，自动降级到免费模型，不中断编码
 
 4. **数据隔离**

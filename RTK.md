@@ -55,11 +55,11 @@ rtk npm test --prefix tools/browser-mcp
 
 ## Repo-local configuration
 
-This repository already contains a project-scoped RTK filter file at [`/.rtk/filters.toml`](/Users/joe/Documents/skill/.rtk/filters.toml).
+This repository already contains a project-scoped RTK filter file at [`/.rtk/filters.toml`](.rtk/filters.toml).
 
 Current local filters are targeted and narrow:
 
-- `cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml ...`
+- `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate|refresh ...`
 
 Do not assume every repo script has a custom RTK filter. If a command is uncommon, RTK may still help, but it may only provide generic compaction.
 

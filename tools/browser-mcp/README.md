@@ -45,7 +45,7 @@ Codex or MCP live startup to execute the Node build.
 
 ### stdio (recommended/production)
 ```bash
-router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill
+router-rs browser mcp-stdio --repo-root /Users/joe/Developer/skill
 # Flags: --headless true|false
 #        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
@@ -54,7 +54,7 @@ router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill
 ## Smoke test
 
 ```bash
-printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill
+printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | router-rs browser mcp-stdio --repo-root /Users/joe/Developer/skill
 ```
 
 ## Routing
@@ -74,7 +74,7 @@ If you already have a Rust-first runtime attach descriptor, browser-mcp can
 consume it directly for self-inspection:
 
 ```bash
-router-rs browser mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
+router-rs browser mcp-stdio --repo-root /Users/joe/Developer/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
 ```
 
 `--runtime-attach-artifact-path` is the canonical Rust-first entrypoint for

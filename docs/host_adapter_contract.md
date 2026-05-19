@@ -40,10 +40,9 @@
 本文件仅维护指针，不维护第二份枚举列表。添加或删除 lane 时，编辑 `RUNTIME_REGISTRY.json` 并重建 `router-rs`。
 - **产品级外部能力**（tmux `session_supervisor`、原生 MCP 配置面、桌面线程宿主等）可以按宿主不同；这些以 `RUNTIME_REGISTRY.host_projections.*.capabilities` 与相关 status 字段为显式真源，**不得**从 skill `platforms` 或热路由里“假看齐”。
 - **Harness hook 面严格矩阵**：`host_projections.*.harness_capabilities` 默认必须满足 [`configs/framework/RUNTIME_REGISTRY_SCHEMA.json`](configs/framework/RUNTIME_REGISTRY_SCHEMA.json) 中的 `harness_capability_policy`（`core_always` + `cli_agent_hook_baseline`）。**若某宿主无法提供** `cli_agent_hook_baseline` 中的某项，必须在同一投影对象上声明 `harness_capability_exceptions`（`cap` + `status: unsupported` + 非空 `rationale`）；根目录 `tests/policy_contracts.rs` 的 `runtime_registry_host_projections_split_harness_capabilities` 从 schema + registry **机读**校验，禁止再用宿主名字硬编码例外。
-- **热路由宿主展开**：`SKILL.md` 未声明 `platforms` 或声明 `supported` / `all-hosts` 时，skill-compiler 将 `host_support.platforms` 展开为 **`host_targets.supported` 全量**；热路由技能（`SKILL_ROUTING_RUNTIME.json`）在策略上应对每一闭集 id 可路由，**豁免**仅保留给确属 Codex 安装面 skills（见根 `tests/policy_contracts.rs` 常量）。**与上条分工**：NL 热路由默认闭集全覆盖；**hook 级 harness 能力**以 registry 矩阵与例外为准，不与 skill `platforms` 混读。
+- **热路由宿主展开**：`SKILL.md` 未声明 `platforms` 或声明 `supported` / `all-hosts` 时，`router-rs framework skills refresh` 将 `host_support.platforms` 展开为 **`host_targets.supported` 全量**；热路由技能（`SKILL_ROUTING_RUNTIME.json`）在策略上应对每一闭集 id 可路由，**豁免**仅保留给确属 Codex 安装面 skills（见根 `tests/policy_contracts.rs` 常量）。**与上条分工**：NL 热路由默认闭集全覆盖；**hook 级 harness 能力**以 registry 矩阵与例外为准，不与 skill `platforms` 混读。
 - **NL 热路由 suppress/boost 数据面**：按记录（slug / gate 等）与 `signals.rs` 谓词组合的 suppress、boost 规则真源在 [`configs/framework/NL_ROUTE_ADJUSTMENTS.json`](../configs/framework/NL_ROUTE_ADJUSTMENTS.json)（`router-rs` 嵌入，`route/nl_route_adjustments.rs`）。跨查询的短语 marker（如 meta-routing 子串表）在 [`configs/framework/ROUTING_SIGNAL_MARKERS.json`](../configs/framework/ROUTING_SIGNAL_MARKERS.json)；**不要**把两类规则塞进同一文件以免双真源争用。
 - **Review gate lane 闭集（Cursor/Codex）**：`RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes`（非空字符串数组）为可清点 `REVIEW_GATE` 深度子代理 lane 真源；`hook_common::is_deep_review_gate_lane_normalized` 从注册表嵌入读取。
-- **skill-compiler 严格宿主元数据（可选）**：`skill-compiler-rs --strict-host-platforms` 时，**空** `metadata.platforms` 报错而非展开为全宿主；默认行为不变，便于存量 skill 渐进迁移。
 
 **宿主集合术语（避免混读）**：
 `host_targets.supported` 是全局闭集宿主 id；
@@ -147,7 +146,7 @@
 | Codex host entrypoint provider | `scripts/router-rs/src/codex_hooks.rs` |
 | Claude Code / Claude Desktop stdio-agent hook 语义（stdin JSON） | `scripts/router-rs/src/claude_hooks.rs`（共享实现；公开入口为 `router-rs claude hook` / `router-rs claude-desktop agent`） |
 | `framework host-integration install`、投影 manifest、入口模板 | `scripts/router-rs/src/host_integration.rs` |
-| CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude`/`qoder` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
+| CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude`/`claude-desktop` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
 | 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；Claude 侧 `.claude/settings.json`、Claude Desktop 侧 `.claude/settings.json`（由 host integration 写入） |
 | 闭集宿主 id 与 `install_tool` / `host_entrypoints` | `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 与 `host_targets.metadata` |
 

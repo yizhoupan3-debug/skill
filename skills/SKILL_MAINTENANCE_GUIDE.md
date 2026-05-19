@@ -13,15 +13,13 @@
 2. Body 必含：`## When to use` + `## Do not use`
 3. 运行生成同步：
    ```bash
-   cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
-     --skills-root skills \
-     --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-     --apply
+   cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+     framework skills refresh --framework-root "$PWD" --write
    ```
    这一步会统一刷新 `SKILL_ROUTING_RUNTIME.json`、`SKILL_ROUTING_INDEX.md` 等生成路由产物；不要手改这些生成文件。
 4. 运行验证：
    ```bash
-   cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml
+   cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate --framework-root "$PWD"
    cargo test --test policy_contracts
    ```
    本地人工执行这些高输出命令时，可按 [`RTK.md`](../RTK.md) 改用 `rtk ...` 包装形式。
@@ -30,7 +28,7 @@
 ## 改 Skill 必查
 
 - 触发词是否变化 → 更新 description
-- 边界是否变化 → 重新运行 Rust skill compiler `--apply`
+- 边界是否变化 → 重新运行 `router-rs framework skills refresh --write`
 - 是否引入第二份 live source → 删除多余副本
 - 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex host-integration install-skills --repo-root \"$PWD\" install`（或使用已安装的 `router-rs` 等价命令），不要手动改 `~/.codex/skills`
 

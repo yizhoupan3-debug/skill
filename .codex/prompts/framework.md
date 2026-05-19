@@ -12,7 +12,7 @@ argument-hint: "[framework task...]"
 
 Use `$framework` semantics via the Rust-owned shared core.
 
-Framework root: `/Users/joe/Documents/skill`.
-Project root: `/Users/joe/Documents/skill`.
+Framework root: `${FRAMEWORK_ROOT}`.
+Project root: `${PROJECT_ROOT}`.
 
 $ARGUMENTS

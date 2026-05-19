@@ -12,7 +12,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 
 | Component | Description | Examples |
 |-----------|-------------|----------|
-| `HOST` | Target host identifier | `CLAUDE`, `CURSOR`, `CODEX`, `QODER` |
+| `HOST` | Target host identifier | `CLAUDE`, `CURSOR`, `CODEX` |
 | `FEATURE` | Feature or subsystem name | `REVIEW_GATE`, `CONTINUITY`, `AUTOPILOT`, `RFV_LOOP` |
 | `ACTION` | Action modifier (optional) | `DISABLE`, `ENABLE`, `MAX`, `MODE` |
 
@@ -24,7 +24,6 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Claude Desktop | `ROUTER_RS_CLAUDE_*` | MCP-based desktop agent |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
-| Qoder | `ROUTER_RS_QODER_*` | Custom host |
 
 ### Known Env Vars
 
@@ -110,8 +109,7 @@ skills/
 `configs/framework/GENERATED_ARTIFACTS.json` tracks all generated artifacts with their generator commands.
 
 **Generator sources:**
-- `scripts/router-rs/Cargo.toml` — Rust router runtime (active)
-- `scripts/skill-compiler-rs/Cargo.toml` — Skill compiler (deprecated, removed in f3c4bd5)
+- `scripts/router-rs/Cargo.toml` — Rust router runtime (`framework skills validate|refresh`)
 
 ---
 

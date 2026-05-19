@@ -33,11 +33,11 @@ verification protocol when layout or pagination correctness matters.
 1. Identify whether the task is read, generate, edit, or audit.
 2. Prefer structured `.docx` edits that preserve existing styles, headings, tables, numbering, and sections.
 3. Use the Rust OOXML CLI for structure and render-aware checks:
-   - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx>`
-   - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx> --json`
-   - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --output-dir <dir>`
-   - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --width 1600 --height 2000`
-   - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --dpi 180`
+   - `cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx>`
+   - `cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx> --json`
+   - `cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --output-dir <dir>`
+   - `cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --width 1600 --height 2000`
+   - `cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --dpi 180`
 4. Recheck every meaningful document change visually when layout matters.
 5. Deliver both content/result status and layout status.
 

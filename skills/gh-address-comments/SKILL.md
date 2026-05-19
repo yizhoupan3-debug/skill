@@ -63,7 +63,7 @@ selected fixes cleanly.
 Default helper:
 
 ```bash
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- \
+cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- \
   fetch-comments --repo . --json
 ```
 

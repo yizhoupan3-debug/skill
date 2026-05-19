@@ -306,13 +306,13 @@ fn session_key_ignores_lonely_agent_id_for_cwd_fallback_match() {
 fn event(session: &str, prompt: &str) -> Value {
     json!({
         "session_id": session,
-        "cwd": "/Users/joe/Documents/skill",
+        "cwd": "/Users/joe/Developer/skill",
         "prompt": prompt
     })
 }
 
 fn load_state_for(repo: &Path, session: &str) -> ReviewGateState {
-    let payload = json!({ "session_id": session, "cwd": "/Users/joe/Documents/skill" });
+    let payload = json!({ "session_id": session, "cwd": "/Users/joe/Developer/skill" });
     load_state(repo, &payload)
         .expect("load ok")
         .expect("state exists")
@@ -816,7 +816,7 @@ fn stop_goal_gate_hydrates_from_goal_state_and_evidence_without_keywords() {
         "stop",
         &json!({
             "session_id": "ev-gate",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "ok",
             "response": "done; no Goal:/Checkpoint:/verified boilerplate in prose"
         }),
@@ -873,7 +873,7 @@ fn stop_hydrates_when_hook_state_lacks_goal_required_but_goal_on_disk() {
         "stop",
         &json!({
             "session_id": "noflag",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "bye",
             "response": "done without magic words"
         }),
@@ -908,7 +908,7 @@ fn stop_hydrates_when_active_task_missing_but_goal_on_disk() {
         "stop",
         &json!({
             "session_id": "orph",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "bye",
             "response": "done"
         }),
@@ -953,7 +953,7 @@ fn stop_goal_gate_hydrates_running_goal_without_checkpoints_or_keywords() {
         "stop",
         &json!({
             "session_id": "run-gate",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "ok",
             "response": "no Goal/Checkpoint/Verification boilerplate"
         }),
@@ -997,7 +997,7 @@ fn stop_goal_gate_hydrates_when_goal_state_omits_status_field() {
         "stop",
         &json!({
             "session_id": "ns-gate",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "ok",
             "response": "no chat boilerplate"
         }),
@@ -1043,7 +1043,7 @@ fn stop_does_not_set_review_override_from_assistant_echo_alone() {
         "stop",
         &json!({
             "session_id": "s-ov-echo",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "全面review这个仓库",
             "response": "用户坚持不要用子代理，我仅在主会话输出 findings。"
         }),
@@ -1071,7 +1071,7 @@ fn stop_does_not_set_delegation_override_from_assistant_echo_when_review_armed()
         "stop",
         &json!({
             "session_id": sid,
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "全面review这个仓库",
             "response": "项目经理说不要并行分头推进，我只好先在主会话出 findings。"
         }),
@@ -1103,7 +1103,7 @@ fn stop_does_not_set_delegation_override_from_assistant_global_override_echo_whe
         "stop",
         &json!({
             "session_id": sid,
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "全面review这个仓库",
             "response": "Stand-up recap: we'll handle this locally and summarize in chat."
         }),
@@ -1134,7 +1134,7 @@ fn stop_sets_review_override_from_user_prompt_disarms_review_gate_followup() {
         "stop",
         &json!({
             "session_id": sid,
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "不要使用子代理，本轮只在主会话给结论",
             "response": "收到。",
         }),
@@ -1164,7 +1164,7 @@ fn stop_user_parallel_opt_out_matches_has_override_and_delegation_regex_coupling
         "stop",
         &json!({
             "session_id": sid,
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "prompt": "我们不要并行分工了，先主线程输出",
             "response": "明白。",
         }),
@@ -1250,7 +1250,7 @@ fn nested_payload_response_reject_reason_does_not_satisfy_review_gate_on_stop() 
         "stop",
         &json!({
             "session_id": "s13nest-r",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "payload": {
                 "prompt": "继续",
                 "response": "reject reason: shared_context_heavy"
@@ -1273,7 +1273,7 @@ fn nested_payload_response_sets_reject_reason_on_after_agent_response() {
         "afterAgentResponse",
         &json!({
             "session_id": "s13nest-a",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "payload": { "response": "small_task" }
         }),
     );
@@ -1290,7 +1290,7 @@ fn emergency_review_gate_disable_cold_after_agent_response_persists_reject_reaso
         "afterAgentResponse",
         &json!({
             "session_id": "s-cold-ara",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "response": "reject reason: small_task"
         }),
     );
@@ -1611,7 +1611,7 @@ fn review_gate_disabled_after_agent_response_updates_state_after_before_submit_s
     );
     let payload = json!({
         "session_id": sid,
-        "cwd": "/Users/joe/Documents/skill",
+        "cwd": "/Users/joe/Developer/skill",
         "payload": { "response": "small_task" }
     });
     {
@@ -1892,7 +1892,7 @@ fn review_gate_disabled_post_tool_use_still_advances_phase_after_arm() {
             "postToolUse",
             &json!({
                 "session_id": "srg-pu2",
-                "cwd": "/Users/joe/Documents/skill",
+                "cwd": "/Users/joe/Developer/skill",
                 "tool_name": "functions.subagent",
                 "tool_input": { "subagent_type": "explore", "fork_context": false }
             }),
@@ -2525,7 +2525,7 @@ fn pre_compact_emits_additional_context_summary() {
     let out = dispatch_cursor_hook_event(
         &repo,
         "preCompact",
-        &json!({ "session_id": "s8", "cwd": "/Users/joe/Documents/skill" }),
+        &json!({ "session_id": "s8", "cwd": "/Users/joe/Developer/skill" }),
     );
     assert!(out
         .get("additional_context")
@@ -2875,7 +2875,7 @@ fn stop_picks_assistant_goal_contract_from_messages_when_top_level_response_empt
     );
     let stop_payload = json!({
         "session_id": "s-msg-goal",
-        "cwd": "/Users/joe/Documents/skill",
+        "cwd": "/Users/joe/Developer/skill",
         "prompt": "continue",
         "messages": [
             {"role": "user", "content": "continue"},
@@ -2952,7 +2952,7 @@ fn deep_json_strings_satisfy_pre_goal_reject_on_before_submit() {
     );
     let deep = json!({
         "session_id": "deep-s1",
-        "cwd": "/Users/joe/Documents/skill",
+        "cwd": "/Users/joe/Developer/skill",
         "messages": [{ "role": "user", "content": "small_task" }]
     });
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &deep);
@@ -2969,7 +2969,7 @@ fn messages_tail_user_text_clears_review_gate_when_top_level_prompt_empty() {
     );
     let ev = json!({
         "session_id": "s-msg-only",
-        "cwd": "/Users/joe/Documents/skill",
+        "cwd": "/Users/joe/Developer/skill",
         "messages": [
             { "role": "user", "content": "earlier" },
             { "role": "assistant", "content": "ok" },
@@ -3030,7 +3030,7 @@ fn nested_payload_prompt_reject_reason_satisfies_pre_goal_before_submit() {
     );
     let nested = json!({
         "session_id": "s17nest",
-        "cwd": "/Users/joe/Documents/skill",
+        "cwd": "/Users/joe/Developer/skill",
         "payload": {
             "prompt": "small_task\n\nGoal: smoke\nNon-goals: none\nDone when: ok\nValidation commands: cargo test"
         }
@@ -3059,7 +3059,7 @@ fn nested_payload_prompt_reject_reason_updates_stop_pre_goal() {
     );
     let nested_stop = json!({
         "session_id": "s17stop-n",
-        "cwd": "/Users/joe/Documents/skill",
+        "cwd": "/Users/joe/Developer/skill",
         "payload": {
             "prompt": "small_task\nGoal:\nNon-goals:\nDone when:\nValidation commands:"
         }
@@ -3148,7 +3148,7 @@ fn post_tool_use_nested_payload_tool_fields_satisfy_pre_goal() {
         "postToolUse",
         &json!({
             "session_id": "s17nest-tu",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "payload": {
                 "tool_name": "functions.subagent",
                 "tool_input": {"type": "general-purpose", "fork_context": false}
@@ -3171,7 +3171,7 @@ fn post_tool_use_non_countable_lane_does_not_satisfy_pre_goal() {
         "postToolUse",
         &json!({
             "session_id": "s-lane",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "tool_name": "functions.subagent",
             "tool_input": {"lane": "my-custom-reviewer", "fork_context": false}
         }),
@@ -3195,7 +3195,7 @@ fn post_tool_use_fork_context_string_true_blocks_pre_goal() {
         "postToolUse",
         &json!({
             "session_id": "s-fkstr",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "tool_name": "functions.subagent",
             "tool_input": {"type": "explore", "fork_context": "true"}
         }),
@@ -3400,7 +3400,7 @@ fn subagent_start_pre_goal_requires_typed_subagent() {
         "SubagentStart",
         &json!({
             "session_id": "s-sub-pre",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "tool_input": {"fork_context": false}
         }),
     );
@@ -3413,7 +3413,7 @@ fn subagent_start_pre_goal_requires_typed_subagent() {
         "SubagentStart",
         &json!({
             "session_id": "s-sub-pre",
-            "cwd": "/Users/joe/Documents/skill",
+            "cwd": "/Users/joe/Developer/skill",
             "subagent_type": "general-purpose",
             "tool_input": {"fork_context": false}
         }),
@@ -3509,12 +3509,12 @@ fn write_terminal_file(dir: &Path, id: &str, header: &str) -> PathBuf {
 
 #[test]
 fn parse_terminal_header_extracts_pid_cwd_active() {
-    let txt = "---\npid: 12345\ncwd: \"/Users/joe/Documents/skill\"\ncommand: \"cargo test\"\nstarted_at: 2026-05-10T12:00:00Z\nrunning_for_ms: 295037   \n---\nbody...";
+    let txt = "---\npid: 12345\ncwd: \"/Users/joe/Developer/skill\"\ncommand: \"cargo test\"\nstarted_at: 2026-05-10T12:00:00Z\nrunning_for_ms: 295037   \n---\nbody...";
     let h = parse_terminal_header(txt).expect("parsed");
     assert_eq!(h.pid, Some(12345));
     assert_eq!(
         h.cwd.as_deref(),
-        Some(Path::new("/Users/joe/Documents/skill"))
+        Some(Path::new("/Users/joe/Developer/skill"))
     );
     assert!(h.is_active);
     assert!(h.started_at_ms.is_some());
@@ -3522,7 +3522,7 @@ fn parse_terminal_header_extracts_pid_cwd_active() {
 
 #[test]
 fn parse_terminal_header_inactive_when_no_running_for_ms() {
-    let txt = "---\npid: 35455\ncwd: /Users/joe/Documents/skill\n---\n~/skill ❯";
+    let txt = "---\npid: 35455\ncwd: /Users/joe/Developer/skill\n---\n~/skill ❯";
     let h = parse_terminal_header(txt).expect("parsed");
     assert_eq!(h.pid, Some(35455));
     assert!(!h.is_active);
@@ -3878,12 +3878,12 @@ fn session_start_initializes_terminal_baseline_ledger() {
     write_terminal_file(
         &term_dir,
         "t1",
-        "---\npid: 11111\ncwd: /Users/joe/Documents/skill\nrunning_for_ms: 1\n---\n",
+        "---\npid: 11111\ncwd: /Users/joe/Developer/skill\nrunning_for_ms: 1\n---\n",
     );
     write_terminal_file(
         &term_dir,
         "t2",
-        "---\npid: 22222\ncwd: /Users/joe/Documents/skill\n---\n",
+        "---\npid: 22222\ncwd: /Users/joe/Developer/skill\n---\n",
     );
     let prev = std::env::var_os("CURSOR_TERMINALS_DIR");
     std::env::set_var("CURSOR_TERMINALS_DIR", &term_dir);

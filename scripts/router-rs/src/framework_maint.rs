@@ -437,16 +437,25 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
 
     let readme =
         fs::read_to_string(repo_root.join(".codex/README.md")).map_err(|e| e.to_string())?;
-    if hooks_text.contains("sessionEnd") || hooks_text.contains("Kiro") {
-        return Err(
-            "verify_codex_hooks: Codex hook projection contains stale lifecycle or host wording"
-                .into(),
-        );
-    }
-    if readme.contains("sessionEnd") || readme.contains("Kiro") {
-        return Err(
-            "verify_codex_hooks: Codex README contains stale lifecycle or host wording".into(),
-        );
+    const STALE_HOST_MARKERS: &[&str] = &[
+        "sessionEnd",
+        "Kiro",
+        "qoder",
+        "qoderwork",
+        "antigravity",
+        "trae",
+    ];
+    for marker in STALE_HOST_MARKERS {
+        if hooks_text.contains(marker) {
+            return Err(format!(
+                "verify_codex_hooks: Codex hook projection contains stale marker `{marker}`"
+            ));
+        }
+        if readme.contains(marker) {
+            return Err(format!(
+                "verify_codex_hooks: Codex README contains stale marker `{marker}`"
+            ));
+        }
     }
     verify_codex_skill_runtime_health(&repo_root)?;
 

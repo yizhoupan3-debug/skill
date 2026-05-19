@@ -18,11 +18,13 @@ audit:
 
 check: fmt clippy test
 
+validate-skills:
+    cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+        framework skills validate --framework-root "{{PWD}}"
+
 compile-skills:
-    cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
-        --skills-root skills \
-        --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-        --apply
+    cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+        framework skills refresh --framework-root "{{PWD}}" --write
 
 sync-entrypoints:
     cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
@@ -34,4 +36,4 @@ publish:
 doctor:
     cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "{{PWD}}"
 
-ci: compile-skills test-all
+ci: validate-skills test-all

@@ -36,9 +36,9 @@ Statements, detailed fundamentals, holders, CSI constituents, and CSI weights ar
 
 ## File layout
 
-- Skill doc: `/Users/joe/Documents/skill/skills/financial-data-fetching/SKILL.md`
-- README: `/Users/joe/Documents/skill/skills/financial-data-fetching/README.md`
-- Rust CLI: `/Users/joe/Documents/skill/rust_tools/financial_data_rs/`
+- Skill doc: `/Users/joe/Developer/skill/skills/financial-data-fetching/SKILL.md`
+- README: `/Users/joe/Developer/skill/skills/financial-data-fetching/README.md`
+- Rust CLI: `/Users/joe/Developer/skill/rust_tools/financial_data_rs/`
 
 ---
 
@@ -47,7 +47,7 @@ Statements, detailed fundamentals, holders, CSI constituents, and CSI weights ar
 ### 1. Validate the Rust-owned sources first
 
 ```bash
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- validate
+cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- validate
 ```
 
 Only call a source **verified here** if its probe returns `ok: true`.
@@ -58,11 +58,11 @@ Only call a source **verified here** if its probe returns `ok: true`.
 
 ```bash
 # U.S. stocks
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
   ohlcv --market us --symbol AAPL --interval 1h --period 5d --source yahoo
 
 # Crypto
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
   ohlcv --market crypto --exchange binance --symbol BTC/USDT --interval 1h --limit 100
 ```
 
@@ -70,18 +70,18 @@ cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_r
 
 ```bash
 # U.S. stock capital metrics
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
   capital --market us --symbol AAPL
 
 # China A-share capital metrics
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
   capital --market cn --symbol 600519
 ```
 
 #### Backtest Export
 
 ```bash
-cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
   export --market us --symbol AAPL --interval 1d --period 1y \
   --schema vectorbt --file-format csv --output output/financial-data/aapl.csv
 ```
@@ -119,4 +119,4 @@ Before using any fetched dataset in research or backtests, verify:
 Re-run `validate`. Do not assume a previously working public endpoint is still healthy.
 
 ### Need strategy help rather than data help
-Use: `/Users/joe/Documents/skill/skills/algo-trading/SKILL.md`
+Use: `/Users/joe/Developer/skill/skills/algo-trading/SKILL.md`

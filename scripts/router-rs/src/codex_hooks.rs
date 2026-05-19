@@ -2520,7 +2520,7 @@ mod tests {
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/env python3 \"/Users/joe/Documents/skill/.codex/hooks/review_subagent_gate.py\"",
+            "command": "/usr/bin/env python3 \"/Users/joe/Developer/skill/.codex/hooks/review_subagent_gate.py\"",
             "timeout": 10
           }
         ]
@@ -2583,11 +2583,11 @@ mod tests {
 
         #[test]
         fn hook_command_format_pure_router_rs_binary() {
-            let repo_root = Path::new("/Users/joe/Documents/skill");
+            let repo_root = Path::new("/Users/joe/Developer/skill");
             let stop_command = build_install_hook_command(repo_root, "Stop");
             assert!(stop_command.contains("codex hook --event=Stop"));
             assert!(stop_command.contains("router-rs binary unavailable for Codex hook"));
-            assert!(!stop_command.contains("/Users/joe/Documents/skill"));
+            assert!(!stop_command.contains("/Users/joe/Developer/skill"));
             let pre_tool_command = build_install_hook_command(repo_root, "PreToolUse");
             assert!(pre_tool_command.contains("codex hook --event=PreToolUse"));
             assert!(!pre_tool_command.contains("codex hook pre-tool-use"));
