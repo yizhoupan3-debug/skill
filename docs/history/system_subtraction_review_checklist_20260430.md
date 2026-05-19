@@ -3,6 +3,8 @@
 > Historical note (2026-04-30): this completed review is archived to avoid
 > treating old command spellings and completed subtraction tasks as active
 > runtime instructions.
+>
+> **Superseded (2026-05)**: Parts of this checklist conflict with the current tree (hooks enabled, `skill-compiler-rs` removed, router-rs owns `framework skills`). See [docs/plans/README.md](../plans/README.md).
 
 状态：已完成静态系统 review
 范围：Codex-only 前提下，审查路由、runtime、host 集成、memory、artifact、browser MCP、skill surface 与入口形态

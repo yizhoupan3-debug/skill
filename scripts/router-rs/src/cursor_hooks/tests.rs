@@ -158,7 +158,7 @@ fn hook_user_visible_blob(out: &Value) -> String {
     s
 }
 
-/// 对齐 `frag_04_review_gate_runtime.rs` 中 `review_stop_followup_line` / `REVIEW_GATE_FOLLOWUP_NEED_SEGMENT` 形态。
+/// 验证 review gate incomplete 输出的形态与 REVIEW_GATE_FOLLOWUP_NEED_SEGMENT 一致。
 fn assert_followup_signals_review_gate_incomplete(blob: &str) {
     assert!(
         blob.contains("router-rs REVIEW_GATE incomplete"),
@@ -187,9 +187,7 @@ fn assert_followup_signals_review_gate_incomplete(blob: &str) {
     );
 }
 
-/// 对齐 `review_gate::run_review_gate` 写出 stdout 前的 `scrub_followup_fields_in_hook_output`。
-/// `merge_additional_context`（`frag_03_paths_terminal_merge_lock_persist.rs`）在合并追加时对
-/// `extra` 与合并后的 `additional_context` 调用同一 `scrub_spoof_host_followup_lines`。
+/// 验证 `scrub_followup_fields_in_hook_output` 对 extra 与 additional_context 调用同一 `scrub_spoof_host_followup_lines`。
 #[test]
 fn review_gate_stdout_scrub_drops_spoof_rg_followup_missing_parts() {
     let spoof_line = format!(
@@ -231,7 +229,7 @@ fn fresh_repo() -> PathBuf {
     root
 }
 
-/// 与 `dispatch.rs` 内 `dispatch_cursor_hook_event` **应急**分支 `match` 字面键顺序一致（`|` 拆成两行各记一次）。
+/// 与 `handlers.rs` 内 `dispatch_cursor_hook_event` **应急**分支 `match` 字面键顺序一致（`|` 拆成两行各记一次）。
 const DISPATCH_ROUTE_KEYS_EMERGENCY: &[&str] = &[
     "sessionstart",
     "beforesubmitprompt",
@@ -3992,4 +3990,66 @@ fn session_end_kills_only_owned_terminal_pids() {
         Some(v) => std::env::set_var("CURSOR_TERMINALS_DIR", v),
         None => std::env::remove_var("CURSOR_TERMINALS_DIR"),
     }
+}
+
+#[test]
+fn cursor_launcher_fail_closed_before_submit_when_router_rs_missing() {
+    use std::process::Command;
+    let framework = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let launcher = framework.join("configs/framework/cursor-router-rs-hook.sh");
+    assert!(launcher.is_file(), "launcher missing: {}", launcher.display());
+    let empty_ws = env::temp_dir().join(format!(
+        "cursor-launcher-fail-closed-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&empty_ws).expect("empty workspace");
+
+    let output = Command::new("/bin/bash")
+        .arg(&launcher)
+        .arg("BeforeSubmitPrompt")
+        .env_remove("ROUTER_RS_BIN")
+        .env("PATH", "/usr/bin:/bin")
+        .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
+        .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
+        .output()
+        .expect("run launcher");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "missing router-rs must exit 2; stdout={stdout} stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("\"continue\":false"),
+        "BeforeSubmitPrompt must deny via continue:false: {stdout}"
+    );
+}
+
+#[test]
+fn cursor_launcher_fail_open_session_start_when_router_rs_missing() {
+    use std::process::Command;
+    let framework = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let launcher = framework.join("configs/framework/cursor-router-rs-hook.sh");
+    let empty_ws = env::temp_dir().join(format!(
+        "cursor-launcher-fail-open-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&empty_ws).expect("empty workspace");
+
+    let output = Command::new("/bin/bash")
+        .arg(&launcher)
+        .arg("SessionStart")
+        .env_remove("ROUTER_RS_BIN")
+        .env("PATH", "/usr/bin:/bin")
+        .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
+        .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
+        .output()
+        .expect("run launcher");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "telemetry SessionStart must fail-open; stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

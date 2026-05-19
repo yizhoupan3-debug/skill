@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GSD Shipping State",
+  "description": "SHIPPING_STATE.json schema for delivery gate tracking",
+  "type": "object",
+  "required": ["schema_version", "version", "task_id", "gates"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "gsd-shipping-state-v1"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "passed", "failed"]
+    },
+    "gates": {
+      "type": "object",
+      "properties": {
+        "test_coverage": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "pending"] },
+            "coverage_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "evidence_ref": { "type": "string" }
+          }
+        },
+        "code_quality": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "pending"] },
+            "linters_passed": { "type": "boolean" },
+            "security_audit_passed": { "type": "boolean" },
+            "rfv_rounds": { "type": "integer" },
+            "evidence_ref": { "type": "string" }
+          }
+        },
+        "documentation": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "pending"] },
+            "files_updated": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "git_clean": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "pending"] },
+            "branch": { "type": "string" },
+            "commit_sha": { "type": "string" }
+          }
+        },
+        "worktree_review": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail", "pending"] },
+            "worktree_path": { "type": ["string", "null"] },
+            "findings_resolved": { "type": "integer" },
+            "evidence_ref": { "type": "string" }
+          }
+        }
+      }
+    },
+    "merge_commit_sha": {
+      "type": ["string", "null"]
+    },
+    "final_verification": {
+      "type": "object",
+      "properties": {
+        "verifier_results": {
+          "type": "array"
+        },
+        "closeout_passed": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

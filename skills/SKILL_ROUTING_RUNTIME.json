@@ -15,8 +15,8 @@
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 52,
-    "hot_skill_count": 27,
+    "full_skill_count": 28,
+    "hot_skill_count": 28,
     "kind": "hot",
     "policy": "session-start required gates plus allowlisted first-turn control owners plus explicit framework command aliases; route/search may load the fallback manifest after runtime-owned skills have been excluded."
   },
@@ -806,6 +806,33 @@
       ],
       "P1",
       "skills/update/SKILL.md",
+      [
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "gsd",
+      "L0",
+      "gate",
+      "none",
+      "n/a",
+      "GSD lifecycle commands for end-to-end project management with adversarial review and multi-agent execution.",
+      [
+        "/gsd",
+        "/gsd-new-project",
+        "/gsd-plan-phase",
+        "/gsd-execute-phase",
+        "/gsd-verify-work",
+        "/gsd-discuss-phase",
+        "/gsd-ship"
+      ],
+      "P1",
+      "skills/gsd/SKILL.md",
       [
         "claude-code",
         "claude-desktop",

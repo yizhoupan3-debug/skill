@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GSD Security Rules",
+  "description": "Dangerous command classification and handling rules",
+  "version": "1.0",
+  "dangerous_commands": {
+    "destructive": {
+      "description": "Irreversible data destruction",
+      "patterns": [
+        "rm -rf",
+        "rm -r /",
+        "git reset --hard",
+        "git clean -fd",
+        "drop table",
+        "delete from .* where",
+        "truncate table",
+        "shred -u"
+      ],
+      "action": "block",
+      "cli_handler": "rewrite_safe",
+      "skill_handler": "require_confirmation",
+      "desktop_handler": "warn_user"
+    },
+    "credential": {
+      "description": "Potential credential exposure",
+      "patterns": [
+        "password\\s*=",
+        "secret\\s*=",
+        "api_key\\s*=",
+        "token\\s*=",
+        "credential\\s*=",
+        "--secret",
+        "-p\\s+[a-zA-Z0-9]"
+      ],
+      "action": "warn",
+      "cli_handler": "audit_log",
+      "skill_handler": "reject_env_write",
+      "desktop_handler": "warn_user"
+    },
+    "external_network": {
+      "description": "External network requests",
+      "patterns": [
+        "curl\\s+http",
+        "wget\\s+http",
+        "fetch\\s+http",
+        "requests\\.post\\(",
+        "http\\.post"
+      ],
+      "action": "audit",
+      "cli_handler": "audit_log",
+      "skill_handler": "audit_log",
+      "desktop_handler": "audit_log"
+    },
+    "system_modification": {
+      "description": "System-level modifications",
+      "patterns": [
+        "sudo\\s+",
+        "chmod\\s+777",
+        "chmod\\s+000",
+        "launchctl\\s+load",
+        "systemctl\\s+stop",
+        "service\\s+stop"
+      ],
+      "action": "warn",
+      "cli_handler": "require_confirmation",
+      "skill_handler": "require_confirmation",
+      "desktop_handler": "warn_user"
+    },
+    "force_push": {
+      "description": "Force git push operations",
+      "patterns": [
+        "git push\\s+--force",
+        "git push\\s+-f"
+      ],
+      "action": "warn",
+      "cli_handler": "require_confirmation",
+      "skill_handler": "require_confirmation",
+      "desktop_handler": "warn_user"
+    }
+  },
+  "secondary_confirmation": {
+    "dangerous": [
+      "删除非空目录",
+      "git push --force",
+      "删除未提交的分支",
+      "清空数据库表"
+    ],
+    "high_risk": [
+      "创建 worktree",
+      "合并冲突分支",
+      "修改环境变量",
+      "安装全局依赖"
+    ]
+  },
+  "whitelist": {
+    "trusted_commands": [
+      "cargo test",
+      "cargo clippy",
+      "cargo build",
+      "npm test",
+      "npm run build",
+      "cargo fmt",
+      "rustfmt"
+    ],
+    "trusted_paths": [
+      "node_modules",
+      "target",
+      ".git/objects",
+      ".git/refs"
+    ]
+  }
+}

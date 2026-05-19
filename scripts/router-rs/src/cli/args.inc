@@ -10,22 +10,10 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: FrameworkCommand,
     },
-    Codex {
+    /// Unified host commands: codex, cursor, claude, claude-desktop
+    Host {
         #[command(subcommand)]
-        command: CodexCommand,
-    },
-    Cursor {
-        #[command(subcommand)]
-        command: CursorCommand,
-    },
-    Claude {
-        #[command(subcommand)]
-        command: ClaudeCommand,
-    },
-    #[command(name = "claude-desktop")]
-    ClaudeDesktop {
-        #[command(subcommand)]
-        command: ClaudeDesktopCommand,
+        command: HostCommand,
     },
     Trace {
         #[command(subcommand)]
@@ -35,13 +23,10 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: StorageCommand,
     },
-    Browser {
+    /// Diagnostic commands: profile, browser
+    Diagnose {
         #[command(subcommand)]
-        command: BrowserCommand,
-    },
-    Profile {
-        #[command(subcommand)]
-        command: ProfileCommand,
+        command: DiagnoseCommand,
     },
     Migrate {
         #[command(subcommand)]
@@ -158,7 +143,7 @@ pub(crate) struct MaintRootsArgs {
 
 #[derive(Args, Debug, Clone)]
 pub(crate) struct MaintRepoArgs {
-    #[arg(long)]
+    #[arg(long, alias = "repo-root")]
     pub(crate) framework_root: Option<PathBuf>,
 }
 
@@ -188,7 +173,6 @@ pub(crate) enum FrameworkCommand {
     Snapshot(FrameworkSnapshotCommand),
     /// Human-readable workspace checks (paths, hooks, Codex sync hint).
     Doctor(RepoRootCommand),
-    ContractSummary(RepoRootCommand),
     /// Host-neutral alias for full host-entrypoint materialization (same as `codex sync --repo-root`).
     #[command(name = "sync-entrypoints", visible_alias = "sync_entrypoints")]
     SyncEntrypoints(RepoRootCommand),
@@ -210,11 +194,53 @@ pub(crate) enum FrameworkCommand {
     /// Print sorted JSON array of `NL_SIGNAL_REGISTRY` signal names (align `NL_ROUTE_ADJUSTMENTS.json` with Rust).
     #[command(hide = true)]
     NlRouteSignalRegistryContract,
-    Contracts,
+    Contracts(FrameworkContractsCommand),
+    /// Validate or refresh skill routing artifacts (replaces skill-compiler-rs).
+    Skills {
+        #[command(subcommand)]
+        command: SkillsSubcommand,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub(crate) enum CodexCommand {
+pub(crate) enum SkillsSubcommand {
+    /// Check SKILL_MANIFEST / SKILL_ROUTING_RUNTIME paths and GSD rows.
+    Validate(MaintRepoArgs),
+    /// Write derived reports (e.g. SKILL_TIERS.json) then validate.
+    Refresh {
+        #[arg(long, alias = "framework-root")]
+        repo_root: Option<PathBuf>,
+        #[arg(long, default_value = "false")]
+        write: bool,
+        /// Emit minimal PLUGIN/HEALTH companion stubs (not policy-complete; prefer checked-in catalogs).
+        #[arg(long, default_value = "false")]
+        write_companions: bool,
+    },
+}
+
+/// Unified host commands (merged: codex, cursor, claude, claude-desktop)
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum HostCommand {
+    Codex {
+        #[command(subcommand)]
+        command: CodexSubcommand,
+    },
+    Cursor {
+        #[command(subcommand)]
+        command: CursorSubcommand,
+    },
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeSubcommand,
+    },
+    ClaudeDesktop {
+        #[command(subcommand)]
+        command: ClaudeDesktopSubcommand,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum CodexSubcommand {
     HookProjection,
     Sync(RepoRootCommand),
     Check(RepoRootCommand),
@@ -224,20 +250,45 @@ pub(crate) enum CodexCommand {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub(crate) enum CursorCommand {
+pub(crate) enum CursorSubcommand {
     Hook(CursorHookCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub(crate) enum ClaudeCommand {
+pub(crate) enum ClaudeSubcommand {
     Hook(ClaudeHookCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub(crate) enum ClaudeDesktopCommand {
+pub(crate) enum ClaudeDesktopSubcommand {
     /// Run MCP stdio agent loop (skills, evidence, closeout advisory).
     #[command(name = "agent")]
     Agent(ClaudeDesktopAgentCommand),
+}
+
+/// Diagnostic commands (merged: profile, browser)
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum DiagnoseCommand {
+    Profile {
+        #[command(subcommand)]
+        command: ProfileSubcommand,
+    },
+    Browser {
+        #[command(subcommand)]
+        command: BrowserSubcommand,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum ProfileSubcommand {
+    Emit(ProfilePathCommand),
+    Artifacts(ProfilePathCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum BrowserSubcommand {
+    McpStdio(BrowserMcpStdioCommand),
+    ResolveAttachArtifact(BrowserResolveAttachCommand),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -262,18 +313,6 @@ pub(crate) enum StorageCommand {
     CheckpointControlPlane(JsonInputCommand),
     BackendCatalog,
     BackendParity(StorageBackendParityCommand),
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub(crate) enum BrowserCommand {
-    McpStdio(BrowserMcpStdioCommand),
-    ResolveAttachArtifact(BrowserResolveAttachCommand),
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub(crate) enum ProfileCommand {
-    Emit(ProfilePathCommand),
-    Artifacts(ProfilePathCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -480,6 +519,16 @@ pub(crate) struct CurrentArtifactClutterCommand {
     pub(crate) active_task_id: String,
     #[arg(long)]
     pub(crate) repo_root: Option<PathBuf>,
+}
+
+/// Framework contracts command (merged: contract-summary + contracts)
+#[derive(Args, Debug, Clone)]
+pub(crate) struct FrameworkContractsCommand {
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
+    /// Include contract summary (default: false, returns full contracts)
+    #[arg(long, default_value_t = false)]
+    pub(crate) summary: bool,
 }
 
 #[derive(Parser, Debug)]

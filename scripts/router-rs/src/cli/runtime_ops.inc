@@ -4912,7 +4912,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         cached_records.as_ref()
     };
     let owned_host_records = if host_id.is_some() {
-        Some(filter_records_for_host(records.to_vec(), host_id.as_deref())?)
+        Some(filter_records_for_host(records.clone(), host_id.as_deref())?)
     } else {
         None
     };

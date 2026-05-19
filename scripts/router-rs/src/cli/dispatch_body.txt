@@ -33,14 +33,10 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
             Ok(())
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
-        RouterCommand::Codex { command } => dispatch_codex_command(command),
-        RouterCommand::Claude { command } => dispatch_claude_command(command),
-        RouterCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
-        RouterCommand::Cursor { command } => dispatch_cursor_command(command),
+        RouterCommand::Host { command } => dispatch_host_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
-        RouterCommand::Browser { command } => dispatch_browser_command(command),
-        RouterCommand::Profile { command } => dispatch_profile_command(command),
+        RouterCommand::Diagnose { command } => dispatch_diagnose_command(command),
         RouterCommand::Migrate { command } => dispatch_migrate_command(command),
         RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
         RouterCommand::Closeout { command } => dispatch_closeout_command(command),
@@ -62,10 +58,6 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
         FrameworkCommand::Doctor(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             run_framework_doctor(&repo_root)
-        }
-        FrameworkCommand::ContractSummary(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            print_json_value(&build_framework_contract_summary_envelope(&repo_root)?)
         }
         FrameworkCommand::SyncEntrypoints(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
@@ -142,6 +134,7 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
             print_json_value(&handle_step_ledger_operation(payload)?)
         }
         FrameworkCommand::Maint { command } => crate::framework_maint::dispatch(command),
+        FrameworkCommand::Skills { command } => dispatch_framework_skills(command),
         FrameworkCommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
             print_json_value(&payload)
@@ -150,26 +143,71 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
             println!("{}", crate::route::nl_route_signal_registry_names_json());
             Ok(())
         }
-        FrameworkCommand::Contracts => {
-            print_json_value(&build_control_plane_contract_descriptors())
+        FrameworkCommand::Contracts(command) => {
+            if command.summary {
+                let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+                print_json_value(&build_framework_contract_summary_envelope(&repo_root)?)
+            } else {
+                print_json_value(&build_control_plane_contract_descriptors())
+            }
         }
     }
 }
 
-fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
+fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String> {
+    use crate::framework_skills::{refresh_skills, validate_skills, SkillsCommand};
     match command {
-        CodexCommand::HookProjection => print_json_value(&build_codex_hook_projection()),
-        CodexCommand::Sync(command) => {
+        SkillsSubcommand::Validate(args) => {
+            let repo_root = resolve_repo_root_arg(args.framework_root.as_deref())?;
+            validate_skills(&repo_root)
+        }
+        SkillsSubcommand::Refresh {
+            repo_root,
+            write,
+            write_companions,
+        } => {
+            let repo_root = resolve_repo_root_arg(repo_root.as_deref())?;
+            refresh_skills(&SkillsCommand {
+                repo_root,
+                write,
+                write_companions,
+            })
+        }
+    }
+}
+
+/// Unified host command dispatcher (merged: codex, cursor, claude, claude-desktop)
+fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
+    match command {
+        HostCommand::Codex { command } => dispatch_codex_command(command),
+        HostCommand::Cursor { command } => dispatch_cursor_command(command),
+        HostCommand::Claude { command } => dispatch_claude_command(command),
+        HostCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
+    }
+}
+
+/// Unified diagnostic command dispatcher (merged: profile, browser)
+fn dispatch_diagnose_command(command: DiagnoseCommand) -> Result<(), String> {
+    match command {
+        DiagnoseCommand::Profile { command } => dispatch_profile_command(command),
+        DiagnoseCommand::Browser { command } => dispatch_browser_command(command),
+    }
+}
+
+fn dispatch_codex_command(command: CodexSubcommand) -> Result<(), String> {
+    match command {
+        CodexSubcommand::HookProjection => print_json_value(&build_codex_hook_projection()),
+        CodexSubcommand::Sync(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let provider = codex_host_entrypoint_provider(&repo_root)?;
             print_json_value(&sync_host_entrypoints(&repo_root, true, provider)?)
         }
-        CodexCommand::Check(command) => {
+        CodexSubcommand::Check(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let provider = codex_host_entrypoint_provider(&repo_root)?;
             print_json_value(&sync_host_entrypoints(&repo_root, false, provider)?)
         }
-        CodexCommand::Hook(command) => {
+        CodexSubcommand::Hook(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let event_name = command
                 .event
@@ -179,11 +217,11 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
             print_json_value(&codex_hook_stdout_payload(payload))?;
             Ok(())
         }
-        CodexCommand::HostIntegration(command) => {
+        CodexSubcommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
             print_json_value(&payload)
         }
-        CodexCommand::InstallHooks(command) => {
+        CodexSubcommand::InstallHooks(command) => {
             let resolved_codex_home = resolve_codex_home(command.codex_home.as_deref())?;
             let mode = if command.check {
                 InstallMode::Check
@@ -199,25 +237,25 @@ fn dispatch_codex_command(command: CodexCommand) -> Result<(), String> {
     }
 }
 
-fn dispatch_cursor_command(command: CursorCommand) -> Result<(), String> {
+fn dispatch_cursor_command(command: CursorSubcommand) -> Result<(), String> {
     match command {
-        CursorCommand::Hook(command) => {
+        CursorSubcommand::Hook(command) => {
             run_review_gate(&command.event, command.repo_root.as_deref())
         }
     }
 }
 
-fn dispatch_claude_command(command: ClaudeCommand) -> Result<(), String> {
+fn dispatch_claude_command(command: ClaudeSubcommand) -> Result<(), String> {
     match command {
-        ClaudeCommand::Hook(command) => {
+        ClaudeSubcommand::Hook(command) => {
             run_claude_hook_cli(&command.event, command.repo_root.as_deref())
         }
     }
 }
 
-fn dispatch_claude_desktop_command(command: ClaudeDesktopCommand) -> Result<(), String> {
+fn dispatch_claude_desktop_command(command: ClaudeDesktopSubcommand) -> Result<(), String> {
     match command {
-        ClaudeDesktopCommand::Agent(command) => {
+        ClaudeDesktopSubcommand::Agent(command) => {
             let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             run_claude_desktop_mcp_loop(Some(&root))
         }
@@ -298,9 +336,9 @@ fn dispatch_storage_command(command: StorageCommand) -> Result<(), String> {
     }
 }
 
-fn dispatch_browser_command(command: BrowserCommand) -> Result<(), String> {
+fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), String> {
     match command {
-        BrowserCommand::McpStdio(command) => run_browser_mcp_stdio_loop(
+        BrowserSubcommand::McpStdio(command) => run_browser_mcp_stdio_loop(
             command.repo_root.as_deref(),
             BrowserAttachConfig::from_cli_and_env(
                 command.runtime_attach_descriptor_path,
@@ -308,7 +346,7 @@ fn dispatch_browser_command(command: BrowserCommand) -> Result<(), String> {
                 command.headless,
             ),
         ),
-        BrowserCommand::ResolveAttachArtifact(command) => {
+        BrowserSubcommand::ResolveAttachArtifact(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let Some(path) =
                 resolve_browser_mcp_attach_artifact(&repo_root, command.search_root.as_deref())
@@ -321,13 +359,13 @@ fn dispatch_browser_command(command: BrowserCommand) -> Result<(), String> {
     }
 }
 
-fn dispatch_profile_command(command: ProfileCommand) -> Result<(), String> {
+fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), String> {
     match command {
-        ProfileCommand::Emit(command) => {
+        ProfileSubcommand::Emit(command) => {
             let profile = load_framework_profile(&command.framework_profile)?;
             print_json_value(&build_profile_bundle(&profile)?)
         }
-        ProfileCommand::Artifacts(command) => {
+        ProfileSubcommand::Artifacts(command) => {
             let profile = load_framework_profile(&command.framework_profile)?;
             print_json_value(&build_codex_artifact_bundle(&profile, command.full)?)
         }

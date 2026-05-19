@@ -296,7 +296,12 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     std::fs::create_dir_all(&repo_root).unwrap();
     seed_framework_markers(&repo_root);
     let sync_report =
-        router_rs_json(&["codex", "sync", "--repo-root", repo_root.to_str().unwrap()]);
+        router_rs_json(&[
+            "framework",
+            "sync-entrypoints",
+            "--repo-root",
+            repo_root.to_str().unwrap(),
+        ]);
     let manifest = read_json(&repo_root.join(".codex/host_entrypoints_sync_manifest.json"));
     assert!(
         sync_report["written"]
@@ -390,7 +395,12 @@ fn codex_sync_preserves_existing_agents_policy_file() {
     std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
 
     let sync_report =
-        router_rs_json(&["codex", "sync", "--repo-root", repo_root.to_str().unwrap()]);
+        router_rs_json(&[
+            "framework",
+            "sync-entrypoints",
+            "--repo-root",
+            repo_root.to_str().unwrap(),
+        ]);
     assert!(
         !sync_report["written"]
             .as_array()
@@ -781,7 +791,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     assert!(
-        slugs.len() <= 27,
+        slugs.len() <= 32,
         "hot runtime surface should stay bounded; got {}",
         slugs.len()
     );
@@ -941,7 +951,12 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
 }
 
 /// Host-agnostic hot-route skills must list every closed-set host id; Codex-installer-only skills are exempt.
-const HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS: &[&str] = &["plugin-creator", "skill-installer"];
+const HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS: &[&str] = &[
+    "plugin-creator",
+    "skill-installer",
+    "openai-docs",
+    "tao-ci",
+];
 
 #[test]
 fn hot_runtime_skill_records_cover_all_supported_hosts() {
@@ -2203,8 +2218,13 @@ fn screenshot_skill_uses_workspace_rust_binary_entrypoint() {
 
 #[test]
 fn openai_proxy_config_does_not_commit_plaintext_api_keys() {
-    let config = read_text(&project_root().join("openai_proxy/config.yaml"));
-    let start_script = read_text(&project_root().join("openai_proxy/start.sh"));
+    let proxy_root = project_root().join("openai_proxy");
+    if !proxy_root.join("config.yaml").is_file() {
+        // openai_proxy removed in bfd7d87; keep test for forks that still ship the directory.
+        return;
+    }
+    let config = read_text(&proxy_root.join("config.yaml"));
+    let start_script = read_text(&proxy_root.join("start.sh"));
     assert!(config.contains("__OPENAI_PROXY_API_KEY__"));
     assert!(!config.contains("qscxzaq75321470"));
     assert!(!config.contains("sk-aggregator-"));

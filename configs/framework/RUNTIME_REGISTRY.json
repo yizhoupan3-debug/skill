@@ -44,6 +44,7 @@
         "install_tool": "claude",
         "projection_status": "implemented",
         "installable": true,
+        "default_framework_command": "gsd",
         "host_entrypoints": [
           "AGENTS.md",
           ".claude/rules/framework.md",
@@ -54,6 +55,7 @@
         "install_tool": "claude-desktop",
         "projection_status": "implemented",
         "installable": true,
+        "default_framework_command": "gsd",
         "host_entrypoints": [
           "AGENTS.md",
           ".claude/CLAUDE.md"
@@ -74,7 +76,11 @@
       "general-purpose",
       "generalpurpose",
       "best-of-n-runner",
-      "bestofnrunner"
+      "bestofnrunner",
+      "review",
+      "reviewer",
+      "critic",
+      "code-review"
     ]
   },
   "framework_commands": {
@@ -276,6 +282,87 @@
       "lineage": {
         "source": "repo-native",
         "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor."
+      }
+    },
+    "gsd": {
+      "canonical_owner": "gsd",
+      "skill_path": "skills/gsd/SKILL.md",
+      "official_workflow": {
+        "phases": [
+          "exploration",
+          "planning",
+          "execution",
+          "verification",
+          "discussion",
+          "delivery"
+        ]
+      },
+      "implementation_bar": [
+        "adversarial-first",
+        "evidence-driven-verification",
+        "one-breath-wave-execution",
+        "multi-agent-with-lightweight-main-thread"
+      ],
+      "host_entrypoints": {
+        "codex-cli": "/gsd",
+        "cursor": "/gsd",
+        "claude-code": "/gsd",
+        "claude-desktop": "/gsd"
+      },
+      "entrypoint_modes": {
+        "new-project": {
+          "codex-cli": "/gsd-new-project",
+          "cursor": "/gsd-new-project",
+          "claude-code": "/gsd-new-project",
+          "claude-desktop": "/gsd-new-project"
+        },
+        "plan": {
+          "codex-cli": "/gsd-plan-phase",
+          "cursor": "/gsd-plan-phase",
+          "claude-code": "/gsd-plan-phase",
+          "claude-desktop": "/gsd-plan-phase"
+        },
+        "execute": {
+          "codex-cli": "/gsd-execute-phase",
+          "cursor": "/gsd-execute-phase",
+          "claude-code": "/gsd-execute-phase",
+          "claude-desktop": "/gsd-execute-phase"
+        },
+        "verify": {
+          "codex-cli": "/gsd-verify-work",
+          "cursor": "/gsd-verify-work",
+          "claude-code": "/gsd-verify-work",
+          "claude-desktop": "/gsd-verify-work"
+        },
+        "discuss": {
+          "codex-cli": "/gsd-discuss-phase",
+          "cursor": "/gsd-discuss-phase",
+          "claude-code": "/gsd-discuss-phase",
+          "claude-desktop": "/gsd-discuss-phase"
+        },
+        "ship": {
+          "codex-cli": "/gsd-ship",
+          "cursor": "/gsd-ship",
+          "claude-code": "/gsd-ship",
+          "claude-desktop": "/gsd-ship"
+        }
+      },
+      "interaction_invariants": {
+        "requires_explicit_entrypoint": true,
+        "explicit_entrypoints": [
+          "/gsd",
+          "/gsd-new-project",
+          "/gsd-plan-phase",
+          "/gsd-execute-phase",
+          "/gsd-verify-work",
+          "/gsd-discuss-phase",
+          "/gsd-ship"
+        ],
+        "implicit_route_policy": "never"
+      },
+      "lineage": {
+        "source": "repo-native",
+        "description": "GSD lifecycle commands for exploration through ship with adversarial review."
       }
     },
     "team": {

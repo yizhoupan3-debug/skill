@@ -116,7 +116,7 @@ cargo run --manifest-path /abs/path/to/framework-repo/scripts/router-rs/Cargo.to
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
-等价于：`refresh-host-projections` → `skill-compiler-rs --apply` → 默认离线契约测试 → `skill-compiler-rs` crate tests → `generated-artifacts-status` OK → 可选 host skill publish。
+等价于：`refresh-host-projections` → `framework skills refresh --write` → 默认离线契约测试 → `generated-artifacts-status` OK → 可选 host skill publish。
 
 默认离线套件包括：
 
@@ -128,7 +128,6 @@ cargo test --test rust_cli_tools
 cargo test --test host_integration
 cargo test --test browser_mcp_scripts
 cargo test --test codex_aggregator_rustification
-cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml
 ```
 
 可选外网套件：

@@ -23,7 +23,9 @@ pub enum LintSeverity {
 #[derive(Debug, Clone)]
 pub struct LintFinding {
     pub severity: LintSeverity,
+    #[allow(dead_code)]
     pub message: String,
+    #[allow(dead_code)]
     pub line_no: Option<usize>,
 }
 
@@ -102,7 +104,6 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
 
     // Check 3: verdict-like lines after a finding line → OK.
     // But if a verdict-like line (blocked|revise|ship) appears *before* any [P*]/Caveat: line → warn.
-    let verdict_keywords = ["blocked", "revise before merge", "ship with caveats", "revise"];
     let has_any_finding = non_blank_indices.iter().any(|&i| {
         let line = lines[i].trim();
         SEVERITY_PREFIX.is_match(line) || CAVEAT_PREFIX.is_match(line)

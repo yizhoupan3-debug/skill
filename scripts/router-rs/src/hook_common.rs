@@ -242,6 +242,46 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
         .into_owned()
 }
 
+fn framework_goal_entry_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)(^|\s)/(?:autopilot|gsd(?:-[a-z0-9-]+)?)\b").expect("invalid regex")
+    })
+}
+
+fn framework_non_goal_entry_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)(^|\s)/(autopilot|team|gitx|update|gsd(?:-[a-z0-9-]+)?)\b")
+            .expect("invalid regex")
+    })
+}
+
+/// `/autopilot` or `/gsd*` — arms goal continuity gates (Cursor hooks; shared heuristic).
+pub fn is_framework_goal_entry_prompt(text: &str) -> bool {
+    framework_goal_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+}
+
+pub fn is_autopilot_entrypoint_prompt(text: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/autopilot\b").expect("invalid regex"));
+    re.is_match(&strip_quoted_or_codeblock_or_url(text))
+}
+
+pub fn is_gsd_entrypoint_prompt(text: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        Regex::new(r"(?i)(^|\s)/gsd(?:-[a-z0-9-]+)?\b").expect("invalid regex")
+    });
+    re.is_match(&strip_quoted_or_codeblock_or_url(text))
+}
+
+/// Framework slash commands that may arm delegation (excludes goal-only entries).
+pub fn is_framework_non_goal_entrypoint_prompt(text: &str) -> bool {
+    let sanitized = strip_quoted_or_codeblock_or_url(text);
+    framework_non_goal_entry_re().is_match(&sanitized) && !is_framework_goal_entry_prompt(text)
+}
+
 pub fn is_narrow_review_prompt(text: &str) -> bool {
     if !review_keyword_re().is_match(text) {
         return false;

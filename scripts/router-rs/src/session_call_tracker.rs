@@ -6,7 +6,7 @@
 
 use crate::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{json, Value};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -118,6 +118,7 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// Record token usage in the session tracker.
+#[allow(dead_code)]
 pub fn record_token_usage(
     repo_root: &Path,
     input_tokens: u64,

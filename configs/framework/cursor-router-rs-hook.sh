@@ -5,6 +5,8 @@ EVENT="${1:-}"
 ROOT="${CURSOR_WORKSPACE_ROOT:-$PWD}"
 FW="${SKILL_FRAMEWORK_ROOT:-$ROOT}"
 
+FAIL_MSG='router-rs binary unavailable for critical Cursor hook; fail-closed instead of silently bypassing gate enforcement'
+
 critical_event() {
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
     beforesubmitprompt|stop|posttooluse|subagentstart|subagentstop)
@@ -12,6 +14,25 @@ critical_event() {
       ;;
     *)
       return 1
+      ;;
+  esac
+}
+
+emit_fail_closed_json() {
+  local ev
+  ev="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$ev" in
+    beforesubmitprompt)
+      printf '%s\n' "{\"continue\":false,\"user_message\":\"$FAIL_MSG\"}"
+      ;;
+    subagentstart)
+      printf '%s\n' "{\"permission\":\"deny\",\"user_message\":\"$FAIL_MSG\"}"
+      ;;
+    stop|posttooluse|subagentstop)
+      printf '%s\n' '{"continue":false,"user_message":"'"$FAIL_MSG"'"}'
+      ;;
+    *)
+      printf '%s\n' "{\"permission\":\"deny\",\"user_message\":\"$FAIL_MSG\"}"
       ;;
   esac
 }
@@ -38,11 +59,11 @@ fi
 
 if [ ! -x "$ROUTER_RS_BIN" ]; then
   if critical_event "$EVENT"; then
-    printf '%s\n' '{"permission":"deny","user_message":"router-rs binary unavailable for critical Cursor hook; fail-closed instead of silently bypassing gate enforcement"}'
-    exit 1
+    emit_fail_closed_json "$EVENT"
+    exit 2
   fi
   printf '%s\n' "[cursor-hook] router-rs binary unavailable for telemetry event $EVENT; fail-open" >&2
   exit 0
 fi
 
-exec "$ROUTER_RS_BIN" cursor hook --event="$EVENT" --repo-root "$ROOT"
+exec "$ROUTER_RS_BIN" host cursor hook --event="$EVENT" --repo-root "$ROOT"

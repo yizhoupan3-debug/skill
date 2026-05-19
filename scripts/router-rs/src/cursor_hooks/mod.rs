@@ -67,14 +67,8 @@ fn should_force_hook_state_lock_failure_for_test() -> bool {
     FORCE_CURSOR_HOOK_STATE_LOCK_FAILURE_FOR_TEST.with(|c| c.get())
 }
 
-// --- split fragments (same module scope via include!) ---
-include!("frag_01_continuity_intent.rs");
-include!("frag_02_gate_event.rs");
-include!("frag_03_paths_terminal_merge_lock_persist.rs");
-include!("frag_04_review_gate_runtime.rs");
-include!("frag_05_handlers_core.rs");
-include!("frag_06_session_terminal_kill.rs");
-include!("dispatch.rs");
+// --- cursor hooks handlers ---
+include!("handlers.rs");
 
 #[cfg(test)]
 mod tests {

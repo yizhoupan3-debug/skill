@@ -292,6 +292,7 @@ pub(crate) fn invalidate_records_cache() -> Result<(), String> {
 }
 
 /// Invalidate cache entry for specific paths.
+#[allow(dead_code)]
 pub(crate) fn invalidate_records_cache_for_paths(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,

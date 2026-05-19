@@ -6400,13 +6400,13 @@ fn subscribe_attached_runtime_events_returns_cursor_not_event_payload() {
 
 #[test]
 fn cli_parses_codex_hook_with_event_flag() {
-    let cli = Cli::try_parse_from(["router-rs", "codex", "hook", "--event", "Stop"])
-        .expect("parse codex hook --event");
-    let Some(RouterCommand::Codex {
-        command: CodexCommand::Hook(command),
+    let cli = Cli::try_parse_from(["router-rs", "host", "codex", "hook", "--event", "Stop"])
+        .expect("parse host codex hook --event");
+    let Some(RouterCommand::Host {
+        command: HostCommand::Codex { command: CodexSubcommand::Hook(command) },
     }) = cli.command
     else {
-        panic!("expected codex hook command");
+        panic!("expected host codex hook command");
     };
     assert_eq!(command.event.as_deref(), Some("Stop"));
     assert_eq!(command.name.as_deref(), None);
@@ -6415,12 +6415,12 @@ fn cli_parses_codex_hook_with_event_flag() {
 #[test]
 fn cli_parses_codex_hook_with_positional() {
     let cli =
-        Cli::try_parse_from(["router-rs", "codex", "hook", "Stop"]).expect("parse codex hook");
-    let Some(RouterCommand::Codex {
-        command: CodexCommand::Hook(command),
+        Cli::try_parse_from(["router-rs", "host", "codex", "hook", "Stop"]).expect("parse host codex hook");
+    let Some(RouterCommand::Host {
+        command: HostCommand::Codex { command: CodexSubcommand::Hook(command) },
     }) = cli.command
     else {
-        panic!("expected codex hook command");
+        panic!("expected host codex hook command");
     };
     assert_eq!(command.name.as_deref(), Some("Stop"));
     assert_eq!(command.event.as_deref(), None);
@@ -6428,13 +6428,13 @@ fn cli_parses_codex_hook_with_positional() {
 
 #[test]
 fn install_hooks_cli_repo_root_optional() {
-    let cli = Cli::try_parse_from(["router-rs", "codex", "install-hooks"])
-        .expect("parse install-hooks without repo-root");
-    let Some(RouterCommand::Codex {
-        command: CodexCommand::InstallHooks(command),
+    let cli = Cli::try_parse_from(["router-rs", "host", "codex", "install-hooks"])
+        .expect("parse host codex install-hooks without repo-root");
+    let Some(RouterCommand::Host {
+        command: HostCommand::Codex { command: CodexSubcommand::InstallHooks(command) },
     }) = cli.command
     else {
-        panic!("expected codex install-hooks command");
+        panic!("expected host codex install-hooks command");
     };
     assert!(command.repo_root.is_none());
 }

@@ -59,7 +59,7 @@
 | 宿主安装/入口 | 闭集宿主 id 来自 `host_targets.supported`，缺元数据 fail-closed；install 遍历只使用 `projection_status=implemented && installable=true` | `host_targets.metadata.<host>.install_tool`、`projection_status`、`installable` 与 `host_entrypoints` | `installable_host_id_and_skills_install_tool_pairs` |
 | L4 / L5 边界 | L4 只做 argv/stdin/超时/路径转发；L5 只承载 skill 契约与可读叙事 | `.cursor/rules/*.mdc`、Codex `AGENTS.md` 投影形状不同 | `host_entrypoints_sync_manifest` |
 | `${CODEX_HOME}/skills` | 表示 Codex 用户级 skill 投影根；仓库开发态优先 `skills/` | 仅 Codex install/sync 使用该 HOME 语义，Cursor 不复用 | `workspace_bootstrap_defaults.skills.user_dir` |
-| **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；**缺省或未写**时编译器按 `RUNTIME_REGISTRY.host_targets.supported` **全集**展开；可用 **`supported` / `all-hosts`** 令牌显式表达同一语义；运行 **`skill-compiler-rs --apply`** | 闭集 id 为 `codex-cli` / `codex-app` / `cursor` / `claude-code` / `qoder`；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由编译器归一 | `normalize_skill_host_platforms`（`scripts/skill-compiler-rs`）；`tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`**、**`hot_runtime_skill_records_cover_all_supported_hosts`** |
+| **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；**缺省或未写**时按 `RUNTIME_REGISTRY.host_targets.supported` **全集**展开；可用 **`supported` / `all-hosts`** 令牌显式表达同一语义；维护后运行 **`router-rs framework skills validate`**（可选 **`refresh --write`** 写 `SKILL_TIERS.json`） | 闭集 id 为 `codex-cli` / `codex-app` / `cursor` / `claude-code` / `claude-desktop`；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由路由层归一 | `tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`**、**`hot_runtime_skill_records_cover_all_supported_hosts`** |
 
 单行指针：五层模型见 [`harness_architecture.md`](harness_architecture.md)；Rust API / CLI 契约见 [`rust_contracts.md`](rust_contracts.md)；跨宿主语言、路由与执行协议见仓库根 [`../AGENTS.md`](../AGENTS.md)。
 
@@ -165,7 +165,7 @@
 
 **PR 顺序（建议单行记忆）**：`RUNTIME_REGISTRY`（及测试夹具中的最小 registry）→ `framework_host_targets` → `<host>_hooks` + `main` mod → `dispatch`（含 `dispatch_body.txt`）→ `host_integration` → L4 `hooks.json` → `tests/host_integration` / `tests/policy_contracts`。
 
-**本仓库日常「接满」技能与路由（开发者在改 skill / registry 后）**：`cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- --skills-root skills --source-manifest skills/SKILL_SOURCE_MANIFEST.json --apply` → `router-rs framework sync-entrypoints --repo-root "$PWD"` → 按需 `router-rs framework host-integration install --to <codex|cursor|claude|qoder>`（`installable` 宿主）。
+**本仓库日常「接满」技能与路由（开发者在改 skill / registry 后）**：`router-rs framework skills validate --repo-root "$PWD"`（可选 `framework skills refresh --write`）→ `router-rs framework sync-entrypoints --repo-root "$PWD"` → 按需 `router-rs framework host-integration install --to <codex|cursor|claude>`（`installable` 宿主）。
 
 | 阶段 | 主要落点 |
 |------|----------|

@@ -1692,6 +1692,35 @@
         "cursor"
       ],
       "cold"
+    ],
+    [
+      "gsd",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "GSD lifecycle commands for end-to-end project management with adversarial review and multi-agent execution. Use when the user invokes /gsd, /gsd-new-project, /gsd-plan-phase, /gsd-execute-phase, /gsd-verify-work, /gsd-discuss-phase, or /gsd-ship.",
+      "n/a",
+      [
+        "/gsd",
+        "/gsd-new-project",
+        "/gsd-plan-phase",
+        "/gsd-execute-phase",
+        "/gsd-verify-work",
+        "/gsd-discuss-phase",
+        "/gsd-ship"
+      ],
+      "project",
+      3,
+      "skills/gsd/SKILL.md",
+      [
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
     ]
   ]
 }

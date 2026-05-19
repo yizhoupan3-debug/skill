@@ -69,6 +69,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root
 
 ## Skill Routing
 
+- **Claude Code 默认生命周期**：GSD（`/gsd-new-project` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-discuss-phase` → `/gsd-ship`），见 `skills/gsd/SKILL.md`。`/autopilot` 仍为 opt-in 的 goal-style 连续执行入口（`skills/autopilot/SKILL.md`）。
 - 第一入口是当前生效 skill root 下的 `skills/SKILL_ROUTING_RUNTIME.json`。
 - 产品/IDE 内「Autopilot」文案通常不等同于本仓库 `skills/autopilot` 的 `/autopilot` harness；以该 skill 与 `docs/harness_architecture.md` 为准。
 - 命中 skill 后，只读 runtime 记录里的 `skill_path` 对应文件；这就是合规读取 skill，不等于禁止使用 skill。

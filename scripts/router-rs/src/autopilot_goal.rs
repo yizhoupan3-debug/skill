@@ -61,6 +61,7 @@ pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
 }
 
 /// Validate that the task directory exists. Returns the path if valid, None if task_id is invalid.
+#[allow(dead_code)]
 pub fn validate_task_directory_exists(repo_root: &Path, task_id: &str) -> Option<PathBuf> {
     let tid = crate::path_guard::safe_task_id_component(task_id)?;
     let task_dir = repo_root.join("artifacts/current").join(tid);

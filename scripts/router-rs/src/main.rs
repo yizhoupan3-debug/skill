@@ -17,6 +17,7 @@ mod framework_host_targets;
 mod framework_maint;
 mod framework_profile;
 mod framework_runtime;
+mod framework_skills;
 mod harness_context_signals;
 mod harness_contract;
 mod harness_operator_nudges;

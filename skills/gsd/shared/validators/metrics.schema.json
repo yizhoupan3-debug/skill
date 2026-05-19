@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GSD Metrics",
+  "description": "METRICS.json schema for execution tracking",
+  "type": "object",
+  "required": ["schema_version", "task_id", "session_id", "created_at"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "gsd-metrics-v1"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9-]+$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["command_id", "command", "started_at", "status"],
+        "properties": {
+          "command_id": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "completed", "failed"]
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input_start": { "type": "integer" },
+              "input_end": { "type": "integer" },
+              "output_start": { "type": "integer" },
+              "output_end": { "type": "integer" }
+            }
+          },
+          "rtk_savings": {
+            "type": "object",
+            "properties": {
+              "saved_tokens": { "type": "integer" },
+              "savings_percent": { "type": "number" }
+            }
+          },
+          "subagent_count": {
+            "type": "integer"
+          },
+          "parallel_degree": {
+            "type": "number"
+          },
+          "evidence_count": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "aggregates": {
+      "type": "object",
+      "properties": {
+        "total_commands": { "type": "integer" },
+        "completed_commands": { "type": "integer" },
+        "total_tokens_saved": { "type": "integer" },
+        "avg_rtk_savings_percent": { "type": "number" },
+        "total_subagent_calls": { "type": "integer" },
+        "avg_parallel_degree": { "type": "number" }
+      }
+    }
+  }
+}

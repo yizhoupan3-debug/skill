@@ -37,16 +37,18 @@ jobs:
       - name: Cursor bootstrap + workspace hooks template sanity
         run: |
           bash -n scripts/cursor-bootstrap-framework.sh
+          bash -n configs/framework/cursor-router-rs-hook.sh
+          bash -n configs/framework/claude-router-rs-hook.sh
           python3 -m json.tool configs/framework/cursor-hooks.workspace-template.json > /dev/null
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Compile skill registry
+      - name: Build router-rs
+        run: cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+
+      - name: Validate skill registry
         run: |
-          cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
-            --skills-root skills \
-            --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-            --apply
+          cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate --framework-root "$PWD"
 
       - name: Run Rust policy tests
         run: cargo test --test policy_contracts
@@ -71,12 +73,8 @@ jobs:
 
       - name: Check generated artifact drift
         run: |
-          cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
-            --skills-root skills \
-            --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
-            --apply
-          cargo build --release --manifest-path scripts/router-rs/Cargo.toml
-          ./scripts/router-rs/target/release/router-rs \
+          cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
+          cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- \
             framework host-integration generated-artifacts-status \
             --framework-root "$PWD" > generated-artifacts-status.json
           python - <<'PY'
@@ -88,12 +86,8 @@ jobs:
           if not status.get("ok"):
               print(json.dumps(status.get("manifest_status", {}), ensure_ascii=False, indent=2))
               for artifact in status.get("generated_artifacts", []):
-                  if not artifact.get("clean"):
+                  if artifact.get("status") != "ok":
                       print(json.dumps(artifact, ensure_ascii=False, indent=2))
               sys.exit(1)
+          print("generated-artifacts-status: ok")
           PY
-          mapfile -t generated_paths < <(jq -r '.generated_artifacts[].path' configs/framework/GENERATED_ARTIFACTS.json)
-          if ! git diff --quiet -- "${generated_paths[@]}"; then
-            echo "::error::Generated skill artifacts or shared CLI entrypoints are out of date after regeneration."
-            exit 1
-          fi

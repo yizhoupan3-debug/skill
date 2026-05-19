@@ -915,6 +915,8 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
             | ".cursor/rules/framework.mdc"
             | ".claude/rules/framework.md"
             | ".claude/settings.json"
+            | ".claude/CLAUDE.md"
+            | ".claude/mcp.json"
     )
 }
 
@@ -2094,9 +2096,8 @@ fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathB
 }
 
 fn build_router_rs_claude_hook_command(event: &str) -> String {
-    let missing_binary_fallback = "printf \"%s\\n\" \"{\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"router-rs binary unavailable for Claude hook\\\",\\\"suppressOutput\\\":true}\"; exit 1";
     format!(
-        "/usr/bin/env bash -lc 'HOOK_PAYLOAD=\"$(cat)\"; CLAUDE_PROJECT_ROOT=\"${{CLAUDE_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; if [[ -r \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\" ]]; then set -a; . \"$CLAUDE_PROJECT_ROOT/.claude/router-rs-hook.env\"; set +a; fi; ROUTER_RS_BIN=\"\"; for candidate in \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/release/router-rs\" \"$CLAUDE_PROJECT_ROOT/target/debug/router-rs\" \"$(command -v router-rs 2>/dev/null || true)\"; do if [ -n \"$candidate\" ] && [ -x \"$candidate\" ] && \"$candidate\" claude hook --help >/dev/null 2>&1; then ROUTER_RS_BIN=\"$candidate\"; break; fi; done; if [ ! -x \"$ROUTER_RS_BIN\" ]; then {missing_binary_fallback}; fi; printf \"%s\" \"$HOOK_PAYLOAD\" | \"$ROUTER_RS_BIN\" claude hook --event={event} --repo-root \"$CLAUDE_PROJECT_ROOT\"'"
+        "/usr/bin/env bash \"${{SKILL_FRAMEWORK_ROOT:-${{CLAUDE_PROJECT_ROOT:-$PWD}}}}/configs/framework/claude-router-rs-hook.sh\" {event}"
     )
 }
 
@@ -2112,7 +2113,11 @@ fn managed_claude_hook_entry(event: &str) -> Value {
 
 fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
     match value {
-        Value::String(s) => s.contains("router-rs") && s.contains("claude hook"),
+        Value::String(s) => {
+            s.contains("claude-router-rs-hook.sh")
+                || (s.contains("router-rs") && s.contains("claude hook"))
+                || s.contains(".claude/hooks/router-rs-hook.sh")
+        }
         Value::Array(items) => items.iter().any(value_contains_router_rs_claude_hook),
         Value::Object(map) => map.values().any(value_contains_router_rs_claude_hook),
         _ => false,
@@ -2347,7 +2352,7 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n**Default lifecycle on Claude: GSD** (`/gsd-new-project` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-discuss-phase` → `/gsd-ship`). `/autopilot` remains opt-in legacy goal-style execution (`skills/autopilot/SKILL.md`).\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
     )
 }
 

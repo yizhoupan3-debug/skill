@@ -28,4 +28,10 @@ sync-entrypoints:
     cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
         framework sync-entrypoints --repo-root "{{PWD}}"
 
+publish:
+    ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+
+doctor:
+    cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "{{PWD}}"
+
 ci: compile-skills test-all

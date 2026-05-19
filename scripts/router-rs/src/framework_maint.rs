@@ -120,18 +120,26 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     run_router(
         &fw,
         &[
-            "codex",
-            "sync",
+            "framework",
+            "sync-entrypoints",
             "--repo-root",
             fw.to_string_lossy().as_ref(),
         ],
     )?;
 
     let installable_tools = installable_projection_tools(&fw)?;
-    for tool in installable_tools
+    // claude-desktop shares `.claude/.framework-projection.json` with claude-code;
+    // install claude-code last so verify_claude_projection sees the Code manifest.
+    let mut projection_tools: Vec<String> = installable_tools
         .iter()
         .filter(|tool| tool.as_str() != "codex")
-    {
+        .cloned()
+        .collect();
+    if let Some(idx) = projection_tools.iter().position(|t| t == "claude") {
+        let claude = projection_tools.remove(idx);
+        projection_tools.push(claude);
+    }
+    for tool in &projection_tools {
         run_router(
             &fw,
             &[
@@ -166,9 +174,6 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String>
     )?;
     let mut tools = Vec::new();
     for (_host_id, tool) in pairs {
-        if tool == "claude" {
-            continue;
-        }
         if !tools.contains(&tool) {
             tools.push(tool);
         }
@@ -181,7 +186,7 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
         match tool.as_str() {
             "codex" => verify_codex_hooks(repo_root.to_path_buf())?,
             "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
-            "claude" => verify_claude_projection(repo_root)?,
+            "claude" | "claude-desktop" => verify_claude_projection(repo_root)?,
             other => {
                 return Err(format!(
                     "installable projection tool `{other}` has no maint verifier"
@@ -224,7 +229,7 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         "subagentStart",
         "subagentStop",
     ];
-    const ROUTER_NEEDLE: &str = "router-rs cursor hook";
+    const ROUTER_NEEDLE: &str = "cursor-router-rs-hook.sh";
     const LAUNCHER_NEEDLE: &str = "cursor-router-rs-hook.sh";
 
     for event in REQUIRED_EVENTS {
@@ -252,8 +257,61 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         }
     }
 
+    verify_cursor_launcher_fail_closed(&repo_root)?;
     run_cursor_smoke_session_start(&repo_root)?;
     eprintln!("verify_cursor_hooks: ok");
+    Ok(())
+}
+
+fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
+    let launcher = repo_root.join("configs/framework/cursor-router-rs-hook.sh");
+    if !launcher.is_file() {
+        return Err(format!(
+            "verify_cursor_hooks: missing launcher {}",
+            launcher.display()
+        ));
+    }
+    let script = fs::read_to_string(&launcher).map_err(|e| e.to_string())?;
+    for needle in [
+        "emit_fail_closed_json",
+        "exit 2",
+        "\"continue\":false",
+        "beforesubmitprompt",
+    ] {
+        if !script.contains(needle) {
+            return Err(format!(
+                "verify_cursor_hooks: launcher must contain `{needle}` (fail-closed contract)"
+            ));
+        }
+    }
+
+    let empty_ws = std::env::temp_dir().join(format!(
+        "verify-cursor-launcher-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&empty_ws).map_err(|e| e.to_string())?;
+
+    let output = Command::new("/bin/bash")
+        .arg(&launcher)
+        .arg("BeforeSubmitPrompt")
+        .env_remove("ROUTER_RS_BIN")
+        .env("PATH", "/usr/bin:/bin")
+        .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
+        .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if output.status.code() != Some(2) {
+        return Err(format!(
+            "verify_cursor_hooks: launcher missing binary must exit 2 for BeforeSubmitPrompt (got {:?}); stdout={stdout}",
+            output.status.code()
+        ));
+    }
+    if !stdout.contains("\"continue\":false") {
+        return Err(format!(
+            "verify_cursor_hooks: BeforeSubmitPrompt fail-closed must emit continue:false; stdout={stdout}"
+        ));
+    }
     Ok(())
 }
 
@@ -291,7 +349,9 @@ fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
             .get("hooks")
             .and_then(|hooks| hooks.get(event))
             .map(|value| {
-                value.to_string().contains("router-rs") && value.to_string().contains("claude hook")
+                let serialized = value.to_string();
+                (serialized.contains("router-rs") && serialized.contains("claude hook"))
+                    || serialized.contains("claude-router-rs-hook.sh")
             })
             .unwrap_or(false);
         if !has_hook {
@@ -308,6 +368,7 @@ fn run_cursor_smoke_session_start(repo_root: &Path) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let status = Command::new(&exe)
         .args([
+            "host",
             "cursor",
             "hook",
             "--event=SessionStart",
@@ -570,6 +631,7 @@ fn codex_hook_smoke(
 ) -> Result<(), String> {
     let mut child = Command::new(exe)
         .args([
+            "host",
             "codex",
             "hook",
             "--event",
@@ -624,19 +686,21 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         artifact_root: Some(art.clone()),
     })?;
 
-    let skill_compiler = fw.join("scripts/skill-compiler-rs/Cargo.toml");
+    let router_manifest = fw.join("scripts/router-rs/Cargo.toml");
     run_cargo(
         &fw,
         &[
             "run",
+            "--quiet",
             "--manifest-path",
-            skill_compiler.to_string_lossy().as_ref(),
+            router_manifest.to_string_lossy().as_ref(),
             "--",
-            "--skills-root",
+            "framework",
             "skills",
-            "--source-manifest",
-            "skills/SKILL_SOURCE_MANIFEST.json",
-            "--apply",
+            "refresh",
+            "--framework-root",
+            &fw.to_string_lossy(),
+            "--write",
         ],
     )?;
 
@@ -658,16 +722,6 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         );
         run_cargo(&fw, &["test", "--test", "autoresearch_cli"])?;
     }
-
-    eprintln!("cargo test → skill-compiler-rs");
-    run_cargo(
-        &fw,
-        &[
-            "test",
-            "--manifest-path",
-            skill_compiler.to_string_lossy().as_ref(),
-        ],
-    )?;
 
     let status_json = run_host_integration_from_args(&[
         "generated-artifacts-status".into(),
@@ -692,10 +746,10 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         run_router(
             &fw,
             &[
-                "codex",
+                "framework",
                 "host-integration",
                 "install-skills",
-                "--repo-root",
+                "--framework-root",
                 fw.to_string_lossy().as_ref(),
                 "--artifact-root",
                 art.to_string_lossy().as_ref(),
@@ -1103,6 +1157,7 @@ fn install_codex_user_hooks(args: InstallCodexUserHooksArgs) -> Result<(), Strin
     fs::create_dir_all(&codex_home).map_err(|e| e.to_string())?;
     let status = Command::new(&bin)
         .args([
+            "host",
             "codex",
             "install-hooks",
             "--codex-home",
@@ -1309,7 +1364,7 @@ fn clean_orphan_directories(repo_root: &Path, dry_run: bool, ttl_days: u64) -> R
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_secs()
-        .saturating_sub(ttl_days as u64 * 24 * 60 * 60);
+        .saturating_sub(ttl_days * 24 * 60 * 60);
 
     let mut orphans: Vec<(PathBuf, u64)> = Vec::new();
 

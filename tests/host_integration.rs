@@ -79,7 +79,18 @@ fn cursor_hooks_template_matches_repo_hook_events_and_timeouts() {
             template_command.contains("cursor-router-rs-hook.sh"),
             "template Cursor hook {key} must use the router-rs launcher: {template_command}"
         );
+        assert_eq!(
+            normalize_cursor_hook_command(repo_command),
+            normalize_cursor_hook_command(template_command),
+            "repo and template command must match after SKILL_FRAMEWORK_ROOT normalization for {key}"
+        );
     }
+}
+
+fn normalize_cursor_hook_command(command: &str) -> String {
+    command
+        .replace("${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}", "${ROOT}")
+        .replace("${CURSOR_WORKSPACE_ROOT:-$PWD}", "${ROOT}")
 }
 
 fn first_cursor_hook_timeout(value: &Value) -> Option<i64> {
@@ -541,29 +552,28 @@ fn install_skills_claude_target_installs_only_claude() {
             panic!("expected Claude settings hook entries for {event}: {settings:?}")
         });
         assert!(
-            entries
-                .iter()
-                .any(|entry| entry.to_string().contains("router-rs")
-                    && entry.to_string().contains("claude hook --help")
-                    && entry.to_string().contains(&format!("--event={event}"))),
-            "expected managed router-rs Claude hook for {event}: {entries:?}"
+            entries.iter().any(|entry| {
+                entry
+                    .to_string()
+                    .contains("claude-router-rs-hook.sh")
+                    && entry.to_string().contains(event)
+            }),
+            "expected managed Claude launcher hook for {event}: {entries:?}"
         );
     }
     let pre_tool_command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         .as_str()
         .expect("claude hook command");
     assert!(
-        pre_tool_command.contains("HOOK_PAYLOAD")
-            && pre_tool_command.contains("claude hook --event=PreToolUse"),
-        "Claude hook command must forward stdin to router-rs (Cursor-shaped payloads are filtered in Rust, not in Bash): {pre_tool_command}"
+        pre_tool_command.contains("claude-router-rs-hook.sh")
+            && pre_tool_command.contains("PreToolUse"),
+        "Claude hook command must invoke launcher script: {pre_tool_command}"
     );
     let fallback = Command::new("/bin/sh")
         .arg("-c")
         .arg(pre_tool_command)
-        .env(
-            "CLAUDE_PROJECT_ROOT",
-            tmp.path().join("missing-router-root"),
-        )
+        .env("CLAUDE_PROJECT_ROOT", &repo_root)
+        .env("SKILL_FRAMEWORK_ROOT", project_root())
         .env("PATH", "/bin:/usr/bin")
         .output()
         .expect("run claude fallback command");
@@ -1632,6 +1642,7 @@ fn install_skills_repo_root_alias_does_not_fill_project_root() {
     std::fs::create_dir_all(&project_root).unwrap();
 
     let mut command = router_rs_command([
+        "host",
         "codex",
         "host-integration",
         "install-skills",
@@ -1809,6 +1820,7 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
         project_root.to_str().unwrap(),
     ]);
     let codex_status = router_rs_json(&[
+        "host",
         "codex",
         "host-integration",
         "status",
@@ -1929,6 +1941,7 @@ fn runtime_registry_missing_file_fails_closed_with_actionable_error() {
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
     let output = run(router_rs_command([
+        "host",
         "codex",
         "host-integration",
         "export-runtime-registry",
@@ -2035,7 +2048,13 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["supported"],
-        json!(["codex-cli", "codex-app", "cursor", "claude-code"])
+        json!([
+            "codex-cli",
+            "codex-app",
+            "cursor",
+            "claude-code",
+            "claude-desktop"
+        ])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["codex-cli"]["install_tool"],
