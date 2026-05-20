@@ -7,10 +7,13 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
     crate::hook_timing::mark_hook_start();
     let result = (|| -> Result<(), String> {
         let payload = crate::cursor_hooks::read_cursor_hook_stdin_json()?;
-        let repo_root = crate::cursor_hooks::resolve_cursor_hook_repo_root(cli_repo_root, &payload)?;
-        let mut output = crate::cursor_hooks::dispatch_cursor_hook_event(&repo_root, event, &payload);
+        let repo_root =
+            crate::cursor_hooks::resolve_cursor_hook_repo_root(cli_repo_root, &payload)?;
+        let mut output =
+            crate::cursor_hooks::dispatch_cursor_hook_event(&repo_root, event, &payload);
         crate::autopilot_goal::scrub_followup_fields_in_hook_output(&mut output);
         crate::cursor_hooks::apply_cursor_hook_output_policy(&mut output);
+        crate::cursor_hooks::apply_cursor_hook_silent_policy(&mut output);
         let mut stdout = std::io::stdout();
         let serialized = serde_json::to_string(&output).map_err(|e| e.to_string())?;
         stdout

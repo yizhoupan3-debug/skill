@@ -127,7 +127,7 @@
 
 **Cursor 排障（短）**：
 
-- **`fork_context` 缺省**：仅当载荷中 **`fork_context`/`forkContext` 可解析为布尔 `false`** 时视为独立上下文子代理；**缺字段 ≠ false**，可能影响 pre-goal / `REVIEW_GATE` 相位，见 [`review_gate_engine.rs`](../scripts/router-rs/src/review_gate_engine.rs) 与 [`harness_architecture.md`](harness_architecture.md) **§5.0**（含 JSON 整数 `0`/`1` 与 multiset / `subagentStop` 核销说明）。
+- **`fork_context` 缺省（Cursor）**：默认 **`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 开启**时，可数深度 lane 且字段缺失可推断为 `false`；关闭后与 Codex 一致——**仅**可解析为布尔 `false` 时计独立证据。显式 `fork_context: true` 永不算。见 [`cursor_review_independent_fork`](../scripts/router-rs/src/review_gate_engine.rs) 与 harness **§5.0**。
 - **磁盘 `GOAL_STATE` 与 pre-goal**：若需收紧「仅凭盘上 GOAL 即在 beforeSubmit 视同 pre-goal 已满足」的信任边界，见 [`harness_architecture.md`](harness_architecture.md) §5 中 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`。
 - **`cursor-router-rs-hook.sh` 与 exit code**：对 **critical** 事件（如 beforeSubmit/Stop/postToolUse/subagentStart/subagentStop）在 `router-rs` 缺失时 **fail-closed**；其余事件 **fail-open**（stderr 提示 + exit 0）。仅看 exit code 时可能漏判 SessionStart 等是否实际注入了上下文。
 - **仿宿主续跑行**：若在聊天区看到 `RG_FOLLOWUP` 等**无 `router-rs ` 前缀**的仿机读行，勿当 hook 真源；以 hook stdout JSON 为准，说明见 [`harness_architecture.md`](harness_architecture.md) **§4.3**。

@@ -57,7 +57,27 @@ pub(crate) fn independent_context_fork(fork: Option<bool>) -> bool {
 }
 
 pub(crate) fn independent_reviewer_evidence(review_lane: bool, fork: Option<bool>) -> bool {
-    review_lane && independent_context_fork(fork)
+    review_lane && cursor_review_independent_fork(fork, review_lane)
+}
+
+/// Cursor-only: when `fork_context` is absent on a deep review lane payload, optionally treat as
+/// independent fork (`false`). Explicit `fork_context: true` never infers. Off when
+/// `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` is disabled.
+pub(crate) fn cursor_review_independent_fork(fork: Option<bool>, deep_review_lane: bool) -> bool {
+    if independent_context_fork(fork) {
+        return true;
+    }
+    if fork == Some(true) {
+        return false;
+    }
+    if !deep_review_lane {
+        return false;
+    }
+    if !crate::router_env_flags::router_rs_cursor_review_fork_context_missing_infer_false_enabled()
+    {
+        return false;
+    }
+    matches!(fork, None)
 }
 
 pub(crate) fn review_gate_armed(required: bool, override_seen: bool) -> bool {
@@ -100,5 +120,26 @@ mod fork_context_parse_tests {
             fork_context_from_values(&json!({"fork_context": "false"}), None),
             Some(false)
         );
+    }
+
+    #[test]
+    fn cursor_review_independent_fork_infers_missing_fork_on_deep_lane() {
+        let prev = std::env::var_os("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+        std::env::set_var(
+            "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+            "1",
+        );
+        assert!(cursor_review_independent_fork(None, true));
+        assert!(!cursor_review_independent_fork(Some(true), true));
+        assert!(!cursor_review_independent_fork(None, false));
+        match prev {
+            Some(v) => std::env::set_var(
+                "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+                v,
+            ),
+            None => {
+                std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
+            }
+        }
     }
 }

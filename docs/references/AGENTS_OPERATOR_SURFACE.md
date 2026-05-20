@@ -22,6 +22,9 @@
 
 | 变量 | 作用 |
 |------|------|
+| `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | hook-state 按龄清扫（默认 7；`0` 关闭） |
+| `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review `pending_cycle_keys` 上限（默认 32） |
+| `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `SESSION_CALL_TRACKER` `per_tool` 键上限（默认 128） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0` | 关闭 SessionEnd 终端回收 |
 | `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy` | 旧「全仓库 active terminal」清扫 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal |

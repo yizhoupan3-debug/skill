@@ -10,6 +10,7 @@
 //! - `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`
 //! - `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` → [`router_rs_cursor_hook_state_legacy_full_sweep_enabled`]
 //! - `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` → [`router_rs_cursor_pre_goal_strict_disk_enabled`]
+//! - `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` → [`router_rs_cursor_review_fork_context_missing_infer_false_enabled`]
 //! - `ROUTER_RS_TASK_LEDGER_FLOCK` → [`router_rs_task_ledger_flock_enabled`]（跨进程账本 flock，默认启用）
 //! - `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` → [`router_rs_cursor_hook_outbound_context_max_bytes`]（出站 UTF-8 **字节**上限）
 //! - `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` → [`router_rs_cursor_sessionstart_context_max_bytes`]
@@ -29,10 +30,19 @@ const ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV: &str =
 const ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP_ENV: &str =
     "ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP";
 const ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV: &str = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
+const ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
+    "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
 const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
 const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
 const ROUTER_RS_CURSOR_CARGO_CHECK_SYNC_ENV: &str = "ROUTER_RS_CURSOR_CARGO_CHECK_SYNC";
 const ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC_ENV: &str = "ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC";
+const ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS_ENV: &str =
+    "ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS";
+const ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV: &str =
+    "ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX";
+const ROUTER_RS_CURSOR_HOOK_SILENT_ENV: &str = "ROUTER_RS_CURSOR_HOOK_SILENT";
+const ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV: &str =
+    "ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX";
 
 /// GSD **pre-goal** nudge（legacy env 名 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）仍保持显式 opt-in。
 pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
@@ -47,13 +57,21 @@ pub fn router_rs_cursor_hook_state_legacy_full_sweep_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP_ENV)
 }
 
-/// Cursor：beforeSubmit 路径上是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
+/// Cursor：是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
 ///
 /// 默认 **关闭**（与历史一致：盘上已有 GOAL 可跳过 pre-goal nag）。**仅**当
 /// `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=1|true|yes|on` 时开启，用于降低 checkout/遗留
-/// `artifacts/current` 带入的旧 GOAL 误放行 pre-goal 的风险；Stop 路径（`arm_if_goal_file`）不受影响。
+/// `artifacts/current` 带入的旧 GOAL 误放行 pre-goal 的风险（beforeSubmit **与** Stop 均适用）。
 pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV)
+}
+
+/// Cursor：当 subagent 事件**未**携带可解析的 `fork_context` 时，是否将可数深度 lane 视为 `fork_context=false`。
+///
+/// 默认 **开启**（`unset` 或非 `0`/`false`/`off`/`no`）。显式 `fork_context: true` 仍阻断独立上下文证据。
+/// 关闭后恢复 harness §5.0「缺字段≠false」语义。
+pub fn router_rs_cursor_review_fork_context_missing_infer_false_enabled() -> bool {
+    router_rs_env_enabled_default_true(ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
 }
 
 /// `ROUTER_RS_TASK_LEDGER_FLOCK`：是否对「任务账本」写入使用 `artifacts/current` 旁路 sentinel 文件的 `flock`。
@@ -78,6 +96,45 @@ pub fn router_rs_cursor_hook_state_dir_sync_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC_ENV)
 }
 
+/// Age-based stale sweep for `.cursor/hook-state/` owned files (default **7** days).
+///
+/// `0` / `false` / `off` / `no` disables; `LEGACY_FULL_SWEEP` remains opt-in full wipe.
+pub fn router_rs_cursor_hook_state_stale_sweep_days() -> u64 {
+    match env::var(ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS_ENV) {
+        Err(_) => 7,
+        Ok(raw) => {
+            let t = raw.trim().to_ascii_lowercase();
+            if matches!(t.as_str(), "0" | "false" | "off" | "no") {
+                return 0;
+            }
+            match raw.trim().parse::<u64>() {
+                Ok(n) => n,
+                Err(_) => {
+                    eprintln!(
+                        "[router-rs] invalid {ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS_ENV}={raw:?}; using default 7"
+                    );
+                    7
+                }
+            }
+        }
+    }
+}
+
+/// Max entries in `review_subagent_pending_cycle_keys` (default **32**).
+pub fn router_rs_cursor_review_pending_cycle_max() -> usize {
+    parse_router_rs_usize_clamped(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, 32, 1, 256)
+}
+
+/// Max distinct tool names in `SESSION_CALL_TRACKER.json` `per_tool` (default **128**).
+pub fn router_rs_session_call_tracker_tool_keys_max() -> usize {
+    parse_router_rs_usize_clamped(
+        ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV,
+        128,
+        16,
+        4096,
+    )
+}
+
 /// 与历史实现一致：空字符串经 trim 后不属于关闭词，仍视为启用。
 pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
     match env::var(var_name) {
@@ -98,6 +155,11 @@ pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
         }
         Err(_) => false,
     }
+}
+
+/// `ROUTER_RS_CURSOR_HOOK_SILENT=1`：剥 advisory `additional_context`；保留 `router-rs ` 硬短码 followup。
+pub fn router_rs_cursor_hook_silent_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_SILENT_ENV)
 }
 
 /// `ROUTER_RS_OPERATOR_INJECT`：聚合关断 advisory 注入；硬门控短码不受此开关影响。

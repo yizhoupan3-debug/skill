@@ -42,13 +42,36 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 
 `subagentStart` 拒绝文案中的「`max_concurrent_subagents_limit` 契约」指 **24** 上限常量，不是信封里的 8。
 
+## 状态有界 / 内存（hook 子进程）
+
+当前为 **一 hook 一 `router-rs` 进程**（无 warm daemon）：跨调用的堆泄漏风险低；主要控制 **磁盘累积** 与 **单次 hook RSS 尖峰**。
+
+| 机制 | 默认 | 说明 |
+|------|------|------|
+| `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | `7`（`0` 关闭） | SessionEnd/Start 按 mtime/`updated_at` 清扫陈旧 `.cursor/hook-state/` 自有前缀文件；**不删**当前 `session_key` 与近期并行会话 |
+| `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP=1` | 关 | 全目录前缀清扫（多会话互删风险，仅运维 opt-in） |
+| SessionStart `init_tracker` | 每会话重置 | `artifacts/current/SESSION_CALL_TRACKER.json` |
+| `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `128` | `per_tool` 键数上限；满时淘汰**调用计数最低**的工具名 |
+| `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | `32` | `review_subagent_pending_cycle_keys` 上限（满则拒绝新 key）+ stale prune |
+| `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | `7200`（`0` 关闭自动回收） | open subagent / pending stale 阈值；`0` 不 prune pending |
+| SessionStart `SESSION_SUMMARY` | 前缀读 | 预算 ≈ sessionstart max + 512 字节，再出站截断 |
+| Stop / signal assistant | tail `4096` 字符 | `hook_common::hook_assistant_tail_window` |
+| Terminal 观察缓存 | 进程内 ≤8 目录 | `terminal_observation_cache`（`Arc` + mtime） |
+
 ## 常用 env
 
 | 变量 | 作用 |
 |------|------|
 | `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` | 关闭 Stop 续跑注入（兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（绑定 `/gsd-execute-phase`） |
-| `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 压制非必要 hook 文案 |
+| `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 剥 advisory `additional_context`（含 soft-nag detail）；保留 `router-rs ` 硬短码 |
+| `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | hook-state 陈旧清扫天数（见上表） |
+| `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review pending multiset 上限 |
+| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 关闭 Cursor 缺省 `fork_context`→`false` 推断 |
+| `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=1` | 禁止仅凭磁盘 GOAL 放行 pre-goal |
+| `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | SESSION_CALL_TRACKER `per_tool` 键上限 |
+
+Stop 硬门控（`REVIEW_GATE` / `AG_FOLLOWUP` / closeout）与 `GSD_GOAL_CONTINUE` **互斥**；无硬门控时 goal 续跑仍注入 `additional_context`。
 
 ## 自检
 

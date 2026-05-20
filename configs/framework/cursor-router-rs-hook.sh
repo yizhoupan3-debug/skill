@@ -38,7 +38,10 @@ emit_fail_closed_json() {
 }
 
 ROUTER_RS_BIN="${ROUTER_RS_BIN:-}"
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}"
 for candidate in \
+  "$CARGO_TARGET_DIR/release/router-rs" \
+  "$CARGO_TARGET_DIR/debug/router-rs" \
   "$ROOT/scripts/router-rs/target/release/router-rs" \
   "$ROOT/scripts/router-rs/target/debug/router-rs" \
   "$FW/scripts/router-rs/target/release/router-rs" \

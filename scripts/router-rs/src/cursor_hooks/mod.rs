@@ -2,9 +2,7 @@ use crate::hook_common::{
     has_override, is_parallel_delegation_prompt, is_review_prompt, normalize_subagent_type,
     normalize_tool_name, saw_reject_reason, strip_quoted_or_codeblock_or_url,
 };
-use crate::review_gate_engine::{
-    fork_context_from_values, independent_context_fork, review_gate_armed,
-};
+use crate::review_gate_engine::{fork_context_from_values, review_gate_armed};
 use crate::review_output_lint::{lint_review_output, LintSeverity};
 use crate::runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT;
 use chrono::{DateTime, Utc};

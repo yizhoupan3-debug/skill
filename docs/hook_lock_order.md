@@ -24,7 +24,7 @@ Cross-process hook subprocesses serialize continuity writes with **POSIX `flock`
 | **Cursor** | `try_lock_exclusive` + stale recovery; up to ~1.5s retry |
 | **Codex** | Unix: **blocking** `flock(LOCK_EX)` on `{state_path}.lock` |
 
-**Cursor L3 stale recovery**（`acquire_state_lock` 重试路径）：读取 lock 元数据 `pid`/`ts` 后，若 **`age_ms > HOOK_STATE_LOCK_STALE_MS`（30_000）** 或 **holder PID 已死**，则 `remove_file` lock 路径以便新 hook 获锁（见 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `acquire_state_lock`）。**SessionEnd**：删除 review gate 状态前须 `acquire_state_lock` → 删 state 文件 → `release_state_lock`（禁止未持锁删 state）。
+**Cursor L3 stale recovery**（`acquire_state_lock` 重试路径）：**仅当 holder PID 已死**时 `remove_file` lock 路径；`age_ms > 30s` 且 PID 仍存活时**只重试、不删路径**（避免双 inode 双 flock）。孤儿 lock 文件（无持有者）靠 `try_lock_exclusive` 直接成功。**7d age sweep**（`sweep_stale_hook_state_by_age`）：`.lock` **仅**在 holder PID 已死（或 lock 缺失/不可读）时可删；存活 holder 即使 `age>30s` 也不 unlink；关联 json 仍按 mtime/`updated_at` 判 7d 陈旧。**SessionEnd 清扫顺序**：当前 `session_key` state（持锁删除）→ `sweep_hook_state_tmp_orphans` → `SESSION_CALL_TRACKER.tmp` → **`sweep_stale_hook_state_by_age`**（默认 7d）→ 可选 `LEGACY_FULL_SWEEP` 全目录。锁不可用则 stderr `session_end_state_delete_skipped=lock_unavailable` 且保留 state 文件。
 
 Do not share one lock file between Cursor and Codex. See `task_write_lock.rs` and `codex_hooks.rs`.
 
@@ -45,7 +45,10 @@ Do not share one lock file between Cursor and Codex. See `task_write_lock.rs` an
 | Stop soft-nag 仍含 `need=` | `handle_stop` soft 分支 | `review_gate_soft_nag_includes_need_segment`（另见 `review_gate_stop_softens_after_max_nudges_env_cap`） |
 | SessionEnd 持锁删 state | `handle_session_end` | `session_end_acquires_lock_before_state_delete` |
 | `ROUTER_RS_CURSOR_CARGO_CHECK_SYNC=0` | `maybe_run_cursor_rust_lint` 早退 | `post_tool_skips_cargo_check_when_env_off` |
-| L3 30s stale + dead pid | `acquire_state_lock` | `cursor_lock_recovers_from_stale_timestamp` / `cursor_lock_recovers_from_stale_timestamp_when_pid_is_current_process` |
+| L3 dead pid removes lock | `acquire_state_lock` | `cursor_lock_recovers_from_stale_timestamp` |
+| L3 orphan lock (alive pid metadata) | `acquire_state_lock` | `cursor_lock_recovers_orphan_lock_file_without_remove_when_holder_alive` |
+| Age sweep keeps alive-holder lock | `hook_state_lock_removable_for_sweep` | `stale_sweep_preserves_alive_holder_lock_when_json_fresh` |
+| SessionEnd skip delete if no lock | `handle_session_end` | `session_end_skips_state_delete_when_lock_unavailable` |
 | PostTool ∥ Stop 不死锁 | PostTool 锁序 | `stop_and_post_tool_concurrent_hooks_complete_under_one_second` |
 
 ## Related

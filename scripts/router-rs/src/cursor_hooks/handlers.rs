@@ -119,7 +119,7 @@ fn finalize_stop_hook_outputs(
     try_write_cursor_continuity_checkpoint_on_stop(repo_root);
 }
 
-fn try_write_cursor_continuity_checkpoint_on_stop(repo_root: &Path) {
+pub(crate) fn try_write_cursor_continuity_checkpoint_on_stop(repo_root: &Path) {
     if !crate::router_env_flags::router_rs_env_enabled_default_true(
         "ROUTER_RS_CONTINUITY_STOP_CHECKPOINT",
     ) {
@@ -131,7 +131,7 @@ fn try_write_cursor_continuity_checkpoint_on_stop(repo_root: &Path) {
         "cursor-stop",
         summary_body,
     ) else {
-        eprintln!("[router-rs] cursor continuity checkpoint skipped: no active/focus task pointer");
+        eprintln!("[router-rs] cursor continuity checkpoint skipped: payload build failed");
         return;
     };
     if let Err(err) = crate::framework_runtime::write_framework_session_artifacts(payload) {
@@ -299,6 +299,32 @@ fn goal_verify_or_block_re() -> &'static Regex {
 /// 部分宿主以字符串 `"true"` / `"false"` 下发，需与 JSON bool 同等解析。
 fn fork_context_from_tool(event: &Value, tool_input: &Value) -> Option<bool> {
     fork_context_from_values(tool_input, Some(event))
+}
+
+/// Cursor-only: optional inference when `fork_context` is omitted on countable deep-review lanes.
+fn cursor_fork_context_from_tool(
+    event: &Value,
+    tool_input: &Value,
+    sub_type: &str,
+    agent_type: &str,
+) -> Option<bool> {
+    if let Some(parsed) = fork_context_from_tool(event, tool_input) {
+        return Some(parsed);
+    }
+    if !crate::router_env_flags::router_rs_cursor_review_fork_context_missing_infer_false_enabled()
+    {
+        return None;
+    }
+    let lane = if !sub_type.is_empty() {
+        sub_type
+    } else {
+        agent_type
+    };
+    if crate::hook_common::is_deep_review_gate_lane_normalized(lane) {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 /// Goal gate：须同时满足 Goal、Non-goals、Validation commands 行内标题非空，且 Done when 至少两条（英/中标题均可）。
@@ -860,6 +886,10 @@ fn hook_event_signal_text_with_scrape_mode(
     response: &str,
     full_scrape: bool,
 ) -> String {
+    let response = crate::hook_common::hook_assistant_tail_window(
+        response,
+        crate::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+    );
     let mut s = String::with_capacity(
         prompt
             .len()
@@ -868,7 +898,7 @@ fn hook_event_signal_text_with_scrape_mode(
     );
     s.push_str(prompt);
     s.push('\n');
-    s.push_str(response);
+    s.push_str(&response);
     s.push('\n');
     if full_scrape {
         s.push_str(&hook_event_all_text(event));
@@ -1222,6 +1252,10 @@ struct SessionTerminalLedger {
 
 const SESSION_TERMINAL_LEDGER_VERSION: u32 = 2;
 
+fn prune_session_terminal_ledger(ledger: &mut SessionTerminalLedger) {
+    ledger.owned_pids.retain(|pid| is_process_alive(*pid));
+}
+
 fn load_session_terminal_ledger(repo_root: &Path, event: &Value) -> SessionTerminalLedger {
     let path = session_terminal_ledger_path(repo_root, event);
     let Ok(raw) = fs::read_to_string(path) else {
@@ -1232,12 +1266,15 @@ fn load_session_terminal_ledger(repo_root: &Path, event: &Value) -> SessionTermi
             pending_shells: Vec::new(),
         };
     };
-    serde_json::from_str::<SessionTerminalLedger>(&raw).unwrap_or(SessionTerminalLedger {
-        version: SESSION_TERMINAL_LEDGER_VERSION,
-        baseline_pids: Vec::new(),
-        owned_pids: Vec::new(),
-        pending_shells: Vec::new(),
-    })
+    let mut ledger =
+        serde_json::from_str::<SessionTerminalLedger>(&raw).unwrap_or(SessionTerminalLedger {
+            version: SESSION_TERMINAL_LEDGER_VERSION,
+            baseline_pids: Vec::new(),
+            owned_pids: Vec::new(),
+            pending_shells: Vec::new(),
+        });
+    prune_session_terminal_ledger(&mut ledger);
+    ledger
 }
 
 fn save_session_terminal_ledger(repo_root: &Path, event: &Value, ledger: &SessionTerminalLedger) {
@@ -1245,7 +1282,9 @@ fn save_session_terminal_ledger(repo_root: &Path, event: &Value, ledger: &Sessio
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    if let Ok(text) = serde_json::to_string_pretty(ledger) {
+    let mut ledger = ledger.clone();
+    prune_session_terminal_ledger(&mut ledger);
+    if let Ok(text) = serde_json::to_string_pretty(&ledger) {
         let _ = fs::write(path, text);
     }
 }
@@ -1452,8 +1491,12 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                 if let Ok(existing) = fs::read_to_string(&lock_path) {
                     if let Some((pid, ts_ms)) = parse_lock_metadata(&existing) {
                         let age_ms = now_millis().saturating_sub(ts_ms);
-                        if age_ms > HOOK_STATE_LOCK_STALE_MS || !is_process_alive(pid) {
+                        if !is_process_alive(pid) {
                             let _ = fs::remove_file(&lock_path);
+                        } else if age_ms > HOOK_STATE_LOCK_STALE_MS {
+                            eprintln!(
+                                "[router-rs] hook-state lock held (pid={pid} age_ms={age_ms}); waiting (no remove_file)"
+                            );
                         }
                     }
                 }
@@ -1773,6 +1816,32 @@ fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
     review_hard_armed(state) && !review_subagent_evidence_satisfied(state)
 }
 
+/// 主线程交付 compact findings、且未 spawn 可数深度子代理时，升 phase 3 清 REVIEW_GATE。
+fn maybe_bump_review_phase_for_main_thread_compact_findings(
+    state: &mut ReviewGateState,
+    assistant_tail: &str,
+) -> bool {
+    if !review_hard_armed(state) || state.phase >= 3 {
+        return false;
+    }
+    if !state.review_subagent_pending_cycle_keys.is_empty() || state.subagent_start_count > 0 {
+        return false;
+    }
+    if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
+        assistant_tail,
+    ) {
+        return false;
+    }
+    bump_phase(state, 3);
+    clear_review_gate_escalation_counters(state);
+    true
+}
+
+/// Stop 硬门控（REVIEW_GATE / AG_FOLLOWUP）与 GSD/RFV 续跑注入互斥。
+fn stop_hard_gate_blocks_continuity_merge(state: &ReviewGateState) -> bool {
+    review_stop_followup_needed(state) || (state.goal_required && !goal_is_satisfied(state))
+}
+
 /// Stop / 观测 fixture 共用的 `need=` 段（前缀仍须含 `REVIEW_GATE` 供 `router_rs_observation` 分类）。
 pub(crate) const REVIEW_GATE_FOLLOWUP_NEED_SEGMENT: &str =
     "need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false";
@@ -1965,6 +2034,30 @@ fn subagent_limit_denial(active: u32, limit: u32) -> Value {
     })
 }
 
+/// When `ROUTER_RS_CURSOR_HOOK_SILENT=1`: drop advisory `additional_context`; keep hard
+/// `followup_message` lines that start with the `router-rs ` leader prefix.
+pub(crate) fn apply_cursor_hook_silent_policy(output: &mut Value) {
+    if !crate::router_env_flags::router_rs_cursor_hook_silent_enabled() {
+        return;
+    }
+    if let Some(obj) = output.as_object_mut() {
+        obj.remove("additional_context");
+    }
+    if let Some(Value::String(s)) = output.get_mut("followup_message") {
+        let kept: Vec<&str> = s
+            .lines()
+            .filter(|line| line.trim_start().starts_with("router-rs "))
+            .collect();
+        if kept.is_empty() {
+            if let Some(obj) = output.as_object_mut() {
+                obj.remove("followup_message");
+            }
+        } else {
+            *s = kept.join("\n");
+        }
+    }
+}
+
 pub(crate) fn apply_cursor_hook_output_policy(output: &mut Value) {
     crate::router_rs_observation::attach_router_rs_observation(
         output,
@@ -1972,7 +2065,7 @@ pub(crate) fn apply_cursor_hook_output_policy(output: &mut Value) {
     );
     let max_out = crate::router_env_flags::router_rs_cursor_hook_outbound_context_max_bytes();
     if let Some(Value::String(s)) = output.get_mut("additional_context") {
-        let next = truncate_cursor_hook_outbound_context(s.as_str(), max_out);
+        let next = truncate_cursor_hook_outbound_context_preserving_gate(s.as_str(), max_out);
         *s = next;
     }
 
@@ -1982,7 +2075,7 @@ pub(crate) fn apply_cursor_hook_output_policy(output: &mut Value) {
             .max(32 * 1024);
     if let Some(Value::String(s)) = output.get_mut("followup_message") {
         if s.len() > absurd_followup_threshold {
-            *s = truncate_cursor_hook_outbound_context(s.as_str(), max_out);
+            *s = truncate_cursor_hook_followup_preserving_review_gate(s.as_str(), max_out);
         }
     }
 }
@@ -1997,6 +2090,7 @@ fn truncate_cursor_hook_outbound_context(combined: &str, max_bytes: usize) -> St
     if combined.len() <= max_bytes {
         return combined.to_string();
     }
+    // `combined` may be borrowed; allocation only when truncating.
     let suf = CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX;
     let suf_len = suf.len();
     if max_bytes <= suf_len {
@@ -2020,6 +2114,100 @@ fn truncate_cursor_hook_outbound_context(combined: &str, max_bytes: usize) -> St
         cut -= 1;
     }
     format!("{}{}", &combined[..cut], suf)
+}
+
+fn cursor_hook_outbound_line_is_protected(line: &str) -> bool {
+    let t = line.trim_start();
+    t.contains("router-rs REVIEW_GATE")
+        || t.starts_with(REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX)
+        || t.contains("continuity_suppressed=")
+}
+
+/// Outbound truncation: keep REVIEW_GATE / continuity_suppressed lines; truncate filler.
+pub(crate) fn truncate_cursor_hook_outbound_context_preserving_gate(
+    combined: &str,
+    max_bytes: usize,
+) -> String {
+    if combined.len() <= max_bytes {
+        return combined.to_string();
+    }
+    let mut protected: Vec<&str> = Vec::new();
+    let mut rest: Vec<&str> = Vec::new();
+    for line in combined.lines() {
+        if cursor_hook_outbound_line_is_protected(line) {
+            protected.push(line);
+        } else {
+            rest.push(line);
+        }
+    }
+    let protected_body = protected.join("\n");
+    if protected_body.len() >= max_bytes {
+        return truncate_cursor_hook_outbound_context(&protected_body, max_bytes);
+    }
+    let rest_body = rest.join("\n");
+    if rest_body.is_empty() {
+        return protected_body;
+    }
+    let sep_len = if protected_body.is_empty() { 0 } else { 1 };
+    let rest_budget = max_bytes.saturating_sub(protected_body.len() + sep_len);
+    let truncated_rest = truncate_cursor_hook_outbound_context(&rest_body, rest_budget);
+    if protected_body.is_empty() {
+        truncated_rest
+    } else if truncated_rest.is_empty() {
+        protected_body
+    } else {
+        let mut out = protected_body;
+        out.push('\n');
+        out.push_str(&truncated_rest);
+        if out.len() > max_bytes {
+            truncate_cursor_hook_outbound_context(&out, max_bytes)
+        } else {
+            out
+        }
+    }
+}
+
+fn truncate_cursor_hook_followup_preserving_review_gate(
+    combined: &str,
+    max_bytes: usize,
+) -> String {
+    if combined.len() <= max_bytes {
+        return combined.to_string();
+    }
+    let mut gate: Vec<&str> = Vec::new();
+    let mut rest: Vec<&str> = Vec::new();
+    for line in combined.lines() {
+        if line.trim_start().starts_with("router-rs REVIEW_GATE") {
+            gate.push(line);
+        } else {
+            rest.push(line);
+        }
+    }
+    let gate_body = gate.join("\n");
+    if gate_body.len() >= max_bytes {
+        return truncate_cursor_hook_outbound_context(&gate_body, max_bytes);
+    }
+    let rest_body = rest.join("\n");
+    if rest_body.is_empty() {
+        return gate_body;
+    }
+    let sep_len = if gate_body.is_empty() { 0 } else { 1 };
+    let rest_budget = max_bytes.saturating_sub(gate_body.len() + sep_len);
+    let truncated_rest = truncate_cursor_hook_outbound_context(&rest_body, rest_budget);
+    if gate_body.is_empty() {
+        truncated_rest
+    } else if truncated_rest.is_empty() {
+        gate_body
+    } else {
+        let mut out = gate_body;
+        out.push('\n');
+        out.push_str(&truncated_rest);
+        if out.len() > max_bytes {
+            truncate_cursor_hook_outbound_context(&out, max_bytes)
+        } else {
+            out
+        }
+    }
 }
 
 /// 应急关闭门控时仍执行 PostToolUse/Subagent 状态更新，但不对模型注入门控类提示（与 SILENT 剥离字段一致）。
@@ -2055,9 +2243,9 @@ fn goal_state_list_any_nonempty_string(goal: &Value, key: &str) -> bool {
 /// `arm_if_goal_file`：**Stop** 等收口路径传 `true`，在磁盘已有 GOAL 但 hook-state 未写 `goal_required` 时仍回补；
 /// **beforeSubmit** 传 `false`，避免普通消息因残留 GOAL 文件被误标为 autopilot。
 ///
-/// **`pre_goal_review_satisfied`（磁盘旁路）**：Stop 路径始终可由 hydration 置真。beforeSubmit 路径
-/// 在 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` 开启时**不**因仅存在磁盘 GOAL 而置真，以免遗留
-/// `GOAL_STATE` 误放行 pre-goal；其余 goal 字段的 hydrate（contract/progress/verify 等）仍执行。
+/// **`pre_goal_review_satisfied`（磁盘旁路）**：在 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` 开启时
+/// **不**因仅存在磁盘 GOAL 而置真（beforeSubmit 与 Stop 均适用）；其余 goal 字段的 hydrate
+/// （contract/progress/verify 等）仍执行。
 fn hydrate_goal_gate_from_disk(
     repo_root: &Path,
     state: &mut ReviewGateState,
@@ -2073,8 +2261,7 @@ fn hydrate_goal_gate_from_disk(
     if arm_if_goal_file {
         state.goal_required = true;
     }
-    if arm_if_goal_file || !crate::router_env_flags::router_rs_cursor_pre_goal_strict_disk_enabled()
-    {
+    if !crate::router_env_flags::router_rs_cursor_pre_goal_strict_disk_enabled() {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
     }
@@ -2225,22 +2412,89 @@ const CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时
 /// **双事件去重**：宿主可能对同一子代理先发 `subagentStart` 再发 `PostToolUse`（同一 `subagent_id`）。对 **`id:`** 前缀的稳定 key，若 pending 已含该字符串，则 **PostToolUse 路径不再 push**，避免「一次 stop 只核销一条」语义下出现双 pending。
 ///
 /// **`subagent_start_count`** 仅在 **`handle_subagent_start`** 的 qualifying review 分支递增；PostToolUse 仅负责 multiset 入队（及 phase bump），**不**增加该计数，以免与宿主双事件重复计数。
+/// Returns whether the key is tracked in pending (new push or already present).
 fn push_review_pending_cycle_key(
     state: &mut ReviewGateState,
     cycle_key: Option<String>,
     from_posttool: bool,
-) {
+) -> bool {
     let Some(k) = cycle_key else {
-        return;
+        return false;
     };
-    if from_posttool
+    if from_posttool && state.review_subagent_pending_cycle_keys.contains(&k) {
+        return true;
+    }
+    if !from_posttool
         && k.starts_with("id:")
         && state.review_subagent_pending_cycle_keys.contains(&k)
     {
-        return;
+        return true;
+    }
+    let max = crate::router_env_flags::router_rs_cursor_review_pending_cycle_max();
+    if state.review_subagent_pending_cycle_keys.len() >= max {
+        eprintln!("[router-rs] review_pending_cycle_keys_at_cap_refused cap={max} key={k}");
+        return false;
     }
     state.review_subagent_pending_cycle_keys.push(k);
     sync_review_cycle_legacy_fields(state);
+    true
+}
+
+/// Clear pending review cycle keys when subagent activity is stale (avoids permanent REVIEW_GATE).
+fn prune_stale_review_pending_cycle_keys(state: &mut ReviewGateState) {
+    if state.review_subagent_pending_cycle_keys.is_empty() {
+        return;
+    }
+    let Some(stale_after_secs) = cursor_open_subagent_stale_after_secs() else {
+        // Align with `reset_stale_active_subagents`: stale recovery off → do not prune pending.
+        return;
+    };
+    if state.active_subagent_count == 0 {
+        let Some(raw) = state.active_subagent_last_started_at.as_deref() else {
+            eprintln!(
+                "[router-rs] review_pending_orphan_no_timestamp: skip clear (v1 migrate safety)"
+            );
+            return;
+        };
+        let clear = chrono::DateTime::parse_from_rfc3339(raw)
+            .ok()
+            .map(|started_at| {
+                let age = Utc::now().signed_duration_since(started_at.with_timezone(&Utc));
+                age.num_seconds() > stale_after_secs
+            })
+            .unwrap_or(true);
+        if clear {
+            eprintln!(
+                "[router-rs] cleared review_subagent_pending_cycle_keys (no open subagents, stale pending)"
+            );
+            state.review_subagent_pending_cycle_keys.clear();
+            sync_review_cycle_legacy_fields(state);
+        }
+        return;
+    }
+    let Some(started_at) = state.active_subagent_last_started_at.as_deref() else {
+        return;
+    };
+    let Ok(started_at) = chrono::DateTime::parse_from_rfc3339(started_at) else {
+        return;
+    };
+    let age = Utc::now().signed_duration_since(started_at.with_timezone(&Utc));
+    if age.num_seconds() <= stale_after_secs {
+        return;
+    }
+    state.review_subagent_pending_cycle_keys.clear();
+    sync_review_cycle_legacy_fields(state);
+}
+
+fn apply_subagent_stale_hygiene(state: &mut ReviewGateState) -> bool {
+    let stale_reset = reset_stale_active_subagents(state);
+    if stale_reset {
+        state.review_subagent_pending_cycle_keys.clear();
+        sync_review_cycle_legacy_fields(state);
+    } else {
+        prune_stale_review_pending_cycle_keys(state);
+    }
+    stale_reset
 }
 
 fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
@@ -2260,6 +2514,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         .ok()
         .flatten()
         .unwrap_or_else(empty_state);
+    let _stale_reset = apply_subagent_stale_hygiene(&mut state);
     // delegation 启发式不再持久化进 hook-state，避免与 review 相位门控长期粘连。
     state.delegation_required = false;
     let text = prompt_text(event);
@@ -2366,44 +2621,54 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         .flatten()
         .unwrap_or_else(empty_state);
     let tool_input = tool_input_of(event);
-    let stale_reset = reset_stale_active_subagents(&mut state);
+    let stale_reset = apply_subagent_stale_hygiene(&mut state);
     if let Some(limit) = cursor_max_open_subagents() {
         if state.active_subagent_count >= limit {
             release_state_lock(&mut lock);
             return subagent_limit_denial(state.active_subagent_count, limit);
         }
     }
-    let fork = fork_context_from_tool(event, &tool_input);
-    let independent_fork = independent_context_fork(fork);
     let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
+    let fork = cursor_fork_context_from_tool(event, &tool_input, &sub_type, &agent_type);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
     let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
+    let independent_fork_pre_goal =
+        crate::review_gate_engine::cursor_review_independent_fork(fork, pre_goal_kind);
+    let independent_fork_review =
+        crate::review_gate_engine::cursor_review_independent_fork(fork, review_kind);
     let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
     let armed = review_hard_armed(&state);
-    state.active_subagent_count = state.active_subagent_count.saturating_add(1);
-    state.active_subagent_last_started_at = Some(Utc::now().to_rfc3339());
-    let mut mutated = true;
+    let mut track_open_subagent = true;
+    let mut mutated = false;
     // 与 PostToolUse 对齐：pre-goal 在独立 fork 且存在 lane 类型证据时满足（含非白名单 lane 名）。
-    if state.goal_required && pre_goal_kind && independent_fork {
+    if state.goal_required && pre_goal_kind && independent_fork_pre_goal {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
         mutated = true;
     }
-    if armed && independent_fork && review_kind {
-        let was_below_2 = state.phase < 2;
-        bump_phase(&mut state, 2);
-        // 仅 SubagentStart 事件计数；PostToolUse 入 multiset 不递增（见 `push_review_pending_cycle_key` 模块注释）。
-        state.subagent_start_count += 1;
-        state.lane_intent_matches = Some(true);
-        push_review_pending_cycle_key(&mut state, cycle_key, false);
-        if was_below_2 {
-            clear_review_gate_escalation_counters(&mut state);
-        }
-        state.last_subagent_type = Some(if !sub_type.is_empty() {
-            sub_type.clone()
+    if armed && independent_fork_review && review_kind {
+        if push_review_pending_cycle_key(&mut state, cycle_key, false) {
+            let was_below_2 = state.phase < 2;
+            bump_phase(&mut state, 2);
+            // 仅 SubagentStart 事件计数；PostToolUse 入 multiset 不递增（见 `push_review_pending_cycle_key` 模块注释）。
+            state.subagent_start_count += 1;
+            state.lane_intent_matches = Some(true);
+            state.last_subagent_type = Some(if !sub_type.is_empty() {
+                sub_type.clone()
+            } else {
+                agent_type.clone()
+            });
+            if was_below_2 {
+                clear_review_gate_escalation_counters(&mut state);
+            }
+            mutated = true;
         } else {
-            agent_type.clone()
-        });
+            track_open_subagent = false;
+        }
+    }
+    if track_open_subagent {
+        state.active_subagent_count = state.active_subagent_count.saturating_add(1);
+        state.active_subagent_last_started_at = Some(Utc::now().to_rfc3339());
         mutated = true;
     }
     if stale_reset {
@@ -2495,40 +2760,41 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let tool_input = tool_input_of(event);
     let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
-    let fork = fork_context_from_tool(event, &tool_input);
-    let independent_fork = independent_context_fork(fork);
+    let fork = cursor_fork_context_from_tool(event, &tool_input, &sub_type, &agent_type);
+    let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
+    let independent_fork_review =
+        crate::review_gate_engine::cursor_review_independent_fork(fork, review_kind);
+    let independent_fork_pre_goal =
+        crate::review_gate_engine::cursor_review_independent_fork(fork, pre_goal_kind);
     let mut mutated = false;
     if tool_name_matches_subagent_lane(&name)
         && pre_goal_kind
         && state.goal_required
-        && independent_fork
+        && independent_fork_pre_goal
     {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
         mutated = true;
     }
-    if tool_name_matches_subagent_lane(&name)
-        && review_subagent_kind_ok(&sub_type, &agent_type)
-        && armed
-        && independent_fork
-    {
+    if tool_name_matches_subagent_lane(&name) && review_kind && armed && independent_fork_review {
         let start_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
-        let was_below_2 = state.phase < 2;
-        bump_phase(&mut state, 2);
-        state.last_subagent_tool = Some(name.clone());
-        push_review_pending_cycle_key(&mut state, start_key, true);
-        if !sub_type.is_empty() || !agent_type.is_empty() {
-            state.last_subagent_type = Some(if !sub_type.is_empty() {
-                sub_type
-            } else {
-                agent_type
-            });
+        if push_review_pending_cycle_key(&mut state, start_key, true) {
+            let was_below_2 = state.phase < 2;
+            bump_phase(&mut state, 2);
+            state.last_subagent_tool = Some(name.clone());
+            if !sub_type.is_empty() || !agent_type.is_empty() {
+                state.last_subagent_type = Some(if !sub_type.is_empty() {
+                    sub_type
+                } else {
+                    agent_type
+                });
+            }
+            state.lane_intent_matches = Some(true);
+            if was_below_2 {
+                clear_review_gate_escalation_counters(&mut state);
+            }
+            mutated = true;
         }
-        state.lane_intent_matches = Some(true);
-        if was_below_2 {
-            clear_review_gate_escalation_counters(&mut state);
-        }
-        mutated = true;
     }
     if mutated {
         let _ = save_state(repo_root, event, &mut state);
@@ -2759,6 +3025,13 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
         state.goal_verify_or_block_seen = true;
         dirty = true;
     }
+    let tail = crate::hook_common::hook_assistant_tail_window(
+        &text,
+        crate::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+    );
+    if maybe_bump_review_phase_for_main_thread_compact_findings(&mut state, &tail) {
+        dirty = true;
+    }
     if dirty {
         let _ = save_state(repo_root, event, &mut state);
     }
@@ -2776,27 +3049,32 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         if let Some(msg) = closeout_msg {
             out["followup_message"] = Value::String(msg);
         }
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame, false);
+        let skip_continuity_merge = out.get("followup_message").is_some();
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame, skip_continuity_merge);
         return out;
     }
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         let msg = lock_failure_followup_for_stop(event);
         let mut out = json!({ "followup_message": msg });
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame, false);
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame, true);
         return out;
     }
     let loaded = load_state(repo_root, event);
     let text = prompt_text(event);
-    let response_text = agent_response_text(event);
-    let signal_text = hook_event_signal_text(event, &text, &response_text);
+    let response_full = agent_response_text(event);
+    let signal_text = hook_event_signal_text(event, &text, &response_full);
+    let response_for_lint = crate::hook_common::hook_assistant_tail_window(
+        &response_full,
+        crate::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+    );
 
     // Completion claim guard must not depend on hook-state existence: a strict closeout violation
     // is a hard-stop even when the review gate state was never initialized for this session.
-    if let Some(msg) = stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text)
+    if let Some(msg) = stop_hard_closeout_followup_for_assistant_response(repo_root, &response_full)
     {
         let mut out = json!({ "followup_message": msg });
-        release_lock_then_finalize_stop(repo_root, &mut out, &frame, false, &mut lock);
+        release_lock_then_finalize_stop(repo_root, &mut out, &frame, true, &mut lock);
         return out;
     }
     let (mut output, skip_continuity_merge) = match loaded {
@@ -2805,9 +3083,10 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             let msg = format!(
                 "router-rs：hook-state 不可读（{io_error}），门控降级。请检查权限与 JSON。"
             );
-            (json!({ "followup_message": msg }), false)
+            (json!({ "followup_message": msg }), true)
         }
         Ok(Some(mut state)) => {
+            let _stale_reset = apply_subagent_stale_hygiene(&mut state);
             state.delegation_required = false;
             // Override 句式仅承认用户本轮 prompt（与 beforeSubmit 一致）；勿用含助手输出的
             // `signal_text`，避免助手复述「不要用子代理」类话术误清空 REVIEW_GATE。
@@ -2832,6 +3111,13 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 clear_review_gate_escalation_counters(&mut state);
             }
             hydrate_goal_gate_from_disk(repo_root, &mut state, true, &frame);
+            if maybe_bump_review_phase_for_main_thread_compact_findings(
+                &mut state,
+                &response_for_lint,
+            ) {
+                let _ = save_state(repo_root, event, &mut state);
+            }
+            let gate_blocks_continuity = stop_hard_gate_blocks_continuity_merge(&state);
             if review_stop_followup_needed(&state) {
                 state.followup_count += 1;
                 state.review_followup_count += 1;
@@ -2841,7 +3127,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                     None => true,
                     Some(n) => state.review_followup_count <= n,
                 };
-                let skip_continuity_merge = !use_full;
+                let skip_continuity_merge = gate_blocks_continuity || !use_full;
                 let out = if use_full {
                     json!({ "followup_message": review_stop_followup_line(&state) })
                 } else {
@@ -2866,7 +3152,10 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 let _ = save_state(repo_root, event, &mut state);
                 // Stop 只给短码，避免把整段 Autopilot 契约说明塞进会话收尾（细则见 beforeSubmit / AGENTS）。
                 let message = goal_stop_followup_line(&state);
-                (json!({ "followup_message": message }), false)
+                (
+                    json!({ "followup_message": message }),
+                    gate_blocks_continuity,
+                )
             } else {
                 // Do not clear gate state on Stop for sessions that still track goal/review:
                 // the next Stop should still enforce the same requirements until satisfied/overridden.
@@ -2880,10 +3169,18 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             }
         }
     };
-    // Advisory: lint review output format (compact envelope checks)
-    // Runs on every Stop regardless of gate state; findings go to additional_context as soft hints.
-    if !response_text.trim().is_empty() && response_text.contains("[P") {
-        let lint_findings = lint_review_output(&response_text);
+    // Advisory: lint review output format (compact envelope checks).
+    // Skip when Stop already carries a hard followup or continuity merge is suppressed (same as GSD/RFV).
+    let hard_stop_followup = output
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .is_some_and(|s| !s.trim().is_empty());
+    if !hard_stop_followup
+        && !skip_continuity_merge
+        && !response_for_lint.trim().is_empty()
+        && response_for_lint.contains("[P")
+    {
+        let lint_findings = lint_review_output(&response_for_lint);
         if !lint_findings.is_empty() {
             let warning_count = lint_findings
                 .iter()
@@ -3051,7 +3348,11 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     // Raw SESSION_SUMMARY body (prefix-stable under SessionStart byte cap); see
     // `session_start_additional_context_observes_router_rs_sessionstart_max_env`.
     let session_summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
-    if let Ok(raw) = fs::read_to_string(&session_summary_path) {
+    let summary_budget = crate::router_env_flags::router_rs_cursor_sessionstart_context_max_bytes()
+        .saturating_add(512);
+    if let Some(raw) =
+        crate::read_bounded::read_utf8_file_prefix(&session_summary_path, summary_budget)
+    {
         let block = raw.trim();
         if !block.is_empty() {
             sections.push(block.to_string());
@@ -3069,6 +3370,11 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     }
     sections.push(format!("Repo: {}", repo_root.display()));
     let ctx = compact_cursor_sessionstart_context(sections).unwrap_or_default();
+    if let Err(e) = crate::session_call_tracker::init_tracker(repo_root) {
+        eprintln!("[router-rs warning] init_tracker failed: {e}");
+    }
+    sweep_session_call_tracker_tmp_orphans(repo_root);
+    sweep_stale_hook_state_by_age(repo_root, event);
     json!({ "additional_context": ctx })
 }
 
@@ -3278,13 +3584,19 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
     let owned: HashSet<u32> = owned_vec.into_iter().collect();
     // 按本会话 `session_key` 精准删除主状态：须先持锁再删，避免与并发 hook 双 inode 双 flock。
     let mut lock = acquire_state_lock(repo_root, event);
-    let sp = state_path(repo_root, event);
-    let _ = fs::remove_file(&sp);
+    if lock.is_some() {
+        let sp = state_path(repo_root, event);
+        let _ = fs::remove_file(&sp);
+    } else {
+        eprintln!("[router-rs] session_end_state_delete_skipped=lock_unavailable");
+    }
     release_state_lock(&mut lock);
     remove_adversarial_loop(repo_root, event);
     let _ = fs::remove_file(session_terminal_ledger_path(repo_root, event));
     // 原子写入孤儿：始终全局清扫（与 session_key 无关）。
     sweep_hook_state_tmp_orphans(repo_root);
+    sweep_session_call_tracker_tmp_orphans(repo_root);
+    sweep_stale_hook_state_by_age(repo_root, event);
     // 默认不扫其它会话的 review/adversarial/session 文件（同仓库多 Cursor 会话避免互删）。
     // 需清 session_id/cwd 漂移遗留的全目录 stale 时，设 `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP=1`。
     if crate::router_env_flags::router_rs_cursor_hook_state_legacy_full_sweep_enabled() {
@@ -3315,6 +3627,148 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
         );
     }
     json!({})
+}
+
+fn hook_state_paths_for_session(repo_root: &Path, event: &Value) -> Vec<PathBuf> {
+    let key = session_key(event);
+    vec![
+        state_dir(repo_root).join(format!("review-subagent-{key}.json")),
+        state_dir(repo_root).join(format!("review-subagent-{key}.lock")),
+        state_dir(repo_root).join(format!("adversarial-loop-{key}.json")),
+        state_dir(repo_root).join(format!("session-terminals-{key}.json")),
+    ]
+}
+
+/// Age sweep may remove `.lock` only when absent, unreadable, or holder PID is dead (aligned with L3 acquire).
+fn hook_state_lock_removable_for_sweep(lock_path: &Path) -> bool {
+    if !lock_path.is_file() {
+        return true;
+    }
+    let Ok(existing) = fs::read_to_string(lock_path) else {
+        return true;
+    };
+    let Some((pid, _ts_ms)) = parse_lock_metadata(&existing) else {
+        return true;
+    };
+    !is_process_alive(pid)
+}
+
+fn companion_lock_path_for_hook_state_file(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    if !name.ends_with(".json") {
+        return None;
+    }
+    let stem = name.strip_suffix(".json")?;
+    Some(path.with_file_name(format!("{stem}.lock")))
+}
+
+fn hook_state_json_updated_at_stale(path: &Path, cutoff: chrono::DateTime<Utc>) -> bool {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else {
+        return false;
+    };
+    let Some(updated_at) = v.get("updated_at").and_then(Value::as_str) else {
+        return false;
+    };
+    chrono::DateTime::parse_from_rfc3339(updated_at)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc) < cutoff)
+        .unwrap_or(false)
+}
+
+fn hook_state_file_mtime_stale(path: &Path, cutoff: SystemTime) -> bool {
+    fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .is_some_and(|mtime| mtime < cutoff)
+}
+
+fn hook_state_file_is_stale(
+    path: &Path,
+    cutoff_system: SystemTime,
+    cutoff_chrono: chrono::DateTime<Utc>,
+) -> bool {
+    if hook_state_file_mtime_stale(path, cutoff_system) {
+        return true;
+    }
+    if path.extension().and_then(|e| e.to_str()) == Some("json") {
+        return hook_state_json_updated_at_stale(path, cutoff_chrono);
+    }
+    false
+}
+
+/// Age-based sweep of owned hook-state files (default 7d). Skips current `session_key` paths.
+fn sweep_stale_hook_state_by_age(repo_root: &Path, event: &Value) {
+    let days = crate::router_env_flags::router_rs_cursor_hook_state_stale_sweep_days();
+    if days == 0 {
+        return;
+    }
+    let dir = state_dir(repo_root);
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+    let cutoff_chrono = Utc::now() - chrono::Duration::days(days as i64);
+    let cutoff_system =
+        SystemTime::now() - std::time::Duration::from_secs(days.saturating_mul(86_400));
+    let skip: std::collections::HashSet<PathBuf> = hook_state_paths_for_session(repo_root, event)
+        .into_iter()
+        .collect();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !review_gate_state_file_owned_by_module(name) {
+            continue;
+        }
+        if skip.contains(&path) {
+            continue;
+        }
+        if name.ends_with(".lock") {
+            if !hook_state_lock_removable_for_sweep(&path) {
+                continue;
+            }
+            let json_path = path.with_file_name(format!(
+                "{}.json",
+                name.strip_suffix(".lock").unwrap_or(name)
+            ));
+            if json_path.is_file()
+                && !hook_state_file_is_stale(&json_path, cutoff_system, cutoff_chrono)
+            {
+                continue;
+            }
+            let _ = fs::remove_file(&path);
+            continue;
+        }
+        if !hook_state_file_is_stale(&path, cutoff_system, cutoff_chrono) {
+            continue;
+        }
+        let lock_ok = companion_lock_path_for_hook_state_file(&path)
+            .map(|lp| hook_state_lock_removable_for_sweep(&lp))
+            .unwrap_or(true);
+        if lock_ok {
+            let _ = fs::remove_file(&path);
+            if let Some(lp) = companion_lock_path_for_hook_state_file(&path) {
+                let _ = fs::remove_file(lp);
+            }
+        }
+    }
+}
+
+fn sweep_session_call_tracker_tmp_orphans(repo_root: &Path) {
+    let path = repo_root
+        .join("artifacts")
+        .join("current")
+        .join("SESSION_CALL_TRACKER.tmp");
+    if path.is_file() {
+        let _ = fs::remove_file(path);
+    }
 }
 
 /// 仅清理由崩溃残留的原子写入 tmp（与 `session_key` 无关）。

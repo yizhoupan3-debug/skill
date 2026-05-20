@@ -7,6 +7,20 @@ use regex::Regex;
 use serde_json::{Map, Value};
 use std::sync::OnceLock;
 
+/// Default UTF-8 **char** budget for assistant text on Cursor hook signal / lint paths.
+pub const CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 4096;
+
+/// Truncate assistant text for hook signal paths (char-based; matches deep-continuation tail style).
+pub fn hook_assistant_tail_window(raw: &str, max_chars: usize) -> String {
+    let total = raw.chars().count();
+    if total <= max_chars {
+        return raw.to_string();
+    }
+    let omitted = total.saturating_sub(max_chars);
+    let tail: String = raw.chars().skip(omitted).collect();
+    format!("[...omitted {omitted} chars...]\n{tail}")
+}
+
 fn compile_patterns(patterns: &[&str]) -> Vec<Regex> {
     patterns
         .iter()
@@ -247,8 +261,7 @@ fn framework_goal_drive_entry_re() -> &'static Regex {
     RE.get_or_init(|| {
         // Pre-execution GSD (`new-project`, `plan-phase`, `discuss-phase`) must NOT arm
         // `goal_required` / drive_until_done — see skills/gsd/shared/phase-boundaries.md.
-        Regex::new(r"(?i)(^|\s)/gsd-(?:execute-phase|verify-work|ship)\b")
-            .expect("invalid regex")
+        Regex::new(r"(?i)(^|\s)/gsd-(?:execute-phase|verify-work|ship)\b").expect("invalid regex")
     })
 }
 
@@ -291,9 +304,8 @@ pub fn is_autopilot_entrypoint_prompt(_text: &str) -> bool {
 
 pub fn is_gsd_entrypoint_prompt(text: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/gsd(?:-[a-z0-9-]+)?\b").expect("invalid regex")
-    });
+    let re =
+        RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/gsd(?:-[a-z0-9-]+)?\b").expect("invalid regex"));
     re.is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
@@ -545,7 +557,9 @@ mod tests {
 
     #[test]
     fn gsd_pre_execution_does_not_arm_goal_drive_entry() {
-        assert!(is_gsd_pre_execution_entry_prompt("please /gsd-new-project on this idea"));
+        assert!(is_gsd_pre_execution_entry_prompt(
+            "please /gsd-new-project on this idea"
+        ));
         assert!(is_gsd_pre_execution_entry_prompt("/gsd-plan-phase"));
         assert!(is_gsd_pre_execution_entry_prompt("  /gsd-discuss-phase  "));
         assert!(!is_framework_goal_entry_prompt("/gsd-new-project"));

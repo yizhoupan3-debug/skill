@@ -286,16 +286,17 @@ fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
         }
     }
 
-    let empty_ws = std::env::temp_dir().join(format!(
-        "verify-cursor-launcher-{}",
-        std::process::id()
-    ));
+    let empty_ws =
+        std::env::temp_dir().join(format!("verify-cursor-launcher-{}", std::process::id()));
     fs::create_dir_all(&empty_ws).map_err(|e| e.to_string())?;
+    let empty_target = empty_ws.join("no-router-rs-target");
+    fs::create_dir_all(&empty_target).map_err(|e| e.to_string())?;
 
     let output = Command::new("/bin/bash")
         .arg(&launcher)
         .arg("BeforeSubmitPrompt")
         .env_remove("ROUTER_RS_BIN")
+        .env("CARGO_TARGET_DIR", &empty_target)
         .env("PATH", "/usr/bin:/bin")
         .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
         .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
@@ -459,6 +460,8 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         }
     }
     verify_codex_skill_runtime_health(&repo_root)?;
+
+    crate::framework_runtime::eprint_codex_hooks_duplicate_warnings(&repo_root);
 
     codex_hook_smoke(
         &exe,

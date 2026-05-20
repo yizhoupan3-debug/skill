@@ -11,6 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod alias;
+mod codex_hooks_duplicate;
 mod constants;
 mod continuity_digest;
 mod framework_doctor;
@@ -36,6 +37,10 @@ pub use alias::build_framework_alias_envelope;
 #[allow(unused_imports)]
 pub use constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 // Retained for external callers.
+pub use codex_hooks_duplicate::{
+    collect_codex_hooks_duplicate_warnings, count_codex_hook_router_rs_commands,
+    eprint_codex_hooks_duplicate_warnings,
+};
 #[allow(unused_imports)]
 pub use constants::FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION;
 pub use constants::{
@@ -43,7 +48,7 @@ pub use constants::{
     FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
 };
 pub use continuity_digest::{
-    build_framework_continuity_digest_prompt, build_framework_continuity_digest_prompt_ex,
+    build_framework_continuity_digest_prompt,
     build_framework_continuity_digest_prompt_from_task_view,
 };
 pub use framework_doctor::{run_continuity_audit, run_framework_doctor};
@@ -634,13 +639,17 @@ pub(crate) fn truncate_utf8_chars_with_ellipsis(input: &str, max_chars: usize) -
     out
 }
 
-/// Resolve the task to refresh on automatic Stop hooks: **active → focus** (no mint).
-pub fn resolve_automatic_stop_checkpoint_task_id(repo_root: &Path) -> Option<String> {
+/// Stable task id when no active/focus pointer exists (review-only sessions).
+pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
+
+/// Resolve the task to refresh on automatic Stop hooks: **active → focus → continuity-session**.
+pub fn resolve_automatic_stop_checkpoint_task_id(repo_root: &Path) -> String {
     let pointers = crate::task_state::read_task_pointers(repo_root);
     pointers
         .active_task_id
         .or(pointers.focus_task_id)
         .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| CONTINUITY_SESSION_CHECKPOINT_TASK_ID.to_string())
 }
 
 /// Stop-hook checkpoint: in-place refresh of the current task; does not repoint control plane.
@@ -649,7 +658,7 @@ pub fn build_automatic_stop_hook_checkpoint_payload(
     task_line: &str,
     summary_text: &str,
 ) -> Option<Value> {
-    let task_id = resolve_automatic_stop_checkpoint_task_id(repo_root)?;
+    let task_id = resolve_automatic_stop_checkpoint_task_id(repo_root);
     let payload = build_automatic_continuity_checkpoint_payload_with_task_id(
         repo_root,
         task_line,

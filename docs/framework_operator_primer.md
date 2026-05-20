@@ -35,7 +35,8 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 
 ## 混用时的实际武装顺序（Cursor Stop）
 
-- **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。
+- **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**硬门控 Stop 不合并 `GSD_GOAL_CONTINUE`**（避免「门未满足」与续跑 drive 同轮打架）；无硬门控时 goal 续跑仍走 `additional_context`。
+- **主线程深度 review**：交付 compact findings（`[P0]`–`[P2]` / `Caveat:`）且未 spawn 可数子代理时，可清 `REVIEW_GATE`；多 lane 并行审仍须 `general-purpose` / `best-of-n-runner` 子代理证据。
 - **同一条用户消息里同时写深度 review 与 GSD 执行区入口**（`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。若你本意是「先深度审稿再开连续执行」，请拆成两轮（先 review-only 提交，或先落盘 `GOAL_STATE` 再带 `/gsd-execute-phase`）。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）；同轮写 `/autopilot` **不会**抑制 review 武装。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 GSD execution 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
 
@@ -49,6 +50,10 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 - **Stop 单行提示**：若见 `router-rs REVIEW_GATE incomplete` 与 `need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false`，按该 `need=` 检查子代理载荷；尾缀 `hint=` 为可读排障补充，不改变 `need=` 语义。若同一门控多轮 `Stop` 仍卡，完整 `need=`/`hint=` 可能在 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`**（默认 8）之后被降级到 `additional_context`，`followup_message` 仅保留短 `mode=soft_nag` 行（见 [harness_architecture.md](harness_architecture.md) 环境变量表）。
 
 完整排障叙述见 [host_adapter_contract.md](host_adapter_contract.md) 中 Cursor 小节与 [harness_architecture.md](harness_architecture.md) 中 Review gate 相关段落。
+
+## Codex：hook 重复触发
+
+若 **用户级** `~/.codex/hooks.json` 与 **项目** `.codex/hooks.json` 均注册 `router-rs codex hook`，同一事件可能执行多次（证据重复、状态竞态）。`router-rs framework doctor` 会对每份 hooks 文件统计并 WARN；保留一份入口即可。
 
 ## Codex：`AGENTS.md` 与二进制快照
 

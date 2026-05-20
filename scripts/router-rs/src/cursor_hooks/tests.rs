@@ -380,6 +380,15 @@ fn event(session: &str, prompt: &str) -> Value {
     })
 }
 
+fn merge_event(mut base: Value, extra: Value) -> Value {
+    if let (Some(base_obj), Some(extra_obj)) = (base.as_object_mut(), extra.as_object()) {
+        for (k, v) in extra_obj {
+            base_obj.insert(k.clone(), v.clone());
+        }
+    }
+    base
+}
+
 fn load_state_for(repo: &Path, session: &str) -> ReviewGateState {
     let payload = json!({ "session_id": session, "cwd": FRAMEWORK_HARNESS_TEST_CWD });
     load_state(repo, &payload)
@@ -1535,8 +1544,8 @@ fn stop_lock_failure_still_surfaces_autopilot_drive() {
     let blob = hook_user_visible_blob(&out);
     assert!(blob.contains("锁不可用"), "{blob}");
     assert!(
-        blob.contains("GSD_GOAL_CONTINUE"),
-        "lock failure should keep active drive visible; blob={blob}"
+        !blob.contains("GSD_GOAL_CONTINUE"),
+        "hard lock-failure followup must not merge GSD_GOAL_CONTINUE; blob={blob}"
     );
 }
 
@@ -1683,6 +1692,57 @@ fn stop_hard_gate_does_not_inject_session_close_style_paragraph() {
     assert!(
         !ac.contains("SESSION_CLOSE_STYLE"),
         "hard Stop followup must not bundle soft closeout nudge: {out:?}"
+    );
+    assert!(
+        !ac.contains("GSD_GOAL_CONTINUE"),
+        "hard Stop followup must suppress goal continuity merge: {out:?}"
+    );
+    assert!(
+        !ac.contains("review-output-lint"),
+        "hard Stop followup must not merge review-output-lint: {out:?}"
+    );
+}
+
+#[test]
+fn stop_review_armed_with_active_goal_suppresses_gsd_continue() {
+    let _inject_on = OperatorInjectEnabledGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-review-goal-mutex";
+    fs::create_dir_all(repo.join("artifacts/current/default-rg")).expect("mkdir goal");
+    fs::write(
+        repo.join("artifacts/current/active_task.json"),
+        r#"{"task_id":"default-rg"}"#,
+    )
+    .expect("active_task");
+    crate::autopilot_goal::framework_autopilot_goal(json!({
+        "repo_root": repo.display().to_string(),
+        "operation": "start",
+        "task_id": "default-rg",
+        "goal": "drive while review gate open",
+        "non_goals": ["n"],
+        "done_when": ["d1", "d2"],
+        "validation_commands": ["cargo test -q"],
+        "drive_until_done": true,
+    }))
+    .expect("goal start");
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let blob = hook_user_visible_blob(&out);
+    assert!(
+        blob.contains("REVIEW_GATE") || blob.contains("AG_FOLLOWUP"),
+        "expected hard gate followup: {blob}"
+    );
+    assert!(
+        !blob.contains("GSD_GOAL_CONTINUE"),
+        "hard gate must not merge GSD_GOAL_CONTINUE: {blob}"
+    );
+    assert!(
+        !blob.contains("review-output-lint"),
+        "hard gate must not merge review-output-lint: {blob}"
     );
 }
 
@@ -1986,6 +2046,31 @@ fn cursor_hook_outbound_trunc_respects_byte_cap_and_marker() {
 }
 
 #[test]
+fn outbound_truncation_preserves_review_gate_and_continuity_suppressed_lines() {
+    let _env_lock = cursor_hook_outbound_context_max_chars_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
+    std::env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "512");
+
+    let filler = "z".repeat(2000);
+    let gate_line = format!(
+        "router-rs REVIEW_GATE incomplete phase=2 {} {}",
+        super::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT,
+        super::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+    );
+    let body = format!("{filler}\ncontinuity_suppressed=review_soft_nag\n{gate_line}\n{filler}");
+    let max_out = crate::router_env_flags::router_rs_cursor_hook_outbound_context_max_bytes();
+    let got = super::truncate_cursor_hook_outbound_context_preserving_gate(&body, max_out);
+    assert!(got.len() <= max_out);
+    assert!(got.contains("continuity_suppressed=review_soft_nag"));
+    assert!(got.contains(super::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT));
+
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", v),
+        None => std::env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS"),
+    }
+}
+
+#[test]
 fn review_gate_disabled_post_tool_use_still_advances_phase_after_arm() {
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
@@ -2163,8 +2248,13 @@ fn stop_releases_l3_before_continuity_checkpoint() {
 
 #[test]
 fn review_gate_soft_nag_includes_need_segment() {
+    let _env = crate::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("1");
+    assert_eq!(
+        crate::router_env_flags::router_rs_cursor_review_gate_stop_max_nudges_cap(),
+        Some(1)
+    );
     let repo = fresh_repo();
     let sid = "s-soft-need";
     let _ = dispatch_cursor_hook_event(
@@ -2215,8 +2305,13 @@ fn post_tool_skips_cargo_check_when_env_off() {
 
 #[test]
 fn review_gate_stop_softens_after_max_nudges_env_cap() {
+    let _env = crate::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("2");
+    assert_eq!(
+        crate::router_env_flags::router_rs_cursor_review_gate_stop_max_nudges_cap(),
+        Some(2)
+    );
     let repo = fresh_repo();
     let sid = "s-rg-stop-nudge-cap";
     let _ = dispatch_cursor_hook_event(
@@ -2261,9 +2356,221 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
         "need= must stay in followup_message after cap (not only additional_context); fm3={fm3:?}"
     );
     assert!(
+        fm3.contains(REVIEW_GATE_FOLLOWUP_HINT_SEGMENT),
+        "hint= must stay in followup_message after cap; fm3={fm3:?}"
+    );
+    assert!(
         blob3.contains("continuity_suppressed=review_soft_nag"),
         "soft-nag stop should note suppressed continuity merge; blob3={blob3:?}"
     );
+}
+
+#[test]
+fn session_end_skips_state_delete_when_lock_unavailable() {
+    let _guard = ForceHookStateLockFailureGuard::new();
+    let repo = fresh_repo();
+    let payload = event("s-end-no-lock", "全面review这个仓库");
+    let sp = state_path(&repo, &payload);
+    if let Some(parent) = sp.parent() {
+        fs::create_dir_all(parent).expect("mkdir hook-state");
+    }
+    fs::write(
+        &sp,
+        serde_json::to_string(&empty_state()).expect("serialize"),
+    )
+    .expect("seed state");
+    assert!(sp.exists());
+    let _ = dispatch_cursor_hook_event(&repo, "sessionEnd", &payload);
+    assert!(
+        sp.exists(),
+        "sessionEnd must not delete state when lock acquisition failed"
+    );
+}
+
+#[test]
+fn cursor_hook_silent_strips_additional_context_keeps_review_gate_followup() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CURSOR_HOOK_SILENT");
+    std::env::set_var("ROUTER_RS_CURSOR_HOOK_SILENT", "1");
+    let mut out = json!({
+        "followup_message": format!(
+            "router-rs REVIEW_GATE incomplete phase=0 {} {}",
+            REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+        ),
+        "additional_context": "Continuity digest: noisy advisory text",
+    });
+    apply_cursor_hook_silent_policy(&mut out);
+    assert!(out.get("additional_context").is_none());
+    let fm = out["followup_message"].as_str().unwrap_or("");
+    assert!(fm.contains("router-rs REVIEW_GATE"));
+    assert!(fm.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT));
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CURSOR_HOOK_SILENT", v),
+        None => std::env::remove_var("ROUTER_RS_CURSOR_HOOK_SILENT"),
+    }
+}
+
+#[test]
+fn review_pending_not_cleared_when_stale_after_disabled() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS");
+    std::env::set_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS", "0");
+
+    let repo = fresh_repo();
+    let sid = "s-pending-no-prune-off";
+    let payload = event(sid, "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "sa-keep-pending",
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "继续"));
+    let state = load_state_for(&repo, sid);
+    assert!(
+        !state.review_subagent_pending_cycle_keys.is_empty(),
+        "STALE_AFTER=0 must not clear pending via prune_stale_review_pending_cycle_keys"
+    );
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "STALE_AFTER=0 must not prune pending on stop; fm={fm}"
+    );
+
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS", v),
+        None => std::env::remove_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS"),
+    }
+}
+
+#[test]
+fn review_pending_cycle_keys_respects_env_cap() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    std::env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "2");
+    assert_eq!(
+        crate::router_env_flags::router_rs_cursor_review_pending_cycle_max(),
+        2,
+        "env cap must be visible before dispatch"
+    );
+
+    let repo = fresh_repo();
+    let sid = "s-pending-cap";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    for i in 0..3 {
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStart",
+            &json!({
+                "session_id": sid,
+                "subagent_type": "general-purpose",
+                "fork_context": false,
+                "subagent_id": format!("sa-cap-{i}"),
+            }),
+        );
+    }
+    let state = load_state_for(&repo, sid);
+    assert_eq!(
+        state.review_subagent_pending_cycle_keys.len(),
+        2,
+        "cap=2 must refuse third push, got {:?}",
+        state.review_subagent_pending_cycle_keys
+    );
+    assert!(
+        !state
+            .review_subagent_pending_cycle_keys
+            .iter()
+            .any(|k| k == "id:sa-cap-2"),
+        "third key must be refused at cap"
+    );
+
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
+}
+
+#[test]
+fn v1_migrate_pending_preserved_when_no_started_at_timestamp() {
+    let repo = fresh_repo();
+    let sid = "s-pending-orphan";
+    let payload = event(sid, "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+
+    let mut state = empty_state();
+    state.review_required = true;
+    state.phase = 2;
+    state.review_subagent_pending_cycle_keys = vec!["id:orphan".to_string()];
+    state.active_subagent_count = 0;
+    state.active_subagent_last_started_at = None;
+    assert!(save_state(&repo, &payload, &mut state));
+
+    let _ = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let loaded = load_state_for(&repo, sid);
+    assert_eq!(
+        loaded.review_subagent_pending_cycle_keys,
+        vec!["id:orphan".to_string()],
+        "v1 migrate fixture must not clear pending without timestamp"
+    );
+}
+
+#[test]
+fn review_pending_cycle_pruned_when_no_open_subagents_and_stale_start() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS");
+    std::env::set_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS", "1");
+
+    let repo = fresh_repo();
+    let sid = "s-pending-prune";
+    let payload = event(sid, "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "sa-prune-1",
+        }),
+    );
+
+    let sp = state_path(&repo, &payload);
+    let raw = fs::read_to_string(&sp).expect("read state");
+    let mut state: Value = serde_json::from_str(&raw).expect("parse state");
+    state["phase"] = json!(3);
+    state["review_subagent_pending_cycle_keys"] = json!(["id:sa-prune-1"]);
+    state["active_subagent_count"] = json!(0);
+    state["active_subagent_last_started_at"] = json!("2000-01-01T00:00:00+00:00");
+    fs::write(&sp, serde_json::to_string(&state).expect("serialize")).expect("write state");
+
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !fm.contains("REVIEW_GATE incomplete"),
+        "stale pending must be pruned so stop is not blocked; fm={fm}"
+    );
+
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS", v),
+        None => std::env::remove_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS"),
+    }
 }
 
 #[test]
@@ -2505,6 +2812,359 @@ fn review_gate_posttool_skips_duplicate_id_after_subagent_start() {
     assert_eq!(end.phase, 3);
     assert_eq!(end.subagent_stop_count, 1);
     assert!(end.review_subagent_pending_cycle_keys.is_empty());
+}
+
+/// 同 session：`subagentStart` + `PostToolUse`（同 `lane:`、无 id）仅一条 pending；单次 stop 清门。
+#[test]
+fn review_gate_dual_event_lane_dedup_single_stop_clears() {
+    let repo = fresh_repo();
+    let sid = "s-dedupe-lane";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "functions.subagent",
+            "tool_input": { "subagent_type": "general-purpose", "fork_context": false }
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(
+        mid.review_subagent_pending_cycle_keys,
+        vec!["lane:general-purpose".to_string()]
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({ "session_id": sid, "subagent_type": "general-purpose" }),
+    );
+    let end = load_state_for(&repo, sid);
+    assert_eq!(end.phase, 3);
+    assert!(end.review_subagent_pending_cycle_keys.is_empty());
+}
+
+#[test]
+fn pending_cap_denial_does_not_increment_active_subagent_count() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "1");
+    assert_eq!(
+        crate::router_env_flags::router_rs_cursor_review_pending_cycle_max(),
+        1
+    );
+
+    let repo = fresh_repo();
+    let sid = "s-cap-atomic";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "sa-1",
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "sa-2",
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(
+        mid.review_subagent_pending_cycle_keys.len(),
+        1,
+        "cap=1 must refuse second pending: {:?}",
+        mid.review_subagent_pending_cycle_keys
+    );
+    assert_eq!(
+        mid.active_subagent_count, 1,
+        "cap refusal must not bump open count"
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "sa-1",
+        }),
+    );
+    let after_stop = load_state_for(&repo, sid);
+    assert_eq!(
+        after_stop.active_subagent_count, 0,
+        "stop must not leave phantom open count"
+    );
+    assert_ne!(
+        after_stop.phase, 2,
+        "must not stick at phase 2 with zero open subagents after sole stop"
+    );
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
+}
+
+#[test]
+fn posttool_at_pending_cap_does_not_bump_phase() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "1");
+
+    let repo = fresh_repo();
+    let sid = "s-posttool-cap";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "cap-1",
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "functions.subagent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "fork_context": false,
+                "subagent_id": "cap-1"
+            }
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(mid.phase, 2);
+    assert_eq!(
+        mid.review_subagent_pending_cycle_keys.len(),
+        1,
+        "cap full: postTool must not add phantom pending: {:?}",
+        mid.review_subagent_pending_cycle_keys
+    );
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
+}
+
+#[test]
+fn main_thread_compact_review_clears_gate_on_stop() {
+    let repo = fresh_repo();
+    let sid = "s-main-thread-review";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let payload = json!({
+        "session_id": sid,
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "payload": {
+            "response": "[P1] scripts/router-rs/src/cursor_hooks/handlers.rs:3000 — Stop 双信号 — 续跑与 REVIEW_GATE 并存"
+        }
+    });
+    let _ = dispatch_cursor_hook_event(&repo, "afterAgentResponse", &payload);
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "done"));
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !fm.contains("REVIEW_GATE incomplete"),
+        "main-thread compact findings must clear gate; fm={fm}"
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(state.phase >= 3);
+}
+
+#[test]
+fn main_thread_deferential_compact_does_not_clear_gate_on_stop() {
+    let repo = fresh_repo();
+    let sid = "s-main-thread-deferential";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let payload = json!({
+        "session_id": sid,
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "payload": {
+            "response": "[P2] 见上文"
+        }
+    });
+    let _ = dispatch_cursor_hook_event(&repo, "afterAgentResponse", &payload);
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "done"));
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete") || fm.contains("AG_FOLLOWUP"),
+        "deferential-only compact must not clear gate; fm={fm}"
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(
+        state.phase < 3,
+        "deferential-only compact must not reach phase 3; phase={}",
+        state.phase
+    );
+}
+
+#[test]
+fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let prev_pre = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED");
+    env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", "1");
+    let prev = env::var_os("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
+    env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", "1");
+
+    let repo = fresh_repo();
+    let sid = "s-strict-disk-stop";
+    fs::create_dir_all(repo.join("artifacts/current/strict-stop")).expect("mkdir");
+    fs::write(
+        repo.join("artifacts/current/active_task.json"),
+        r#"{"task_id":"strict-stop"}"#,
+    )
+    .expect("active_task");
+    crate::autopilot_goal::framework_autopilot_goal(json!({
+        "repo_root": repo.display().to_string(),
+        "operation": "start",
+        "task_id": "strict-stop",
+        "goal": "strict disk stop",
+        "non_goals": ["n"],
+        "done_when": ["d1", "d2"],
+        "validation_commands": ["cargo test -q"],
+    }))
+    .expect("goal");
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "/gsd-execute-phase continue"),
+    );
+    let after_submit = load_state_for(&repo, sid);
+    assert!(
+        !after_submit.pre_goal_review_satisfied,
+        "strict disk: beforeSubmit must not hydrate pre_goal from disk alone"
+    );
+    let _ = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "continue"));
+    let after_stop = load_state_for(&repo, sid);
+    assert!(
+        !after_stop.pre_goal_review_satisfied,
+        "strict disk: Stop hydrate must not set pre_goal from disk GOAL alone"
+    );
+    assert!(after_stop.goal_required);
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK"),
+    }
+    match prev_pre {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED"),
+    }
+}
+
+#[test]
+fn review_subagent_start_missing_fork_infers_false_for_deep_lane() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+    env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+
+    let repo = fresh_repo();
+    let sid = "s-infer-fork";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({ "session_id": sid, "subagent_type": "general-purpose" }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({ "session_id": sid, "subagent_type": "general-purpose" }),
+    );
+    let state = load_state_for(&repo, sid);
+    assert_eq!(
+        state.phase, 3,
+        "missing fork on deep lane should infer false"
+    );
+
+    match prev {
+        Some(v) => env::set_var(
+            "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+            v,
+        ),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+    }
+}
+
+#[test]
+fn review_subagent_start_explicit_fork_true_still_blocks_gate() {
+    let repo = fresh_repo();
+    let sid = "s-fork-true";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": true,
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({ "session_id": sid, "subagent_type": "general-purpose" }),
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(state.phase < 3);
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
 }
 
 #[test]
@@ -2854,6 +3514,104 @@ fn session_end_legacy_full_sweep_removes_unrelated_session_hook_state() {
     match prev {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP", v),
         None => env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP"),
+    }
+}
+
+#[cfg(unix)]
+fn set_path_mtime_days_ago(path: &std::path::Path, days: u64) {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+        .saturating_sub(days.saturating_mul(86_400));
+    let times = [
+        libc::timespec {
+            tv_sec: secs as libc::time_t,
+            tv_nsec: 0,
+        },
+        libc::timespec {
+            tv_sec: secs as libc::time_t,
+            tv_nsec: 0,
+        },
+    ];
+    let cpath = CString::new(path.as_os_str().as_bytes()).expect("path");
+    unsafe {
+        libc::utimensat(libc::AT_FDCWD, cpath.as_ptr(), times.as_ptr(), 0);
+    }
+}
+
+/// Age sweep must not unlink `.lock` when holder PID is alive (even with old ts) if json is fresh.
+#[test]
+fn stale_sweep_preserves_alive_holder_lock_when_json_fresh() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_days = env::var_os("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS");
+    env::set_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS", "7");
+    env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP");
+
+    let repo = fresh_repo();
+    let victim = event("victim-alive-lock", "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &victim);
+    let lock_path = state_lock_path(&repo, &victim);
+    let stale_ts = now_millis().saturating_sub(120_000);
+    fs::write(
+        &lock_path,
+        format!("pid={} ts={stale_ts}\n", std::process::id()),
+    )
+    .expect("seed alive-pid lock with old ts");
+
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "sessionEnd",
+        &json!({ "session_id": "sweeper-other-session" }),
+    );
+
+    assert!(
+        lock_path.is_file(),
+        "sweep must not remove lock while holder pid is alive and json is fresh"
+    );
+
+    match prev_days {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS"),
+    }
+}
+
+/// Default age sweep removes old session_key files but keeps recent parallel-session state.
+#[cfg(unix)]
+#[test]
+fn session_end_stale_sweep_removes_old_orphan_preserves_recent() {
+    let _env = crate::test_env_sync::process_env_lock();
+    use std::env;
+    let prev_days = env::var_os("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS");
+    env::set_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS", "1");
+    env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP");
+
+    let repo = fresh_repo();
+    let old_payload = event("old-session-key", "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &old_payload);
+    let old_state = state_path(&repo, &old_payload);
+    assert!(old_state.exists());
+    set_path_mtime_days_ago(&old_state, 10);
+
+    let recent_payload = json!({ "session_id": "fresh-parallel-session" });
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &recent_payload);
+    let recent_state = state_path(&repo, &recent_payload);
+    assert!(recent_state.exists());
+
+    let end_payload = json!({ "session_id": "unrelated-end-session" });
+    let _ = dispatch_cursor_hook_event(&repo, "sessionEnd", &end_payload);
+
+    assert!(!old_state.exists(), "10d-old hook-state must be age-swept");
+    assert!(
+        recent_state.exists(),
+        "recent parallel session state must remain"
+    );
+
+    match prev_days {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS"),
     }
 }
 
@@ -3666,7 +4424,7 @@ fn cursor_lock_recovers_from_stale_timestamp() {
 }
 
 #[test]
-fn cursor_lock_recovers_from_stale_timestamp_when_pid_is_current_process() {
+fn cursor_lock_recovers_orphan_lock_file_without_remove_when_holder_alive() {
     let repo = fresh_repo();
     let payload = event("s27-alive", "review");
     let lock_path = state_lock_path(&repo, &payload);
@@ -3676,11 +4434,15 @@ fn cursor_lock_recovers_from_stale_timestamp_when_pid_is_current_process() {
         &lock_path,
         format!("pid={} ts={stale_ts}\n", std::process::id()),
     )
-    .expect("seed stale lock");
+    .expect("seed stale lock metadata without flock holder");
     let mut lock = acquire_state_lock(&repo, &payload);
     assert!(
         lock.is_some(),
-        "must reclaim L3 lock when age > HOOK_STATE_LOCK_STALE_MS even if metadata pid is alive"
+        "orphan lock file must be acquired via try_lock without remove_file on alive pid"
+    );
+    assert!(
+        lock_path.is_file(),
+        "must not remove_file lock path when holder pid is still alive"
     );
     release_state_lock(&mut lock);
 }
@@ -3688,12 +4450,12 @@ fn cursor_lock_recovers_from_stale_timestamp_when_pid_is_current_process() {
 #[test]
 fn cursor_lock_concurrent_acquire_serializes() {
     let repo = Arc::new(fresh_repo());
-    let payload = event("s28-shared", "review");
+    let sessions = ["s28-a", "s28-b"];
     let mut joins = Vec::new();
-    for _ in 0..2 {
+    for session in sessions {
         let repo = Arc::clone(&repo);
-        let payload = payload.clone();
         joins.push(std::thread::spawn(move || {
+            let payload = event(session, "review");
             for _ in 0..20 {
                 let lock = acquire_state_lock(&repo, &payload).expect("acquire");
                 let mut guard = Some(lock);
@@ -4056,6 +4818,28 @@ fn session_start_additional_context_observes_router_rs_sessionstart_max_env() {
 }
 
 #[test]
+fn session_start_resets_session_call_tracker() {
+    let _inject_on = OperatorInjectEnabledGuard::new();
+    let repo = fresh_repo();
+    fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+    crate::session_call_tracker::init_tracker(&repo).expect("seed");
+    for _ in 0..50 {
+        crate::session_call_tracker::record_tool_call(&repo, "Read").expect("record");
+    }
+    let before = crate::session_call_tracker::read_tracker_state(&repo).expect("read");
+    assert!(before["total_calls"].as_u64().unwrap_or(0) >= 50);
+
+    let payload = json!({
+        "session_id": "ss-tracker-reset",
+        "cwd": repo.display().to_string()
+    });
+    let _ = dispatch_cursor_hook_event(&repo, "sessionStart", &payload);
+    let after = crate::session_call_tracker::read_tracker_state(&repo).expect("read after");
+    assert_eq!(after["total_calls"], 0);
+    assert!(after["per_tool"].as_object().unwrap().is_empty());
+}
+
+#[test]
 fn session_start_prepends_active_focus_goal_mismatch_hint() {
     let _inject_on = OperatorInjectEnabledGuard::new();
     let _rg = ReviewGateDisableEnvClearGuard::new();
@@ -4250,11 +5034,14 @@ fn cursor_launcher_fail_closed_before_submit_when_router_rs_missing() {
         std::process::id()
     ));
     fs::create_dir_all(&empty_ws).expect("empty workspace");
+    let empty_target = empty_ws.join("no-cargo-target");
+    fs::create_dir_all(&empty_target).expect("empty target dir");
 
     let output = Command::new("/bin/bash")
         .arg(&launcher)
         .arg("BeforeSubmitPrompt")
         .env_remove("ROUTER_RS_BIN")
+        .env("CARGO_TARGET_DIR", &empty_target)
         .env("PATH", "/usr/bin:/bin")
         .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
         .env("SKILL_FRAMEWORK_ROOT", &empty_ws)

@@ -32,15 +32,59 @@ pub struct LintFinding {
 static TABLE_ROW: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*\|.*\|.*\|").expect("table row regex"));
 
-static SEVERITY_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*\[P[012]\]").expect("severity prefix regex")
-});
+static SEVERITY_PREFIX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*\[P[012]\]").expect("severity prefix regex"));
 
 static CAVEAT_PREFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*Caveat:").expect("caveat prefix regex"));
 
 static SCOPE_PREFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*(Scope:|Out of scope:)").expect("scope prefix regex"));
+
+/// Whether assistant text contains at least one compact review finding line (`[P0]`–`[P2]` or `Caveat:`).
+pub fn assistant_has_compact_review_finding_line(text: &str) -> bool {
+    text.lines().any(|line| {
+        let t = line.trim();
+        SEVERITY_PREFIX.is_match(t) || CAVEAT_PREFIX.is_match(t)
+    })
+}
+
+const SUBSTANTIVE_FINDING_BODY_MIN_LEN: usize = 12;
+
+fn remainder_after_compact_finding_prefix(line: &str) -> &str {
+    let t = line.trim();
+    if let Some(m) = SEVERITY_PREFIX.find(t) {
+        return t[m.end()..].trim_start();
+    }
+    if let Some(m) = CAVEAT_PREFIX.find(t) {
+        return t[m.end()..].trim_start();
+    }
+    ""
+}
+
+fn line_is_substantive_compact_finding(line: &str) -> bool {
+    let t = line.trim();
+    if !(SEVERITY_PREFIX.is_match(t) || CAVEAT_PREFIX.is_match(t)) {
+        return false;
+    }
+    let rest = remainder_after_compact_finding_prefix(t);
+    rest.contains(':') && rest.len() >= SUBSTANTIVE_FINDING_BODY_MIN_LEN
+}
+
+/// Gate main-thread REVIEW_GATE clear: avoid `[P2] 见上文`-style prefix-only lines.
+pub fn assistant_has_substantive_compact_review_finding_line(text: &str) -> bool {
+    let finding_lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|t| SEVERITY_PREFIX.is_match(t) || CAVEAT_PREFIX.is_match(t))
+        .collect();
+    if finding_lines.len() >= 2 {
+        return true;
+    }
+    finding_lines
+        .iter()
+        .any(|line| line_is_substantive_compact_finding(line))
+}
 
 /// Validate review output text against compact envelope rules.
 ///
@@ -84,10 +128,13 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
 
     // Check 2: no Markdown tables before the first [P*] or Caveat: line
     // (Scope:/Out of scope: lines are allowed before findings)
-    let first_finding_idx = non_blank_indices.iter().find(|&&i| {
-        let line = lines[i].trim();
-        SEVERITY_PREFIX.is_match(line) || CAVEAT_PREFIX.is_match(line)
-    }).copied();
+    let first_finding_idx = non_blank_indices
+        .iter()
+        .find(|&&i| {
+            let line = lines[i].trim();
+            SEVERITY_PREFIX.is_match(line) || CAVEAT_PREFIX.is_match(line)
+        })
+        .copied();
 
     if let Some(limit) = first_finding_idx {
         for i in 0..limit {
@@ -112,8 +159,9 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
     if !has_any_finding && !first_line.is_empty() {
         // No findings at all — may still be a valid brief Scope-only reply
         // Only flag if first line looks like a verdict
-        let is_verdict =
-            first_line.starts_with("blocked") || first_line.starts_with("revise") || first_line.starts_with("ship");
+        let is_verdict = first_line.starts_with("blocked")
+            || first_line.starts_with("revise")
+            || first_line.starts_with("ship");
         if is_verdict {
             findings.push(LintFinding {
                 severity: LintSeverity::Warning,
@@ -132,7 +180,8 @@ mod tests {
 
     #[test]
     fn clean_output_with_p0_first() {
-        let text = "[P0] src/main.rs:42 — use-after-free in parse loop — segfault on malformed input
+        let text =
+            "[P0] src/main.rs:42 — use-after-free in parse loop — segfault on malformed input
 [P1] src/lib.rs:15 — unchecked unwrap — panic on empty slice
 verdict: revise before merge";
         let f = lint_review_output(text);
@@ -161,7 +210,9 @@ verdict: revise before merge";
 [P0] src/main.rs:42 — use-after-free";
         let f = lint_review_output(text);
         assert!(!f.is_empty(), "expected warnings");
-        assert!(f.iter().any(|fl| fl.message.contains("First non-blank line")));
+        assert!(f
+            .iter()
+            .any(|fl| fl.message.contains("First non-blank line")));
     }
 
     #[test]
@@ -179,7 +230,9 @@ verdict: revise before merge";
         let text = "blocked: this should not ship
 Also some prose here";
         let f = lint_review_output(text);
-        assert!(f.iter().any(|fl| fl.message.contains("Verdict appears before")));
+        assert!(f
+            .iter()
+            .any(|fl| fl.message.contains("Verdict appears before")));
     }
 
     #[test]
@@ -207,5 +260,18 @@ Out of scope: tests/
 | all | revise |";
         let f = lint_review_output(text);
         assert!(f.is_empty(), "expected clean, got: {f:?}");
+    }
+
+    #[test]
+    fn substantive_requires_path_anchor_or_two_lines() {
+        assert!(!assistant_has_substantive_compact_review_finding_line(
+            "[P2] 见上文"
+        ));
+        assert!(assistant_has_substantive_compact_review_finding_line(
+            "[P1] scripts/router-rs/src/cursor_hooks/handlers.rs:3000 — issue"
+        ));
+        assert!(assistant_has_substantive_compact_review_finding_line(
+            "[P0] a\n[P1] b"
+        ));
     }
 }
