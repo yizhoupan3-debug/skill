@@ -254,7 +254,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | L3 control plane | `scripts/router-rs/src/`：`codex_hooks.rs`、`claude_hooks.rs`、`cursor_hooks/mod.rs`（同目录 `handlers.rs` 等经 `include!` 编入同一 Rust 模块）、`autopilot_goal.rs`、`rfv_loop.rs`、`framework_runtime/mod.rs`、`task_state.rs`、`host_integration.rs` |
 | L2 continuity | `artifacts/current/`、`TRACE_EVENTS.jsonl`、`STEP_LEDGER.jsonl`、`configs/framework/*SCHEMA*` |
 | Skill 热路由（router-rs hot path） | `skills/SKILL_ROUTING_RUNTIME.json` |
-| Skill 冷元数据（**非** router-rs hot path；由 `router-rs framework skills` / policy contract / CI 消费） | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json` |
+| Skill 伴生元数据（**非**每 prompt 热路径；`SKILL_PLUGIN_CATALOG` / `SKILL_ROUTING_RUNTIME_EXPLAIN` 由 refresh / policy / CI 消费；**`SKILL_ROUTING_METADATA.json` 在 `load_records_from_runtime` 时 merge**，见 `route/records.rs` `merge_sidecar_route_metadata_from_runtime`） | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`（EXPLAIN：CI/companion/人读，router route 模块不读） |
 | Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `scripts/router-rs/src/registry_loader.rs` |
 | 宿主投影 GSD/review 文案 | `configs/framework/host_projection_narrative.json` |
 | 生成物 manifest / drift | `configs/framework/GENERATED_ARTIFACTS.json` + `framework host-integration generated-artifacts-status` |

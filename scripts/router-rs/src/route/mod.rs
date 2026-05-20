@@ -28,7 +28,7 @@ pub(crate) use policy::{build_route_diff_report, build_route_policy, build_route
 #[cfg(test)]
 pub(crate) use records::load_records_cached_for_stdio_with_default_runtime_path;
 pub(crate) use records::{
-    invalidate_records_cache, invalidate_records_cache_for_paths, load_inline_records,
+    invalidate_records_cache, load_inline_records,
     load_records, load_records_cached_for_stdio, load_records_from_manifest,
 };
 pub(crate) use routing::{

@@ -54,8 +54,11 @@ const PROTECTED_GENERATED_PATHS: [&str; 4] = [
     CODEX_HOOKS_README_PATH,
     HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
 ];
-const PROTECTED_GENERATED_PREFIXES: [&str; 2] =
-    ["skills/SKILL_", "configs/framework/RUNTIME_REGISTRY.json"];
+const PROTECTED_GENERATED_PREFIXES: [&str; 3] = [
+    "skills/SKILL_",
+    "configs/framework/RUNTIME_REGISTRY.json",
+    "scripts/router-rs/",
+];
 const CODEX_REVIEW_SUBAGENT_TOOL_NAMES: [&str; 6] = [
     "task",
     "functions.task",
@@ -236,7 +239,7 @@ impl Drop for CodexStateLock {
 /// camelCase per Codex *Common input fields*), then env fallbacks operators may set.
 ///
 /// Does **not** include the per-invocation fallback (`codex_session_key` adds that); see
-/// [`docs/plans/RESEARCH_codex_hooks_official_crosscheck.md`](../../../docs/plans/RESEARCH_codex_hooks_official_crosscheck.md) (archived stub; see `docs/plans/README.md`).
+/// See [`docs/plans/README.md`](../../../docs/plans/README.md) for plans index (historical crosscheck stubs removed).
 fn codex_stable_session_raw(event: &Value) -> Option<String> {
     fn trimmed_nonempty(value: &str) -> Option<String> {
         let t = value.trim();
@@ -1048,6 +1051,9 @@ fn protected_generated_paths() -> Vec<&'static str> {
     PROTECTED_GENERATED_PATHS.to_vec()
 }
 
+/// Codex hook install projection. `codex_audit_commands.legacy_review_subagent_gate` is a
+/// stable JSON key alias only: the CLI subcommand is `review-subagent-gate`, which maps to the
+/// same `lifecycle-context` handler as `codex_lifecycle_context` (not a separate gate).
 pub fn build_codex_hook_projection() -> Value {
     json!({
         "schema_version": "router-rs-codex-hook-projection-v1",

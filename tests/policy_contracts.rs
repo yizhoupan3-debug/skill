@@ -157,16 +157,19 @@ fn plan_mode_keeps_review_optional_and_review_only() {
 
     let review_gate = read_text(&project_root().join(".cursor/rules/review-subagent-gate.mdc"));
     for marker in [
-        "review lane 必须只读",
-        "输出 findings、风险、缺测与证据锚点",
-        "不改代码",
-        "review 默认不执行",
+        "review lane **只读**",
+        "纯 review 禁止默认改代码",
+        "skills/code-review-deep/SKILL.md",
     ] {
         assert!(review_gate.contains(marker), "missing marker: {marker}");
     }
 
     let agents = read_text(&project_root().join("AGENTS.md"));
-    for marker in ["Review 与执行解耦", "只找 findings", "纯 review 回合除外"] {
+    for marker in [
+        "Review findings-only",
+        "skills/code-review-deep/SKILL.md",
+        "docs/references/EXECUTION_LADDER.md",
+    ] {
         assert!(agents.contains(marker), "missing AGENTS marker: {marker}");
     }
 
@@ -373,8 +376,8 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         "AGENTS.md"
     );
     let codex_policy = read_text(&repo_root.join("AGENTS.md"));
-    assert!(codex_policy.contains("bounded sidecar admission"));
-    assert!(codex_policy.contains("主线程始终负责上下文判断"));
+    assert!(codex_policy.contains("Review findings-only"));
+    assert!(codex_policy.contains("docs/references/EXECUTION_LADDER.md"));
     assert!(manifest["full_sync"]["text_files"]
         .as_array()
         .unwrap()
@@ -1058,15 +1061,17 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
 }
 
 #[test]
-#[ignore = "legacy full plugin_catalog contract; companions are refresh stubs since harness-minimal-gsd"]
-fn plugin_catalog_routing_metadata_legacy_capabilities_contract() {
+fn plugin_catalog_routing_metadata_companion_schemas_contract() {
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
     let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
     let explain = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json"));
     let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
 
     assert_eq!(plugin_catalog["schema_version"], "skill-plugin-catalog-v1");
-    assert_eq!(plugin_catalog["plugin_abi_version"], "skill-plugin-abi-v1");
+    assert!(
+        plugin_catalog["skills"].is_object(),
+        "companion plugin catalog must list skills"
+    );
     assert_eq!(
         routing_metadata["schema_version"],
         "skill-routing-metadata-v1"
@@ -1076,190 +1081,14 @@ fn plugin_catalog_routing_metadata_legacy_capabilities_contract() {
         "skill-routing-runtime-explain-v1"
     );
     assert_eq!(health["schema_version"], "skill-health-manifest-v1");
-    assert_eq!(health["status"], "healthy");
-    assert_eq!(health["summary"]["degraded_records"], 0);
-    let capability_classes = plugin_catalog["capability_classes"]
-        .as_array()
-        .expect("capability_classes")
-        .iter()
-        .map(|class| class.as_str().expect("capability class").to_string())
-        .collect::<BTreeSet<_>>();
-    let key_classes = plugin_catalog["capability_key_classes"]
-        .as_object()
-        .expect("capability_key_classes");
-    let allowed_keys = key_classes.keys().cloned().collect::<BTreeSet<_>>();
-    let record_shape = plugin_catalog["contract"]["record_shape"]
-        .as_array()
-        .expect("plugin contract record_shape")
-        .iter()
-        .map(|key| key.as_str().expect("record_shape key").to_string())
-        .collect::<BTreeSet<_>>();
-    for (key, class) in key_classes {
-        let class = class.as_str().expect("capability_key_classes value");
-        assert!(
-            capability_classes.contains(class),
-            "capability key {key} maps to unknown class {class}"
-        );
-    }
-    let allowed_routing_layers = ["L0", "L1", "L2", "L3", "L4"]
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    let allowed_routing_owners = ["owner", "gate"].into_iter().collect::<BTreeSet<_>>();
-    let allowed_routing_gates = ["none", "evidence", "source", "artifact", "delegation"]
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    let allowed_network_access = ["local", "conditional", "required", "unspecified"]
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    for (slug, record) in plugin_catalog["skills"].as_object().expect("plugin skills") {
-        let record_keys = record
-            .as_object()
-            .unwrap_or_else(|| panic!("plugin {slug} record must be an object"))
-            .keys()
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        assert_eq!(
-            record_keys, record_shape,
-            "plugin {slug} record keys must match contract.record_shape"
-        );
-        let caps = record["capabilities"]
-            .as_object()
-            .unwrap_or_else(|| panic!("plugin {slug} capabilities must be an object"));
-        for key in caps.keys() {
-            assert!(
-                allowed_keys.contains(key),
-                "plugin {slug} uses unknown capability key {key}"
-            );
-        }
-        let routing_layer = caps["routing_layer"].as_str().unwrap_or_default();
-        let routing_owner = caps["routing_owner"].as_str().unwrap_or_default();
-        let routing_gate = caps["routing_gate"].as_str().unwrap_or_default();
-        let network_access = caps["network_access"].as_str().unwrap_or_default();
-        for array_key in [
-            "allowed_tools",
-            "approval_required_tools",
-            "artifact_outputs",
-        ] {
-            let values = caps[array_key]
-                .as_array()
-                .unwrap_or_else(|| panic!("plugin {slug} {array_key} must be an array"));
-            assert!(
-                values.iter().all(|value| value.as_str().is_some()),
-                "plugin {slug} {array_key} must contain strings only"
-            );
-        }
-        assert!(
-            allowed_routing_layers.contains(routing_layer),
-            "plugin {slug} has unknown routing_layer {routing_layer}"
-        );
-        assert!(
-            allowed_routing_owners.contains(routing_owner),
-            "plugin {slug} has unknown routing_owner {routing_owner}"
-        );
-        assert!(
-            allowed_routing_gates.contains(routing_gate),
-            "plugin {slug} has unknown routing_gate {routing_gate}"
-        );
-        assert!(
-            allowed_network_access.contains(network_access),
-            "plugin {slug} has unknown network_access {network_access}"
-        );
-    }
-    let sample = plugin_catalog["skills"]["skill-framework-developer"].clone();
-    let validate_sample = |record: serde_json::Value| -> Result<(), String> {
-        let record_obj = record
-            .as_object()
-            .ok_or_else(|| "record must be object".to_string())?;
-        let keys = record_obj.keys().cloned().collect::<BTreeSet<_>>();
-        if keys != record_shape {
-            return Err("record_shape_mismatch".to_string());
-        }
-        let caps = record["capabilities"]
-            .as_object()
-            .ok_or_else(|| "capabilities must be object".to_string())?;
-        for key in caps.keys() {
-            if !allowed_keys.contains(key) {
-                return Err(format!("unknown_capability_key:{key}"));
-            }
-        }
-        if !allowed_routing_layers.contains(caps["routing_layer"].as_str().unwrap_or_default()) {
-            return Err("unknown_routing_layer".to_string());
-        }
-        if !allowed_routing_owners.contains(caps["routing_owner"].as_str().unwrap_or_default()) {
-            return Err("unknown_routing_owner".to_string());
-        }
-        if !allowed_routing_gates.contains(caps["routing_gate"].as_str().unwrap_or_default()) {
-            return Err("unknown_routing_gate".to_string());
-        }
-        if !allowed_network_access.contains(caps["network_access"].as_str().unwrap_or_default()) {
-            return Err("unknown_network_access".to_string());
-        }
-        for array_key in [
-            "allowed_tools",
-            "approval_required_tools",
-            "artifact_outputs",
-        ] {
-            if !caps[array_key]
-                .as_array()
-                .map(|values| values.iter().all(|value| value.as_str().is_some()))
-                .unwrap_or(false)
-            {
-                return Err(format!("invalid_value_shape:{array_key}"));
-            }
-        }
-        Ok(())
-    };
-    let mut unknown_key = sample.clone();
-    unknown_key["capabilities"]["made_up"] = serde_json::json!("x");
-    assert!(validate_sample(unknown_key)
-        .unwrap_err()
-        .contains("unknown_capability_key"));
-    let mut unknown_enum = sample.clone();
-    unknown_enum["capabilities"]["routing_gate"] = serde_json::json!("made-up");
-    assert_eq!(
-        validate_sample(unknown_enum).unwrap_err(),
-        "unknown_routing_gate"
+    assert!(
+        routing_metadata["skills"].is_object(),
+        "routing metadata companion must list skills"
     );
-    let mut wrong_shape = sample.clone();
-    wrong_shape["capabilities"]["allowed_tools"] = serde_json::json!("shell");
     assert_eq!(
-        validate_sample(wrong_shape).unwrap_err(),
-        "invalid_value_shape:allowed_tools"
-    );
-    let mut wrong_record_shape = sample.clone();
-    wrong_record_shape["unexpected"] = serde_json::json!(true);
-    assert_eq!(
-        validate_sample(wrong_record_shape).unwrap_err(),
-        "record_shape_mismatch"
-    );
-
-    let skill = "skill-framework-developer";
-    assert!(plugin_catalog["skills"][skill].is_object());
-    assert!(plugin_catalog["skills"][skill]["dependencies"].is_object());
-    assert!(plugin_catalog["skills"][skill]["test_fixtures"].is_object());
-    assert_eq!(
-        plugin_catalog["skills"][skill]["lifecycle"]["retirement"]["state"],
-        "active"
-    );
-    assert!(routing_metadata["skills"][skill].is_object());
-    if explain["selected"][skill].is_object() {
-        assert_eq!(
-            explain["selected"][skill]["plugin_kind"],
-            plugin_catalog["skills"][skill]["kind"]
-        );
-    } else {
-        assert_eq!(explain["summary"]["has_sparse_entries"], true);
-        assert_eq!(explain["summary"]["selected_emitted_count"], 0);
-        assert!(
-            explain["summary"]["selected_total_count"]
-                .as_u64()
-                .unwrap_or_default()
-                > 0
-        );
-    }
-    assert_eq!(
-        routing_metadata["skills"][skill]["fallback_policy"]["mode"],
-        "eligible-in-runtime"
+        explain.get("source_of_truth").and_then(|v| v.as_bool()),
+        Some(false),
+        "RUNTIME_EXPLAIN is a refresh stub, not router hot-path truth"
     );
 }
 

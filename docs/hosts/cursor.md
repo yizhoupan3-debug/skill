@@ -28,7 +28,7 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 
 ## Hook 能力（本仓）
 
-默认 **7 个** Cursor 事件（减法闭集，见 [`.cursor/hooks.json`](../.cursor/hooks.json)）：
+默认 **7 个** Cursor 事件（减法闭集，见 [`.cursor/hooks.json`](../../.cursor/hooks.json)）：
 
 | 事件 | 作用 |
 |------|------|
@@ -38,7 +38,7 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 | `postToolUse` | Review multiset 兜底 + Shell 账本；**非门控工具**在 router-rs 内 fast-path 跳过。**`timeout: 20`**（与 beforeSubmit/stop/subagent 一致） |
 | `sessionStart` / `sessionEnd` | 连续性注入 + hook-state 清扫 |
 
-**已默认移除**（勿在 `hooks.json` 恢复）：`afterAgentResponse`（compact 清门改依赖 `Stop` tail）、`beforeShellExecution` / `afterShellExecution`、`afterFileEdit`（rustfmt）、`preCompact`。bootstrap 模板 [`cursor-hooks.workspace-template.json`](../configs/framework/cursor-hooks.workspace-template.json) **须与** [`.cursor/hooks.json`](../.cursor/hooks.json) **保持同一 7 事件集**（`scripts/ci/check-cursor-hooks-parity.sh`）。
+**已默认移除**（勿在 `hooks.json` 恢复）：`afterAgentResponse`（handler 仍保留：主线程 compact 可提前 bump review phase；默认未注册，清门仍依赖 `Stop` tail）、`beforeShellExecution` / `afterShellExecution`、`afterFileEdit`（rustfmt）、`preCompact`。bootstrap 模板 [`cursor-hooks.workspace-template.json`](../../configs/framework/cursor-hooks.workspace-template.json) **须与** [`.cursor/hooks.json`](../../.cursor/hooks.json) **保持同一 7 事件集**（`scripts/ci/check-cursor-hooks-parity.sh`）。
 
 ### PostToolUse `timeout: 20`（运维）
 
@@ -47,7 +47,7 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 - **症状**：review 证据链长期 `REVIEW_GATE incomplete` 且日志无新 `router-rs` 输出 → 查 `postToolUse` 是否超时；优先 release 二进制、`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 应急对比、清理 `.cursor/hook-state/` 陈旧文件（见上表 `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS`）。
 - **勿**盲目调到 60s+：只会掩盖磁盘/状态膨胀；应修根因。确需上调时同时改 `.cursor/hooks.json` 与 workspace template，并跑 `check-cursor-hooks-parity.sh`。
 
-- **Agent 面**：上表事件 → `router-rs cursor hook`（经 [`cursor-router-rs-hook.sh`](../configs/framework/cursor-router-rs-hook.sh)）
+- **Agent 面**：上表事件 → `router-rs cursor hook`（经 [`cursor-router-rs-hook.sh`](../../configs/framework/cursor-router-rs-hook.sh)）
 - **REVIEW_GATE 可清点 lane**（仅）：`general-purpose`、`best-of-n-runner`（registry `review_gate.deep_gate_lanes`）
 - **Goal drive**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` — **不是** `/gsd-new-project` 等 pre-exec 命令（`/autopilot` 已退役）
 - **Fail-closed**：关键事件经 `cursor-router-rs-hook.sh`；`beforeSubmit` 对 plan 文件无可靠 Plan/Agent 模式信号
@@ -69,8 +69,8 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
      cargo build --release --manifest-path scripts/router-rs/Cargo.toml
    ```
 2. **Launcher** 探测顺序：仓库 `scripts/router-rs/target/release` → `/tmp/skill-cargo-target/release` → debug → `PATH`。可选：`export ROUTER_RS_BIN="$PWD/scripts/router-rs/target/release/router-rs"`。
-3. **项目 env**：[`.cursor/router-rs-hook.env`](../.cursor/router-rs-hook.env) 由 launcher 自动 `source`（默认关 post-tool evidence、同步 `cargo check`、SessionEnd 杀终端）。Claude 对齐模板见 [`configs/framework/claude-router-rs-hook.env`](../configs/framework/claude-router-rs-hook.env)。
-4. **主进程索引**：仓库 [`.vscode/settings.json`](../.vscode/settings.json) 排除 `target/` 等；`rust-analyzer.cargo.targetDir` 指向 `/tmp/skill-cargo-target`。Browser MCP 等在 **Cursor Settings → MCP** 手动关闭（与 hook 正交）。
+3. **项目 env**：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 由 launcher 自动 `source`（默认关 post-tool evidence、同步 `cargo check`、SessionEnd 杀终端）。Claude 对齐模板见 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)。
+4. **主进程索引**：仓库 [`.vscode/settings.json`](../../.vscode/settings.json) 排除 `target/` 等；`rust-analyzer.cargo.targetDir` 指向 `/tmp/skill-cargo-target`。Browser MCP 等在 **Cursor Settings → MCP** 手动关闭（与 hook 正交）。
 
 ## 状态有界 / 内存（hook 子进程）
 

@@ -16,6 +16,8 @@
 | 主题 | 文档 |
 |------|------|
 | 使用者视角：宿主差异、门控快查、阅读顺序 | [framework_operator_primer.md](framework_operator_primer.md) |
+| Env 命名与默认值表 | [framework_naming_conventions.md](framework_naming_conventions.md) |
+| 政策分层地图（operator profiles 依赖） | [harness_policy_map.md](harness_policy_map.md) |
 | RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
 | 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | GSD 任务 ROADMAP：`artifacts/current/<task_id>/ROADMAP.md`；见 [plans/README.md](plans/README.md) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |

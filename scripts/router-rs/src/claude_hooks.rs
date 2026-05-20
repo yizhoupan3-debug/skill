@@ -8,7 +8,7 @@ use crate::hook_common::{
     has_override, is_review_prompt, normalize_subagent_type, normalize_tool_name,
 };
 use crate::review_gate_engine::{
-    fork_context_from_values, independent_reviewer_evidence, review_gate_blocks_stop,
+    fork_context_from_values, claude_independent_reviewer_evidence, review_gate_blocks_stop,
     ReviewGateFacts,
 };
 use serde_json::{json, Map, Value};
@@ -19,6 +19,9 @@ use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 
 const CLAUDE_HOOK_STATE_UNREADABLE: &str =
     "router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
@@ -663,6 +666,102 @@ fn review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
     ))
 }
 
+/// Serialize Claude review_gate JSON under `<state>.lock` (ADR P1-5; mirrors Codex hook-state flock).
+#[cfg(unix)]
+struct ClaudeReviewStateLock {
+    file: std::fs::File,
+}
+
+#[cfg(unix)]
+impl Drop for ClaudeReviewStateLock {
+    fn drop(&mut self) {
+        let fd = self.file.as_raw_fd();
+        unsafe {
+            let _ = libc::flock(fd, libc::LOCK_UN);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+struct ClaudeReviewStateLock {
+    path: PathBuf,
+}
+
+#[cfg(not(unix))]
+impl Drop for ClaudeReviewStateLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(unix)]
+fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewStateLock, String> {
+    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("claude_state_dir_create_failed: {e}"))?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|e| format!("claude_state_lock_open_failed: {e}"))?;
+    let fd = file.as_raw_fd();
+    let rc = unsafe { libc::flock(fd, libc::LOCK_EX) };
+    if rc != 0 {
+        return Err(format!(
+            "claude_state_lock_flock_failed: {}",
+            io::Error::last_os_error()
+        ));
+    }
+    Ok(ClaudeReviewStateLock { file })
+}
+
+#[cfg(not(unix))]
+fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewStateLock, String> {
+    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("claude_state_dir_create_failed: {e}"))?;
+    }
+    let started = SystemTime::now();
+    loop {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+        {
+            Ok(mut file) => {
+                let now_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                let stamp = format!("pid={} ts={now_ms}\n", std::process::id());
+                file.write_all(stamp.as_bytes())
+                    .map_err(|e| format!("claude_state_lock_write_failed: {e}"))?;
+                file.sync_all()
+                    .map_err(|e| format!("claude_state_lock_sync_failed: {e}"))?;
+                return Ok(ClaudeReviewStateLock { path: lock_path });
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                if started.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(20) {
+                    return Err("claude_state_lock_timeout".to_string());
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(err) => return Err(format!("claude_state_lock_open_failed: {err}")),
+        }
+    }
+}
+
+fn with_claude_review_state_lock<T, F>(state_path: &Path, f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    let _guard = acquire_claude_review_state_lock(state_path)?;
+    f()
+}
+
 #[derive(Debug, Clone)]
 enum AgentDiskState<T> {
     Absent,
@@ -740,15 +839,18 @@ fn load_touch_state_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<To
 
 fn write_review_state(repo_root: &Path, payload: &Value, state: &ReviewGateState) {
     let path = review_state_path(repo_root, payload);
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
     let value = json!({
         "review_required": state.review_required,
         "review_override": state.review_override,
         "independent_reviewer_seen": state.independent_reviewer_seen,
     });
-    if let Err(err) = fs::write(path, format!("{value}\n")) {
+    let body = format!("{value}\n");
+    if let Err(err) = with_claude_review_state_lock(&path, || {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(&path, &body).map_err(|e| e.to_string())
+    }) {
         eprintln!("[router-rs] stdio agent hook state write failed (review_gate): {err}");
     }
 }
@@ -814,22 +916,33 @@ fn tool_name_implies_subagent(normalized: &str) -> bool {
 }
 
 fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
-    let mut state = match load_review_gate_disk(repo_root, payload) {
-        AgentDiskState::Unreadable => return,
-        AgentDiskState::Absent => ReviewGateState::default(),
-        AgentDiskState::Ok(s) => s,
-    };
-    if !state.review_required || state.review_override {
-        return;
-    }
+    let path = review_state_path(repo_root, payload);
     let tool_input = agent_tool_input(payload);
     let fork = fork_context_from_values(&tool_input, Some(payload));
-    if subagent_tool(payload)
-        && independent_reviewer_evidence(reviewer_lane(&tool_input, payload), fork)
-    {
-        state.independent_reviewer_seen = true;
-        write_review_state(repo_root, payload, &state);
-    }
+    let Ok(()) = with_claude_review_state_lock(&path, || {
+        let mut state = match load_review_gate_disk(repo_root, payload) {
+            AgentDiskState::Unreadable => return Ok(()),
+            AgentDiskState::Absent => ReviewGateState::default(),
+            AgentDiskState::Ok(s) => s,
+        };
+        if !state.review_required || state.review_override {
+            return Ok(());
+        }
+        if subagent_tool(payload)
+            && claude_independent_reviewer_evidence(reviewer_lane(&tool_input, payload), fork)
+        {
+            state.independent_reviewer_seen = true;
+            let value = json!({
+                "review_required": state.review_required,
+                "review_override": state.review_override,
+                "independent_reviewer_seen": state.independent_reviewer_seen,
+            });
+            fs::write(&path, format!("{value}\n")).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }) else {
+        return;
+    };
 }
 
 fn legacy_touch_state_path(repo_root: &Path) -> PathBuf {
@@ -1171,6 +1284,20 @@ mod tests {
         let repo = unique_test_repo("non-automation-prompt");
         let payload = json!({ "prompt": "fix the failing test in main.rs" });
         assert!(run_user_prompt_submit(&repo, &payload).is_none());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn claude_review_state_lock_file_created_on_write() {
+        let repo = unique_test_repo("claude-flock");
+        let payload = json!({ "session_id": "flock-s1", "prompt": "深度 review" });
+        let _ = run_user_prompt_submit(&repo, &payload);
+        let path = review_state_path(&repo, &payload);
+        assert!(path.is_file());
+        assert!(
+            PathBuf::from(format!("{}.lock", path.display())).is_file(),
+            "flock sidecar should exist after locked write"
+        );
         let _ = fs::remove_dir_all(repo);
     }
 

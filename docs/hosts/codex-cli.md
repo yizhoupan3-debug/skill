@@ -41,7 +41,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 ## 独有
 
 - **`session_supervisor`** / tmux 长会话（见 `rust-session-supervisor` skill）
-- `$CODEX_HOME/skills` 为 **26 pinned** surface，≠ 全量 60 on-disk skills
+- `$CODEX_HOME/skills` 为 **27 pinned** surface（`skills/SKILL_ROUTING_RUNTIME.json` `hot_skill_count`），≠ 全量 **52** on-disk skills（`manifest_skill_count`）。仓库内投影目录 `artifacts/codex-skill-surface/skills` 须 `just publish` 或 `framework maint update-one-shot` 生成，克隆后可能为空。
 
 ## 自检
 

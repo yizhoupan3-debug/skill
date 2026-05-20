@@ -138,45 +138,6 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
     })
 }
 
-/// Record token usage in the session tracker.
-#[allow(dead_code)]
-pub fn record_token_usage(
-    repo_root: &Path,
-    input_tokens: u64,
-    output_tokens: u64,
-) -> Result<(), String> {
-    apply_task_ledger_mutation(repo_root, || {
-        let path = tracker_path(repo_root);
-        let mut payload = load_or_init_tracker(&path)?;
-
-        let token_usage = payload["token_usage"]
-            .as_object_mut()
-            .ok_or_else(|| "token_usage not an object".to_string())?;
-
-        let input = token_usage
-            .get("input")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
-        let output = token_usage
-            .get("output")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
-        let total = token_usage
-            .get("total")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
-
-        token_usage.insert("input".to_string(), json!(input + input_tokens));
-        token_usage.insert("output".to_string(), json!(output + output_tokens));
-        token_usage.insert(
-            "total".to_string(),
-            json!(total + input_tokens + output_tokens),
-        );
-
-        write_tracker(&path, &payload)
-    })
-}
-
 /// Read the current tracker state as JSON (for MCP resource).
 #[allow(dead_code)]
 pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
@@ -302,18 +263,6 @@ mod tests {
         assert_eq!(state["total_calls"], 3);
         assert_eq!(state["per_tool"]["Read"], 2);
         assert_eq!(state["per_tool"]["Bash"], 1);
-    }
-
-    #[test]
-    fn token_usage_accumulates() {
-        let repo = test_repo("tokens");
-        init_tracker(&repo).unwrap();
-        record_token_usage(&repo, 100, 50).unwrap();
-        record_token_usage(&repo, 200, 75).unwrap();
-        let state = read_tracker_state(&repo).unwrap();
-        assert_eq!(state["token_usage"]["input"], 300);
-        assert_eq!(state["token_usage"]["output"], 125);
-        assert_eq!(state["token_usage"]["total"], 425);
     }
 
     #[test]

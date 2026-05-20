@@ -806,7 +806,7 @@ fn gsd_skips_pre_goal_nag_when_goal_state_on_disk() {
     let _gate = ReviewGateActiveGuard::new();
     use std::env;
     let prev_strict = env::var_os("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
-    env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
+    env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", "0");
 
     let repo = fresh_repo();
     fs::create_dir_all(repo.join("artifacts/current/gt1")).expect("mkdir");
@@ -2914,6 +2914,44 @@ fn review_gate_dual_event_lane_dedup_single_stop_clears() {
 }
 
 #[test]
+fn before_submit_fail_closed_when_hook_state_dir_readonly() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _rg = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let sid = "save-fail-closed";
+    let dir = repo.join(".cursor/hook-state");
+    fs::create_dir_all(&dir).expect("mkdir hook-state");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&dir).expect("meta").permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&dir, perms).expect("chmod");
+    }
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面深度 review 这段代码"),
+    );
+    assert_eq!(
+        out.get("continue").and_then(Value::as_bool),
+        Some(false),
+        "fail-closed (ADR-002): {out:?}"
+    );
+    let blocked = out
+        .get("user_message")
+        .and_then(Value::as_str)
+        .or_else(|| out.get("followup_message").and_then(Value::as_str))
+        .unwrap_or("");
+    assert!(
+        blocked.contains("未能持久化")
+            || blocked.contains("锁不可用")
+            || blocked.contains("已拦截"),
+        "expected blocked persist or lock message: {out:?}"
+    );
+}
+
+#[test]
 fn pending_cap_denial_does_not_increment_active_subagent_count() {
     let _env = crate::test_env_sync::process_env_lock();
     let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
@@ -2940,7 +2978,7 @@ fn pending_cap_denial_does_not_increment_active_subagent_count() {
             "subagent_id": "sa-1",
         }),
     );
-    let _ = dispatch_cursor_hook_event(
+    let cap_denied = dispatch_cursor_hook_event(
         &repo,
         "subagentStart",
         &json!({
@@ -2949,6 +2987,11 @@ fn pending_cap_denial_does_not_increment_active_subagent_count() {
             "fork_context": false,
             "subagent_id": "sa-2",
         }),
+    );
+    assert_eq!(
+        cap_denied.get("permission").and_then(Value::as_str),
+        Some("deny"),
+        "ADR-004: cap refusal must deny subagentStart: {cap_denied:?}"
     );
     let mid = load_state_for(&repo, sid);
     assert_eq!(
@@ -3283,6 +3326,9 @@ fn subagent_stop_must_match_open_reviewer_cycle() {
 /// 两个不同 subagent id 并行 start：各自 stop 各核销一条 pending；**第二次** stop 排空 multiset 后才 phase 3。
 #[test]
 fn review_gate_two_distinct_subagent_ids_both_stops_clear_gate() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_cap = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
     let repo = fresh_repo();
     let sid = "s-two-review-ids";
     let _ = dispatch_cursor_hook_event(
@@ -3341,6 +3387,11 @@ fn review_gate_two_distinct_subagent_ids_both_stops_clear_gate() {
     assert_eq!(final_state.phase, 3);
     assert_eq!(final_state.subagent_stop_count, 1);
     assert!(final_state.review_subagent_pending_cycle_keys.is_empty());
+
+    match prev_cap {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
 }
 
 /// 无 subagent id 时 cycle key 均为同一 `lane:`；两次并行 start 压入两条 multiset 记录，需**两次** stop 才清门。

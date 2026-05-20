@@ -43,7 +43,10 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 | **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** `.cursor/hook-state` 内 review 字段；`postToolUse`/`subagent*` 不再推进 review phase。 |
 | **active 无 GOAL、focus 有 GOAL** | SessionStart 有中文提示；运行 `framework task-state-resolve` 或修正 `active_task.json`。 |
 | **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
-| **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=1`** | 生产建议：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；须可数 subagent 或用户拒因 token。 |
+| **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset 即 strict）：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；宽松 legacy 设 `=0|false|off|no`。 |
+| **Stop 自动 checkpoint 与 supervisor** | `focus: false` checkpoint **会**更新 `.supervisor_state.json.task_id` 为刷新任务，**不**移动 `active_task`/`focus_task`（ADR-001）。supervisor 表「最后 continuity 刷新任务」。 |
+| **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
+| **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | Claude 专用；默认 **关闭**（不读 Cursor 同名 env）。 |
 | **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |
 | **D9 未做项** | `reject_reason` 仍扫全段 signal_text；Codex 无 missing-`fork_context` 推断 — 见 plan v2 defer。 |
 | **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 行，但 **不**再以 `continuity_suppressed=review_soft_nag` **单独**阻断 GSD 续跑（硬 `REVIEW_GATE` / `AG_FOLLOWUP` 仍优先）。 |
@@ -85,7 +88,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 
 ## Codex：`AGENTS.md` 与二进制快照
 
-若修改仓库根 `AGENTS.md` 且依赖 Codex 侧投影：策略正文可能在 **编译期嵌入** 的 `router-rs` 中；改文后须重新构建并执行 `codex sync` / `framework sync-entrypoints`（见 [AGENTS.md](../AGENTS.md) 文末 **Codex Sync** 与 [README.md](../README.md)）。
+若修改仓库根 `AGENTS.md` 且依赖 Codex 侧投影：策略正文可能在 **编译期嵌入** 的 `router-rs` 中；改文后须重新构建并执行 `codex sync` / `framework sync-entrypoints`（见 [AGENTS.md](../AGENTS.md) → **Codex：`AGENTS.md` 构建快照（策略 A）** 与 [README.md](../README.md)）。
 
 ## 出站文本被「砍一半」
 
@@ -101,7 +104,7 @@ Cursor 对 `additional_context` / 过长 `followup_message` 有 **UTF-8 字节�
 | review 与 GSD goal drive 同轮混写 | 本节「混用时的实际武装顺序」 |
 | 真源分散 | 本文「阅读顺序」+ 不猜 slug |
 | 上手重 | README 路径 A / B 分流 |
-| Codex 策略漂移 | Codex Sync + `framework doctor` 提示 |
+| Codex 策略漂移 | `cargo build` + `framework sync-entrypoints` + `framework doctor` 提示 |
 | 环境变量命名 | harness 表前脚注 |
 | 截断不可见 | 出站 `...[~trunc]` 类标记 + 文档 |
 

@@ -50,6 +50,8 @@ const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 7] = [
     "plan-mode",
     "update",
 ];
+/// Subset checked by `framework doctor` metadata-only mode. Full drift-gate list:
+/// `configs/framework/GENERATED_ARTIFACTS.json` (`framework maint update-one-shot`).
 const REQUIRED_GENERATED_ARTIFACTS: [&str; 12] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",

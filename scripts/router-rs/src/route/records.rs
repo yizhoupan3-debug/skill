@@ -291,21 +291,6 @@ pub(crate) fn invalidate_records_cache() -> Result<(), String> {
     Ok(())
 }
 
-/// Invalidate cache entry for specific paths.
-#[allow(dead_code)]
-pub(crate) fn invalidate_records_cache_for_paths(
-    runtime_path: Option<&Path>,
-    manifest_path: Option<&Path>,
-) -> Result<(), String> {
-    let key = records_cache_key(runtime_path, manifest_path);
-    let mut state = records_cache_state()
-        .write()
-        .map_err(|_| "route records cache lock poisoned".to_string())?;
-    state.map.remove(&key);
-    state.fifo.retain(|k| k != &key);
-    Ok(())
-}
-
 pub(crate) fn load_records_cached_for_stdio(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,

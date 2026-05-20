@@ -23,10 +23,7 @@ pub enum LintSeverity {
 #[derive(Debug, Clone)]
 pub struct LintFinding {
     pub severity: LintSeverity,
-    #[allow(dead_code)]
     pub message: String,
-    #[allow(dead_code)]
-    pub line_no: Option<usize>,
 }
 
 static TABLE_ROW: LazyLock<Regex> =
@@ -103,7 +100,6 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
         findings.push(LintFinding {
             severity: LintSeverity::Info,
             message: "Review output appears empty or all-blank.".to_string(),
-            line_no: None,
         });
         return findings;
     }
@@ -122,7 +118,6 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
                 "First non-blank line must start with `[P0]`, `[P1]`, `[P2]`, `Caveat:`, `Scope:`, or `Out of scope:`; got: {:?}",
                 if first_line.len() > 60 { &first_line[..60] } else { first_line }
             ),
-            line_no: Some(first_idx + 1),
         });
     }
 
@@ -142,7 +137,6 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
                 findings.push(LintFinding {
                     severity: LintSeverity::Warning,
                     message: "Markdown table detected before first `[P*]`/`Caveat:` line. Tables before findings violate the compact envelope.".to_string(),
-                    line_no: Some(i + 1),
                 });
                 break; // one table warning is enough
             }
@@ -166,7 +160,6 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
             findings.push(LintFinding {
                 severity: LintSeverity::Warning,
                 message: "Verdict appears before any `[P*]`/`Caveat:` finding. Verdict must appear only after the findings list.".to_string(),
-                line_no: Some(first_idx + 1),
             });
         }
     }

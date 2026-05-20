@@ -10,8 +10,8 @@ fn merge_continuity_followups(
     output: &mut Value,
     frame: &crate::task_state::CursorContinuityFrame,
 ) {
-    let goal_mismatch_blocks_drive =
-        crate::task_state::task_view_has_active_goal_focus_mismatch_note(&frame.pointer_view);
+    // ADR-007: pointer mismatch alone must not suppress GSD_GOAL_CONTINUE when focus drives.
+    let goal_mismatch_blocks_drive = false;
     let autopilot = if goal_mismatch_blocks_drive {
         None
     } else {
@@ -1200,11 +1200,6 @@ fn is_framework_goal_drive_entry_prompt(prompt: &str, signal_text: &str) -> bool
     crate::hook_common::is_framework_goal_entry_prompt(prompt)
 }
 
-#[allow(dead_code)]
-fn is_autopilot_goal_entry_prompt(prompt: &str, signal_text: &str) -> bool {
-    is_framework_goal_drive_entry_prompt(prompt, signal_text)
-}
-
 /// 显式委托/并行入口走 bounded sidecar gate；goal 入口（GSD 执行区 `/gsd-execute-phase` 等）只走 goal 机。
 fn framework_prompt_arms_delegation(text: &str) -> bool {
     crate::hook_common::is_framework_non_goal_entrypoint_prompt(text)
@@ -2064,6 +2059,15 @@ fn subagent_limit_denial(active: u32, limit: u32) -> Value {
     })
 }
 
+fn review_pending_cycle_cap_denial(cap: usize) -> Value {
+    json!({
+        "permission": "deny",
+        "user_message": format!(
+            "router-rs：review 子代理 pending 已达上限 {cap}（ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX）。请先等待已有 review subagentStop 核销 pending，或 Stop 后按 REVIEW_GATE 指引清门（rg_clear / 完成深度 lane）。"
+        )
+    })
+}
+
 /// When `ROUTER_RS_CURSOR_HOOK_SILENT=1`: drop advisory `additional_context`; keep hard
 /// `followup_message` lines that start with the `router-rs ` leader prefix.
 pub(crate) fn apply_cursor_hook_silent_policy(output: &mut Value) {
@@ -2634,11 +2638,24 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     } else {
         persisted
     };
-    release_state_lock(&mut lock);
+    let gate_needs_persist = review_arms_for_gate
+        || state.goal_required
+        || needs_autopilot_pre_goal
+        || (review && !cursor_review_gate_disabled_by_env());
     if !persisted || !persisted_after_followup {
+        if gate_needs_persist
+            && !crate::router_env_flags::router_rs_cursor_hook_state_fail_open_enabled()
+        {
+            release_state_lock(&mut lock);
+            return json!({
+                "continue": false,
+                "user_message": "router-rs：hook-state 未能持久化，review/goal 门控本回合已拦截提交。请检查 .cursor/hook-state 目录权限或磁盘空间；应急可设 ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1。"
+            });
+        }
         let warning = "router-rs：hook-state 未能持久化，review/委托门控本回合可能降级。";
         merge_additional_context(&mut output, warning);
     }
+    release_state_lock(&mut lock);
     output
 }
 
@@ -2669,7 +2686,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         crate::review_gate_engine::cursor_review_independent_fork(fork, review_kind);
     let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
     let armed = review_hard_armed(&state);
-    let mut track_open_subagent = true;
+    let track_open_subagent = true;
     let mut mutated = false;
     // 与 PostToolUse 对齐：pre-goal 在独立 fork 且存在 lane 类型证据时满足（含非白名单 lane 名）。
     if state.goal_required && pre_goal_kind && independent_fork_pre_goal {
@@ -2694,7 +2711,10 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
             }
             mutated = true;
         } else {
-            track_open_subagent = false;
+            release_state_lock(&mut lock);
+            return review_pending_cycle_cap_denial(
+                crate::router_env_flags::router_rs_cursor_review_pending_cycle_max() as usize,
+            );
         }
     }
     if track_open_subagent {
@@ -2857,15 +2877,14 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
             mutated = true;
         }
     }
+    // Agent `Shell` 工具：在释放 session 锁之前更新终端账本（ADR-003）。
+    if name == "shell" {
+        cursor_post_tool_shell_terminal_track(repo_root, event);
+    }
     if mutated {
         let _ = save_state(repo_root, event, &mut state);
     }
     release_state_lock(&mut lock);
-
-    // Agent `Shell` 工具：`before/afterShellExecution` 可能不与 Task 工具一一对应；PostToolUse 再补记归属。
-    if name == "shell" {
-        cursor_post_tool_shell_terminal_track(repo_root, event);
-    }
 
     // 与 Codex PostTool 对齐：终端执行验证类命令时写入 EVIDENCE_INDEX（连续性就绪且未关闭 POSTTOOL_EVIDENCE）。
     let syn = crate::hook_posttool_normalize::synthetic_post_tool_evidence_shape(event);

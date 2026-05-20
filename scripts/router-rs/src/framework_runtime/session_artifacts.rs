@@ -289,6 +289,29 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
     }
     if plan.focus {
         write_focused_repo_mirrors(plan, &repo_root, &mirror_root, &updated_at)?;
+    } else {
+        write_supervisor_state_for_non_focus_checkpoint(plan, &repo_root)?;
+    }
+    Ok(())
+}
+
+/// ADR-001: Stop/automatic checkpoint (`focus: false`) refreshes task artifacts and syncs
+/// `.supervisor_state.json` to the checkpoint `task_id` without moving active/focus pointers.
+fn write_supervisor_state_for_non_focus_checkpoint(
+    plan: &mut SessionArtifactWritePlan,
+    repo_root: &Path,
+) -> Result<(), String> {
+    let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
+    if let Some(expected) = plan.expected_supervisor_state_hash.as_deref() {
+        assert_expected_file_hash(
+            &supervisor_state_path,
+            Some(expected),
+            "supervisor state",
+        )?;
+    }
+    if write_json_if_changed(&supervisor_state_path, &plan.supervisor_state_payload)? {
+        plan.changed_paths
+            .push(supervisor_state_path.display().to_string());
     }
     Ok(())
 }

@@ -52,8 +52,8 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## Skill Routing
 
-- **默认生命周期（全闭集宿主）**：GSD（`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`）。Pre-execution **禁止改产品代码**（`skills/gsd/shared/phase-boundaries.md`）。
-- **执行区**（可改产品代码）：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` + `GOAL_STATE.json`（`framework_autopilot_goal` stdio）。**`/autopilot` 已退役** → 用 `/gsd-execute-phase`（见 `MIGRATION.md`）。
+- **默认生命周期（GSD）**：命令链、pre-execution 边界与执行区见 [`skills/gsd/SKILL.md`](skills/gsd/SKILL.md) 与 [`skills/gsd/shared/phase-boundaries.md`](skills/gsd/shared/phase-boundaries.md)；各宿主安装文案见 [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)（`host-integration install` 读取）。**`/autopilot` 已退役** → `/gsd-execute-phase`（[`MIGRATION.md`](MIGRATION.md)）。
+- **执行区**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` + `GOAL_STATE.json`（`framework_autopilot_goal` stdio）。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
 ## Continuity artifacts
@@ -92,11 +92,9 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## Execution Ladder
 
-- **Cursor**：`execution-subagent-gate.mdc` / `review-subagent-gate.mdc` 为执行面真源。
-- **Review 与执行解耦**：纯 review 回合**只找 findings**，禁止默认改代码/提交/推进 execute；**纯 review 回合除外**于 GSD 默认链。深度 lane 见 `host_adapter_contract.md` §0.1。
-- **并行 subagent**：可拆独立子问题时默认 3–5 个 `fork_context=false` lane；**主线程始终负责上下文判断**、集成与最终验证。
-- **Codex / 无 Cursor gate**：仅显式 subagent 或 GSD 执行区命令（`/gsd-execute-phase` 等）时 **bounded sidecar admission**。
-- **完整规则**：`docs/references/EXECUTION_LADDER.md`。
+- **Cursor 宿主差异**：`.cursor/rules/execution-subagent-gate.mdc`、`review-subagent-gate.mdc`（仅 lane / hook / `updateCurrentStep` 等 Cursor 硬约束）。
+- **Review findings-only**（全宿主）：[`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)（compact 信封、透镜、默认只读 findings）；深度可数 lane 见 `host_adapter_contract.md` §0.1。
+- **并行 subagent / Codex 侧车 / 完整梯子**：[`docs/references/EXECUTION_LADDER.md`](docs/references/EXECUTION_LADDER.md)。
 
 ## Closeout
 
@@ -105,9 +103,8 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## GSD goal drive
 
-- `/gsd-execute-phase`（及 verify/ship）→ `framework_autopilot_goal` → `artifacts/current/<task_id>/GOAL_STATE.json`；`drive_until_done` 时 Cursor Stop 注入 **`GSD_GOAL_CONTINUE`**（关闭：`ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0`，兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK`）。
-- 宏任务用地平线切片 + `artifacts/current` 冷启动摘要。
-- 细节：`skills/gsd/execute-phase/SKILL.md`、`docs/harness_architecture.md`。
+- `/gsd-execute-phase`（及 verify/ship）→ `framework_autopilot_goal` → `artifacts/current/<task_id>/GOAL_STATE.json`；续跑注入与 env 见 `docs/references/AGENTS_OPERATOR_SURFACE.md`、`docs/harness_architecture.md`。
+- 执行 wave / 验证：`skills/gsd/execute-phase/SKILL.md`、`skills/gsd/verify-work/SKILL.md`。
 
 ## Git
 

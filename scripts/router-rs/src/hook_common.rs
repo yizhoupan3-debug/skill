@@ -282,7 +282,7 @@ pub const GSD_GOAL_DRIVE_HOOK_NUDGE: &str = "Framework goal drive (/gsd-execute-
 fn framework_non_goal_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/(autopilot|team|gitx|update|gsd(?:-[a-z0-9-]+)?)\b")
+        Regex::new(r"(?i)(^|\s)/(team|gitx|update|gsd(?:-[a-z0-9-]+)?)\b")
             .expect("invalid regex")
     })
 }

@@ -1,5 +1,7 @@
 # Codex Host Projection Contract
 
+> **Redirect**：多宿主 harness 接入、hook 矩阵与工程清单的**主入口**是 [`host_adapter_contract.md`](host_adapter_contract.md)。本文仅描述 **Codex CLI 投影**边界；勿与主契约混读。
+
 **中文 harness 接入（多宿主安装、hook 矩阵、工程清单）**：[`host_adapter_contract.md`](host_adapter_contract.md) — 接新宿主、Cursor/Claude 差异时读该文件。
 
 Documentation index: [`README.md`](README.md) (this directory).

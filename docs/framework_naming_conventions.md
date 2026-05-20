@@ -43,8 +43,8 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | false | Disable review gate |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | false | Enable pre-goal autopilot |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 8 | Max autopilot nudges |
-| `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | 5 | Max concurrent subagents |
-| `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 300 | Stale subagent threshold |
+| `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | 24 | Max open subagents counted on hook path（`MAX_CONCURRENT_SUBAGENTS_LIMIT`；可调低或 `0` 关闭） |
+| `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 7200 | Stale subagent threshold（秒，默认 2h） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS` | true | Kill stale terminals on session end |
 | `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE` | default | Terminal kill mode |
 | `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` | - | Session close style |
@@ -153,17 +153,9 @@ fn check_legacy_env_vars() {
 
 **Status**: RESOLVED - `GENERATED_ARTIFACTS.json` updated to remove 10 entries referencing deleted `scripts/skill-compiler-rs/Cargo.toml`. Deprecated entries moved to `_deprecated_entries` array for audit trail.
 
-The following artifacts are now tracked as deprecated in `GENERATED_ARTIFACTS.json`:
+`skill-compiler-rs` 删除后，下列路径仍由 [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) **登记为 active 生成物**（`framework skills refresh` / `host-integration install` / `sync-entrypoints`）；**勿 hand-edit**，须用 generator 刷新：
 
-- `skills/SKILL_ROUTING_REGISTRY.md`
-- `skills/SKILL_ROUTING_INDEX.md`
-- `skills/SKILL_MANIFEST.json`
-- `skills/SKILL_ROUTING_RUNTIME.json`
-- `skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`
-- `skills/SKILL_PLUGIN_CATALOG.json`
-- `skills/SKILL_ROUTING_METADATA.json`
-- `skills/SKILL_HEALTH_MANIFEST.json`
-- `skills/SKILL_APPROVAL_POLICY.json`
+- `skills/SKILL_ROUTING_*`、`SKILL_MANIFEST.json`、`SKILL_PLUGIN_CATALOG.json` 等（见 manifest 全文）
 - `configs/framework/FRAMEWORK_SURFACE_POLICY.json`
 
-Active artifacts (5 entries) now only reference `scripts/router-rs/Cargo.toml`.
+`SKILL_ROUTING_METADATA.json` 在路由加载时由 `merge_sidecar_route_metadata_from_runtime` 合并进记录（非每 prompt 全量扫描，但影响 route 记录）。

@@ -956,6 +956,11 @@ fn stop_checkpoint_does_not_repoint_focus() {
     }))
     .expect("seed task");
 
+    write_text_fixture(
+        &repo_root.join(".supervisor_state.json"),
+        r#"{"schema_version":"supervisor-state-v2","task_id":"stale-supervisor-task","task_summary":"stale","active_phase":"execution"}"#,
+    );
+
     let active_before = fs::read_to_string(repo_root.join("artifacts/current/active_task.json"))
         .expect("read active");
     let focus_before = fs::read_to_string(repo_root.join("artifacts/current/focus_task.json"))
@@ -1025,6 +1030,34 @@ fn stop_checkpoint_does_not_repoint_focus() {
     )
     .expect("task summary updated");
     assert!(summary.contains("Stop hook automatic checkpoint"));
+
+    let supervisor: Value = serde_json::from_str(
+        &fs::read_to_string(repo_root.join(".supervisor_state.json")).expect("read supervisor"),
+    )
+    .expect("parse supervisor");
+    assert_eq!(
+        supervisor.get("task_id").and_then(Value::as_str),
+        Some(task_id),
+        "stop checkpoint must sync supervisor to checkpoint task (ADR-001)"
+    );
+
+    let snapshot =
+        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+    let reasons = snapshot["runtime_snapshot"]["continuity"]["inconsistency_reasons"]
+        .as_array()
+        .expect("reasons")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    assert!(
+        !reasons.iter().any(|r| r.contains("disagrees")),
+        "supervisor should align with pointers after stop checkpoint: {reasons:?}"
+    );
+    assert_ne!(
+        snapshot["runtime_snapshot"]["continuity"]["state"],
+        json!("inconsistent"),
+        "continuity should not be inconsistent after ADR-001 stop checkpoint"
+    );
 
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -3300,8 +3333,8 @@ fn framework_command_aliases_require_literal_entrypoints() {
         Some(&runtime_path),
         None,
         None,
-        "请用 /autopilot-deep 深度调研这个系统",
-        "retired-autopilot-deep-manifest",
+        "请做深度调研这个系统",
+        "deep-research-neutral-phrases",
         false,
         true,
     )

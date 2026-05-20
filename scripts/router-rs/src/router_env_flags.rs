@@ -59,11 +59,25 @@ pub fn router_rs_cursor_hook_state_legacy_full_sweep_enabled() -> bool {
 
 /// Cursor：是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
 ///
-/// 默认 **关闭**（与历史一致：盘上已有 GOAL 可跳过 pre-goal nag）。**仅**当
-/// `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=1|true|yes|on` 时开启，用于降低 checkout/遗留
-/// `artifacts/current` 带入的旧 GOAL 误放行 pre-goal 的风险（beforeSubmit **与** Stop 均适用）。
+/// 默认 **开启**（ADR-005：盘上仅有 GOAL 不足以满足 pre-goal）。**仅**当
+/// `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=0|false|off|no` 时恢复历史宽松语义。
 pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV)
+    router_rs_env_enabled_default_true(ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV)
+}
+
+const ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN_ENV: &str = "ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN";
+
+/// `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`：hook-state 持久化失败时 beforeSubmit 仍 `continue: true`（应急）。
+pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN_ENV)
+}
+
+const ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
+    "ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
+
+/// Claude：缺失 `fork_context` 时是否推断 independent fork（默认 **关闭**，不读取 Cursor env）。
+pub fn router_rs_claude_review_fork_context_missing_infer_false_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
 }
 
 /// Cursor：当 subagent 事件**未**携带可解析的 `fork_context` 时，是否将可数深度 lane 视为 `fork_context=false`。
@@ -336,13 +350,13 @@ mod tests {
     }
 
     #[test]
-    fn pre_goal_strict_disk_opt_in_only() {
+    fn pre_goal_strict_disk_default_true() {
         let _g = lock_env();
         let prev = env::var_os("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
         env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
-        assert!(!super::router_rs_cursor_pre_goal_strict_disk_enabled());
-        env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", "true");
         assert!(super::router_rs_cursor_pre_goal_strict_disk_enabled());
+        env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", "0");
+        assert!(!super::router_rs_cursor_pre_goal_strict_disk_enabled());
         match prev {
             Some(v) => env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", v),
             None => env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK"),

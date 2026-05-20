@@ -81,7 +81,6 @@ pub(crate) fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
     validate_skills(&cmd.repo_root)
 }
 
-#[allow(dead_code)]
 fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
     let manifest_path = repo_root.join("skills/SKILL_MANIFEST.json");
     let manifest: Value =

@@ -10,7 +10,7 @@
 | 组件 | 路径 |
 |------|------|
 | Hooks（**4 事件**，减法闭集） | `.claude/settings.json` → [`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh) |
-| 项目 env | [`.claude/router-rs-hook.env`](../.claude/router-rs-hook.env)（模板：[`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)） |
+| 项目 env | [`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)（模板：[`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)） |
 | Framework 规则 | `.claude/rules/framework.md` |
 | 项目叙事 | `.claude/CLAUDE.md`（可选） |
 

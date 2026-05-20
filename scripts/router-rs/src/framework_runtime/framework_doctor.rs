@@ -122,6 +122,36 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
         );
     }
 
+    println!("\n--- control plane (supervisor / pointers) ---");
+    match super::build_framework_runtime_snapshot_envelope(repo_root, None, None) {
+        Ok(envelope) => {
+            let snapshot = &envelope["runtime_snapshot"];
+            let state = snapshot
+                .get("continuity")
+                .and_then(|v| v.get("state"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            println!("continuity.state: {state}");
+            let reasons = snapshot
+                .get("continuity")
+                .and_then(|v| v.get("inconsistency_reasons"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .chain(
+                    snapshot
+                        .get("control_plane_inconsistency_reasons")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten(),
+                );
+            for reason in reasons.filter_map(Value::as_str).filter(|s| !s.is_empty()) {
+                println!("WARN: {reason}");
+            }
+        }
+        Err(e) => println!("WARN: runtime snapshot unavailable: {e}"),
+    }
+
     Ok(())
 }
 

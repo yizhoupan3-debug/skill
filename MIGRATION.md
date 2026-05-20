@@ -48,6 +48,19 @@ cd /path/to/project
 # 可选：--with-cursor-rules 仅 symlink harness gate 规则（不含 framework.mdc）
 ```
 
+## router-rs 连续性 / 门控（findings-remediation-2026-05）
+
+| 变更 | 操作面 |
+|------|--------|
+| **Stop checkpoint + supervisor** | 自动 checkpoint（`focus: false`）会同步 `.supervisor_state.json.task_id` 到刷新任务；**不**移动 `active_task` / `focus_task`。 |
+| **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset = strict）；仅磁盘 `GOAL_STATE` **不再**满足 pre-goal。宽松 legacy：`0` / `false` / `off` / `no`。 |
+| **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 写失败时 beforeSubmit 仍放行（应急）；**默认 fail-closed**。 |
+| **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | **Claude 专用**；默认 **关闭**（缺失 `fork_context` 不清 `REVIEW_GATE`）。**勿**与 Cursor 同名 env 混用。 |
+| **Review pending cap** | 达 `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` 时 `subagentStart` 返回 `permission: deny`。 |
+| **Claude review_gate** | `.claude/hook-state/review_gate_*.json` 写入使用 `flock`（与 Codex 对齐）。 |
+
+升级后若 continuity 仍报 supervisor 分歧：触发一次 **Cursor Stop** 或 `router-rs framework session-artifact-write`（`focus: false`）。
+
 ## Cursor：hooks 减法闭集（2026-05-20）
 
 本仓 [`.cursor/hooks.json`](.cursor/hooks.json) 默认仅 **7** 事件：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。

@@ -616,26 +616,6 @@ pub(crate) fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
     input.chars().take(max_chars).collect()
 }
 
-/// Like [`truncate_utf8_chars`], but appends `...` when the input exceeds `max_chars` (for hook UI hints).
-#[allow(dead_code)] // Kept for upcoming hook UI truncation; not wired yet.
-pub(crate) fn truncate_utf8_chars_with_ellipsis(input: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
-    }
-    let mut out = String::new();
-    for (i, ch) in input.chars().enumerate() {
-        if i >= max_chars {
-            break;
-        }
-        out.push(ch);
-    }
-    if input.chars().count() > max_chars && max_chars >= 3 {
-        out.truncate(out.len().saturating_sub(3));
-        out.push_str("...");
-    }
-    out
-}
-
 /// Stable task id when no active/focus pointer exists (review-only sessions).
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 

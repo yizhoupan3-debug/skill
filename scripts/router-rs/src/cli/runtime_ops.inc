@@ -1325,9 +1325,7 @@ fn external_research_phrase_signals_deep(lower: &str) -> bool {
 
 /// Narrow host-neutral cues for Execute deep shaping (substring match; ASCII segments may be lowercased).
 pub(crate) fn payload_text_signals_deep_research(text: &str) -> bool {
-    text.contains("/autopilot-deep")
-        || text.contains("/autopilot deep")
-        || text.contains("深度调研")
+    text.contains("深度调研")
         || text.contains("深度研究")
         || text.contains("deep research")
         || text.contains("deep dive")
@@ -1371,9 +1369,7 @@ fn infer_research_mode(payload: &ExecuteRequestPayload) -> ResearchMode {
     if payload_text_signals_deep_research(&task) {
         return ResearchMode::Deep;
     }
-    if task.contains("/autopilot-quick")
-        || task.contains("/autopilot quick")
-        || task.contains("快查")
+    if task.contains("快查")
         || task.contains("快速调研")
     {
         return ResearchMode::Quick;

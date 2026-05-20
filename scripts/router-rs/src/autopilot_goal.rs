@@ -30,11 +30,6 @@ pub fn gsd_goal_continue_hook_enabled() -> bool {
             || router_rs_env_enabled_default_true(LEGACY_AUTOPILOT_DRIVE_HOOK_ENV))
 }
 
-#[allow(dead_code)]
-fn autopilot_drive_hook_enabled() -> bool {
-    gsd_goal_continue_hook_enabled()
-}
-
 /// Invalidate route records cache after GOAL_STATE mutations (best-effort).
 fn invalidate_route_records_cache_on_write() {
     if let Err(e) = invalidate_records_cache() {
@@ -68,18 +63,6 @@ pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
         .filter(|s| !s.is_empty())?;
     crate::path_guard::safe_task_id_component(&t)?;
     Some(t)
-}
-
-/// Validate that the task directory exists. Returns the path if valid, None if task_id is invalid.
-#[allow(dead_code)]
-pub fn validate_task_directory_exists(repo_root: &Path, task_id: &str) -> Option<PathBuf> {
-    let tid = crate::path_guard::safe_task_id_component(task_id)?;
-    let task_dir = repo_root.join("artifacts/current").join(tid);
-    if task_dir.is_dir() {
-        Some(task_dir)
-    } else {
-        None
-    }
 }
 
 /// Ensure the task directory exists, creating it if necessary.

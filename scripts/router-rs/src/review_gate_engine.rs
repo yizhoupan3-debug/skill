@@ -60,6 +60,29 @@ pub(crate) fn independent_reviewer_evidence(review_lane: bool, fork: Option<bool
     review_lane && cursor_review_independent_fork(fork, review_lane)
 }
 
+/// Claude Code: independent reviewer evidence; does **not** read Cursor fork-infer env (ADR-006).
+pub(crate) fn claude_independent_reviewer_evidence(review_lane: bool, fork: Option<bool>) -> bool {
+    review_lane && claude_review_independent_fork(fork, review_lane)
+}
+
+/// Claude-only: optional infer when `fork_context` is absent on a reviewer lane payload.
+pub(crate) fn claude_review_independent_fork(fork: Option<bool>, deep_review_lane: bool) -> bool {
+    if independent_context_fork(fork) {
+        return true;
+    }
+    if fork == Some(true) {
+        return false;
+    }
+    if !deep_review_lane {
+        return false;
+    }
+    if !crate::router_env_flags::router_rs_claude_review_fork_context_missing_infer_false_enabled()
+    {
+        return false;
+    }
+    matches!(fork, None)
+}
+
 /// Cursor-only: when `fork_context` is absent on a deep review lane payload, optionally treat as
 /// independent fork (`false`). Explicit `fork_context: true` never infers. Off when
 /// `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` is disabled.
