@@ -39,8 +39,17 @@ pub(crate) fn validate_skills(repo_root: &Path) -> Result<(), String> {
 
     let disk_slugs = discover_skill_md_slugs(&skills_root)?;
     let runtime_slugs = skill_slugs_from_index(&runtime)?;
-    if !runtime_slugs.contains("gsd") {
-        errors.push("runtime missing expected GSD framework_command slug: gsd".to_string());
+    for slug in [
+        "discussx",
+        "planx",
+        "implementx",
+        "verifyx",
+    ] {
+        if !runtime_slugs.contains(slug) {
+            errors.push(format!(
+                "runtime missing expected my-lifecycle framework_command slug: {slug}"
+            ));
+        }
     }
     for slug in [
         "gsd-new-project",
@@ -49,7 +58,7 @@ pub(crate) fn validate_skills(repo_root: &Path) -> Result<(), String> {
         "gsd-ship",
     ] {
         if !disk_slugs.contains(slug) {
-            errors.push(format!("disk missing expected GSD lane skill: {slug}"));
+            errors.push(format!("disk missing expected legacy GSD lane skill: {slug}"));
         }
     }
 

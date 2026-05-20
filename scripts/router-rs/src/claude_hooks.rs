@@ -412,10 +412,26 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
         .or_else(|| payload.get("user_prompt"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    if crate::hook_common::is_my_lifecycle_entry_prompt(prompt)
+        && crate::hook_common::is_gsd_pre_execution_entry_prompt(prompt)
+    {
+        return add_context(
+            "UserPromptSubmit",
+            crate::hook_common::MY_PRE_EXECUTION_HOOK_NUDGE,
+        );
+    }
     if crate::hook_common::is_gsd_pre_execution_entry_prompt(prompt) {
         return add_context(
             "UserPromptSubmit",
             crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE,
+        );
+    }
+    if crate::hook_common::is_my_lifecycle_entry_prompt(prompt)
+        && crate::hook_common::is_framework_goal_entry_prompt(prompt)
+    {
+        return add_context(
+            "UserPromptSubmit",
+            crate::hook_common::MY_GOAL_DRIVE_HOOK_NUDGE,
         );
     }
     if crate::hook_common::is_framework_goal_entry_prompt(prompt) {
@@ -424,7 +440,10 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
             crate::hook_common::GSD_GOAL_DRIVE_HOOK_NUDGE,
         );
     }
-    if !agent_review_gate_disabled() && (is_review_prompt(prompt) || has_override(prompt)) {
+    if !agent_review_gate_disabled()
+        && !crate::hook_common::my_light_profile_active(Some(repo_root), prompt)
+        && (is_review_prompt(prompt) || has_override(prompt))
+    {
         let path = review_state_path(repo_root, payload);
         let state = match with_claude_review_state_lock(&path, || {
             let mut state = match load_review_gate_disk(repo_root, payload) {
@@ -458,7 +477,7 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
         };
         if state.review_required
             && !state.review_override
-            && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root))
+            && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), prompt)
         {
             let nudge =
                 crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root));

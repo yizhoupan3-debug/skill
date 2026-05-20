@@ -131,6 +131,20 @@ See `validators/README.md` for validation levels and usage.
 }
 ```
 
+### Topology extensions (`my-light` / personal lifecycle)
+
+When using `/my-plan` or `lifecycle_profile: my-light`, each wave may also include:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `wave_key` | string | Stable id for `depends_on` edges (e.g. `w2-routing`) |
+| `parallel_group` | string | Lanes sharing a group may run in parallel |
+| `depends_on` | string[] | Prior `wave_key` values (serial prerequisite) |
+| `execution_mode` | `parallel` \| `serial` | Scheduler hint for `/my-implement` |
+| `lanes[]` | array | Per-lane `lane_id`, `scope_paths`, `done_when`, `lane_note_path` |
+
+`/my-implement` runs **all waves in one breath** without pausing at wave boundaries for user confirmation (see `skills/my-implement/SKILL.md`).
+
 ## SHIPPING_STATE.json
 
 **Location**: `artifacts/current/<task_id>/SHIPPING_STATE.json`

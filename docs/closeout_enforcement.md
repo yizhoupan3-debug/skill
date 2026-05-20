@@ -171,21 +171,13 @@ Skills with smaller surface (gitx, slides one-shot rebuild) should still emit
 records when they touch files; the evaluator's bar for partial/risk-only
 closeouts is intentionally low.
 
-## Hook integration (planned)
+## Hook integration（已接线）
 
-- **Codex Stop hook** — fail-closed. Stop hook calls `router-rs closeout
-  evaluate` against the record at `artifacts/closeout/<task_id>.json`; if
-  `closeout_allowed=false`, returns `decision: block` with a `followup_message`
-  listing violations.
-- **Cursor stop hook** — soft gate (host limitation). Same evaluation, but
-  surfaced via `followup_message` only.
-- **Session supervisor** — `session_supervisor` will refuse to transition
-  `completed-unintegrated → integrated` until the worker's closeout record
-  passes evaluation.
+- **Codex Stop** — 在 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 硬 tier（CI 或显式开启）且助手宣称完成时：`decision: block` + `CLOSEOUT_FOLLOWUP`（见 `codex_hooks.rs`）。
+- **Cursor Stop** — 同源评估（`closeout_stop_followup_for_completion_text`）；硬 tier 注入 `followup_message`；本地 solo 默认**软** tier（unset 且非 CI 可不附 record）。
+- **Session write** — `write_framework_session_artifacts` 在硬 tier 下可拒写（`enforce_closeout_for_session_payload`）。
 
-These wiring points are tracked separately and are NOT yet active in
-`.codex/hooks.json` / `.cursor/hooks.json`. The CLI and stdio ops are the
-first-class surface; hook wiring is the next slice.
+CLI / stdio `closeout evaluate` 仍为裁判真源；hook 为投影，见 [`harness_architecture.md`](harness_architecture.md) §3.2。
 
 ## Tests
 

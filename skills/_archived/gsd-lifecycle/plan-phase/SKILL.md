@@ -11,7 +11,7 @@ routing_gate: evidence
 routing_gate_evidence: "GOAL_STATE.json exists, adversarial review passed"
 routing_priority: P1
 session_start: n/a
-user-invocable: true
+user-invocable: false
 trigger_hints:
   - /gsd-plan-phase
   - gsd plan

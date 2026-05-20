@@ -174,6 +174,41 @@ pub fn review_spawn_first_nudge_line(repo_root: Option<&Path>) -> String {
         .unwrap_or_else(|_| DEFAULT_SPAWN_FIRST_NUDGE.to_string())
 }
 
+fn load_registry_root(repo_root: Option<&Path>) -> Result<Value, String> {
+    let path = registry_json_path(repo_root);
+    let raw =
+        std::fs::read_to_string(&path).map_err(|e| format!("read registry: {e}"))?;
+    serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))
+}
+
+/// `lifecycle_profiles.<name>.disable_review_gate_hard_block` (default false if missing).
+pub fn lifecycle_profile_disables_review_gate_hard_block(
+    repo_root: Option<&Path>,
+    profile: &str,
+) -> Result<bool, String> {
+    let root = load_registry_root(repo_root)?;
+    Ok(root
+        .get("lifecycle_profiles")
+        .and_then(|p| p.get(profile))
+        .and_then(|p| p.get("disable_review_gate_hard_block"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false))
+}
+
+/// `lifecycle_profiles.<name>.disable_spawn_first_nudge` (default false if missing).
+pub fn lifecycle_profile_disables_spawn_first_nudge(
+    repo_root: Option<&Path>,
+    profile: &str,
+) -> Result<bool, String> {
+    let root = load_registry_root(repo_root)?;
+    Ok(root
+        .get("lifecycle_profiles")
+        .and_then(|p| p.get(profile))
+        .and_then(|p| p.get("disable_spawn_first_nudge"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false))
+}
+
 #[cfg(test)]
 pub(crate) fn assert_spawn_first_registry_fields(repo_root: Option<&Path>) {
     assert!(review_spawn_first_enabled(repo_root));

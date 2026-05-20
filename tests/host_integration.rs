@@ -140,7 +140,7 @@ fn install_native_integration_is_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/gsd/SKILL.md","host_entrypoints":{"codex-cli":"/gsd"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"legacy-gsd","surface_publish":false,"skill_path":"skills/_archived/gsd-lifecycle/SKILL.md","host_entrypoints":{"codex-cli":"/gsd"}},"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -198,7 +198,11 @@ fn install_native_integration_is_idempotent() {
         &surface_root.join("systematic-debugging"),
         &repo_root.join("skills/systematic-debugging")
     ));
-    assert_framework_alias_skill(&surface_root, "gsd");
+    assert_framework_alias_skill(&surface_root, "implementx");
+    assert!(
+        !surface_root.join("gsd").exists(),
+        "legacy gsd must not be published to codex skill surface"
+    );
     assert!(
         !surface_root.join("team/SKILL.md").exists(),
         "team must remain a framework alias, not a visible Codex skill surface"

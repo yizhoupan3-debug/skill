@@ -4,7 +4,7 @@
 
 - `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.codex/skills` 当成主路径前提。
 - system skill 放 `skills/.system/`。不要同时保留两份 live source。
-- `~/.codex/skills` 是 Codex/App/CLI 共用的轻量安装面；常与 host integration 生成的 `artifacts/codex-skill-surface/skills` 投影配套，用于 CLI 可见的薄别名。**框架命令的真源在仓库内**：例如 `gsd` → `skills/gsd/SKILL.md`（`RUNTIME_REGISTRY.json` → `framework_commands.gsd`），`team` 的 registry `skill_path` → `skills/agent-swarm-orchestration/SKILL.md`（见 `configs/framework/RUNTIME_REGISTRY.json` 与 `router-rs framework alias <name>`）。`/autopilot` 已退役；连续执行请用 `/gsd-execute-phase`。治理与路由边界仍见 `skills/skill-framework-developer/SKILL.md`；不要在 `~/.codex/skills` 手修 canonical body。
+- `~/.codex/skills` 是 Codex/App/CLI 共用的轻量安装面；常与 host integration 生成的 `artifacts/codex-skill-surface/skills` 投影配套，用于 CLI 可见的薄别名。**框架命令的真源在仓库内**：个人默认 **`discussx` / `planx` / `implementx` / `verifyx`**；legacy `gsd` → `skills/_archived/gsd-lifecycle/SKILL.md`（`surface_publish: false`，不进入 `~/.codex/skills` 或 Cursor 斜杠列表）。`team` → `skills/agent-swarm-orchestration/SKILL.md`。改 routing 后执行 `just publish` + `host-integration install`。治理与路由边界仍见 `skills/skill-framework-developer/SKILL.md`；不要在 `~/.codex/skills` 手修 canonical body。
 - 不再维护 skill health 分。路由真源只保留 source manifest、skill frontmatter、generated manifest/runtime，以及真实回归用例；不要新增健康快照或把健康分写回 schema。
 - 过期计划/历史文档（`docs/plans/*` stub、`docs/history/`、`configs/codex/docs/`）已删除；勿恢复为「第二真源」。索引见 [`docs/plans/README.md`](../docs/plans/README.md)、[`MIGRATION.md`](../MIGRATION.md)。
 

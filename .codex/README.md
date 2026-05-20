@@ -14,7 +14,7 @@ Feature enablement uses `[features] hooks = true`; older public examples may sti
 
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active. Stable keys require `session_id` / `conversation_id` / `thread_id` in hook payloads (snake_case **or** camelCase, e.g. `sessionId`) or `CODEX_SESSION_ID` / `CODEX_CONVERSATION_ID` in the environment; otherwise hook-state may not persist across invocations (router-rs logs a one-time stderr warning per process).
 
-Optional **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`**: when set to `1`/`true`/`yes`/`on`, `UserPromptSubmit`, `PostToolUse`, and `Stop` **block** if no stable identifier is present (`SessionStart` is unaffected).
+**`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`** defaults **on** (`unset` = require stable keys). Set `0`/`false`/`off`/`no` for legacy payloads without `session_id` / env fallbacks (`SessionStart` is unaffected). Without a stable id and with strict mode off, hook-state uses one deterministic repo-wide fallback filename (not per-invocation random keys).
 
 Generated hook commands resolve `router-rs` in order: **`ROUTER_RS_BIN`** when set to an executable path, then `scripts/router-rs/target/{release,debug}/router-rs`, then repo `target/{release,debug}/router-rs`, finally `command -v router-rs` (last resort — prefer pinning `ROUTER_RS_BIN` or building into the repo). If the binary is missing, **all** lifecycle hooks fail closed with a JSON `decision:block` line.
 

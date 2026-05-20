@@ -149,19 +149,24 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         blockers: payload.get("blockers"),
         continuity: payload.get("continuity"),
     });
-    let journal_payload = build_continuity_journal_payload(ContinuityJournalInput {
-        task_id: &task_id,
-        task: &task,
-        phase: &phase,
-        status: &status,
-        artifact_dir: &primary_dir,
-        summary_text: &summary_text,
-        next_actions_payload: &next_actions_payload,
-        evidence_payload: &evidence_payload,
-        trace_metadata_payload: &trace_metadata_payload,
-        supervisor_state_payload: &supervisor_state_payload,
-        existing_journal: read_json_strict(&journal_path)?,
-    });
+    let write_journal = crate::router_env_flags::router_rs_continuity_write_journal_enabled();
+    let journal_payload = if write_journal {
+        build_continuity_journal_payload(ContinuityJournalInput {
+            task_id: &task_id,
+            task: &task,
+            phase: &phase,
+            status: &status,
+            artifact_dir: &primary_dir,
+            summary_text: &summary_text,
+            next_actions_payload: &next_actions_payload,
+            evidence_payload: &evidence_payload,
+            trace_metadata_payload: &trace_metadata_payload,
+            supervisor_state_payload: &supervisor_state_payload,
+            existing_journal: read_json_strict(&journal_path)?,
+        })
+    } else {
+        read_json_strict(&journal_path).unwrap_or_else(|_| json!({}))
+    };
     Ok(SessionArtifactWritePlan {
         task,
         phase,
@@ -198,21 +203,22 @@ fn write_primary_session_artifacts(plan: &mut SessionArtifactWritePlan) -> Resul
     let next_actions_payload = plan.next_actions_payload.clone();
     let evidence_payload = plan.write_evidence.then(|| plan.evidence_payload.clone());
     let trace_metadata_payload = plan.trace_metadata_payload.clone();
-    let journal_payload = plan.journal_payload.clone();
+    let write_journal = crate::router_env_flags::router_rs_continuity_write_journal_enabled();
+    let journal_payload = write_journal.then(|| plan.journal_payload.clone());
     write_session_artifact_set(
         ArtifactPaths {
             summary: &plan.summary_path,
             next_actions: &plan.next_actions_path,
             evidence: &plan.evidence_path,
             trace_metadata: Some(&plan.trace_metadata_path),
-            journal: Some(&plan.journal_path),
+            journal: write_journal.then_some(&plan.journal_path),
         },
         ArtifactPayloads {
             summary_text: &summary_text,
             next_actions: &next_actions_payload,
             evidence: evidence_payload.as_ref(),
             trace_metadata: &trace_metadata_payload,
-            journal: Some(&journal_payload),
+            journal: journal_payload.as_ref(),
         },
         &mut plan.changed_paths,
     )
@@ -233,21 +239,22 @@ fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<
         let next_actions_payload = plan.next_actions_payload.clone();
         let evidence_payload = plan.write_evidence.then(|| plan.evidence_payload.clone());
         let trace_metadata_payload = plan.trace_metadata_payload.clone();
-        let journal_payload = plan.journal_payload.clone();
+        let write_journal = crate::router_env_flags::router_rs_continuity_write_journal_enabled();
+        let journal_payload = write_journal.then(|| plan.journal_payload.clone());
         write_session_artifact_set(
             ArtifactPaths {
                 summary: &mirror_summary,
                 next_actions: &mirror_next_actions,
                 evidence: &mirror_evidence,
                 trace_metadata: Some(&mirror_trace),
-                journal: Some(&mirror_journal),
+                journal: write_journal.then_some(&mirror_journal),
             },
             ArtifactPayloads {
                 summary_text: &summary_text,
                 next_actions: &next_actions_payload,
                 evidence: evidence_payload.as_ref(),
                 trace_metadata: &trace_metadata_payload,
-                journal: Some(&journal_payload),
+                journal: journal_payload.as_ref(),
             },
             &mut plan.changed_paths,
         )?;

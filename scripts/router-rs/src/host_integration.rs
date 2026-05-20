@@ -42,8 +42,11 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME: &str = ".framework-projection-desktop.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
-const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 7] = [
-    "gsd",
+const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
+    "discussx",
+    "planx",
+    "implementx",
+    "verifyx",
     "code-review-deep",
     "deepinterview",
     "gitx",
@@ -3417,7 +3420,9 @@ fn ensure_host_skill_surface(
     for slug in &desired {
         if let Some(source_path) = codex_skill_surface_source_path(&repo_root, slug)? {
             changed |= ensure_codex_skills_symlink(&surface_root.join(slug), &source_path)?;
-        } else if is_framework_command(&repo_root, slug)? {
+        } else if is_framework_command(&repo_root, slug)?
+            && framework_command_surface_publish(&repo_root, slug)?
+        {
             changed |= ensure_framework_command_skill(&repo_root, &surface_root.join(slug), slug)?;
         }
     }
@@ -3535,6 +3540,9 @@ fn desired_host_skill_surface_slugs(
         }
     }
     for slug in HOST_SKILL_SURFACE_PINNED_SKILLS {
+        if !framework_command_surface_publish(repo_root, slug)? {
+            continue;
+        }
         if codex_skill_surface_source_path(repo_root, slug)?.is_some()
             || is_framework_command(repo_root, slug)?
         {
@@ -3585,6 +3593,22 @@ fn codex_skill_surface_source_path(
 
 fn is_framework_command(repo_root: &Path, slug: &str) -> Result<bool, String> {
     Ok(framework_command_names(repo_root)?.contains(slug))
+}
+
+/// Whether a `framework_commands` slug may appear on Codex/Cursor skill surface (default true).
+fn framework_command_surface_publish(repo_root: &Path, slug: &str) -> Result<bool, String> {
+    let registry = load_runtime_registry_payload(repo_root)?;
+    let Some(command) = registry
+        .get("framework_commands")
+        .and_then(Value::as_object)
+        .and_then(|commands| commands.get(slug))
+    else {
+        return Ok(true);
+    };
+    Ok(command
+        .get("surface_publish")
+        .and_then(Value::as_bool)
+        .unwrap_or(true))
 }
 
 fn ensure_framework_command_skill(

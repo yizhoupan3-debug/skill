@@ -4,12 +4,13 @@
 
 ## 默认（profile 之外）
 
-- **unset = 走 harness §5 表格默认**（与「本页 export 块」无关）。
+- **2026-05 减法默认（`router-rs` unset）**：PostTool 证据 **关**、Stop 自动 checkpoint **关**、depth digest `深度信号` **关**；需显式 `=1`/`true`/`yes`/`on` 开启（见 `router_env_flags.rs` helper）。
+- **CI closeout**：仍由 `GITHUB_ACTIONS` / `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 控制硬门禁（solo 本地默认软）。
 - 下列 profile 仅在你在 shell 中**显式 `source`/export** 后生效；关能力不等于关闭硬门控短码（见 harness §4 / §5 各节）。
 
-## Solo / low-noise（单人、降低注入与磁盘写）
+## Solo / low-noise（单人、**与代码默认一致** + 可选再关注入）
 
-目标：少提示、少自动写 `EVIDENCE_INDEX`、少 Codex Stop checkpoint；仍保留可按需打开的 goal/review 硬路径。
+目标：与 unset 默认一致；可选再关 operator nudge / GSD 续跑软提示。若要恢复旧「自动记账」行为，显式开启下表项。
 
 **cwd**：下文 `source` 与相对路径 `configs/...` 均以 **Git 仓库根** 为当前目录；请先 `cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`（或手动 `cd` 到 clone 根）再执行，**从子目录 `source` 会找不到文件**。若不在 Git 工作副本中或 `git rev-parse` 失败，回退的 `pwd` **不保证**为仓库根，请自行确认当前目录下存在 `configs/framework/`。
 
@@ -21,8 +22,9 @@
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 可设 `0` | 仅关 operator nudge 文案 |
 | `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK` | 可设 `0` | 关 Stop 等路径 `GSD_GOAL_CONTINUE` advisory（兼容读 legacy `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 可设 `0` | 关 `RFV_LOOP_CONTINUE` advisory |
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | 可设 `0` | 关 PostTool 自动追加 `EVIDENCE_INDEX` |
-| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | 可设 `0`（Codex） | 关 Codex `Stop` 自动连续性 checkpoint |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | 默认 **关**；设 `1` 开启 | PostTool 自动追加 `EVIDENCE_INDEX` |
+| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | 默认 **关**；设 `1` 开启 | Codex/Cursor `Stop` 自动 checkpoint |
+| `ROUTER_RS_DEPTH_COMPLIANCE_HINT` | 默认 **关**；设 `1` 或 `DEPTH_SCORE_MODE=strict` | SessionStart digest `深度信号` |
 | `ROUTER_RS_CURSOR_HOOK_SILENT` | 可设 `1` | 出站 policy 后剥 advisory；硬短码保留（harness §4.2） |
 | `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` | 可设 `0` | 关 Stop 软 `SESSION_CLOSE_STYLE` |
 

@@ -6,8 +6,9 @@
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` | 关闭 PostTool 向 `EVIDENCE_INDEX` 追加 |
-| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0` | 关闭 Codex `Stop` 自动检查点 |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` | **开启** PostTool 向 `EVIDENCE_INDEX` 追加（unset 默认关） |
+| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1` | **开启** Stop 自动检查点（unset 默认关） |
+| `ROUTER_RS_DEPTH_COMPLIANCE_HINT=1` | **开启** digest `深度信号`（unset 默认关；`DEPTH_SCORE_MODE=strict` 亦开启） |
 | `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` | 关闭 Cursor `GOAL_STATE` 续跑提示（兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
 | `ROUTER_RS_RFV_LOOP_HOOK=0` | 关闭 `RFV_LOOP_STATE` 多轮 RFV 提示 |
 | `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 压制非必要 hook 文案（硬阻塞仍可见） |

@@ -184,8 +184,12 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 RFV advisory 结构化外研 hint（[`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs)；仍受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束） |
 | `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK` | 开 | 关闭 Stop 等必要事件上的 `GSD_GOAL_CONTINUE` advisory（兼容读 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK`） |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 关闭必要事件上的 `RFV_LOOP_CONTINUE` advisory |
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 PostTool 在满足连续性就绪且启发式判定为验证类命令时向 `EVIDENCE_INDEX` 自动追加（[`framework_runtime/mod.rs`](../scripts/router-rs/src/framework_runtime/mod.rs)）；unset 等同启用 |
-| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 Cursor/Codex `Stop` 对**当前任务**的原地 checkpoint（[`cursor_hooks/handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs)、[`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs)）；unset 等同启用；**不**再 mint 新 `cursor-stop-*` 或改写 focus/active；无指针时写入稳定 `continuity-session` |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | **关** | **仅** `1`/`true`/`yes`/`on`：开启 PostTool 向 `EVIDENCE_INDEX` 自动追加（2026-05 solo 减法默认关） |
+| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | **关** | **仅** `1`/`true`/`yes`/`on`：开启 Cursor/Codex `Stop` 原地 checkpoint；unset 默认不写 |
+| `ROUTER_RS_DEPTH_COMPLIANCE_HINT` | **关** | **仅** `1`/`true`/`yes`/`on`：SessionStart digest 注入 `深度信号:`；`ROUTER_RS_DEPTH_SCORE_MODE=strict` 时亦开启 |
+| `ROUTER_RS_CONTINUITY_WRITE_JOURNAL` | **关** | **仅** `1`/`true`/`yes`/`on`：session 批量写 `CONTINUITY_JOURNAL.json` |
+| `ROUTER_RS_TASK_STATE_AGGREGATE_AUTO` | **关** | **仅** `1`/`true`/`yes`/`on`：GOAL/RFV/evidence 变更后自动刷新 `TASK_STATE.json`；否则用 `framework task-state-aggregate-sync` |
+| `ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE` | `goal_only` | `goal_only`（默认）：digest 含 GOAL、不读根 `SESSION_SUMMARY`；`digest`：完整 digest；`summary`：仅根摘要 + 提示行 |
 | `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | **仅** `1`/`true`/`yes`/`on`：剥 `additional_context`（含 soft-nag 的 `REVIEW_GATE detail` 段落）；保留 `followup_message` 中以 `router-rs ` 开头的硬短码（[`apply_cursor_hook_silent_policy`](../scripts/router-rs/src/cursor_hooks/handlers.rs)，[`review_gate.rs`](../scripts/router-rs/src/review_gate.rs)） |
 | `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` | 8192，clamp 1024–65536 | Cursor hook stdout：`additional_context` /（极端长度）`followup_message` 经 [`apply_cursor_hook_output_policy`](../scripts/router-rs/src/cursor_hooks/handlers.rs) UTF-8 **字节**裁剪（变量名为 `_CHARS`，语义为字节上限）；详见 §4.2 |
 | `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` | 1200，clamp 256–8192 | Cursor SessionStart `additional_context` 合成字节上限 |

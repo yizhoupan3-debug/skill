@@ -10,7 +10,7 @@ routing_gate: evidence
 routing_gate_evidence: "ROADMAP.md exists, WAVE_STATE.json exists"
 routing_priority: P1
 session_start: n/a
-user-invocable: true
+user-invocable: false
 trigger_hints:
   - /gsd-execute-phase
   - gsd execute

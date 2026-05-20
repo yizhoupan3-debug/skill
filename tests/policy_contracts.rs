@@ -78,7 +78,15 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "web-scraping",
 ];
 
-const FRAMEWORK_COMMAND_IDS: &[&str] = &["gsd", "deepinterview", "gitx", "update"];
+const FRAMEWORK_COMMAND_IDS: &[&str] = &[
+    "discussx",
+    "planx",
+    "implementx",
+    "verifyx",
+    "deepinterview",
+    "gitx",
+    "update",
+];
 
 fn retired_runtime_owned_skill_slugs() -> HashSet<&'static str> {
     RETIRED_RUNTIME_OWNED_SKILL_SLUGS.iter().copied().collect()
@@ -444,7 +452,9 @@ fn codex_user_skill_surface_stays_lightweight_and_explicit() {
         "surface loaded too many skills: {}",
         skills.len()
     );
-    assert!(skills.iter().any(|item| item.as_str() == Some("gsd")));
+    assert!(skills.iter().any(|item| item.as_str() == Some("discussx")));
+    assert!(skills.iter().any(|item| item.as_str() == Some("implementx")));
+    assert!(!skills.iter().any(|item| item.as_str() == Some("gsd")));
     assert!(skills.iter().any(|item| item.as_str() == Some("gitx")));
     assert!(skills
         .iter()
@@ -452,12 +462,14 @@ fn codex_user_skill_surface_stays_lightweight_and_explicit() {
     assert!(!skills.iter().any(|item| item.as_str() == Some("team")));
     assert!(!skills.iter().any(|item| item.as_str() == Some("refresh")));
     assert!(!skills.iter().any(|item| item.as_str() == Some("autopilot")));
-    assert!(surface_root.join("gsd/SKILL.md").exists());
+    assert!(surface_root.join("discussx/SKILL.md").exists());
+    assert!(surface_root.join("implementx/SKILL.md").exists());
+    assert!(!surface_root.join("gsd").exists());
     assert!(surface_root.join("gitx/SKILL.md").exists());
     assert!(surface_root.join("deepinterview/SKILL.md").exists());
     assert!(!surface_root.join("team/SKILL.md").exists());
-    let gsd = read_text(&surface_root.join("gsd/SKILL.md"));
-    assert!(gsd.contains("/gsd-execute-phase") || gsd.contains("/gsd-new-project"));
+    let my_impl = read_text(&surface_root.join("implementx/SKILL.md"));
+    assert!(my_impl.contains("/implementx"));
 }
 
 #[test]
@@ -1840,14 +1852,15 @@ fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     let gp = registry
         .get("framework_commands")
-        .and_then(|fc| fc.get("gsd"))
+        .and_then(|fc| fc.get("implementx"))
         .and_then(|g| g.get("goal_persistence"))
-        .expect("framework_commands.gsd.goal_persistence");
+        .expect("framework_commands.implementx.goal_persistence");
     let eps = gp
         .get("execution_entrypoints")
         .and_then(|v| v.as_array())
         .expect("execution_entrypoints array");
-    assert!(eps.iter().any(|v| v.as_str() == Some("/gsd-execute-phase")));
+    assert!(eps.iter().any(|v| v.as_str() == Some("/implementx")));
+    assert!(eps.iter().any(|v| v.as_str() == Some("/verifyx")));
     assert!(gp
         .get("continuation_hook_leader")
         .and_then(|v| v.as_str())
@@ -1861,8 +1874,23 @@ fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
 
 /// Pre-execution stdio must not show `drive_until_done: true` (agents copy-paste from SKILL.md).
 #[test]
+fn gsd_framework_command_not_published_to_skill_surface() {
+    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let gsd = &registry["framework_commands"]["gsd"];
+    assert_eq!(
+        gsd.get("surface_publish").and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    let my_impl = &registry["framework_commands"]["implementx"];
+    assert!(
+        my_impl.get("surface_publish").and_then(|v| v.as_bool()).unwrap_or(true),
+        "implementx defaults to surface_publish true"
+    );
+}
+
+#[test]
 fn gsd_new_project_skill_forbids_pre_exec_drive_until_done_true() {
-    let text = read_text(&project_root().join("skills/gsd/new-project/SKILL.md"));
+    let text = read_text(&project_root().join("skills/_archived/gsd-lifecycle/new-project/SKILL.md"));
     assert!(
         !text.contains("\"drive_until_done\":true"),
         "new-project must not embed drive_until_done:true in stdio example"
@@ -1901,10 +1929,15 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
         }
     }
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
-    let gsd = &registry["framework_commands"]["gsd"];
+    let my_impl = &registry["framework_commands"]["implementx"];
     assert_eq!(
-        gsd["skill_path"].as_str().expect("gsd skill_path"),
-        "skills/gsd/SKILL.md"
+        my_impl["skill_path"].as_str().expect("implementx skill_path"),
+        "skills/implementx/SKILL.md"
+    );
+    let legacy = &registry["framework_commands"]["gsd"];
+    assert_eq!(
+        legacy["skill_path"].as_str().expect("legacy gsd skill_path"),
+        "skills/_archived/gsd-lifecycle/SKILL.md"
     );
     assert!(
         registry["framework_commands"].get("autopilot").is_none(),

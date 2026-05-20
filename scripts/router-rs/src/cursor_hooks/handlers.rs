@@ -126,9 +126,7 @@ fn finalize_stop_hook_outputs(
 }
 
 pub(crate) fn try_write_cursor_continuity_checkpoint_on_stop(repo_root: &Path) {
-    if !crate::router_env_flags::router_rs_env_enabled_default_true(
-        "ROUTER_RS_CONTINUITY_STOP_CHECKPOINT",
-    ) {
+    if !crate::router_env_flags::router_rs_continuity_stop_checkpoint_enabled() {
         return;
     }
     let summary_body = "Stop hook automatic checkpoint (Cursor).";
@@ -2011,6 +2009,12 @@ fn cursor_review_gate_disabled_by_env() -> bool {
     )
 }
 
+/// Env disable **or** `lifecycle_profile: my-light` (prompt / GOAL_STATE) — profile-scoped, not global.
+fn cursor_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
+    cursor_review_gate_disabled_by_env()
+        || crate::hook_common::my_light_profile_active(Some(repo_root), text)
+}
+
 /// `subagentStart` 只能拒绝/提示，不能主动关闭既有 subagent；这里用活跃数避免继续堆积。
 fn cursor_max_open_subagents() -> Option<u32> {
     let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS") else {
@@ -2376,6 +2380,11 @@ fn hydrate_goal_gate_from_disk(
     {
         state.goal_verify_or_block_seen = true;
     }
+    // Pre-execution / planning: do not require L1 verification on Stop (P0-9 / solo subtraction).
+    let drive = goal.get("drive_until_done").and_then(Value::as_bool).unwrap_or(false);
+    if !drive && matches!(st_lc.as_str(), "planned" | "draft") {
+        state.goal_verify_or_block_seen = true;
+    }
 }
 
 fn goal_missing_parts(state: &ReviewGateState) -> String {
@@ -2621,17 +2630,18 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let mut output = json!({ "continue": true });
     if review_arms_for_gate
         && !prior_review_required
-        && !cursor_review_gate_disabled_by_env()
+        && !cursor_review_gate_suppressed(repo_root, &text)
         && !state.review_override
     {
-        let nudge = if crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root)) {
+        let nudge = if crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &text)
+        {
             crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root))
         } else {
             CURSOR_DEEP_REVIEW_DEFAULT_NUDGE_FALLBACK.to_string()
         };
         merge_additional_context(&mut output, &nudge);
     }
-    if review && goal_drive_entrypoint && !cursor_review_gate_disabled_by_env() {
+    if review && goal_drive_entrypoint && !cursor_review_gate_suppressed(repo_root, &text) {
         merge_additional_context(&mut output, CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE);
     }
     if needs_autopilot_pre_goal {
@@ -2648,11 +2658,20 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     if let Some(note) = pre_goal_auto_release_note {
         merge_additional_context(&mut output, note);
     }
-    if crate::hook_common::is_gsd_pre_execution_entry_prompt(&text) {
+    if crate::hook_common::is_my_lifecycle_entry_prompt(&text)
+        && crate::hook_common::is_gsd_pre_execution_entry_prompt(&text)
+    {
+        merge_additional_context(&mut output, crate::hook_common::MY_PRE_EXECUTION_HOOK_NUDGE);
+    } else if crate::hook_common::is_gsd_pre_execution_entry_prompt(&text) {
         merge_additional_context(
             &mut output,
             crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE,
         );
+    }
+    if crate::hook_common::is_my_lifecycle_entry_prompt(&text)
+        && goal_drive_entrypoint
+    {
+        merge_additional_context(&mut output, crate::hook_common::MY_GOAL_DRIVE_HOOK_NUDGE);
     }
     crate::paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(
         repo_root,
@@ -2668,7 +2687,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let gate_needs_persist = review_arms_for_gate
         || state.goal_required
         || needs_autopilot_pre_goal
-        || (review && !cursor_review_gate_disabled_by_env());
+        || (review && !cursor_review_gate_suppressed(repo_root, &text));
     if !persisted || !persisted_after_followup {
         if gate_needs_persist
             && !crate::router_env_flags::router_rs_cursor_hook_state_fail_open_enabled()
@@ -3185,7 +3204,16 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
 
 fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     let frame = crate::task_state::resolve_cursor_continuity_frame(repo_root);
-    if cursor_review_gate_disabled_by_env() {
+    let stop_signal_text = {
+        let response = agent_response_text(event);
+        let prompt = prompt_text(event);
+        if prompt.trim().is_empty() {
+            response
+        } else {
+            format!("{prompt}\n{response}")
+        }
+    };
+    if cursor_review_gate_suppressed(repo_root, &stop_signal_text) {
         let response_text = agent_response_text(event);
         let closeout_msg =
             stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text);
@@ -3508,27 +3536,44 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
             crate::task_state::CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH.to_string(),
         );
     }
-    // Raw SESSION_SUMMARY body (prefix-stable under SessionStart byte cap); see
-    // `session_start_additional_context_observes_router_rs_sessionstart_max_env`.
-    let session_summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
-    let summary_budget = crate::router_env_flags::router_rs_cursor_sessionstart_context_max_bytes()
-        .saturating_add(512);
-    if let Some(raw) =
-        crate::read_bounded::read_utf8_file_prefix(&session_summary_path, summary_budget)
-    {
-        let block = raw.trim();
-        if !block.is_empty() {
-            sections.push(block.to_string());
+    let mode = crate::router_env_flags::router_rs_cursor_sessionstart_summary_mode();
+    if matches!(
+        mode,
+        crate::router_env_flags::CursorSessionStartSummaryMode::Summary
+            | crate::router_env_flags::CursorSessionStartSummaryMode::GoalOnly
+    ) {
+        let session_summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
+        let summary_budget =
+            crate::router_env_flags::router_rs_cursor_sessionstart_context_max_bytes()
+                .saturating_add(512);
+        if matches!(
+            mode,
+            crate::router_env_flags::CursorSessionStartSummaryMode::Summary
+        ) {
+            if let Some(raw) =
+                crate::read_bounded::read_utf8_file_prefix(&session_summary_path, summary_budget)
+            {
+                let block = raw.trim();
+                if !block.is_empty() {
+                    sections.push(block.to_string());
+                }
+            }
         }
     }
-    if let Ok(digest) =
-        crate::framework_runtime::build_framework_continuity_digest_prompt_from_task_view(
-            repo_root, 4, true, &task_view,
-        )
-    {
-        let trimmed = digest.trim();
-        if !trimmed.is_empty() {
-            sections.push(trimmed.to_string());
+    if matches!(
+        mode,
+        crate::router_env_flags::CursorSessionStartSummaryMode::Digest
+            | crate::router_env_flags::CursorSessionStartSummaryMode::GoalOnly
+    ) {
+        if let Ok(digest) =
+            crate::framework_runtime::build_framework_continuity_digest_prompt_from_task_view(
+                repo_root, 4, true, &task_view,
+            )
+        {
+            let trimmed = digest.trim();
+            if !trimmed.is_empty() {
+                sections.push(trimmed.to_string());
+            }
         }
     }
     sections.push(format!("Repo: {}", repo_root.display()));
@@ -4412,7 +4457,12 @@ pub(crate) fn dispatch_cursor_hook_event(
 ) -> Value {
     let lowered = event_name.trim().to_lowercase();
     let lowered = lowered.as_str();
-    let disabled = cursor_review_gate_disabled_by_env();
+    let dispatch_text = payload
+        .get("prompt")
+        .and_then(Value::as_str)
+        .or_else(|| payload.get("user_message").and_then(Value::as_str))
+        .unwrap_or("");
+    let disabled = cursor_review_gate_suppressed(repo_root, dispatch_text);
 
     if disabled {
         if matches!(lowered, "sessionstart") {

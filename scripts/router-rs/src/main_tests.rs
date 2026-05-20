@@ -649,11 +649,18 @@ fn continuity_digest_includes_goal_state_attachment() {
         }"#,
     )
     .expect("goal state");
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_hint = std::env::var_os("ROUTER_RS_DEPTH_COMPLIANCE_HINT");
+    std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1");
     let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
     assert!(
         prompt.contains("深度信号") && prompt.contains("d0/3"),
-        "depth hint should surface in digest prompt; prompt={prompt:?}"
+        "depth hint should surface when ROUTER_RS_DEPTH_COMPLIANCE_HINT=1; prompt={prompt:?}"
     );
+    match prev_hint {
+        Some(v) => std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", v),
+        None => std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT"),
+    }
     assert!(
         prompt.contains("Active goal"),
         "goal section missing; prompt={prompt:?}"
@@ -833,6 +840,10 @@ fn framework_snapshot_missing_recovery_anchors_is_not_resumable() {
 
 #[test]
 fn framework_session_writer_materializes_complete_focus_continuity() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_journal = std::env::var_os("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
+    std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", "1");
+
     let repo_root = temp_dir_path("framework-session-writer-continuity");
     let output_dir = repo_root.join("artifacts").join("current");
     let payload = json!({
@@ -935,6 +946,41 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
             .is_some_and(|value| value.len() == 64)
     );
 
+    match prev_journal {
+        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", v),
+        None => std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL"),
+    }
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn framework_session_writer_skips_journal_by_default() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_journal = std::env::var_os("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
+    std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
+
+    let repo_root = temp_dir_path("framework-session-no-journal");
+    let output_dir = repo_root.join("artifacts").join("current");
+    let _ = write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": "no-journal-task",
+        "task": "t",
+        "phase": "implementation",
+        "status": "in_progress",
+        "summary": "s",
+        "focus": true,
+        "next_actions": []
+    }))
+    .expect("write");
+    let journal = repo_root
+        .join("artifacts/current/no-journal-task/CONTINUITY_JOURNAL.json");
+    assert!(!journal.is_file(), "journal must not be written by default");
+
+    match prev_journal {
+        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", v),
+        None => std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL"),
+    }
     let _ = fs::remove_dir_all(&repo_root);
 }
 
@@ -1225,6 +1271,10 @@ fn runtime_view_active_task_id_matches_resolve_task_view() {
 
 #[test]
 fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE");
+    std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1");
+
     let repo_root = temp_dir_path("post-tool-evidence-append");
     let output_dir = repo_root.join("artifacts").join("current");
     let _ = write_framework_session_artifacts(json!({
@@ -1269,11 +1319,19 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         .unwrap()
         .contains("cargo test"));
 
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v),
+        None => std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE"),
+    }
     let _ = fs::remove_dir_all(&repo_root);
 }
 
 #[test]
 fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE");
+    std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1");
+
     let repo_root = temp_dir_path("cursor-post-tool-evidence-append");
     let output_dir = repo_root.join("artifacts").join("current");
     let _ = write_framework_session_artifacts(json!({
@@ -1318,6 +1376,10 @@ fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         .unwrap()
         .contains("cargo test"));
 
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v),
+        None => std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE"),
+    }
     let _ = fs::remove_dir_all(&repo_root);
 }
 
@@ -1520,6 +1582,10 @@ fn post_tool_evidence_no_ops_without_continuity_seed() {
 
 #[test]
 fn framework_session_artifact_write_rejects_corrupt_continuity_journal() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_journal = std::env::var_os("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
+    std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", "1");
+
     let repo_root = temp_dir_path("framework-session-corrupt-journal");
     let output_dir = repo_root.join("artifacts").join("current");
     let first = write_framework_session_artifacts(json!({
@@ -1558,6 +1624,10 @@ fn framework_session_artifact_write_rejects_corrupt_continuity_journal() {
         "unexpected error: {err}"
     );
 
+    match prev_journal {
+        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", v),
+        None => std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL"),
+    }
     let _ = fs::remove_dir_all(&repo_root);
 }
 
@@ -2279,7 +2349,7 @@ fn framework_alias_fails_closed_for_missing_alias_record() {
     fs::create_dir_all(&registry_dir).expect("create registry dir");
     fs::write(
         registry_dir.join("RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/gsd/SKILL.md"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/_archived/gsd-lifecycle/SKILL.md"}}}"#,
     )
     .expect("write registry");
 
@@ -3321,7 +3391,8 @@ fn framework_command_aliases_require_literal_entrypoints() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
-    assert!(records.iter().any(|record| record.slug == "gsd"));
+    assert!(records.iter().any(|record| record.slug == "implementx"));
+    assert!(records.iter().any(|record| record.slug == "discussx"));
     assert!(!records.iter().any(|record| record.slug == "autopilot"));
     assert!(records.iter().any(|record| record.slug == "deepinterview"));
     assert!(records.iter().any(|record| record.slug == "gitx"));
@@ -3344,18 +3415,18 @@ fn framework_command_aliases_require_literal_entrypoints() {
         "manifest fallback must not resurrect autopilot owner: {autopilot_deep:?}"
     );
 
-    let gsd_exec = route_task_with_manifest_fallback(
+    let my_exec = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
         None,
         None,
-        "/gsd-execute-phase",
-        "alias-gsd-exec",
+        "/implementx",
+        "alias-my-implement",
         true,
         true,
     )
-    .expect("route explicit gsd execute alias");
-    assert_eq!(gsd_exec.selected_skill, "gsd");
+    .expect("route explicit my-implement alias");
+    assert_eq!(my_exec.selected_skill, "implementx");
 
     let team_alias = crate::framework_runtime::build_framework_alias_envelope(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),

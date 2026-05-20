@@ -11,7 +11,7 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
-user-invocable: true
+user-invocable: false
 trigger_hints:
   - /gsd-new-project
   - gsd new project

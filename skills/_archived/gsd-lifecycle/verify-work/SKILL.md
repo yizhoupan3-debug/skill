@@ -10,7 +10,7 @@ routing_gate: evidence
 routing_gate_evidence: "WAVE_STATE.json shows global_status=completed"
 routing_priority: P1
 session_start: n/a
-user-invocable: true
+user-invocable: false
 trigger_hints:
   - /gsd-verify-work
   - gsd verify

@@ -10,7 +10,7 @@ routing_gate: evidence
 routing_gate_evidence: "WAVE_STATE.json global_status=completed, EVIDENCE_INDEX has entries"
 routing_priority: P1
 session_start: n/a
-user-invocable: true
+user-invocable: false
 trigger_hints:
   - /gsd-ship
   - gsd ship

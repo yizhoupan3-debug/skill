@@ -24,8 +24,18 @@ just doctor
 
 ## 默认工作流（全宿主）
 
-- **GSD** 为默认生命周期（`/gsd-new-project` … `/gsd-ship`），已在 `RUNTIME_REGISTRY` 为 `codex-cli` / `cursor` / `claude-code` / `claude-desktop` 注册；`AGENTS.md` 与各宿主 framework 投影文案一致。
-- `/autopilot` 已退役；连续执行请用 `/gsd-execute-phase`（goal drive 经 `GOAL_STATE.json` + `framework_autopilot_goal` stdio）。
+- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；`lifecycle_profile: my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge。
+- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish` + `framework host-integration install --to cursor --scope user`；**重启 Cursor**。GSD 整树已迁至 `skills/_archived/gsd-lifecycle/`（`.cursorignore`），消除无前缀残留如 `/discuss-phase`、`/plan-phase`、`/execute-phase`、`/verify-work`、`/ship`、`/new-project`。
+- **legacy-gsd（冷表）**：`/gsd-*` 六段命令仅在 `skills/SKILL_MANIFEST.json`（`legacy-gsd`）保留，供框架 CI / 回归；**不要**作为个人日常入口。
+- `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
+
+| 退役（个人） | 替代 |
+|--------------|------|
+| `/gsd-new-project` + `/gsd-discuss-phase` | `/discussx` |
+| `/gsd-plan-phase` | `/planx` |
+| `/gsd-execute-phase` | `/implementx` |
+| `/gsd-verify-work` + `/gsd-ship` | `/verifyx` |
+| `/discuss-phase`、`/plan-phase`、`/execute-phase`、`/verify-work`、`/ship`、`/new-project`（无前缀 GSD 残留） | 已归档，**无**个人斜杠；用上表四命令 |
 
 ## Cursor：framework 规则仅用户级
 
@@ -112,7 +122,7 @@ cd /path/to/project
 | `router-rs schema-drift baseline --repo-root …` | 捕获 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json` |
 | `router-rs schema-drift check --repo-root …` | 对比基线；hooks parity、gate timeout、REQUIREMENTS↔ROADMAP 标题、`EVIDENCE_INDEX.artifacts[]` |
 
-GSD 验收入口：[`skills/gsd/verify-work/SKILL.md`](skills/gsd/verify-work/SKILL.md)。CI 探针：`skill-ci` 跑 `schema-drift contract`。
+GSD 验收入口：[`skills/_archived/gsd-lifecycle/verify-work/SKILL.md`](skills/_archived/gsd-lifecycle/verify-work/SKILL.md)。CI 探针：`skill-ci` 跑 `schema-drift contract`。
 
 ## Claude Code：hook env 与 Cursor 对齐（2026-05-20）
 
@@ -147,6 +157,6 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | `docs/plans/*.md`（除 [`docs/plans/README.md`](docs/plans/README.md)） | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
 | `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
 | `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
-| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/gsd/`](skills/gsd/) + `/gsd-execute-phase` |
+| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/_archived/gsd-lifecycle/`](skills/_archived/gsd-lifecycle/) + `/gsd-execute-phase` |
 
 勿在 issue/评论中链接已删路径；契约以 [`docs/README.md`](docs/README.md) 索引为准。

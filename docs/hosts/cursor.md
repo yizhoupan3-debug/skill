@@ -8,7 +8,7 @@
 
 | 组件 | Scope | 路径 |
 |------|-------|------|
-| Framework 叙事（GSD 默认链） | **User only** | `~/.cursor/rules/framework.mdc` |
+| Framework 叙事（My 默认链） | **User only** | `~/.cursor/rules/framework.mdc` |
 | Harness hooks | **Project** | `<repo>/.cursor/hooks.json` |
 | Review / execution gate 规则 | **Project** | `<repo>/.cursor/rules/*.mdc`（非 framework） |
 | Hook state | **Project** | `<repo>/.cursor/hook-state/` |
@@ -23,8 +23,10 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
 
 ## 默认工作流
 
-全闭集宿主默认 **GSD**：`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`。  
-Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-boundaries.md`）。
+全闭集宿主默认 **My lifecycle**：`/discussx` → `/planx` → `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave）→ `/verifyx`。  
+Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与无前缀 GSD 残留（`discuss-phase` 等）已归档至 `skills/_archived/gsd-lifecycle/`（`.cursorignore`），不在 surface 发布。
+
+**可见性**：改 routing 后须 `just publish`（或 `ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1` + `framework maint update-one-shot`）并 `framework host-integration install --to cursor --scope user`；项目内 `.cursor/commands/{discussx,planx,implementx,verifyx}.md` 提供斜杠命令正文。
 
 ## Hook 能力（本仓）
 
@@ -49,7 +51,7 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 
 - **Agent 面**：上表事件 → `router-rs cursor hook`（经 [`cursor-router-rs-hook.sh`](../../configs/framework/cursor-router-rs-hook.sh)）
 - **REVIEW_GATE 可清点 lane**（仅）：`general-purpose`、`best-of-n-runner`（registry `review_gate.deep_gate_lanes`）
-- **Goal drive**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` — **不是** `/gsd-new-project` 等 pre-exec 命令（`/autopilot` 已退役）
+- **Goal drive**：`/implementx`、`/verifyx` — **不是** `/discussx`、`/planx`（`/autopilot` 已退役；legacy `/gsd-*` 不发布到 surface）
 - **Fail-closed**：关键事件经 `cursor-router-rs-hook.sh`；`beforeSubmit` 对 plan 文件无可靠 Plan/Agent 模式信号
 
 ## Subagent 并发上限（勿与 stdio 默认混淆）

@@ -11,7 +11,7 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
-user-invocable: true
+user-invocable: false
 trigger_hints:
   - /gsd
   - /gsd-new-project
@@ -26,7 +26,9 @@ metadata:
   tags: [gsd, lifecycle, project-management, adversarial-review]
 ---
 
-# GSD - Global Skill Development
+# GSD - Global Skill Development (legacy)
+
+**Personal default is My lifecycle** — `/my-discuss` → `/my-plan` → `/my-implement` → `/my-verify`. This tree is **legacy-gsd** (cold manifest / framework CI only); `user-invocable: false` so slash commands do not appear in hosts.
 
 Repo-native GSD augments [official get-shit-done](https://github.com/gsd-build/get-shit-done) semantics — see `references/OFFICIAL_GSD_ALIGNMENT.md`.
 

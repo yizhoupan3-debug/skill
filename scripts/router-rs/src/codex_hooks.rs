@@ -773,7 +773,10 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
 
 fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
     let prompt = codex_prompt_text(event);
-    let facts = ReviewGateFacts::from_prompt(&prompt);
+    let mut facts = ReviewGateFacts::from_prompt(&prompt);
+    if crate::hook_common::my_light_profile_active(Some(repo_root), &prompt) {
+        facts.review_required = false;
+    }
     let state = CodexLifecycleContextState {
         seq: 0,
         review_required: facts.review_required,
@@ -807,7 +810,7 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
     }
     if facts.review_required
         && !facts.review_override
-        && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root))
+        && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
     {
         contexts.push(crate::registry_loader::review_spawn_first_nudge_line(Some(
             repo_root,
@@ -951,7 +954,7 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
 }
 
 fn continuity_stop_checkpoint_env_enabled() -> bool {
-    router_rs_env_enabled_default_true("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT")
+    crate::router_env_flags::router_rs_continuity_stop_checkpoint_enabled()
 }
 
 /// Codex Stop 守门通过后写入 `artifacts/current/*` 与指针文件；失败不阻断 Stop（仅 stderr）。

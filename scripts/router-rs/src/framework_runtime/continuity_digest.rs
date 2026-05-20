@@ -509,8 +509,8 @@ mod digest_active_focus_hint_tests {
             "expected zh continuity hint line in prompt:\n{prompt}"
         );
         assert!(
-            prompt.contains("hydration"),
-            "expected hydration wording:\n{prompt}"
+            prompt.contains("focus") || prompt.contains("active"),
+            "expected pointer mismatch wording:\n{prompt}"
         );
         assert!(
             !prompt.contains("## Active goal"),

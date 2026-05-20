@@ -259,25 +259,90 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
 fn framework_goal_drive_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        // Pre-execution GSD (`new-project`, `plan-phase`, `discuss-phase`) must NOT arm
-        // `goal_required` / drive_until_done — see skills/gsd/shared/phase-boundaries.md.
-        Regex::new(r"(?i)(^|\s)/gsd-(?:execute-phase|verify-work|ship)\b").expect("invalid regex")
+        // Pre-execution GSD/my discuss+plan must NOT arm goal drive — see phase-boundaries / my-plan SKILL.
+        Regex::new(
+            r"(?i)(^|\s)/(?:gsd-(?:execute-phase|verify-work|ship)|implementx|verifyx)\b",
+        )
+        .expect("invalid regex")
     })
 }
 
 fn gsd_pre_execution_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/gsd-(?:new-project|plan-phase|discuss-phase)\b")
-            .expect("invalid regex")
+        Regex::new(
+            r"(?i)(^|\s)/(?:gsd-(?:new-project|plan-phase|discuss-phase)|discussx|planx)\b",
+        )
+        .expect("invalid regex")
     })
 }
 
+fn my_lifecycle_entry_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)(^|\s)/(?:discussx|planx|implementx|verifyx)\b").expect("invalid regex")
+    })
+}
+
+/// Any `/discussx|planx|implementx|verifyx` personal lifecycle slash command.
+pub fn is_my_lifecycle_entry_prompt(text: &str) -> bool {
+    my_lifecycle_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+}
+
+/// `GOAL_STATE.lifecycle_profile` or active my-* prompt → my-light harness behavior.
+pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) -> bool {
+    if is_my_lifecycle_entry_prompt(text) {
+        return true;
+    }
+    let Some(root) = repo_root else {
+        return false;
+    };
+    crate::autopilot_goal::read_goal_state_for_hydration(root)
+        .ok()
+        .flatten()
+        .and_then(|(goal, _)| {
+            goal.get("lifecycle_profile")
+                .and_then(|v| v.as_str())
+                .map(|p| p == "my-light")
+        })
+        .unwrap_or(false)
+}
+
+/// Profile-scoped review gate off (not global env); includes `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`.
+pub fn review_gate_hard_block_suppressed(
+    repo_root: Option<&std::path::Path>,
+    text: &str,
+) -> bool {
+    if crate::router_env_flags::router_rs_env_enabled_default_false(
+        "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE",
+    ) {
+        return true;
+    }
+    if my_light_profile_active(repo_root, text) {
+        return true;
+    }
+    repo_root
+        .and_then(|root| {
+            crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
+                Some(root),
+                "my-light",
+            )
+            .ok()
+        })
+        .unwrap_or(false)
+}
+
 /// Hook nudge for GSD pre-execution commands (read-only product surface).
-pub const GSD_PRE_EXECUTION_HOOK_NUDGE: &str = "GSD pre-execution (/gsd-new-project, /gsd-plan-phase, /gsd-discuss-phase): product repo is READ-ONLY per skills/gsd/shared/phase-boundaries.md. Write only under artifacts/current/<task_id>/ and allowed planning docs. Do not set drive_until_done:true, do not run fix/build/test on product code, and do not spawn implementation agents until /gsd-execute-phase.";
+pub const GSD_PRE_EXECUTION_HOOK_NUDGE: &str = "GSD pre-execution (/gsd-new-project, /gsd-plan-phase, /gsd-discuss-phase): product repo is READ-ONLY per skills/_archived/gsd-lifecycle/shared/phase-boundaries.md. Write only under artifacts/current/<task_id>/ and allowed planning docs. Do not set drive_until_done:true, do not run fix/build/test on product code, and do not spawn implementation agents until /gsd-execute-phase.";
 
 /// Hook nudge when execution-zone goal drive is armed.
-pub const GSD_GOAL_DRIVE_HOOK_NUDGE: &str = "Framework goal drive (/gsd-execute-phase, /gsd-verify-work, /gsd-ship): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched GSD skill_path (see skills/gsd/execute-phase/SKILL.md).";
+pub const GSD_GOAL_DRIVE_HOOK_NUDGE: &str = "Framework goal drive (/gsd-execute-phase, /gsd-verify-work, /gsd-ship, /implementx, /verifyx): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched skill_path (see skills/_archived/gsd-lifecycle/execute-phase/SKILL.md or skills/implementx/SKILL.md).";
+
+/// Hook nudge for my-* pre-execution (read-only product surface).
+pub const MY_PRE_EXECUTION_HOOK_NUDGE: &str = "My lifecycle pre-execution (/discussx, /planx): product repo READ-ONLY. Write only under artifacts/current/<task_id>/ and planning docs. No drive_until_done until /implementx.";
+
+/// Hook nudge when my-implement arms goal drive (one-breath all waves).
+pub const MY_GOAL_DRIVE_HOOK_NUDGE: &str = "My lifecycle implement (/implementx): run ALL waves in WAVE_STATE.json without pausing at wave boundaries; main thread schedules lanes only; lane-notes on disk. See skills/implementx/SKILL.md.";
 
 fn framework_non_goal_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -339,7 +404,25 @@ pub fn is_narrow_review_prompt(text: &str) -> bool {
 }
 
 /// Whether hooks may inject the spawn-first pairing reviewer one-liner.
-pub fn should_inject_spawn_first_review_nudge(repo_root: Option<&std::path::Path>) -> bool {
+pub fn should_inject_spawn_first_review_nudge(
+    repo_root: Option<&std::path::Path>,
+    prompt_text: &str,
+) -> bool {
+    if my_light_profile_active(repo_root, prompt_text) {
+        return false;
+    }
+    if repo_root
+        .and_then(|r| {
+            crate::registry_loader::lifecycle_profile_disables_spawn_first_nudge(
+                Some(r),
+                "my-light",
+            )
+            .ok()
+        })
+        .unwrap_or(false)
+    {
+        return false;
+    }
     crate::router_env_flags::router_rs_review_spawn_first_nudge_enabled()
         && crate::registry_loader::review_spawn_first_enabled(repo_root)
 }
@@ -587,6 +670,17 @@ mod tests {
         assert!(!is_framework_goal_entry_prompt("/autopilot"));
         assert!(!is_framework_goal_entry_prompt("/autopilot-quick"));
         assert!(!is_gsd_pre_execution_entry_prompt("/gsd-execute-phase"));
+    }
+
+    #[test]
+    fn my_lifecycle_entry_and_goal_drive() {
+        assert!(is_my_lifecycle_entry_prompt("/implementx"));
+        assert!(is_my_lifecycle_entry_prompt("/discussx"));
+        assert!(is_framework_goal_entry_prompt("/implementx"));
+        assert!(is_framework_goal_entry_prompt("/verifyx"));
+        assert!(is_gsd_pre_execution_entry_prompt("/discussx"));
+        assert!(is_gsd_pre_execution_entry_prompt("/planx"));
+        assert!(!is_framework_goal_entry_prompt("/discussx"));
     }
 
     #[test]

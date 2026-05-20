@@ -52,8 +52,8 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## Skill Routing
 
-- **默认生命周期（GSD）**：命令链、pre-execution 边界与执行区见 [`skills/gsd/SKILL.md`](skills/gsd/SKILL.md) 与 [`skills/gsd/shared/phase-boundaries.md`](skills/gsd/shared/phase-boundaries.md)；各宿主安装文案见 [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)（`host-integration install` 读取）。**`/autopilot` 已退役** → `/gsd-execute-phase`（[`MIGRATION.md`](MIGRATION.md)）。
-- **执行区**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` + `GOAL_STATE.json`（`framework_autopilot_goal` stdio）。
+- **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` **一口气**跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。**legacy-gsd**（`/gsd-*`）仅冷表 [`skills/SKILL_MANIFEST.json`](skills/SKILL_MANIFEST.json)；GSD 树在 `skills/_archived/gsd-lifecycle/`（`.cursorignore`），**不会**出现在 Cursor 斜杠列表。
+- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light`；`framework_autopilot_goal` stdio）。`my-light` 关闭 `REVIEW_GATE` 硬拦。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
 ## Continuity artifacts
@@ -104,7 +104,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 ## GSD goal drive
 
 - `/gsd-execute-phase`（及 verify/ship）→ `framework_autopilot_goal` → `artifacts/current/<task_id>/GOAL_STATE.json`；续跑注入与 env 见 `docs/references/AGENTS_OPERATOR_SURFACE.md`、`docs/harness_architecture.md`。
-- 执行 wave / 验证：`skills/gsd/execute-phase/SKILL.md`、`skills/gsd/verify-work/SKILL.md`。
+- 执行 wave / 验证：`skills/_archived/gsd-lifecycle/execute-phase/SKILL.md`、`skills/_archived/gsd-lifecycle/verify-work/SKILL.md`。
 
 ## Git
 

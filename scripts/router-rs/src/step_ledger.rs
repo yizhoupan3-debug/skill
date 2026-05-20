@@ -137,9 +137,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
     let changed = crate::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
         let inner_changed = append_jsonl_entry(&path, &entry_value, idempotency_key.as_deref())?;
         if inner_changed {
-            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
-                &repo_root, &task_id,
-            );
+            let _ = crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id);
         }
         Ok(inner_changed)
     })?;

@@ -55,6 +55,9 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
 }
 
 pub(crate) fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &str) {
+    if !crate::router_env_flags::router_rs_task_state_aggregate_auto_enabled() {
+        return;
+    }
     if task_id.trim().is_empty() {
         return;
     }
@@ -96,6 +99,9 @@ mod tests {
 
     #[test]
     fn sync_writes_after_goal_start() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev = std::env::var_os("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO");
+        std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", "1");
         let tmp = std::env::temp_dir().join(format!(
             "router-rs-task-agg-{}",
             std::time::SystemTime::now()
@@ -131,6 +137,10 @@ mod tests {
         );
         assert_eq!(v.get("task_id").and_then(Value::as_str), Some("t-agg"));
         assert!(v.get("goal_state").is_some());
+        match prev {
+            Some(v) => std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", v),
+            None => std::env::remove_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO"),
+        }
         let _ = fs::remove_dir_all(&tmp);
     }
 

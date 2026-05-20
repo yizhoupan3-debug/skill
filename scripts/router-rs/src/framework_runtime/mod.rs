@@ -2,7 +2,6 @@ use crate::closeout_enforcement::{
     evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
     CloseoutEvidenceContext,
 };
-use crate::router_env_flags::router_rs_env_enabled_default_true;
 use chrono::{Local, SecondsFormat};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -717,7 +716,7 @@ pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
 
 fn continuity_post_tool_evidence_env_enabled() -> bool {
-    router_rs_env_enabled_default_true("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE")
+    crate::router_env_flags::router_rs_continuity_post_tool_evidence_enabled()
 }
 
 fn extract_codex_shell_command_preview(event: &Value) -> Option<String> {
@@ -819,10 +818,6 @@ pub(crate) fn append_evidence_index_merged_row(
     task_id_override: Option<&str>,
     entry: Map<String, Value>,
 ) -> Result<(), String> {
-    if !continuity_post_tool_evidence_env_enabled() {
-        return Ok(());
-    }
-
     // 解析 entry 中的签名字段用于去重（精确去重：command_preview + recorded_at）
     let entry_signature = entry
         .get("command_preview")

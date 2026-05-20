@@ -15,8 +15,8 @@
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 27,
-    "hot_skill_count": 27,
+    "full_skill_count": 30,
+    "hot_skill_count": 30,
     "manifest_skill_count": 52,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
@@ -792,23 +792,84 @@
       "framework_command"
     ],
     [
-      "gsd",
+      "discussx",
       "L0",
       "owner",
       "none",
       "n/a",
-      "GSD lifecycle commands for end-to-end project management with adversarial review and multi-agent execution.",
+      "Personal lifecycle discuss — requirements, decisions-only chat, doc-only.",
       [
-        "/gsd",
-        "/gsd-new-project",
-        "/gsd-plan-phase",
-        "/gsd-execute-phase",
-        "/gsd-verify-work",
-        "/gsd-discuss-phase",
-        "/gsd-ship"
+        "/discussx",
+        "discussx"
       ],
       "P1",
-      "skills/gsd/SKILL.md",
+      "skills/discussx/SKILL.md",
+      [
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "planx",
+      "L0",
+      "owner",
+      "none",
+      "n/a",
+      "Personal lifecycle plan — ROADMAP and WAVE_STATE DAG, doc-only.",
+      [
+        "/planx",
+        "planx"
+      ],
+      "P1",
+      "skills/planx/SKILL.md",
+      [
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "implementx",
+      "L0",
+      "owner",
+      "none",
+      "n/a",
+      "Personal lifecycle implement — one-breath all waves, multi-agent, main thread scheduler only.",
+      [
+        "/implementx",
+        "implementx"
+      ],
+      "P1",
+      "skills/implementx/SKILL.md",
+      [
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "verifyx",
+      "L0",
+      "owner",
+      "none",
+      "n/a",
+      "Personal lifecycle verify+ship — evidence, closeout, goal complete in one command.",
+      [
+        "/verifyx",
+        "verifyx"
+      ],
+      "P1",
+      "skills/verifyx/SKILL.md",
       [
         "claude-code",
         "claude-desktop",

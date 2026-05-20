@@ -22,14 +22,14 @@
         "install_tool": "codex",
         "projection_status": "implemented",
         "installable": true,
-        "default_framework_command": "gsd",
+        "default_framework_command": "implementx",
         "host_entrypoints": "AGENTS.md"
       },
       "cursor": {
         "install_tool": "cursor",
         "projection_status": "implemented",
         "installable": true,
-        "default_framework_command": "gsd",
+        "default_framework_command": "implementx",
         "host_entrypoints": [
           "AGENTS.md",
           ".cursor/rules/*.mdc"
@@ -46,7 +46,7 @@
         "install_tool": "claude",
         "projection_status": "implemented",
         "installable": true,
-        "default_framework_command": "gsd",
+        "default_framework_command": "implementx",
         "host_entrypoints": [
           "AGENTS.md",
           ".claude/rules/framework.md",
@@ -57,7 +57,7 @@
         "install_tool": "claude-desktop",
         "projection_status": "implemented",
         "installable": true,
-        "default_framework_command": "gsd",
+        "default_framework_command": "implementx",
         "host_entrypoints": [
           "AGENTS.md",
           ".claude/CLAUDE.md"
@@ -93,10 +93,83 @@
       "code-review"
     ]
   },
+  "lifecycle_profiles": {
+    "my-light": {
+      "disable_review_gate_hard_block": true,
+      "disable_spawn_first_nudge": true,
+      "commands": [
+        "discussx",
+        "planx",
+        "implementx",
+        "verifyx"
+      ]
+    }
+  },
   "framework_commands": {
+    "discussx": {
+      "canonical_owner": "discussx",
+      "skill_path": "skills/discussx/SKILL.md",
+      "host_entrypoints": {
+        "codex-cli": "/discussx",
+        "cursor": "/discussx",
+        "claude-code": "/discussx",
+        "claude-desktop": "/discussx"
+      },
+      "lineage": {
+        "source": "repo-native",
+        "description": "Personal lifecycle discuss (replaces gsd-new-project + discuss)."
+      }
+    },
+    "planx": {
+      "canonical_owner": "planx",
+      "skill_path": "skills/planx/SKILL.md",
+      "host_entrypoints": {
+        "codex-cli": "/planx",
+        "cursor": "/planx",
+        "claude-code": "/planx",
+        "claude-desktop": "/planx"
+      }
+    },
+    "implementx": {
+      "canonical_owner": "implementx",
+      "skill_path": "skills/implementx/SKILL.md",
+      "host_entrypoints": {
+        "codex-cli": "/implementx",
+        "cursor": "/implementx",
+        "claude-code": "/implementx",
+        "claude-desktop": "/implementx"
+      },
+      "implementation_bar": [
+        "one-breath-all-waves",
+        "multi-agent-with-lightweight-main-thread"
+      ],
+      "goal_persistence": {
+        "stdio_op": "framework_autopilot_goal",
+        "artifact": "artifacts/current/<task_id>/GOAL_STATE.json",
+        "execution_entrypoints": [
+          "/implementx",
+          "/verifyx"
+        ],
+        "continuation_hook_leader": "router-rs GSD_GOAL_CONTINUE",
+        "disable_hook_env": "ROUTER_RS_GSD_GOAL_CONTINUE_HOOK",
+        "rationale": "Personal lifecycle: implementx runs all WAVE_STATE waves in one breath; verifyx closes with evidence+ship. Pre-exec discussx/planx do not arm goal drive."
+      }
+    },
+    "verifyx": {
+      "canonical_owner": "verifyx",
+      "skill_path": "skills/verifyx/SKILL.md",
+      "host_entrypoints": {
+        "codex-cli": "/verifyx",
+        "cursor": "/verifyx",
+        "claude-code": "/verifyx",
+        "claude-desktop": "/verifyx"
+      }
+    },
     "gsd": {
-      "canonical_owner": "gsd",
-      "skill_path": "skills/gsd/SKILL.md",
+      "canonical_owner": "legacy-gsd",
+      "surface_publish": false,
+      "legacy": true,
+      "skill_path": "skills/_archived/gsd-lifecycle/SKILL.md",
       "official_workflow": {
         "phases": [
           "exploration",
