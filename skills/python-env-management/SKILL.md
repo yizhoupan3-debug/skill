@@ -27,7 +27,7 @@ trigger_hints:
   - astral uv
 metadata:
   version: "1.1.1"
-  platforms: [darwin]
+  platforms: [supported]
   tags:
     - python
     - uv
