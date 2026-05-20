@@ -1,5 +1,5 @@
 use crate::framework_runtime::{
-    build_automatic_continuity_checkpoint_payload, build_framework_continuity_digest_prompt,
+    build_automatic_stop_hook_checkpoint_payload, build_framework_continuity_digest_prompt,
     build_framework_contract_summary_envelope, try_append_post_tool_shell_evidence,
     write_framework_session_artifacts,
 };
@@ -929,8 +929,12 @@ fn try_write_continuity_checkpoint_on_codex_stop(repo_root: &Path, event: &Value
     } else {
         text
     };
-    let payload =
-        build_automatic_continuity_checkpoint_payload(repo_root, &task_line, &summary_body);
+    let Some(payload) =
+        build_automatic_stop_hook_checkpoint_payload(repo_root, &task_line, &summary_body)
+    else {
+        eprintln!("[router-rs] codex continuity checkpoint skipped: no active/focus task pointer");
+        return;
+    };
     if let Err(err) = write_framework_session_artifacts(payload) {
         eprintln!("[router-rs] continuity checkpoint write failed (non-fatal): {err}");
     }
@@ -3008,6 +3012,32 @@ mod tests {
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.independent_review_subagent_seen);
             assert!(state.review_lane_seen);
+        }
+
+        #[test]
+        fn post_tool_review_lane_fork_false_does_not_count_deep_independent() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-2rev",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-2rev",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"review","fork_context":false}
+            });
+            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            assert!(out.is_none());
+            let state = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(
+                !state.independent_review_subagent_seen,
+                "review subagent_type is Claude-only; must not satisfy Codex deep_gate_lanes"
+            );
         }
 
         #[test]

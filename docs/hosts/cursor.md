@@ -33,6 +33,15 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 - **Goal drive**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` — **不是** `/gsd-new-project` 等 pre-exec 命令（`/autopilot` 已退役）
 - **Fail-closed**：关键事件经 `cursor-router-rs-hook.sh`；`beforeSubmit` 对 plan 文件无可靠 Plan/Agent 模式信号
 
+## Subagent 并发上限（勿与 stdio 默认混淆）
+
+| 语义 | 默认 | 真源 |
+|------|------|------|
+| Cursor hook **open subagent** 计数上限 | **24** | `MAX_CONCURRENT_SUBAGENTS_LIMIT`；`ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` 可调低或 `0` 关闭 |
+| Goal/stdio **信封** 默认并发 | **8** | `DEFAULT_MAX_CONCURRENT_SUBAGENTS`（`runtime_envelope_ids.rs`） |
+
+`subagentStart` 拒绝文案中的「`max_concurrent_subagents_limit` 契约」指 **24** 上限常量，不是信封里的 8。
+
 ## 常用 env
 
 | 变量 | 作用 |
@@ -51,6 +60,6 @@ cargo test --manifest-path scripts/router-rs/Cargo.toml host_integration
 
 ## Unsupported（勿假看齐）
 
-- 无 Claude Code 专用 reviewer lane 字符串（`review`/`reviewer` 等）作为 REVIEW_GATE 清门依据
+- Claude Code 专用 lane（`review`/`reviewer`/`critic`/`code-review`，见 registry `claude_reviewer_lanes`）**不能**作为本宿主 REVIEW_GATE 清门依据；须用 `general-purpose` 或 `best-of-n-runner`
 - 无 tmux `session_supervisor`（Codex CLI 独有）
 - Tab / App lifecycle hooks 未接入 harness

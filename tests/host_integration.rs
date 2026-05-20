@@ -10,6 +10,13 @@ use std::process::Command;
 use tempfile::tempdir;
 
 #[test]
+fn runtime_registry_review_gate_lane_fields_present_on_disk() {
+    let v = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let (deep, claude) = common::review_gate_lane_sets_from_registry(&v);
+    common::assert_review_gate_lane_sets_closed(&deep, &claude);
+}
+
+#[test]
 fn shell_installer_e2e_writes_expected_files() {
     let codex_home = tempdir().unwrap();
     let status = router_rs_command([
@@ -89,7 +96,10 @@ fn cursor_hooks_template_matches_repo_hook_events_and_timeouts() {
 
 fn normalize_cursor_hook_command(command: &str) -> String {
     command
-        .replace("${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}", "${ROOT}")
+        .replace(
+            "${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}",
+            "${ROOT}",
+        )
         .replace("${CURSOR_WORKSPACE_ROOT:-$PWD}", "${ROOT}")
 }
 
@@ -554,9 +564,7 @@ fn install_skills_claude_target_installs_only_claude() {
         });
         assert!(
             entries.iter().any(|entry| {
-                entry
-                    .to_string()
-                    .contains("claude-router-rs-hook.sh")
+                entry.to_string().contains("claude-router-rs-hook.sh")
                     && entry.to_string().contains(event)
             }),
             "expected managed Claude launcher hook for {event}: {entries:?}"
@@ -1992,14 +2000,8 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let aliases = &payload["framework_commands"];
     assert!(aliases.get("autopilot").is_none());
     assert_eq!(aliases["gsd"]["canonical_owner"], "gsd");
-    assert_eq!(
-        aliases["gsd"]["host_entrypoints"]["codex-cli"],
-        "/gsd"
-    );
-    assert_eq!(
-        aliases["gsd"]["host_entrypoints"]["cursor"],
-        "/gsd"
-    );
+    assert_eq!(aliases["gsd"]["host_entrypoints"]["codex-cli"], "/gsd");
+    assert_eq!(aliases["gsd"]["host_entrypoints"]["cursor"], "/gsd");
     assert_eq!(
         aliases["gsd"]["entrypoint_modes"]["execute"]["codex-cli"],
         "/gsd-execute-phase"
@@ -2091,7 +2093,9 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         .as_array()
         .unwrap()
         .contains(&json!("evidence-driven-verification")));
-    let gp = gsd["goal_persistence"].as_object().expect("goal_persistence");
+    let gp = gsd["goal_persistence"]
+        .as_object()
+        .expect("goal_persistence");
     assert!(gp
         .get("continuation_hook_leader")
         .and_then(|v| v.as_str())

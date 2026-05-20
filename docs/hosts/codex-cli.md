@@ -34,7 +34,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 
 - 多层 hook **全部加载、并发**；项目 hook 需 trusted project
 - PostTool / Stop / SessionStart → 证据与 continuity digest
-- REVIEW_GATE lane 闭集与 Cursor 相同（registry）
+- REVIEW_GATE 可数 lane：`review_gate.deep_gate_lanes`（与 Cursor 相同；**不含** Claude 的 `review`/`reviewer` 等）。单次 PostToolUse 证据，无 multiset
 
 ## 独有
 

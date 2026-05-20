@@ -31,18 +31,35 @@
 
 ## 0.1 Countable REVIEW_GATE deep review lanes
 
-**权威真源**：`configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes`（由 `registry_review_gate.rs` 编译期加载）。所有宿主都从此注册表派生可清点深度审稿 lane。
+**权威真源**（`configs/framework/RUNTIME_REGISTRY.json`，`registry_review_gate.rs` 编译期嵌入）：
 
-当前注册值（以磁盘 JSON 为准）：`general-purpose`、`best-of-n-runner`（含归一化等价名 `generalpurpose`/`bestofnrunner`）。
+| 字段 | 消费宿主 | 含义 |
+|------|----------|------|
+| `review_gate.deep_gate_lanes` | **Cursor**、**Codex CLI**（`hook_common::is_deep_review_gate_lane_normalized`） | 可数深度审稿 lane：**仅** `general-purpose`、`best-of-n-runner` 及归一化等价名 `generalpurpose`/`bestofnrunner` |
+| `review_gate.claude_reviewer_lanes` | **Claude Code**（`claude_hooks::reviewer_lane` → `is_claude_reviewer_lane_from_registry`） | 上表四拼写 **加上** `review`、`reviewer`、`critic`、`code-review` |
 
-**Claude Code 额外接受**：`review`、`reviewer`、`critic`、`code-review`（仅 `claude_hooks.rs` 中 `reviewer_lane`；Cursor/Codex 宿主**不认**这些字符串）。见 `harness_architecture.md` §5.0。
+**勿混读**：`deep_gate_lanes` **不是** Claude 超集；在 Cursor/Codex 上使用 `subagent_type: "review"` 且 `fork_context=false` **不会**计入独立审稿证据。
 
-本文件仅维护指针，不维护第二份枚举列表。添加或删除 lane 时，编辑 `RUNTIME_REGISTRY.json` 并重建 `router-rs`。
+本文件不维护第二份 lane 枚举列表。增删 lane 时改 `RUNTIME_REGISTRY.json` 对应字段并重建 `router-rs`。
+
+### 跨宿主 REVIEW_GATE 差异（operator）
+
+| 能力 | Cursor | Codex CLI | Claude Code | Claude Desktop / codex-app |
+|------|--------|-----------|-------------|----------------------------|
+| 可数深度 lane 真源 | `deep_gate_lanes` | `deep_gate_lanes` | `claude_reviewer_lanes` | 无 hook 面 |
+| subagentStart/Stop multiset | ✓ | ✗（单次 PostToolUse 证据） | ✗ | ✗ |
+| `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✗ | ✗ | ✗ |
+| Stop 硬短码 | `router-rs REVIEW_GATE incomplete` | `CODEX_REVIEW_GATE` | `CLAUDE_REVIEW_GATE` | — |
+| GSD `GSD_GOAL_CONTINUE` on Stop | ✓ | ✗（continuity checkpoint） | ✗（UserPromptSubmit nudge） | ✗ |
+| Stop soft-nag / spoof scrub | ✓ | 部分 | 部分 | — |
+
+细节见 [`harness_architecture.md`](harness_architecture.md) §5.0 与各 [`docs/hosts/*.md`](hosts/cursor.md)。
+
 - **产品级外部能力**（tmux `session_supervisor`、原生 MCP 配置面、桌面线程宿主等）可以按宿主不同；这些以 `RUNTIME_REGISTRY.host_projections.*.capabilities` 与相关 status 字段为显式真源，**不得**从 skill `platforms` 或热路由里“假看齐”。
 - **Harness hook 面严格矩阵**：`host_projections.*.harness_capabilities` 默认必须满足 [`configs/framework/RUNTIME_REGISTRY_SCHEMA.json`](configs/framework/RUNTIME_REGISTRY_SCHEMA.json) 中的 `harness_capability_policy`（`core_always` + `cli_agent_hook_baseline`）。**若某宿主无法提供** `cli_agent_hook_baseline` 中的某项，必须在同一投影对象上声明 `harness_capability_exceptions`（`cap` + `status: unsupported` + 非空 `rationale`）；根目录 `tests/policy_contracts.rs` 的 `runtime_registry_host_projections_split_harness_capabilities` 从 schema + registry **机读**校验，禁止再用宿主名字硬编码例外。
 - **热路由宿主展开**：`SKILL.md` 未声明 `platforms` 或声明 `supported` / `all-hosts` 时，`router-rs framework skills refresh` 将 `host_support.platforms` 展开为 **`host_targets.supported` 全量**；热路由技能（`SKILL_ROUTING_RUNTIME.json`）在策略上应对每一闭集 id 可路由，**豁免**仅保留给确属 Codex 安装面 skills（见根 `tests/policy_contracts.rs` 常量）。**与上条分工**：NL 热路由默认闭集全覆盖；**hook 级 harness 能力**以 registry 矩阵与例外为准，不与 skill `platforms` 混读。
 - **NL 热路由 suppress/boost 数据面**：按记录（slug / gate 等）与 `signals.rs` 谓词组合的 suppress、boost 规则真源在 [`configs/framework/NL_ROUTE_ADJUSTMENTS.json`](../configs/framework/NL_ROUTE_ADJUSTMENTS.json)（`router-rs` 嵌入，`route/nl_route_adjustments.rs`）。跨查询的短语 marker（如 meta-routing 子串表）在 [`configs/framework/ROUTING_SIGNAL_MARKERS.json`](../configs/framework/ROUTING_SIGNAL_MARKERS.json)；**不要**把两类规则塞进同一文件以免双真源争用。
-- **Review gate lane 闭集（Cursor/Codex）**：`RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes`（非空字符串数组）为可清点 `REVIEW_GATE` 深度子代理 lane 真源；`hook_common::is_deep_review_gate_lane_normalized` 从注册表嵌入读取。
+- **Review gate lane 闭集（Cursor/Codex）**：`review_gate.deep_gate_lanes`；Claude Code 用 `review_gate.claude_reviewer_lanes`（见 §0.1 表）。
 
 **宿主集合术语（避免混读）**：
 `host_targets.supported` 是全局闭集宿主 id；

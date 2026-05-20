@@ -307,13 +307,12 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
     seed_framework_markers(&repo_root);
-    let sync_report =
-        router_rs_json(&[
-            "framework",
-            "sync-entrypoints",
-            "--repo-root",
-            repo_root.to_str().unwrap(),
-        ]);
+    let sync_report = router_rs_json(&[
+        "framework",
+        "sync-entrypoints",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
     let manifest = read_json(&repo_root.join(".codex/host_entrypoints_sync_manifest.json"));
     assert!(
         sync_report["written"]
@@ -329,7 +328,13 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["supported_hosts"],
-        serde_json::json!(["codex-cli", "codex-app", "cursor", "claude-code", "claude-desktop"])
+        serde_json::json!([
+            "codex-cli",
+            "codex-app",
+            "cursor",
+            "claude-code",
+            "claude-desktop"
+        ])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
@@ -406,13 +411,12 @@ fn codex_sync_preserves_existing_agents_policy_file() {
     let policy = "custom policy from disk\nbounded sidecar admission\n同一轮并发启动\n";
     std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
 
-    let sync_report =
-        router_rs_json(&[
-            "framework",
-            "sync-entrypoints",
-            "--repo-root",
-            repo_root.to_str().unwrap(),
-        ]);
+    let sync_report = router_rs_json(&[
+        "framework",
+        "sync-entrypoints",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
     assert!(
         !sync_report["written"]
             .as_array()
@@ -963,12 +967,8 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
 }
 
 /// Host-agnostic hot-route skills must list every closed-set host id; Codex-installer-only skills are exempt.
-const HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS: &[&str] = &[
-    "plugin-creator",
-    "skill-installer",
-    "openai-docs",
-    "tao-ci",
-];
+const HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS: &[&str] =
+    &["plugin-creator", "skill-installer", "openai-docs", "tao-ci"];
 
 #[test]
 fn hot_runtime_skill_records_cover_all_supported_hosts() {
@@ -1693,6 +1693,13 @@ fn runtime_registry_review_gate_deep_lanes_non_empty() {
 }
 
 #[test]
+fn runtime_registry_review_gate_lane_sets_closed() {
+    let v = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let (deep, claude) = common::review_gate_lane_sets_from_registry(&v);
+    common::assert_review_gate_lane_sets_closed(&deep, &claude);
+}
+
+#[test]
 fn document_only_provider_lanes_do_not_become_installable_hosts() {
     let registry =
         read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
@@ -1785,6 +1792,28 @@ fn runtime_registry_schema_covers_execution_critical_fields_only() {
             "invalid projection_status {status} for {host}"
         );
     }
+
+    let review_gate = registry
+        .get("review_gate")
+        .and_then(Value::as_object)
+        .expect("RUNTIME_REGISTRY must include review_gate object");
+    let required_review_gate = schema["required_review_gate_fields"]
+        .as_array()
+        .expect("schema required_review_gate_fields");
+    for field in required_review_gate {
+        let field = field.as_str().expect("required_review_gate_fields entry");
+        let lanes = review_gate
+            .get(field)
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| panic!("review_gate.{field} must be array"));
+        assert!(!lanes.is_empty(), "review_gate.{field} must be non-empty");
+        for item in lanes {
+            assert!(
+                item.as_str().is_some(),
+                "review_gate.{field} entries must be strings"
+            );
+        }
+    }
 }
 
 #[test]
@@ -1811,6 +1840,25 @@ fn manifest_and_runtime_skill_paths_are_loadable() {
             );
         }
     }
+}
+
+// --- SKILL_MANIFEST hygiene ---
+
+#[test]
+fn skill_manifest_excludes_retired_autopilot_slug() {
+    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
+    let keys = manifest["keys"].as_array().expect("manifest keys");
+    let slug_idx = key_index(keys, "slug");
+    let slugs = manifest["skills"]
+        .as_array()
+        .expect("manifest skills")
+        .iter()
+        .map(|row| row[slug_idx].as_str().expect("manifest slug"))
+        .collect::<Vec<_>>();
+    assert!(
+        !slugs.contains(&"autopilot"),
+        "retired autopilot must not appear in SKILL_MANIFEST.json (stub remains on disk only)"
+    );
 }
 
 #[test]
@@ -1906,12 +1954,11 @@ fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
         .and_then(|v| v.as_array())
         .expect("execution_entrypoints array");
     assert!(eps.iter().any(|v| v.as_str() == Some("/gsd-execute-phase")));
-    assert!(
-        gp.get("continuation_hook_leader")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .contains("GSD_GOAL_CONTINUE")
-    );
+    assert!(gp
+        .get("continuation_hook_leader")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .contains("GSD_GOAL_CONTINUE"));
     assert!(registry
         .get("framework_commands")
         .and_then(|fc| fc.get("autopilot"))

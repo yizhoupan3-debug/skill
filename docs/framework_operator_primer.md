@@ -36,15 +36,15 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 ## 混用时的实际武装顺序（Cursor Stop）
 
 - **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。
-- **同一条用户消息里同时写深度 review 与 `/autopilot`**：`beforeSubmit` 里 **`review_arms_for_gate = review && !autopilot_entrypoint`**，因此只要本回合用户文本命中 **`/autopilot` 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。若你本意是「先深度审稿再开 autopilot」，请拆成两轮（先不带 `/autopilot` 的 review-only 提交，或先落盘 `GOAL_STATE` 再推进），详见 [RUNTIME_REGISTRY.json](../configs/framework/RUNTIME_REGISTRY.json) 中 autopilot 与 review 叠乘说明。
-- **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 `/autopilot` 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
+- **同一条用户消息里同时写深度 review 与 GSD 执行区入口**（`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。若你本意是「先深度审稿再开连续执行」，请拆成两轮（先 review-only 提交，或先落盘 `GOAL_STATE` 再带 `/gsd-execute-phase`）。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）；同轮写 `/autopilot` **不会**抑制 review 武装。
+- **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 GSD execution 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
 
 ## 深度审稿 `REVIEW_GATE`（Cursor / Codex 可数 lane）
 
 清门依赖宿主载荷，常见卡点：
 
 - **`fork_context` / `forkContext`**：须能解析为逻辑 **`false`**（典型为 JSON **布尔** `false`、可走布尔字符串表中的 `"false"` / `"0"` 等，或 JSON **整数** **`0`**）。**整数 `1`** 解析为 **`true`**（非独立 fork）；其它 **Number** 与**字段缺失**均不为 `false`。仍推荐宿主使用 **JSON 布尔**。
-- **Lane**：可清点深度 lane 仅含注册在 `configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes` 中的值（当前：`general-purpose`、`best-of-n-runner` 及归一化等价名；**`explore` 等不计入**）。权威列表见 `docs/host_adapter_contract.md` §0.1，本文件不维护第二份枚举。  
+- **Lane**：Cursor/Codex 仅 `review_gate.deep_gate_lanes`（`general-purpose`、`best-of-n-runner` 及归一化等价名；**`explore` / `review` / `reviewer` 等不计入**）。Claude Code 用 `claude_reviewer_lanes`。在 Cursor 上误用 `subagent_type: "review"` 不会清 `REVIEW_GATE`。见 `docs/host_adapter_contract.md` §0.1 差异表。  
 - **Multiset 与双事件**：`review_subagent_pending_cycle_keys` 由 qualifying **`subagentStart`** / **`PostToolUse`** 入队，由 **`subagentStop`** 逐条核销至空才清门；同一 **`id:`** 若 `subagentStart` 已入队，随后同 id 的 `PostToolUse` **不重复入队**（见 `handlers.rs` 的 `push_review_pending_cycle_key`）。并行仅 `lane:` 且无稳定 id 时仍依赖 multiset 中多条相同 key。  
 - **Stop 单行提示**：若见 `router-rs REVIEW_GATE incomplete` 与 `need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false`，按该 `need=` 检查子代理载荷；尾缀 `hint=` 为可读排障补充，不改变 `need=` 语义。若同一门控多轮 `Stop` 仍卡，完整 `need=`/`hint=` 可能在 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`**（默认 8）之后被降级到 `additional_context`，`followup_message` 仅保留短 `mode=soft_nag` 行（见 [harness_architecture.md](harness_architecture.md) 环境变量表）。
 
@@ -65,7 +65,7 @@ Cursor 对 `additional_context` / 过长 `followup_message` 有 **UTF-8 字节�
 | 宿主不对称「假安全」 | 上表 + README 路径 B 声明 |
 | `REVIEW_GATE` 难排障 | `need=` + `hint=` + host_adapter 链 |
 | 误把 `RG_FOLLOWUP` 当真注入或当清门令牌 | 本节「机读短码真源与常见误报」「粘贴清门」+ harness §4.3 |
-| review 与 `/autopilot` 同轮混写 | 本节「混用时的实际武装顺序」 |
+| review 与 GSD goal drive 同轮混写 | 本节「混用时的实际武装顺序」 |
 | 真源分散 | 本文「阅读顺序」+ 不猜 slug |
 | 上手重 | README 路径 A / B 分流 |
 | Codex 策略漂移 | Codex Sync + `framework doctor` 提示 |

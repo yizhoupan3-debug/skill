@@ -1,0 +1,38 @@
+{
+  "schema_version": "closeout-record-v1",
+  "task_id": "cursor-user-scope-officecli-retire",
+  "started_at": "2026-05-19T08:00:00Z",
+  "ended_at": "2026-05-20T00:30:00Z",
+  "summary": "Host-native adaptation shipped: Cursor framework user-only, officecli removed, GSD default on all closed hosts, pre-exec hook split, docs/hosts operator pages. UAT functional PASS; verify-work noted partial before final commits.",
+  "verification_status": "passed",
+  "changed_files": [
+    "configs/framework/RUNTIME_REGISTRY.json",
+    "scripts/router-rs/src/hook_common.rs",
+    "scripts/router-rs/src/host_integration.rs",
+    "AGENTS.md",
+    "docs/host_adapter_contract.md",
+    "docs/hosts/cursor.md",
+    "docs/hosts/codex-cli.md",
+    "docs/hosts/claude.md",
+    "skills/gsd/"
+  ],
+  "commands_run": [
+    {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},
+    {"command": "cargo test --test policy_contracts", "exit_code": 0},
+    {"command": "router-rs framework skills validate", "exit_code": 0},
+    {"command": "router-rs framework maint verify-cursor-hooks", "exit_code": 0},
+    {"command": "router-rs framework maint verify-codex-hooks", "exit_code": 0}
+  ],
+  "artifacts_checked": [
+    {"path": "artifacts/current/cursor-user-scope-officecli-retire/UAT.md", "exists": true},
+    {"path": "artifacts/current/cursor-user-scope-officecli-retire/ROADMAP.md", "exists": true},
+    {"path": "docs/hosts/cursor.md", "exists": true}
+  ],
+  "blockers": [],
+  "risks": [
+    "P1-4 hook event audit table not completed",
+    "schema-drift CLI subcommand not in router-rs",
+    "Ship RFV 3-round adversarial skipped for doc-only delta; code paths covered by policy_contracts"
+  ],
+  "notes": "Working tree clean at ship; 6 commits ahead of origin/main. Multi-worktree review skipped (delivered on main)."
+}

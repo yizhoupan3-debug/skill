@@ -78,6 +78,12 @@
       "general-purpose",
       "generalpurpose",
       "best-of-n-runner",
+      "bestofnrunner"
+    ],
+    "claude_reviewer_lanes": [
+      "general-purpose",
+      "generalpurpose",
+      "best-of-n-runner",
       "bestofnrunner",
       "review",
       "reviewer",

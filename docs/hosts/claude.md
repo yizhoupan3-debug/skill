@@ -12,7 +12,7 @@
 | Framework 规则 | `.claude/rules/framework.md` |
 | 项目叙事 | `.claude/CLAUDE.md`（可选） |
 
-**能力**：`PreToolUse` **可 deny**；`Stop` 每轮一次；REVIEW_GATE 除 registry 闭集外还接受 `review`/`reviewer`/`critic`/`code-review`（**仅 Code**，Cursor/Codex 不认）。
+**能力**：`PreToolUse` **可 deny**；`Stop` 每轮一次；REVIEW_GATE 可数 reviewer lane 见 registry **`review_gate.claude_reviewer_lanes`**（含 `review`/`reviewer`/`critic`/`code-review`；Cursor/Codex 仅 `deep_gate_lanes`）。无 Cursor 式 subagentStart/Stop multiset。
 
 ```bash
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- \

@@ -407,10 +407,16 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
         .and_then(Value::as_str)
         .unwrap_or("");
     if crate::hook_common::is_gsd_pre_execution_entry_prompt(prompt) {
-        return add_context("UserPromptSubmit", crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE);
+        return add_context(
+            "UserPromptSubmit",
+            crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE,
+        );
     }
     if crate::hook_common::is_framework_goal_entry_prompt(prompt) {
-        return add_context("UserPromptSubmit", crate::hook_common::GSD_GOAL_DRIVE_HOOK_NUDGE);
+        return add_context(
+            "UserPromptSubmit",
+            crate::hook_common::GSD_GOAL_DRIVE_HOOK_NUDGE,
+        );
     }
     if !agent_review_gate_disabled() && (is_review_prompt(prompt) || has_override(prompt)) {
         let mut state = match load_review_gate_disk(repo_root, payload) {
@@ -767,17 +773,8 @@ fn reviewer_lane(tool_input: &Value, payload: &Value) -> bool {
             .or_else(|| payload.get("agent_type"))
             .and_then(Value::as_str),
     );
-    matches!(
-        subagent_type.as_str(),
-        "general-purpose"
-            | "generalpurpose"
-            | "best-of-n-runner"
-            | "bestofnrunner"
-            | "review"
-            | "reviewer"
-            | "critic"
-            | "code-review"
-    )
+    !subagent_type.is_empty()
+        && crate::registry_review_gate::is_claude_reviewer_lane_from_registry(&subagent_type)
 }
 
 fn subagent_tool(payload: &Value) -> bool {
@@ -1235,6 +1232,31 @@ mod tests {
         });
         assert!(run_post_tool_use(&repo, &reviewer).is_none());
         assert!(run_stop(&repo, &json!({ "session_id": "s-pass" })).is_none());
+        let _ = fs::remove_dir_all(repo);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+    }
+
+    #[test]
+    fn review_gate_accepts_review_lane_with_fork_false() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("review-gate-review-lane");
+        let prompt = json!({ "session_id": "s-review-lane", "prompt": "深度 review 这个 PR" });
+        let _ = run_user_prompt_submit(&repo, &prompt);
+        let reviewer = json!({
+            "session_id": "s-review-lane",
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"subagent_type": "review", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &reviewer).is_none());
+        assert!(
+            run_stop(&repo, &json!({ "session_id": "s-review-lane" })).is_none(),
+            "Claude claude_reviewer_lanes includes review; independent evidence should clear gate"
+        );
         let _ = fs::remove_dir_all(repo);
         match prev_disable {
             Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
