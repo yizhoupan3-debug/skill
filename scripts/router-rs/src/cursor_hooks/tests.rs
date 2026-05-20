@@ -49,6 +49,35 @@ impl Drop for ReviewGateDisableEnvClearGuard {
     }
 }
 
+/// 单测需要已移除事件的完整 handler（`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1`）。
+struct LegacySubtractedEventsGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    prev: Option<std::ffi::OsString>,
+}
+
+impl LegacySubtractedEventsGuard {
+    fn enable() -> Self {
+        let _lock = crate::test_env_sync::process_env_lock();
+        let key = "ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS";
+        let prev = env::var_os(key);
+        env::set_var(key, "1");
+        Self {
+            _lock,
+            prev,
+        }
+    }
+}
+
+impl Drop for LegacySubtractedEventsGuard {
+    fn drop(&mut self) {
+        let key = "ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS";
+        match self.prev.take() {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
 /// Gate-active tests (`harness-minimal-gsd`): clear env/thread-local review-gate disable so
 /// `beforeSubmit` / `stop` run real handlers (parallel bench hooks may set `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`).
 struct ReviewGateActiveGuard {
@@ -1380,6 +1409,7 @@ fn nested_payload_response_reject_reason_does_not_satisfy_review_gate_on_stop() 
 
 #[test]
 fn nested_payload_response_sets_reject_reason_on_after_agent_response() {
+    let _legacy = LegacySubtractedEventsGuard::enable();
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -1400,6 +1430,7 @@ fn nested_payload_response_sets_reject_reason_on_after_agent_response() {
 
 #[test]
 fn emergency_review_gate_disable_cold_after_agent_response_persists_reject_reason_seen() {
+    let _legacy = LegacySubtractedEventsGuard::enable();
     let _env_clear = ReviewGateDisableEnvClearGuard::new();
     let _rg_disable = ReviewGateDisableTestGuard::new();
     let repo = fresh_repo();
@@ -1767,6 +1798,7 @@ fn review_gate_disabled_before_submit_emits_only_continue_true() {
 
 #[test]
 fn review_gate_disabled_after_agent_response_updates_state_after_before_submit_seeded() {
+    let _legacy = LegacySubtractedEventsGuard::enable();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let repo = fresh_repo();
     let sid = "aar-rg-disabled-parity";
@@ -3082,6 +3114,7 @@ fn posttool_at_pending_cap_does_not_bump_phase() {
 
 #[test]
 fn main_thread_compact_review_clears_gate_on_stop() {
+    let _legacy = LegacySubtractedEventsGuard::enable();
     let repo = fresh_repo();
     let sid = "s-main-thread-review";
     let _ = dispatch_cursor_hook_event(
@@ -3141,6 +3174,7 @@ fn main_thread_compact_review_clears_gate_on_stop_only() {
 
 #[test]
 fn main_thread_deferential_compact_does_not_clear_gate_on_stop() {
+    let _legacy = LegacySubtractedEventsGuard::enable();
     let repo = fresh_repo();
     let sid = "s-main-thread-deferential";
     let _ = dispatch_cursor_hook_event(
@@ -3539,7 +3573,186 @@ fn stop_without_subagent_emits_minimal_review_gate_line() {
 }
 
 #[test]
+fn subtracted_before_shell_default_noop_skips_terminal_ledger() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+    env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+
+    let repo = fresh_repo();
+    let payload = json!({
+        "session_id": "sub-shell-noop",
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "command": "echo noop-test"
+    });
+    let ledger_path = state_dir(&repo).join(format!(
+        "session-terminals-{}.json",
+        super::session_key(&payload)
+    ));
+    let out = dispatch_cursor_hook_event(&repo, "beforeShellExecution", &payload);
+    assert_eq!(
+        out,
+        json!({ "continue": true, "permission": "allow" }),
+        "default subtracted dispatch must pass shell gate without side effects"
+    );
+    assert!(
+        !ledger_path.exists(),
+        "ledger file must not be created on subtracted noop: {}",
+        ledger_path.display()
+    );
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS"),
+    }
+}
+
+#[test]
+fn subtracted_after_agent_response_runs_handler_when_registered_in_hooks_json() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+    env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+
+    let repo = fresh_repo();
+    let hooks_path = repo.join(".cursor/hooks.json");
+    let mut doc: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&hooks_path).unwrap_or_else(|_| r#"{"hooks":{}}"#.to_string()),
+    )
+    .unwrap();
+    doc["hooks"]["afterAgentResponse"] = json!([{
+        "command": "configs/framework/cursor-router-rs-hook.sh",
+        "timeout": 20
+    }]);
+    fs::write(&hooks_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("sub-ara-reg", "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "afterAgentResponse",
+        &json!({
+            "session_id": "sub-ara-reg",
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "payload": { "response": "reject reason: small_task" }
+        }),
+    );
+    assert!(
+        load_state_for(&repo, "sub-ara-reg").reject_reason_seen,
+        "registered subtracted event must run handler without LEGACY env"
+    );
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS"),
+    }
+}
+
+#[test]
+fn subtracted_empty_hooks_entry_stays_noop() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+    env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+
+    let repo = fresh_repo();
+    let hooks_path = repo.join(".cursor/hooks.json");
+    let mut doc: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&hooks_path).unwrap_or_else(|_| r#"{"hooks":{}}"#.to_string()),
+    )
+    .unwrap();
+    doc["hooks"]["afterAgentResponse"] = json!([]);
+    fs::write(&hooks_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("sub-ara-empty", "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "afterAgentResponse",
+        &json!({
+            "session_id": "sub-ara-empty",
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "payload": { "response": "reject reason: small_task" }
+        }),
+    );
+    assert!(
+        !load_state_for(&repo, "sub-ara-empty").reject_reason_seen,
+        "empty hooks entry must not run handler"
+    );
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS"),
+    }
+}
+
+#[test]
+fn review_gate_disabled_registered_after_agent_response_persists_reject_reason() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_legacy = env::var_os("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+    env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+    let _env_clear = ReviewGateDisableEnvClearGuard::new();
+    let _rg_disable = ReviewGateDisableTestGuard::new();
+
+    let repo = fresh_repo();
+    let hooks_path = repo.join(".cursor/hooks.json");
+    let mut doc: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&hooks_path).unwrap_or_else(|_| r#"{"hooks":{}}"#.to_string()),
+    )
+    .unwrap();
+    doc["hooks"]["afterAgentResponse"] = json!([{
+        "command": "configs/framework/cursor-router-rs-hook.sh",
+        "timeout": 20
+    }]);
+    fs::write(&hooks_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+
+    let sid = "rg-dis-ara";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "afterAgentResponse",
+        &json!({
+            "session_id": sid,
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "response": "reject reason: small_task"
+        }),
+    );
+    assert!(
+        load_state_for(&repo, sid).reject_reason_seen,
+        "review-gate-disabled + registered afterAgentResponse must still run handler"
+    );
+
+    match prev_legacy {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS"),
+    }
+}
+
+#[test]
+fn subtracted_after_agent_response_default_is_empty_object() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+    env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS");
+
+    let repo = fresh_repo();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "afterAgentResponse",
+        &json!({ "session_id": "sub-ara", "response": "[P1] x" }),
+    );
+    assert_eq!(out, json!({}));
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS"),
+    }
+}
+
+#[test]
 fn pre_compact_emits_additional_context_summary() {
+    let _legacy = LegacySubtractedEventsGuard::enable();
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4634,6 +4847,7 @@ fn cursor_hook_rejects_oversized_stdin() {
 
 #[test]
 fn pre_compact_does_not_mutate_state() {
+    let _legacy = LegacySubtractedEventsGuard::enable();
     let repo = fresh_repo();
     let payload = event("s30", "全面review这个仓库");
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);

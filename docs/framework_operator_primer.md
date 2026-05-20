@@ -45,6 +45,8 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 | **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
 | **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset 即 strict）：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；宽松 legacy 设 `=0|false|off|no`。 |
 | **Stop 自动 checkpoint 与 supervisor** | `focus: false` checkpoint **会**更新 `.supervisor_state.json.task_id` 为刷新任务，**不**移动 `active_task`/`focus_task`（ADR-001）。supervisor 表「最后 continuity 刷新任务」。 |
+| **Cursor hooks 减法闭集** | 默认 **7** 事件；5 个已移除事件 dispatch **no-op**（[`subtraction.rs`](../scripts/router-rs/src/cursor_hooks/subtraction.rs)）。写回 `hooks.json` 即恢复 handler；`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 仅作未注册时对照。 |
+| **`router-rs schema-drift`** | `contract` / `baseline` / `check` 验收 hooks 闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题；见 [`verify-work/SKILL.md`](../skills/gsd/verify-work/SKILL.md)。 |
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | Claude 专用；默认 **关闭**（不读 Cursor 同名 env）。 |
 | **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |

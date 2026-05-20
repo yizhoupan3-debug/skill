@@ -4358,6 +4358,10 @@ pub(crate) fn dispatch_cursor_hook_event(
         return json!({ "continue": true });
     }
 
+    if subtraction::should_noop_subtracted_event(repo_root, lowered) {
+        return subtraction::subtracted_event_noop_output(lowered);
+    }
+
     let mut out = match lowered {
         "sessionstart" => handle_session_start(repo_root, payload),
         "beforesubmitprompt" | "userpromptsubmit" => handle_before_submit(repo_root, payload),

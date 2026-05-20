@@ -65,15 +65,33 @@ Verify all work results with evidence-driven approach.
 
 Detect divergence between task artifacts and implementation.
 
-**Note:** `router-rs schema-drift baseline` is **not** implemented; use the harness bundle below.
+**Primary:** capture and check a machine baseline (task id from `active_task.json`, else `focus_task.json`, when omitted):
+
+```bash
+REPO="${FRAMEWORK_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cargo run --manifest-path "$REPO/scripts/router-rs/Cargo.toml" --quiet -- \
+  schema-drift baseline --repo-root "$REPO" ${TASK_ID:+--task-id "$TASK_ID"}
+cargo run --manifest-path "$REPO/scripts/router-rs/Cargo.toml" --quiet -- \
+  schema-drift check --repo-root "$REPO" ${TASK_ID:+--task-id "$TASK_ID"}
+```
+
+Writes `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json` and checks:
+
+- Cursor **7-event** required/forbidden sets (lists from `router-rs schema-drift contract`, aligned with `subtraction.rs`)
+- Per-file hook `command` / `timeout` audit + **hooks.json ↔ workspace-template** command/timeout parity
+- `REQUIREMENTS.md` / `ROADMAP.md` `##`/`###` heading fingerprints (`headings_match` must hold on check)
+- `EVIDENCE_INDEX.json` non-empty `artifacts[]` when present
+- Embedded contract schema versions (`closeout-record`, hook observation)
+
+After **router-rs** or contract-version changes, re-run **`schema-drift baseline`** for the task. Contract: `router-rs schema-drift contract`.
+
+**Fallback** (when baseline not yet captured):
 
 ```bash
 TASK=artifacts/current/<task_id>
-# Plan vs ROADMAP / REQUIREMENTS headings (lightweight)
 diff -u <(rg -n '^## |^### ' "$TASK/REQUIREMENTS.md" 2>/dev/null || true) \
         <(rg -n '^## |^### ' "$TASK/ROADMAP.md" 2>/dev/null || true) || true
-# EVIDENCE_INDEX machine rollup expects `artifacts[]` (not only `entries[]`)
-test -f "$TASK/EVIDENCE_INDEX.json" && (cd "${FRAMEWORK_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}" && uv run python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('artifacts'), 'missing artifacts[] for router-rs rollup'" "$TASK/EVIDENCE_INDEX.json")
+test -f "$TASK/EVIDENCE_INDEX.json" && uv run python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('artifacts'), 'missing artifacts[]'" "$TASK/EVIDENCE_INDEX.json"
 ```
 
 Python 依赖/CI 变更验收：对照 **`$python-env-management`**（`uv.lock`、`skill-ci` pip-scan）；勿在 skill 正文新增 operator `pip`。

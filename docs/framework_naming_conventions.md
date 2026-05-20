@@ -48,7 +48,11 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS` | true | Kill stale terminals on session end |
 | `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE` | default | Terminal kill mode |
 | `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` | - | Session close style |
-| `ROUTER_RS_CURSOR_HOOK_STATE_FULL_SWEEP_ENABLE` | false | Full state sweep |
+| `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` | false | Full hook-state prefix sweep on SessionEnd |
+| `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | true | Forbid disk-only GOAL hydration for pre-goal (`0`/`false`/`off`/`no` = legacy loose) |
+| `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS` | false | Run full handlers for 5 subtracted events when absent from hooks.json |
+| `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN` | false | beforeSubmit continues when hook-state persist fails |
+| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | true | Infer `fork_context=false` when field missing on countable lanes |
 
 #### Claude-specific
 

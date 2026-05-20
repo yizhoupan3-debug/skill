@@ -38,7 +38,7 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 | `postToolUse` | Review multiset 兜底 + Shell 账本；**非门控工具**在 router-rs 内 fast-path 跳过。**`timeout: 20`**（与 beforeSubmit/stop/subagent 一致） |
 | `sessionStart` / `sessionEnd` | 连续性注入 + hook-state 清扫 |
 
-**已默认移除**（勿在 `hooks.json` 恢复）：`afterAgentResponse`（handler 仍保留：主线程 compact 可提前 bump review phase；默认未注册，清门仍依赖 `Stop` tail）、`beforeShellExecution` / `afterShellExecution`、`afterFileEdit`（rustfmt）、`preCompact`。bootstrap 模板 [`cursor-hooks.workspace-template.json`](../../configs/framework/cursor-hooks.workspace-template.json) **须与** [`.cursor/hooks.json`](../../.cursor/hooks.json) **保持同一 7 事件集**（`scripts/ci/check-cursor-hooks-parity.sh`）。
+**已默认移除**（勿在 `hooks.json` 恢复）：`afterAgentResponse`、`beforeShellExecution` / `afterShellExecution`、`afterFileEdit`、`preCompact`。对应 handler 仍保留，但 **`dispatch_cursor_hook_event` 默认 no-op**（不写 hook-state / shell 账本 / rustfmt）；清门与 compact findings 走 **`Stop` tail**。手动加回 `hooks.json` 即恢复 handler；未注册时可用 `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 做对照（见 [`MIGRATION.md`](../../MIGRATION.md)）。bootstrap 模板 [`cursor-hooks.workspace-template.json`](../../configs/framework/cursor-hooks.workspace-template.json) **须与** [`.cursor/hooks.json`](../../.cursor/hooks.json) **保持同一 7 事件集**（`scripts/ci/check-cursor-hooks-parity.sh`）。
 
 ### PostToolUse `timeout: 20`（运维）
 
@@ -98,7 +98,9 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 | `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | hook-state 陈旧清扫天数（见上表） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review pending multiset 上限 |
 | `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 关闭 Cursor 缺省 `fork_context`→`false` 推断 |
-| `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=1` | 禁止仅凭磁盘 GOAL 放行 pre-goal |
+| `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | **默认 strict**（unset 即禁止仅凭磁盘 GOAL 放行 pre-goal）；legacy 宽松：`0`/`false`/`off`/`no` |
+| `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` | 5 个减法事件未写入 `hooks.json` 时仍跑完整 handler（单测/对照） |
+| `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` | hook-state 写失败时 beforeSubmit 仍放行（应急；默认 fail-closed） |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | SESSION_CALL_TRACKER `per_tool` 键上限 |
 
 Stop 硬门控（`REVIEW_GATE` / `AG_FOLLOWUP` / closeout）与 `GSD_GOAL_CONTINUE` **互斥**；无硬门控时 goal 续跑仍注入 `additional_context`。

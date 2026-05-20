@@ -47,6 +47,7 @@ mod route;
 mod router_env_flags;
 mod router_rs_observation;
 mod router_self;
+mod schema_drift;
 mod runtime_envelope_ids;
 mod runtime_storage;
 mod session_call_tracker;

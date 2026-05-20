@@ -24,6 +24,7 @@
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
 | 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`registry_loader`、`host_projection_narrative`、`GENERATED_ARTIFACTS` 见 [harness_architecture.md §2.3](harness_architecture.md#23-控制面配置与生成物2026-05-20-硬化)；多宿主 harness 契约见 [host_adapter_contract.md](host_adapter_contract.md)（**单数**）；[host_adapter_contracts.md](host_adapter_contracts.md)（**复数**）仅为 Codex 投影英文专页，勿混读 |
 | 生成物 drift / doctor 快探针 | [harness_architecture.md §2.3](harness_architecture.md#23-控制面配置与生成物2026-05-20-硬化)；`framework host-integration generated-artifacts-status [--skip-generator-run]` |
+| 任务级 schema drift（hooks 7 事件闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题） | `router-rs schema-drift contract` / `baseline` / `check`（[`schema_drift.rs`](../scripts/router-rs/src/schema_drift.rs)）；GSD 验收见 [`skills/gsd/verify-work/SKILL.md`](../skills/gsd/verify-work/SKILL.md) |
 | Cursor Plan / GSD 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/gsd/plan-phase/SKILL.md`](../skills/gsd/plan-phase/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
 | Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
 | 插件 ABI / routing metadata | [runtime_plugin_contract.md](runtime_plugin_contract.md) |

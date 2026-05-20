@@ -65,7 +65,7 @@ cd /path/to/project
 
 本仓 [`.cursor/hooks.json`](.cursor/hooks.json) 默认仅 **7** 事件：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。
 
-**已移除的注册**（`router-rs` handler 仍保留，可手动加回 hooks.json）：
+**已移除的注册**（`router-rs` handler 仍保留；**默认 dispatch 为 no-op**，不跑账本/rustfmt/compact 清门）：
 
 | 事件 | 恢复代价 / 说明 |
 |------|-----------------|
@@ -74,11 +74,23 @@ cd /path/to/project
 | `afterFileEdit` | Agent 改 `.rs` 后自动 `rustfmt` |
 | `preCompact` | compaction 前 RFV/门状态摘要 |
 
+手动把事件加回 `hooks.json` 后，dispatch **自动**走真实 handler（无需 env）。仅当**未**注册但仍想跑 handler（单测/对照）时：`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1`（见 [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env) 注释）。
+
 **门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「PostToolUse timeout」。
 
-**模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`）。
+**模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`；事件列表真源：`router-rs schema-drift contract` ↔ [`subtraction.rs`](scripts/router-rs/src/cursor_hooks/subtraction.rs)）。
 
 **内存相关**：见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「内存 / release」；项目 env [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。
+
+## Schema drift CLI（2026-05-20）
+
+| 子命令 | 作用 |
+|--------|------|
+| `router-rs schema-drift contract` | 打印契约（7 必需 / 5 禁止事件、基线路径、嵌入 schema 版本） |
+| `router-rs schema-drift baseline --repo-root …` | 捕获 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json` |
+| `router-rs schema-drift check --repo-root …` | 对比基线；hooks parity、gate timeout、REQUIREMENTS↔ROADMAP 标题、`EVIDENCE_INDEX.artifacts[]` |
+
+GSD 验收入口：[`skills/gsd/verify-work/SKILL.md`](skills/gsd/verify-work/SKILL.md)。CI 探针：`skill-ci` 跑 `schema-drift contract`。
 
 ## Claude Code：hook env 与 Cursor 对齐（2026-05-20）
 

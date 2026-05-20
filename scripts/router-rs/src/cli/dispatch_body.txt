@@ -42,6 +42,7 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
         RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
         RouterCommand::Closeout { command } => dispatch_closeout_command(command),
         RouterCommand::Eval { command } => dispatch_eval_command(command),
+        RouterCommand::SchemaDrift { command } => dispatch_schema_drift_command(command),
         RouterCommand::RouterSelf { command } => router_self::dispatch(command),
     }
 }
@@ -498,5 +499,40 @@ fn print_search_results(query: &str, payload: &SearchResultsPayload, rows: Vec<M
             "{:<30} | {:<5} | {:<10} | {:<6.2} | {}",
             row.slug, row.layer, row.gate, row.score, description
         );
+    }
+}
+
+fn dispatch_schema_drift_command(command: SchemaDriftCommand) -> Result<(), String> {
+    use crate::schema_drift::{
+        check_against_baseline, resolve_task_id_for_schema_drift, schema_drift_contract,
+        write_baseline,
+    };
+    match command {
+        SchemaDriftCommand::Contract => print_json_value(&schema_drift_contract()),
+        SchemaDriftCommand::Baseline(args) => {
+            let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+            let task_id = resolve_task_id_for_schema_drift(&repo_root, args.task_id.as_deref())?;
+            let (baseline, path) = write_baseline(&repo_root, &task_id)?;
+            print_json_value(&serde_json::json!({
+                "schema_version": "schema-drift-baseline-write-response-v1",
+                "task_id": task_id,
+                "baseline_path": path.display().to_string(),
+                "baseline": baseline,
+            }))
+        }
+        SchemaDriftCommand::Check(args) => {
+            let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+            let task_id = resolve_task_id_for_schema_drift(&repo_root, args.task_id.as_deref())?;
+            let response = check_against_baseline(&repo_root, &task_id);
+            print_json_value(&response)?;
+            if !response.ok {
+                return Err(format!(
+                    "schema-drift check failed for task {} ({} drift items); re-run `router-rs schema-drift baseline` after intentional changes",
+                    task_id,
+                    response.drift.len()
+                ));
+            }
+            Ok(())
+        }
     }
 }

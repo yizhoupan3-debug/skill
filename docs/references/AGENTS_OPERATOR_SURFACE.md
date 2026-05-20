@@ -29,8 +29,21 @@
 | `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy` | 旧「全仓库 active terminal」清扫 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 自动放行次数（默认 8；`0` 关闭） |
+| `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | **默认 strict**（unset 禁止仅凭磁盘 GOAL 满足 pre-goal）；legacy：`0`/`false`/`off`/`no` |
+| `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` | 5 个已从默认 `hooks.json` 移除的事件在未注册时仍 dispatch 完整 handler |
+| `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` | hook-state 写失败时 beforeSubmit 仍 `continue:true`（应急） |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` | 论文强对抗审稿注入（文案 `PAPER_ADVERSARIAL_HOOK.txt`） |
 | `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 operator 注入总闸（含 paper adversarial） |
+
+## Schema drift（verify / CI）
+
+```bash
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift contract
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift baseline --repo-root "$PWD"
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift check --repo-root "$PWD"
+```
+
+任务 id 省略时读 `artifacts/current/active_task.json`，否则 `focus_task.json`。基线写入 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`。详见 [`skills/gsd/verify-work/SKILL.md`](../../skills/gsd/verify-work/SKILL.md)。
 
 ## Closeout 分层
 

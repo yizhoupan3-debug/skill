@@ -49,6 +49,11 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: EvalCommand,
     },
+    #[command(name = "schema-drift")]
+    SchemaDrift {
+        #[command(subcommand)]
+        command: SchemaDriftCommand,
+    },
     /// Install globally or clean intermediate Cargo artifacts for this crate.
     #[command(name = "self")]
     RouterSelf {
@@ -329,6 +334,24 @@ pub(crate) enum MigrateCommand {
 pub(crate) enum HookPolicyCommand {
     Evaluate(JsonInputCommand),
     Contract,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum SchemaDriftCommand {
+    /// Capture harness/task schema fingerprints and write SCHEMA_DRIFT_BASELINE.json.
+    Baseline(SchemaDriftRepoArgs),
+    /// Compare current repo state against the on-disk baseline for a task.
+    Check(SchemaDriftRepoArgs),
+    /// Print schema-drift contract (versions, paths, cursor hook sets).
+    Contract,
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct SchemaDriftRepoArgs {
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
+    #[arg(long)]
+    pub(crate) task_id: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Clone)]

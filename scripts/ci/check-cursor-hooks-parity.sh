@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Workspace bootstrap template must match repo .cursor/hooks.json (7-event subtraction set).
+# Event lists are loaded from `router-rs schema-drift contract` (single source with subtraction.rs).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
@@ -13,37 +14,47 @@ for f in "$hooks" "$template"; do
 done
 uv run python - <<'PY'
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 root = Path(".").resolve()
+manifest = root / "scripts/router-rs/Cargo.toml"
+
+def load_contract() -> dict:
+    out = subprocess.check_output(
+        [
+            "cargo",
+            "run",
+            "--quiet",
+            "--manifest-path",
+            str(manifest),
+            "--",
+            "schema-drift",
+            "contract",
+        ],
+        cwd=root,
+        text=True,
+    )
+    return json.loads(out)
+
+contract = load_contract()
+REQUIRED = contract["cursor_hooks_required"]
+FORBIDDEN = contract["cursor_hooks_forbidden"]
+
 hooks = json.loads((root / ".cursor/hooks.json").read_text())
 template = json.loads(
     (root / "configs/framework/cursor-hooks.workspace-template.json").read_text()
 )
 
-REQUIRED = [
-    "beforeSubmitPrompt",
-    "stop",
-    "sessionStart",
-    "sessionEnd",
-    "postToolUse",
-    "subagentStart",
-    "subagentStop",
-]
-FORBIDDEN = [
-    "afterAgentResponse",
-    "beforeShellExecution",
-    "afterShellExecution",
-    "afterFileEdit",
-    "preCompact",
-]
 GATE_TIMEOUT_EVENTS = {
     "beforeSubmitPrompt": 20,
     "stop": 20,
     "postToolUse": 20,
     "subagentStart": 20,
     "subagentStop": 20,
+    "sessionStart": 5,
+    "sessionEnd": 15,
 }
 
 
@@ -100,5 +111,8 @@ else:
 if errs:
     print("\n".join(errs), file=sys.stderr)
     sys.exit(1)
-print("OK: .cursor/hooks.json matches cursor-hooks.workspace-template.json (7 events, gate timeouts)")
+print(
+    "OK: .cursor/hooks.json matches cursor-hooks.workspace-template.json "
+    f"({len(REQUIRED)} events, contract-driven lists)"
+)
 PY

@@ -65,7 +65,10 @@ fn should_force_hook_state_lock_failure_for_test() -> bool {
     FORCE_CURSOR_HOOK_STATE_LOCK_FAILURE_FOR_TEST.with(|c| c.get())
 }
 
+mod subtraction;
 mod terminal_observation_cache;
+
+pub use subtraction::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
 
 // --- cursor hooks handlers ---
 include!("handlers.rs");

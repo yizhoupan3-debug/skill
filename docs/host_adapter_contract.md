@@ -132,7 +132,7 @@
 **Cursor 排障（短）**：
 
 - **`fork_context` 缺省（Cursor）**：默认 **`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 开启**时，可数深度 lane 且字段缺失可推断为 `false`；关闭后与 Codex 一致——**仅**可解析为布尔 `false` 时计独立证据。显式 `fork_context: true` 永不算。见 [`cursor_review_independent_fork`](../scripts/router-rs/src/review_gate_engine.rs) 与 harness **§5.0**。
-- **磁盘 `GOAL_STATE` 与 pre-goal**：若需收紧「仅凭盘上 GOAL 即在 beforeSubmit 视同 pre-goal 已满足」的信任边界，见 [`harness_architecture.md`](harness_architecture.md) §5 中 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`。
+- **磁盘 `GOAL_STATE` 与 pre-goal**：**默认 strict**（unset 即禁止仅凭盘上 GOAL 在 beforeSubmit/Stop 将 `pre_goal_review_satisfied` 置真）；legacy 宽松设 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=0|false|off|no`。见 [`harness_architecture.md`](harness_architecture.md) §5。
 - **`cursor-router-rs-hook.sh` 与 exit code**：对 **critical** 事件（如 beforeSubmit/Stop/postToolUse/subagentStart/subagentStop）在 `router-rs` 缺失时 **fail-closed**；其余事件 **fail-open**（stderr 提示 + exit 0）。仅看 exit code 时可能漏判 SessionStart 等是否实际注入了上下文。
 - **仿宿主续跑行**：若在聊天区看到 `RG_FOLLOWUP` 等**无 `router-rs ` 前缀**的仿机读行，勿当 hook 真源；以 hook stdout JSON 为准，说明见 [`harness_architecture.md`](harness_architecture.md) **§4.3**。
 - **清门粘贴**：**不要**把 **`RG_FOLLOWUP`…** 当清门令牌粘贴；[`saw_reject_reason`](../scripts/router-rs/src/hook_common.rs) 不因该前缀清门。请用 **`rg_clear`**、拒因 token，或自然语言 override；与 [framework_operator_primer.md](framework_operator_primer.md)「粘贴清门」一致。

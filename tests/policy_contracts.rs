@@ -2052,30 +2052,28 @@ fn installed_project_hooks_are_router_rs_managed() {
 
 #[test]
 fn cursor_hooks_json_matches_workspace_template_seven_event_set() {
+    let contract = router_rs_json(&["schema-drift", "contract"]);
+    let required: Vec<String> = contract["cursor_hooks_required"]
+        .as_array()
+        .expect("cursor_hooks_required")
+        .iter()
+        .map(|v| v.as_str().expect("event name").to_string())
+        .collect();
+    let forbidden: Vec<String> = contract["cursor_hooks_forbidden"]
+        .as_array()
+        .expect("cursor_hooks_forbidden")
+        .iter()
+        .map(|v| v.as_str().expect("event name").to_string())
+        .collect();
+
     let hooks = read_json(&project_root().join(".cursor/hooks.json"));
     let template = read_json(
         &project_root().join("configs/framework/cursor-hooks.workspace-template.json"),
     );
-    const REQUIRED: &[&str] = &[
-        "beforeSubmitPrompt",
-        "stop",
-        "sessionStart",
-        "sessionEnd",
-        "postToolUse",
-        "subagentStart",
-        "subagentStop",
-    ];
-    const FORBIDDEN: &[&str] = &[
-        "afterAgentResponse",
-        "beforeShellExecution",
-        "afterShellExecution",
-        "afterFileEdit",
-        "preCompact",
-    ];
     for doc in [(&hooks, "hooks.json"), (&template, "workspace-template")] {
         let events = doc.0["hooks"].as_object().expect("hooks object");
-        for ev in REQUIRED {
-            let key = (*ev).to_string();
+        for ev in &required {
+            let key = ev.clone();
             assert!(
                 events.contains_key(&key),
                 "{} missing event {}",
@@ -2090,8 +2088,8 @@ fn cursor_hooks_json_matches_workspace_template_seven_event_set() {
                 ev
             );
         }
-        for ev in FORBIDDEN {
-            let key = (*ev).to_string();
+        for ev in &forbidden {
+            let key = ev.clone();
             assert!(
                 !events.contains_key(&key),
                 "{} must not register removed event {}",
@@ -2103,8 +2101,8 @@ fn cursor_hooks_json_matches_workspace_template_seven_event_set() {
     let h = hooks["hooks"].as_object().unwrap();
     let t = template["hooks"].as_object().unwrap();
     assert_eq!(h.keys().collect::<Vec<_>>(), t.keys().collect::<Vec<_>>());
-    for ev in REQUIRED {
-        let key = ev.to_string();
+    for ev in &required {
+        let key = ev.clone();
         assert_eq!(
             h[&key][0]["timeout"], t[&key][0]["timeout"],
             "timeout mismatch on {ev}"

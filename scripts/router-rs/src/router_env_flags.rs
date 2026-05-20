@@ -65,7 +65,14 @@ pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
     router_rs_env_enabled_default_true(ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV)
 }
 
+const ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS_ENV: &str =
+    "ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS";
 const ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN_ENV: &str = "ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN";
+
+/// 恢复已从默认 `hooks.json` 移除的 5 个事件的完整 handler dispatch（shell 账本、rustfmt、`afterAgentResponse` 等）。
+pub fn router_rs_cursor_hook_legacy_subtracted_events_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS_ENV)
+}
 
 /// `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`：hook-state 持久化失败时 beforeSubmit 仍 `continue: true`（应急）。
 pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
