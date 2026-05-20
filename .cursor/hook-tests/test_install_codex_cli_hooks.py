@@ -81,26 +81,37 @@ def test_preserves_existing_event_hooks() -> None:
                 if isinstance(hook, dict):
                     commands.append(hook.get("command"))
         assert_true("/usr/bin/env echo existing" in commands, "existing stop hook should be preserved")
-        router_hooks = [
-            c
-            for c in commands
-            if isinstance(c, str) and "codex hook --event=Stop" in c
-        ]
+        def is_managed_router_stop(command: object) -> bool:
+            if not isinstance(command, str):
+                return False
+            if "codex hook --event=Stop" in command:
+                return True
+            return "codex-router-rs-hook.sh" in command and " Stop" in command
+
+        router_hooks = [c for c in commands if is_managed_router_stop(c)]
         assert_true(len(router_hooks) == 1, "expected exactly one managed Stop command hook")
         gate_cmd = router_hooks[0]
         assert_true(
-            "git rev-parse --show-toplevel" in gate_cmd,
+            "git rev-parse --show-toplevel" in gate_cmd
+            or "CODEX_PROJECT_ROOT" in gate_cmd
+            or "SKILL_FRAMEWORK_ROOT" in gate_cmd,
             "hook should resolve repo root at runtime, not embed install-time path only",
         )
-        assert_true(
-            'ROUTER_RS_BIN=""; if [ -x "$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs"'
-            in gate_cmd,
-            "hook should prefer in-repo router-rs (release first) before PATH",
-        )
-        assert_true(
-            "exit 1" in gate_cmd and "fail-closed" in gate_cmd,
-            "hook should fail-closed when router-rs is missing",
-        )
+        if "codex hook --event=Stop" in gate_cmd:
+            assert_true(
+                'ROUTER_RS_BIN=""; if [ -x "$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs"'
+                in gate_cmd,
+                "legacy inline hook should prefer in-repo router-rs before PATH",
+            )
+            assert_true(
+                "exit 1" in gate_cmd and "fail-closed" in gate_cmd,
+                "legacy inline hook should fail-closed when router-rs is missing",
+            )
+        else:
+            assert_true(
+                "codex-router-rs-hook.sh" in gate_cmd,
+                "steady-state installer should use codex-router-rs-hook.sh launcher",
+            )
 
 
 def test_updates_features_scoped_codex_hooks_only() -> None:

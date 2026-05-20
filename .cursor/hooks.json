@@ -4,7 +4,7 @@
   "hooks": {
     "beforeSubmitPrompt": [
       {
-        "_doc": "Goal/autopilot + review gate：stdin JSON → router-rs BeforeSubmitPrompt",
+        "_doc": "GSD goal + review gate：stdin JSON → router-rs BeforeSubmitPrompt",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" BeforeSubmitPrompt",
         "timeout": 20
       }
@@ -74,7 +74,7 @@
     ],
     "subagentStart": [
       {
-        "_doc": "更新 review gate：pre-goal subagent 计数 / phase（与 autopilot 契约对齐）；并按会话活跃 subagent 数做启动限流，避免旧 subagent 堆积。",
+        "_doc": "更新 review gate：pre-goal subagent 计数 / phase（与 GSD execute-zone goal 契约对齐）；并按会话活跃 subagent 数做启动限流，避免旧 subagent 堆积。",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SubagentStart",
         "timeout": 20
       }

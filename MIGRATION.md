@@ -1,6 +1,6 @@
 # Skill 真源迁移（2026-05-19）
 
-- **唯一可写 skill 源**：`/Users/joe/Developer/skill/skills/`
+- **唯一可写 skill 源**：`$SKILL_FRAMEWORK_ROOT/skills/`（本机示例：`/Users/joe/Developer/skill/skills/`）
 - **Codex 全局**：`~/.codex/skills` → `artifacts/codex-skill-surface/skills`
 - **Agents 全局**：`~/.agents/skills` → 同上 surface
 - **已删除（2026-05-19 激进清理）**：`~/Documents/skill`、`~/Documents/skill.nosync` 及同批空壳/无关目录；勿再引用。`~/skills_backup` 此前已删。
@@ -9,7 +9,7 @@
 ## 日常维护
 
 ```bash
-export SKILL_FRAMEWORK_ROOT=/Users/joe/Developer/skill
+export SKILL_FRAMEWORK_ROOT="${SKILL_FRAMEWORK_ROOT:-/path/to/Developer/skill}"
 cd "$SKILL_FRAMEWORK_ROOT"
 just publish    # 或：ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 … update-one-shot
 just doctor

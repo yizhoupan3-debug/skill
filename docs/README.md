@@ -17,10 +17,10 @@
 |------|------|
 | 使用者视角：宿主差异、门控快查、阅读顺序 | [framework_operator_primer.md](framework_operator_primer.md) |
 | RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)）；**ADR**：[`close_gates` 与 `max_rounds` 收口路径](plans/ADR_rfv_close_gates_max_rounds.md) |
-| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | [RESEARCH_harness_weak_model_top_tier.md](plans/RESEARCH_harness_weak_model_top_tier.md)，[context_token_audit_deep_dive.md](plans/context_token_audit_deep_dive.md)；全盘减法审计勾选表（与 PR 短清单互补） [harness_subtraction_first_principles_audit_checklist.md](plans/harness_subtraction_first_principles_audit_checklist.md) |
+| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | 历史研究见 [plans/README.md](plans/README.md) stub 索引；**可执行计划**在 [`.cursor/plans/`](../.cursor/plans/) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
-| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 与 Codex/Cursor/Claude 投影边界统一见 [host_adapter_contract.md](host_adapter_contract.md)；Round 2 计划镜像 [plans/harness_host_round2.md](plans/harness_host_round2.md)；Harness 改进 backlog（路线图展开） [plans/harness_improvement_backlog.md](plans/harness_improvement_backlog.md) |
+| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 与 Codex/Cursor/Claude 投影边界见 [host_adapter_contract.md](host_adapter_contract.md) + [host_adapter_contracts.md](host_adapter_contracts.md)；执行计划真源 [`.cursor/plans/`](../.cursor/plans/) |
 | Cursor Plan / 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)（含轻量 / execution / audit plan、**`plan_profile: research`**、**CreatePlan 输出契约**、Git 状态证据收口、**调研范围与能力联动**）；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；历史计划链见 [plans/README.md](plans/README.md)（stub 镜像 + `.cursor/plans/` 真源） |
 | Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
 | 插件 ABI / routing metadata | [runtime_plugin_contract.md](runtime_plugin_contract.md) |

@@ -1918,6 +1918,28 @@ fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
         .is_none());
 }
 
+/// Pre-execution stdio must not show `drive_until_done: true` (agents copy-paste from SKILL.md).
+#[test]
+fn gsd_new_project_skill_forbids_pre_exec_drive_until_done_true() {
+    let text = read_text(&project_root().join("skills/gsd/new-project/SKILL.md"));
+    assert!(
+        !text.contains("\"drive_until_done\":true"),
+        "new-project must not embed drive_until_done:true in stdio example"
+    );
+    assert!(
+        !text.contains("\"drive_until_done\": true"),
+        "new-project must not embed drive_until_done: true in stdio example"
+    );
+    assert!(
+        text.contains("drive_until_done\":false") || text.contains("drive_until_done\": false"),
+        "new-project stdio must show drive_until_done:false"
+    );
+    assert!(
+        text.contains("status: planned") || text.contains("\"status\":\"planned\""),
+        "new-project stdio must show status planned"
+    );
+}
+
 /// 防止 framework 命令的 `skill_path` 再次指回仅存在于生成投影下的路径（裸 clone 会断链）。
 #[test]
 fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {

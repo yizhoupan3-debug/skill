@@ -1,0 +1,38 @@
+{
+  "schema_version": "closeout-record-v1",
+  "task_id": "post-migration-tech-debt",
+  "started_at": "2026-05-20T00:40:00+08:00",
+  "ended_at": "2026-05-20T02:50:00+08:00",
+  "summary": "Post-migration tech debt closed: GSD pre-exec stdio fix, tri-host integration verified, doc truth/host cross-links, policy + hook tests; verify-work and ship PASS.",
+  "verification_status": "passed",
+  "changed_files": [
+    "skills/gsd/new-project/SKILL.md",
+    "tests/policy_contracts.rs",
+    "scripts/router-rs/src/cursor_hooks/tests.rs",
+    "docs/README.md",
+    "docs/host_adapter_contract.md",
+    "docs/host_adapter_contracts.md",
+    ".cursor/hooks.json",
+    ".cursor/hook-tests/test_install_codex_cli_hooks.py",
+    "MIGRATION.md"
+  ],
+  "commands_run": [
+    {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},
+    {"command": "cargo test --test policy_contracts", "exit_code": 0},
+    {"command": "framework doctor --repo-root .", "exit_code": 0},
+    {"command": "framework maint verify-cursor-hooks", "exit_code": 0},
+    {"command": "python3 .cursor/hook-tests/test_install_codex_cli_hooks.py", "exit_code": 0}
+  ],
+  "artifacts_checked": [
+    {"path": "artifacts/current/post-migration-tech-debt/VERIFY_REPORT.md", "exists": true},
+    {"path": "artifacts/current/post-migration-tech-debt/WAVE_STATE.json", "exists": true},
+    {"path": "artifacts/current/post-migration-tech-debt/EVIDENCE_INDEX.json", "exists": true}
+  ],
+  "blockers": [],
+  "risks": [
+    "artifacts/current/post-migration-tech-debt gitignored — closeout JSON is tracked pointer",
+    "main ahead origin/main 9 commits — push recommended",
+    "Uncommitted hook-perf-deadlock router-rs changes remain in working tree (orthogonal)"
+  ],
+  "notes": "closeout_gate equivalent: closeout evaluate + framework_autopilot_goal complete + SHIPPING_STATE pass"
+}

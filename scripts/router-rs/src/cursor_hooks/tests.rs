@@ -49,6 +49,45 @@ impl Drop for ReviewGateDisableEnvClearGuard {
     }
 }
 
+/// Gate-active tests (`harness-minimal-gsd`): clear env/thread-local review-gate disable so
+/// `beforeSubmit` / `stop` run real handlers (parallel bench hooks may set `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`).
+struct ReviewGateActiveGuard {
+    _env: ReviewGateDisableEnvClearGuard,
+}
+
+impl ReviewGateActiveGuard {
+    fn new() -> Self {
+        super::set_test_review_gate_disable_override(None);
+        Self {
+            _env: ReviewGateDisableEnvClearGuard::new(),
+        }
+    }
+}
+
+/// Opt-in GSD pre-goal nudge (`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` — legacy env name).
+struct GsdPreGoalOptInEnvGuard {
+    prev: Option<std::ffi::OsString>,
+}
+
+impl GsdPreGoalOptInEnvGuard {
+    fn enable() -> Self {
+        let key = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
+        let prev = env::var_os(key);
+        env::set_var(key, "1");
+        Self { prev }
+    }
+}
+
+impl Drop for GsdPreGoalOptInEnvGuard {
+    fn drop(&mut self) {
+        let key = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
+        match self.prev.take() {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
 /// 单测临时设置 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`，Drop 时还原。
 struct ReviewGateStopMaxNudgesEnvGuard {
     prev: Option<std::ffi::OsString>,
@@ -490,7 +529,8 @@ fn parallel_delegation_does_not_latch_delegation_required() {
 }
 
 #[test]
-fn autopilot_entry_does_not_arm_delegation_or_review_from_fix_copy() {
+fn gsd_execute_entry_does_not_arm_delegation_or_review_from_fix_copy() {
+    let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -503,11 +543,11 @@ fn autopilot_entry_does_not_arm_delegation_or_review_from_fix_copy() {
     let state = load_state_for(&repo, "ap-del");
     assert!(
         !state.delegation_required,
-        "autopilot must not stack delegation_required (was: framework_entrypoint)"
+        "GSD execute must not stack delegation_required (was: framework_entrypoint)"
     );
     assert!(
         !state.review_required,
-        "autopilot execution turn must not re-arm review from findings wording"
+        "GSD execute turn must not re-arm review from findings wording"
     );
     assert!(state.goal_required);
 }
@@ -535,6 +575,47 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
         "same-submit autopilot must suppress review arming; got {state:?}"
     );
     assert!(state.goal_required);
+}
+
+#[test]
+fn before_submit_gsd_new_project_does_not_arm_goal_required() {
+    let repo = fresh_repo();
+    let sid = "gsd-new-project-pre-exec";
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "请 /gsd-new-project 做迁移后技术债审查"),
+    );
+    assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("GSD pre-execution"),
+        "expected pre-exec nudge; got {ac:?}"
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(
+        !state.goal_required,
+        "pre-exec /gsd-new-project must not arm goal_required; got {state:?}"
+    );
+}
+
+#[test]
+fn before_submit_gsd_plan_phase_does_not_arm_goal_required() {
+    let repo = fresh_repo();
+    let sid = "gsd-plan-pre-exec";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "/gsd-plan-phase"),
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(
+        !state.goal_required,
+        "/gsd-plan-phase must not arm goal_required; got {state:?}"
+    );
 }
 
 #[test]
@@ -715,8 +796,9 @@ fn closeout_followup_emits_when_strict_and_record_missing() {
 }
 
 #[test]
-fn autopilot_skips_pre_goal_nag_when_goal_state_on_disk() {
+fn gsd_skips_pre_goal_nag_when_goal_state_on_disk() {
     let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
     use std::env;
     let prev_strict = env::var_os("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
     env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
@@ -764,8 +846,9 @@ fn autopilot_skips_pre_goal_nag_when_goal_state_on_disk() {
 }
 
 #[test]
-fn autopilot_pre_goal_strict_disk_skips_hydrate_pre_goal_on_before_submit() {
+fn gsd_pre_goal_strict_disk_skips_hydrate_pre_goal_on_before_submit() {
     let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
     use std::env;
     let prev = env::var_os("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
     env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", "1");
@@ -1374,7 +1457,7 @@ fn stop_writes_back_reject_reason_seen_for_future_sessions() {
 
 #[test]
 fn before_submit_lock_failure_fails_closed_without_writing_state() {
-    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let _gate = ReviewGateActiveGuard::new();
     let _guard = ForceHookStateLockFailureGuard::new();
     let repo = fresh_repo();
     let payload = event("s14", "全面review这个仓库");
@@ -2188,6 +2271,7 @@ fn subagent_stop_without_start_does_not_promote_phase() {
 /// `explore` + `fork_context=false` 在门控启用时不得当作深度审稿 lane；随后的 `general-purpose` 完整周期仍可清相位。
 #[test]
 fn armed_review_explore_posttool_then_general_purpose_cycle_clears_phase() {
+    let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let sid = "s-explore-then-gp";
     let _ = dispatch_cursor_hook_event(
@@ -2922,10 +3006,10 @@ fn stop_picks_assistant_goal_contract_from_messages_when_top_level_response_empt
 }
 
 #[test]
-fn autopilot_before_submit_prompts_pre_goal_review_when_opt_in() {
+fn gsd_pre_goal_nudge_when_opt_in_enabled() {
     let _env = crate::test_env_sync::process_env_lock();
-    let prev = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED");
-    env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", "1");
+    let _gate = ReviewGateActiveGuard::new();
+    let _pre_goal = GsdPreGoalOptInEnvGuard::enable();
     let repo = fresh_repo();
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -2934,21 +3018,18 @@ fn autopilot_before_submit_prompts_pre_goal_review_when_opt_in() {
     );
     let msg = hook_user_visible_blob(&out);
     assert!(
-        msg.contains("GSD execute (/gsd-execute-phase)") || msg.contains("Autopilot"),
-        "surface={msg:?}"
+        msg.contains("GSD execute (/gsd-execute-phase)"),
+        "expected GSD pre-goal nudge; surface={msg:?}"
     );
-    match prev {
-        Some(v) => env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", v),
-        None => env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED"),
-    }
+    assert!(load_state_for(&repo, "s17b").goal_required);
 }
 
 #[test]
-fn autopilot_pre_goal_auto_releases_when_nag_cap_reached() {
+fn gsd_pre_goal_auto_releases_when_nag_cap_reached() {
     let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
     let prev_cap = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES");
-    let prev_pg = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED");
-    env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", "1");
+    let _pre_goal = GsdPreGoalOptInEnvGuard::enable();
     env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES", "2");
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
@@ -2970,14 +3051,11 @@ fn autopilot_pre_goal_auto_releases_when_nag_cap_reached() {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES", v),
         None => env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES"),
     }
-    match prev_pg {
-        Some(v) => env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", v),
-        None => env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED"),
-    }
 }
 
 #[test]
 fn deep_json_strings_satisfy_pre_goal_reject_on_before_submit() {
+    let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3027,6 +3105,7 @@ fn messages_tail_user_text_clears_review_gate_when_top_level_prompt_empty() {
 
 #[test]
 fn before_submit_reject_reason_token_in_user_prompt_satisfies_pre_goal() {
+    let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3391,7 +3470,8 @@ fn cursor_session_key_nested_workspace_folder_matches_top_cwd() {
 }
 
 #[test]
-fn autopilot_pre_goal_persists_when_session_id_only_nested_in_payload() {
+fn gsd_pre_goal_persists_when_session_id_only_nested_in_payload() {
+    let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let cwd = repo.display().to_string();
     let sid = "nested-sid-pregoal";
@@ -4091,5 +4171,90 @@ fn cursor_launcher_fail_open_session_start_when_router_rs_missing() {
         Some(0),
         "telemetry SessionStart must fail-open; stderr={}",
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn stop_handler_releases_session_lock_before_task_ledger_checkpoint() {
+    let src = include_str!("handlers.rs");
+    assert!(
+        src.contains("release_lock_then_finalize_stop"),
+        "Stop must release L3 before finalize_stop_hook_outputs (L1 checkpoint)"
+    );
+    let start = src.find("fn handle_stop").expect("handle_stop");
+    let body = &src[start..];
+    let locked = body
+        .split("let mut lock = acquire_state_lock")
+        .nth(1)
+        .expect("locked branch");
+    assert!(
+        locked.contains("release_lock_then_finalize_stop"),
+        "locked Stop path must not call finalize while holding session lock"
+    );
+}
+
+#[test]
+fn terminal_observation_cache_avoids_repeat_dir_scan() {
+    use super::terminal_observation_cache::{
+        collect_terminal_observations_cached, reset_terminal_cache_for_tests,
+        terminal_scan_count_for_tests,
+    };
+    reset_terminal_cache_for_tests();
+    let dir = std::env::temp_dir().join(format!(
+        "router-rs-term-cache-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&dir).expect("mkdir terminals");
+    let txt = dir.join("1.txt");
+    fs::write(
+        &txt,
+        "pid: 4242\ncwd: /tmp\nlast_command: echo hi\n---\n",
+    )
+    .expect("write terminal");
+    let _ = collect_terminal_observations_cached(&dir);
+    let _ = collect_terminal_observations_cached(&dir);
+    assert_eq!(
+        terminal_scan_count_for_tests(),
+        1,
+        "second collect in same process should hit mtime cache"
+    );
+    let _ = fs::remove_dir_all(&dir);
+    reset_terminal_cache_for_tests();
+}
+
+#[test]
+fn stop_and_post_tool_concurrent_hooks_complete_under_one_second() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let repo = Arc::new(fresh_repo());
+    let sid = "s-concurrent-stop-post";
+    let post_payload = json!({
+        "session_id": sid,
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "tool_name": "Read",
+        "tool_path": "README.md"
+    });
+    let stop_payload = json!({
+        "session_id": sid,
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "prompt": "",
+        "agent_response": "done"
+    });
+    let start = std::time::Instant::now();
+    let repo_post = Arc::clone(&repo);
+    let post = std::thread::spawn(move || {
+        dispatch_cursor_hook_event(&repo_post, "postToolUse", &post_payload)
+    });
+    let repo_stop = Arc::clone(&repo);
+    let stop = std::thread::spawn(move || {
+        dispatch_cursor_hook_event(&repo_stop, "stop", &stop_payload)
+    });
+    let _ = post.join().expect("post join");
+    let _ = stop.join().expect("stop join");
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "concurrent postToolUse+stop should not wedge on lock order"
     );
 }

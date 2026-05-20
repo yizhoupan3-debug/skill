@@ -1,5 +1,7 @@
 # Codex Host Projection Contract
 
+**中文 harness 接入（多宿主安装、hook 矩阵、工程清单）**：[`host_adapter_contract.md`](host_adapter_contract.md) — 接新宿主、Cursor/Claude 差异时读该文件。
+
 Documentation index: [`README.md`](README.md) (this directory).
 
 ## Goal

@@ -122,11 +122,13 @@ After exploration, generate:
 
 ## Stdio Operations
 
-```bash
-# Start goal after exploration
-printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<path>","goal":"<goal from exploration>","non_goals":["<non-goals>"],"done_when":["<done-when conditions>"],"validation_commands":["<validation commands>"],"drive_until_done":true}}' | router-rs --stdio-json
+See `../shared/stdio-contracts.md`. **Pre-execution only** — `drive_until_done: false`, `status: planned`; do not run `validation_commands` until execute-phase.
 
-# Start RFV for adversarial review
+```bash
+# Draft goal contract only (NOT execution)
+printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<path>","goal":"<goal from exploration>","non_goals":["<non-goals>"],"done_when":["<done-when conditions>"],"validation_commands":["<planned commands — not run in new-project>"],"drive_until_done":false,"status":"planned"}}' | router-rs --stdio-json
+
+# RFV on documents only (fix_scope = artifacts/current/<task_id>/*.md)
 printf '%s\n' '{"id":2,"op":"framework_rfv_loop","payload":{"operation":"start","repo_root":"<path>","goal":"Review REQUIREMENTS.md for completeness","max_rounds":2,"allow_external_research":true,"review_scope":"requirements","verify_commands":["cat REQUIREMENTS.md"],"stop_when":["P0 findings zero","P1 findings zero"]}}' | router-rs --stdio-json
 ```
 
