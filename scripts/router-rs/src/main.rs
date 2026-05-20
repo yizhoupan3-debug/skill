@@ -62,6 +62,9 @@ mod task_write_lock;
 mod trace_runtime;
 
 #[cfg(test)]
+mod claude_desktop_test_support;
+
+#[cfg(test)]
 mod integration_test_prelude;
 
 pub mod hook_status {

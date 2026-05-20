@@ -4,29 +4,13 @@
 
 #[cfg(test)]
 mod desktop_mcp_tests {
+    use crate::claude_desktop_test_support;
     use serde_json::json;
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static DESKTOP_TEST_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
 
     fn test_repo_dir() -> PathBuf {
-        let seq = DESKTOP_TEST_DIR_SEQ.fetch_add(1, Ordering::Relaxed);
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "router-rs-test-evidence-{}-{}",
-            std::process::id(),
-            seq
-        ));
-        let _ = std::fs::create_dir_all(path.join("artifacts/current"));
-        let _ = std::fs::write(
-            path.join("artifacts/current/active_task.json"),
-            r#"{"task_id": "test-task"}"#,
-        );
-        let _ = std::fs::write(
-            path.join("artifacts/current/SESSION_SUMMARY.md"),
-            "# Test Session\n",
-        );
+        let path = claude_desktop_test_support::unique_temp_repo("mcp");
+        claude_desktop_test_support::seed_minimal_current_task_layout(&path);
         path
     }
 
@@ -492,19 +476,10 @@ mod rate_limiter_tests {
 
 #[cfg(test)]
 mod json_parse_error_tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static DESKTOP_TEST_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
+    use crate::claude_desktop_test_support;
 
     fn unique_test_repo_dir() -> std::path::PathBuf {
-        let seq = DESKTOP_TEST_DIR_SEQ.fetch_add(1, Ordering::Relaxed);
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "router-rs-test-evidence-{}-{}",
-            std::process::id(),
-            seq
-        ));
-        path
+        claude_desktop_test_support::unique_temp_repo("json-parse")
     }
 
     // M5 FIX: Add JSON parse error path tests
@@ -513,15 +488,7 @@ mod json_parse_error_tests {
     fn malformed_json_returns_parse_error() {
         // Test that malformed JSON returns -32700 error code
         let path = unique_test_repo_dir();
-        let _ = std::fs::create_dir_all(path.join("artifacts/current"));
-        let _ = std::fs::write(
-            path.join("artifacts/current/active_task.json"),
-            r#"{"task_id": "test-task"}"#,
-        );
-        let _ = std::fs::write(
-            path.join("artifacts/current/SESSION_SUMMARY.md"),
-            "# Test Session\n",
-        );
+        claude_desktop_test_support::seed_minimal_current_task_layout(&path);
 
         let response = crate::claude_desktop_hooks::handle_mcp_request("not valid json {", &path);
 
@@ -542,15 +509,7 @@ mod json_parse_error_tests {
     fn valid_json_missing_method_returns_error() {
         // Test that valid JSON but missing method field returns appropriate error
         let path = unique_test_repo_dir();
-        let _ = std::fs::create_dir_all(path.join("artifacts/current"));
-        let _ = std::fs::write(
-            path.join("artifacts/current/active_task.json"),
-            r#"{"task_id": "test-task"}"#,
-        );
-        let _ = std::fs::write(
-            path.join("artifacts/current/SESSION_SUMMARY.md"),
-            "# Test Session\n",
-        );
+        claude_desktop_test_support::seed_minimal_current_task_layout(&path);
 
         // Missing method field
         let response =

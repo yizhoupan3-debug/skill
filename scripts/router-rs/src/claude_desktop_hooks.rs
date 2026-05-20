@@ -1507,12 +1507,7 @@ pub(crate) fn tool_goal_state_manage_test_helper(
     arguments: &Value,
     operation: &str,
 ) -> Result<String, String> {
-    // Create a temp repo path for testing
-    let mut path = std::env::temp_dir();
-    path.push(format!(
-        "router-rs-claude-desktop-test-{}",
-        std::process::id()
-    ));
+    let path = crate::claude_desktop_test_support::unique_temp_repo("goal-manage");
     let _ = std::fs::create_dir_all(&path);
 
     let mut args_with_op = arguments.clone();
@@ -1552,12 +1547,7 @@ pub(crate) fn tool_rfv_loop_manage_test_helper(
     arguments: &Value,
     operation: &str,
 ) -> Result<String, String> {
-    // Create a temp repo path for testing
-    let mut path = std::env::temp_dir();
-    path.push(format!(
-        "router-rs-claude-desktop-test-{}",
-        std::process::id()
-    ));
+    let path = crate::claude_desktop_test_support::unique_temp_repo("rfv-manage");
     let _ = std::fs::create_dir_all(&path);
 
     let mut args_with_op = arguments.clone();
@@ -1603,11 +1593,7 @@ mod tests {
     use super::*;
 
     fn unique_test_repo(name: &str) -> PathBuf {
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "router-rs-claude-desktop-mcp-{name}-{}",
-            std::process::id()
-        ));
+        let path = crate::claude_desktop_test_support::unique_temp_repo(&format!("mcp-{name}"));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         path
