@@ -43,6 +43,23 @@ L1  Executable verification and exit codes
   - [`skills/SKILL_ROUTING_METADATA.json`](../skills/SKILL_ROUTING_METADATA.json)：路由 metadata 真源；`tests/policy_contracts.rs` 与 `host_integration.rs` 校验。
   - [`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`](../skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json)：路由解释器衍生物，policy 契约校验目标；不要把它当 router-rs 第二真源去删。
 
+### 2.3 控制面配置与生成物（2026-05-20 硬化）
+
+| 真源 | 用途 |
+|------|------|
+| [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) | 闭集宿主、`review_gate.deep_gate_lanes`、profile 投影；**运行时**经 [`registry_loader.rs`](../scripts/router-rs/src/registry_loader.rs) 从磁盘读取（**非** `include_str!` 嵌入）。读盘失败时 lane 判定 **fail-closed**（不计入深度 lane）；`framework doctor` 探测 snapshot。改 lane 后重启 hook 子进程即可，**无需** `cargo build`。 |
+| [`configs/framework/host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) | 各宿主 framework 投影内的 **GSD 默认链** 与 **review findings-only** 英文段落；`framework host-integration install` 渲染时读取。叙事政策仍以 [`AGENTS.md`](../AGENTS.md) 为跨宿主真源，本 JSON 仅为安装产物文案真源。 |
+| [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) | 声明须纳入版本库的生成物路径、generator 命令与 `compare` 模式（`byte-for-byte` / `normalized-text`）。 |
+
+**`generated-artifacts-status` 两种模式**（[`host_integration.rs`](../scripts/router-rs/src/host_integration.rs)）：
+
+| 模式 | 触发 | 行为 |
+|------|------|------|
+| **metadata-only** | `framework doctor`（默认）；CLI `--skip-generator-run`；env `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` | 不跑 manifest generator；检查声明路径存在、forbidden marker、undeclared/missing required；`manifest_status.mode` = `manifest-backed-generated-artifact-metadata-only`。 |
+| **drift-gate（全量）** | `framework maint update-one-shot`；显式全量探针 | 在隔离 temp root 执行声明 generator（含 `host-integration install` 等慢步骤，默认单 generator **300s** 超时，可用 `ROUTER_RS_GENERATOR_TIMEOUT_SECONDS` 覆盖），再 byte/normalized 对比 checked-in 与再生副本。 |
+
+集成测试与日常 `doctor` 应使用 **metadata-only**；提交前维护流仍须至少一次 **drift-gate** 绿（见 [`skills/update/SKILL.md`](../skills/update/SKILL.md)）。
+
 ## 3. 主数据流
 
 ### 3.1 证据流
@@ -109,7 +126,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 **stdin 体量**：`router-rs claude hook` 从 stdin 读取的原始输入 **上限 4 MiB**（与 Codex hook 限量读取一致），溢出返回错误；合法 JSON 解析错误返回 `stdin_json_invalid:` 前缀消息。
 
-`router-rs framework install --to claude` 写入的 hook **command** 须将 stdin **原样交给** `router-rs claude hook`；不在 Bash 层用 `grep` 对 `cursor_version` / `workspace_roots` / `/.cursor/` 做预短路（历史上曾与 Rust 真源分裂）。安装串见 [`host_integration.rs`](../scripts/router-rs/src/host_integration.rs) 的 `build_router_rs_claude_hook_command`。
+`router-rs framework host-integration install --to claude` 写入的 hook **command** 须将 stdin **原样交给** `router-rs claude hook`；不在 Bash 层用 `grep` 对 `cursor_version` / `workspace_roots` / `/.cursor/` 做预短路（历史上曾与 Rust 真源分裂）。安装串见 [`host_integration.rs`](../scripts/router-rs/src/host_integration.rs) 的 `build_router_rs_claude_hook_command`。
 
 ### 4.2 Cursor `additional_context`：合并链路与出站字节上限
 
@@ -195,7 +212,8 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | `ROUTER_RS_CLIPBOARD_PATH` | unset（可选） | CLI/read_clipboard：自定义剪贴板文件路径（[`runtime_ops.inc`](../scripts/router-rs/src/cli/runtime_ops.inc)） |
 | `ROUTER_RS_STORAGE_ROOT` | unset（可选） | `runtime_storage` 持久根重写 |
 | `ROUTER_RS_BIN` | unset（可选） | host_integration：`router-rs` 可执行路径提示 |
-| `ROUTER_RS_GENERATOR_TIMEOUT_SECONDS` | unset（可选） | host_integration：生成步骤超时秒 |
+| `ROUTER_RS_GENERATOR_TIMEOUT_SECONDS` | unset → **300s** | `generated-artifacts-status` drift-gate：单条 manifest generator 超时（秒）；`0` 仍用默认 300s |
+| `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS` | 关 | **仅** `1`/`true`/`yes`/`on`：等同 CLI `--skip-generator-run`（metadata-only，不跑 generator、不比 drift） |
 | `ROUTER_RS_SHARED_TARGET` | unset（可选） | `router_self` 共享 target 路径 |
 | `ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS` / `ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS` | unset | framework `/update` maint 流专用（[`framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs)） |
 已退役的文案分叉、beforeSubmit 双续跑、聊天区投影切换、静默例外模式、Plan→Build goal 门控开关都不再支持；相关变量已从活跃代码与主真源文档移除。
@@ -233,7 +251,9 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | L2 continuity | `artifacts/current/`、`TRACE_EVENTS.jsonl`、`STEP_LEDGER.jsonl`、`configs/framework/*SCHEMA*` |
 | Skill 热路由（router-rs hot path） | `skills/SKILL_ROUTING_RUNTIME.json` |
 | Skill 冷元数据（**非** router-rs hot path；由 `router-rs framework skills` / policy contract / CI 消费） | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json` |
-| Host registry | `configs/framework/RUNTIME_REGISTRY.json` |
+| Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `scripts/router-rs/src/registry_loader.rs` |
+| 宿主投影 GSD/review 文案 | `configs/framework/host_projection_narrative.json` |
+| 生成物 manifest / drift | `configs/framework/GENERATED_ARTIFACTS.json` + `framework host-integration generated-artifacts-status` |
 | 弱模型 / 上下文预算调研索引 | 见 `skills/SKILL_ROUTING_RUNTIME.json` 的 hot/cold 分布，或运行 `router-rs eval route` |
 | 全面自检清单（减法审计，非合并门槛） | 运行 `router-rs framework maint update-audit --repo-root .` |
 

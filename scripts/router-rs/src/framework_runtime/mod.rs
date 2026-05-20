@@ -639,14 +639,14 @@ pub(crate) fn truncate_utf8_chars_with_ellipsis(input: &str, max_chars: usize) -
 /// Stable task id when no active/focus pointer exists (review-only sessions).
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
-/// Resolve the task to refresh on automatic Stop hooks: **active → focus → continuity-session**.
+/// Resolve the task to refresh on automatic Stop hooks (continuation-aware; see [`crate::autopilot_goal::resolve_checkpoint_task_id_from_pointer_ids`]).
 pub fn resolve_automatic_stop_checkpoint_task_id(repo_root: &Path) -> String {
     let pointers = crate::task_state::read_task_pointers(repo_root);
-    pointers
-        .active_task_id
-        .or(pointers.focus_task_id)
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| CONTINUITY_SESSION_CHECKPOINT_TASK_ID.to_string())
+    crate::autopilot_goal::resolve_checkpoint_task_id_from_pointer_ids(
+        repo_root,
+        &pointers.active_task_id,
+        &pointers.focus_task_id,
+    )
 }
 
 /// Stop-hook checkpoint: in-place refresh of the current task; does not repoint control plane.

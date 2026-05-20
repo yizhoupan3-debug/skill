@@ -14,7 +14,7 @@ Desktop **没有** CLI 级 shell hook，因此：
 
 ```bash
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
-  framework install --to claude-desktop --repo-root "$PWD"
+  framework host-integration install --to claude-desktop --repo-root "$PWD"
 ```
 
 ## 推荐 MCP 工作流（降 token）

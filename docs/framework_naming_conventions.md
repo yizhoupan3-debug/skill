@@ -76,8 +76,9 @@ configs/framework/
 ├── CLOSEOUT_RECORD_SCHEMA.json      # Closeout record schema
 ├── FRAMEWORK_SURFACE_POLICY.json     # Framework surface policy
 ├── GENERATED_ARTIFACTS.json          # Generated artifact registry
+├── host_projection_narrative.json    # GSD + review findings-only install copy
 ├── HARNESS_*.json                    # Harness configuration
-├── RUNTIME_REGISTRY.json             # Runtime registry
+├── RUNTIME_REGISTRY.json             # Runtime registry (disk-loaded by registry_loader)
 ├── RUNTIME_PROVIDER_REGISTRY.json    # Provider registry
 ├── NL_ROUTE_ADJUSTMENTS.json         # Natural language route adjustments
 ├── ROUTER_RS_HOOK_OBSERVATION_RULES.json
@@ -106,10 +107,17 @@ skills/
 
 ### Generated Artifact Tracking
 
-`configs/framework/GENERATED_ARTIFACTS.json` tracks all generated artifacts with their generator commands.
+`configs/framework/GENERATED_ARTIFACTS.json` tracks all checked-in generated artifacts with their generator commands.
+
+**Inspection modes** (`framework host-integration generated-artifacts-status`):
+
+- **metadata-only** — `--skip-generator-run` or `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1`; default for `framework doctor`
+- **drift-gate** — full regeneration in a temp root; required for `framework maint update-one-shot`
+
+See [`harness_architecture.md`](harness_architecture.md) §2.3.
 
 **Generator sources:**
-- `scripts/router-rs/Cargo.toml` — Rust router runtime (`framework skills validate|refresh`)
+- `scripts/router-rs/Cargo.toml` — Rust router runtime (`framework skills validate|refresh`, `host-integration install`, `sync-entrypoints`)
 
 ---
 

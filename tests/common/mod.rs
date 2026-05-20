@@ -114,7 +114,7 @@ pub fn seed_framework_markers(root: &Path) {
     );
     write_text(
         &root.join("configs/framework/host_projection_narrative.json"),
-        r#"{"schema_version":"framework-host-projection-narrative-v1","gsd_default_lifecycle_paragraph":"GSD lifecycle (test seed).","review_findings_only_paragraph":"Review findings-only (test seed)."}"#,
+        r#"{"schema_version":"framework-host-projection-narrative-v2","gsd_default_lifecycle_paragraph":"GSD lifecycle (test seed).","gsd_lifecycle_by_host":{"cursor":"GSD cursor (test).","codex-cli":"GSD codex (test)."},"review_findings_only_paragraph":"Review findings-only (test seed)."}"#,
     );
     write_text(
         &root.join("scripts/router-rs/Cargo.toml"),

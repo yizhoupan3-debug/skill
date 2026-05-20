@@ -8,7 +8,7 @@
 
 **相关契约**（英文实现侧叙事）：[`rust_contracts.md`](rust_contracts.md)。**Codex 投影专用英文契约**：[`host_adapter_contracts.md`](host_adapter_contracts.md)（勿与本文混读）。
 
-**手稿技能（paper-workbench 栈）**：论文前门与专科 lane 的可读契约以仓库 `skills/` 下对应 `SKILL.md` 与 reference 为内容真源；**安装与宿主投影**不以某一 IDE 为专属——闭集宿主列表与安装工具名以 **`configs/framework/RUNTIME_REGISTRY.json`** 为准，落地到 Cursor/Codex 等工作区时使用 **`router-rs framework install --to <host>`**（实现见 `host_integration.rs`）。技能栈索引见 [`../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md)。
+**手稿技能（paper-workbench 栈）**：论文前门与专科 lane 的可读契约以仓库 `skills/` 下对应 `SKILL.md` 与 reference 为内容真源；**安装与宿主投影**不以某一 IDE 为专属——闭集宿主列表与安装工具名以 **`configs/framework/RUNTIME_REGISTRY.json`** 为准，落地到 Cursor/Codex 等工作区时使用 **`router-rs framework host-integration install --to <host>`**（实现见 `host_integration.rs`）。技能栈索引见 [`../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md)。
 
 **解绑与共同沉降验收**：历史清单已归档为 stub（见 [`docs/plans/README.md`](plans/README.md)）；运行时以本文 §3.1 工程清单、[harness_architecture.md](harness_architecture.md) 与 `router-rs framework maint update-audit` 为准。
 
@@ -79,7 +79,7 @@
 
 单行指针：五层模型见 [`harness_architecture.md`](harness_architecture.md)；Rust API / CLI 契约见 [`rust_contracts.md`](rust_contracts.md)；跨宿主语言、路由与执行协议见仓库根 [`../AGENTS.md`](../AGENTS.md)。
 
-**闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；hooks 通过 **`router-rs claude-desktop agent`**，投影安装 **`router-rs framework install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。两者在 Rust 里共享 host-neutral stdio-agent hook 协议实现，但 host id、投影路径（`.claude/*` / `.claude-desktop/*`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。
+**闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework host-integration install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；hooks 通过 **`router-rs claude-desktop agent`**，投影安装 **`router-rs framework host-integration install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。两者在 Rust 里共享 host-neutral stdio-agent hook 协议实现，但 host id、投影路径（`.claude/*` / `.claude-desktop/*`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。
 
 **单行指针**：跨 Cursor 工作区接入与操作步骤见 [`docs/hosts/cursor.md`](hosts/cursor.md)；仓库级一键接入见根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）。**其它宿主操作手册（≤1 页）**：[`docs/hosts/codex-cli.md`](hosts/codex-cli.md)、[`docs/hosts/claude.md`](hosts/claude.md)。
 
@@ -125,7 +125,7 @@
 | Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`（及策略合并字段，见运行时）；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NAGGES`**（[`harness_architecture.md`](harness_architecture.md) §5 表） |
 | 续跑类合并 | Same | [`cursor_hooks/`](../scripts/router-rs/src/cursor_hooks/mod.rs) + `autopilot_goal` / `rfv_loop` | `additional_context` / `followup_message`（宿主 JSON 出站字段） |
 | **`ROUTER_RS_OPERATOR_INJECT` × SessionStart** | SessionStart | `cursor_hooks`（`handle_session_start`） | 与 Codex 对称：闸关则不写入连续性 `additional_context`；闸开则复用 `framework_runtime::continuity_digest` 与 Codex 同源段落；出站超长时与 review gate 等路径一致追加 `...[~trunc]`（细则见 [`harness_architecture.md`](harness_architecture.md) §2.1） |
-| **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | `ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时在 stdout 打印醒目 WARN（与 [`harness_architecture.md`](harness_architecture.md) §3.1 一致） |
+| **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | 生成物为 **metadata-only** `generated-artifacts-status`（不跑慢 generator）；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时打印醒目 WARN（见 harness §2.3 / §3.1） |
 
 **Cursor 排障（短）**：
 
@@ -143,15 +143,17 @@
 |--------|----------|----------------|-----------------|
 | PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/review_gate_*.json`、`hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE`（与 Codex `CODEX_HOOK_STATE_UNREADABLE` 同形排障） |
-| 投影规则与 hook 绑定 | `router-rs framework install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/settings.json`（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）、`.claude/.framework-projection.json`（project scope） |
+| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/settings.json`（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）、`.claude/.framework-projection.json`（project scope） |
 
 ### Claude Desktop（`router-rs claude-desktop agent`）
 
+**能力边界**：无 CLI 级 PreToolUse / Stop 硬拦截（registry `harness_capability_exceptions`）；门控靠 **MCP 工具工作流** + 短投影文案。勿与 Claude Code 的四事件 hook 表混读。
+
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude-desktop agent --repo-root …` | stdio-agent hook shared implementation | `.claude/hook_state_<session>.json`；出站 Claude Desktop hook JSON，顶层 `router_rs_observation.host` 为 `claude-desktop` |
-| **Claude Desktop Stop × `.claude` 状态 JSON** | Stop | shared stdio-agent dispatch | `review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_DESKTOP_HOOK_STATE_UNREADABLE` |
-| 投影规则与 hook 绑定 | `router-rs framework install --to claude-desktop` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/settings.json`（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）、`.claude/.framework-projection.json`（project scope） |
+| MCP 工具工作流 | Desktop MCP stdio | `router-rs` MCP server（见项目 `.claude/CLAUDE.md`） | `artifacts/current/` 与 Code 共用；`goal_state_manage` / `closeout_gate` / `framework_digest` |
+| 投影安装 | 一次性接入 | `router-rs framework host-integration install --to claude-desktop` | 项目 `.claude/CLAUDE.md`（短指针）、`.mcp.json`；**不**写入 `.claude/settings.json` hook 四事件 |
+| 操作手册 | — | — | [`docs/hosts/claude-desktop.md`](hosts/claude-desktop.md) |
 
 **统一原则**：宿主配置中的命令应保持 **短命 + 超时**；语义在 Rust，不在宿主脚本里分支业务规则。
 
@@ -172,6 +174,9 @@
 | CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude`/`claude-desktop` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
 | 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；Claude 侧 `.claude/settings.json`、Claude Desktop 侧 `.claude/settings.json`（由 host integration 写入） |
 | 闭集宿主 id 与 `install_tool` / `host_entrypoints` | `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 与 `host_targets.metadata` |
+| `review_gate` 磁盘 loader | `scripts/router-rs/src/registry_loader.rs` |
+| GSD/review 安装文案 | `configs/framework/host_projection_narrative.json` |
+| 生成物 drift manifest | `configs/framework/GENERATED_ARTIFACTS.json` |
 
 1. **在 `RUNTIME_REGISTRY.json`** 扩展 `host_targets.supported`、`host_targets.metadata.<host>.install_tool` 与 `host_targets.metadata.<host>.host_entrypoints`（及若需要，`host_projections.*`）；`framework_host_targets.rs` 必须只从注册表读取这些值，并补齐 fail-closed 单测。
 2. **薄 hook**：仅解析 workspace root / repo root → 组装 `router-rs …` argv；stdin 透传钩子 JSON。
@@ -202,7 +207,7 @@
 - [ ] **[`scripts/router-rs/src/framework_host_targets.rs`](../scripts/router-rs/src/framework_host_targets.rs)**：确保只从注册表读取上述字段，fail-closed；必要时补充单元测试。
 - [ ] **新增** `scripts/router-rs/src/<host>_hooks.rs`（命名对齐现有 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) / [`cursor_hooks.rs`](../scripts/router-rs/src/cursor_hooks.rs)）：实现各生命周期分支；在 [`main.rs`](../scripts/router-rs/src/main.rs) 注册 `mod` 并导出入口。
 - [ ] **[`scripts/router-rs/src/cli/dispatch_body.txt`](../scripts/router-rs/src/cli/dispatch_body.txt)** 与 [`scripts/router-rs/src/cli/dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs)：挂上 `router-rs <host> hook <event> …` 分发（与现有 `codex` / `cursor` 子命令并列）。
-- [ ] **[`scripts/router-rs/src/host_integration.rs`](../scripts/router-rs/src/host_integration.rs)**：`framework host-integration install --to <tool>` 能解析注册表中的 `install_tool`；为该宿主增加投影写入（对标 `render_cursor_framework_entrypoint` / `render_codex_framework_entrypoint`）；若产生新的生成物路径，同步 [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（及代码中 `REQUIRED_GENERATED_ARTIFACTS` 等常量，若有）。
+- [ ] **[`scripts/router-rs/src/host_integration.rs`](../scripts/router-rs/src/host_integration.rs)**：`framework host-integration install --to <tool>` 能解析注册表中的 `install_tool`；为该宿主增加投影写入（对标 `render_cursor_framework_entrypoint` / `render_codex_framework_entrypoint`），GSD/review 段落从 [`host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) 读取；若产生新的生成物路径，同步 [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（及代码中 `REQUIRED_GENERATED_ARTIFACTS` 等常量，若有）。
 - [ ] **L4 样例**：检出中的 [`.cursor/hooks.json`](../.cursor/hooks.json)（Cursor）与由 sync 写入的 `.codex/hooks.json`（Codex）应保持 **argv + 超时 + stdin 透传**，不在 shell 内复制 L3 业务分支；新宿主应对照新增同级配置。
 - [ ] **[`tests/host_integration.rs`](../tests/host_integration.rs)**：增加 dry-run 或临时目录安装断言（沿用现有 `host_targets.metadata` / manifest 断言模式）。
 - [ ] **[`tests/policy_contracts.rs`](../tests/policy_contracts.rs)**（根包）：registry / 契约回归。

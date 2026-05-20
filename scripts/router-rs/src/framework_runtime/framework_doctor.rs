@@ -40,6 +40,10 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
     ];
 
     println!("\n--- path checks ---");
+    match crate::registry_loader::check_review_gate_registry_snapshot(repo_root) {
+        Ok(()) => println!("RUNTIME_REGISTRY review_gate snapshot: ok"),
+        Err(e) => println!("WARN: RUNTIME_REGISTRY review_gate snapshot failed: {e}"),
+    }
     for (label, path) in &checks {
         let status = if path.is_file() {
             "ok (file)"
@@ -214,6 +218,36 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
                                 "task_registry.json focus_task_id: matches focus_task.json"
                                     .to_string(),
                             );
+                        }
+                    }
+
+                    if let (Some(active_id), Some(focus_id)) =
+                        (&active_task_id, &focus_task_id)
+                    {
+                        if active_id != focus_id {
+                            let active_goal = crate::autopilot_goal::read_goal_state(
+                                repo_root,
+                                Some(active_id.as_str()),
+                            )
+                            .ok()
+                            .flatten();
+                            let focus_goal = crate::autopilot_goal::read_goal_state(
+                                repo_root,
+                                Some(focus_id.as_str()),
+                            )
+                            .ok()
+                            .flatten();
+                            let active_drives = active_goal
+                                .as_ref()
+                                .is_some_and(crate::autopilot_goal::goal_state_requests_continuation);
+                            let focus_drives = focus_goal
+                                .as_ref()
+                                .is_some_and(crate::autopilot_goal::goal_state_requests_continuation);
+                            if active_goal.is_some() && !active_drives && focus_drives {
+                                issues.push(format!(
+                                    "ACTIVE_NOT_DRIVING: active '{active_id}' GOAL does not request continuation but focus '{focus_id}' does; align pointers or complete focus GOAL"
+                                ));
+                            }
                         }
                     }
 

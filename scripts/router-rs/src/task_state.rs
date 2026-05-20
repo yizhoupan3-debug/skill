@@ -23,6 +23,10 @@ pub const RESOLVED_TASK_VIEW_SCHEMA_VERSION: &str = "router-rs-resolved-task-vie
 pub const RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL: &str =
     "continuity:active_goal_missing_focus_has_goal";
 
+/// Active resolves with a readable GOAL that does not request continuation while `focus_task` does.
+pub const RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES: &str =
+    "continuity:active_goal_not_driving_focus_drives";
+
 /// Suffix for [`depth_compliance_refresh_hint`] when `ROUTER_RS_DEPTH_SCORE_MODE` is not `strict`
 /// yet structured external-research rounds are present advisory counters only for the third depth point.
 pub const DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH: &str =
@@ -31,8 +35,13 @@ pub const DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH: &str =
 /// Zh line appended to Codex continuity digest and Cursor SessionStart when
 /// [`task_view_has_active_goal_focus_mismatch_note`] is true (same bytes as legacy digest string).
 pub const CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH: &str = concat!(
-    "连续性提示: active 任务无可用 GOAL，但 `focus_task` 另有 GOAL；hydration 不自动回退。",
+    "连续性提示: active 任务无可用 GOAL，但 `focus_task` 另有 GOAL；hydration 在 active 指针无效时不回退 focus。",
     "请核对 `artifacts/current/active_task.json` 或运行 `framework task-state-resolve`。",
+);
+
+pub const CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH: &str = concat!(
+    "连续性提示: active 任务的 GOAL 未在续跑，但 `focus_task` 正在 drive；",
+    "hydration/checkpoint 已优先 focus。请核对 active/focus 指针是否应对齐。",
 );
 
 /// Pushes [`RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL`] when appropriate. Active may still
@@ -65,6 +74,40 @@ fn maybe_note_active_goal_missing_focus_has_goal(
     };
     notes.push(format!(
         "{RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL} active={active_id} focus={focus_id}"
+    ));
+}
+
+fn maybe_note_active_goal_not_driving_focus_drives(
+    repo_root: &Path,
+    pointers: &TaskPointers,
+    resolved_task_id: &str,
+    goal_state: Option<&Value>,
+    notes: &mut Vec<String>,
+) {
+    let Some(active_id) = pointers.active_task_id.as_deref() else {
+        return;
+    };
+    let Some(focus_id) = pointers.focus_task_id.as_deref() else {
+        return;
+    };
+    if active_id == focus_id || resolved_task_id != active_id {
+        return;
+    }
+    let Some(active_goal) = goal_state else {
+        return;
+    };
+    if crate::autopilot_goal::goal_state_requests_continuation(active_goal) {
+        return;
+    }
+    let Ok(Some(focus_goal)) = crate::autopilot_goal::read_goal_state(repo_root, Some(focus_id))
+    else {
+        return;
+    };
+    if !crate::autopilot_goal::goal_state_requests_continuation(&focus_goal) {
+        return;
+    }
+    notes.push(format!(
+        "{RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES} active={active_id} focus={focus_id}"
     ));
 }
 
@@ -291,6 +334,12 @@ pub fn task_view_has_active_goal_focus_mismatch_note(view: &ResolvedTaskView) ->
         .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL))
 }
 
+pub fn task_view_has_active_goal_not_driving_focus_note(view: &ResolvedTaskView) -> bool {
+    view.resolution_notes
+        .iter()
+        .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES))
+}
+
 fn rfv_loop_active(state: &Value) -> bool {
     state
         .get("loop_status")
@@ -418,6 +467,13 @@ pub fn resolve_task_view_with_pointers(
     );
 
     maybe_note_active_goal_missing_focus_has_goal(
+        repo_root,
+        &pointers,
+        task_id.as_str(),
+        goal_state.as_ref(),
+        &mut resolution_notes,
+    );
+    maybe_note_active_goal_not_driving_focus_drives(
         repo_root,
         &pointers,
         task_id.as_str(),

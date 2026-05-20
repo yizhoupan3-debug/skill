@@ -37,11 +37,17 @@ artifact contracts remain framework-root-native and Rust-generated.
   `independent_behavior: false`.
 - Checked-in generated artifacts are declared by
   `configs/framework/GENERATED_ARTIFACTS.json` and can be inspected through
-  `framework host-integration generated-artifacts-status`; this manifest-backed
-  drift gate regenerates declared artifacts in an isolated temporary root,
-  validates schema `framework-generated-artifacts-manifest-v1`, byte-compares
-  manifest-declared outputs, and reports undeclared generated framework artifacts
-  across reverse-reference surfaces or forbidden expanded host-private paths.
+  `framework host-integration generated-artifacts-status`. **Metadata-only**
+  (`--skip-generator-run`) is the default for `framework doctor` and fast CI
+  probes. **Drift-gate** regenerates declared artifacts in an isolated temporary
+  root, validates schema `framework-generated-artifacts-manifest-v1`, compares
+  manifest-declared outputs (`byte-for-byte` or `normalized-text`), and reports
+  undeclared generated framework artifacts across reverse-reference surfaces or
+  forbidden expanded host-private paths. Maintainer flows (`update-one-shot`) must
+  pass drift-gate before merge.
+- Host framework entrypoint GSD/review narrative paragraphs are declared in
+  `configs/framework/host_projection_narrative.json` and rendered by
+  `framework host-integration install`; do not fork duplicate prose in Rust.
 
 ## Hard Rules
 

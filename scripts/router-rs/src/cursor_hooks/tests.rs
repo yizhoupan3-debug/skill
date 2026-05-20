@@ -3068,6 +3068,35 @@ fn main_thread_compact_review_clears_gate_on_stop() {
 }
 
 #[test]
+fn main_thread_compact_review_clears_gate_on_stop_only() {
+    let repo = fresh_repo();
+    let sid = "s-main-thread-stop-only";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let stop_payload = json!({
+        "session_id": sid,
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "payload": {
+            "response": "[P1] scripts/router-rs/src/cursor_hooks/handlers.rs:3000 — Stop-only compact path — substantive finding line for gate clear"
+        }
+    });
+    let out = dispatch_cursor_hook_event(&repo, "stop", &stop_payload);
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !fm.contains("REVIEW_GATE incomplete"),
+        "stop tail compact findings must clear gate without afterAgentResponse; fm={fm}"
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(state.phase >= 3);
+}
+
+#[test]
 fn main_thread_deferential_compact_does_not_clear_gate_on_stop() {
     let repo = fresh_repo();
     let sid = "s-main-thread-deferential";

@@ -116,7 +116,15 @@ cargo run --manifest-path /abs/path/to/framework-repo/scripts/router-rs/Cargo.to
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
-等价于：`refresh-host-projections` → `framework skills refresh --write` → 默认离线契约测试 → `generated-artifacts-status` OK → 可选 host skill publish。
+等价于：`refresh-host-projections` → `framework skills refresh --write` → 默认离线契约测试 → **全量** `generated-artifacts-status`（drift-gate，`ok: true`）→ 可选 host skill publish。
+
+日常快检（**不**替代提交前 drift-gate）：
+
+```bash
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
+# 或显式：
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration generated-artifacts-status --framework-root "$PWD" --skip-generator-run
+```
 
 默认离线套件包括：
 

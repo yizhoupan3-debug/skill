@@ -3493,7 +3493,7 @@ fn explicit_manifest_preserves_native_runtime_for_low_confidence_hits() {
         Some(&runtime_path),
         Some(&manifest_path),
         None,
-        "帮我写一个 Python 脚本，并补 pytest 回归测试",
+        "write a small helper function",
         "explicit-manifest-native-runtime",
         true,
         true,

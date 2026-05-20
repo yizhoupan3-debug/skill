@@ -4,7 +4,7 @@
 
 **使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)。
 
-**近期变更（2026-05）**：`/autopilot` 已退役（用 `/gsd-execute-phase`）；Cursor hooks 默认 **7 事件**减法闭集；`docs/plans/` 与 `docs/history/` 过期 stub 已移除（索引见 [`docs/plans/README.md`](docs/plans/README.md)）；控制面硬化见 [`MIGRATION.md`](MIGRATION.md)。文档地图：[`docs/README.md`](docs/README.md)。
+**近期变更（2026-05）**：`/autopilot` 已退役（用 `/gsd-execute-phase`）；Cursor hooks 默认 **7 事件**减法闭集；`docs/plans/` 与 `docs/history/` 过期 stub 已移除（索引见 [`docs/plans/README.md`](docs/plans/README.md)）；控制面硬化（registry 磁盘 loader、`host_projection_narrative.json`、生成物 metadata-only doctor）见 [`MIGRATION.md`](MIGRATION.md) 与 [`docs/harness_architecture.md`](docs/harness_architecture.md) §2.3。文档地图：[`docs/README.md`](docs/README.md)。
 
 ## 我该怎么入门（两条路径）
 
@@ -16,7 +16,7 @@
   适合：需要 **Cursor/Codex/Claude hooks**、`.cursor/hook-state` 门控、连续性 `artifacts/current/`、证据索引等。必须先 **构建并安装 `router-rs`**，再按宿主配置 hooks；关键事件在二进制缺失时常 **fail-closed**（见下文 Codex hooks 解析顺序）。  
   **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 `AGENTS.md` → Codex Sync。  
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
-  `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检。
+  `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
 
 ## 这套系统包含什么
 

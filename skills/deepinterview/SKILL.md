@@ -78,7 +78,7 @@ approval_required_tools: []
 ## Canonical owner
 
 - 主 owner：`deepinterview` 只负责澄清、收敛和 findings-first handoff。
-- 达到清晰阈值后，交给本仓原生执行入口 `autopilot` 或当前任务的最窄 skill owner。
+- 达到清晰阈值后，交给 `/gsd-execute-phase`（`framework_autopilot_goal`）或当前任务的最窄 skill owner。
 - 若需要多 review 面并行取证，先走 [`agent-swarm-orchestration`](../agent-swarm-orchestration/SKILL.md) 判断 bounded sidecar 边界。
 
 ## Workflow
@@ -100,7 +100,7 @@ approval_required_tools: []
 
 - 不再写旧插件状态或旧插件 spec。
 - 访谈进度和澄清结果写到 `artifacts/current/<task_id>/bootstrap/` 以及 task-scoped `SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`；root 只保留 `.supervisor_state.json`。
-- 达标后的 handoff 交给本仓 `autopilot` 和 Rust supervisor。
+- 达标后的 handoff 交给 `/gsd-execute-phase` 与 Rust supervisor。
 
 ## Instructions
 
