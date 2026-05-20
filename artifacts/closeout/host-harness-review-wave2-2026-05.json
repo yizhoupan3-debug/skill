@@ -1,0 +1,40 @@
+{
+  "schema_version": "closeout-record-v1",
+  "task_id": "host-harness-review-wave2-2026-05",
+  "started_at": "2026-05-20T22:00:00+08:00",
+  "ended_at": "2026-05-21T01:15:00+08:00",
+  "summary": "四宿主 harness wave-2：Codex session/Stop、Cursor 门控硬化、Claude gate 守卫、Desktop manifest 分离、closeout/e2e/docs；845 router-rs + 93 policy 测试通过。",
+  "verification_status": "passed",
+  "changed_files": [
+    "scripts/router-rs/src/codex_hooks.rs",
+    "scripts/router-rs/src/cursor_hooks/handlers.rs",
+    "scripts/router-rs/src/claude_hooks.rs",
+    "scripts/router-rs/src/claude_desktop_hooks.rs",
+    "scripts/router-rs/src/host_integration.rs",
+    "scripts/router-rs/src/framework_maint.rs",
+    "tests/host_integration.rs",
+    "docs/hosts/cursor.md",
+    "docs/hosts/codex-cli.md",
+    "docs/hosts/claude.md",
+    "docs/host_adapter_contract.md",
+    "MIGRATION.md"
+  ],
+  "commands_run": [
+    {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},
+    {"command": "cargo test --test policy_contracts", "exit_code": 0},
+    {"command": "bash scripts/ci/check-cursor-hooks-parity.sh", "exit_code": 0}
+  ],
+  "artifacts_checked": [
+    {"path": "artifacts/current/host-harness-review-wave2-2026-05/VERIFICATION_REPORT.md", "exists": true},
+    {"path": "artifacts/current/host-harness-review-wave2-2026-05/EVIDENCE_INDEX.json", "exists": true},
+    {"path": "artifacts/current/host-harness-review-wave2-2026-05/WAVE_STATE.json", "exists": true},
+    {"path": "artifacts/current/host-harness-review-wave2-2026-05/GOAL_STATE.json", "exists": true}
+  ],
+  "blockers": [],
+  "risks": [
+    "Git working tree dirty (22 files); operator commit required",
+    "supervisor_state.json may still point at prior task until Stop checkpoint",
+    "schema-drift baseline for this task_id optional defer"
+  ],
+  "notes": "gsd-ship: verify PASS; Gate A pending user commit"
+}

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Canonical Claude Code router-rs hook launcher (settings merge must reference this path).
 set -euo pipefail
 
 HOOK_EVENT="${1:?usage: $0 <event>}"

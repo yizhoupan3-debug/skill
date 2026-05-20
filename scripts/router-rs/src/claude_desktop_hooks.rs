@@ -543,8 +543,8 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                                 "description": "task id，默认当前 active task",
                             },
                             "round": {
-                                "type": "object",
-                                "description": "round 对象（append_round 时需要）",
+                                "type": "integer",
+                                "description": "RFV round number (append_round 时需要)",
                             },
                         },
                         "required": ["operation"],
@@ -898,15 +898,16 @@ fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, S
     let exit_display = exit_code
         .map(|ec| ec.to_string())
         .unwrap_or_else(|| "null".to_string());
+    let honor_note = " (honor-system: not bound to host tool execution — verify independently)";
     if let Some(text) = output {
         let max_chars = evidence_output_max_chars();
         let trimmed = text.chars().take(max_chars).collect::<String>();
         Ok(format!(
-            "Evidence recorded: {tool_name_display} '{command_display}' -> exit={exit_display}\n{trimmed}"
+            "Evidence recorded{honor_note}: {tool_name_display} '{command_display}' -> exit={exit_display}\n{trimmed}"
         ))
     } else {
         Ok(format!(
-            "Evidence recorded: {tool_name_display} '{command_display}' -> exit={exit_display}"
+            "Evidence recorded{honor_note}: {tool_name_display} '{command_display}' -> exit={exit_display}"
         ))
     }
 }
@@ -961,7 +962,7 @@ fn tool_session_checkpoint(arguments: &Value, repo_root: &Path) -> Result<String
     ))
 }
 
-fn tool_closeout_gate(_arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(crate) fn tool_closeout_gate(_arguments: &Value, repo_root: &Path) -> Result<String, String> {
     let task_view = resolve_task_view(repo_root, None);
     let mut findings: Vec<String> = Vec::new();
 
@@ -977,25 +978,44 @@ fn tool_closeout_gate(_arguments: &Value, repo_root: &Path) -> Result<String, St
         .as_ref()
         .map(|e| e.has_successful_verification)
         .unwrap_or(false);
+    let task_id = task_view.task_id.as_deref().unwrap_or("");
+
     if !evidence_success {
         findings.push("evidence: no successful EVIDENCE_INDEX records".to_string());
     } else {
         findings.push("evidence: successful records present".to_string());
+        if !task_id.is_empty()
+            && crate::autopilot_goal::task_evidence_success_only_self_attested(repo_root, task_id)
+        {
+            findings.push(
+                "WARN: evidence: only self-attested MCP record_evidence rows — verify independently"
+                    .to_string(),
+            );
+        }
     }
-
-    let has_summary = task_view
-        .resolution_notes
-        .iter()
-        .any(|n| n.contains("checkpoint") || n.contains("summary"));
-    if !has_summary {
-        findings.push("checkpoint: no SESSION_SUMMARY".to_string());
+    let summary_path = if task_id.is_empty() {
+        repo_root.join("artifacts/current/SESSION_SUMMARY.md")
     } else {
-        findings.push("checkpoint: SESSION_SUMMARY present".to_string());
+        repo_root
+            .join("artifacts/current")
+            .join(task_id)
+            .join("SESSION_SUMMARY.md")
+    };
+    let has_summary = summary_path.is_file();
+    if !has_summary {
+        findings.push(format!(
+            "checkpoint: missing SESSION_SUMMARY at {}",
+            summary_path.display()
+        ));
+    } else {
+        findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
     }
 
     let all_clear = goal_present && evidence_success && has_summary;
     let verdict = if all_clear {
         "PASS: all closeout gates satisfied (advisory)"
+    } else if goal_present && evidence_success {
+        "ADVISORY: checkpoint missing — call session_checkpoint before claiming PASS"
     } else {
         "ADVISORY: some gates not satisfied (MCP cannot hard-block, self-discipline required)"
     };
@@ -1352,6 +1372,21 @@ fn tool_rfv_loop_status(arguments: &Value, repo_root: &Path) -> Result<String, S
     serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
 }
 
+fn parse_rfv_round_argument(value: Option<&Value>) -> Result<u64, String> {
+    let Some(v) = value else {
+        return Err("append_round requires 'round' argument (integer)".to_string());
+    };
+    if let Some(n) = v.as_u64() {
+        return Ok(n);
+    }
+    if let Some(n) = v.as_i64() {
+        if n >= 0 {
+            return Ok(n as u64);
+        }
+    }
+    Err("append_round requires 'round' argument (integer)".to_string())
+}
+
 fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, String> {
     let operation = arguments
         .get("operation")
@@ -1389,10 +1424,7 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, S
             }
         }
         "append_round" => {
-            let round = arguments
-                .get("round")
-                .and_then(Value::as_u64)
-                .ok_or("append_round requires 'round' argument (integer)")?;
+            let round = parse_rfv_round_argument(arguments.get("round"))?;
             payload["round"] = json!(round);
 
             // Validate required string arguments with specific error messages

@@ -50,7 +50,10 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | Claude 专用；默认 **关闭**（不读 Cursor 同名 env）。 |
 | **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |
-| **D9 未做项** | `reject_reason` 仍扫全段 signal_text；Codex 无 missing-`fork_context` 推断 — 见 plan v2 defer。 |
+| **D9 / fork 推断** | Cursor 默认 **开启** missing-`fork_context`→`false` 推断（`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，unset=on）。Claude **默认关闭**（`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，**不**读 Cursor 同名 env）。Codex PostTool/Stop 独立审稿证据走 `cursor_review_independent_fork`（**读取 Cursor env**，无单独 `ROUTER_RS_CODEX_*` fork 开关）。 |
+| **Codex stable session** | 默认 **要求** 稳定 session 键（`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` unset=on）；legacy `=0`/`false` 时用单一确定性 fallback 文件名（非 per-invocation 随机键）。Stop 上仅 review 措辞、无 UPS 落盘证据时仍 `CODEX_REVIEW_GATE` block。 |
+| **Codex `stop_hook_active`** | Codex 内部 Stop 重放默认**仍**执行 review/closeout 门控；**仅** `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 时跳过门控（checkpoint 仍 best-effort）。 |
+| **Codex Stop closeout** | 完成宣称 + `ROUTER_RS_CLOSEOUT_ENFORCEMENT`（CI 默认 on）时 Stop `decision:block` + `CLOSEOUT_FOLLOWUP`（`framework_runtime::closeout_stop_followup_for_completion_text`，与 Cursor 同源 token 表）。 |
 | **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 行，但 **不**再以 `continuity_suppressed=review_soft_nag` **单独**阻断 GSD 续跑（硬 `REVIEW_GATE` / `AG_FOLLOWUP` 仍优先）。 |
 
 ## 混用时的实际武装顺序（Cursor Stop）

@@ -58,8 +58,20 @@ cd /path/to/project
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | **Claude 专用**；默认 **关闭**（缺失 `fork_context` 不清 `REVIEW_GATE`）。**勿**与 Cursor 同名 env 混用。 |
 | **Review pending cap** | 达 `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` 时 `subagentStart` 返回 `permission: deny`。 |
 | **Claude review_gate** | `.claude/hook-state/review_gate_*.json` 写入使用 `flock`（与 Codex 对齐）。 |
+| **Codex stable session + Stop review**（2026-05 wave-1） | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` **默认 on**；legacy `=0`。无稳定键时 hook-state 用确定性 fallback（非 per-invocation 随机）。Stop 在 review 已武装且无独立子代理证据时 block，**含**无 hook-state 文件；Stop 载荷 review 措辞 alone 不能清门。 |
+| **Codex wave-2 P1-4..P1-7**（2026-05） | PostTool hook-state 锁失败 **fail-closed**（与 UserPromptSubmit 同形）。`stop_hook_active` 默认仍执行 review/closeout；仅 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 跳过门控。Stop closeout：`closeout_stop_followup_for_completion_text`。Codex fork 推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`。 |
 
 升级后若 continuity 仍报 supervisor 分歧：触发一次 **Cursor Stop** 或 `router-rs framework session-artifact-write`（`focus: false`）。
+
+## Cursor / Codex wave-2 review gate（2026-05）
+
+| 主题 | 行为 |
+|------|------|
+| **主线程 compact 清门（Cursor）** | 无可数 `deep_gate_lanes` + `fork_context=false` 子代理证据时，**不得**仅凭 compact findings 清 `REVIEW_GATE`（默认无 `afterAgentResponse`；须 `subagent_start_count` / pending multiset / phase≥2 后再与 `Stop` tail 配合）。 |
+| **`fork_context` 缺省推断** | Cursor：**默认开**（`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，unset=on）。Codex PostTool/Stop 独立审稿证据**共用**该 env（无 `ROUTER_RS_CODEX_*` fork 开关）。Claude 用 **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**，默认**关**。 |
+| **hook-state fail-closed** | Cursor review 武装路径与 Codex PostTool（wave-2 P1-4..）在锁不可用时 deny / Stop 硬门控。 |
+| **Codex Stop 清门** | **无** Cursor 式 `rg_clear` / `reject_reason` 粘贴清门；须独立审稿证据或文档列出的 bypass env。 |
+| **细则** | [`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)、[`docs/hosts/codex-cli.md`](docs/hosts/codex-cli.md) |
 
 ## Cursor：hooks 减法闭集（2026-05-20）
 

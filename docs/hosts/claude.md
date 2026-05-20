@@ -12,7 +12,12 @@
 | Hooks（**4 事件**，减法闭集） | `.claude/settings.json` → [`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh) |
 | 项目 env | [`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)（模板：[`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)） |
 | Framework 规则 | `.claude/rules/framework.md` |
-| 项目叙事 | `.claude/CLAUDE.md`（可选） |
+| 项目叙事 | `.claude/CLAUDE.md`（可选；Code 项目规则） |
+| Desktop 短指针 | 同路径 **`.claude/CLAUDE.md`**（`install --to claude-desktop` 写入 ≤40 行 MCP 工作流指针，**非** Code 四事件 hook 表） |
+
+### `session_key`（与 Cursor 同类）
+
+`.claude/review_gate_*.json` / `hook_state_*.json` 文件名由 **`session_key`** 分流，解析顺序：**显式会话 id**（`session_id` / `sessionId` 等）→ **`ROUTER_RS_CLAUDE_SESSION_NAMESPACE`**（非空时）→ **`cwd` / workspace 路径字段** → **repo 稳定 token**。同仓多会话在无 id 时可能共用状态；并行分流时设 namespace（语义对齐 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`，见 [`harness_architecture.md`](../harness_architecture.md) 环境变量表）。
 
 ### 默认注册的 hook 事件
 
@@ -45,7 +50,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
 
 ## Claude Desktop (`claude-desktop`)
 
-**传输**：MCP stdio — **无** CLI 级 PreToolUse / SubagentStop hook 表。
+**传输**：MCP stdio — **无** CLI 级 PreToolUse / SubagentStop hook 表。操作步骤与 MCP 工具序见项目 **`.claude/CLAUDE.md`**（[`docs/hosts/claude-desktop.md`](claude-desktop.md)）；**勿**与 Code 的 `.claude/settings.json` 四事件 hook 混读。
 
 | 能力 | 状态 |
 |------|------|

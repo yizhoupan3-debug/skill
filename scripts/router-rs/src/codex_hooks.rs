@@ -271,23 +271,20 @@ fn codex_stable_session_raw(event: &Value) -> Option<String> {
     None
 }
 
+const CODEX_UNSTABLE_SESSION_KEY_RAW: &str = "unstable:no-stable-session-id";
+
 fn codex_require_stable_session_key_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY")
+    router_rs_env_enabled_default_true("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY")
 }
 
 fn codex_session_key(event: &Value) -> String {
     let raw = codex_stable_session_raw(event).unwrap_or_else(|| {
         CODEX_SESSION_KEY_FALLBACK_WARN.call_once(|| {
             eprintln!(
-                "[router-rs] codex hook-state: unstable session key (set CODEX_SESSION_ID / CODEX_CONVERSATION_ID or include session_id / sessionId / conversation_id / thread_id in hook payloads); state under .codex/hook-state may not persist across invocations."
+                "[router-rs] codex hook-state: no stable session id (set CODEX_SESSION_ID / CODEX_CONVERSATION_ID or include session_id / sessionId / conversation_id / thread_id in hook payloads). With ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY disabled, hook-state shares a single repo-wide fallback filename — not per-session."
             );
         });
-        let now_ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let nonce = ATOMIC_WRITE_NONCE.fetch_add(1, Ordering::SeqCst);
-        format!("invocation:{}:{now_ns}:{nonce}", std::process::id())
+        CODEX_UNSTABLE_SESSION_KEY_RAW.to_string()
     });
     let mut hasher = Sha256::new();
     hasher.update(raw.as_bytes());
@@ -726,6 +723,26 @@ fn codex_deep_independent_reviewer_evidence(
     )
 }
 
+fn codex_hook_state_persist_block_payload() -> Value {
+    json!({
+        "decision": "block",
+        "reason": "Codex hook state could not be persisted under .codex/hook-state.",
+    })
+}
+
+fn codex_stop_hook_active_replay(event: &Value) -> bool {
+    event
+        .get("stop_hook_active")
+        .or(event.get("stopHookActive"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// Codex-internal Stop replays (`stop_hook_active`): skip gate enforcement only when explicitly opted in.
+fn codex_stop_hook_active_bypass_enabled() -> bool {
+    router_rs_env_enabled_default_false("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS")
+}
+
 fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
     let mut dedup = HashSet::new();
     let mut unique = Vec::new();
@@ -777,10 +794,7 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         Ok((Some(next), ()))
     });
     if write_result.is_err() {
-        return Some(json!({
-            "decision": "block",
-            "reason": "Codex hook state could not be persisted under .codex/hook-state.",
-        }));
+        return Some(codex_hook_state_persist_block_payload());
     }
 
     if !router_rs_operator_inject_globally_enabled() {
@@ -860,23 +874,27 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
     }) {
         Ok(()) => None,
         Err(err) => {
-            eprintln!("[router-rs] codex subagent evidence update skipped (non-fatal): {err}");
-            None
+            eprintln!("[router-rs] codex subagent evidence persist failed (fail-closed): {err}");
+            Some(codex_hook_state_persist_block_payload())
         }
     }
 }
 
 fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
-    if event
-        .get("stop_hook_active")
-        .or(event.get("stopHookActive"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        // Codex-internal stop hook replays: gate enforcement is skipped, but continuity checkpoint
-        // is still best-effort (same non-blocking posture as an unblocked Stop).
+    if codex_stop_hook_active_replay(event) && codex_stop_hook_active_bypass_enabled() {
+        // Codex-internal Stop replays: gate bypass is opt-in; continuity checkpoint stays best-effort.
         try_write_continuity_checkpoint_on_codex_stop(repo_root, event);
         return None;
+    }
+
+    let prompt_text = codex_prompt_text(event);
+    if let Some(msg) =
+        crate::framework_runtime::closeout_stop_followup_for_completion_text(repo_root, &prompt_text)
+    {
+        return Some(json!({
+            "decision": "block",
+            "followup_message": msg
+        }));
     }
 
     match codex_load_state(repo_root, event) {
@@ -899,7 +917,20 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
                 }));
             }
         }
-        Ok(None) => {}
+        Ok(None) => {
+            let prompt = codex_prompt_text(event);
+            let stop_facts = ReviewGateFacts::from_prompt(&prompt);
+            if review_gate_blocks_stop(ReviewGateFacts {
+                review_required: stop_facts.review_required,
+                review_override: stop_facts.review_override,
+                independent_reviewer_seen: false,
+            }) {
+                return Some(json!({
+                    "decision": "block",
+                    "followup_message": "router-rs CODEX_REVIEW_GATE incomplete need=independent_context_reviewer_subagent_fork_context_false"
+                }));
+            }
+        }
     }
 
     let reset_result = with_codex_state_lock(repo_root, event, |_loaded| {
@@ -1083,7 +1114,7 @@ Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `Se
 Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
 `SessionStart` injects workspace pointer plus a short continuity digest when `artifacts/current/` is populated, `UserPromptSubmit` injects only trigger-specific context, `PreToolUse` blocks direct edits to generated Codex surfaces, `PostToolUse` records subagent/tool telemetry and appends verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active (disable with `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`), and `Stop` writes an automatic in-progress continuity checkpoint under `artifacts/current/` unless `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0`. Broad/deep review prompts also require an independent read-only reviewer subagent (`fork_context=false`) before Stop can close. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active. Stable keys require `session_id` / `conversation_id` / `thread_id` in hook payloads (snake_case **or** camelCase, e.g. `sessionId`) or `CODEX_SESSION_ID` / `CODEX_CONVERSATION_ID` in the environment; otherwise hook-state may not persist across invocations (router-rs logs a one-time stderr warning per process).\n\n\
-Optional **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`**: when set to `1`/`true`/`yes`/`on`, `UserPromptSubmit`, `PostToolUse`, and `Stop` **block** if no stable identifier is present (`SessionStart` is unaffected).\n\n\
+**`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`** defaults **on** (`unset` = require stable keys). Set `0`/`false`/`off`/`no` for legacy payloads without `session_id` / env fallbacks (`SessionStart` is unaffected). Without a stable id and with strict mode off, hook-state uses one deterministic repo-wide fallback filename (not per-invocation random keys).\n\n\
 Generated hook commands resolve `router-rs` in order: **`ROUTER_RS_BIN`** when set to an executable path, then `scripts/router-rs/target/{release,debug}/router-rs`, then repo `target/{release,debug}/router-rs`, finally `command -v router-rs` (last resort — prefer pinning `ROUTER_RS_BIN` or building into the repo). If the binary is missing, **all** lifecycle hooks fail closed with a JSON `decision:block` line.\n\n\
 Merged `additionalContext` for SessionStart/UserPromptSubmit is capped by UTF-8 **byte** length (not Unicode character count). Tune with `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` or legacy `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` (same semantics; clamped 256–8192; default 640 bytes).\n\n\
 Successful Codex hook processes always print one JSON object line on stdout (including `{}` when there is no hook-specific output).\n\n\
@@ -3132,14 +3163,14 @@ mod tests {
         }
 
         #[test]
-        fn session_key_without_stable_identifier_differs_per_invocation() {
+        fn session_key_without_stable_identifier_is_deterministic() {
             let _g = env_lock();
             std::env::remove_var("CODEX_SESSION_ID");
+            std::env::remove_var("CODEX_CONVERSATION_ID");
             let k1 = super::super::codex_session_key(&json!({}));
             let k2 = super::super::codex_session_key(&json!({}));
-            assert_ne!(k1, k2, "fallback keys must not alias distinct hook calls");
+            assert_eq!(k1, k2, "fallback keys must alias the same hook-state file");
             assert_eq!(k1.len(), 32);
-            assert_eq!(k2.len(), 32);
         }
 
         #[test]
@@ -3378,7 +3409,7 @@ mod tests {
         }
 
         #[test]
-        fn post_tool_use_with_invalid_state_is_non_fatal() {
+        fn post_tool_use_with_invalid_state_blocks_fail_closed() {
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -3397,11 +3428,15 @@ mod tests {
                 "tool_input":{"subagent_type":"explore"}
             });
             let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
-            assert!(out.is_none());
+            assert_eq!(
+                out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str),
+                Some("block"),
+                "invalid hook-state must fail-closed on PostToolUse: {out:?}"
+            );
         }
 
         #[test]
-        fn stop_without_state_does_not_block_when_required() {
+        fn stop_without_state_blocks_when_review_prompt_without_ups_evidence() {
             let repo = fresh_repo();
             let payload = json!({
                 "hook_event_name":"Stop",
@@ -3410,7 +3445,11 @@ mod tests {
                 "prompt":"全面review"
             });
             let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
-            assert!(out.is_none());
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE"), "out={out:?}");
         }
 
         #[test]
@@ -3599,17 +3638,146 @@ mod tests {
         }
 
         #[test]
-        fn stop_hook_active_returns_none() {
+        fn stop_hook_active_bypass_skips_gate_only_when_env_set() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS");
+            std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", "1");
             let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-8-bypass",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
             let payload = json!({
                 "hook_event_name":"Stop",
-                "session_id":"sm-8",
+                "session_id":"sm-8-bypass",
                 "cwd": repo.to_string_lossy().to_string(),
-                "prompt":"全面review",
+                "prompt":"继续",
                 "stop_hook_active": true
             });
             let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
-            assert!(out.is_none());
+            assert!(out.is_none(), "bypass env must skip review gate on replay: {out:?}");
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v),
+                None => std::env::remove_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS"),
+            }
+        }
+
+        #[test]
+        fn stop_hook_active_still_blocks_review_gate_by_default() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS");
+            std::env::remove_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS");
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-8-default",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let payload = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-8-default",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续",
+                "stop_hook_active": true
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(
+                out.as_ref()
+                    .and_then(|v| v.get("decision"))
+                    .and_then(Value::as_str)
+                    == Some("block")
+                    && msg.contains("CODEX_REVIEW_GATE"),
+                "stop_hook_active without bypass must still enforce review: {out:?}"
+            );
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v),
+                None => {}
+            }
+        }
+
+        #[test]
+        fn stop_completion_claim_blocks_with_closeout_followup_when_strict() {
+            let _g = env_lock();
+            let prev = std::env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
+            std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1");
+            let repo = fresh_repo();
+            let tid = "t-codex-closeout";
+            fs::create_dir_all(repo.join("artifacts/current").join(tid)).unwrap();
+            fs::write(
+                repo.join("artifacts/current/active_task.json"),
+                format!(r#"{{"task_id":"{tid}"}}"#),
+            )
+            .unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-closeout",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"all done, shipped"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert_eq!(
+                out.as_ref()
+                    .and_then(|v| v.get("decision"))
+                    .and_then(Value::as_str),
+                Some("block")
+            );
+            assert!(
+                msg.contains("CLOSEOUT_FOLLOWUP") && msg.contains("missing_record"),
+                "expected closeout block on Stop; got {out:?}"
+            );
+            match prev {
+                Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
+                None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+            }
+        }
+
+        #[test]
+        fn post_tool_state_lock_failure_blocks_like_user_prompt_submit() {
+            let repo = fresh_repo();
+            let event = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"lock-pt-block",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let state_path = codex_state_path(&repo, &event);
+            fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+            let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
+            fs::write(&lock_path, "pid=1 ts=1\n").unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o000)).unwrap();
+            }
+            #[cfg(not(unix))]
+            {
+                let guard = acquire_codex_state_lock(&state_path).unwrap();
+                let _hold = guard;
+            }
+            let out = run_codex_review_subagent_gate(&repo, &event).unwrap();
+            assert_eq!(
+                out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str),
+                Some("block"),
+                "PostTool lock failure must fail-closed: {out:?}"
+            );
+            assert_eq!(
+                out.as_ref().and_then(|v| v.get("reason")).and_then(Value::as_str),
+                Some("Codex hook state could not be persisted under .codex/hook-state.")
+            );
         }
 
         #[test]
@@ -3709,13 +3877,14 @@ mod tests {
         }
 
         #[test]
-        fn codex_session_key_fallback_is_invocation_scoped_without_identifiers() {
+        fn codex_session_key_fallback_is_stable_without_identifiers() {
             let _guard = env_lock();
             std::env::remove_var("CODEX_SESSION_ID");
+            std::env::remove_var("CODEX_CONVERSATION_ID");
             let event = json!({});
             let a = codex_session_key(&event);
             let b = codex_session_key(&event);
-            assert_ne!(a, b);
+            assert_eq!(a, b);
             assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
             assert_eq!(a.len(), 32);
         }
@@ -4060,7 +4229,7 @@ mod tests {
         #[test]
         fn strict_stable_session_key_off_allows_userpromptsubmit_without_identifier() {
             let _guard = env_lock();
-            std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
+            std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "0");
             std::env::remove_var("CODEX_SESSION_ID");
             std::env::remove_var("CODEX_CONVERSATION_ID");
             let repo = fresh_repo();

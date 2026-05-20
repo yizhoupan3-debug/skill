@@ -1545,6 +1545,72 @@ fn stop_lock_failure_reports_degraded_followup() {
 }
 
 #[test]
+fn stop_lock_failure_fail_closed_review_gate_when_review_armed() {
+    let _gate = ReviewGateActiveGuard::new();
+    let _guard = ForceHookStateLockFailureGuard::new();
+    let repo = fresh_repo();
+    let payload = event("s15-review-lock", "全面review这个仓库");
+    let lock_path = state_lock_path(&repo, &payload);
+    fs::create_dir_all(lock_path.parent().expect("parent")).expect("mkdir");
+    fs::write(&lock_path, b"locked").expect("seed lock");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let out = dispatch_cursor_hook_event(&repo, "stop", &payload);
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete") && fm.contains("hook_state_lock_unavailable"),
+        "review-armed stop must fail-closed REVIEW_GATE on lock loss; fm={fm}"
+    );
+}
+
+#[test]
+fn subagent_start_lock_failure_denies_when_review_armed() {
+    let _gate = ReviewGateActiveGuard::new();
+    let _guard = ForceHookStateLockFailureGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-sub-lock-deny";
+    let submit = event(sid, "全面review这个仓库");
+    let mut armed = empty_state();
+    armed.review_required = true;
+    armed.phase = 1;
+    if let Some(parent) = state_path(&repo, &submit).parent() {
+        fs::create_dir_all(parent).expect("mkdir hook-state");
+    }
+    fs::write(
+        state_path(&repo, &submit),
+        serde_json::to_string(&armed).expect("serialize"),
+    )
+    .expect("seed review-armed state");
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({ "session_id": sid, "subagent_type": "general-purpose", "fork_context": false }),
+    );
+    assert_eq!(out.get("permission"), Some(&json!("deny")));
+}
+
+#[test]
+fn stop_load_state_invalid_json_fail_closed_review_gate() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-stop-bad-json";
+    let payload = event(sid, "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    fs::write(state_path(&repo, &payload), b"{not json").expect("bad state");
+    let out = dispatch_cursor_hook_event(&repo, "stop", &payload);
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete") && fm.contains("hook_state_read_failed"),
+        "corrupt hook-state must fail-closed; fm={fm}"
+    );
+}
+
+#[test]
 fn stop_lock_failure_still_surfaces_autopilot_drive() {
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _guard = ForceHookStateLockFailureGuard::new();
@@ -1573,7 +1639,10 @@ fn stop_lock_failure_still_surfaces_autopilot_drive() {
     fs::write(&lock_path, b"locked").expect("seed lock");
     let out = dispatch_cursor_hook_event(&repo, "stop", &payload);
     let blob = hook_user_visible_blob(&out);
-    assert!(blob.contains("锁不可用"), "{blob}");
+    assert!(
+        blob.contains("REVIEW_GATE incomplete") && blob.contains("hook_state_lock_unavailable"),
+        "review-armed stop lock loss must hard REVIEW_GATE; blob={blob}"
+    );
     assert!(
         !blob.contains("GSD_GOAL_CONTINUE"),
         "hard lock-failure followup must not merge GSD_GOAL_CONTINUE; blob={blob}"
@@ -3113,7 +3182,7 @@ fn posttool_at_pending_cap_does_not_bump_phase() {
 }
 
 #[test]
-fn main_thread_compact_review_clears_gate_on_stop() {
+fn main_thread_compact_review_does_not_clear_gate_without_subagent() {
     let _legacy = LegacySubtractedEventsGuard::enable();
     let repo = fresh_repo();
     let sid = "s-main-thread-review";
@@ -3136,15 +3205,19 @@ fn main_thread_compact_review_clears_gate_on_stop() {
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        !fm.contains("REVIEW_GATE incomplete"),
-        "main-thread compact findings must clear gate; fm={fm}"
+        fm.contains("REVIEW_GATE incomplete"),
+        "compact-only must not clear gate (P0-4); fm={fm}"
     );
     let state = load_state_for(&repo, sid);
-    assert!(state.phase >= 3);
+    assert!(
+        state.phase < 3,
+        "compact-only must not reach phase 3; phase={}",
+        state.phase
+    );
 }
 
 #[test]
-fn main_thread_compact_review_clears_gate_on_stop_only() {
+fn main_thread_compact_stop_only_does_not_clear_gate_without_subagent() {
     let repo = fresh_repo();
     let sid = "s-main-thread-stop-only";
     let _ = dispatch_cursor_hook_event(
@@ -3165,11 +3238,11 @@ fn main_thread_compact_review_clears_gate_on_stop_only() {
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        !fm.contains("REVIEW_GATE incomplete"),
-        "stop tail compact findings must clear gate without afterAgentResponse; fm={fm}"
+        fm.contains("REVIEW_GATE incomplete"),
+        "stop-only compact must not clear gate without subagent; fm={fm}"
     );
     let state = load_state_for(&repo, sid);
-    assert!(state.phase >= 3);
+    assert!(state.phase < 3, "phase={}", state.phase);
 }
 
 #[test]

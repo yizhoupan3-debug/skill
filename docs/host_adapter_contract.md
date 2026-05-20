@@ -81,7 +81,7 @@
 
 单行指针：五层模型见 [`harness_architecture.md`](harness_architecture.md)；Rust API / CLI 契约见 [`rust_contracts.md`](rust_contracts.md)；跨宿主语言、路由与执行协议见仓库根 [`../AGENTS.md`](../AGENTS.md)。
 
-**闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework host-integration install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；hooks 通过 **`router-rs claude-desktop agent`**，投影安装 **`router-rs framework host-integration install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。两者在 Rust 里共享 host-neutral stdio-agent hook 协议实现，但 host id、投影路径（`.claude/*` / `.claude-desktop/*`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。
+**闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework host-integration install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；门控经 **MCP stdio**（`router-rs claude-desktop agent`），投影安装 **`router-rs framework host-integration install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。**Claude Code** 的 CLI hook 走 **`router-rs claude hook`**（`claude_hooks.rs`）；Desktop **不**复用该 stdio hook 分发路径（无 PreToolUse/Stop 硬拦截表）。两者 host id、投影（Code：`.claude/settings.json`；Desktop：项目 `.claude/CLAUDE.md` 短指针 + `.mcp.json`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。
 
 **单行指针**：跨 Cursor 工作区接入与操作步骤见 [`docs/hosts/cursor.md`](hosts/cursor.md)；仓库级一键接入见根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）。**其它宿主操作手册（≤1 页）**：[`docs/hosts/codex-cli.md`](hosts/codex-cli.md)、[`docs/hosts/claude.md`](hosts/claude.md)。
 
@@ -171,10 +171,10 @@
 | Codex hook 语义 | `scripts/router-rs/src/codex_hooks.rs` |
 | shared host entrypoint sync engine | `scripts/router-rs/src/host_entrypoint_sync.rs` |
 | Codex host entrypoint provider | `scripts/router-rs/src/codex_hooks.rs` |
-| Claude Code / Claude Desktop stdio-agent hook 语义（stdin JSON） | `scripts/router-rs/src/claude_hooks.rs`（共享实现；公开入口为 `router-rs claude hook` / `router-rs claude-desktop agent`） |
+| Claude Code hook 语义（stdin JSON） | `scripts/router-rs/src/claude_hooks.rs` → **`router-rs claude hook`**；Claude Desktop 为 **MCP**（`claude_desktop_hooks.rs` / `router-rs claude-desktop agent`），**不**与 Code 共用 CLI hook 四事件表 |
 | `framework host-integration install`、投影 manifest、入口模板 | `scripts/router-rs/src/host_integration.rs` |
 | CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude`/`claude-desktop` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
-| 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；Claude 侧 `.claude/settings.json`、Claude Desktop 侧 `.claude/settings.json`（由 host integration 写入） |
+| 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；**Claude Code** 侧 `.claude/settings.json`（四事件 hook）；**Claude Desktop** **不**写入 `.claude/settings.json` hook 表（MCP + 项目 `.claude/CLAUDE.md` 指针，见 [`docs/hosts/claude-desktop.md`](hosts/claude-desktop.md)） |
 | 闭集宿主 id 与 `install_tool` / `host_entrypoints` | `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 与 `host_targets.metadata` |
 | `review_gate` 磁盘 loader | `scripts/router-rs/src/registry_loader.rs` |
 | GSD/review 安装文案 | `configs/framework/host_projection_narrative.json` |

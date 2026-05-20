@@ -81,7 +81,8 @@ fn refresh_host_projections_keeps_claude_projection_explicit() {
     assert!(maint.contains("let installable_tools = installable_projection_tools(&fw)?"));
     assert!(maint.contains("verify_installable_projections(&fw, &installable_tools)?"));
     assert!(maint.contains("install claude-code last"));
-    assert!(maint.contains("\"claude\" | \"claude-desktop\" => verify_claude_projection(repo_root)?"));
+    assert!(maint.contains("verify_claude_code_projection"));
+    assert!(maint.contains("verify_claude_desktop_projection"));
     assert!(maint.contains(".claude/rules/framework.md"));
     assert!(maint.contains(".claude/.framework-projection.json"));
     assert!(maint.contains("host_projection: claude-code"));

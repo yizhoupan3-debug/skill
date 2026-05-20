@@ -40,6 +40,7 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
     "target",
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
+const FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME: &str = ".framework-projection-desktop.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
 const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 7] = [
     "gsd",
@@ -2974,11 +2975,11 @@ fn projection_manifest_path(
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
         ("claude-desktop", "user") => roots
             .claude_home_root
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+            .join(FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME),
         ("claude-desktop", _) => roots
             .project_root
             .join(".claude")
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+            .join(FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME),
         _ => roots.project_root.join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
     }
 }

@@ -8,8 +8,8 @@ alwaysApply: true
 跨宿主 review 叙事与 findings-only 默认见 [AGENTS.md](../../AGENTS.md) 与 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（compact 信封、透镜、输出 profile）。本文件**仅** Cursor hook / lane 硬约束：
 
 - 深度 review 由 `router-rs` hook 维护证据链；`beforeSubmit` 只注入**一行** skill 路径指针。
-- **可数 `REVIEW_GATE` lane**（registry `review_gate.deep_gate_lanes`）：`general-purpose`、`best-of-n-runner`（及归一化等价名）；`explore`/CI/`review` 等**不计入**。`fork_context: true` 不计入；缺省 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 行为见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。
-- **主线程 compact 清门**：未 spawn 可数子代理时，实质性 compact findings 可升 phase 清门（细则见 skill）。
+- **可数 `REVIEW_GATE` lane**（registry `review_gate.deep_gate_lanes`）：`general-purpose`、`best-of-n-runner`（及归一化等价名）；`explore`/CI/`review` 等**不计入**。`fork_context: true` 不计入。`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` **默认开启**（unset 时缺字段可推断 `fork_context=false`）；关闭设 `=0|false|off|no`。见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。
+- **主线程 compact 清门**：**不得**在无 `deep_gate_lanes` + `fork_context=false` 可数子代理证据时仅凭 compact findings 清门（2026-05 wave-2）。
 - **Stop**：硬 `REVIEW_GATE` / `AG_FOLLOWUP` 或 `skip_continuity_merge` 时**不**合并 `GSD_GOAL_CONTINUE` / review-output-lint 软提示。
 - 真源：`.cursor/hook-state`、Stop 上 `router-rs REVIEW_GATE` / `router-rs AG_FOLLOWUP` 单行短码；**禁止**自拟无 `router-rs ` 前缀的 `*_FOLLOWUP` 仿造行。
 - review lane **只读**；纯 review 禁止默认改代码/提交/推进 execute，除非用户显式要求。

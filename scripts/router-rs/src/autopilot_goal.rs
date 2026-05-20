@@ -377,6 +377,62 @@ pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str)
     (true, any_ok)
 }
 
+/// True when at least one successful evidence row exists and every successful row is MCP
+/// self-attested (`mcp_record_evidence` without host-bound `tool_call_id`).
+pub fn task_evidence_success_only_self_attested(repo_root: &Path, task_id: &str) -> bool {
+    let artifacts = task_evidence_artifacts_for_task(repo_root, task_id);
+    let mut saw_success = false;
+    let mut saw_non_self_attested_success = false;
+    for entry in artifacts {
+        if !crate::hook_common::evidence_index_entry_implies_success(&entry) {
+            continue;
+        }
+        saw_success = true;
+        if !evidence_row_is_self_attested(&entry) {
+            saw_non_self_attested_success = true;
+        }
+    }
+    saw_success && !saw_non_self_attested_success
+}
+
+fn task_evidence_artifacts_for_task(repo_root: &Path, task_id: &str) -> Vec<Value> {
+    if task_id.trim().is_empty() {
+        return Vec::new();
+    }
+    if crate::path_guard::safe_task_id_component(task_id).is_none() {
+        return Vec::new();
+    }
+    let Ok(goal_path) = goal_state_path_for_task(repo_root, task_id) else {
+        return Vec::new();
+    };
+    let Some(parent) = goal_path.parent() else {
+        return Vec::new();
+    };
+    let path = parent.join(EVIDENCE_INDEX_FILENAME);
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(val) = serde_json::from_str::<Value>(&raw) else {
+        return Vec::new();
+    };
+    val.get("artifacts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn evidence_row_is_self_attested(entry: &Value) -> bool {
+    if entry
+        .get("tool_call_id")
+        .and_then(Value::as_str)
+        .is_some_and(|s| !s.trim().is_empty())
+    {
+        return false;
+    }
+    entry.get("kind").and_then(Value::as_str) == Some("mcp_record_evidence")
+        || entry.get("source").and_then(Value::as_str) == Some("mcp_record_evidence")
+}
+
 pub fn read_goal_state(
     repo_root: &Path,
     task_id_override: Option<&str>,

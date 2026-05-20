@@ -69,7 +69,7 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
      cargo build --release --manifest-path scripts/router-rs/Cargo.toml
    ```
 2. **Launcher** 探测顺序：仓库 `scripts/router-rs/target/release` → `/tmp/skill-cargo-target/release` → debug → `PATH`。可选：`export ROUTER_RS_BIN="$PWD/scripts/router-rs/target/release/router-rs"`。
-3. **项目 env**：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 由 launcher 自动 `source`（默认关 post-tool evidence、同步 `cargo check`、SessionEnd 杀终端）。Claude 对齐模板见 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)。
+3. **项目 env**：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 由 launcher 自动 `source`（本仓 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 减写盘；**router-rs 全局默认 unset=开**，见上表）。另默认关同步 `cargo check`、SessionEnd 杀终端。Claude 对齐模板见 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)。
 4. **主进程索引**：仓库 [`.vscode/settings.json`](../../.vscode/settings.json) 排除 `target/` 等；`rust-analyzer.cargo.targetDir` 指向 `/tmp/skill-cargo-target`。Browser MCP 等在 **Cursor Settings → MCP** 手动关闭（与 hook 正交）。
 
 ## 状态有界 / 内存（hook 子进程）
@@ -94,16 +94,20 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 |------|------|
 | `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` | 关闭 Stop 续跑注入（兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（绑定 `/gsd-execute-phase`） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES=<n>` | **仅显式设置**时，连续 pre-goal 提示达上限后自动 `pre_goal_review_satisfied`；unset/0 不自动放行 |
 | `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 剥 advisory `additional_context`（含 soft-nag detail）；保留 `router-rs ` 硬短码 |
 | `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | hook-state 陈旧清扫天数（见上表） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review pending multiset 上限 |
-| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 关闭 Cursor 缺省 `fork_context`→`false` 推断 |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | **开**（unset 启用）：验证类 PostTool 可向 `EVIDENCE_INDEX` 追加；**仅** `0`/`false`/`off`/`no` 关闭。本仓 [`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 默认 `=0` 减写盘 |
+| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | **开**（unset 启用）：可数深度 lane 在 `fork_context` **缺失**时可推断为 `false`；**仅** `=0`/`false`/`off`/`no` 关闭推断 |
 | `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | **默认 strict**（unset 即禁止仅凭磁盘 GOAL 放行 pre-goal）；legacy 宽松：`0`/`false`/`off`/`no` |
 | `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` | 5 个减法事件未写入 `hooks.json` 时仍跑完整 handler（单测/对照） |
 | `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` | hook-state 写失败时 beforeSubmit 仍放行（应急；默认 fail-closed） |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | SESSION_CALL_TRACKER `per_tool` 键上限 |
 
 Stop 硬门控（`REVIEW_GATE` / `AG_FOLLOWUP` / closeout）与 `GSD_GOAL_CONTINUE` **互斥**；无硬门控时 goal 续跑仍注入 `additional_context`。
+
+**Fail-closed（review 武装路径）**：`subagentStart` / `subagentStop` / `postToolUse`（review armed）在 hook-state 锁不可用时返回 `permission: deny`；Stop 在 hook-state 不可读或 review 场景锁丢失时注入硬 `REVIEW_GATE`（不合并 continuity）。主线程 compact findings alone 不得清门，须有可数深度子代理证据（`subagent_start_count` / pending multiset / phase≥2）后再与 substantive compact 行配合升 phase。
 
 ## 自检
 

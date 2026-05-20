@@ -1190,6 +1190,42 @@ pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<
 }
 
 /// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.
+/// Shared Stop/closeout guard when assistant or user text claims completion (Cursor/Codex parity).
+pub fn closeout_stop_followup_for_completion_text(
+    repo_root: &Path,
+    text: &str,
+) -> Option<String> {
+    if text.trim().is_empty() || !crate::hook_common::contains_completion_claim_token(text) {
+        return None;
+    }
+    let tid = crate::task_state::resolve_task_view(repo_root, None)
+        .task_id
+        .filter(|s| !s.is_empty())?;
+    if !closeout_programmatic_enforcement_enabled() {
+        return None;
+    }
+    let record_path = closeout_record_path_for_task(repo_root, &tid).ok()?;
+    if !record_path.is_file() {
+        return Some(format!(
+            "CLOSEOUT_FOLLOWUP task_id={tid} reason=missing_record path={}\n\
+请在完成态宣称前写入 closeout record 并通过评估。",
+            record_path.display()
+        ));
+    }
+    let eval = evaluate_closeout_record_file_for_task(repo_root, &tid, &record_path).ok()?;
+    if eval
+        .get("closeout_allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    Some(format!(
+        "CLOSEOUT_FOLLOWUP task_id={tid} reason=evaluation_failed path={}",
+        record_path.display()
+    ))
+}
+
 pub fn evaluate_closeout_record_file_for_task(
     repo_root: &Path,
     task_id: &str,

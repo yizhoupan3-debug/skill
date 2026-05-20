@@ -51,6 +51,57 @@ mod desktop_mcp_tests {
     }
 
     #[test]
+    fn closeout_gate_requires_session_summary_file() {
+        let repo = test_repo_dir();
+        let out = crate::claude_desktop_hooks::tool_closeout_gate(&json!({}), &repo)
+            .expect("closeout_gate");
+        assert!(
+            out.contains("ADVISORY") || out.contains("checkpoint: missing"),
+            "without SESSION_SUMMARY must not PASS: {out}"
+        );
+        assert!(!out.starts_with("[Closeout Gate] PASS"));
+    }
+
+    #[test]
+    fn closeout_gate_warns_when_evidence_is_only_self_attested() {
+        let repo = test_repo_dir();
+        let task_id = "test-task";
+        let task_dir = repo.join("artifacts/current").join(task_id);
+        std::fs::create_dir_all(&task_dir).unwrap();
+        std::fs::write(
+            task_dir.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[{"kind":"mcp_record_evidence","source":"mcp_record_evidence","success":true,"command_preview":"cargo test"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            task_dir.join("GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"test"}"#,
+        )
+        .unwrap();
+
+        let out = crate::claude_desktop_hooks::tool_closeout_gate(&json!({}), &repo)
+            .expect("closeout_gate");
+        assert!(
+            out.contains("WARN: evidence: only self-attested"),
+            "expected self-attest warning in: {out}"
+        );
+
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn tools_list_append_round_round_is_integer_schema() {
+        let response = crate::claude_desktop_hooks::handle_tools_list(Some(json!(1)));
+        let tools = response["result"]["tools"].as_array().expect("tools");
+        let rfv = tools
+            .iter()
+            .find(|t| t["name"] == "rfv_loop_manage")
+            .expect("rfv_loop_manage");
+        let round = &rfv["inputSchema"]["properties"]["round"];
+        assert_eq!(round["type"], "integer");
+    }
+
+    #[test]
     fn evidence_records_exit_code_correctly() {
         let repo = test_repo_dir();
 

@@ -128,17 +128,12 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     )?;
 
     let installable_tools = installable_projection_tools(&fw)?;
-    // claude-desktop shares `.claude/.framework-projection.json` with claude-code;
-    // install claude-code last so verify_claude_projection sees the Code manifest.
-    let mut projection_tools: Vec<String> = installable_tools
+    // claude-code and claude-desktop use separate projection manifests under `.claude/`.
+    let projection_tools: Vec<String> = installable_tools
         .iter()
         .filter(|tool| tool.as_str() != "codex")
         .cloned()
         .collect();
-    if let Some(idx) = projection_tools.iter().position(|t| t == "claude") {
-        let claude = projection_tools.remove(idx);
-        projection_tools.push(claude);
-    }
     for tool in &projection_tools {
         let scope = if tool == "cursor" { "user" } else { "project" };
         run_router(
@@ -187,7 +182,8 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
         match tool.as_str() {
             "codex" => verify_codex_hooks(repo_root.to_path_buf())?,
             "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
-            "claude" | "claude-desktop" => verify_claude_projection(repo_root)?,
+            "claude" => verify_claude_code_projection(repo_root)?,
+            "claude-desktop" => verify_claude_desktop_projection(repo_root)?,
             other => {
                 return Err(format!(
                     "installable projection tool `{other}` has no maint verifier"
@@ -287,32 +283,49 @@ fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
     let empty_target = empty_ws.join("no-router-rs-target");
     fs::create_dir_all(&empty_target).map_err(|e| e.to_string())?;
 
-    let output = Command::new("/bin/bash")
-        .arg(&launcher)
-        .arg("BeforeSubmitPrompt")
-        .env_remove("ROUTER_RS_BIN")
-        .env("CARGO_TARGET_DIR", &empty_target)
-        .env("PATH", "/usr/bin:/bin")
-        .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
-        .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
-        .output()
-        .map_err(|e| e.to_string())?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if output.status.code() != Some(2) {
-        return Err(format!(
-            "verify_cursor_hooks: launcher missing binary must exit 2 for BeforeSubmitPrompt (got {:?}); stdout={stdout}",
-            output.status.code()
-        ));
-    }
-    if !stdout.contains("\"continue\":false") {
-        return Err(format!(
-            "verify_cursor_hooks: BeforeSubmitPrompt fail-closed must emit continue:false; stdout={stdout}"
-        ));
+    const CRITICAL_EVENTS: &[(&str, &str)] = &[
+        ("BeforeSubmitPrompt", "continue:false"),
+        ("PostToolUse", "continue:false"),
+        ("SubagentStart", "permission:deny"),
+        ("SubagentStop", "continue:false"),
+        ("Stop", "continue:false"),
+    ];
+    for (event, contract) in CRITICAL_EVENTS {
+        let output = Command::new("/bin/bash")
+            .arg(&launcher)
+            .arg(event)
+            .env_remove("ROUTER_RS_BIN")
+            .env("CARGO_TARGET_DIR", &empty_target)
+            .env("PATH", "/usr/bin:/bin")
+            .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
+            .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
+            .output()
+            .map_err(|e| e.to_string())?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if output.status.code() != Some(2) {
+            return Err(format!(
+                "verify_cursor_hooks: launcher missing binary must exit 2 for {event} (got {:?}); stdout={stdout}",
+                output.status.code()
+            ));
+        }
+        match *contract {
+            "continue:false" if !stdout.contains("\"continue\":false") => {
+                return Err(format!(
+                    "verify_cursor_hooks: {event} fail-closed must emit continue:false; stdout={stdout}"
+                ));
+            }
+            "permission:deny" if !stdout.contains("\"permission\":\"deny\"") => {
+                return Err(format!(
+                    "verify_cursor_hooks: {event} fail-closed must emit permission deny; stdout={stdout}"
+                ));
+            }
+            _ => {}
+        }
     }
     Ok(())
 }
 
-fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
+fn verify_claude_code_projection(repo_root: &Path) -> Result<(), String> {
     let rule = repo_root.join(".claude/rules/framework.md");
     let settings = repo_root.join(".claude/settings.json");
     let manifest = repo_root.join(".claude/.framework-projection.json");
@@ -357,7 +370,47 @@ fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
             ));
         }
     }
-    eprintln!("verify_claude_projection: ok");
+    eprintln!("verify_claude_code_projection: ok");
+    Ok(())
+}
+
+fn verify_claude_desktop_projection(repo_root: &Path) -> Result<(), String> {
+    let mcp = repo_root.join(".claude/mcp.json");
+    let claude_md = repo_root.join(".claude/CLAUDE.md");
+    let manifest = repo_root
+        .join(".claude")
+        .join(".framework-projection-desktop.json");
+    for path in [&mcp, &claude_md, &manifest] {
+        if !path.is_file() {
+            return Err(format!(
+                "verify_claude_desktop_projection: missing {}",
+                path.display()
+            ));
+        }
+    }
+    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
+    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
+    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("claude-desktop")
+    {
+        return Err(
+            "verify_claude_desktop_projection: manifest must declare claude-desktop".to_string(),
+        );
+    }
+    let mcp_text = fs::read_to_string(&mcp).map_err(|e| e.to_string())?;
+    if !mcp_text.contains("router-rs-framework") {
+        return Err(
+            "verify_claude_desktop_projection: .claude/mcp.json must register router-rs-framework"
+                .to_string(),
+        );
+    }
+    let md_text = fs::read_to_string(&claude_md).map_err(|e| e.to_string())?;
+    if !md_text.contains("claude-desktop") {
+        return Err(
+            "verify_claude_desktop_projection: .claude/CLAUDE.md must reference claude-desktop"
+                .to_string(),
+        );
+    }
+    eprintln!("verify_claude_desktop_projection: ok");
     Ok(())
 }
 

@@ -1194,6 +1194,37 @@ fn hook_lock_unavailable_notice_json() -> Value {
     })
 }
 
+fn hook_state_lock_fail_closed_for_review_json() -> Value {
+    json!({
+        "permission": "deny",
+        "user_message": "router-rs：`.cursor/hook-state` 锁不可用，review 证据路径已 fail-closed。请检查目录权限或争用后重试。"
+    })
+}
+
+/// Best-effort read without holding the session lock (TOCTOU-safe only for fail-closed branches).
+fn peek_review_hard_armed(repo_root: &Path, event: &Value) -> bool {
+    match load_state(repo_root, event) {
+        Ok(Some(ref state)) => review_hard_armed(state),
+        _ => false,
+    }
+}
+
+fn hook_state_lock_failure_output(repo_root: &Path, event: &Value) -> Value {
+    if peek_review_hard_armed(repo_root, event) {
+        hook_state_lock_fail_closed_for_review_json()
+    } else {
+        hook_lock_unavailable_notice_json()
+    }
+}
+
+/// Wave-2 / P0-4: countable deep-gate subagent evidence before any main-thread compact may clear REVIEW_GATE.
+fn countable_review_subagent_evidence_seen(state: &ReviewGateState) -> bool {
+    state.subagent_start_count > 0
+        || state.subagent_stop_count > 0
+        || !state.review_subagent_pending_cycle_keys.is_empty()
+        || state.phase >= 2
+}
+
 /// GSD execution-zone commands arm goal continuity gates (`/gsd-execute-phase|verify-work|ship`).
 fn is_framework_goal_drive_entry_prompt(prompt: &str, signal_text: &str) -> bool {
     let _ = signal_text;
@@ -1830,7 +1861,7 @@ fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
     review_hard_armed(state) && !review_subagent_evidence_satisfied(state)
 }
 
-/// 主线程交付 compact findings、且未 spawn 可数深度子代理时，升 phase 3 清 REVIEW_GATE。
+/// 主线程 compact findings **不得**在无可数深度子代理证据时单独升 phase 3 清 REVIEW_GATE（P0-4 / wave-2）。
 fn maybe_bump_review_phase_for_main_thread_compact_findings(
     state: &mut ReviewGateState,
     assistant_tail: &str,
@@ -1838,7 +1869,7 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
     if !review_hard_armed(state) || state.phase >= 3 {
         return false;
     }
-    if !state.review_subagent_pending_cycle_keys.is_empty() || state.subagent_start_count > 0 {
+    if !countable_review_subagent_evidence_seen(state) {
         return false;
     }
     if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
@@ -1930,36 +1961,18 @@ fn gsd_pre_goal_followup_message() -> String {
         .to_string()
 }
 
-/// 连续 pre-goal 提示上限：beforeSubmit 每轮在仍缺 pre-goal 时累加计数，达到后自动 `pre_goal_review_satisfied=true`，避免卡死。
-/// - **未设置**环境变量：默认 **8**（第八轮仍卡则放行）。
-/// - `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES=0` / `false` / `off` / `no`：**关闭**自动放行（严格）。
-/// - 正整数：自定义上限。
+/// 连续 pre-goal 提示上限（**仅**显式 env 启用）：beforeSubmit 每轮在仍缺 pre-goal 时累加计数，达到后自动 `pre_goal_review_satisfied=true`。
+/// - **未设置** / `0` / `false` / `off` / `no`：**不**自动放行（默认严格，P1-1）。
+/// - 正整数：自定义上限（运维 opt-in）。
 fn cursor_autopilot_pre_goal_max_nudges_cap() -> Option<u32> {
-    #[cfg(test)]
-    {
-        // 单测未显式设变量时关闭自动放行，避免并行用例间状态与计数依赖。
-        let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES") else {
-            return None;
-        };
-        let t = raw.trim().to_ascii_lowercase();
-        if matches!(t.as_str(), "" | "0" | "false" | "off" | "no") {
-            return None;
-        }
-        t.parse::<u32>().ok().filter(|v| *v >= 1)
+    let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES") else {
+        return None;
+    };
+    let t = raw.trim().to_ascii_lowercase();
+    if matches!(t.as_str(), "" | "0" | "false" | "off" | "no") {
+        return None;
     }
-    #[cfg(not(test))]
-    {
-        match std::env::var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES") {
-            Err(_) => Some(8),
-            Ok(raw) => {
-                let t = raw.trim().to_ascii_lowercase();
-                if matches!(t.as_str(), "" | "0" | "false" | "off" | "no") {
-                    return None;
-                }
-                t.parse::<u32>().ok().filter(|v| *v >= 1).or(Some(8))
-            }
-        }
-    }
+    t.parse::<u32>().ok().filter(|v| *v >= 1)
 }
 
 fn maybe_autopilot_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Option<&'static str> {
@@ -2418,7 +2431,7 @@ fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
     )
 }
 
-fn lock_failure_followup_for_stop(event: &Value) -> String {
+fn stop_lock_failure_is_fail_closed(event: &Value) -> bool {
     let text = prompt_text(event);
     let response_text = agent_response_text(event);
     let signal_text = hook_event_signal_text(event, &text, &response_text);
@@ -2428,10 +2441,19 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let overridden = has_override(&text) || saw_reject_reason(&signal_text, &text);
+    (review_arms || delegation || goal_drive_entrypoint) && !overridden
+}
 
-    let strong_constraint = (review_arms || delegation || goal_drive_entrypoint) && !overridden;
-    if strong_constraint {
-        return "router-rs：hook-state 锁不可用，本轮须严格 review/委托/autopilot 证据。合并前请修复锁/权限并重试，或 subagent/拒因。".to_string();
+fn review_gate_stop_lock_unavailable_line() -> String {
+    format!(
+        "router-rs REVIEW_GATE incomplete phase=0 {} hook_state_lock_unavailable {}",
+        REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+    )
+}
+
+fn lock_failure_followup_for_stop(event: &Value) -> String {
+    if stop_lock_failure_is_fail_closed(event) {
+        return review_gate_stop_lock_unavailable_line();
     }
     state_lock_degraded_followup().to_string()
 }
@@ -2662,7 +2684,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
 fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
-        return hook_lock_unavailable_notice_json();
+        return hook_state_lock_failure_output(repo_root, event);
     }
     let mut state = load_state(repo_root, event)
         .ok()
@@ -2735,7 +2757,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
 fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
-        return hook_lock_unavailable_notice_json();
+        return hook_state_lock_failure_output(repo_root, event);
     }
     let mut state = load_state(repo_root, event)
         .ok()
@@ -2796,7 +2818,13 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
 
 /// PostToolUse fast-path: skip tracker, hook-state, evidence, and rust-lint for tools that
 /// cannot affect review multiset / shell ledger / pre-goal (see plan: Cursor memory P0).
-fn post_tool_use_needs_work(repo_root: &Path, event: &Value, name: &str) -> bool {
+/// When `state` is `Some`, caller holds the session lock (P1-3: no TOCTOU on review armed).
+fn post_tool_use_needs_work(
+    repo_root: &Path,
+    event: &Value,
+    name: &str,
+    state: Option<&ReviewGateState>,
+) -> bool {
     if tool_name_matches_subagent_lane(name) {
         return true;
     }
@@ -2813,8 +2841,8 @@ fn post_tool_use_needs_work(repo_root: &Path, event: &Value, name: &str) -> bool
             }
         }
     }
-    if let Ok(Some(state)) = load_state(repo_root, event) {
-        if review_hard_armed(&state) {
+    if let Some(state) = state {
+        if review_hard_armed(state) {
             return true;
         }
     }
@@ -2823,7 +2851,28 @@ fn post_tool_use_needs_work(repo_root: &Path, event: &Value, name: &str) -> bool
 
 fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let name = normalize_tool_name(Some(&tool_name_of(event)));
-    if !post_tool_use_needs_work(repo_root, event, &name) {
+    let review_armed_peek = peek_review_hard_armed(repo_root, event);
+
+    if review_armed_peek {
+        let mut lock = acquire_state_lock(repo_root, event);
+        if lock.is_none() {
+            return hook_state_lock_fail_closed_for_review_json();
+        }
+        let state = load_state(repo_root, event)
+            .ok()
+            .flatten()
+            .unwrap_or_else(empty_state);
+        if !post_tool_use_needs_work(repo_root, event, &name, Some(&state)) {
+            release_state_lock(&mut lock);
+            return json!({});
+        }
+        if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name) {
+            eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
+        }
+        return handle_post_tool_use_with_lock(repo_root, event, &name, &mut lock, state);
+    }
+
+    if !post_tool_use_needs_work(repo_root, event, &name, None) {
         return json!({});
     }
     if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name) {
@@ -2833,10 +2882,20 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     if lock.is_none() {
         return hook_lock_unavailable_notice_json();
     }
-    let mut state = load_state(repo_root, event)
+    let state = load_state(repo_root, event)
         .ok()
         .flatten()
         .unwrap_or_else(empty_state);
+    handle_post_tool_use_with_lock(repo_root, event, &name, &mut lock, state)
+}
+
+fn handle_post_tool_use_with_lock(
+    repo_root: &Path,
+    event: &Value,
+    name: &str,
+    lock: &mut Option<LockGuard>,
+    mut state: ReviewGateState,
+) -> Value {
     let armed = review_hard_armed(&state);
     let tool_input = tool_input_of(event);
     let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
@@ -2862,7 +2921,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
         if push_review_pending_cycle_key(&mut state, start_key, true) {
             let was_below_2 = state.phase < 2;
             bump_phase(&mut state, 2);
-            state.last_subagent_tool = Some(name.clone());
+            state.last_subagent_tool = Some(name.to_string());
             if !sub_type.is_empty() || !agent_type.is_empty() {
                 state.last_subagent_type = Some(if !sub_type.is_empty() {
                     sub_type
@@ -2884,7 +2943,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     if mutated {
         let _ = save_state(repo_root, event, &mut state);
     }
-    release_state_lock(&mut lock);
+    release_state_lock(lock);
 
     // 与 Codex PostTool 对齐：终端执行验证类命令时写入 EVIDENCE_INDEX（连续性就绪且未关闭 POSTTOOL_EVIDENCE）。
     let syn = crate::hook_posttool_normalize::synthetic_post_tool_evidence_shape(event);
@@ -3135,9 +3194,17 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     }
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
-        let msg = lock_failure_followup_for_stop(event);
-        let mut out = json!({ "followup_message": msg });
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame, true);
+        let skip_continuity_merge = true;
+        let mut out = if stop_lock_failure_is_fail_closed(event) {
+            json!({
+                "followup_message": review_gate_stop_lock_unavailable_line()
+            })
+        } else {
+            json!({
+                "followup_message": lock_failure_followup_for_stop(event)
+            })
+        };
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame, skip_continuity_merge);
         return out;
     }
     let loaded = load_state(repo_root, event);
@@ -3161,7 +3228,8 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         Ok(None) => (json!({}), false),
         Err(io_error) => {
             let msg = format!(
-                "router-rs：hook-state 不可读（{io_error}），门控降级。请检查权限与 JSON。"
+                "router-rs REVIEW_GATE incomplete phase=0 {} hook_state_read_failed={io_error} {}",
+                REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
             );
             (json!({ "followup_message": msg }), true)
         }

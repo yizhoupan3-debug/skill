@@ -2183,3 +2183,154 @@ fn normalize_macos_private_var(path: &str) -> String {
         path.to_string()
     }
 }
+
+#[test]
+fn claude_desktop_and_code_use_separate_projection_manifests() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install_desktop = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(install_desktop["success"], true);
+
+    let install_code = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude",
+    ]);
+    assert_eq!(install_code["success"], true);
+
+    let code_manifest = read_json(&repo_root.join(".claude/.framework-projection.json"));
+    let desktop_manifest =
+        read_json(&repo_root.join(".claude/.framework-projection-desktop.json"));
+    assert_eq!(
+        code_manifest["host_projection"].as_str(),
+        Some("claude-code")
+    );
+    assert_eq!(
+        desktop_manifest["host_projection"].as_str(),
+        Some("claude-desktop")
+    );
+    assert!(repo_root.join(".claude/mcp.json").exists());
+}
+
+#[test]
+fn install_and_remove_claude_desktop_projection() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(install["success"], true);
+    assert_eq!(install["results"]["claude-desktop"]["status"], "installed");
+    assert!(repo_root.join(".claude/mcp.json").exists());
+    assert!(repo_root.join(".claude/CLAUDE.md").exists());
+    assert!(repo_root
+        .join(".claude/.framework-projection-desktop.json")
+        .exists());
+
+    let removed = host_integration_json(&[
+        "remove",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(removed["success"], true);
+    assert_eq!(removed["results"]["claude-desktop"]["status"], "removed");
+    assert!(!repo_root
+        .join(".claude/.framework-projection-desktop.json")
+        .exists());
+    assert!(!repo_root.join(".claude/mcp.json").exists());
+    assert!(!repo_root.join(".claude/CLAUDE.md").exists());
+}
+
+#[test]
+fn remove_claude_desktop_preserves_claude_code_manifest() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    for tool in ["claude-desktop", "claude"] {
+        let result = host_integration_json(&[
+            "install",
+            "--framework-root",
+            repo_root.to_str().unwrap(),
+            "--project-root",
+            repo_root.to_str().unwrap(),
+            "--home",
+            home.to_str().unwrap(),
+            "--scope",
+            "project",
+            "--to",
+            tool,
+        ]);
+        assert_eq!(result["success"], true);
+    }
+
+    let removed = host_integration_json(&[
+        "remove",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(removed["results"]["claude-desktop"]["status"], "removed");
+    assert!(!repo_root
+        .join(".claude/.framework-projection-desktop.json")
+        .exists());
+    assert!(repo_root.join(".claude/.framework-projection.json").exists());
+    let code_manifest = read_json(&repo_root.join(".claude/.framework-projection.json"));
+    assert_eq!(
+        code_manifest["host_projection"].as_str(),
+        Some("claude-code")
+    );
+    assert!(repo_root.join(".claude/settings.json").exists());
+}
