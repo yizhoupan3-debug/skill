@@ -54,8 +54,14 @@ pub(crate) fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
     // 纯 ML/CS 技术讨论过滤（不含论文关键词时）
     let tech_ml_noise = {
         let tech_tokens = [
-            "training", "model architecture", "loss function", "hyperparameter",
-            "embedding", "backpropagation", "dataset", "inference",
+            "training",
+            "model architecture",
+            "loss function",
+            "hyperparameter",
+            "embedding",
+            "backpropagation",
+            "dataset",
+            "inference",
         ];
         tech_tokens.iter().filter(|k| lower.contains(*k)).count() >= 2
             && !has_paper_signal
@@ -109,8 +115,14 @@ pub(crate) fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
 
     // Anti-signal: ML/CS 行话在无强信号时降权，减少纯技术讨论误触发
     let anti_signals = [
-        "transformer", "attention", "convolution", "normalization",
-        "optimizer", "gradient descent", "batch size", "learning rate",
+        "transformer",
+        "attention",
+        "convolution",
+        "normalization",
+        "optimizer",
+        "gradient descent",
+        "batch size",
+        "learning rate",
     ];
     let anti_hits = anti_signals.iter().filter(|k| lower.contains(*k)).count();
     if anti_hits >= 2 && !has_paper_signal && !text.contains("审稿") {

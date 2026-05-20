@@ -55,4 +55,4 @@
 
 ## History
 
-历史迁移、旧 alias 和旧 profile inventory 只放 `docs/history/`，不进入 steady-state contract。
+历史迁移、旧 alias 和旧 profile inventory 只放 `MIGRATION.md` / git 历史，不进入 steady-state contract。

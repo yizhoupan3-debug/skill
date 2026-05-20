@@ -7,9 +7,8 @@
 Journal-specific matplotlib styles. Install and use:
 
 ```bash
-pip install SciencePlots
-# or
-uv pip install SciencePlots
+uv add --dev SciencePlots
+uv sync --all-groups
 ```
 
 ```python
@@ -40,7 +39,7 @@ Produces Illustrator-editable SVG exports. Best when the figure needs
 post-generation touch-up in a vector editor.
 
 ```bash
-pip install LovelyPlots
+uv add --dev LovelyPlots && uv sync --all-groups
 ```
 
 ```python
@@ -58,7 +57,7 @@ fig.savefig('figure.svg', format='svg')
 Alternative scientific style with clean defaults.
 
 ```bash
-pip install ExtensysPlots
+uv add --dev ExtensysPlots && uv sync --all-groups
 ```
 
 ```python
@@ -111,7 +110,7 @@ Use the `colorspacious` package or online simulators (e.g., Coblis) to check
 how your figure looks under deuteranopia, protanopia, and tritanopia.
 
 ```bash
-pip install colorspacious
+uv add --dev colorspacious && uv sync --all-groups
 ```
 
 ---

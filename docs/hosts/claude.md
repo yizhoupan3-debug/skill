@@ -1,6 +1,7 @@
 # Claude Code / Claude Desktop 宿主操作手册
 
-**权威能力矩阵**：`configs/framework/RUNTIME_REGISTRY.json` → `host_projections.claude-code` / `claude-desktop`
+**权威能力矩阵**：`configs/framework/RUNTIME_REGISTRY.json` → `host_projections.claude-code` / `claude-desktop`  
+**接入契约**：[host_adapter_contract.md](../host_adapter_contract.md)
 
 ## Claude Code (`claude-code`)
 
@@ -8,16 +9,39 @@
 
 | 组件 | 路径 |
 |------|------|
-| Hooks | `.claude/settings.json` → `router-rs claude hook` |
+| Hooks（**4 事件**，减法闭集） | `.claude/settings.json` → [`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh) |
+| 项目 env | [`.claude/router-rs-hook.env`](../.claude/router-rs-hook.env)（模板：[`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)） |
 | Framework 规则 | `.claude/rules/framework.md` |
 | 项目叙事 | `.claude/CLAUDE.md`（可选） |
 
-**能力**：`PreToolUse` **可 deny**；`Stop` 每轮一次；REVIEW_GATE 可数 reviewer lane 见 registry **`review_gate.claude_reviewer_lanes`**（含 `review`/`reviewer`/`critic`/`code-review`；Cursor/Codex 仅 `deep_gate_lanes`）。无 Cursor 式 subagentStart/Stop multiset。
+### 默认注册的 hook 事件
+
+| 事件 | 作用 |
+|------|------|
+| `PreToolUse` | 可 **deny**；守卫 framework/settings 路径 |
+| `UserPromptSubmit` | Review 武装 / 提示（对齐 Cursor `beforeSubmitPrompt` 语义） |
+| `PostToolUse` | settings/framework 变更提示；reviewer 证据（无 Cursor 式每工具 tracker 风暴） |
+| `Stop` | `REVIEW_GATE` / settings 校验 / touch-state 清门 |
+
+**与 Cursor 的差异**：Claude **无** `subagentStart`/`subagentStop` multiset、无 `sessionStart`/`sessionEnd`、无 shell 生命周期 hook、无 `afterFileEdit` rustfmt。深度审稿用 registry **`review_gate.claude_reviewer_lanes`**（含 `review`/`reviewer`/`critic`/`code-review`；Cursor/Codex 仅 `deep_gate_lanes`）。
+
+### 内存 / release（与 Cursor 对齐）
+
+1. **构建 release**（优先命中 ~8MB 而非 debug ~37MB）：
+   ```bash
+   CARGO_TARGET_DIR="$PWD/scripts/router-rs/target" \
+     cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+   ```
+2. **Launcher** 探测：仓库 `scripts/router-rs/target/release` → `/tmp/skill-cargo-target/release` → debug → `PATH`（须支持 `claude hook --help`）。
+3. **项目 env**：`settings.json` 包装命令在 exec 前 `source` `.claude/router-rs-hook.env`。默认 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（减 PostTool 写盘）。Cursor 专用变量（`ROUTER_RS_CURSOR_*`、`ROUTER_RS_CURSOR_KILL_STALE_TERMINALS`）**不**适用于 Claude。
+4. 可选：`export ROUTER_RS_BIN="$PWD/scripts/router-rs/target/release/router-rs"`。
 
 ```bash
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
   framework host-integration install --to claude --scope project
 ```
+
+安装会合并 **上述 4 事件** 进 `.claude/settings.json`；**不会**覆盖已存在的 `.claude/router-rs-hook.env`。
 
 ## Claude Desktop (`claude-desktop`)
 
@@ -40,4 +64,10 @@ Desktop 用户须在 MCP 侧 **手动** `record_evidence` / `session_checkpoint`
 
 ```bash
 cargo test --manifest-path scripts/router-rs/Cargo.toml claude
+cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
 ```
+
+## Unsupported（勿假看齐）
+
+- Cursor 式 `subagentStart`/`subagentStop` open 计数与 multiset（Claude 用 Stop + 磁盘 `review_gate_*.json`）
+- Cursor `GSD_GOAL_CONTINUE` Stop 注入形态（Claude 用 MCP / 聊天续跑，见 Desktop 手册）

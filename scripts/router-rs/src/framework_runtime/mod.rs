@@ -37,10 +37,7 @@ pub use alias::build_framework_alias_envelope;
 #[allow(unused_imports)]
 pub use constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 // Retained for external callers.
-pub use codex_hooks_duplicate::{
-    collect_codex_hooks_duplicate_warnings, count_codex_hook_router_rs_commands,
-    eprint_codex_hooks_duplicate_warnings,
-};
+pub use codex_hooks_duplicate::eprint_codex_hooks_duplicate_warnings;
 #[allow(unused_imports)]
 pub use constants::FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION;
 pub use constants::{

@@ -2,6 +2,9 @@
 
 mod atomic_write;
 mod autopilot_goal;
+pub mod goal_drive {
+    pub use crate::autopilot_goal::*;
+}
 mod background_state;
 mod browser_mcp;
 mod claude_desktop_hooks;
@@ -21,26 +24,29 @@ mod framework_skills;
 mod harness_context_signals;
 mod harness_contract;
 mod harness_operator_nudges;
+mod hook_gate_core;
 mod hook_common;
-mod hook_timing;
 mod hook_observation_rules;
 mod hook_policy;
 mod hook_posttool_normalize;
+mod hook_timing;
 mod host_entrypoint_sync;
 mod host_integration;
 mod lane_normalize;
 mod paper_adversarial_hook;
 mod path_guard;
+mod read_bounded;
+mod registry_loader;
 mod registry_review_gate;
 mod review_gate;
 mod review_gate_engine;
+mod review_output_lint;
 mod review_routing_signals;
 mod rfv_loop;
 mod route;
 mod router_env_flags;
 mod router_rs_observation;
 mod router_self;
-mod review_output_lint;
 mod runtime_envelope_ids;
 mod runtime_storage;
 mod session_call_tracker;

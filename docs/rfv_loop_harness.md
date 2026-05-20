@@ -19,7 +19,8 @@
   - `operation: append_round` — 每轮结束后 supervisor 写入：`round`、`review_summary`、`external_research_summary`（可空）、可选结构化 **`external_research`**（校验见 [references/rfv-loop/external-research-harness.md](references/rfv-loop/external-research-harness.md)）、`fix_summary`、`verify_result`（`PASS|FAIL|SKIPPED`）、`supervisor_decision`（`continue|close|block`）、`reason`
   - `operation: status`
 - `max_rounds` 在 Rust 侧有 **硬上限 1000**（防止误填天文数字）；超过会截断并在响应中带 `warning`。
-- **Cursor**：若 `.cursor/hooks.json` 接入 `router-rs cursor hook`，且 **`RFV_LOOP_STATE.json`** 中 **`loop_status=active`**，Stop / beforeSubmit 可合并 **RFV_LOOP_CONTINUE** 跟进；preCompact 可附带一行 RFV 摘要。关闭注入：`ROUTER_RS_RFV_LOOP_HOOK=0`。
+- **Cursor**：若 [`.cursor/hooks.json`](../.cursor/hooks.json) 接入 `router-rs cursor hook`（默认 7 事件），且 **`RFV_LOOP_STATE.json`** 中 **`loop_status=active`**，**`Stop` / `beforeSubmitPrompt`** 可合并 **RFV_LOOP_CONTINUE** 跟进。本仓**不再**默认注册 `preCompact`；RFV 一行摘要仅在实现仍收到该事件时生效（恢复见 [`MIGRATION.md`](../MIGRATION.md)）。关闭注入：`ROUTER_RS_RFV_LOOP_HOOK=0`。
+- **Claude Code**：`Stop` / `UserPromptSubmit` 在 `loop_status=active` 时同样可合并 RFV 续跑提示（无 Cursor `preCompact` 等价事件）。
 
 **GOAL（`GOAL_STATE.json` / `framework_autopilot_goal`）与 RFV 账本的关系**：
 

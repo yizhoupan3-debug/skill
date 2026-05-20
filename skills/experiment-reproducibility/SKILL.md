@@ -73,6 +73,7 @@ This skill owns **experiment reproducibility management** for research.
 - Inner-loop research automation should route deep reproducibility requirements here
 - Works with performance work when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs
 - Works with `$mac-memory-management` when reproducibility must account for Mac memory constraints and fallback behavior
+- For Python install/lock/PATH governance (uv-only, no pip), use `$python-env-management` first; this skill owns seeds, data, and experiment records atop a pinned `uv.lock`
 - When invoked as a **gate-chain lane owner** (G2 / G5 / G14 reproducibility
   checks under the manuscript protocol), follow the lane contract in
   [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md); produce only the
@@ -96,8 +97,8 @@ When this skill is co-invoked with paper review or writing lanes:
 | Tool | When to use | Command |
 |------|-----------|---------|
 | **conda** | Complex ML environments | `conda env export > environment.yml` |
-| **pip** | Python-only projects | `pip freeze > requirements.txt` |
-| **uv** | Modern Python projects | `uv pip compile pyproject.toml` |
+| **pip** | Legacy (discouraged) | Prefer `$python-env-management`: project `uv.lock` + `uv export` for snapshots |
+| **uv** | Modern Python projects | `uv lock` / `uv sync`; snapshot via committed `uv.lock` or `uv export` |
 | **Docker** | Full system reproducibility | `Dockerfile` with pinned versions |
 | **Nix** | Absolute reproducibility | `flake.nix` with locked inputs |
 

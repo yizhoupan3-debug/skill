@@ -271,7 +271,7 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     // Workaround: Use GOAL `complete` + RFV `append_round` close_gates instead
     // References:
     //   - Contract: docs/references/rfv-loop/reasoning-depth-contract.md
-    //   - ADR: docs/plans/ADR_rfv_close_gates_max_rounds.md
+    //   - Contract: docs/references/rfv-loop/reasoning-depth-contract.md (historical ADR stub removed; see docs/plans/README.md)
     // Expected behavior when implemented: closeout gate should check min_depth_score
     //   from GOAL_STATE.completion_gates against depth_compliance_aggregate output
 

@@ -108,7 +108,7 @@ metadata:
 
 ## 执行计划继承面（research→execution）
 
-当存在**前置** `plan_profile: research` 文档、等价调研结论文档或外部合成材料时，`execution` `.plan.md` 在第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**的正文区域内须有固定标题 **`## 执行计划继承面`**，且须出现在**任意正文 Markdown checkbox 清单或其它分节任务叙述之前**（可与正文首个 `#` 标题相邻；**不得**把该节写入 YAML frontmatter）（≤15 行），避免执行计划从零复述调研或把外部范例整段搬进 overview。无前置调研的 execution 可省略本节，或在 **`## 执行计划继承面`** 小节内写一行 **`继承指针：无（无前置调研）`**。第一性原则与减法规则见 [`docs/plans/RESEARCH_plan_execution_handoff_first_principles.md`](../../docs/plans/RESEARCH_plan_execution_handoff_first_principles.md)。
+当存在**前置** `plan_profile: research` 文档、等价调研结论文档或外部合成材料时，`execution` `.plan.md` 在第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**的正文区域内须有固定标题 **`## 执行计划继承面`**，且须出现在**任意正文 Markdown checkbox 清单或其它分节任务叙述之前**（可与正文首个 `#` 标题相邻；**不得**把该节写入 YAML frontmatter）（≤15 行），避免执行计划从零复述调研或把外部范例整段搬进 overview。无前置调研的 execution 可省略本节，或在 **`## 执行计划继承面`** 小节内写一行 **`继承指针：无（无前置调研）`**。第一性原则与减法规则见下文 [**执行计划继承面（research→execution）**](#执行计划继承面researchexecution)。
 
 ### 继承面建议字段（每行一项，可写「无 / 不适用」）
 
@@ -180,7 +180,7 @@ metadata:
 
 ### 宿主侧计划落盘（与协作）
 
-Cursor 官方说明：计划默认保存在**用户目录**，需 **「Save to workspace」** 才进入工作区以便版本管理与团队共享；内部 todo 与文件不同步等宿主/社区讨论，见 [`docs/plans/plan_writing_capability_research_synthesis.md`](../../docs/plans/plan_writing_capability_research_synthesis.md) §3。
+Cursor 官方说明：计划默认保存在**用户目录**，需 **「Save to workspace」** 才进入工作区以便版本管理与团队共享；内部 todo 与文件不同步等宿主/社区讨论，见上文 [**宿主侧计划落盘（与协作）**](#宿主侧计划落盘与协作) 与 [`docs/plans/README.md`](../../docs/plans/README.md)。
 
 ## Workflow（四步）
 
@@ -292,7 +292,8 @@ Non-goals: <可选>
 - `skills/SKILL_FRAMEWORK_PROTOCOLS.md` — 讨论 → 规划 → 执行 → 验证 与最小 findings / execution / verification 形状。
 - `skills/gitx/SKILL.md` — `/gitx` / `/gitx plan` 收口与深度 review checklist。
 - `skills/code-review-deep/SKILL.md` — 对抗式/全切片深度代码审（默认 compact findings、`REVIEW_GATE` 可数 lane 与符号锚点习惯与本 skill **强例**对齐）。
-- `docs/plans/plan_todo_checklist.md` — Todo 四元组与对齐的勾选短清单（与本节互补）。
-- `docs/plans/plan_review_findings_round1.md` — 本地主线程模拟独立视角对样例 execution plan 的 findings（可复核 Verify、closeout 与 `--stat` 等）。
-- `docs/plans/RESEARCH_plan_execution_handoff_first_principles.md` — research→execution 第一性 / 减法 / 外部准入与继承面理由。
+- [`docs/plans/README.md`](../../docs/plans/README.md) — plans 索引与 GSD 真源指针；历史 stub 已移除。
+- 本文件 [**Todo 可执行性（四元组、对齐与依赖）**](#todo-可执行性四元组对齐与依赖) — 四元组、YAML/正文对齐与拆分依赖。
+- 本文件 [**Workflow**](#workflow四步) 第 3 步 + [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) — 可选审 plan / 深度 review 的 findings 与 Verify 习惯。
+- 本文件 [**执行计划继承面（research→execution）**](#执行计划继承面researchexecution) — 继承指针、外部准入表与减法规则。
 - `.cursor/rules/cursor-plan-output.mdc` — Cursor alwaysApply 下对 CreatePlan 产出的硬自检清单。

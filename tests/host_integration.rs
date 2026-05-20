@@ -43,7 +43,7 @@ fn shell_installer_e2e_writes_expected_files() {
     assert!(hooks.contains("PostToolUse"));
     assert!(hooks.contains("Stop"));
     assert!(hooks.contains("router-rs"));
-    assert!(hooks.contains("codex hook --event="));
+    assert!(hooks.contains("codex-router-rs-hook.sh"));
     assert!(!hooks.contains("sessionEnd"));
 }
 
@@ -140,7 +140,7 @@ fn install_native_integration_is_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"autopilot":{}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/gsd/SKILL.md","host_entrypoints":{"codex-cli":"/gsd"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -216,7 +216,7 @@ fn install_native_integration_is_idempotent() {
         .unwrap()
         .join(surface_runtime["skills"][0][8].as_str().unwrap())
         .is_file());
-    assert!(!tmp.path().join("home/.codex/prompts/autopilot.md").exists());
+    assert!(!tmp.path().join("home/.codex/prompts/gsd.md").exists());
     assert!(!tmp.path().join("home/.codex/prompts/gitx.md").exists());
     assert!(!tmp
         .path()
@@ -1895,7 +1895,11 @@ fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Va
 fn assert_framework_alias_skill(surface_root: &Path, slug: &str) {
     let content = read_text(&surface_root.join(slug).join("SKILL.md"));
     assert!(content.contains(&format!("name: {slug}")));
-    assert!(content.contains("generated lightweight Codex CLI alias"));
+    assert!(
+        content.contains("generated lightweight Codex CLI alias")
+            || content.contains("generated-codex-skill-surface"),
+        "expected generated alias marker in surface SKILL.md"
+    );
     assert!(content.contains(&format!("`/{slug}`")));
     assert!(!content.contains(&format!("`${slug}`")));
     assert!(content.contains("skills/skill-framework-developer/SKILL.md"));

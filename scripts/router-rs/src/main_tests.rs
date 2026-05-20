@@ -971,8 +971,8 @@ fn stop_checkpoint_does_not_repoint_focus() {
         .unwrap_or(0);
 
     assert_eq!(
-        resolve_automatic_stop_checkpoint_task_id(&repo_root).as_deref(),
-        Some(task_id)
+        resolve_automatic_stop_checkpoint_task_id(&repo_root),
+        task_id
     );
     let payload = build_automatic_stop_hook_checkpoint_payload(
         &repo_root,
@@ -1025,6 +1025,133 @@ fn stop_checkpoint_does_not_repoint_focus() {
     )
     .expect("task summary updated");
     assert!(summary.contains("Stop hook automatic checkpoint"));
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn stop_checkpoint_uses_continuity_session_without_pointers() {
+    use crate::framework_runtime::CONTINUITY_SESSION_CHECKPOINT_TASK_ID;
+
+    let repo_root = temp_dir_path("stop-checkpoint-continuity-session");
+    let current = repo_root.join("artifacts/current");
+    fs::create_dir_all(&current).expect("mkdir current");
+
+    let payload = build_automatic_stop_hook_checkpoint_payload(
+        &repo_root,
+        "cursor-stop",
+        "Stop hook automatic checkpoint (Cursor).",
+    )
+    .expect("payload");
+    assert_eq!(
+        payload["task_id"].as_str(),
+        Some(CONTINUITY_SESSION_CHECKPOINT_TASK_ID)
+    );
+    write_framework_session_artifacts(payload).expect("write");
+
+    let summary_path = current
+        .join(CONTINUITY_SESSION_CHECKPOINT_TASK_ID)
+        .join("SESSION_SUMMARY.md");
+    assert!(summary_path.is_file(), "continuity-session summary written");
+    assert!(
+        !current.join("active_task.json").exists(),
+        "must not create active pointer"
+    );
+    assert!(
+        !current.join("focus_task.json").exists(),
+        "must not create focus pointer"
+    );
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn stop_checkpoint_respects_env_disable() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT");
+    std::env::set_var("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT", "0");
+
+    let repo_root = temp_dir_path("stop-checkpoint-env-off");
+    let task_dir = repo_root.join("artifacts/current").join("env-off-task");
+    fs::create_dir_all(&task_dir).expect("mkdir");
+    let summary_path = task_dir.join("SESSION_SUMMARY.md");
+    fs::write(&summary_path, "# before\n").expect("seed summary");
+    fs::write(
+        repo_root.join("artifacts/current/active_task.json"),
+        r#"{"task_id":"env-off-task"}"#,
+    )
+    .expect("active");
+
+    let before = fs::read_to_string(&summary_path).expect("read before");
+    crate::cursor_hooks::try_write_cursor_continuity_checkpoint_on_stop(&repo_root);
+    let after = fs::read_to_string(&summary_path).expect("read after");
+    assert_eq!(before, after, "checkpoint must not run when env disabled");
+
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT", v),
+        None => std::env::remove_var("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT"),
+    }
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn continuity_audit_flags_ephemeral_registry_row() {
+    let repo_root = temp_dir_path("continuity-audit-ephemeral");
+    let current = repo_root.join("artifacts/current");
+    fs::create_dir_all(&current).expect("mkdir");
+    fs::write(
+        current.join("task_registry.json"),
+        r#"{"schema_version":"task-registry-v1","focus_task_id":"real","tasks":[{"task_id":"cursor-stop-999T0000000000"},{"task_id":"real"}]}"#,
+    )
+    .expect("registry");
+    fs::write(current.join("focus_task.json"), r#"{"task_id":"real"}"#).expect("focus");
+
+    let report = run_continuity_audit(&repo_root).expect("audit");
+    let warnings = report["warnings"].as_array().expect("warnings");
+    let joined = warnings
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        joined.contains("EPHEMERAL CHECKPOINT ROW"),
+        "expected ephemeral warning; report={report}"
+    );
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn resolve_task_view_notes_active_goal_missing_on_focus() {
+    use crate::task_state::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL;
+
+    let repo_root = temp_dir_path("goal-mismatch-note");
+    let current = repo_root.join("artifacts/current");
+    fs::create_dir_all(current.join("active-task")).expect("active dir");
+    fs::create_dir_all(current.join("focus-task")).expect("focus dir");
+    fs::write(
+        current.join("active_task.json"),
+        r#"{"task_id":"active-task"}"#,
+    )
+    .expect("active");
+    fs::write(
+        current.join("focus_task.json"),
+        r#"{"task_id":"focus-task"}"#,
+    )
+    .expect("focus");
+    fs::write(
+        current.join("focus-task/GOAL_STATE.json"),
+        r#"{"schema_version":1,"task_id":"focus-task","status":"in_progress","goal":"x","non_goals":[],"done_when":["d"],"validation_commands":["c"],"drive_until_done":false}"#,
+    )
+    .expect("focus goal");
+
+    let view = resolve_task_view(&repo_root, None);
+    assert_eq!(view.task_id.as_deref(), Some("active-task"));
+    let notes = view.resolution_notes.join(" ");
+    assert!(
+        notes.contains(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL),
+        "notes={notes}"
+    );
 
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -2119,7 +2246,7 @@ fn framework_alias_fails_closed_for_missing_alias_record() {
     fs::create_dir_all(&registry_dir).expect("create registry dir");
     fs::write(
         registry_dir.join("RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"autopilot":{"canonical_owner":"autopilot","skill_path":"skills/autopilot/SKILL.md"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/gsd/SKILL.md"}}}"#,
     )
     .expect("write registry");
 

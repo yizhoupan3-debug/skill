@@ -56,9 +56,14 @@ mod desktop_mcp_tests {
         for name in &handler_arms {
             assert!(names.contains(name), "tool {name} missing from tools/list");
         }
-        assert_eq!(names.len(), handler_arms.len(),
+        assert_eq!(
+            names.len(),
+            handler_arms.len(),
             "expected {} tools, got {}: {:?}",
-            handler_arms.len(), names.len(), names);
+            handler_arms.len(),
+            names.len(),
+            names
+        );
     }
 
     #[test]
@@ -72,7 +77,11 @@ mod desktop_mcp_tests {
             "output": "file1.txt",
         });
         let entry_result = crate::claude_desktop_hooks::build_evidence_entry(&args_with);
-        assert!(entry_result.is_ok(), "build_evidence_entry failed: {:?}", entry_result);
+        assert!(
+            entry_result.is_ok(),
+            "build_evidence_entry failed: {:?}",
+            entry_result
+        );
         let entry = entry_result.unwrap();
         assert_eq!(entry.get("exit_code").and_then(|v| v.as_i64()), Some(0));
         assert_eq!(entry.get("success").and_then(|v| v.as_bool()), Some(true));
@@ -82,7 +91,8 @@ mod desktop_mcp_tests {
             "command": "cat foo.txt",
             "output": "contents",
         });
-        let entry_without = crate::claude_desktop_hooks::build_evidence_entry(&args_without).unwrap();
+        let entry_without =
+            crate::claude_desktop_hooks::build_evidence_entry(&args_without).unwrap();
         assert!(entry_without.get("exit_code").is_none());
         assert!(entry_without.get("success").is_none());
 
@@ -101,22 +111,30 @@ mod desktop_mcp_tests {
                 {"command": "cargo test", "exit_code": 0}
             ],
         });
-        let result = crate::claude_desktop_hooks::tool_closeout_record_write_for_test(
-            &args, &repo,
-        );
+        let result = crate::claude_desktop_hooks::tool_closeout_record_write_for_test(&args, &repo);
         assert!(result.is_ok(), "closeout_record_write failed: {:?}", result);
         let output = result.unwrap();
         // Should contain closeout_allowed field
         assert!(output.contains("closeout_allowed") || output.contains("closeout"));
         // File should exist at the expected path
-        let record_path = repo.join("artifacts").join("closeout").join("test-closeout.json");
-        assert!(record_path.is_file(), "record file should exist at {:?}", record_path);
+        let record_path = repo
+            .join("artifacts")
+            .join("closeout")
+            .join("test-closeout.json");
+        assert!(
+            record_path.is_file(),
+            "record file should exist at {:?}",
+            record_path
+        );
         // Verify content
         let content = std::fs::read_to_string(&record_path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed["task_id"], "test-closeout");
         assert_eq!(parsed["verification_status"], "passed");
-        assert!(parsed["schema_version"].as_str().unwrap().contains("closeout-record"));
+        assert!(parsed["schema_version"]
+            .as_str()
+            .unwrap()
+            .contains("closeout-record"));
 
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -129,12 +147,13 @@ mod desktop_mcp_tests {
             "summary": "test",
             "verification_status": "passed",
         });
-        let result = crate::claude_desktop_hooks::tool_closeout_record_write_for_test(
-            &args, &repo,
-        );
+        let result = crate::claude_desktop_hooks::tool_closeout_record_write_for_test(&args, &repo);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("task_id"), "should mention missing task_id, got: {err}");
+        assert!(
+            err.contains("task_id"),
+            "should mention missing task_id, got: {err}"
+        );
 
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -169,7 +188,8 @@ mod transport_mode_tests {
         let mut transport_mode = None;
 
         let result = crate::claude_desktop_hooks::read_mcp_message_test_helper(
-            &mut reader, &mut transport_mode,
+            &mut reader,
+            &mut transport_mode,
         );
         assert!(result.is_ok());
         let msg = result.unwrap().unwrap();
@@ -354,7 +374,8 @@ mod transport_mode_read_tests {
         let mut transport_mode = None;
 
         let result = crate::claude_desktop_hooks::read_mcp_message_test_helper(
-            &mut reader, &mut transport_mode,
+            &mut reader,
+            &mut transport_mode,
         );
         assert!(result.is_ok());
         assert!(transport_mode.is_some());
@@ -368,7 +389,8 @@ mod transport_mode_read_tests {
         let mut transport_mode = None;
 
         let result = crate::claude_desktop_hooks::read_mcp_message_test_helper(
-            &mut reader, &mut transport_mode,
+            &mut reader,
+            &mut transport_mode,
         );
         assert!(result.is_ok());
         assert!(transport_mode.is_none());
@@ -382,7 +404,8 @@ mod transport_mode_read_tests {
         let mut transport_mode = None;
 
         let result = crate::claude_desktop_hooks::read_mcp_message_test_helper(
-            &mut reader, &mut transport_mode,
+            &mut reader,
+            &mut transport_mode,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -396,7 +419,8 @@ mod transport_mode_read_tests {
         let mut transport_mode = None;
 
         let result = crate::claude_desktop_hooks::read_mcp_message_test_helper(
-            &mut reader, &mut transport_mode,
+            &mut reader,
+            &mut transport_mode,
         );
         assert!(result.is_ok());
         let msg = result.unwrap().unwrap();
@@ -423,7 +447,10 @@ mod init_tracker_error_handling_tests {
         let _ = std::fs::remove_dir_all(&test_path.parent().unwrap());
 
         // The key assertion: function returned (didn't panic), result should be Err
-        assert!(result.is_err(), "init_tracker should return error for non-writable path, not panic");
+        assert!(
+            result.is_err(),
+            "init_tracker should return error for non-writable path, not panic"
+        );
     }
 }
 
@@ -456,7 +483,10 @@ mod rate_limiter_tests {
         let mut limiter = crate::claude_desktop_hooks::RateLimiter::new(10000); // 10 second interval
         let _ = limiter.check_and_record("tool_a");
         let result = limiter.check_and_record("tool_b");
-        assert!(result.is_ok(), "different tools should have independent rate limits");
+        assert!(
+            result.is_ok(),
+            "different tools should have independent rate limits"
+        );
     }
 }
 
@@ -484,16 +514,22 @@ mod json_parse_error_tests {
         // Test that malformed JSON returns -32700 error code
         let path = unique_test_repo_dir();
         let _ = std::fs::create_dir_all(path.join("artifacts/current"));
-        let _ = std::fs::write(path.join("artifacts/current/active_task.json"), r#"{"task_id": "test-task"}"#);
-        let _ = std::fs::write(path.join("artifacts/current/SESSION_SUMMARY.md"), "# Test Session\n");
-
-        let response = crate::claude_desktop_hooks::handle_mcp_request(
-            "not valid json {",
-            &path,
+        let _ = std::fs::write(
+            path.join("artifacts/current/active_task.json"),
+            r#"{"task_id": "test-task"}"#,
+        );
+        let _ = std::fs::write(
+            path.join("artifacts/current/SESSION_SUMMARY.md"),
+            "# Test Session\n",
         );
 
+        let response = crate::claude_desktop_hooks::handle_mcp_request("not valid json {", &path);
+
         // Should return an error response
-        assert!(response.is_some(), "should return a response for parse error");
+        assert!(
+            response.is_some(),
+            "should return a response for parse error"
+        );
         let resp = response.unwrap();
         assert_eq!(resp["jsonrpc"], "2.0");
         assert!(resp.get("error").is_some(), "should have error field");
@@ -507,14 +543,18 @@ mod json_parse_error_tests {
         // Test that valid JSON but missing method field returns appropriate error
         let path = unique_test_repo_dir();
         let _ = std::fs::create_dir_all(path.join("artifacts/current"));
-        let _ = std::fs::write(path.join("artifacts/current/active_task.json"), r#"{"task_id": "test-task"}"#);
-        let _ = std::fs::write(path.join("artifacts/current/SESSION_SUMMARY.md"), "# Test Session\n");
+        let _ = std::fs::write(
+            path.join("artifacts/current/active_task.json"),
+            r#"{"task_id": "test-task"}"#,
+        );
+        let _ = std::fs::write(
+            path.join("artifacts/current/SESSION_SUMMARY.md"),
+            "# Test Session\n",
+        );
 
         // Missing method field
-        let response = crate::claude_desktop_hooks::handle_mcp_request(
-            r#"{"jsonrpc":"2.0","id":1}"#,
-            &path,
-        );
+        let response =
+            crate::claude_desktop_hooks::handle_mcp_request(r#"{"jsonrpc":"2.0","id":1}"#, &path);
 
         assert!(response.is_some());
         let resp = response.unwrap();

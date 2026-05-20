@@ -17,8 +17,9 @@
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
     "full_skill_count": 27,
     "hot_skill_count": 27,
+    "manifest_skill_count": 52,
     "kind": "hot",
-    "policy": "session-start required gates plus allowlisted first-turn control owners plus explicit framework command aliases; route/search may load the fallback manifest after runtime-owned skills have been excluded."
+    "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
   },
   "skills": [
     [

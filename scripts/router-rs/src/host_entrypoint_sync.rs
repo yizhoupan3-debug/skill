@@ -104,6 +104,12 @@ pub(crate) fn sync_host_entrypoints(
         extend_report_array(&mut report, "unchanged", single.unchanged)?;
         extend_report_array(&mut report, "created_dirs", single.created_dirs)?;
         if target_root != root {
+            if apply {
+                eprintln!(
+                    "[router-rs] host_entrypoint_sync: worktree {} partial_sync only (hooks/manifest JSON); text entrypoints such as AGENTS.md are not overwritten — align from primary repo.",
+                    target_root.display()
+                );
+            }
             extend_report_array(
                 &mut report,
                 "synced_worktrees",

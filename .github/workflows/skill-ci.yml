@@ -14,6 +14,9 @@ on:
       - '.codex/**'
       - 'configs/codex/**'
       - 'configs/framework/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
   pull_request:
     paths:
       - 'skills/**'
@@ -26,6 +29,9 @@ on:
       - '.codex/**'
       - 'configs/codex/**'
       - 'configs/framework/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
   workflow_dispatch:
 
 jobs:
@@ -34,12 +40,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen
+
       - name: Cursor bootstrap + workspace hooks template sanity
         run: |
           bash -n scripts/cursor-bootstrap-framework.sh
           bash -n configs/framework/cursor-router-rs-hook.sh
           bash -n configs/framework/claude-router-rs-hook.sh
-          python3 -m json.tool configs/framework/cursor-hooks.workspace-template.json > /dev/null
+          uv run python -m json.tool configs/framework/cursor-hooks.workspace-template.json > /dev/null
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -69,7 +81,7 @@ jobs:
         run: cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
 
       - name: Run Codex hook installer tests
-        run: python3 .cursor/hook-tests/test_install_codex_cli_hooks.py
+        run: uv run python .cursor/hook-tests/test_install_codex_cli_hooks.py
 
       - name: Check generated artifact drift
         run: |
@@ -77,7 +89,7 @@ jobs:
           cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- \
             framework host-integration generated-artifacts-status \
             --framework-root "$PWD" > generated-artifacts-status.json
-          python - <<'PY'
+          uv run python - <<'PY'
           import json
           import sys
 

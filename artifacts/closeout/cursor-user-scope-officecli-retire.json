@@ -34,5 +34,5 @@
     "schema-drift CLI subcommand not in router-rs",
     "Ship RFV 3-round adversarial skipped for doc-only delta; code paths covered by policy_contracts"
   ],
-  "notes": "Working tree clean at ship; 6 commits ahead of origin/main. Multi-worktree review skipped (delivered on main)."
+  "notes": "Closeout pointer tracked in git; follow-up migration-residual sweep (manifest/docs/framework.mdc) completed in a later session."
 }

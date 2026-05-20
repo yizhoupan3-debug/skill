@@ -34,8 +34,9 @@ pub(crate) use crate::framework_runtime::{
     build_automatic_stop_hook_checkpoint_payload, build_framework_alias_envelope,
     build_framework_continuity_digest_prompt, build_framework_runtime_snapshot_envelope,
     build_framework_statusline, framework_hook_evidence_append,
-    resolve_automatic_stop_checkpoint_task_id, write_framework_session_artifacts,
-    FrameworkAliasBuildOptions,
+    resolve_automatic_stop_checkpoint_task_id, run_continuity_audit,
+    write_framework_session_artifacts, FrameworkAliasBuildOptions,
+    CONTINUITY_SESSION_CHECKPOINT_TASK_ID,
 };
 pub(crate) use crate::route::{
     build_route_diff_report, build_route_policy, build_route_snapshot, load_records,
@@ -64,5 +65,5 @@ pub(crate) use crate::runtime_storage::{
 pub(crate) use crate::stdio_transport::{
     handle_stdio_json_line, DEFAULT_ROUTER_STDIO_POOL_SIZE, MAX_ROUTER_STDIO_POOL_SIZE,
 };
-pub(crate) use crate::task_state::{read_task_pointers, resolve_task_view};
+pub(crate) use crate::task_state::resolve_task_view;
 pub(crate) use crate::trace_runtime::{record_trace_event, TraceRecordEventRequestPayload};

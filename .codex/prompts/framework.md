@@ -12,7 +12,9 @@ argument-hint: "[framework task...]"
 
 Use `$framework` semantics via the Rust-owned shared core.
 
-**Default lifecycle (all supported hosts): GSD** (`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`). See `skills/gsd/SKILL.md`. `/autopilot` is retired; use `/gsd-execute-phase` for goal-style execution (`skills/autopilot/SKILL.md` is a stub pointer).
+**Default lifecycle (all supported hosts): GSD** (`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`). Pre-execution commands are doc-only (no product code); see `skills/gsd/shared/phase-boundaries.md` and `skills/gsd/references/OFFICIAL_GSD_ALIGNMENT.md`. Continuous execution uses `/gsd-execute-phase` with `GOAL_STATE.json` (`framework_autopilot_goal`); Stop hook leader: `router-rs GSD_GOAL_CONTINUE`. `/autopilot` is retired.
+
+**Code review default (all hosts): findings-only.** Review / 代码审查 / audit of code or a change set delivers severity-sorted findings only — no default edits, fixes, commits, or autopilot/GSD-execute/gitx/loop continuation unless the user explicitly asks to implement or fix. See `skills/code-review-deep/SKILL.md`.
 
 1) Start from `AGENTS.md`.
 2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.

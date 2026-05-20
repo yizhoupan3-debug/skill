@@ -47,9 +47,8 @@ ax.bar(x, means, yerr=sems, capsize=4, error_kw={'linewidth': 1})
 ### Using `statannotations` library
 
 ```bash
-pip install statannotations
-# or
-uv pip install statannotations
+uv add --dev statannotations
+uv sync --all-groups
 ```
 
 ```python

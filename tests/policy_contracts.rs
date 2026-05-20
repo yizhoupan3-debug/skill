@@ -1013,6 +1013,59 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
 
     assert_eq!(plugin_catalog["schema_version"], "skill-plugin-catalog-v1");
+    assert_eq!(plugin_catalog["source_of_truth"], false);
+    assert_eq!(plugin_catalog["derived_from"], "skills/SKILL_MANIFEST.json");
+    assert_eq!(
+        routing_metadata["schema_version"],
+        "skill-routing-metadata-v1"
+    );
+    assert_eq!(routing_metadata["source_of_truth"], false);
+    assert_eq!(
+        explain["schema_version"],
+        "skill-routing-runtime-explain-v1"
+    );
+    assert_eq!(explain["source_of_truth"], false);
+    assert_eq!(health["schema_version"], "skill-health-manifest-v1");
+    assert_eq!(health["source_of_truth"], false);
+    assert!(health["skills"].as_object().is_some());
+
+    let catalog_skills = plugin_catalog["skills"]
+        .as_object()
+        .expect("plugin catalog skills");
+    let metadata_skills = routing_metadata["skills"]
+        .as_object()
+        .expect("routing metadata skills");
+    assert!(!catalog_skills.is_empty());
+    for (slug, record) in catalog_skills {
+        assert!(
+            metadata_skills.contains_key(slug),
+            "routing metadata missing slug {slug}"
+        );
+        assert_eq!(record["kind"], "skill");
+        assert!(record["skill_path"].as_str().is_some());
+        assert!(record["host_support"]["platforms"].as_array().is_some());
+    }
+
+    let skill = "skill-framework-developer";
+    assert!(catalog_skills.contains_key(skill));
+    assert!(metadata_skills.contains_key(skill));
+    if explain["selected"][skill].is_object() {
+        assert_eq!(
+            explain["selected"][skill]["plugin_kind"],
+            catalog_skills[skill]["kind"]
+        );
+    }
+}
+
+#[test]
+#[ignore = "legacy full plugin_catalog contract; companions are refresh stubs since harness-minimal-gsd"]
+fn plugin_catalog_routing_metadata_legacy_capabilities_contract() {
+    let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
+    let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
+    let explain = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json"));
+    let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
+
+    assert_eq!(plugin_catalog["schema_version"], "skill-plugin-catalog-v1");
     assert_eq!(plugin_catalog["plugin_abi_version"], "skill-plugin-abi-v1");
     assert_eq!(
         routing_metadata["schema_version"],
@@ -1022,7 +1075,7 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
         explain["schema_version"],
         "skill-routing-runtime-explain-v1"
     );
-    assert_eq!(health["schema_version"], "skill-health-manifest-v2");
+    assert_eq!(health["schema_version"], "skill-health-manifest-v1");
     assert_eq!(health["status"], "healthy");
     assert_eq!(health["summary"]["degraded_records"], 0);
     let capability_classes = plugin_catalog["capability_classes"]

@@ -51,7 +51,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 ## Skill Routing
 
 - **默认生命周期（全闭集宿主）**：GSD（`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`）。Pre-execution **禁止改产品代码**（`skills/gsd/shared/phase-boundaries.md`）。
-- **执行区**（可改产品代码）：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` + `GOAL_STATE.json`（`framework_autopilot_goal` stdio）。**`/autopilot` 已退役** → 用 `/gsd-execute-phase`（归档：`skills/_archived/autopilot/SKILL.md`）。
+- **执行区**（可改产品代码）：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` + `GOAL_STATE.json`（`framework_autopilot_goal` stdio）。**`/autopilot` 已退役** → 用 `/gsd-execute-phase`（见 `MIGRATION.md`）。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
 ## Continuity artifacts

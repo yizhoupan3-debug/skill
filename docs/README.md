@@ -1,6 +1,6 @@
 # 文档索引（控制面与契约）
 
-**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`harness_architecture.md`](harness_architecture.md) = 连续性 **L1–L5 控制面**上层真源；[`rust_contracts.md`](rust_contracts.md)（英文）= `router-rs` 实现侧契约长文；[`history/`](history/) = 迁移与旧方案归档，**不作为当前运行真源**。
+**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`harness_architecture.md`](harness_architecture.md) = 连续性 **L1–L5 控制面**上层真源；[`rust_contracts.md`](rust_contracts.md)（英文）= `router-rs` 实现侧契约长文；历史迁移叙述见 git 历史与 [`MIGRATION.md`](../MIGRATION.md)。
 
 ## 推荐阅读顺序
 
@@ -16,15 +16,17 @@
 | 主题 | 文档 |
 |------|------|
 | 使用者视角：宿主差异、门控快查、阅读顺序 | [framework_operator_primer.md](framework_operator_primer.md) |
-| RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)）；**ADR**：[`close_gates` 与 `max_rounds` 收口路径](plans/ADR_rfv_close_gates_max_rounds.md) |
-| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | 历史研究见 [plans/README.md](plans/README.md) stub 索引；**可执行计划**在 [`.cursor/plans/`](../.cursor/plans/) |
+| RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
+| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | GSD 任务 ROADMAP：`artifacts/current/<task_id>/ROADMAP.md`；见 [plans/README.md](plans/README.md) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
-| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 与 Codex/Cursor/Claude 投影边界见 [host_adapter_contract.md](host_adapter_contract.md) + [host_adapter_contracts.md](host_adapter_contracts.md)；执行计划真源 [`.cursor/plans/`](../.cursor/plans/) |
-| Cursor Plan / 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)（含轻量 / execution / audit plan、**`plan_profile: research`**、**CreatePlan 输出契约**、Git 状态证据收口、**调研范围与能力联动**）；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；历史计划链见 [plans/README.md](plans/README.md)（stub 镜像 + `.cursor/plans/` 真源） |
+| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`hook_common`、`review_gate` 与 Codex/Cursor/Claude 投影边界见 [host_adapter_contract.md](host_adapter_contract.md) + [host_adapter_contracts.md](host_adapter_contracts.md) |
+| Cursor Plan / GSD 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/gsd/plan-phase/SKILL.md`](../skills/gsd/plan-phase/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
 | Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
 | 插件 ABI / routing metadata | [runtime_plugin_contract.md](runtime_plugin_contract.md) |
-| 历史迁移、减法记录 | [history/](history/) |
+| Python 环境治理（uv-only，冷表显式 `$python-env-management`） | [`skills/python-env-management/SKILL.md`](../skills/python-env-management/SKILL.md) |
+| 历史迁移、减法记录 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
+| Plans 索引（GSD ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
 
 ## 概念与源码映射
 
@@ -33,5 +35,5 @@
 ## 已淘汰叙述（清理边界）
 
 - **勿假设** `router-rs` 只存在于 `scripts/router-rs/target/release/`。根目录 `.cargo/config.toml` 可将 `target-dir` 指到 workspace 统一目录；解析以 `cargo metadata` 的 `target_directory` 为准（或 `cargo build` / `cargo run` 的输出路径）。
-- **勿依赖** 旧版 `.cursor/hooks/*.sh` 脚本链：steady-state 以 [`.cursor/hooks.json`](../.cursor/hooks.json) 为准，事件 stdin 由各条目中的 `router-rs cursor hook --event=...` 承接（校验：在仓库根执行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks`）。
-- **勿将** `docs/history/` 中的计划或清单当作当前契约；steady-state 仅认本索引列出的文档与 `configs/framework/*.json`。
+- **勿依赖** 旧版 `.cursor/hooks/*.sh` 脚本链：steady-state 以 [`.cursor/hooks.json`](../.cursor/hooks.json) 为准（**默认 7 事件**；见 [`docs/hosts/cursor.md`](hosts/cursor.md)）。Claude Code 为 [`.claude/settings.json`](../.claude/settings.json) **4 事件**（见 [`docs/hosts/claude.md`](hosts/claude.md)）。校验：`framework maint verify-cursor-hooks`；构建 release 见两宿主手册「内存 / release」。
+- **勿将** 已删除的 `docs/history/` 或过期 plan 路径当作当前契约；steady-state 仅认本索引列出的文档与 `configs/framework/*.json`。

@@ -5,6 +5,13 @@ EVENT="${1:-}"
 ROOT="${CURSOR_WORKSPACE_ROOT:-$PWD}"
 FW="${SKILL_FRAMEWORK_ROOT:-$ROOT}"
 
+if [[ -r "$ROOT/.cursor/router-rs-hook.env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "$ROOT/.cursor/router-rs-hook.env"
+  set +a
+fi
+
 FAIL_MSG='router-rs binary unavailable for critical Cursor hook; fail-closed instead of silently bypassing gate enforcement'
 
 critical_event() {
@@ -40,12 +47,12 @@ emit_fail_closed_json() {
 ROUTER_RS_BIN="${ROUTER_RS_BIN:-}"
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}"
 for candidate in \
-  "$CARGO_TARGET_DIR/release/router-rs" \
-  "$CARGO_TARGET_DIR/debug/router-rs" \
   "$ROOT/scripts/router-rs/target/release/router-rs" \
-  "$ROOT/scripts/router-rs/target/debug/router-rs" \
   "$FW/scripts/router-rs/target/release/router-rs" \
+  "$CARGO_TARGET_DIR/release/router-rs" \
+  "$ROOT/scripts/router-rs/target/debug/router-rs" \
   "$FW/scripts/router-rs/target/debug/router-rs" \
+  "$CARGO_TARGET_DIR/debug/router-rs" \
   "$ROOT/target/release/router-rs" \
   "$ROOT/target/debug/router-rs" \
   "$FW/target/release/router-rs" \

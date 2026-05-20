@@ -23,6 +23,11 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: StorageCommand,
     },
+    /// Browser MCP utilities (`diagnose browser` is equivalent).
+    Browser {
+        #[command(subcommand)]
+        command: BrowserSubcommand,
+    },
     /// Diagnostic commands: profile, browser
     Diagnose {
         #[command(subcommand)]

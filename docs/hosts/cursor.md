@@ -28,7 +28,19 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 
 ## Hook 能力（本仓）
 
-- **Agent 面**：`beforeSubmitPrompt`、`stop`、`subagentStart`/`subagentStop`、`postToolUse` 等 → `router-rs cursor hook`
+默认 **7 个** Cursor 事件（减法闭集，见 [`.cursor/hooks.json`](../.cursor/hooks.json)）：
+
+| 事件 | 作用 |
+|------|------|
+| `beforeSubmitPrompt` | Review / pre-goal / GSD beforeSubmit 门控 |
+| `stop` | `REVIEW_GATE` / closeout / `GSD_GOAL_CONTINUE` |
+| `subagentStart` / `subagentStop` | 可数深度 lane + open subagent 限流 |
+| `postToolUse` | Review multiset 兜底 + Shell 账本；**非门控工具**在 router-rs 内 fast-path 跳过 |
+| `sessionStart` / `sessionEnd` | 连续性注入 + hook-state 清扫 |
+
+**已默认移除**（可自 `configs/framework/cursor-hooks.workspace-template.json` 历史形态恢复）：`afterAgentResponse`（compact 清门改依赖 `Stop` tail）、`beforeShellExecution` / `afterShellExecution`、`afterFileEdit`（rustfmt）、`preCompact`。
+
+- **Agent 面**：上表事件 → `router-rs cursor hook`（经 [`cursor-router-rs-hook.sh`](../configs/framework/cursor-router-rs-hook.sh)）
 - **REVIEW_GATE 可清点 lane**（仅）：`general-purpose`、`best-of-n-runner`（registry `review_gate.deep_gate_lanes`）
 - **Goal drive**：`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship` — **不是** `/gsd-new-project` 等 pre-exec 命令（`/autopilot` 已退役）
 - **Fail-closed**：关键事件经 `cursor-router-rs-hook.sh`；`beforeSubmit` 对 plan 文件无可靠 Plan/Agent 模式信号
@@ -42,9 +54,20 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 
 `subagentStart` 拒绝文案中的「`max_concurrent_subagents_limit` 契约」指 **24** 上限常量，不是信封里的 8。
 
+## 内存 / release（hook 子进程）
+
+1. **构建 release**（约 8MB，显著小于 debug ~37MB）到仓库 `target`（若 shell 已设 `CARGO_TARGET_DIR=/tmp/...`，须显式覆盖否则 launcher 优先路径无 release）：
+   ```bash
+   CARGO_TARGET_DIR="$PWD/scripts/router-rs/target" \
+     cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+   ```
+2. **Launcher** 探测顺序：仓库 `scripts/router-rs/target/release` → `/tmp/skill-cargo-target/release` → debug → `PATH`。可选：`export ROUTER_RS_BIN="$PWD/scripts/router-rs/target/release/router-rs"`。
+3. **项目 env**：[`.cursor/router-rs-hook.env`](../.cursor/router-rs-hook.env) 由 launcher 自动 `source`（默认关 post-tool evidence、同步 `cargo check`、SessionEnd 杀终端）。Claude 对齐模板见 [`configs/framework/claude-router-rs-hook.env`](../configs/framework/claude-router-rs-hook.env)。
+4. **主进程索引**：仓库 [`.vscode/settings.json`](../.vscode/settings.json) 排除 `target/` 等；`rust-analyzer.cargo.targetDir` 指向 `/tmp/skill-cargo-target`。Browser MCP 等在 **Cursor Settings → MCP** 手动关闭（与 hook 正交）。
+
 ## 状态有界 / 内存（hook 子进程）
 
-当前为 **一 hook 一 `router-rs` 进程**（无 warm daemon）：跨调用的堆泄漏风险低；主要控制 **磁盘累积** 与 **单次 hook RSS 尖峰**。
+当前为 **一 hook 一 `router-rs` 进程**（无 warm daemon）：跨调用的堆泄漏风险低；主要控制 **磁盘累积** 与 **单次 hook RSS 尖峰**（优先 release + `postToolUse` fast-path）。
 
 | 机制 | 默认 | 说明 |
 |------|------|------|

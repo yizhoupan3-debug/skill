@@ -3,7 +3,7 @@
   "generated_artifacts": [
     {
       "path": ".codex/prompts/framework.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to codex-cli",
       "compare": "normalized-text"
     },
     {
@@ -68,22 +68,22 @@
     },
     {
       "path": "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
-      "generator": "true",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {
       "path": "skills/SKILL_PLUGIN_CATALOG.json",
-      "generator": "true",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {
       "path": "skills/SKILL_ROUTING_METADATA.json",
-      "generator": "true",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {
       "path": "skills/SKILL_HEALTH_MANIFEST.json",
-      "generator": "true",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {

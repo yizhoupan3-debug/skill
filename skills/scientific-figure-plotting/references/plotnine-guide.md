@@ -9,9 +9,8 @@ declarative, layered approach to building publication-quality figures.
 ## Installation
 
 ```bash
-pip install plotnine
-# or
-uv pip install plotnine
+uv add --dev plotnine
+uv sync --all-groups
 ```
 
 ## Basic Usage

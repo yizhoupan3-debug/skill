@@ -3,7 +3,7 @@
 ## Purpose
 
 This document freezes the Rust-owned runtime contracts for this repository.
-Historical migration notes live under `docs/history/`; this file describes only
+Historical migration notes live in git history and `MIGRATION.md`; this file describes only
 the current runtime truth in `router-rs` and related Rust tools.
 
 Upper-layer control-plane narrative (L1–L5, evidence/resume injection boundaries):
@@ -67,7 +67,7 @@ Rust owns the default runtime and contract path.
 
 - Do not add a second route authority, default artifact emitter, host-specific generated layer, or parallel runtime state root.
 - Generated host entrypoints are limited sync outputs, not hand-authored truth.
-- Historical migration inventory belongs in `docs/history/`, not in steady-state contracts.
+- Historical migration inventory belongs in `MIGRATION.md` / git history, not in steady-state contracts.
 
 ### 下一 safe slice
 
@@ -119,7 +119,7 @@ Invariants:
 - `route_engine` and primary authority stay Rust
 - unknown selected skills fail closed in consumers
 - fallback selection may choose a safe owner from `SKILL_MANIFEST.json`, but must not introduce a second route authority
-- generated framework command aliases must name an existing manifest owner as `canonical_owner`; deleted historical owners may only appear under `docs/history/`
+- generated framework command aliases must name an existing manifest owner as `canonical_owner`; deleted historical owners must not appear in steady-state registry or routing
 
 ## Runtime Control Contracts
 

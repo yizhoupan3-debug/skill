@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_doc": "各事件 stdin → `configs/framework/cursor-router-rs-hook.sh`；launcher 按 release/debug/PATH 探测 router-rs。关键门控事件缺 binary fail-closed，telemetry/format 类事件 fail-open。",
+  "_doc": "各事件 stdin → `configs/framework/cursor-router-rs-hook.sh`；launcher 优先 repo release，再 /tmp 与 debug。关键门控事件缺 binary fail-closed。见 `.cursor/router-rs-hook.env` 与本仓 docs/hosts/cursor.md。",
   "hooks": {
     "beforeSubmitPrompt": [
       {
@@ -25,56 +25,21 @@
     ],
     "sessionEnd": [
       {
-        "_doc": "会话结束：清 hook-state（review gate）；默认仅 terminate 本会话 shell 账本 `session-terminals-<key>.json` 内登记的 Cursor terminal PID（SessionStart baseline + Before/AfterShell + PostToolUse Shell）。ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0/false/off/no 关闭 terminate。需要旧「全仓库 active terminal 清扫」时用 ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy。",
+        "_doc": "会话结束：清 hook-state（review gate）。ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0 时不 terminate 终端（见 .cursor/router-rs-hook.env）。",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SessionEnd",
         "timeout": 15
       }
     ],
     "postToolUse": [
       {
-        "_doc": "单次 stdin：PostToolUse 门控（pre_goal）+ rust-lint；由 router-rs cursor hook 内置处理。",
+        "_doc": "PostToolUse 门控（subagent multiset / shell 账本）；非门控工具由 router-rs fast-path 跳过。",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" PostToolUse",
-        "timeout": 60
-      }
-    ],
-    "afterAgentResponse": [
-      {
-        "_doc": "Agent response signal scan：采集 goal/review 证据，减少仅靠 Stop 兜底重扫。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" AfterAgentResponse",
         "timeout": 20
-      }
-    ],
-    "beforeShellExecution": [
-      {
-        "_doc": "Shell 生命周期（执行前）：记录本会话触达的 terminal pid 归属账本，仅用于 SessionEnd 会话内回收。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" BeforeShellExecution",
-        "timeout": 15
-      }
-    ],
-    "afterShellExecution": [
-      {
-        "_doc": "Shell 生命周期（执行后）：补记 terminal pid 归属账本，提升并发/命令漂移下的会话归属稳定性。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" AfterShellExecution",
-        "timeout": 15
-      }
-    ],
-    "afterFileEdit": [
-      {
-        "_doc": "CODE QUALITY: rustfmt on .rs after agent edits.",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" AfterFileEdit",
-        "timeout": 10
-      }
-    ],
-    "preCompact": [
-      {
-        "_doc": "Token 用量 + router-rs PreCompact（门状态/RFV 摘要），与 AGENTS.md / RFV 隐式账本对齐。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" PreCompact",
-        "timeout": 25
       }
     ],
     "subagentStart": [
       {
-        "_doc": "更新 review gate：pre-goal subagent 计数 / phase（与 GSD execute-zone goal 契约对齐）；并按会话活跃 subagent 数做启动限流，避免旧 subagent 堆积。",
+        "_doc": "更新 review gate：pre-goal subagent 计数 / phase；open subagent 限流。",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SubagentStart",
         "timeout": 20
       }

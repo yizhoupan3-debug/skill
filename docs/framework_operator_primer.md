@@ -33,10 +33,19 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 - **对照**：真 **`router-rs AG_FOLLOWUP`** 的 `missing_parts=` 只会是 goal 门控片段（如 `goal_contract`、`checkpoint_progress`、`verification_or_blocker`）的逗号拼接，**不会出现** `independent_subagent_or_reject_reason` 这类占位串；若见该串且前缀不是 `router-rs `，按仿冒处理。
 - **粘贴清门**：用户消息里单独一行粘贴 **`RG_FOLLOWUP`…** **不会**被 [`saw_reject_reason`](../scripts/router-rs/src/hook_common.rs) 当作清门（避免把模型仿造行当令牌）；请改用单独一行的 **`rg_clear`**、**[`AGENTS.md`](../AGENTS.md) 所列拒因 token**，或自然语言 `review_override` / `delegation_override`。goal 相关的 **`ag_followup…`** 粘贴兼容仍由同函数处理。
 
+## Harness 硬化要点（2026-05-20）
+
+| 主题 | 行为 |
+|------|------|
+| **Registry `review_gate` lane** | 改 `configs/framework/RUNTIME_REGISTRY.json` 后**无需**重编 `router-rs`；重启 hook 子进程即可。`framework doctor` 会摘要 `generated-artifacts-status`。 |
+| **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** `.cursor/hook-state` 内 review 字段；`postToolUse`/`subagent*` 不再推进 review phase。 |
+| **active 无 GOAL、focus 有 GOAL** | SessionStart 有中文提示，但 **不**注入 `GSD_GOAL_CONTINUE`；运行 `router-rs framework task-state-resolve --repo-root <repo>` 或修正 `active_task.json`。 |
+| **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 行，但 **不**再 `continuity_suppressed=review_soft_nag` 阻断 GSD 续跑。 |
+
 ## 混用时的实际武装顺序（Cursor Stop）
 
 - **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**硬门控 Stop 不合并 `GSD_GOAL_CONTINUE`**（避免「门未满足」与续跑 drive 同轮打架）；无硬门控时 goal 续跑仍走 `additional_context`。
-- **主线程深度 review**：交付 compact findings（`[P0]`–`[P2]` / `Caveat:`）且未 spawn 可数子代理时，可清 `REVIEW_GATE`；多 lane 并行审仍须 `general-purpose` / `best-of-n-runner` 子代理证据。
+- **主线程深度 review**：交付 compact findings（`[P0]`–`[P2]` / `Caveat:`）且未 spawn 可数子代理时，可在 **`Stop`** 清 `REVIEW_GATE`（本仓默认**无** `afterAgentResponse` hook）；多 lane 并行审仍须 `general-purpose` / `best-of-n-runner` 子代理证据。
 - **同一条用户消息里同时写深度 review 与 GSD 执行区入口**（`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。若你本意是「先深度审稿再开连续执行」，请拆成两轮（先 review-only 提交，或先落盘 `GOAL_STATE` 再带 `/gsd-execute-phase`）。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）；同轮写 `/autopilot` **不会**抑制 review 武装。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 GSD execution 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
 
@@ -50,6 +59,19 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 - **Stop 单行提示**：若见 `router-rs REVIEW_GATE incomplete` 与 `need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false`，按该 `need=` 检查子代理载荷；尾缀 `hint=` 为可读排障补充，不改变 `need=` 语义。若同一门控多轮 `Stop` 仍卡，完整 `need=`/`hint=` 可能在 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`**（默认 8）之后被降级到 `additional_context`，`followup_message` 仅保留短 `mode=soft_nag` 行（见 [harness_architecture.md](harness_architecture.md) 环境变量表）。
 
 完整排障叙述见 [host_adapter_contract.md](host_adapter_contract.md) 中 Cursor 小节与 [harness_architecture.md](harness_architecture.md) 中 Review gate 相关段落。
+
+## Hook 减法闭集与内存（2026-05-20）
+
+| 宿主 | 默认注册事件数 | 手册 |
+|------|----------------|------|
+| **Cursor** | **7** | [`docs/hosts/cursor.md`](hosts/cursor.md) |
+| **Claude Code** | **4** | [`docs/hosts/claude.md`](hosts/claude.md) |
+| **Codex CLI** | 见 `.codex/hooks.json`（另述） | [`docs/hosts/codex-cli.md`](hosts/codex-cli.md) |
+
+- **Cursor 已移除**：`afterAgentResponse`（compact 清门改 **`Stop` tail**）、shell 生命周期、`afterFileEdit`、`preCompact`。
+- **`postToolUse`**：仍注册，但 `Read`/`Grep` 等在 router-rs **fast-path** 跳过 tracker 与 hook-state 锁；须 **`cargo build --release`** 且 launcher 命中 release（~8MB）。
+- **Claude**：`PostToolUse` 仅 touched settings/framework 时才有上下文；共享 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（`.claude/router-rs-hook.env`）。
+- **恢复旧 Cursor 事件**：见 [`MIGRATION.md`](../MIGRATION.md)。
 
 ## Codex：hook 重复触发
 

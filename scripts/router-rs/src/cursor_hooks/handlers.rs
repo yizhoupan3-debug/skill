@@ -10,7 +10,13 @@ fn merge_continuity_followups(
     output: &mut Value,
     frame: &crate::task_state::CursorContinuityFrame,
 ) {
-    let autopilot = build_autopilot_drive_followup_using_frame(repo_root, frame);
+    let goal_mismatch_blocks_drive =
+        crate::task_state::task_view_has_active_goal_focus_mismatch_note(&frame.pointer_view);
+    let autopilot = if goal_mismatch_blocks_drive {
+        None
+    } else {
+        build_autopilot_drive_followup_using_frame(repo_root, frame)
+    };
     let rfv = build_rfv_loop_followup_using_frame(repo_root, frame);
     match (autopilot, rfv) {
         (Some(ap_msg), Some(rfv_msg)) if !ap_msg.is_empty() && !rfv_msg.is_empty() => {
@@ -2743,8 +2749,38 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
     json!({})
 }
 
+/// PostToolUse fast-path: skip tracker, hook-state, evidence, and rust-lint for tools that
+/// cannot affect review multiset / shell ledger / pre-goal (see plan: Cursor memory P0).
+fn post_tool_use_needs_work(repo_root: &Path, event: &Value, name: &str) -> bool {
+    if tool_name_matches_subagent_lane(name) {
+        return true;
+    }
+    if name.eq_ignore_ascii_case("shell") {
+        return true;
+    }
+    if tool_name_is_rust_file_write_tool(name) {
+        if let Some(path) = payload_tool_path(event) {
+            if path.extension().and_then(|e| e.to_str()) == Some("rs")
+                && path.is_file()
+                && crate::path_guard::path_is_within_repo_root(repo_root, &path)
+            {
+                return true;
+            }
+        }
+    }
+    if let Ok(Some(state)) = load_state(repo_root, event) {
+        if review_hard_armed(&state) {
+            return true;
+        }
+    }
+    false
+}
+
 fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let name = normalize_tool_name(Some(&tool_name_of(event)));
+    if !post_tool_use_needs_work(repo_root, event, &name) {
+        return json!({});
+    }
     if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name) {
         eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
     }
@@ -3127,7 +3163,12 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                     None => true,
                     Some(n) => state.review_followup_count <= n,
                 };
-                let skip_continuity_merge = gate_blocks_continuity || !use_full;
+                // soft_nag 超 cap：仍注入 REVIEW 提示，但不阻断 GSD/RFV 续跑（ADR / P1-4）。
+                let skip_continuity_merge = if use_full {
+                    gate_blocks_continuity
+                } else {
+                    state.goal_required && !goal_is_satisfied(&state)
+                };
                 let out = if use_full {
                     json!({ "followup_message": review_stop_followup_line(&state) })
                 } else {
@@ -4218,6 +4259,30 @@ fn dispatch_disabled_should_strip_nags(lowered: &str) -> bool {
     )
 }
 
+/// ADR-006: strip review-arming fields while keeping unrelated hook-state (shell ledger, etc.).
+fn clear_review_gate_hook_state(repo_root: &Path, event: &Value) {
+    let mut lock = acquire_state_lock(repo_root, event);
+    if lock.is_none() {
+        eprintln!("[router-rs] review_gate_disabled_state_clear_skipped: hook-state lock unavailable");
+        return;
+    }
+    let mut state = load_state(repo_root, event)
+        .ok()
+        .flatten()
+        .unwrap_or_else(empty_state);
+    if !state.review_required && state.review_subagent_pending_cycle_keys.is_empty() {
+        release_state_lock(&mut lock);
+        return;
+    }
+    state.review_required = false;
+    state.review_subagent_pending_cycle_keys.clear();
+    sync_review_cycle_legacy_fields(&mut state);
+    clear_review_gate_escalation_counters(&mut state);
+    let _ = save_state(repo_root, event, &mut state);
+    release_state_lock(&mut lock);
+    eprintln!("[router-rs] review_gate_disabled_state_cleared");
+}
+
 pub(crate) fn dispatch_cursor_hook_event(
     repo_root: &Path,
     event_name: &str,
@@ -4227,9 +4292,19 @@ pub(crate) fn dispatch_cursor_hook_event(
     let lowered = lowered.as_str();
     let disabled = cursor_review_gate_disabled_by_env();
 
+    if disabled {
+        if matches!(lowered, "sessionstart") {
+            clear_review_gate_hook_state(repo_root, payload);
+        } else if matches!(
+            lowered,
+            "posttooluse" | "subagentstart" | "subagentstop" | "beforesubmitprompt" | "userpromptsubmit"
+        ) {
+            clear_review_gate_hook_state(repo_root, payload);
+        }
+    }
+
     // Emergency short-circuit: in disabled mode beforesubmit / userpromptsubmit skip the
-    // review-gate-aware handler entirely so the host always sees `continue: true`. Other events
-    // share the same handler dispatch with the normal mode; differences live in nag scrubbing.
+    // review-gate-aware handler entirely so the host always sees `continue: true`.
     if disabled && matches!(lowered, "beforesubmitprompt" | "userpromptsubmit") {
         return json!({ "continue": true });
     }

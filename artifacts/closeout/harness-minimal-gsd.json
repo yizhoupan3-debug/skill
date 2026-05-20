@@ -19,8 +19,6 @@
     "skills/plan-mode/SKILL.md",
     "skills/gsd/ship/SKILL.md",
     "skills/gsd/verify-work/SKILL.md",
-    "skills/autopilot/SKILL.md",
-    "skills/_archived/autopilot/SKILL.md"
   ],
   "commands_run": [
     {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},

@@ -34,4 +34,4 @@ Regenerate with:
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
 ```
 
-Steady-state documentation map (vs `docs/history/` archive): `docs/README.md`.
+Steady-state documentation map: `docs/README.md`.

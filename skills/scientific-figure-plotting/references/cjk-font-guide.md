@@ -31,7 +31,7 @@ Install Noto Sans SC (Google's open CJK font):
 brew install --cask font-noto-sans-cjk-sc
 
 # pip (for matplotlib only)
-pip install matplotlib-cjk-fonts
+uv add --dev matplotlib-cjk-fonts && uv sync --all-groups
 ```
 
 After installing, clear matplotlib's font cache:

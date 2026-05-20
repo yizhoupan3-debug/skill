@@ -15,6 +15,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const TRACKER_FILE: &str = "SESSION_CALL_TRACKER.json";
 const SCHEMA_VERSION: &str = "fw-session-call-tracker-v1";
 
+fn cap_per_tool_keys(per_tool: &mut serde_json::Map<String, Value>) {
+    let max_keys = crate::router_env_flags::router_rs_session_call_tracker_tool_keys_max();
+    if per_tool.len() <= max_keys {
+        return;
+    }
+    let mut entries: Vec<(String, u64)> = per_tool
+        .iter()
+        .map(|(k, v)| (k.clone(), v.as_u64().unwrap_or(0)))
+        .collect();
+    entries.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    while per_tool.len() > max_keys {
+        if let Some((key, _)) = entries.first() {
+            per_tool.remove(key);
+            entries.remove(0);
+        } else {
+            break;
+        }
+    }
+}
+
 /// Global write lock for atomic file operations.
 static TRACKER_WRITE_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
 
@@ -43,6 +63,7 @@ pub fn record_tool_call(repo_root: &Path, tool_name: &str) -> Result<(), String>
             .ok_or_else(|| "per_tool not an object".to_string())?;
         let count = per_tool.get(tool_name).and_then(Value::as_u64).unwrap_or(0);
         per_tool.insert(tool_name.to_string(), json!(count + 1));
+        cap_per_tool_keys(per_tool);
 
         write_tracker(&path, &payload)
     })
@@ -335,6 +356,22 @@ mod tests {
         }
         let warnings = check_anomalies(&repo).unwrap();
         assert!(warnings.iter().any(|w| w.contains("closeout_gate")));
+    }
+
+    #[test]
+    fn per_tool_cap_evicts_lowest_count() {
+        let repo = test_repo("cap");
+        init_tracker(&repo).unwrap();
+        let max = crate::router_env_flags::router_rs_session_call_tracker_tool_keys_max();
+        for i in 0..=max {
+            record_tool_call(&repo, &format!("tool_{i}")).unwrap();
+        }
+        record_tool_call(&repo, "tool_new").unwrap();
+        let state = read_tracker_state(&repo).unwrap();
+        let per_tool = state["per_tool"].as_object().expect("object");
+        assert!(per_tool.len() <= max);
+        assert!(per_tool.get("tool_new").is_some());
+        assert!(per_tool.get("tool_0").is_none());
     }
 
     #[test]

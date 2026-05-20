@@ -151,7 +151,23 @@ safe_symlink() {
   echo "symlink $linkpath -> $target"
 }
 
+install_hook_env() {
+  local src="${FRAMEWORK_ROOT}/.cursor/router-rs-hook.env"
+  local dest="${PROJECT_ROOT}/.cursor/router-rs-hook.env"
+  if [[ -f "$dest" ]]; then
+    echo "router-rs-hook.env already present; skipping"
+    return
+  fi
+  if [[ ! -f "$src" ]]; then
+    echo "note: no ${src}; skip router-rs-hook.env copy"
+    return
+  fi
+  cp "$src" "$dest"
+  echo "wrote $dest"
+}
+
 install_hooks
+install_hook_env
 safe_symlink "${FRAMEWORK_ROOT}/skills" "${PROJECT_ROOT}/skills"
 safe_symlink "${FRAMEWORK_ROOT}/AGENTS.md" "${PROJECT_ROOT}/AGENTS.md"
 

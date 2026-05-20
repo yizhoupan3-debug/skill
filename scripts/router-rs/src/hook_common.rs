@@ -455,7 +455,7 @@ pub fn normalize_subagent_type(value: Option<&str>) -> String {
 ///
 /// **不是** Claude stdio-agent reviewer lane 的超集（Claude 另含 review/critic 等）；勿把本函数结果套到 Claude 门控。
 pub fn is_deep_review_gate_lane_normalized(lane: &str) -> bool {
-    crate::registry_review_gate::is_deep_review_gate_lane_from_registry(lane)
+    crate::registry_loader::is_deep_review_gate_lane_from_registry(lane, None)
 }
 
 pub fn normalize_tool_name(value: Option<&str>) -> String {
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn deep_review_gate_lane_normalized_matches_registry_matrix() {
-        crate::registry_review_gate::assert_deep_review_gate_lane_matrix();
+        crate::registry_review_gate::assert_deep_review_gate_lane_matrix(None);
     }
 
     #[test]

@@ -774,7 +774,7 @@ fn reviewer_lane(tool_input: &Value, payload: &Value) -> bool {
             .and_then(Value::as_str),
     );
     !subagent_type.is_empty()
-        && crate::registry_review_gate::is_claude_reviewer_lane_from_registry(&subagent_type)
+        && crate::registry_loader::is_claude_reviewer_lane_from_registry(&subagent_type, None)
 }
 
 fn subagent_tool(payload: &Value) -> bool {

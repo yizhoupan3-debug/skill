@@ -1,0 +1,13 @@
+{
+  "files.watcherExclude": {
+    "**/target/**": true,
+    "**/node_modules/**": true,
+    "**/.git/objects/**": true,
+    "**/.cursor/hook-state/**": true
+  },
+  "search.exclude": {
+    "**/target": true
+  },
+  "rust-analyzer.cargo.targetDir": "/tmp/skill-cargo-target",
+  "rust-analyzer.files.excludeDirs": ["target", "node_modules"]
+}

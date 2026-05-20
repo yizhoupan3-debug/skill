@@ -99,14 +99,11 @@ Prefer `uv` when installing Python dependencies.
 Python packages:
 
 ```bash
-uv pip install reportlab pdfplumber pypdf
+uv add reportlab pdfplumber pypdf
+uv sync
 ```
 
-Fallback:
-
-```bash
-python3 -m pip install reportlab pdfplumber pypdf
-```
+Or one-shot: `uvx --with reportlab --with pdfplumber --with pypdf python script.py`
 
 System rendering tools:
 

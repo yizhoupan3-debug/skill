@@ -113,10 +113,11 @@ Run the notebook top-to-bottom when the environment allows.
 - Use stable, descriptive filenames (for example, `ablation-temperature.ipynb`).
 
 ## Dependencies (install only when needed)
-Prefer `uv` for dependency management. Optional packages for local notebook execution:
+Prefer `$python-env-management` / uv for dependencies. Optional packages for local notebook execution:
 
 ```bash
-uv pip install jupyterlab ipykernel
+uv add --group dev jupyterlab ipykernel
+uv sync --all-groups
 ```
 
 ## Environment

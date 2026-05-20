@@ -19,6 +19,8 @@ coverage.xml
 htmlcov/
 lcov.info
 *.bak_codex_*
+*.bak
+hooks.json.bak
 configs/codex/sub_accounts.state.json
 .pytest_cache/
 .codebuddy/

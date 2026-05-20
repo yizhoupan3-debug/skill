@@ -5,7 +5,7 @@ use crate::router_env_flags::router_rs_task_ledger_flock_enabled;
 use crate::task_state::resolve_task_view;
 use serde_json::{json, Value};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Print diagnostics to stdout (plain text, not JSON).
 pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
@@ -84,6 +84,27 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
     println!("\n--- Codex hooks duplication (operator) ---");
     for line in super::codex_hooks_duplicate::collect_codex_hooks_duplicate_warnings(repo_root) {
         println!("{line}");
+    }
+
+    println!("\n--- generated artifacts (manifest drift) ---");
+    match crate::host_integration::generated_artifacts_status_for_repo(repo_root) {
+        Ok(summary) => {
+            let ok = summary.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            println!(
+                "generated-artifacts-status: {}",
+                if ok { "ok" } else { "DRIFT or FAIL" }
+            );
+            if let Some(arr) = summary.get("drifted_artifacts").and_then(|v| v.as_array()) {
+                let n = arr.len();
+                if n > 0 {
+                    println!("  drifted_count: {n}");
+                }
+            }
+            if !ok {
+                println!("  fix: cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot");
+            }
+        }
+        Err(e) => println!("generated-artifacts-status: error ({e})"),
     }
 
     println!("\n--- continuity ledger ---");

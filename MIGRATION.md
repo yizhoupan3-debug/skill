@@ -18,7 +18,7 @@ just doctor
 ## 默认工作流（全宿主）
 
 - **GSD** 为默认生命周期（`/gsd-new-project` … `/gsd-ship`），已在 `RUNTIME_REGISTRY` 为 `codex-cli` / `cursor` / `claude-code` / `claude-desktop` 注册；`AGENTS.md` 与各宿主 framework 投影文案一致。
-- `/autopilot` 已退役；连续执行请用 `/gsd-execute-phase`（见 `skills/_archived/autopilot/SKILL.md`）。
+- `/autopilot` 已退役；连续执行请用 `/gsd-execute-phase`（goal drive 经 `GOAL_STATE.json` + `framework_autopilot_goal` stdio）。
 
 ## Cursor：framework 规则仅用户级
 
@@ -40,3 +40,52 @@ cd /path/to/project
   --framework-root "$SKILL_FRAMEWORK_ROOT" --with-configs
 # 可选：--with-cursor-rules 仅 symlink harness gate 规则（不含 framework.mdc）
 ```
+
+## Cursor：hooks 减法闭集（2026-05-20）
+
+本仓 [`.cursor/hooks.json`](.cursor/hooks.json) 默认仅 **7** 事件：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。
+
+**已移除的注册**（`router-rs` handler 仍保留，可手动加回 hooks.json）：
+
+| 事件 | 恢复代价 / 说明 |
+|------|-----------------|
+| `afterAgentResponse` | compact findings 可提前一轮清 `REVIEW_GATE`；默认改 `Stop` tail |
+| `beforeShellExecution` / `afterShellExecution` | SessionEnd 终端 PID 账本更全；需 `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS≠0` 才有意义 |
+| `afterFileEdit` | Agent 改 `.rs` 后自动 `rustfmt` |
+| `preCompact` | compaction 前 RFV/门状态摘要 |
+
+**内存相关**：见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「内存 / release」；项目 env [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。
+
+## Claude Code：hook env 与 Cursor 对齐（2026-05-20）
+
+Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`），无需删除 Cursor 侧已移除的 5 个事件。
+
+| 项 | 路径 |
+|----|------|
+| 项目 env 真源 | [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env) |
+| 模板 / 新仓库复制 | [`configs/framework/claude-router-rs-hook.env`](configs/framework/claude-router-rs-hook.env) |
+| Launcher | [`configs/framework/claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)（release 优先，与 Cursor 同序） |
+| 重装 hooks 合并 | `framework host-integration install --to claude --scope project` |
+
+默认 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（减 PostTool 证据写盘）。**不要**把 `ROUTER_RS_CURSOR_*` 写入 Claude env（无意义）。
+
+## Harness framework hardening（2026-05-20）
+
+| 变更 | 说明 |
+|------|------|
+| `review_gate` lane 集 | 从磁盘 `configs/framework/RUNTIME_REGISTRY.json` 读取（改 lane **无需** `cargo build`）；`framework doctor` 会跑 `generated-artifacts-status` 摘要 |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |
+| active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时**不**注入 `GSD_GOAL_CONTINUE`；用 `framework task-state-resolve` 或修正 `active_task.json` |
+| Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 提示，但**不再**阻断 GSD 续跑 |
+| `SKILL_ROUTING_RUNTIME.scope` | `hot_skill_count`/`full_skill_count` = 热表行数；`manifest_skill_count` = 全 manifest 行数 |
+
+## 文档与计划卫生（2026-05-20）
+
+| 移除 | 替代真源 |
+|------|----------|
+| `docs/plans/*.md`（除 [`docs/plans/README.md`](docs/plans/README.md)） | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
+| `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
+| `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
+| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/gsd/`](skills/gsd/) + `/gsd-execute-phase` |
+
+勿在 issue/评论中链接已删路径；契约以 [`docs/README.md`](docs/README.md) 索引为准。

@@ -721,7 +721,9 @@ mod should_retry_with_manifest_tests {
     #[test]
     fn visual_review_hot_does_not_block_manifest_systematic_debugging() {
         let mut hot = make_decision("visual-review", 14.0, "L3", "four_step");
-        hot.reasons.push("Visual-review weak match: no explicit visual evidence, reduced score.".to_string());
+        hot.reasons.push(
+            "Visual-review weak match: no explicit visual evidence, reduced score.".to_string(),
+        );
         let mut full = make_decision("systematic-debugging", 72.0, "L2", "four_step");
         full.reasons.push("Routing gate matched: bug.".to_string());
         full.reasons.push(

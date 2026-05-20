@@ -1,4 +1,7 @@
 //! Process-local cache for `terminals/*.txt` scans within one hook subprocess.
+//!
+//! Cache hits avoid repeat `read_dir` scans; callers still receive an owned `Vec` clone per call.
+//! The main win is skipping duplicate directory walks within one hook subprocess (not zero-copy).
 
 use super::{parse_terminal_header, TerminalObservation};
 use std::collections::HashMap;
@@ -6,14 +9,17 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
 
+/// Max distinct `terminals_dir` keys per hook subprocess (daemon would need revisiting).
+const MAX_TERMINAL_CACHE_DIRS: usize = 8;
+
 struct CacheEntry {
     dir_mtime: Option<SystemTime>,
-    observations: Vec<TerminalObservation>,
+    observations: Arc<Vec<TerminalObservation>>,
 }
 
 static CACHE: Mutex<Option<HashMap<PathBuf, CacheEntry>>> = Mutex::new(None);
@@ -61,18 +67,22 @@ pub fn collect_terminal_observations_cached(terminals_dir: &Path) -> Vec<Termina
     let map = guard.get_or_insert_with(HashMap::new);
     if let Some(entry) = map.get(terminals_dir) {
         if entry.dir_mtime == mtime {
-            return entry.observations.clone();
+            return (*entry.observations).clone();
         }
     }
     let observations = scan_terminals_dir(terminals_dir);
+    let shared = Arc::new(observations);
+    if map.len() >= MAX_TERMINAL_CACHE_DIRS {
+        map.clear();
+    }
     map.insert(
         terminals_dir.to_path_buf(),
         CacheEntry {
             dir_mtime: mtime,
-            observations: observations.clone(),
+            observations: Arc::clone(&shared),
         },
     );
-    observations
+    (*shared).clone()
 }
 
 #[cfg(test)]

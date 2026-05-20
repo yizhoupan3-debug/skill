@@ -886,6 +886,40 @@
       "cold"
     ],
     [
+      "python-env-management",
+      "L4",
+      "owner",
+      "none",
+      "P2",
+      "macOS Python governance with uv-only (Rust) packaging: PATH single-track, per-project uv.lock, pip ban, migration runbook.",
+      "n/a",
+      [
+        "python 环境管理",
+        "python 版本混乱",
+        "不用 pip",
+        "uv 包管理",
+        "uv.lock",
+        ".python-version",
+        "全局 python 包",
+        "python PATH",
+        "pip 禁用",
+        "python 长期治理",
+        "macos python setup",
+        "astral uv"
+      ],
+      "project",
+      3,
+      "skills/python-env-management/SKILL.md",
+      [
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "cold"
+    ],
+    [
       "math-derivation",
       "L4",
       "owner",
@@ -937,11 +971,8 @@
       3,
       "skills/openai-docs/SKILL.md",
       [
-        "claude-code",
-        "claude-desktop",
         "codex-app",
-        "codex-cli",
-        "cursor"
+        "codex-cli"
       ],
       "skill"
     ],

@@ -1,0 +1,9 @@
+[project]
+name = "skill-framework"
+version = "0.0.0"
+description = "Minimal Python surface for skill-framework hook tests and CI (uv-only)."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv]
+package = false

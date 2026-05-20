@@ -715,6 +715,11 @@ fn compatibility_alias_inventory() -> Value {
     })
 }
 
+/// Lightweight summary for `framework doctor` (full manifest regen is expensive).
+pub(crate) fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value, String> {
+    generated_artifacts_status(Some(repo_root), Some(&repo_root.join("artifacts")))
+}
+
 fn generated_artifacts_status(
     framework_root: Option<&Path>,
     artifact_root: Option<&Path>,
@@ -913,6 +918,7 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
     matches!(
         path,
         ".codex/host_entrypoints_sync_manifest.json"
+            | ".codex/prompts/framework.md"
             | ".claude/rules/framework.md"
             | ".claude/settings.json"
             | ".claude/CLAUDE.md"
@@ -2165,6 +2171,30 @@ fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool, String> {
     write_json_if_changed(settings_path, &merged)
 }
 
+fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+    let dest = roots.project_root.join(".claude/router-rs-hook.env");
+    if dest.is_file() {
+        return Ok(false);
+    }
+    let template = roots
+        .framework_root
+        .join("configs/framework/claude-router-rs-hook.env");
+    if !template.is_file() {
+        return Ok(false);
+    }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::copy(&template, &dest).map_err(|e| {
+        format!(
+            "install claude hook env: copy {} -> {}: {e}",
+            template.display(),
+            dest.display()
+        )
+    })?;
+    Ok(true)
+}
+
 fn install_claude_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -2174,10 +2204,11 @@ fn install_claude_projection(
     let changed =
         write_text_if_changed(&target, &render_claude_framework_entrypoint(roots, scope))?;
     let hooks_changed = install_claude_settings_hooks(&settings_path)?;
+    let env_changed = install_claude_hook_env_if_absent(roots)?;
     let manifest_changed = write_claude_projection_manifest(roots, scope, &target, &settings_path)?;
     Ok(json!({
         "status": "installed",
-        "changed": changed || hooks_changed || manifest_changed,
+        "changed": changed || hooks_changed || env_changed || manifest_changed,
         "scope": scope,
         "prompts": {
             "framework": {

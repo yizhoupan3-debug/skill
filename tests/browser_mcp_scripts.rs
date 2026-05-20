@@ -341,6 +341,7 @@ fn launcher_prefers_explicit_attach_descriptor_env_over_auto_discovery() {
     assert_eq!(
         result["argv"],
         json!([
+            "diagnose",
             "browser",
             "mcp-stdio",
             "--repo-root",
@@ -368,6 +369,7 @@ fn launcher_leaves_sqlite_attach_discovery_to_rust_runtime() {
     assert_eq!(
         result["argv"],
         json!([
+            "diagnose",
             "browser",
             "mcp-stdio",
             "--repo-root",
@@ -410,6 +412,7 @@ fn browser_mcp_stdio_exposes_repository_skill_router_tools() {
     ]
     .join("\n");
     let mut command = router_rs_command([
+        "diagnose",
         "browser",
         "mcp-stdio",
         "--repo-root",
@@ -468,6 +471,7 @@ fn launcher_leaves_filesystem_attach_discovery_to_rust_runtime() {
     assert_eq!(
         result["argv"],
         json!([
+            "diagnose",
             "browser",
             "mcp-stdio",
             "--repo-root",
@@ -491,6 +495,7 @@ fn launcher_uses_canonical_attach_artifact_env() {
     assert_eq!(
         result["argv"],
         json!([
+            "diagnose",
             "browser",
             "mcp-stdio",
             "--repo-root",
@@ -522,6 +527,7 @@ fn launcher_prefers_descriptor_env_over_attach_artifact_env() {
     assert_eq!(
         result["argv"],
         json!([
+            "diagnose",
             "browser",
             "mcp-stdio",
             "--repo-root",
@@ -540,6 +546,7 @@ fn launcher_falls_back_to_plain_start_when_no_attach_input_exists() {
     assert_eq!(
         result["argv"],
         json!([
+            "diagnose",
             "browser",
             "mcp-stdio",
             "--repo-root",
@@ -553,6 +560,7 @@ fn launcher_falls_back_to_plain_start_when_no_attach_input_exists() {
 fn run_resolver_cli(search_root: &std::path::Path) -> Output {
     let repo_root = project_root();
     run(router_rs_command([
+        "diagnose",
         "browser",
         "resolve-attach-artifact",
         "--repo-root",
@@ -595,6 +603,7 @@ fn run_launcher(
     extra_args: &[&str],
 ) -> serde_json::Value {
     let mut args: Vec<String> = vec![
+        "diagnose".into(),
         "browser".into(),
         "mcp-stdio".into(),
         "--repo-root".into(),

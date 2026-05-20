@@ -1088,7 +1088,7 @@ Regenerate with:\n\n\
 ```sh\n\
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"\n\
 ```\n\n\
-Steady-state documentation map (vs `docs/history/` archive): `docs/README.md`.\n"
+Steady-state documentation map: `docs/README.md`.\n"
         .to_string()
 }
 

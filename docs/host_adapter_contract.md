@@ -81,7 +81,7 @@
 
 **闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；hooks 通过 **`router-rs claude-desktop agent`**，投影安装 **`router-rs framework install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。两者在 Rust 里共享 host-neutral stdio-agent hook 协议实现，但 host id、投影路径（`.claude/*` / `.claude-desktop/*`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。
 
-**单行指针**：跨 Cursor 工作区接入步骤见仓库根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）。**分宿主操作手册（≤1 页）**：[`docs/hosts/cursor.md`](hosts/cursor.md)、[`docs/hosts/codex-cli.md`](hosts/codex-cli.md)、[`docs/hosts/claude.md`](hosts/claude.md)。历史清单 [`docs/plans/cursor_cross_workspace_operator_checklist.md`](plans/cursor_cross_workspace_operator_checklist.md) 为 archived stub，运行时以 hosts 手册为准。
+**单行指针**：跨 Cursor 工作区接入与操作步骤见 [`docs/hosts/cursor.md`](hosts/cursor.md)；仓库级一键接入见根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）。**其它宿主操作手册（≤1 页）**：[`docs/hosts/codex-cli.md`](hosts/codex-cli.md)、[`docs/hosts/claude.md`](hosts/claude.md)。
 
 **Cursor 投影 scope**：`framework.mdc` 与 browser MCP 规则仅安装到 **user** scope（`~/.cursor/rules/`）；仓库内保留 `.cursor/hooks.json` 与项目级 harness 配置。`framework maint refresh-host-projections` 对 `cursor` 使用 `--scope user`，其它 installable 宿主仍为 `project`。
 
@@ -118,9 +118,11 @@
 
 ### Cursor（`.cursor/hooks.json`）
 
+**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../MIGRATION.md)）。项目 env：[`.cursor/router-rs-hook.env`](../.cursor/router-rs-hook.env)；`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../scripts/router-rs/src/cursor_hooks/handlers.rs)）。
+
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`（及策略合并字段，见运行时）；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`**（[`harness_architecture.md`](harness_architecture.md) §5 表） |
+| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`（及策略合并字段，见运行时）；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NAGGES`**（[`harness_architecture.md`](harness_architecture.md) §5 表） |
 | 续跑类合并 | Same | [`cursor_hooks/`](../scripts/router-rs/src/cursor_hooks/mod.rs) + `autopilot_goal` / `rfv_loop` | `additional_context` / `followup_message`（宿主 JSON 出站字段） |
 | **`ROUTER_RS_OPERATOR_INJECT` × SessionStart** | SessionStart | `cursor_hooks`（`handle_session_start`） | 与 Codex 对称：闸关则不写入连续性 `additional_context`；闸开则复用 `framework_runtime::continuity_digest` 与 Codex 同源段落；出站超长时与 review gate 等路径一致追加 `...[~trunc]`（细则见 [`harness_architecture.md`](harness_architecture.md) §2.1） |
 | **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | `ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时在 stdout 打印醒目 WARN（与 [`harness_architecture.md`](harness_architecture.md) §3.1 一致） |
@@ -135,9 +137,11 @@
 
 ### Claude Code（`router-rs claude hook`）
 
+**默认注册 4 事件**（减法闭集，与 Cursor 7 事件不同宿主能力）：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`。项目 env：[`.claude/router-rs-hook.env`](../.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](../configs/framework/claude-router-rs-hook.env)）；launcher **release 优先** 同 Cursor（[`claude-router-rs-hook.sh`](../configs/framework/claude-router-rs-hook.sh)）。
+
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | stdio-agent hook shared implementation | `.claude/hook_state_<session>.json`（会话 touch 状态；Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/review_gate_*.json`、`hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE`（与 Codex `CODEX_HOOK_STATE_UNREADABLE` 同形排障） |
 | 投影规则与 hook 绑定 | `router-rs framework install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/settings.json`（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）、`.claude/.framework-projection.json`（project scope） |
 

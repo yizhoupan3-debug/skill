@@ -2071,7 +2071,7 @@ fn outbound_truncation_preserves_review_gate_and_continuity_suppressed_lines() {
 }
 
 #[test]
-fn review_gate_disabled_post_tool_use_still_advances_phase_after_arm() {
+fn review_gate_disabled_post_tool_use_does_not_advance_review_phase() {
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -2096,7 +2096,11 @@ fn review_gate_disabled_post_tool_use_still_advances_phase_after_arm() {
 
     assert_eq!(out, json!({}));
     let state = load_state_for(&repo, "srg-pu2");
-    assert!(state.phase >= 2, "phase={}", state.phase);
+    assert!(
+        state.phase < 2,
+        "DISABLE must clear review state and not advance phase via postToolUse; phase={}",
+        state.phase
+    );
 }
 
 #[test]
@@ -2360,8 +2364,8 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
         "hint= must stay in followup_message after cap; fm3={fm3:?}"
     );
     assert!(
-        blob3.contains("continuity_suppressed=review_soft_nag"),
-        "soft-nag stop should note suppressed continuity merge; blob3={blob3:?}"
+        !blob3.contains("continuity_suppressed=review_soft_nag"),
+        "soft-nag over cap must not block GSD/RFV merge (P1-4); blob3={blob3:?}"
     );
 }
 
@@ -2755,6 +2759,58 @@ fn subagent_start_then_stop_promotes_to_phase3() {
     let state = load_state_for(&repo, "s6b");
     assert_eq!(state.phase, 3);
     assert_eq!(state.subagent_stop_count, 1);
+}
+
+#[test]
+fn post_tool_use_fast_path_skips_tracker_for_read() {
+    let repo = fresh_repo();
+    let sid = "s-fast-read";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "Read",
+            "tool_input": { "path": "README.md" }
+        }),
+    );
+    let tracker = repo.join("artifacts/current/SESSION_CALL_TRACKER.json");
+    assert!(
+        !tracker.is_file(),
+        "fast-path Read must not write SESSION_CALL_TRACKER"
+    );
+}
+
+#[test]
+fn post_tool_use_still_records_subagent_on_task_tool() {
+    let _guard = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-fast-task";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "Task",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "fork_context": false,
+                "subagent_id": "pt-only"
+            }
+        }),
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(
+        state
+            .review_subagent_pending_cycle_keys
+            .contains(&"id:pt-only".to_string()),
+        "Task postToolUse must enqueue review multiset when gate armed"
+    );
 }
 
 /// `subagentStart` 与随后同一 `subagent_id` 的 `PostToolUse` 不应对 **`id:`** multiset 双入队。
@@ -3261,6 +3317,10 @@ fn review_gate_two_distinct_subagent_ids_both_stops_clear_gate() {
 /// 无 subagent id 时 cycle key 均为同一 `lane:`；两次并行 start 压入两条 multiset 记录，需**两次** stop 才清门。
 #[test]
 fn review_gate_parallel_lane_only_keys_two_stops_clear_gate() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_cap = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "2");
+
     let repo = fresh_repo();
     let sid = "s-parallel-lane-only";
     let _ = dispatch_cursor_hook_event(
@@ -3318,6 +3378,11 @@ fn review_gate_parallel_lane_only_keys_two_stops_clear_gate() {
     assert_eq!(state.phase, 3);
     assert!(state.review_subagent_pending_cycle_keys.is_empty());
     assert_eq!(state.subagent_stop_count, 1);
+
+    match prev_cap {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
 }
 
 #[test]

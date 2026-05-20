@@ -222,11 +222,6 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         "sessionStart",
         "sessionEnd",
         "postToolUse",
-        "afterAgentResponse",
-        "beforeShellExecution",
-        "afterShellExecution",
-        "afterFileEdit",
-        "preCompact",
         "subagentStart",
         "subagentStop",
     ];

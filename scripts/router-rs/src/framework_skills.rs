@@ -42,7 +42,12 @@ pub(crate) fn validate_skills(repo_root: &Path) -> Result<(), String> {
     if !runtime_slugs.contains("gsd") {
         errors.push("runtime missing expected GSD framework_command slug: gsd".to_string());
     }
-    for slug in ["gsd-new-project", "gsd-plan-phase", "gsd-execute-phase", "gsd-ship"] {
+    for slug in [
+        "gsd-new-project",
+        "gsd-plan-phase",
+        "gsd-execute-phase",
+        "gsd-ship",
+    ] {
         if !disk_slugs.contains(slug) {
             errors.push(format!("disk missing expected GSD lane skill: {slug}"));
         }
@@ -93,10 +98,7 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
     if let Some(rows) = manifest["skills"].as_array() {
         for row in rows {
             let slug = row.get(0).and_then(Value::as_str).unwrap_or("");
-            let skill_path = row
-                .get(path_idx)
-                .and_then(Value::as_str)
-                .unwrap_or("");
+            let skill_path = row.get(path_idx).and_then(Value::as_str).unwrap_or("");
             let platforms = host_idx
                 .and_then(|i| row.get(i))
                 .cloned()
@@ -185,14 +187,8 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
                 "loadouts": {}
             }),
         ),
-        (
-            "skills/SKILL_ROUTING_REGISTRY.md",
-            json!(null),
-        ),
-        (
-            "skills/SKILL_ROUTING_INDEX.md",
-            json!(null),
-        ),
+        ("skills/SKILL_ROUTING_REGISTRY.md", json!(null)),
+        ("skills/SKILL_ROUTING_INDEX.md", json!(null)),
     ];
     for (rel, value) in stubs {
         let path = repo_root.join(rel);
@@ -246,11 +242,7 @@ fn collect_missing_skill_paths(
     let keys = doc
         .get("keys")
         .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .collect::<Vec<_>>()
-        })
+        .map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>())
         .unwrap_or_default();
     let path_idx = keys.iter().position(|k| *k == "skill_path");
     for row in rows {

@@ -14,8 +14,7 @@ fn ascii_lower_contains_word_token(c: &str, token: &str) -> bool {
     while i + tlen <= bytes.len() {
         if &c[i..i + tlen] == token {
             let before_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
-            let after_ok =
-                i + tlen == bytes.len() || !bytes[i + tlen].is_ascii_alphanumeric();
+            let after_ok = i + tlen == bytes.len() || !bytes[i + tlen].is_ascii_alphanumeric();
             if before_ok && after_ok {
                 return true;
             }
