@@ -2457,8 +2457,8 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
     }
     state_lock_degraded_followup().to_string()
 }
-/// 首次武装时注入一行指针，避免 `additional_context` 过长刷屏；细则见 skill / harness §5.0。
-const CURSOR_DEEP_REVIEW_DEFAULT_NUDGE: &str = "深度审稿：`skills/code-review-deep/SKILL.md`（默认≥2 路只读并行；lane 仅 general-purpose / best-of-n-runner；每路 JSON 布尔 fork_context=false）。";
+/// Legacy fallback when registry nudge unavailable.
+const CURSOR_DEEP_REVIEW_DEFAULT_NUDGE_FALLBACK: &str = "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer。细则 skills/code-review-deep/SKILL.md";
 
 /// 同一条用户提交里同时出现 review 信号与 goal drive 入口时追加；与 `review_arms_for_gate` 语义对齐。
 const CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 GSD 执行区入口（`/gsd-execute-phase` 等）；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/gsd-execute-phase`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
@@ -2624,7 +2624,12 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         && !cursor_review_gate_disabled_by_env()
         && !state.review_override
     {
-        merge_additional_context(&mut output, CURSOR_DEEP_REVIEW_DEFAULT_NUDGE);
+        let nudge = if crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root)) {
+            crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root))
+        } else {
+            CURSOR_DEEP_REVIEW_DEFAULT_NUDGE_FALLBACK.to_string()
+        };
+        merge_additional_context(&mut output, &nudge);
     }
     if review && goal_drive_entrypoint && !cursor_review_gate_disabled_by_env() {
         merge_additional_context(&mut output, CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE);

@@ -63,6 +63,16 @@ cd /path/to/project
 
 升级后若 continuity 仍报 supervisor 分歧：触发一次 **Cursor Stop** 或 `router-rs framework session-artifact-write`（`focus: false`）。
 
+## Spawn-first 配对审稿（deep-review-multiagent-compact-2026-05，2026-05-21）
+
+| 项 | 说明 |
+|----|------|
+| **Registry** | `review_gate.spawn_first_enabled`（默认 true）、`spawn_first_nudge`（一行文案） |
+| **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **仅关闭** beforeSubmit/UPS 单行 nudge；**不** 改变 REVIEW_GATE 清门阈值 |
+| **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（四宿主 `is_narrow_review_prompt`） |
+| **禁止** | `start_count≥2` 清门、缺 `review-lanes` 文件即 Stop block |
+| **细则** | [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)、[`docs/references/EXECUTION_LADDER.md`](docs/references/EXECUTION_LADDER.md) |
+
 ## Cursor / Codex wave-2 review gate（2026-05）
 
 | 主题 | 行为 |

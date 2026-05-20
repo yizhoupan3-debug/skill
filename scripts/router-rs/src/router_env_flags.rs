@@ -41,6 +41,7 @@ const ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS_ENV: &str =
 const ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV: &str =
     "ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX";
 const ROUTER_RS_CURSOR_HOOK_SILENT_ENV: &str = "ROUTER_RS_CURSOR_HOOK_SILENT";
+const ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
 const ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV: &str =
     "ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX";
 
@@ -77,6 +78,11 @@ pub fn router_rs_cursor_hook_legacy_subtracted_events_enabled() -> bool {
 /// `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`：hook-state 持久化失败时 beforeSubmit 仍 `continue: true`（应急）。
 pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN_ENV)
+}
+
+/// Spawn-first pairing reviewer one-line nudge in hook outbound context (all hosts). Default **on**; `0|false|off|no` disables nudge only (gate thresholds unchanged).
+pub fn router_rs_review_spawn_first_nudge_enabled() -> bool {
+    router_rs_env_enabled_default_true(ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV)
 }
 
 const ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =

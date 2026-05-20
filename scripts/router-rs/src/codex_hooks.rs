@@ -805,10 +805,13 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
     if let Some(warning) = codex_projection_drift_warning(repo_root) {
         contexts.push(warning);
     }
-    if facts.review_required && !facts.review_override {
-        contexts.push(
-            "Review gate: start a read-only independent reviewer subagent with explicit `fork_context=false` (`subagent_type` must be **`general-purpose`** or **`best-of-n-runner`** for countable evidence — `explore` does not qualify), then synthesize findings locally. Codex records observed independent reviewer evidence; read-only intent must remain explicit in the lane prompt.".to_string(),
-        );
+    if facts.review_required
+        && !facts.review_override
+        && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root))
+    {
+        contexts.push(crate::registry_loader::review_spawn_first_nudge_line(Some(
+            repo_root,
+        )));
     }
     let additional_context = codex_compact_contexts(contexts);
     if additional_context.is_none() {
@@ -2921,15 +2924,40 @@ mod tests {
                 .as_ref()
                 .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
                 .unwrap_or_default();
-            assert!(ctx.contains("Review gate:"));
+            assert!(
+                ctx.contains("配对审稿") || ctx.contains("fork_context"),
+                "spawn-first nudge: {ctx}"
+            );
             assert!(ctx.contains("fork_context=false"));
-            assert!(ctx.contains("general-purpose") && ctx.contains("best-of-n-runner"));
+            assert!(ctx.contains("general-purpose") || ctx.contains("best-of-n-runner"));
             if !ctx.is_empty() {
                 assert!(ctx.len() <= codex_additional_context_max_bytes());
             }
             let state = codex_load_state(&repo, &payload).unwrap().unwrap();
             assert_eq!(state.seq, 1);
             assert!(state.review_required);
+        }
+
+        #[test]
+        fn user_prompt_submit_narrow_path_skips_review_arm() {
+            let repo = fresh_repo();
+            let payload = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-narrow",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"review ./README.md"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            assert!(
+                out.is_none(),
+                "narrow single-path review must not arm gate: {out:?}"
+            );
+            let armed = codex_load_state(&repo, &payload)
+                .ok()
+                .flatten()
+                .map(|s| s.review_required)
+                .unwrap_or(false);
+            assert!(!armed, "narrow prompt should not set review_required");
         }
 
         #[test]

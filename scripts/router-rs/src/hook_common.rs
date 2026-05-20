@@ -316,6 +316,16 @@ pub fn is_framework_non_goal_entrypoint_prompt(text: &str) -> bool {
 }
 
 pub fn is_narrow_review_prompt(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.eq_ignore_ascii_case("small_task")
+        || trimmed.starts_with("small_task\n")
+        || trimmed.starts_with("small_task ")
+    {
+        return true;
+    }
+    if trimmed.contains("不用子代理") || trimmed.to_ascii_lowercase().contains("no subagent") {
+        return true;
+    }
     if !review_keyword_re().is_match(text) {
         return false;
     }
@@ -326,6 +336,12 @@ pub fn is_narrow_review_prompt(text: &str) -> bool {
         return false;
     }
     narrow_review_prefix_re().is_match(text)
+}
+
+/// Whether hooks may inject the spawn-first pairing reviewer one-liner.
+pub fn should_inject_spawn_first_review_nudge(repo_root: Option<&std::path::Path>) -> bool {
+    crate::router_env_flags::router_rs_review_spawn_first_nudge_enabled()
+        && crate::registry_loader::review_spawn_first_enabled(repo_root)
 }
 
 fn strong_code_review_anchor(sanitized: &str, tokens: &[String]) -> bool {
@@ -571,6 +587,16 @@ mod tests {
         assert!(!is_framework_goal_entry_prompt("/autopilot"));
         assert!(!is_framework_goal_entry_prompt("/autopilot-quick"));
         assert!(!is_gsd_pre_execution_entry_prompt("/gsd-execute-phase"));
+    }
+
+    #[test]
+    fn narrow_review_prompt_skips_arm_for_small_task_and_single_path() {
+        assert!(is_narrow_review_prompt("small_task"));
+        assert!(is_narrow_review_prompt("review ./README.md"));
+        assert!(!is_review_prompt("review ./README.md"));
+        assert!(!is_review_prompt("small_task\nplease check one paragraph"));
+        assert!(is_narrow_review_prompt("不用子代理，review src/lib.rs"));
+        assert!(!is_review_prompt("不用子代理，review src/lib.rs"));
     }
 
     #[test]

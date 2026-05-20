@@ -24,7 +24,7 @@
 | 事件 | 作用 |
 |------|------|
 | `PreToolUse` | 可 **deny**；守卫 framework/settings 路径 |
-| `UserPromptSubmit` | Review 武装 / 提示（对齐 Cursor `beforeSubmitPrompt` 语义） |
+| `UserPromptSubmit` | Review 武装 / **spawn-first** 单行 nudge（registry）；窄范围不武装 |
 | `PostToolUse` | settings/framework 变更提示；reviewer 证据（无 Cursor 式每工具 tracker 风暴） |
 | `Stop` | `REVIEW_GATE` / settings 校验 / touch-state 清门 |
 

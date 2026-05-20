@@ -498,15 +498,19 @@ fn before_submit_first_arm_injects_compact_deep_review_nudge() {
         "expected skill pointer; got {ac:?}"
     );
     assert!(
-        ac.contains("≥2") && ac.contains("fork_context=false"),
-        "expected compact ≥2 + fork_context hint; got {ac:?}"
+        ac.contains("fork_context=false"),
+        "expected spawn-first fork_context hint; got {ac:?}"
     );
     assert!(
-        ac.contains("general-purpose") && ac.contains("best-of-n-runner"),
+        ac.contains("配对审稿") || ac.contains("spawn"),
+        "expected spawn-first nudge; got {ac:?}"
+    );
+    assert!(
+        ac.contains("general-purpose") || ac.contains("best-of-n-runner"),
         "expected countable lane names; got {ac:?}"
     );
     assert!(
-        ac.len() < 280,
+        ac.len() < 400,
         "nudge should stay a single short line; len={} body={ac:?}",
         ac.len()
     );
@@ -527,8 +531,8 @@ fn before_submit_review_prompt_compact_nudge_has_no_second_breadth_paragraph() {
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        ac.contains("skills/code-review-deep/SKILL.md") && ac.contains("≥2"),
-        "expected same compact pointer; got {ac:?}"
+        ac.contains("skills/code-review-deep/SKILL.md") && ac.contains("fork_context=false"),
+        "expected spawn-first pointer; got {ac:?}"
     );
     assert!(
         !ac.contains("≥3"),

@@ -9,6 +9,7 @@ Desktop **没有** CLI 级 shell hook，因此：
 - **无** PreToolUse / Stop 硬拦截（registry `harness_capability_exceptions`）
 - **无** REVIEW_GATE 子代理 hook 面
 - 门控可靠 = **MCP 工具工作流** + 短投影文案，不假装 hook 已拦截
+- **叙事对齐**：深度 review 用 **spawn-first 配对审稿**（先 spawn 可数 reviewer；窄范围/small_task 不 block）；见 `skills/code-review-deep/SKILL.md`
 
 ## 安装
 

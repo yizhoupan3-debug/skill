@@ -37,6 +37,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 - 多层 hook **全部加载、并发**；项目 hook 需 trusted project
 - PostTool / Stop / SessionStart → 证据与 continuity digest
 - REVIEW_GATE 可数 lane：`review_gate.deep_gate_lanes`（与 Cursor 相同；**不含** Claude 的 `review`/`reviewer` 等）。单次 PostToolUse 证据，无 multiset
+- **Spawn-first**：`UserPromptSubmit` 注入 registry `spawn_first_nudge` 一行；窄范围（`review ./file`、`small_task`）不武装 gate
 - **Stop 清门与 Cursor 不对齐**：Codex **无**用户消息粘贴的 **`rg_clear`** / **`/rg_clear`** 或 bounded **`reject_reason`** 令牌清门（[`saw_reject_reason`](../../scripts/router-rs/src/hook_common.rs) 仅 Cursor Stop 消费）。清门须 **PostTool 独立审稿证据**（可数 lane + `fork_context=false`，缺省推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）或运维 env（如 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 仅跳 Stop 门控重放，非粘贴清门）。对照 [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1。
 
 ## 独有

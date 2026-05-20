@@ -43,6 +43,7 @@ On start: set `GOAL_STATE.json` `status` → `running`, `drive_until_done` → `
 | Subagent dense | Spawn subagents for specific tasks |
 | One-breath | Don't ask user at every step |
 | Evidence driven | Every verification → EVIDENCE_INDEX |
+| Spawn-first review | When review+execute mix: spawn pairing reviewer before main tools; lane notes → `review-lanes/` (soft) |
 | Checkpoint at boundaries | State persists at each wave end |
 
 ## Pre-Conditions

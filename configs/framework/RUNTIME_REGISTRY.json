@@ -74,6 +74,8 @@
     }
   },
   "review_gate": {
+    "spawn_first_enabled": true,
+    "spawn_first_nudge": "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
     "deep_gate_lanes": [
       "general-purpose",
       "generalpurpose",

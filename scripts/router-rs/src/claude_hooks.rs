@@ -456,11 +456,13 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
                 );
             }
         };
-        if state.review_required && !state.review_override {
-            return add_context(
-                "UserPromptSubmit",
-                "Review gate: start an observed independent reviewer lane first (`fork_context=false`), then synthesize findings locally. The hook records independent reviewer evidence when the payload proves the lane and fork setting.",
-            );
+        if state.review_required
+            && !state.review_override
+            && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root))
+        {
+            let nudge =
+                crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root));
+            return add_context("UserPromptSubmit", &nudge);
         }
     }
     None

@@ -33,6 +33,15 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 - **对照**：真 **`router-rs AG_FOLLOWUP`** 的 `missing_parts=` 只会是 goal 门控片段（如 `goal_contract`、`checkpoint_progress`、`verification_or_blocker`）的逗号拼接，**不会出现** `independent_subagent_or_reject_reason` 这类占位串；若见该串且前缀不是 `router-rs `，按仿冒处理。
 - **粘贴清门**：用户消息里单独一行粘贴 **`RG_FOLLOWUP`…** **不会**被 [`saw_reject_reason`](../scripts/router-rs/src/hook_common.rs) 当作清门（避免把模型仿造行当令牌）；请改用单独一行的 **`rg_clear`**、**[`AGENTS.md`](../AGENTS.md) 所列拒因 token**，或自然语言 `review_override` / `delegation_override`。goal 相关的 **`ag_followup…`** 粘贴兼容仍由同函数处理。
 
+## Spawn-first 配对审稿（2026-05-21）
+
+| 主题 | 操作 |
+|------|------|
+| **目标** | 少 Stop `REVIEW_GATE` nag：首轮工具**前** spawn 可数 reviewer；主线程调研须**另开** reviewer（`explore` 不算） |
+| **一行 nudge** | registry `spawn_first_nudge`；关 nudge：`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` |
+| **窄范围不拦** | `review ./file`、`small_task`、不用子代理 → 不武装 gate |
+| **勿做** | 为提高 spawn 率而收紧清门（`≥2` lane、lane 文件必达） |
+
 ## Harness 硬化要点（2026-05-20）
 
 | 主题 | 行为 |

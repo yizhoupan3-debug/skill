@@ -44,6 +44,13 @@
 
 **区分**：`ROUTER_RS_HOOK_OBSERVATION_RULES.json` 等仍由 `include_str!` 编译进二进制（见 [`rust_contracts.md`](rust_contracts.md)）；**review_gate lane 集不在此列**。
 
+| 字段 | 含义 |
+|------|------|
+| `review_gate.spawn_first_enabled` | 默认 true；为 false 时跳过 spawn-first 单行 nudge（清门阈值不变） |
+| `review_gate.spawn_first_nudge` | 四宿主 hook 出站一行配对审稿文案（Cursor beforeSubmit、Codex UPS、Claude UserPromptSubmit） |
+
+**窄范围 skip**（四宿主）：`hook_common::is_narrow_review_prompt` → 不武装 `review_required`（`review ./file`、`small_task`、不用子代理）。**不提高** wave-2 `start_count` 清门阈值。
+
 ### 跨宿主 REVIEW_GATE 差异（operator）
 
 | 能力 | Cursor | Codex CLI | Claude Code | Claude Desktop / codex-app |

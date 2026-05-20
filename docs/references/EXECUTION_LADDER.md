@@ -10,8 +10,10 @@
 
 ## Review
 
-- 深度 review：`fork_context=false` 只读 reviewer；lane 闭集见 `host_adapter_contract.md` §0.1。
-- 默认走 `skills/code-review-deep/SKILL.md`：**review-only**，禁止默认改代码。
+- 深度 review：**spawn-first 配对审稿**——首轮主线程工具前先 spawn 可数只读 reviewer（`fork_context=false`）；主线程调研须 **另开** 独立 reviewer（`explore` 不计入证据）。细则 `skills/code-review-deep/SKILL.md`。
+- lane 闭集见 `host_adapter_contract.md` §0.1；**不提高** wave-2 Stop 清门阈值。
+- **窄范围**（单文件路径 review、`small_task`、不用子代理）：不武装 review gate，**不得** Stop-block。
+- 默认 **review-only**，禁止默认改代码。
 - 清门 token（单独一行）：`small_task`、`shared_context_heavy`、`write_scope_overlap`、`next_step_blocked`、`verification_missing`、`token_overhead_dominates`。
 
 ## 并行与 subagent

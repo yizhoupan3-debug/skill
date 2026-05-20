@@ -1093,6 +1093,18 @@ fn plugin_catalog_routing_metadata_companion_schemas_contract() {
 }
 
 #[test]
+#[test]
+fn runtime_registry_review_gate_spawn_first_fields() {
+    let root = project_root();
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let rg = &registry["review_gate"];
+    assert_eq!(rg["spawn_first_enabled"], true);
+    let nudge = rg["spawn_first_nudge"].as_str().expect("spawn_first_nudge str");
+    assert!(nudge.contains("fork_context"));
+    assert!(nudge.contains("配对审稿") || nudge.contains("spawn"));
+}
+
+#[test]
 fn runtime_provider_registry_declares_component_plugin_lanes() {
     let registry =
         read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));

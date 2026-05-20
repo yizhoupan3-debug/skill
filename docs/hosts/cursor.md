@@ -32,7 +32,7 @@ Pre-execution 三命令 **禁止改产品代码**（`skills/gsd/shared/phase-bou
 
 | 事件 | 作用 |
 |------|------|
-| `beforeSubmitPrompt` | Review / pre-goal / GSD beforeSubmit 门控 |
+| `beforeSubmitPrompt` | Review / pre-goal / GSD；深度 review **spawn-first** 单行 nudge（`review_gate.spawn_first_nudge`） |
 | `stop` | `REVIEW_GATE` / closeout / `GSD_GOAL_CONTINUE` |
 | `subagentStart` / `subagentStop` | 可数深度 lane + open subagent 限流 |
 | `postToolUse` | Review multiset 兜底 + Shell 账本；**非门控工具**在 router-rs 内 fast-path 跳过。**`timeout: 20`**（与 beforeSubmit/stop/subagent 一致） |

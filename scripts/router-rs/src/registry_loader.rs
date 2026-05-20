@@ -7,10 +7,14 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+const DEFAULT_SPAWN_FIRST_NUDGE: &str = "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md";
+
 #[derive(Clone)]
 struct ReviewGateSnapshot {
     deep_gate_lanes: HashSet<String>,
     claude_reviewer_lanes: HashSet<String>,
+    spawn_first_enabled: bool,
+    spawn_first_nudge: String,
 }
 
 static CACHE: OnceLock<Mutex<HashMap<PathBuf, ReviewGateSnapshot>>> = OnceLock::new();
@@ -99,9 +103,25 @@ fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, S
         std::fs::read_to_string(registry_path).map_err(|e| format!("read registry: {e}"))?;
     let root: Value =
         serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))?;
+    let review_gate = root
+        .get("review_gate")
+        .ok_or_else(|| "RUNTIME_REGISTRY.review_gate missing".to_string())?;
+    let spawn_first_enabled = review_gate
+        .get("spawn_first_enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let spawn_first_nudge = review_gate
+        .get("spawn_first_nudge")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_SPAWN_FIRST_NUDGE)
+        .to_string();
     Ok(ReviewGateSnapshot {
         deep_gate_lanes: lane_set(&root, "deep_gate_lanes")?,
         claude_reviewer_lanes: lane_set(&root, "claude_reviewer_lanes")?,
+        spawn_first_enabled,
+        spawn_first_nudge,
     })
 }
 
@@ -138,6 +158,28 @@ pub(crate) fn is_claude_reviewer_lane_from_registry(lane: &str, repo_root: Optio
 pub fn check_review_gate_registry_snapshot(repo_root: &Path) -> Result<(), String> {
     let path = registry_json_path(Some(repo_root));
     load_snapshot_from_disk(&path).map(|_| ())
+}
+
+/// Spawn-first pairing reviewer nudge enabled (registry default true).
+pub fn review_spawn_first_enabled(repo_root: Option<&Path>) -> bool {
+    snapshot(repo_root)
+        .map(|s| s.spawn_first_enabled)
+        .unwrap_or(true)
+}
+
+/// One-line spawn-first nudge for hook `additional_context` (registry-backed).
+pub fn review_spawn_first_nudge_line(repo_root: Option<&Path>) -> String {
+    snapshot(repo_root)
+        .map(|s| s.spawn_first_nudge.clone())
+        .unwrap_or_else(|_| DEFAULT_SPAWN_FIRST_NUDGE.to_string())
+}
+
+#[cfg(test)]
+pub(crate) fn assert_spawn_first_registry_fields(repo_root: Option<&Path>) {
+    assert!(review_spawn_first_enabled(repo_root));
+    let line = review_spawn_first_nudge_line(repo_root);
+    assert!(line.contains("fork_context"));
+    assert!(line.contains("code-review-deep") || line.contains("配对审稿"));
 }
 
 /// Smoke matrix for tests (uses disk registry at `repo_root` or crate-relative default).
@@ -178,6 +220,11 @@ mod tests {
     #[test]
     fn claude_reviewer_lane_matrix_disk_default() {
         assert_claude_reviewer_lane_matrix(None);
+    }
+
+    #[test]
+    fn spawn_first_registry_fields_disk_default() {
+        assert_spawn_first_registry_fields(None);
     }
 
     #[test]
