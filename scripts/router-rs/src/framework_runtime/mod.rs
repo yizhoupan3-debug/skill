@@ -44,6 +44,7 @@ pub use constants::{
 };
 pub use continuity_digest::{
     build_framework_continuity_digest_prompt, build_framework_continuity_digest_prompt_ex,
+    build_framework_continuity_digest_prompt_from_task_view,
 };
 pub use framework_doctor::{run_continuity_audit, run_framework_doctor};
 pub use prompt_compression::build_framework_prompt_compression_envelope;
@@ -633,6 +634,33 @@ pub(crate) fn truncate_utf8_chars_with_ellipsis(input: &str, max_chars: usize) -
     out
 }
 
+/// Resolve the task to refresh on automatic Stop hooks: **active → focus** (no mint).
+pub fn resolve_automatic_stop_checkpoint_task_id(repo_root: &Path) -> Option<String> {
+    let pointers = crate::task_state::read_task_pointers(repo_root);
+    pointers
+        .active_task_id
+        .or(pointers.focus_task_id)
+        .filter(|s| !s.is_empty())
+}
+
+/// Stop-hook checkpoint: in-place refresh of the current task; does not repoint control plane.
+pub fn build_automatic_stop_hook_checkpoint_payload(
+    repo_root: &Path,
+    task_line: &str,
+    summary_text: &str,
+) -> Option<Value> {
+    let task_id = resolve_automatic_stop_checkpoint_task_id(repo_root)?;
+    let payload = build_automatic_continuity_checkpoint_payload_with_task_id(
+        repo_root,
+        task_line,
+        summary_text,
+        Some(task_id.as_str()),
+        false,
+        true,
+    );
+    Some(payload)
+}
+
 /// 构建自动连续性检查点载荷（非完成态 `status=in_progress`，用于 Codex Stop 等钩子）。
 ///
 /// `task_line` 用作路由摘要标题；`summary_text` 写入 SESSION_SUMMARY 正文片段。
@@ -646,15 +674,22 @@ pub fn build_automatic_continuity_checkpoint_payload(
         task_line,
         summary_text,
         None,
+        false,
+        false,
     )
 }
 
 /// 带可选 task_id 的版本（用于 Desktop MCP session_checkpoint tool）。
+///
+/// `repointer_focus`: when true, rewrite active/focus/supervisor (explicit user checkpoint).
+/// `update_registry_only_if_known`: when true, never append a new registry row for unknown ids.
 pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
     repo_root: &Path,
     task_line: &str,
     summary_text: &str,
     task_id: Option<&str>,
+    repointer_focus: bool,
+    update_registry_only_if_known: bool,
 ) -> Value {
     let output_dir = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
     let task = if task_line.trim().is_empty() {
@@ -675,7 +710,8 @@ pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
         "summary": summary,
         "phase": "execution",
         "status": "in_progress",
-        "focus": true,
+        "focus": repointer_focus,
+        "update_registry_only_if_known": update_registry_only_if_known,
         "next_actions": [
             "Open artifacts/current/SESSION_SUMMARY.md on the next session.",
             "Optional: run `router-rs framework snapshot --repo-root <repo>` for a compact runtime read model.",
@@ -1153,10 +1189,12 @@ pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<
     // SECURITY: Verify the resolved path is still within the expected directory.
     // This prevents any remaining path traversal attempts (e.g., via symlinks).
     let closeout_dir = repo_root.join("artifacts").join("closeout");
-    let canonical_path = std::fs::canonicalize(&path)
-        .or_else(|_| std::fs::canonicalize(&closeout_dir).map(|p| p.join(format!("{}.json", sanitized))));
+    let canonical_path = std::fs::canonicalize(&path).or_else(|_| {
+        std::fs::canonicalize(&closeout_dir).map(|p| p.join(format!("{}.json", sanitized)))
+    });
     if let Ok(canonical) = canonical_path {
-        let canonical_dir = std::fs::canonicalize(&closeout_dir).map_err(|e| format!("failed to canonicalize closeout directory: {}", e))?;
+        let canonical_dir = std::fs::canonicalize(&closeout_dir)
+            .map_err(|e| format!("failed to canonicalize closeout directory: {}", e))?;
         if !canonical.starts_with(&canonical_dir) {
             return Err("path traversal detected".to_string());
         }
@@ -1342,6 +1380,30 @@ fn is_terminal(value: &str, terminal_values: &[&str]) -> bool {
     terminal_values
         .iter()
         .any(|candidate| lowered == *candidate)
+}
+
+#[cfg(test)]
+mod evidence_lock_order_tests {
+    #[test]
+    fn append_evidence_index_merged_row_does_not_use_task_ledger_flock() {
+        let src = include_str!("mod.rs");
+        let start = src
+            .find("fn append_evidence_index_merged_row")
+            .expect("append_evidence_index_merged_row");
+        let rest = &src[start..];
+        let end = rest
+            .find("\npub fn framework_hook_evidence_append")
+            .unwrap_or(rest.len());
+        let body = &rest[..end];
+        assert!(
+            !body.contains("apply_task_ledger_mutation"),
+            "evidence append must not nest task-ledger flock (L3→L1 deadlock risk)"
+        );
+        assert!(
+            body.contains("acquire_runtime_path_lock"),
+            "evidence append must use path flock"
+        );
+    }
 }
 
 #[cfg(test)]

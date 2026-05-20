@@ -109,10 +109,10 @@ pub(super) fn load_framework_runtime_view(
         let direct = safe_slug(task_id_override.unwrap_or(""));
         if direct.is_empty().not() {
             Some(direct)
-        } else if let Some(focus_task_id) = focus_task_id.clone() {
-            Some(focus_task_id)
         } else if pointer_task_id.is_empty().not() {
             Some(pointer_task_id.clone())
+        } else if let Some(focus_task_id) = focus_task_id.clone() {
+            Some(focus_task_id)
         } else {
             supervisor_task_id
                 .is_empty()
@@ -120,19 +120,6 @@ pub(super) fn load_framework_runtime_view(
                 .then_some(supervisor_task_id.clone())
         }
     };
-    if task_id_override.is_none() {
-        if let Some(task_id) = active_task_id.as_ref() {
-            if task_registry_present
-                && !registry_task_ids_before_selection
-                    .iter()
-                    .any(|existing| existing == task_id)
-            {
-                control_plane_inconsistency_reasons.push(format!(
-                    "selected task_id '{task_id}' is missing from task_registry.json"
-                ));
-            }
-        }
-    }
     if let Some(task_id) = active_task_id.clone() {
         if !known_task_ids.iter().any(|existing| existing == &task_id) {
             known_task_ids.push(task_id.clone());
@@ -152,6 +139,21 @@ pub(super) fn load_framework_runtime_view(
     if let Some(task_id) = focus_task_id.clone() {
         if !known_task_ids.iter().any(|existing| existing == &task_id) {
             known_task_ids.push(task_id);
+        }
+    }
+    if task_id_override.is_none() {
+        if let Some(task_id) = active_task_id.as_ref() {
+            let task_dir = mirror_root.join(task_id);
+            if task_registry_present
+                && task_dir.is_dir()
+                && !registry_task_ids_before_selection
+                    .iter()
+                    .any(|existing| existing == task_id)
+            {
+                control_plane_inconsistency_reasons.push(format!(
+                    "selected task_id '{task_id}' is missing from task_registry.json"
+                ));
+            }
         }
     }
     let task_root = active_task_id

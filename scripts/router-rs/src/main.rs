@@ -22,6 +22,7 @@ mod harness_context_signals;
 mod harness_contract;
 mod harness_operator_nudges;
 mod hook_common;
+mod hook_timing;
 mod hook_observation_rules;
 mod hook_policy;
 mod hook_posttool_normalize;

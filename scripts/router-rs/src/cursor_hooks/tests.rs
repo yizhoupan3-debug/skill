@@ -606,11 +606,7 @@ fn before_submit_gsd_new_project_does_not_arm_goal_required() {
 fn before_submit_gsd_plan_phase_does_not_arm_goal_required() {
     let repo = fresh_repo();
     let sid = "gsd-plan-pre-exec";
-    let _ = dispatch_cursor_hook_event(
-        &repo,
-        "beforeSubmitPrompt",
-        &event(sid, "/gsd-plan-phase"),
-    );
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/gsd-plan-phase"));
     let state = load_state_for(&repo, sid);
     assert!(
         !state.goal_required,
@@ -2056,6 +2052,35 @@ fn subagent_start_promotes_phase_to_2() {
 }
 
 #[test]
+fn review_lane_subagent_start_does_not_count_toward_review_gate() {
+    let repo = fresh_repo();
+    let sid = "s5-review-lane";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "review",
+            "fork_context": false
+        }),
+    );
+    let state = load_state_for(&repo, sid);
+    assert_eq!(
+        state.subagent_start_count, 0,
+        "review lane is not in deep_gate_lanes"
+    );
+    assert!(
+        state.review_subagent_pending_cycle_keys.is_empty(),
+        "non-qualifying start must not enqueue pending cycle keys"
+    );
+}
+
+#[test]
 fn review_subagent_start_with_shared_fork_does_not_promote_phase() {
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
@@ -2110,6 +2135,85 @@ fn review_subagent_start_without_explicit_fork_false_does_not_promote_phase() {
 }
 
 #[test]
+fn stop_releases_l3_before_continuity_checkpoint() {
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-stop-l3-release";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false
+        }),
+    );
+    assert_ne!(
+        out.get("permission").and_then(Value::as_str),
+        Some("deny"),
+        "stop must release L3 before returning so a later hook can acquire; out={out:?}"
+    );
+}
+
+#[test]
+fn review_gate_soft_nag_includes_need_segment() {
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("1");
+    let repo = fresh_repo();
+    let sid = "s-soft-need";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("mode=soft_nag") && fm.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
+        "soft-nag followup must include need= segment; fm={fm:?}"
+    );
+}
+
+#[test]
+fn session_end_acquires_lock_before_state_delete() {
+    let repo = fresh_repo();
+    let payload = event("s-end-lock", "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let sp = state_path(&repo, &payload);
+    assert!(sp.exists());
+    let _ = dispatch_cursor_hook_event(&repo, "sessionEnd", &payload);
+    assert!(!sp.exists(), "sessionEnd must remove review gate state");
+    let mut lock = acquire_state_lock(&repo, &payload);
+    assert!(lock.is_some(), "sessionEnd must not leave L3 wedged");
+    release_state_lock(&mut lock);
+}
+
+#[test]
+fn post_tool_skips_cargo_check_when_env_off() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC");
+    std::env::set_var("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC", "0");
+    assert!(
+        !crate::router_env_flags::router_rs_cursor_cargo_check_sync_enabled(),
+        "env off must disable sync cargo check gate"
+    );
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC", v),
+        None => std::env::remove_var("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC"),
+    }
+}
+
+#[test]
 fn review_gate_stop_softens_after_max_nudges_env_cap() {
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("2");
@@ -2153,12 +2257,12 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
         "third stop should shorten followup_message; fm3={fm3:?}"
     );
     assert!(
-        !fm3.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
-        "full need= should leave followup_message after cap; fm3={fm3:?}"
+        fm3.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
+        "need= must stay in followup_message after cap (not only additional_context); fm3={fm3:?}"
     );
     assert!(
-        blob3.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT),
-        "full line should remain visible via additional_context; blob3={blob3:?}"
+        blob3.contains("continuity_suppressed=review_soft_nag"),
+        "soft-nag stop should note suppressed continuity merge; blob3={blob3:?}"
     );
 }
 
@@ -3128,7 +3232,8 @@ fn before_submit_reject_reason_token_in_user_prompt_satisfies_pre_goal() {
         .and_then(Value::as_str)
         .unwrap_or_default();
     assert!(
-        !msg.contains("GSD execute (/gsd-execute-phase)") && !msg.contains("independent-context reviewer"),
+        !msg.contains("GSD execute (/gsd-execute-phase)")
+            && !msg.contains("independent-context reviewer"),
         "reject_reason on submit should skip pre-goal nag; msg={msg:?}"
     );
 }
@@ -3561,6 +3666,26 @@ fn cursor_lock_recovers_from_stale_timestamp() {
 }
 
 #[test]
+fn cursor_lock_recovers_from_stale_timestamp_when_pid_is_current_process() {
+    let repo = fresh_repo();
+    let payload = event("s27-alive", "review");
+    let lock_path = state_lock_path(&repo, &payload);
+    fs::create_dir_all(lock_path.parent().expect("parent")).expect("mkdir");
+    let stale_ts = now_millis().saturating_sub(60_000);
+    fs::write(
+        &lock_path,
+        format!("pid={} ts={stale_ts}\n", std::process::id()),
+    )
+    .expect("seed stale lock");
+    let mut lock = acquire_state_lock(&repo, &payload);
+    assert!(
+        lock.is_some(),
+        "must reclaim L3 lock when age > HOOK_STATE_LOCK_STALE_MS even if metadata pid is alive"
+    );
+    release_state_lock(&mut lock);
+}
+
+#[test]
 fn cursor_lock_concurrent_acquire_serializes() {
     let repo = Arc::new(fresh_repo());
     let payload = event("s28-shared", "review");
@@ -3638,9 +3763,7 @@ fn parse_terminal_header_extracts_pid_cwd_active() {
 
 #[test]
 fn parse_terminal_header_inactive_when_no_running_for_ms() {
-    let txt = format!(
-        "---\npid: 35455\ncwd: {FRAMEWORK_HARNESS_TEST_CWD}\n---\n~/skill ❯"
-    );
+    let txt = format!("---\npid: 35455\ncwd: {FRAMEWORK_HARNESS_TEST_CWD}\n---\n~/skill ❯");
     let h = parse_terminal_header(&txt).expect("parsed");
     assert_eq!(h.pid, Some(35455));
     assert!(!h.is_active);
@@ -4117,7 +4240,11 @@ fn cursor_launcher_fail_closed_before_submit_when_router_rs_missing() {
     use std::process::Command;
     let framework = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let launcher = framework.join("configs/framework/cursor-router-rs-hook.sh");
-    assert!(launcher.is_file(), "launcher missing: {}", launcher.display());
+    assert!(
+        launcher.is_file(),
+        "launcher missing: {}",
+        launcher.display()
+    );
     let empty_ws = env::temp_dir().join(format!(
         "cursor-launcher-fail-closed-{}",
         std::process::id()
@@ -4151,10 +4278,8 @@ fn cursor_launcher_fail_open_session_start_when_router_rs_missing() {
     use std::process::Command;
     let framework = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let launcher = framework.join("configs/framework/cursor-router-rs-hook.sh");
-    let empty_ws = env::temp_dir().join(format!(
-        "cursor-launcher-fail-open-{}",
-        std::process::id()
-    ));
+    let empty_ws =
+        env::temp_dir().join(format!("cursor-launcher-fail-open-{}", std::process::id()));
     fs::create_dir_all(&empty_ws).expect("empty workspace");
 
     let output = Command::new("/bin/bash")
@@ -4209,11 +4334,7 @@ fn terminal_observation_cache_avoids_repeat_dir_scan() {
     ));
     fs::create_dir_all(&dir).expect("mkdir terminals");
     let txt = dir.join("1.txt");
-    fs::write(
-        &txt,
-        "pid: 4242\ncwd: /tmp\nlast_command: echo hi\n---\n",
-    )
-    .expect("write terminal");
+    fs::write(&txt, "pid: 4242\ncwd: /tmp\nlast_command: echo hi\n---\n").expect("write terminal");
     let _ = collect_terminal_observations_cached(&dir);
     let _ = collect_terminal_observations_cached(&dir);
     assert_eq!(
@@ -4248,9 +4369,8 @@ fn stop_and_post_tool_concurrent_hooks_complete_under_one_second() {
         dispatch_cursor_hook_event(&repo_post, "postToolUse", &post_payload)
     });
     let repo_stop = Arc::clone(&repo);
-    let stop = std::thread::spawn(move || {
-        dispatch_cursor_hook_event(&repo_stop, "stop", &stop_payload)
-    });
+    let stop =
+        std::thread::spawn(move || dispatch_cursor_hook_event(&repo_stop, "stop", &stop_payload));
     let _ = post.join().expect("post join");
     let _ = stop.join().expect("stop join");
     assert!(

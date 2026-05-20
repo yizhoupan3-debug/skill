@@ -92,6 +92,18 @@ fn merge_session_close_style_nudge_when_soft_terminal(output: &mut Value) {
     );
 }
 
+/// Release L3 session hook lock before any L1 task-ledger work inside [`finalize_stop_hook_outputs`].
+fn release_lock_then_finalize_stop(
+    repo_root: &Path,
+    output: &mut Value,
+    frame: &crate::task_state::CursorContinuityFrame,
+    skip_continuity_merge: bool,
+    lock: &mut Option<LockGuard>,
+) {
+    release_state_lock(lock);
+    finalize_stop_hook_outputs(repo_root, output, frame, skip_continuity_merge);
+}
+
 fn finalize_stop_hook_outputs(
     repo_root: &Path,
     output: &mut Value,
@@ -100,6 +112,8 @@ fn finalize_stop_hook_outputs(
 ) {
     if !skip_continuity_merge {
         merge_continuity_followups(repo_root, output, frame);
+    } else {
+        merge_additional_context(output, "continuity_suppressed=review_soft_nag");
     }
     merge_session_close_style_nudge_when_soft_terminal(output);
     try_write_cursor_continuity_checkpoint_on_stop(repo_root);
@@ -112,11 +126,14 @@ fn try_write_cursor_continuity_checkpoint_on_stop(repo_root: &Path) {
         return;
     }
     let summary_body = "Stop hook automatic checkpoint (Cursor).";
-    let payload = crate::framework_runtime::build_automatic_continuity_checkpoint_payload(
+    let Some(payload) = crate::framework_runtime::build_automatic_stop_hook_checkpoint_payload(
         repo_root,
         "cursor-stop",
         summary_body,
-    );
+    ) else {
+        eprintln!("[router-rs] cursor continuity checkpoint skipped: no active/focus task pointer");
+        return;
+    };
     if let Err(err) = crate::framework_runtime::write_framework_session_artifacts(payload) {
         eprintln!("[router-rs] cursor continuity checkpoint write failed (non-fatal): {err}");
     }
@@ -421,7 +438,7 @@ fn cursor_subagent_type_pair(tool_input: &Value, event: &Value) -> (String, Stri
     )
 }
 
-/// `/autopilot` pre-goal：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
+/// GSD goal pre-goal（`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
 /// `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 应急开启时退化为「任一带名 lane/agent 字段」以免应急路径过严。
 fn pre_goal_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
     if cursor_review_gate_disabled_by_env() {
@@ -538,7 +555,7 @@ pub struct ReviewGateState {
     pub goal_contract_seen: bool,
     pub goal_progress_seen: bool,
     pub goal_verify_or_block_seen: bool,
-    /// `/autopilot`：在 goal 契约与收口证据之前，要求独立上下文 subagent 预检（或拒绝原因词）。
+    /// GSD goal pre-goal：在 goal 契约与收口证据之前，要求独立上下文 subagent 预检（或拒绝原因词）。
     #[serde(default)]
     pub pre_goal_review_satisfied: bool,
     /// 连续触发 beforeSubmit 的 pre-goal 提示次数（清门或自动放行后归零）。
@@ -1140,7 +1157,7 @@ fn is_autopilot_goal_entry_prompt(prompt: &str, signal_text: &str) -> bool {
     is_framework_goal_drive_entry_prompt(prompt, signal_text)
 }
 
-/// 显式委托/并行入口走 bounded sidecar gate；goal 入口（`/autopilot`、`/gsd*`）只走 goal 机。
+/// 显式委托/并行入口走 bounded sidecar gate；goal 入口（GSD 执行区 `/gsd-execute-phase` 等）只走 goal 机。
 fn framework_prompt_arms_delegation(text: &str) -> bool {
     crate::hook_common::is_framework_non_goal_entrypoint_prompt(text)
 }
@@ -1395,6 +1412,7 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
     if should_force_hook_state_lock_failure_for_test() {
         return None;
     }
+    let wait_start = std::time::Instant::now();
     let dir = state_dir(repo_root);
     if fs::create_dir_all(&dir).is_err() {
         return None;
@@ -1422,6 +1440,7 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                 let _ = owned.seek(std::io::SeekFrom::Start(0));
                 let _ = owned.write_all(lock_text.as_bytes());
                 let _ = owned.sync_all();
+                crate::hook_timing::add_lock_wait_ms(wait_start.elapsed().as_millis() as u64);
                 return Some(LockGuard {
                     path: lock_path,
                     _file: owned,
@@ -1429,10 +1448,11 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
             }
             Err(_) => {
                 drop(file);
+                const HOOK_STATE_LOCK_STALE_MS: u64 = 30_000;
                 if let Ok(existing) = fs::read_to_string(&lock_path) {
                     if let Some((pid, ts_ms)) = parse_lock_metadata(&existing) {
                         let age_ms = now_millis().saturating_sub(ts_ms);
-                        if age_ms > 30_000 || !is_process_alive(pid) {
+                        if age_ms > HOOK_STATE_LOCK_STALE_MS || !is_process_alive(pid) {
                             let _ = fs::remove_file(&lock_path);
                         }
                     }
@@ -1732,7 +1752,7 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
         return false;
     }
     #[cfg(unix)]
-    {
+    if crate::router_env_flags::router_rs_cursor_hook_state_dir_sync_enabled() {
         if let Ok(dir_file) = OpenOptions::new().read(true).open(&directory) {
             let _ = dir_file.sync_all();
         }
@@ -1744,9 +1764,9 @@ fn review_hard_armed(state: &ReviewGateState) -> bool {
     review_gate_armed(state.review_required, state.review_override)
 }
 
-/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3：独立 start 后 stop 记账）。
+/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3 且 pending multiset 已排空）。
 fn review_subagent_evidence_satisfied(state: &ReviewGateState) -> bool {
-    state.phase >= 3
+    state.phase >= 3 && state.review_subagent_pending_cycle_keys.is_empty()
 }
 
 fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
@@ -2197,7 +2217,7 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
 /// 首次武装时注入一行指针，避免 `additional_context` 过长刷屏；细则见 skill / harness §5.0。
 const CURSOR_DEEP_REVIEW_DEFAULT_NUDGE: &str = "深度审稿：`skills/code-review-deep/SKILL.md`（默认≥2 路只读并行；lane 仅 general-purpose / best-of-n-runner；每路 JSON 布尔 fork_context=false）。";
 
-/// 同一条用户提交里同时出现 review 信号与 `/autopilot` 入口时追加；与 `review_arms_for_gate` 语义对齐。
+/// 同一条用户提交里同时出现 review 信号与 goal drive 入口时追加；与 `review_arms_for_gate` 语义对齐。
 const CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 GSD 执行区入口（`/gsd-execute-phase` 等）；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/gsd-execute-phase`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
 
 /// 将一条 `review_subagent_cycle_key` 压入 multiset 并同步 legacy 字段。
@@ -2312,7 +2332,10 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         merge_additional_context(&mut output, note);
     }
     if crate::hook_common::is_gsd_pre_execution_entry_prompt(&text) {
-        merge_additional_context(&mut output, crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE);
+        merge_additional_context(
+            &mut output,
+            crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE,
+        );
     }
     crate::paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(
         repo_root,
@@ -2621,6 +2644,9 @@ fn cargo_check_with_timeout(cargo_dir: &Path, timeout: std::time::Duration) -> (
 }
 
 fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String> {
+    if !crate::router_env_flags::router_rs_cursor_cargo_check_sync_enabled() {
+        return None;
+    }
     const TIMEOUT_S: u64 = 25;
     const MAX_ERROR_LINES: usize = 20;
 
@@ -2646,8 +2672,10 @@ fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String>
         return None;
     }
 
+    let cargo_start = std::time::Instant::now();
     let (rc, output) =
         cargo_check_with_timeout(&cargo_dir, std::time::Duration::from_secs(TIMEOUT_S));
+    crate::hook_timing::add_cargo_check_ms(cargo_start.elapsed().as_millis() as u64);
 
     // Continuity: append cargo check outcome to artifacts/current/EVIDENCE_INDEX.json (no-op if continuity not seeded).
     let cmd_preview = format!(
@@ -2768,8 +2796,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     if let Some(msg) = stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text)
     {
         let mut out = json!({ "followup_message": msg });
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame, false);
-        release_state_lock(&mut lock);
+        release_lock_then_finalize_stop(repo_root, &mut out, &frame, false, &mut lock);
         return out;
     }
     let (mut output, skip_continuity_merge) = match loaded {
@@ -2820,7 +2847,9 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 } else {
                     let full_cap = cap.expect("soft branch implies cap=Some");
                     let soft = review_stop_followup_soft_line(&state, full_cap);
-                    let mut soft_out = json!({ "followup_message": soft });
+                    let need_line = review_stop_followup_line(&state);
+                    let followup_message = format!("{soft}\n{need_line}");
+                    let mut soft_out = json!({ "followup_message": followup_message });
                     crate::autopilot_goal::merge_hook_nudge_paragraph(
                         &mut soft_out,
                         &review_stop_followup_detail_paragraph(&state),
@@ -2874,8 +2903,13 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             }
         }
     }
-    finalize_stop_hook_outputs(repo_root, &mut output, &frame, skip_continuity_merge);
-    release_state_lock(&mut lock);
+    release_lock_then_finalize_stop(
+        repo_root,
+        &mut output,
+        &frame,
+        skip_continuity_merge,
+        &mut lock,
+    );
     output
 }
 
@@ -3024,7 +3058,9 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
         }
     }
     if let Ok(digest) =
-        crate::framework_runtime::build_framework_continuity_digest_prompt_ex(repo_root, 4, true)
+        crate::framework_runtime::build_framework_continuity_digest_prompt_from_task_view(
+            repo_root, 4, true, &task_view,
+        )
     {
         let trimmed = digest.trim();
         if !trimmed.is_empty() {
@@ -3198,12 +3234,41 @@ fn handle_after_file_edit(repo_root: &Path, event: &Value) -> Value {
     if which::which("rustfmt").is_err() {
         return json!({});
     }
-    let _ = std::process::Command::new("rustfmt")
+    let _ = rustfmt_with_timeout(&p, std::time::Duration::from_secs(10));
+    json!({})
+}
+
+fn rustfmt_with_timeout(path: &Path, timeout: std::time::Duration) -> Option<i32> {
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+
+    let mut child = Command::new("rustfmt")
         .arg("--edition")
         .arg("2021")
-        .arg(&p)
-        .status();
-    json!({})
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.code(),
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    eprintln!(
+                        "[router-rs] rustfmt exceeded timeout ({}s) for {}",
+                        timeout.as_secs(),
+                        path.display()
+                    );
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
@@ -3211,9 +3276,11 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
     let ledger = load_session_terminal_ledger(repo_root, event);
     let owned_vec = ledger.owned_pids.clone();
     let owned: HashSet<u32> = owned_vec.into_iter().collect();
-    // 按本会话 `session_key` 精准删除主状态 / lock / adversarial-loop / terminal 账本。
-    let _ = fs::remove_file(state_path(repo_root, event));
-    let _ = fs::remove_file(state_lock_path(repo_root, event));
+    // 按本会话 `session_key` 精准删除主状态：须先持锁再删，避免与并发 hook 双 inode 双 flock。
+    let mut lock = acquire_state_lock(repo_root, event);
+    let sp = state_path(repo_root, event);
+    let _ = fs::remove_file(&sp);
+    release_state_lock(&mut lock);
     remove_adversarial_loop(repo_root, event);
     let _ = fs::remove_file(session_terminal_ledger_path(repo_root, event));
     // 原子写入孤儿：始终全局清扫（与 session_key 无关）。
@@ -3472,35 +3539,7 @@ fn normalize_shell_command(raw: &str) -> String {
 }
 
 fn collect_terminal_observations(terminals_dir: &Path) -> Vec<TerminalObservation> {
-    let mut out = Vec::new();
-    let Ok(entries) = fs::read_dir(terminals_dir) else {
-        return out;
-    };
-    let mut buf = String::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("txt") {
-            continue;
-        }
-        buf.clear();
-        if let Ok(file) = fs::File::open(&path) {
-            let _ = file.take(4096).read_to_string(&mut buf);
-        }
-        let Some(header) = parse_terminal_header(&buf) else {
-            continue;
-        };
-        let (Some(pid), Some(cwd)) = (header.pid, header.cwd) else {
-            continue;
-        };
-        out.push(TerminalObservation {
-            pid,
-            cwd,
-            active_command: header.active_command,
-            last_command: header.last_command,
-            started_at_ms: header.started_at_ms,
-        });
-    }
-    out
+    terminal_observation_cache::collect_terminal_observations_cached(terminals_dir)
 }
 
 #[cfg(unix)]

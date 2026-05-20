@@ -30,8 +30,11 @@ const ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP_ENV: &str =
     "ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP";
 const ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV: &str = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
 const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
+const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
+const ROUTER_RS_CURSOR_CARGO_CHECK_SYNC_ENV: &str = "ROUTER_RS_CURSOR_CARGO_CHECK_SYNC";
+const ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC_ENV: &str = "ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC";
 
-/// `/autopilot` **pre-goal** 仍保持显式 opt-in。
+/// GSD **pre-goal** nudge（legacy env 名 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）仍保持显式 opt-in。
 pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV)
 }
@@ -58,6 +61,21 @@ pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
 /// 默认 **启用**（unset 或非 `0`/`false`/`off`/`no`）；网络盘若不靠谱可显式设为关闭（并行写入风险自担）。
 pub fn router_rs_task_ledger_flock_enabled() -> bool {
     router_rs_env_enabled_default_true(ROUTER_RS_TASK_LEDGER_FLOCK_ENV)
+}
+
+/// `ROUTER_RS_HOOK_TIMING=1`: emit `hook_timing …` lines on stderr per hook invocation.
+pub fn router_rs_hook_timing_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_HOOK_TIMING_ENV)
+}
+
+/// `ROUTER_RS_CURSOR_CARGO_CHECK_SYNC=1`: run blocking `cargo check` on Rust writes in postToolUse (up to 25s).
+pub fn router_rs_cursor_cargo_check_sync_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_CARGO_CHECK_SYNC_ENV)
+}
+
+/// `ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC=1`: fsync hook-state parent directory after each save (slower).
+pub fn router_rs_cursor_hook_state_dir_sync_enabled() -> bool {
+    router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC_ENV)
 }
 
 /// 与历史实现一致：空字符串经 trim 后不属于关闭词，仍视为启用。
@@ -156,7 +174,13 @@ pub fn router_rs_cursor_review_gate_stop_max_nudges_cap() -> Option<u32> {
                 if matches!(t.as_str(), "" | "0" | "false" | "off" | "no") {
                     return None;
                 }
-                t.parse::<u32>().ok().filter(|v| *v >= 1).or(Some(8))
+                if let Some(n) = t.parse::<u32>().ok().filter(|v| *v >= 1) {
+                    return Some(n);
+                }
+                eprintln!(
+                    "[router-rs] invalid {ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV}={raw:?}; using default cap 8"
+                );
+                Some(8)
             }
         }
     }
@@ -168,11 +192,24 @@ fn parse_router_rs_usize_clamped(
     min_allowed: usize,
     max_allowed: usize,
 ) -> usize {
-    env::var(env_key)
-        .ok()
-        .and_then(|raw| raw.trim().parse::<usize>().ok())
-        .map(|n| n.clamp(min_allowed, max_allowed))
-        .unwrap_or(default_val)
+    match env::var(env_key) {
+        Err(_) => default_val,
+        Ok(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return default_val;
+            }
+            match trimmed.parse::<usize>() {
+                Ok(n) => n.clamp(min_allowed, max_allowed),
+                Err(_) => {
+                    eprintln!(
+                        "[router-rs] invalid {env_key}={raw:?}; using default {default_val} (clamp {min_allowed}..{max_allowed})"
+                    );
+                    default_val
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

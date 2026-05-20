@@ -67,7 +67,7 @@ metadata:
 - 用户要做 research swarm、support router、自动审查流水线
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
 - 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 是否足够；不再新增独立 orchestration owner
-- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板见 harness 参考 `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`（**非热 skill 路由**）；用户侧入口优先 `loop/SKILL.md@{$FRAMEWORK_DOCS_GIT_REF}`（`/loop`）或 `/autopilot`；本 gate 仍负责 spawn admission 与 reject reason
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板见 harness 参考 `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`（**非热 skill 路由**）；用户侧入口优先 `loop/SKILL.md@{$FRAMEWORK_DOCS_GIT_REF}`（`/loop`）或 GSD 执行区 `/gsd-execute-phase`（`GOAL_STATE.json`）；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”

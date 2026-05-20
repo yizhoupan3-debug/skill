@@ -450,100 +450,99 @@ fn build_framework_alias_state_machine(
             }
         })
         .unwrap_or_default();
-    let (current_state, recommended_action, resume_mode, resume_reason) =
-        if alias_name == "gsd" {
-            match state.as_str() {
-                "active"
-                    if evidence_missing
-                        && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
-                {
-                    (
-                        "resume_active_needs_verification".to_string(),
-                        "verify_before_done".to_string(),
-                        "continue-current-task".to_string(),
-                        "implementation is active but verification evidence is still missing"
-                            .to_string(),
-                    )
-                }
-                "active" if !missing_recovery_anchors.is_empty() => (
-                    "resume_active_missing_anchors".to_string(),
-                    "repair_recovery_anchors_then_resume".to_string(),
-                    "repair-continuity".to_string(),
-                    "active continuity is missing required recovery anchors".to_string(),
-                ),
-                "active" => (
-                    "resume_active".to_string(),
-                    "resume_current_task".to_string(),
+    let (current_state, recommended_action, resume_mode, resume_reason) = if alias_name == "gsd" {
+        match state.as_str() {
+            "active"
+                if evidence_missing
+                    && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
+            {
+                (
+                    "resume_active_needs_verification".to_string(),
+                    "verify_before_done".to_string(),
                     "continue-current-task".to_string(),
-                    "live continuity is active".to_string(),
-                ),
-                "completed" => (
-                    "resume_blocked_completed".to_string(),
-                    "start_new_task".to_string(),
-                    "start-new-task".to_string(),
-                    "completed work should stay historical; start a new bounded task".to_string(),
-                ),
-                "stale" => (
-                    "resume_requires_refresh".to_string(),
-                    "refresh_continuity_then_resume".to_string(),
-                    "refresh-continuity".to_string(),
-                    "stale continuity cannot be resumed directly".to_string(),
-                ),
-                "inconsistent" => (
-                    "resume_requires_repair".to_string(),
-                    "repair_continuity_then_resume".to_string(),
-                    "repair-continuity".to_string(),
-                    "continuity artifacts disagree and must be repaired first".to_string(),
-                ),
-                _ => (
-                    "fresh_entry".to_string(),
-                    "start_execution".to_string(),
-                    "fresh-start".to_string(),
-                    "no active continuity is available; enter as a fresh task".to_string(),
-                ),
+                    "implementation is active but verification evidence is still missing"
+                        .to_string(),
+                )
             }
-        } else {
-            match state.as_str() {
-                "active" => (
-                    "resume_active".to_string(),
-                    if alias_name == "deepinterview" {
-                        "resume_interview".to_string()
-                    } else {
-                        "resume_current_task".to_string()
-                    },
-                    "continue-current-task".to_string(),
-                    "live continuity is active".to_string(),
-                ),
-                "completed" => (
-                    "resume_blocked_completed".to_string(),
-                    "start_new_task".to_string(),
-                    "start-new-task".to_string(),
-                    "completed work should stay historical; start a new bounded task".to_string(),
-                ),
-                "stale" => (
-                    "resume_requires_refresh".to_string(),
-                    "refresh_continuity_then_resume".to_string(),
-                    "refresh-continuity".to_string(),
-                    "stale continuity cannot be resumed directly".to_string(),
-                ),
-                "inconsistent" => (
-                    "resume_requires_repair".to_string(),
-                    "repair_continuity_then_resume".to_string(),
-                    "repair-continuity".to_string(),
-                    "continuity artifacts disagree and must be repaired first".to_string(),
-                ),
-                _ => (
-                    "fresh_entry".to_string(),
-                    if alias_name == "deepinterview" {
-                        "start_interview".to_string()
-                    } else {
-                        "start_execution".to_string()
-                    },
-                    "fresh-start".to_string(),
-                    "no active continuity is available; enter as a fresh task".to_string(),
-                ),
-            }
-        };
+            "active" if !missing_recovery_anchors.is_empty() => (
+                "resume_active_missing_anchors".to_string(),
+                "repair_recovery_anchors_then_resume".to_string(),
+                "repair-continuity".to_string(),
+                "active continuity is missing required recovery anchors".to_string(),
+            ),
+            "active" => (
+                "resume_active".to_string(),
+                "resume_current_task".to_string(),
+                "continue-current-task".to_string(),
+                "live continuity is active".to_string(),
+            ),
+            "completed" => (
+                "resume_blocked_completed".to_string(),
+                "start_new_task".to_string(),
+                "start-new-task".to_string(),
+                "completed work should stay historical; start a new bounded task".to_string(),
+            ),
+            "stale" => (
+                "resume_requires_refresh".to_string(),
+                "refresh_continuity_then_resume".to_string(),
+                "refresh-continuity".to_string(),
+                "stale continuity cannot be resumed directly".to_string(),
+            ),
+            "inconsistent" => (
+                "resume_requires_repair".to_string(),
+                "repair_continuity_then_resume".to_string(),
+                "repair-continuity".to_string(),
+                "continuity artifacts disagree and must be repaired first".to_string(),
+            ),
+            _ => (
+                "fresh_entry".to_string(),
+                "start_execution".to_string(),
+                "fresh-start".to_string(),
+                "no active continuity is available; enter as a fresh task".to_string(),
+            ),
+        }
+    } else {
+        match state.as_str() {
+            "active" => (
+                "resume_active".to_string(),
+                if alias_name == "deepinterview" {
+                    "resume_interview".to_string()
+                } else {
+                    "resume_current_task".to_string()
+                },
+                "continue-current-task".to_string(),
+                "live continuity is active".to_string(),
+            ),
+            "completed" => (
+                "resume_blocked_completed".to_string(),
+                "start_new_task".to_string(),
+                "start-new-task".to_string(),
+                "completed work should stay historical; start a new bounded task".to_string(),
+            ),
+            "stale" => (
+                "resume_requires_refresh".to_string(),
+                "refresh_continuity_then_resume".to_string(),
+                "refresh-continuity".to_string(),
+                "stale continuity cannot be resumed directly".to_string(),
+            ),
+            "inconsistent" => (
+                "resume_requires_repair".to_string(),
+                "repair_continuity_then_resume".to_string(),
+                "repair-continuity".to_string(),
+                "continuity artifacts disagree and must be repaired first".to_string(),
+            ),
+            _ => (
+                "fresh_entry".to_string(),
+                if alias_name == "deepinterview" {
+                    "start_interview".to_string()
+                } else {
+                    "start_execution".to_string()
+                },
+                "fresh-start".to_string(),
+                "no active continuity is available; enter as a fresh task".to_string(),
+            ),
+        }
+    };
     let handoff = match alias_name {
         "gsd" => json!({
             "default_mode": "stay-in-gsd-execution",

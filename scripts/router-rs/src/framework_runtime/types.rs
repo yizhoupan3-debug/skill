@@ -71,6 +71,8 @@ pub(super) struct SessionArtifactWritePlan {
     pub(super) summary: String,
     pub(super) task_id: String,
     pub(super) focus: bool,
+    /// When true, skip registry append for unknown `task_id` (automatic Stop hook refresh).
+    pub(super) update_registry_only_if_known: bool,
     pub(super) repo_root: Option<PathBuf>,
     pub(super) mirror_output_dir: Option<PathBuf>,
     pub(super) summary_path: PathBuf,

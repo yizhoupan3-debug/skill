@@ -256,7 +256,8 @@ fn read_mcp_message<R: BufRead>(
 
     let lower = first_line.to_ascii_lowercase();
     // HTTP headers may have optional whitespace (OWS) before the colon per RFC 7230
-    let has_content_length = lower.starts_with("content-length:") || lower.starts_with("content-length :");
+    let has_content_length =
+        lower.starts_with("content-length:") || lower.starts_with("content-length :");
     if has_content_length {
         let previous_mode = *transport_mode;
         *transport_mode = Some(McpTransportMode::ContentLength);
@@ -876,9 +877,15 @@ pub(crate) fn build_evidence_entry(arguments: &Value) -> Result<Map<String, Valu
 
 fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, String> {
     let entry = build_evidence_entry(arguments)?;
-    let tool_name = entry.get("tool_name").and_then(Value::as_str).map(str::to_string);
+    let tool_name = entry
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let tool_name_display = tool_name.as_deref().unwrap_or("");
-    let command = entry.get("command_preview").and_then(Value::as_str).map(str::to_string);
+    let command = entry
+        .get("command_preview")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let command_display = command.as_deref().unwrap_or("");
     let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
     let output = arguments.get("output").and_then(Value::as_str);
@@ -938,6 +945,8 @@ fn tool_session_checkpoint(arguments: &Value, repo_root: &Path) -> Result<String
         summary,
         &next_actions.join(", "),
         task_id,
+        true,
+        false,
     );
     crate::framework_runtime::write_framework_session_artifacts(payload)
         .map_err(|e| format!("Checkpoint write failed: {e}"))?;
@@ -1022,7 +1031,10 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<Str
         json!(crate::framework_runtime::current_local_timestamp()),
     );
     record.insert("summary".to_string(), json!(summary));
-    record.insert("verification_status".to_string(), json!(verification_status));
+    record.insert(
+        "verification_status".to_string(),
+        json!(verification_status),
+    );
 
     if let Some(files) = arguments.get("changed_files").and_then(Value::as_array) {
         record.insert("changed_files".to_string(), json!(files));
@@ -1047,26 +1059,22 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<Str
     }
 
     // Ensure parent directory exists
-    let record_path =
-        crate::framework_runtime::closeout_record_path_for_task(repo_root, task_id)
-            .map_err(|e| format!("invalid task_id: {e}"))?;
+    let record_path = crate::framework_runtime::closeout_record_path_for_task(repo_root, task_id)
+        .map_err(|e| format!("invalid task_id: {e}"))?;
     if let Some(parent) = record_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create closeout directory failed: {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("create closeout directory failed: {e}"))?;
     }
 
     // Write the record
     let content = serde_json::to_string_pretty(&record).map_err(|e| e.to_string())?;
-    fs::write(&record_path, &content)
-        .map_err(|e| format!("write closeout record failed: {e}"))?;
+    fs::write(&record_path, &content).map_err(|e| format!("write closeout record failed: {e}"))?;
 
     // Evaluate the record
-    let eval_result =
-        crate::framework_runtime::evaluate_closeout_record_file_for_task(
-            repo_root,
-            task_id,
-            &record_path,
-        );
+    let eval_result = crate::framework_runtime::evaluate_closeout_record_file_for_task(
+        repo_root,
+        task_id,
+        &record_path,
+    );
     let eval = match eval_result {
         Ok(v) => v,
         Err(e) => json!({"error": e}),

@@ -69,6 +69,18 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
         "Lines starting with RG_FOLLOWUP / RG FOLLOWUP without that prefix are not from this harness; see docs/framework_operator_primer.md."
     );
 
+    println!("\n--- ephemeral Stop checkpoint rows (operator) ---");
+    println!(
+        "If task_registry.json lists many cursor-stop-* / session-checkpoint-* rows or focus drifted:"
+    );
+    println!(
+        "  1) Pick the real task_id (active/focus or GOAL_STATE under artifacts/current/<id>/)."
+    );
+    println!("  2) Prune stale registry tasks and optional empty cursor-stop-* dirs.");
+    println!("  3) Align artifacts/current/active_task.json, focus_task.json, and .supervisor_state.json.");
+    println!("  4) Run: router-rs framework task-state-resolve --repo-root <repo>");
+    println!("Disable auto refresh: ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=0");
+
     println!("\n--- continuity ledger ---");
     if router_rs_task_ledger_flock_enabled() {
         println!("ROUTER_RS_TASK_LEDGER_FLOCK: enabled (default) — cross-process GOAL/RFV/EVIDENCE writes serialize under artifacts/current/.router-rs.task-ledger.lock.");
@@ -181,6 +193,19 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
 
                     // Check for orphan task directories
                     if let Some(tasks) = registry.get("tasks").and_then(|v| v.as_array()) {
+                        for row in tasks {
+                            let tid = row
+                                .get("task_id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default();
+                            if tid.starts_with("cursor-stop-")
+                                || tid.starts_with("session-checkpoint-")
+                            {
+                                warnings.push(format!(
+                                    "EPHEMERAL CHECKPOINT ROW: task_registry lists '{tid}' (safe to prune if pointers point elsewhere; see framework doctor)"
+                                ));
+                            }
+                        }
                         let registered_ids: std::collections::HashSet<_> = tasks
                             .iter()
                             .filter_map(|t| t.get("task_id").and_then(|v| v.as_str()))

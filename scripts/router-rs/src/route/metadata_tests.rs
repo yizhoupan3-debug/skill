@@ -12,6 +12,7 @@ mod route_metadata_tests {
     use crate::route::signals::has_paper_review_judgment_context;
     use crate::route::text::normalize_text;
     use crate::route::types::{RawSkillRecord, SkillRecord};
+    use crate::route_task_with_manifest_fallback;
     use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
@@ -490,60 +491,27 @@ mod route_metadata_tests {
     }
 
     #[test]
-    fn framework_alias_entrypoints_include_mode_variants() {
-        let entrypoints = framework_alias_entrypoints_from_hints(
-            "autopilot",
-            "L0",
-            &[
-                "/autopilot".to_string(),
-                "/autopilot-quick".to_string(),
-                "/autopilot-deep".to_string(),
-                "/autopilot deep".to_string(),
-                "autopilot".to_string(),
-            ],
-        );
-        for expected in [
-            "/autopilot",
-            "/autopilot-quick",
-            "/autopilot-deep",
-            "/autopilot deep",
-            "autopilot",
-        ] {
-            assert!(
-                entrypoints.contains(&expected.to_string()),
-                "missing entrypoint {expected}"
-            );
-        }
-    }
-
-    #[test]
-    fn route_task_matches_autopilot_quick_and_deep_entrypoints() {
-        let records = vec![SkillRecord::from_raw(RawSkillRecord {
-            slug: "autopilot".to_string(),
-            skill_path: Some("skills/autopilot/SKILL.md".to_string()),
-            layer: "L0".to_string(),
-            owner: "owner".to_string(),
-            gate: "none".to_string(),
-            priority: "P1".to_string(),
-            session_start: "required".to_string(),
-            summary: "Autopilot owner".to_string(),
-            short_description: String::new(),
-            when_to_use: String::new(),
-            do_not_use: String::new(),
-            tags: Vec::new(),
-            trigger_hints: vec![
-                "/autopilot".to_string(),
-                "/autopilot-quick".to_string(),
-                "/autopilot-deep".to_string(),
-            ],
-            host_platforms: vec!["codex-cli".to_string()],
-            record_kind: "framework_command".to_string(),
-        })];
+    fn retired_autopilot_slash_commands_do_not_route_to_autopilot_owner() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+        assert!(!records.iter().any(|record| record.slug == "autopilot"));
         for query in ["/autopilot", "/autopilot-quick", "/autopilot-deep"] {
-            let decision =
-                route_task(&records, query, "session", false, false).expect("route decision");
-            assert_eq!(decision.selected_skill, "autopilot");
-            assert_eq!(decision.layer, "L0");
+            let decision = route_task_with_manifest_fallback(
+                &records,
+                Some(&runtime_path),
+                None,
+                None,
+                query,
+                "retired-autopilot-route",
+                false,
+                true,
+            )
+            .expect("route decision");
+            assert_ne!(
+                decision.selected_skill, "autopilot",
+                "retired /autopilot* must not select autopilot owner for {query}: {decision:?}"
+            );
         }
     }
 

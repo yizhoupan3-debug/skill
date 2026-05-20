@@ -35,17 +35,6 @@ pub(crate) fn framework_alias_entrypoints_from_hints(
     {
         entrypoints.push(slug_lower.to_string());
     }
-    if slug_lower == "autopilot" {
-        let has_slash_entrypoint = entrypoints.iter().any(|value| value == "/autopilot");
-        if has_slash_entrypoint {
-            entrypoints.extend([
-                "/autopilot-quick".to_string(),
-                "/autopilot-deep".to_string(),
-                "/autopilot quick".to_string(),
-                "/autopilot deep".to_string(),
-            ]);
-        }
-    }
     entrypoints.sort();
     entrypoints.dedup();
     entrypoints

@@ -105,6 +105,8 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
     let write_evidence = payload.get("evidence").is_some();
     let task_id = resolve_session_task_id(payload, &task);
     let focus = value_bool_or_none(payload.get("focus")).unwrap_or(false);
+    let update_registry_only_if_known =
+        value_bool_or_none(payload.get("update_registry_only_if_known")).unwrap_or(false);
     let repo_root = value_text(payload.get("repo_root"));
     let mirror_output_dir = value_text(payload.get("mirror_output_dir"));
     let output_root = PathBuf::from(&output_dir);
@@ -167,6 +169,7 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         summary,
         task_id,
         focus,
+        update_registry_only_if_known,
         repo_root: (!repo_root.is_empty()).then(|| PathBuf::from(repo_root)),
         mirror_output_dir: (!mirror_output_dir.is_empty())
             .then(|| PathBuf::from(mirror_output_dir)),
@@ -258,25 +261,29 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
     };
     let mirror_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
     let updated_at = current_local_timestamp();
-    if write_task_registry_entry(
-        &mirror_root,
-        TaskRegistryEntry {
-            task_id: &plan.task_id,
-            task: &plan.task,
-            phase: &plan.phase,
-            status: &plan.status,
-            resume_allowed: Some(!super::is_terminal(
-                &plan.status,
-                TERMINAL_VERIFICATION_STATUSES,
-            )),
-            updated_at: &updated_at,
-            focus_task_id: if plan.focus {
-                Some(plan.task_id.as_str())
-            } else {
-                None
+    let registry_known = task_id_known_in_registry(&mirror_root, &plan.task_id);
+    let should_touch_registry = !plan.update_registry_only_if_known || registry_known;
+    if should_touch_registry
+        && write_task_registry_entry(
+            &mirror_root,
+            TaskRegistryEntry {
+                task_id: &plan.task_id,
+                task: &plan.task,
+                phase: &plan.phase,
+                status: &plan.status,
+                resume_allowed: Some(!super::is_terminal(
+                    &plan.status,
+                    TERMINAL_VERIFICATION_STATUSES,
+                )),
+                updated_at: &updated_at,
+                focus_task_id: if plan.focus {
+                    Some(plan.task_id.as_str())
+                } else {
+                    None
+                },
             },
-        },
-    )? {
+        )?
+    {
         plan.changed_paths
             .push(mirror_root.join(TASK_REGISTRY_NAME).display().to_string());
     }
@@ -351,6 +358,16 @@ fn write_focus_task_pointer(
             "updated_at": updated_at,
         }),
     )
+}
+
+fn task_id_known_in_registry(mirror_root: &Path, task_id: &str) -> bool {
+    let registry_path = mirror_root.join(TASK_REGISTRY_NAME);
+    let Ok(existing) = read_json_strict(&registry_path) else {
+        return false;
+    };
+    super::registry_rows_from_payload(&existing)
+        .iter()
+        .any(|row| safe_slug(&value_text(row.get("task_id"))) == task_id)
 }
 
 fn write_task_registry_entry(

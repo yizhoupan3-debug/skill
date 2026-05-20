@@ -4,7 +4,7 @@
   "hooks": {
     "beforeSubmitPrompt": [
       {
-        "_doc": "Goal/autopilot + review gate",
+        "_doc": "Goal/GSD + review gate",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" BeforeSubmitPrompt",
         "timeout": 20
       }

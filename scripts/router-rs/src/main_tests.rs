@@ -939,6 +939,131 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
 }
 
 #[test]
+fn stop_checkpoint_does_not_repoint_focus() {
+    let repo_root = temp_dir_path("stop-checkpoint-in-place");
+    let output_dir = repo_root.join("artifacts").join("current");
+    let task_id = "real-work-task";
+    write_framework_session_artifacts(json!({
+        "repo_root": repo_root,
+        "output_dir": output_dir,
+        "task_id": task_id,
+        "task": "real work",
+        "phase": "execution",
+        "status": "in_progress",
+        "summary": "Primary task",
+        "focus": true,
+        "next_actions": ["Continue"],
+    }))
+    .expect("seed task");
+
+    let active_before = fs::read_to_string(repo_root.join("artifacts/current/active_task.json"))
+        .expect("read active");
+    let focus_before = fs::read_to_string(repo_root.join("artifacts/current/focus_task.json"))
+        .expect("read focus");
+    let registry_before: Value = serde_json::from_str(
+        &fs::read_to_string(repo_root.join("artifacts/current/task_registry.json"))
+            .expect("read registry"),
+    )
+    .expect("parse registry");
+    let rows_before = registry_before["tasks"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+
+    assert_eq!(
+        resolve_automatic_stop_checkpoint_task_id(&repo_root).as_deref(),
+        Some(task_id)
+    );
+    let payload = build_automatic_stop_hook_checkpoint_payload(
+        &repo_root,
+        "cursor-stop",
+        "Stop hook automatic checkpoint (Cursor).",
+    )
+    .expect("checkpoint payload");
+    assert_eq!(payload["focus"], json!(false));
+    assert_eq!(payload["update_registry_only_if_known"], json!(true));
+    write_framework_session_artifacts(payload).expect("write stop checkpoint");
+
+    let active_after = fs::read_to_string(repo_root.join("artifacts/current/active_task.json"))
+        .expect("read active after");
+    let focus_after = fs::read_to_string(repo_root.join("artifacts/current/focus_task.json"))
+        .expect("read focus after");
+    assert_eq!(active_before, active_after, "active pointer must not move");
+    assert_eq!(focus_before, focus_after, "focus pointer must not move");
+
+    let registry_after: Value = serde_json::from_str(
+        &fs::read_to_string(repo_root.join("artifacts/current/task_registry.json"))
+            .expect("read registry after"),
+    )
+    .expect("parse registry after");
+    let rows_after = registry_after["tasks"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    assert_eq!(
+        rows_before, rows_after,
+        "registry must not grow ephemeral rows"
+    );
+    assert!(
+        !registry_after["tasks"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .any(|row| {
+                row.get("task_id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id.starts_with("cursor-stop-"))
+            }),
+        "no cursor-stop slug rows"
+    );
+
+    let summary = fs::read_to_string(
+        repo_root
+            .join("artifacts/current")
+            .join(task_id)
+            .join("SESSION_SUMMARY.md"),
+    )
+    .expect("task summary updated");
+    assert!(summary.contains("Stop hook automatic checkpoint"));
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
+fn runtime_view_active_task_id_matches_resolve_task_view() {
+    let repo_root = temp_dir_path("runtime-view-task-id-align");
+    let current = repo_root.join("artifacts/current");
+    fs::create_dir_all(current.join("active-task")).expect("active dir");
+    fs::create_dir_all(current.join("focus-only-task")).expect("focus dir");
+    fs::write(
+        current.join("active_task.json"),
+        r#"{"task_id":"active-task"}"#,
+    )
+    .expect("write active");
+    fs::write(
+        current.join("focus_task.json"),
+        r#"{"task_id":"focus-only-task"}"#,
+    )
+    .expect("write focus");
+    fs::write(
+        current.join("task_registry.json"),
+        r#"{"schema_version":"task-registry-v1","focus_task_id":"focus-only-task","tasks":[{"task_id":"active-task"},{"task_id":"focus-only-task"}]}"#,
+    )
+    .expect("write registry");
+
+    let snapshot =
+        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+    let resolved = resolve_task_view(&repo_root, None);
+    assert_eq!(
+        snapshot["runtime_snapshot"]["active_task_id"],
+        json!("active-task")
+    );
+    assert_eq!(resolved.task_id.as_deref(), Some("active-task"));
+
+    let _ = fs::remove_dir_all(&repo_root);
+}
+
+#[test]
 fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
     let repo_root = temp_dir_path("post-tool-evidence-append");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -3042,6 +3167,22 @@ fn framework_command_aliases_require_literal_entrypoints() {
     assert!(records.iter().any(|record| record.slug == "gitx"));
     assert!(records.iter().any(|record| record.slug == "update"));
     assert!(!records.iter().any(|record| record.slug == "team"));
+
+    let autopilot_deep = route_task_with_manifest_fallback(
+        &records,
+        Some(&runtime_path),
+        None,
+        None,
+        "请用 /autopilot-deep 深度调研这个系统",
+        "retired-autopilot-deep-manifest",
+        false,
+        true,
+    )
+    .expect("route retired autopilot-deep alias");
+    assert_ne!(
+        autopilot_deep.selected_skill, "autopilot",
+        "manifest fallback must not resurrect autopilot owner: {autopilot_deep:?}"
+    );
 
     let gsd_exec = route_task_with_manifest_fallback(
         &records,
@@ -6404,7 +6545,9 @@ fn cli_parses_codex_hook_with_event_flag() {
     let cli = Cli::try_parse_from(["router-rs", "host", "codex", "hook", "--event", "Stop"])
         .expect("parse host codex hook --event");
     let Some(RouterCommand::Host {
-        command: HostCommand::Codex { command: CodexSubcommand::Hook(command) },
+        command: HostCommand::Codex {
+            command: CodexSubcommand::Hook(command),
+        },
     }) = cli.command
     else {
         panic!("expected host codex hook command");
@@ -6415,10 +6558,12 @@ fn cli_parses_codex_hook_with_event_flag() {
 
 #[test]
 fn cli_parses_codex_hook_with_positional() {
-    let cli =
-        Cli::try_parse_from(["router-rs", "host", "codex", "hook", "Stop"]).expect("parse host codex hook");
+    let cli = Cli::try_parse_from(["router-rs", "host", "codex", "hook", "Stop"])
+        .expect("parse host codex hook");
     let Some(RouterCommand::Host {
-        command: HostCommand::Codex { command: CodexSubcommand::Hook(command) },
+        command: HostCommand::Codex {
+            command: CodexSubcommand::Hook(command),
+        },
     }) = cli.command
     else {
         panic!("expected host codex hook command");
@@ -6432,7 +6577,10 @@ fn install_hooks_cli_repo_root_optional() {
     let cli = Cli::try_parse_from(["router-rs", "host", "codex", "install-hooks"])
         .expect("parse host codex install-hooks without repo-root");
     let Some(RouterCommand::Host {
-        command: HostCommand::Codex { command: CodexSubcommand::InstallHooks(command) },
+        command:
+            HostCommand::Codex {
+                command: CodexSubcommand::InstallHooks(command),
+            },
     }) = cli.command
     else {
         panic!("expected host codex install-hooks command");

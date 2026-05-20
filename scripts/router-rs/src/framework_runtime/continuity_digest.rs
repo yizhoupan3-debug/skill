@@ -13,7 +13,7 @@ pub fn build_framework_continuity_digest_prompt(
     repo_root: &Path,
     max_lines: usize,
 ) -> Result<String, String> {
-    build_framework_continuity_digest_prompt_impl(repo_root, max_lines, false)
+    build_framework_continuity_digest_prompt_ex(repo_root, max_lines, false)
 }
 
 /// Like [`build_framework_continuity_digest_prompt`], but can omit the active/focus GOAL mismatch
@@ -23,10 +23,28 @@ pub fn build_framework_continuity_digest_prompt_ex(
     max_lines: usize,
     omit_active_focus_mismatch_line: bool,
 ) -> Result<String, String> {
+    let task_view = crate::task_state::resolve_task_view(repo_root, None);
+    build_framework_continuity_digest_prompt_from_task_view(
+        repo_root,
+        max_lines,
+        omit_active_focus_mismatch_line,
+        &task_view,
+    )
+}
+
+/// Like [`build_framework_continuity_digest_prompt_ex`] but reuses a caller-resolved [`ResolvedTaskView`]
+/// (e.g. Cursor `sessionStart` already loaded task pointers once).
+pub fn build_framework_continuity_digest_prompt_from_task_view(
+    repo_root: &Path,
+    max_lines: usize,
+    omit_active_focus_mismatch_line: bool,
+    task_view: &crate::task_state::ResolvedTaskView,
+) -> Result<String, String> {
     build_framework_continuity_digest_prompt_impl(
         repo_root,
         max_lines,
         omit_active_focus_mismatch_line,
+        task_view,
     )
 }
 
@@ -34,11 +52,11 @@ fn build_framework_continuity_digest_prompt_impl(
     repo_root: &Path,
     max_lines: usize,
     omit_active_focus_mismatch_line: bool,
+    task_view: &crate::task_state::ResolvedTaskView,
 ) -> Result<String, String> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
-    let task_view = crate::task_state::resolve_task_view(repo_root, None);
     let mut prompt = render_continuity_digest_prompt_base(&continuity, &contract, max_lines);
     if !omit_active_focus_mismatch_line
         && crate::task_state::task_view_has_active_goal_focus_mismatch_note(&task_view)

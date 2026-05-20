@@ -191,31 +191,6 @@
       "cold"
     ],
     [
-      "autopilot",
-      "L0",
-      "owner",
-      "none",
-      "P1",
-      "Repo-native `/autopilot`：goal-style 连续执行、地平线切片、continuity 硬接力； bounded sidecar 并行（lane 清晰时），宏任务优先写满 `artifacts/current` 以便跨轮无隙推进。 Use only when the user explicitly invokes `/autopilot`.",
-      "n/a",
-      [
-        "/autopilot",
-        "/autopilot-quick",
-        "/autopilot-deep"
-      ],
-      "project",
-      3,
-      "skills/autopilot/SKILL.md",
-      [
-        "claude-code",
-        "claude-desktop",
-        "codex-app",
-        "codex-cli",
-        "cursor"
-      ],
-      "skill"
-    ],
-    [
       "citation-management",
       "L1",
       "owner",

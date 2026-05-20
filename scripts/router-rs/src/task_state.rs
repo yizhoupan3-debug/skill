@@ -376,14 +376,20 @@ pub fn resolve_task_view_with_pointers(
         };
     };
 
-    let goal_state = match read_goal_state(repo_root, Some(task_id.as_str())) {
+    let task_id_for_reads = task_id.clone();
+    let repo_for_reads = repo_root.to_path_buf();
+    let (goal_result, rfv_result) = rayon::join(
+        || read_goal_state(&repo_for_reads, Some(task_id_for_reads.as_str())),
+        || read_rfv_loop_state(&repo_for_reads, Some(task_id_for_reads.as_str())),
+    );
+    let goal_state = match goal_result {
         Ok(g) => g,
         Err(e) => {
             push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e);
             None
         }
     };
-    let rfv_loop_state = match read_rfv_loop_state(repo_root, Some(task_id.as_str())) {
+    let rfv_loop_state = match rfv_result {
         Ok(v) => v,
         Err(e) => {
             push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e);

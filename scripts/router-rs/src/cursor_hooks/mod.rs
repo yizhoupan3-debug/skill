@@ -67,6 +67,8 @@ fn should_force_hook_state_lock_failure_for_test() -> bool {
     FORCE_CURSOR_HOOK_STATE_LOCK_FAILURE_FOR_TEST.with(|c| c.get())
 }
 
+mod terminal_observation_cache;
+
 // --- cursor hooks handlers ---
 include!("handlers.rs");
 

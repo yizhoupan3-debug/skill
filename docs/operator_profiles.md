@@ -19,7 +19,7 @@
 |------|----------------|---------------------|
 | `ROUTER_RS_OPERATOR_INJECT` | **Solo：默认不要关总闸**（保持 unset）；若你显式设为 `0`，SessionStart advisory 等会按 harness §2.1 / §5 关闭 | 总闸；关会显著改变「连续性 digest」可见性 |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 可设 `0` | 仅关 operator nudge 文案 |
-| `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` | 可设 `0` | 关 Stop 等路径 `AUTOPILOT_DRIVE` advisory |
+| `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK` | 可设 `0` | 关 Stop 等路径 `GSD_GOAL_CONTINUE` advisory（兼容读 legacy `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
 | `ROUTER_RS_RFV_LOOP_HOOK` | 可设 `0` | 关 `RFV_LOOP_CONTINUE` advisory |
 | `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | 可设 `0` | 关 PostTool 自动追加 `EVIDENCE_INDEX` |
 | `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | 可设 `0`（Codex） | 关 Codex `Stop` 自动连续性 checkpoint |
