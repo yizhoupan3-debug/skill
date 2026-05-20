@@ -1,6 +1,11 @@
-#!/usr/bin/env bash
-# python-env-management health check — uv-only policy
-set -euo pipefail
+#!/usr/bin/env zsh
+# python-env-management health check — uv-only policy (zsh: pip guards are functions)
+emulate -L zsh
+setopt pipefail
+set -e
+
+# Load operator pip guards (non-interactive zsh skips .zprofile otherwise).
+[[ -f "${HOME}/.zprofile.local" ]] && source "${HOME}/.zprofile.local"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -59,25 +64,23 @@ if (( legacy_path == 0 )); then
   pass "no Python.framework or Library/Python on PATH"
 fi
 
-if whence -w pip3 >/dev/null 2>&1; then
+if whence -w pip3 &>/dev/null; then
   ptype="$(whence -w pip3 2>/dev/null || true)"
-  if [[ "$ptype" == pip3:*function* || "$ptype" == *"function"* ]]; then
+  if [[ "$ptype" == *function* ]]; then
     pass "pip3 is shell guard (blocked)"
   else
     bad "pip3 is real binary: $ptype — remove from PATH or add guards"
   fi
-elif command -v pip3 >/dev/null 2>&1; then
-  bad "pip3 is real binary: $(command -v pip3) — remove from PATH or add guards"
 else
   pass "pip3 not on PATH"
 fi
 
-if command -v pip >/dev/null 2>&1; then
-  ptype="$(type pip 2>/dev/null || true)"
-  if [[ "$ptype" == *"function pip"* ]]; then
+if whence -w pip &>/dev/null; then
+  ptype="$(whence -w pip 2>/dev/null || true)"
+  if [[ "$ptype" == pip:*function* || "$ptype" == *function* ]]; then
     pass "pip is shell guard (blocked)"
   else
-    bad "pip is real binary: $(command -v pip)"
+    bad "pip is real binary: $ptype"
   fi
 else
   pass "pip not on PATH"

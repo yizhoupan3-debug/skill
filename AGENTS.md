@@ -10,6 +10,7 @@
 | Cursor framework 叙事 | `router-rs framework host-integration install --to cursor --scope user` → `~/.cursor/rules/framework.mdc` |
 | skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
+| 宿主投影 GSD/review 文案 | `configs/framework/host_projection_narrative.json`（`host-integration install` 读取） |
 | hook 行为 | 各宿主 `hooks.json` + `router-rs` |
 
 **文档地图**：`docs/harness_architecture.md` · `docs/host_adapter_contract.md` · `docs/rust_contracts.md` · `docs/README.md`
@@ -44,6 +45,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## 个人使用（最小操作面）
 
+- **Python 环境（macOS）**：长期治理见 **`$python-env-management`**（uv-only、默认 3.12、每仓库 `uv.lock`）；operator 禁止使用 `pip`。
 - **路由**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`。
 - **可选 env / 注入 / closeout**：`docs/references/AGENTS_OPERATOR_SURFACE.md`（勿在本文重复全表）。
 - **连续性摘要**：`docs/harness_architecture.md` §2–§3。

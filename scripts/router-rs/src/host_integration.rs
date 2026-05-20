@@ -23,8 +23,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
 const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
 const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
-const FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH: &str = "**Default lifecycle (all supported hosts): GSD** (`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`). Pre-execution commands are doc-only (no product code); see `skills/gsd/shared/phase-boundaries.md` and `skills/gsd/references/OFFICIAL_GSD_ALIGNMENT.md`. Continuous execution uses `/gsd-execute-phase` with `GOAL_STATE.json` (`framework_autopilot_goal`); Stop hook leader: `router-rs GSD_GOAL_CONTINUE`. `/autopilot` is retired.";
-const FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH: &str = "**Code review default (all hosts): findings-only.** Review / 代码审查 / audit of code or a change set delivers severity-sorted findings only — no default edits, fixes, commits, or autopilot/GSD-execute/gitx/loop continuation unless the user explicitly asks to implement or fix. See `skills/code-review-deep/SKILL.md`.";
+const HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION: &str = "framework-host-projection-narrative-v1";
 const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
     "framework-generated-artifacts-manifest-v1";
 const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(300);
@@ -224,6 +223,9 @@ enum Commands {
         framework_root: Option<PathBuf>,
         #[arg(long)]
         artifact_root: Option<PathBuf>,
+        /// Skip running manifest generators (existence/forbidden/missing-only probe).
+        #[arg(long)]
+        skip_generator_run: bool,
     },
 }
 
@@ -413,7 +415,20 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
         Commands::GeneratedArtifactsStatus {
             framework_root,
             artifact_root,
-        } => generated_artifacts_status(framework_root.as_deref(), artifact_root.as_deref())?,
+            skip_generator_run,
+        } => generated_artifacts_status(
+            framework_root.as_deref(),
+            artifact_root.as_deref(),
+            skip_generator_run
+                || std::env::var("ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS")
+                    .ok()
+                    .is_some_and(|value| {
+                        matches!(
+                            value.trim().to_ascii_lowercase().as_str(),
+                            "1" | "true" | "yes" | "on"
+                        )
+                    }),
+        )?,
     };
     Ok(payload)
 }
@@ -717,12 +732,17 @@ fn compatibility_alias_inventory() -> Value {
 
 /// Lightweight summary for `framework doctor` (full manifest regen is expensive).
 pub(crate) fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value, String> {
-    generated_artifacts_status(Some(repo_root), Some(&repo_root.join("artifacts")))
+    generated_artifacts_status(
+        Some(repo_root),
+        Some(&repo_root.join("artifacts")),
+        true,
+    )
 }
 
 fn generated_artifacts_status(
     framework_root: Option<&Path>,
     artifact_root: Option<&Path>,
+    skip_generator_run: bool,
 ) -> Result<Value, String> {
     let framework_root = resolve_framework_root(framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
@@ -743,8 +763,15 @@ fn generated_artifacts_status(
             GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION
         ));
     }
-    let temp_root_guard = prepare_generated_artifact_temp_root(&framework_root, &artifact_root)?;
-    let temp_root = temp_root_guard.path();
+    let temp_root_guard = if skip_generator_run {
+        None
+    } else {
+        Some(prepare_generated_artifact_temp_root(
+            &framework_root,
+            &artifact_root,
+        )?)
+    };
+    let temp_root = temp_root_guard.as_ref().map(|guard| guard.path());
     let mut results = Vec::new();
     let mut ok = true;
     let mut declared_paths = BTreeSet::new();
@@ -753,20 +780,26 @@ fn generated_artifacts_status(
     for artifact in &manifest.generated_artifacts {
         validate_generated_artifact_entry(artifact)?;
         declared_paths.insert(artifact.path.clone());
-        if executed_generators.insert(artifact.generator.clone()) {
-            run_generated_artifact_generator(&artifact.generator, &framework_root, temp_root)?;
+        if !skip_generator_run {
+            let temp_root = temp_root.expect("temp root prepared when generators run");
+            if executed_generators.insert(artifact.generator.clone()) {
+                run_generated_artifact_generator(&artifact.generator, &framework_root, temp_root)?;
+            }
         }
         let checked_in_path = framework_root.join(&artifact.path);
-        let regenerated_path = temp_root.join(&artifact.path);
+        let regenerated_path = temp_root.map(|root| root.join(&artifact.path));
         let exists = checked_in_path.is_file();
-        let regenerated_exists = regenerated_path.is_file();
+        let regenerated_exists = regenerated_path
+            .as_ref()
+            .is_some_and(|path| path.is_file());
         let checked_in = if exists {
             Some(fs::read(&checked_in_path).map_err(|err| err.to_string())?)
         } else {
             None
         };
         let regenerated = if regenerated_exists {
-            Some(fs::read(&regenerated_path).map_err(|err| err.to_string())?)
+            let path = regenerated_path.as_ref().expect("regenerated path");
+            Some(fs::read(path).map_err(|err| err.to_string())?)
         } else {
             None
         };
@@ -782,14 +815,22 @@ fn generated_artifacts_status(
                 }
             })
             .unwrap_or_default();
-        let drifted = generated_artifact_drifted(
-            &artifact.compare,
-            checked_in.as_deref(),
-            regenerated.as_deref(),
-            &framework_root,
-            temp_root,
-        )?;
-        let clean = exists && regenerated_exists && !drifted && forbidden.is_empty();
+        let drifted = if skip_generator_run {
+            false
+        } else {
+            generated_artifact_drifted(
+                &artifact.compare,
+                checked_in.as_deref(),
+                regenerated.as_deref(),
+                &framework_root,
+                temp_root.expect("temp root prepared when drift is checked"),
+            )?
+        };
+        let clean = if skip_generator_run {
+            exists && forbidden.is_empty()
+        } else {
+            exists && regenerated_exists && !drifted && forbidden.is_empty()
+        };
         ok &= clean;
         results.push(json!({
             "path": artifact.path,
@@ -822,9 +863,16 @@ fn generated_artifacts_status(
         "schema_version": "framework-generated-artifacts-status-v1",
         "ok": ok,
         "manifest_status": {
-            "mode": "manifest-backed-generated-artifact-drift-gate",
+            "mode": if skip_generator_run {
+                "manifest-backed-generated-artifact-metadata-only"
+            } else {
+                "manifest-backed-generated-artifact-drift-gate"
+            },
             "artifact_root": artifact_root.to_string_lossy(),
-            "temp_root": temp_root.to_string_lossy(),
+            "temp_root": temp_root
+                .map(|path| path.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            "skip_generator_run": skip_generator_run,
             "undeclared_generated_artifacts": undeclared,
             "missing_required_generated_artifacts": missing_required,
             "required_generated_artifacts": REQUIRED_GENERATED_ARTIFACTS,
@@ -2389,14 +2437,40 @@ fn remove_claude_settings_hooks(
     })
 }
 
+#[derive(Debug, Deserialize)]
+struct HostProjectionNarrative {
+    schema_version: String,
+    gsd_default_lifecycle_paragraph: String,
+    review_findings_only_paragraph: String,
+}
+
+fn load_host_projection_narrative(framework_root: &Path) -> Result<HostProjectionNarrative, String> {
+    let path = framework_root.join("configs/framework/host_projection_narrative.json");
+    let raw = fs::read_to_string(&path)
+        .map_err(|err| format!("read host projection narrative {}: {err}", path.display()))?;
+    let narrative: HostProjectionNarrative = serde_json::from_str(&raw)
+        .map_err(|err| format!("invalid host projection narrative {}: {err}", path.display()))?;
+    if narrative.schema_version != HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION {
+        return Err(format!(
+            "unsupported host projection narrative schema_version {:?} at {}; expected {}",
+            narrative.schema_version,
+            path.display(),
+            HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION
+        ));
+    }
+    Ok(narrative)
+}
+
 fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+    let narrative = load_host_projection_narrative(&roots.framework_root)
+        .expect("host projection narrative must load before rendering claude entrypoint");
     let runtime_rel = skills_source_rel(&roots.framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
-        gsd = FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH,
-        review = FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH,
+        gsd = narrative.gsd_default_lifecycle_paragraph,
+        review = narrative.review_findings_only_paragraph,
     )
 }
 
@@ -2906,11 +2980,13 @@ fn write_codex_projection_manifest(
     )
 }
 
-fn render_codex_framework_entrypoint(_roots: &ResolvedProjectionRoots, scope: &str) -> String {
+fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+    let narrative = load_host_projection_narrative(&roots.framework_root)
+        .expect("host projection narrative must load before rendering codex entrypoint");
     format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
-        gsd = FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH,
-        review = FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH,
+        gsd = narrative.gsd_default_lifecycle_paragraph,
+        review = narrative.review_findings_only_paragraph,
     )
 }
 
@@ -3109,13 +3185,15 @@ fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
 }
 
 fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+    let narrative = load_host_projection_narrative(&roots.framework_root)
+        .expect("host projection narrative must load before rendering cursor entrypoint");
     let runtime_rel = skills_source_rel(&roots.framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
-        gsd = FRAMEWORK_GSD_DEFAULT_LIFECYCLE_PARAGRAPH,
-        review = FRAMEWORK_REVIEW_FINDINGS_ONLY_PARAGRAPH,
+        gsd = narrative.gsd_default_lifecycle_paragraph,
+        review = narrative.review_findings_only_paragraph,
     )
 }
 

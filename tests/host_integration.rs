@@ -1225,6 +1225,7 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         "generated-artifacts-status",
         "--framework-root",
         framework_root.to_str().unwrap(),
+        "--skip-generator-run",
     ]);
     assert_eq!(
         status["schema_version"],
@@ -1232,8 +1233,9 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
     );
     assert_eq!(
         status["manifest_status"]["mode"],
-        "manifest-backed-generated-artifact-drift-gate"
+        "manifest-backed-generated-artifact-metadata-only"
     );
+    assert_eq!(status["manifest_status"]["skip_generator_run"], true);
     assert_eq!(status["drift_gate"]["enabled"], true);
     assert_eq!(
         status["drift_gate"]["compare"],
