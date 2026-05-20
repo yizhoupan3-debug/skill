@@ -149,6 +149,13 @@ fn build_autopilot_drive_followup_using_frame(
     repo_root: &Path,
     frame: &crate::task_state::CursorContinuityFrame,
 ) -> Option<String> {
+    if let Some((goal, task_id)) = frame.hydration_goal.as_ref() {
+        return crate::autopilot_goal::build_autopilot_drive_followup_message_from_state(
+            repo_root,
+            task_id.as_str(),
+            goal,
+        );
+    }
     if let (Some(task_id), Some(goal)) = (
         frame.pointer_view.task_id.as_deref(),
         frame.pointer_view.goal_state.as_ref(),
@@ -242,7 +249,9 @@ fn stop_hard_closeout_followup_for_assistant_response(
     if !completion_claimed_in_text(response_text) {
         return None;
     }
-    let tid = crate::autopilot_goal::read_active_task_id(repo_root)?;
+    let tid = crate::task_state::resolve_task_view(repo_root, None)
+        .task_id
+        .filter(|s| !s.is_empty())?;
     match closeout_followup_for_completion_claim(repo_root, &tid) {
         Ok(Some(msg)) => Some(msg),
         Ok(None) => None,
@@ -3385,6 +3394,11 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     let task_view = crate::task_state::resolve_task_view(repo_root, None);
     if crate::task_state::task_view_has_active_goal_focus_mismatch_note(&task_view) {
         sections.push(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH.to_string());
+    }
+    if crate::task_state::task_view_has_active_goal_not_driving_focus_note(&task_view) {
+        sections.push(
+            crate::task_state::CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH.to_string(),
+        );
     }
     // Raw SESSION_SUMMARY body (prefix-stable under SessionStart byte cap); see
     // `session_start_additional_context_observes_router_rs_sessionstart_max_env`.

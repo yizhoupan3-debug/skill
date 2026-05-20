@@ -203,6 +203,69 @@ pub fn read_goal_state_for_hydration(repo_root: &Path) -> Result<Option<(Value, 
     read_goal_state_for_hydration_from_pointer_ids(repo_root, &active_task_id, &focus_task_id)
 }
 
+/// Single continuation truth for hydration, Stop checkpoint, and hook drive followups.
+///
+/// Priority: active GOAL when it requests continuation; else focus when it requests continuation;
+/// else active GOAL if readable; else focus GOAL. Never scans orphan goals by mtime.
+pub fn select_goal_state_from_pointer_ids(
+    repo_root: &Path,
+    active_task_id: &Option<String>,
+    focus_task_id: &Option<String>,
+) -> Result<Option<(Value, String)>, String> {
+    let active_pair = active_task_id
+        .as_ref()
+        .and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
+    let focus_pair = focus_task_id
+        .as_ref()
+        .and_then(|id| read_goal_state_pair_if_valid(repo_root, id));
+
+    if let Some((goal, tid)) = active_pair {
+        if goal_state_requests_continuation(&goal) {
+            return Ok(Some((goal, tid)));
+        }
+        if let Some((ref fgoal, ref ftid)) = focus_pair {
+            if goal_state_requests_continuation(fgoal) {
+                return Ok(Some((fgoal.clone(), ftid.clone())));
+            }
+        }
+        return Ok(Some((goal, tid)));
+    }
+    // Active pointer set but GOAL unreadable: fail-closed (no silent focus fallback).
+    if active_task_id
+        .as_ref()
+        .is_some_and(|id| !id.trim().is_empty())
+    {
+        return Ok(None);
+    }
+    if let Some((goal, tid)) = focus_pair {
+        if goal_state_requests_continuation(&goal) {
+            return Ok(Some((goal, tid)));
+        }
+        return Ok(Some((goal, tid)));
+    }
+    Ok(None)
+}
+
+/// Task id for automatic Stop checkpoint: continuation selection, else active → focus → session slug.
+pub fn resolve_checkpoint_task_id_from_pointer_ids(
+    repo_root: &Path,
+    active_task_id: &Option<String>,
+    focus_task_id: &Option<String>,
+) -> String {
+    if let Ok(Some((_, tid))) =
+        select_goal_state_from_pointer_ids(repo_root, active_task_id, focus_task_id)
+    {
+        return tid;
+    }
+    active_task_id
+        .clone()
+        .or_else(|| focus_task_id.clone())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            crate::framework_runtime::CONTINUITY_SESSION_CHECKPOINT_TASK_ID.to_string()
+        })
+}
+
 /// Same semantics as [`read_goal_state_for_hydration`], but uses pointer ids from a single
 /// snapshot (e.g. paired with [`crate::task_state::resolve_task_view_with_pointers`]).
 pub fn read_goal_state_for_hydration_from_pointer_ids(
@@ -210,13 +273,7 @@ pub fn read_goal_state_for_hydration_from_pointer_ids(
     active_task_id: &Option<String>,
     focus_task_id: &Option<String>,
 ) -> Result<Option<(Value, String)>, String> {
-    if let Some(active) = active_task_id {
-        return Ok(read_goal_state_pair_if_valid(repo_root, active));
-    }
-    if let Some(focus) = focus_task_id {
-        return Ok(read_goal_state_pair_if_valid(repo_root, focus));
-    }
-    Ok(None)
+    select_goal_state_from_pointer_ids(repo_root, active_task_id, focus_task_id)
 }
 
 /// 诊断 / 测试专用 mtime 扫描：picks the **newest** `GOAL_STATE.json` under `artifacts/current/**`.
@@ -1702,6 +1759,46 @@ mod tests {
         let (g, tid) = got.expect("pair");
         assert_eq!(tid, "focus-only");
         assert_eq!(g["goal"], json!("via focus"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn hydration_prefers_focus_when_active_completed_and_focus_drives() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-hydr-active-done-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        for id in ["done-active", "drive-focus"] {
+            fs::create_dir_all(repo.join("artifacts/current").join(id)).expect("mkdir");
+        }
+        fs::write(
+            repo.join("artifacts/current/active_task.json"),
+            r#"{"task_id":"done-active"}"#,
+        )
+        .expect("active");
+        fs::write(
+            repo.join("artifacts/current/focus_task.json"),
+            r#"{"task_id":"drive-focus"}"#,
+        )
+        .expect("focus");
+        fs::write(
+            repo.join("artifacts/current/done-active/GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"done","status":"completed","drive_until_done":false,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
+        )
+        .expect("active goal");
+        fs::write(
+            repo.join("artifacts/current/drive-focus/GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"drive","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
+        )
+        .expect("focus goal");
+        let got = read_goal_state_for_hydration(&repo).expect("hydr");
+        let (g, tid) = got.expect("pair");
+        assert_eq!(tid, "drive-focus");
+        assert_eq!(g["goal"], json!("drive"));
+        let checkpoint = crate::framework_runtime::resolve_automatic_stop_checkpoint_task_id(&repo);
+        assert_eq!(checkpoint, "drive-focus");
         let _ = fs::remove_dir_all(&repo);
     }
 

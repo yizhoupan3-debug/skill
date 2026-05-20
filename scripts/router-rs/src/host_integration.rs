@@ -3,7 +3,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -23,7 +23,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
 const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
 const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
-const HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION: &str = "framework-host-projection-narrative-v1";
+const HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION: &str = "framework-host-projection-narrative-v2";
 const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
     "framework-generated-artifacts-manifest-v1";
 const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(300);
@@ -2440,8 +2440,29 @@ fn remove_claude_settings_hooks(
 #[derive(Debug, Deserialize)]
 struct HostProjectionNarrative {
     schema_version: String,
+    #[serde(default)]
     gsd_default_lifecycle_paragraph: String,
+    #[serde(default)]
+    gsd_lifecycle_by_host: BTreeMap<String, String>,
     review_findings_only_paragraph: String,
+}
+
+fn gsd_paragraph_for_host(narrative: &HostProjectionNarrative, host_projection: &str) -> String {
+    narrative
+        .gsd_lifecycle_by_host
+        .get(host_projection)
+        .cloned()
+        .or_else(|| {
+            if host_projection == "codex-app" {
+                narrative
+                    .gsd_lifecycle_by_host
+                    .get("codex-cli")
+                    .cloned()
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| narrative.gsd_default_lifecycle_paragraph.clone())
 }
 
 fn load_host_projection_narrative(framework_root: &Path) -> Result<HostProjectionNarrative, String> {
@@ -2469,7 +2490,7 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
-        gsd = narrative.gsd_default_lifecycle_paragraph,
+        gsd = gsd_paragraph_for_host(&narrative, "claude-code"),
         review = narrative.review_findings_only_paragraph,
     )
 }
@@ -2985,7 +3006,7 @@ fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &st
         .expect("host projection narrative must load before rendering codex entrypoint");
     format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
-        gsd = narrative.gsd_default_lifecycle_paragraph,
+        gsd = gsd_paragraph_for_host(&narrative, "codex-cli"),
         review = narrative.review_findings_only_paragraph,
     )
 }
@@ -3192,7 +3213,7 @@ fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
-        gsd = narrative.gsd_default_lifecycle_paragraph,
+        gsd = gsd_paragraph_for_host(&narrative, "cursor"),
         review = narrative.review_findings_only_paragraph,
     )
 }

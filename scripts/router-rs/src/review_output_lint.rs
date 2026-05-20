@@ -78,12 +78,12 @@ pub fn assistant_has_substantive_compact_review_finding_line(text: &str) -> bool
         .map(str::trim)
         .filter(|t| SEVERITY_PREFIX.is_match(t) || CAVEAT_PREFIX.is_match(t))
         .collect();
-    if finding_lines.len() >= 2 {
-        return true;
+    if finding_lines.is_empty() {
+        return false;
     }
     finding_lines
         .iter()
-        .any(|line| line_is_substantive_compact_finding(line))
+        .all(|line| line_is_substantive_compact_finding(line))
 }
 
 /// Validate review output text against compact envelope rules.
@@ -270,7 +270,7 @@ Out of scope: tests/
         assert!(assistant_has_substantive_compact_review_finding_line(
             "[P1] scripts/router-rs/src/cursor_hooks/handlers.rs:3000 — issue"
         ));
-        assert!(assistant_has_substantive_compact_review_finding_line(
+        assert!(!assistant_has_substantive_compact_review_finding_line(
             "[P0] a\n[P1] b"
         ));
     }

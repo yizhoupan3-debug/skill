@@ -64,6 +64,10 @@ fn build_framework_continuity_digest_prompt_impl(
         prompt.push_str("\n\n");
         prompt.push_str(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH);
     }
+    if crate::task_state::task_view_has_active_goal_not_driving_focus_note(&task_view) {
+        prompt.push_str("\n\n");
+        prompt.push_str(crate::task_state::CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH);
+    }
     if let Some(hint) = crate::task_state::depth_compliance_refresh_hint(&task_view) {
         prompt.push_str("\n\n");
         prompt.push_str(&hint);

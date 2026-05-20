@@ -37,10 +37,16 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 
 | 主题 | 行为 |
 |------|------|
-| **Registry `review_gate` lane** | 改 `configs/framework/RUNTIME_REGISTRY.json` 后**无需**重编 `router-rs`；重启 hook 子进程即可。`framework doctor` 会摘要 `generated-artifacts-status`。 |
+| **Registry `review_gate` lane** | 真源 `configs/framework/RUNTIME_REGISTRY.json`；[`registry_loader.rs`](../scripts/router-rs/src/registry_loader.rs) **磁盘读取**（无 compile-time embed）。改 lane 后**无需** `cargo build`；重启 hook 子进程即可。 |
+| **宿主投影 GSD/review 文案** | `configs/framework/host_projection_narrative.json`；`host-integration install` 渲染 Codex/Cursor/Claude 入口时读取。勿在 `host_integration.rs` 硬编码段落。 |
+| **`generated-artifacts-status`** | **`framework doctor`** 与 `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍跑全量 **drift-gate**（含慢 generator）。 |
 | **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** `.cursor/hook-state` 内 review 字段；`postToolUse`/`subagent*` 不再推进 review phase。 |
-| **active 无 GOAL、focus 有 GOAL** | SessionStart 有中文提示，但 **不**注入 `GSD_GOAL_CONTINUE`；运行 `router-rs framework task-state-resolve --repo-root <repo>` 或修正 `active_task.json`。 |
-| **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 行，但 **不**再 `continuity_suppressed=review_soft_nag` 阻断 GSD 续跑。 |
+| **active 无 GOAL、focus 有 GOAL** | SessionStart 有中文提示；运行 `framework task-state-resolve` 或修正 `active_task.json`。 |
+| **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
+| **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=1`** | 生产建议：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；须可数 subagent 或用户拒因 token。 |
+| **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |
+| **D9 未做项** | `reject_reason` 仍扫全段 signal_text；Codex 无 missing-`fork_context` 推断 — 见 plan v2 defer。 |
+| **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 行，但 **不**再以 `continuity_suppressed=review_soft_nag` **单独**阻断 GSD 续跑（硬 `REVIEW_GATE` / `AG_FOLLOWUP` 仍优先）。 |
 
 ## 混用时的实际武装顺序（Cursor Stop）
 

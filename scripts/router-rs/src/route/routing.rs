@@ -498,13 +498,6 @@ pub(crate) fn should_accept_manifest_fallback(
         return false;
     }
 
-    if explicit_manifest && route_decision_is_no_hit(hot_decision) {
-        return full_decision.reasons.iter().any(|reason| {
-            reason.contains("Exact skill name matched")
-                || reason.contains("Framework alias entrypoint matched explicitly")
-        });
-    }
-
     if explicit_manifest && !route_decision_is_no_hit(hot_decision) {
         return full_decision.score > hot_decision.score
             || (full_decision.score == hot_decision.score
@@ -644,35 +637,6 @@ mod should_retry_with_manifest_tests {
                 reasons_class: String::new(),
             },
         }
-    }
-
-    #[test]
-    fn explicit_manifest_preserves_runtime_no_hit_without_explicit_match() {
-        let hot = make_decision(NO_SKILL_SELECTED, 0.0, "runtime", "four_step");
-        let mut full = make_decision("gsd", 42.0, "L1", "four_step");
-        full.reasons.push("Routing gate matched: gsd.".to_string());
-        assert!(!should_accept_manifest_fallback(
-            &hot,
-            &full,
-            &[],
-            true,
-            true,
-        ));
-    }
-
-    #[test]
-    fn explicit_manifest_accepts_runtime_no_hit_with_explicit_alias() {
-        let hot = make_decision(NO_SKILL_SELECTED, 0.0, "runtime", "four_step");
-        let mut full = make_decision("gsd", 100.0, "L1", "four_step");
-        full.reasons
-            .push("Framework alias entrypoint matched explicitly: /gsd-execute-phase".to_string());
-        assert!(should_accept_manifest_fallback(
-            &hot,
-            &full,
-            &[],
-            true,
-            true,
-        ));
     }
 
     #[test]

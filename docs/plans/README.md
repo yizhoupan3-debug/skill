@@ -1,6 +1,6 @@
 # Plans index
 
-**GSD 执行真源**：`artifacts/current/<task_id>/ROADMAP.md`（例如 [`repo-hygiene-deep-purge`](../current/repo-hygiene-deep-purge/ROADMAP.md)）。
+**GSD 执行真源**：`artifacts/current/<task_id>/ROADMAP.md`（例如 [`harness-framework-hardening`](../current/harness-framework-hardening/ROADMAP.md)、[`repo-hygiene-deep-purge`](../current/repo-hygiene-deep-purge/ROADMAP.md)）。
 
 Cursor Plan 模式（`.cursor/plans/*.plan.md`）仅在活跃任务需要时使用；已完成的计划文件不保留在仓库中。
 

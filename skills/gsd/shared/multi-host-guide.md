@@ -30,7 +30,7 @@ GSD commands work across Desktop MCP, CLI, Codex, and Cursor.
 
 - Hooks auto-inject continuity context on `UserPromptSubmit` / `Stop`
 - **Execution-zone** `/gsd-execute-phase`, `/gsd-verify-work`, `/gsd-ship` arm goal drive; **pre-exec** `/gsd-new-project`, `/gsd-plan-phase`, `/gsd-discuss-phase` do **not** (see `phase-boundaries.md`)
-- `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=1` enables goal continue on Cursor Stop (legacy env `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` still read)
+- Goal/RFV continuation hints on UserPromptSubmit / Stop via `router-rs claude hook` — **not** Cursor-style `GSD_GOAL_CONTINUE` Stop leader (see `docs/host_adapter_contract.md` §0.1)
 - `ROUTER_RS_RFV_LOOP_HOOK=1` enables RFV continuation hints where the host injects them
 
 ## Default framework (all hosts)
@@ -61,8 +61,8 @@ GSD commands work across Desktop MCP, CLI, Codex, and Cursor.
 
 - **Same default GSD lifecycle** as other hosts; use `/gsd-*` commands explicitly when starting work
 - No tmux supervisor, rely on `artifacts/current` continuity
-- Hooks inject `GSD_GOAL_CONTINUE` and `RFV_LOOP_CONTINUE` hints
-- `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` disables goal continue injection
+- Hooks inject `GSD_GOAL_CONTINUE` and `RFV_LOOP_CONTINUE` hints on **Stop** (when goal drive active)
+- `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` disables goal continue injection on Cursor Stop (legacy env `ROUTER_RS_AUTOPILOT_DRIVE_HOOK` still read)
 
 ## Universal Patterns
 

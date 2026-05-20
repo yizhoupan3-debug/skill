@@ -119,6 +119,7 @@ fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
     Ok(loaded)
 }
 
+/// Fail-closed: registry unreadable → lane is **not** treated as a deep gate lane.
 pub(crate) fn is_deep_review_gate_lane_from_registry(lane: &str, repo_root: Option<&Path>) -> bool {
     let key = normalize_subagent_lane(lane);
     snapshot(repo_root)
@@ -131,6 +132,12 @@ pub(crate) fn is_claude_reviewer_lane_from_registry(lane: &str, repo_root: Optio
     snapshot(repo_root)
         .map(|s| s.claude_reviewer_lanes.contains(&key))
         .unwrap_or(false)
+}
+
+/// Operator/doctor probe: returns `Err` when disk registry cannot be loaded for hook lane sets.
+pub fn check_review_gate_registry_snapshot(repo_root: &Path) -> Result<(), String> {
+    let path = registry_json_path(Some(repo_root));
+    load_snapshot_from_disk(&path).map(|_| ())
 }
 
 /// Smoke matrix for tests (uses disk registry at `repo_root` or crate-relative default).

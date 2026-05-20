@@ -1,5 +1,12 @@
 {
-  "schema_version": "framework-host-projection-narrative-v1",
-  "gsd_default_lifecycle_paragraph": "**Default lifecycle (all supported hosts): GSD** (`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`). Pre-execution commands are doc-only (no product code); see `skills/gsd/shared/phase-boundaries.md` and `skills/gsd/references/OFFICIAL_GSD_ALIGNMENT.md`. Continuous execution uses `/gsd-execute-phase` with `GOAL_STATE.json` (`framework_autopilot_goal`); Stop hook leader: `router-rs GSD_GOAL_CONTINUE`. `/autopilot` is retired.",
+  "schema_version": "framework-host-projection-narrative-v2",
+  "gsd_default_lifecycle_paragraph": "**Default lifecycle (all supported hosts): GSD** (`/gsd-new-project` → `/gsd-discuss-phase` → `/gsd-plan-phase` → `/gsd-execute-phase` → `/gsd-verify-work` → `/gsd-ship`). Pre-execution commands are doc-only (no product code); see `skills/gsd/shared/phase-boundaries.md` and `skills/gsd/references/OFFICIAL_GSD_ALIGNMENT.md`. Continuous execution uses `/gsd-execute-phase` with `GOAL_STATE.json` (`framework_autopilot_goal`). `/autopilot` is retired.",
+  "gsd_lifecycle_by_host": {
+    "cursor": "**Default lifecycle: GSD** (same chain as all hosts). Continuous execution uses `/gsd-execute-phase` with `GOAL_STATE.json`; when `drive_until_done` and `status=running`, **Cursor Stop** injects `router-rs GSD_GOAL_CONTINUE` (disable: `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0`).",
+    "codex-cli": "**Default lifecycle: GSD** (same chain). Goal drive via `framework_autopilot_goal` stdio and continuity digest; **Codex hooks do not inject `GSD_GOAL_CONTINUE` on Stop** (see `docs/host_adapter_contract.md` §0.1).",
+    "codex-app": "**Default lifecycle: GSD** (same chain). Goal drive via MCP tools (`goal_state_manage`, `framework_digest`); no CLI Stop hook bundle on this transport.",
+    "claude-code": "**Default lifecycle: GSD** (same chain). Goal/RFV hints on **UserPromptSubmit** / Stop via `router-rs claude hook`; **no Cursor-style `GSD_GOAL_CONTINUE` Stop leader**.",
+    "claude-desktop": "**Default lifecycle: GSD** (same chain). Goal drive via MCP stdio tools under `artifacts/current/`; **MCP advisory only** — no PreToolUse/Stop hard gate (see `docs/hosts/claude-desktop.md`)."
+  },
   "review_findings_only_paragraph": "**Code review default (all hosts): findings-only.** Review / 代码审查 / audit of code or a change set delivers severity-sorted findings only — no default edits, fixes, commits, or autopilot/GSD-execute/gitx/loop continuation unless the user explicitly asks to implement or fix. See `skills/code-review-deep/SKILL.md`."
 }

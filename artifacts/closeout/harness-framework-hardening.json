@@ -1,0 +1,38 @@
+{
+  "schema_version": "closeout-record-v1",
+  "task_id": "harness-framework-hardening",
+  "started_at": "2026-05-20T10:00:00Z",
+  "ended_at": "2026-05-20T19:00:00Z",
+  "summary": "Harness control-plane hardening + Hook Repair v2: single continuation source (hydration/checkpoint/GSD), per-host GSD narrative v2, compact review gate tighten, closeout task_id from resolve_task_view; verify PASS (822 tests).",
+  "verification_status": "passed",
+  "changed_files": [
+    "scripts/router-rs/src/autopilot_goal.rs",
+    "scripts/router-rs/src/task_state.rs",
+    "scripts/router-rs/src/cursor_hooks/handlers.rs",
+    "scripts/router-rs/src/registry_loader.rs",
+    "scripts/router-rs/src/host_integration.rs",
+    "configs/framework/host_projection_narrative.json",
+    "docs/host_adapter_contract.md",
+    "docs/framework_operator_primer.md"
+  ],
+  "commands_run": [
+    {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml -- --test-threads=1", "exit_code": 0},
+    {"command": "framework maint update-one-shot --framework-root", "exit_code": 0},
+    {"command": "framework doctor --repo-root", "exit_code": 0},
+    {"command": "gsd-verify-work", "exit_code": 0}
+  ],
+  "artifacts_checked": [
+    {"path": "artifacts/current/harness-framework-hardening/VERIFICATION_REPORT.md", "exists": true},
+    {"path": "artifacts/current/harness-framework-hardening/EVIDENCE_INDEX.json", "exists": true},
+    {"path": "artifacts/current/harness-framework-hardening/WAVE_STATE.json", "exists": true},
+    {"path": "artifacts/current/harness-framework-hardening/GOAL_STATE.json", "exists": true}
+  ],
+  "blockers": [],
+  "risks": [
+    "Working tree has uncommitted tracked changes (~32 files); ship Gate A not clean until user commits",
+    "schema-drift baseline CLI not implemented",
+    "RFV 3-round ship loop not run this session (verify PASS + unit tests as substitute)",
+    "ADR-003 text superseded by v2 focus-continuation when active not driving"
+  ],
+  "notes": "closeout_gate equivalent: closeout evaluate + GOAL completed + SESSION_SUMMARY + EVIDENCE_INDEX gsd-ship row"
+}

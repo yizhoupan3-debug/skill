@@ -73,11 +73,14 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 
 | 变更 | 说明 |
 |------|------|
-| `review_gate` lane 集 | 从磁盘 `configs/framework/RUNTIME_REGISTRY.json` 读取（改 lane **无需** `cargo build`）；`framework doctor` 会跑 `generated-artifacts-status` 摘要 |
+| `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`registry_loader.rs`](scripts/router-rs/src/registry_loader.rs)（**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
+| 宿主投影 GSD/review 文案 | [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)；`host-integration install` 读取；勿在 `host_integration.rs` 硬编码 |
+| `generated-artifacts-status` | **`framework doctor`** / `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍要求全量 **drift-gate** `ok: true` |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |
 | active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时**不**注入 `GSD_GOAL_CONTINUE`；用 `framework task-state-resolve` 或修正 `active_task.json` |
-| Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 提示，但**不再**阻断 GSD 续跑 |
+| Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 提示，但**不再**单独以 `continuity_suppressed=review_soft_nag` 阻断 GSD 续跑 |
 | `SKILL_ROUTING_RUNTIME.scope` | `hot_skill_count`/`full_skill_count` = 热表行数；`manifest_skill_count` = 全 manifest 行数 |
+| 文档真源 | 硬化叙述见 [`docs/harness_architecture.md`](docs/harness_architecture.md) §2.3、[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)、[`docs/rust_contracts.md`](docs/rust_contracts.md) |
 
 ## 文档与计划卫生（2026-05-20）
 
