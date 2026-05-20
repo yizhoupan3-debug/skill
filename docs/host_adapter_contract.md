@@ -31,7 +31,7 @@
 
 ## 0.1 Countable REVIEW_GATE deep review lanes
 
-**权威真源**（`configs/framework/RUNTIME_REGISTRY.json`，`registry_review_gate.rs` 编译期嵌入）：
+**权威真源**（磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，由 [`registry_loader.rs`](../scripts/router-rs/src/registry_loader.rs) 加载，ADR-005）：
 
 | 字段 | 消费宿主 | 含义 |
 |------|----------|------|
@@ -40,7 +40,9 @@
 
 **勿混读**：`deep_gate_lanes` **不是** Claude 超集；在 Cursor/Codex 上使用 `subagent_type: "review"` 且 `fork_context=false` **不会**计入独立审稿证据。
 
-本文件不维护第二份 lane 枚举列表。增删 lane 时改 `RUNTIME_REGISTRY.json` 对应字段并重建 `router-rs`。
+本文件不维护第二份 lane 枚举列表。增删 lane 时改 `RUNTIME_REGISTRY.json` 对应字段；**无需** `cargo build`——重启 hook 子进程（或重跑 hook 命令）即可。各宿主 dispatch 入口须绑定工作区 `repo_root`（`HookRegistryRepoGuard`），见 `registry_loader.rs`。
+
+**区分**：`ROUTER_RS_HOOK_OBSERVATION_RULES.json` 等仍由 `include_str!` 编译进二进制（见 [`rust_contracts.md`](rust_contracts.md)）；**review_gate lane 集不在此列**。
 
 ### 跨宿主 REVIEW_GATE 差异（operator）
 
@@ -212,7 +214,7 @@
 - [ ] **[`tests/host_integration.rs`](../tests/host_integration.rs)**：增加 dry-run 或临时目录安装断言（沿用现有 `host_targets.metadata` / manifest 断言模式）。
 - [ ] **[`tests/policy_contracts.rs`](../tests/policy_contracts.rs)**（根包）：registry / 契约回归。
 - [ ] **验证**：`cargo test --manifest-path scripts/router-rs/Cargo.toml`；仓库根 `cargo test`。
-- [ ] **[`AGENTS.md`](../AGENTS.md)**：若新宿主属于 Codex 投影链且涉及策略快照与 **`codex sync`** 生命周期，在「权威分层」表补一句说明（避免第二叙事真源；与现有 Codex 编译期嵌入段落对齐）。
+- [ ] **[`AGENTS.md`](../AGENTS.md)**：若新宿主属于 Codex 投影链且涉及策略快照与 **`codex sync`** 生命周期，在「权威分层」表补一句说明（避免第二叙事真源；AGENTS 策略正文可编译嵌入，与 **review_gate 磁盘 registry** 无关）。
 
 ### 3.2 Maint / supervisor / profile 硬编码宿主耦合盘点
 

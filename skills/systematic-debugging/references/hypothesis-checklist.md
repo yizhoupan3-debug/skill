@@ -24,7 +24,7 @@ If none of the above: **do not hypothesize — collect evidence first.**
 | Hypothesis Type | Fastest Falsification Method |
 |---|---|
 | Wrong environment variable | `env \| grep VAR_NAME` or `cat .env` |
-| Dependency version mismatch | `npm ls pkg` / `pip show pkg` / `cargo tree \| grep pkg` |
+| Dependency version mismatch | `npm ls pkg` / `uv tree` (Python) / `cargo tree \| grep pkg` |
 | Race condition | Add `sleep` or reduce concurrency; see if failure changes |
 | Wrong file/config path | `ls -la expected/path` |
 | Off-by-one / logic bug | Add `console.log`/`print` at suspected line with boundary values |

@@ -52,9 +52,9 @@ persuade, convert, or build brand awareness, distinct from prose naturalization,
 academic writing, or technical documentation.
 
 For detailed guidance, use:
-- [references/copy-frameworks.md](/Users/joe/Developer/skill/skills/copywriting/references/copy-frameworks.md) — AIDA, PAS, BAB, 4U, FAB, StoryBrand with EN+CN examples
-- [references/quality-checklist.md](/Users/joe/Developer/skill/skills/copywriting/references/quality-checklist.md) — P0/P1/P2 copy quality audit
-- [references/tone-presets.md](/Users/joe/Developer/skill/skills/copywriting/references/tone-presets.md) — 6 brand voice registers (Premium, Friendly, Professional, Bold, Playful, Empathetic)
+- [references/copy-frameworks.md](${SKILL_FRAMEWORK_ROOT}/skills/copywriting/references/copy-frameworks.md) — AIDA, PAS, BAB, 4U, FAB, StoryBrand with EN+CN examples
+- [references/quality-checklist.md](${SKILL_FRAMEWORK_ROOT}/skills/copywriting/references/quality-checklist.md) — P0/P1/P2 copy quality audit
+- [references/tone-presets.md](${SKILL_FRAMEWORK_ROOT}/skills/copywriting/references/tone-presets.md) — 6 brand voice registers (Premium, Friendly, Professional, Bold, Playful, Empathetic)
 
 ## When to use
 

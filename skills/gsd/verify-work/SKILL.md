@@ -73,8 +73,10 @@ TASK=artifacts/current/<task_id>
 diff -u <(rg -n '^## |^### ' "$TASK/REQUIREMENTS.md" 2>/dev/null || true) \
         <(rg -n '^## |^### ' "$TASK/ROADMAP.md" 2>/dev/null || true) || true
 # EVIDENCE_INDEX machine rollup expects `artifacts[]` (not only `entries[]`)
-test -f "$TASK/EVIDENCE_INDEX.json" && python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('artifacts'), 'missing artifacts[] for router-rs rollup'" "$TASK/EVIDENCE_INDEX.json"
+test -f "$TASK/EVIDENCE_INDEX.json" && (cd "${FRAMEWORK_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}" && uv run python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('artifacts'), 'missing artifacts[] for router-rs rollup'" "$TASK/EVIDENCE_INDEX.json")
 ```
+
+Python 依赖/CI 变更验收：对照 **`$python-env-management`**（`uv.lock`、`skill-ci` pip-scan）；勿在 skill 正文新增 operator `pip`。
 
 ## Evidence Protocol
 

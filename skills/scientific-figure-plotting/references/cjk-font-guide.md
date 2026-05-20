@@ -30,7 +30,7 @@ Install Noto Sans SC (Google's open CJK font):
 # macOS Homebrew
 brew install --cask font-noto-sans-cjk-sc
 
-# pip (for matplotlib only)
+# uv (dev group — matplotlib CJK fonts)
 uv add --dev matplotlib-cjk-fonts && uv sync --all-groups
 ```
 

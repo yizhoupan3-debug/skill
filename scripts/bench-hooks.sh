@@ -3,6 +3,11 @@
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+if command -v uv >/dev/null 2>&1 && [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
+  PYTHON=(uv run --directory "$REPO_ROOT" python)
+else
+  PYTHON=(python3)
+fi
 ITERATIONS=20
 EVENTS="beforeSubmitPrompt,postToolUse"
 REPORT=""
@@ -92,7 +97,7 @@ hook_payload() {
 percentile() {
   local p="$1"
   shift
-  python3 - "$p" "$@" <<'PY'
+  "${PYTHON[@]}" - "$p" "$@" <<'PY'
 import sys
 p = float(sys.argv[1])
 vals = sorted(int(x) for x in sys.argv[2:])
@@ -118,9 +123,9 @@ for ev in "${EVENT_ARR[@]}"; do
   : > "$times_file"
   payload="$(hook_payload "$ev")"
   for ((i = 1; i <= ITERATIONS; i++)); do
-    start_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    start_ms=$("${PYTHON[@]}" -c 'import time; print(int(time.time()*1000))')
     printf '%s' "$payload" | "$ROUTER_RS_BIN" host cursor hook --event="$ev" --repo-root "$REPO_ROOT" >/dev/null 2>/dev/null || true
-    end_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
+    end_ms=$("${PYTHON[@]}" -c 'import time; print(int(time.time()*1000))')
     echo $((end_ms - start_ms)) >> "$times_file"
   done
   mapfile -t samples < "$times_file"
@@ -130,7 +135,7 @@ for ev in "${EVENT_ARR[@]}"; do
   REPORT_LINES+=("$ev $p50 $p95 ${#samples[@]}")
 done
 
-python3 - "${REPORT:-}" "${REPORT_LINES[@]}" <<'PY'
+"${PYTHON[@]}" - "${REPORT:-}" "${REPORT_LINES[@]}" <<'PY'
 import json, sys
 out_path = sys.argv[1]
 rows = sys.argv[2:]
@@ -149,7 +154,7 @@ else:
 PY
 
 if [[ -n "$COMPARE" && -f "$COMPARE" && -n "$REPORT" ]]; then
-  python3 - "$COMPARE" "$REPORT" <<'PY'
+  "${PYTHON[@]}" - "$COMPARE" "$REPORT" <<'PY'
 import json, sys
 base = json.load(open(sys.argv[1]))
 cur = json.load(open(sys.argv[2]))

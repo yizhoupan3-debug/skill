@@ -33,7 +33,7 @@ metadata:
 
 # plan-mode
 
-把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划文件建议落在 **`.cursor/plans/`**（Cursor 默认）并在仓库内用 **`docs/plans/`** 做可读镜像或摘要指针，避免只在 IDE 私有目录里丢稿。
+把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在 **`.cursor/plans/`**（Cursor 默认，须 **Save to workspace**）；GSD 执行真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 仅索引与指针（见 [`docs/plans/README.md`](../../docs/plans/README.md)），**不**再维护过期 stub 镜像。
 
 ## When to use
 
@@ -65,7 +65,7 @@ metadata:
 
 | 取值 | 含义 |
 |------|------|
-| **`execution`**（**缺省**） | 标准实现计划：可含改代码、加测试、改配置等 todo；**CreatePlan 末条**须按计划 vs 实际 + **Git 状态证据**收口，宿主支持时使用 **`/gitx plan`**（见 **CreatePlan 输出契约**）。 |
+| **`execution`**（**缺省**） | 标准实现计划：可含改代码、加测试、改配置等 todo；**CreatePlan 末条**须按计划 vs 实际 + **Git 状态证据**收口，宿主支持时使用 **`/gitx plan`**（见 **CreatePlan 输出契约**）。若 todo 触及 Python 依赖/CI/本机 PATH，须引用 **`$python-env-management`**，禁止 operator `pip`。 |
 | **`research`** | **调研专用**：todos **仅**只读调研与结论合成；**禁止**以「实现 / 改行为 / 加测试 / 改 CI」为单条主线；**末条不得**把 **`/gitx plan`** 当作本 profile 的必需验证。 |
 
 若宿主 **CreatePlan** 剥离未知 YAML 键：生成后在本文件 **手动补写** `plan_profile: research`。可选用文件名 **`*.research.plan.md`** 作为人类可读标签；**hook 与契约真源仍以 frontmatter 为准**（本仓库当前 **不**按文件名解析 profile）。

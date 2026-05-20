@@ -34,6 +34,16 @@ This document is the single normative spec. Split references under `references/`
 - Supporting **conda** unless a project explicitly documents an exception (default: no)
 - Keeping **python.org 3.14** on default PATH (experimental; opt-in per invocation only)
 
+### 1.4 Enforcement plane
+
+| Layer | What it enforces | How |
+|-------|------------------|-----|
+| **Repo CI** (`skill-ci`) | Tracked skill bodies must not add operator `pip install` / `uv pip` / `python -m pip` (allowlisted normative negatives in this skill); framework repo uses `uv sync --frozen` + `uv run python` | `.github/workflows/skill-ci.yml` + `scripts/ci/check-skills-no-operator-pip.sh` |
+| **Operator machine** | PATH, pip guards, uv-managed `python3` 3.12 | `scripts/health-check.sh` + shell profile contract (macOS; not run on ubuntu CI by default) |
+| **Harness hooks** | — | python-env is **not** a PreToolUse gate; invoke **`$python-env-management`** explicitly for env work |
+
+On conflict between this table and `AGENTS.md` one-liner, **this SPEC wins** for Python packaging semantics.
+
 ---
 
 ## 2. Design principles
@@ -229,7 +239,7 @@ Normative detail: [`references/ci-contract.md`](references/ci-contract.md).
 
 **This repository (`skill`)**
 
-- Replace bare `python3` in workflows with `uv run python` once a root or package `pyproject.toml` exists for hook tests; until then, document expected interpreter in workflow comment pointing to this spec.
+- Root `pyproject.toml` + `uv.lock`; `.github/workflows/skill-ci.yml` uses `astral-sh/setup-uv@v5`, `uv sync --frozen`, and `uv run python` for hook tests. See [`references/ci-contract.md`](references/ci-contract.md) **Status** line.
 
 ---
 
@@ -300,15 +310,7 @@ Normative audit list: [`references/framework-skill-audit.md`](references/framewo
 
 **Already aligned:** `experiment-reproducibility`, `jupyter-notebook` (body).
 
-**Must normalize when touched** (no new `pip` / `uv pip` / `python -m pip` in operator steps):
-
-| Path | Issue |
-|------|--------|
-| `skills/youtube-summarizer/SKILL.md` | `pip install` fallback |
-| `skills/pdf/references/detailed-guide.md` | `uv pip` / `python -m pip` |
-| `skills/scientific-figure-plotting/references/*.md` | `pip install` / `uv pip` |
-
-Replacement pattern: `$python-env-management` → `uv add` / `uv sync` / `uvx` / `uv tool install`.
+**Cross-skill audit (2026-05-20):** All paths in [`references/framework-skill-audit.md`](references/framework-skill-audit.md) are **aligned**. Re-scan after skill edits; replacement pattern remains `uv add` / `uv sync` / `uvx` / `uv tool install` — never operator `pip` / `uv pip`.
 
 ### 12.2 Routing note
 

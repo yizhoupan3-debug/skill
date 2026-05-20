@@ -56,7 +56,7 @@ This skill owns **strategy logic, backtesting judgment, execution design, and ri
 
 ## Do not use
 
-- The main task is fetching/validating/exporting market data -> use `/Users/joe/Developer/skill/skills/financial-data-fetching/SKILL.md`
+- The main task is fetching/validating/exporting market data -> use `${SKILL_FRAMEWORK_ROOT}/skills/financial-data-fetching/SKILL.md`
 - The task is accounting or generic investment commentary
 - The user only wants a data pipeline without strategy logic
 

@@ -71,7 +71,7 @@ This skill owns **real financial data acquisition and validation**. It should be
 
 ## Do not use
 
-- The primary task is strategy design, alpha research, execution logic, or risk rules -> use `/Users/joe/Developer/skill/skills/algo-trading/SKILL.md`
+- The primary task is strategy design, alpha research, execution logic, or risk rules -> use `${SKILL_FRAMEWORK_ROOT}/skills/algo-trading/SKILL.md`
 - The task is personal investment advice
 - The task is macro commentary without data engineering work
 
@@ -111,8 +111,8 @@ This skill does **not** own:
 
 ## Primary assets
 
-- Rust core: `/Users/joe/Developer/skill/rust_tools/financial_data_rs/`
-- README: `/Users/joe/Developer/skill/skills/financial-data-fetching/README.md`
+- Rust core: `${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/`
+- README: `${SKILL_FRAMEWORK_ROOT}/skills/financial-data-fetching/README.md`
 
 ## Rust runtime
 
@@ -141,17 +141,17 @@ This skill does **not** own:
 
 ```bash
 # OHLCV
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/Cargo.toml -- \
   ohlcv --market us --symbol AAPL --interval 1h --period 5d --source yahoo
 
 # Capital metrics
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/Cargo.toml -- \
   capital --market us --symbol AAPL
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/Cargo.toml -- \
   capital --market cn --symbol 600519
 
 # Backtest export
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/Cargo.toml -- \
   export --market us --symbol AAPL --interval 1d --period 1y \
   --schema vectorbt --file-format csv --output output/financial-data/aapl.csv
 ```
@@ -161,7 +161,7 @@ cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_r
 Run before calling a provider verified in this environment:
 
 ```bash
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/financial_data_rs/Cargo.toml -- validate
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/Cargo.toml -- validate
 ```
 
 - Only call a source **verified here** if its probe returns `ok: true`.

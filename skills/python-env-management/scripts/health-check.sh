@@ -38,7 +38,7 @@ if command -v python3 >/dev/null 2>&1; then
   exe="$(python3 -c 'import sys, os; print(os.path.realpath(sys.executable))' 2>/dev/null || echo unknown)"
   case "$ver" in
     *"3.12"*) pass "python3 version: $ver" ;;
-    *) info "python3 not 3.12 (got $ver) — run: uv python pin --global 3.12" ;;
+    *) bad "python3 not 3.12 (got $ver) — run: uv python pin --global 3.12" ;;
   esac
   if [[ "$exe" == *".local/share/uv/"* ]]; then
     pass "python3 executable is uv-managed: $exe"
@@ -55,7 +55,7 @@ legacy_path=0
 while IFS= read -r d; do
   [[ -z "$d" ]] && continue
   if [[ "$d" == *Python.framework* || "$d" == *Library/Python* ]]; then
-    bad "legacy Python on PATH: $d"
+    bad "legacy Python on PATH: $d (fix: strip in ~/.zprofile.local + end of ~/.zshrc; disk reclaim: references/migration-runbook.md Phase 5)"
     ((legacy_path++)) || true
   fi
 done < <(echo "${PATH:-}" | tr ':' '\n')
@@ -68,6 +68,13 @@ if whence -w pip3 &>/dev/null; then
   ptype="$(whence -w pip3 2>/dev/null || true)"
   if [[ "$ptype" == *function* ]]; then
     pass "pip3 is shell guard (blocked)"
+    pip3_rc=0
+    pip3_out="$(pip3 --version 2>&1)" || pip3_rc=$?
+    if (( pip3_rc == 0 )); then
+      bad "pip3 guard did not block invocation (got: $pip3_out)"
+    else
+      pass "pip3 guard rejects invocation (exit $pip3_rc)"
+    fi
   else
     bad "pip3 is real binary: $ptype — remove from PATH or add guards"
   fi
@@ -92,6 +99,22 @@ if command -v uv >/dev/null 2>&1; then
   else
     info "uv python find failed — run: uv python install 3.12 && uv python pin --global 3.12"
   fi
+fi
+
+zshrc="${HOME}/.zshrc"
+if [[ -f "$zshrc" ]]; then
+  if grep -E 'export PATH=.*(Library/Python|Python\.framework)' "$zshrc" >/dev/null 2>&1; then
+    bad "~/.zshrc export PATH still prepends legacy Python"
+  else
+    pass "~/.zshrc: no legacy Python in export PATH (strip block OK)"
+  fi
+  if grep -F '.zprofile.local' "$zshrc" >/dev/null 2>&1; then
+    pass "~/.zshrc sources ~/.zprofile.local (non-login shells)"
+  else
+    info "~/.zshrc: add 'source ~/.zprofile.local' for pip guards in interactive shells"
+  fi
+else
+  info "~/.zshrc not found (skip dotfile audit)"
 fi
 
 if pgrep -lf 'Python.app' >/dev/null 2>&1; then

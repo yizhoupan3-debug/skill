@@ -1730,6 +1730,7 @@ fn attach_codex_hook_observation(mut value: Option<Value>) -> Option<Value> {
 }
 
 pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Value>, String> {
+    let _registry_guard = crate::registry_loader::HookRegistryRepoGuard::new(repo_root);
     let canonical = canonical_codex_audit_command(command)?;
     let mut payload = match read_stdin_payload() {
         Ok(payload) => payload,

@@ -30,6 +30,8 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 
 与全宿主相同：**GSD** 默认链；执行区 `/gsd-execute-phase` 启动 goal-style 连续执行（`/autopilot` 已退役）。
 
+**续跑差异（重要）**：Codex **`Stop` 不注入** Cursor 式 `GSD_GOAL_CONTINUE`（`codex_hooks` 无该段落）。连续执行依赖：`GOAL_STATE.json` 盘上契约、Stop 自动 checkpoint（`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT`）、以及你在下一条消息中继续 `/gsd-execute-phase` 或带 goal 上下文。对照 Cursor：见 [`framework_operator_primer.md`](../framework_operator_primer.md)「混用时的实际武装顺序」。
+
 ## Hook 能力
 
 - 多层 hook **全部加载、并发**；项目 hook 需 trusted project

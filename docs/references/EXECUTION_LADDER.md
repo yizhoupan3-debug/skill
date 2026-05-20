@@ -23,4 +23,8 @@
 ## 执行循环
 
 - 默认 goal-style：plan → implement → verify → repair → closeout（纯 review 除外）。
-- `/gsd-execute-phase`：goal 契约 + `GOAL_STATE.json` + 连续执行至 blocker 或完成（Stop：`GSD_GOAL_CONTINUE`）。
+- `/gsd-execute-phase`：goal 契约 + `GOAL_STATE.json` + 连续执行至 blocker 或完成（Cursor Stop：`GSD_GOAL_CONTINUE`；Codex 见 `docs/hosts/codex-cli.md`）。
+
+## Review 与 GSD 同轮混写（Cursor）
+
+`beforeSubmit`：`review_arms_for_gate = review && !goal_drive_entrypoint`。同条消息里深度 review + `/gsd-execute-phase` 时本回合**不**新武装 review；「先审再 execute」须**拆两轮**。见 [`framework_operator_primer.md`](../framework_operator_primer.md)。

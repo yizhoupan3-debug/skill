@@ -205,7 +205,7 @@ cd /abs/path/to/your-other-repo
 "$FW/scripts/cursor-bootstrap-framework.sh" --framework-root "$FW" --with-cursor-rules --with-configs
 
 # 3) JSON / 符号链接粗检
-python3 -m json.tool .cursor/hooks.json > /dev/null
+uv run python -m json.tool .cursor/hooks.json > /dev/null
 test -L skills && test -L AGENTS.md && echo "symlinks ok"
 
 # 4) 模拟 hook（stdin 空 JSON；repo-root 用目标根）

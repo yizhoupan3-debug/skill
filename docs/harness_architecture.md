@@ -22,6 +22,8 @@ L1  Executable verification and exit codes
 
 依赖方向只允许 `L1 -> L2 -> L3 -> L4 -> L5` 向上消费事实。L5 不得绕过 L2 自称“已完成”。
 
+**术语**：上文 **L4 = 宿主 hook 投影**（Cursor/Codex/Claude）。`SKILL.md` frontmatter 里的 **`routing_layer: L4`** 表示 **冷表 manifest 技能**（如 `python-env-management`），与 harness 层号**不是同一概念**。
+
 ## 2. 热路径真源
 
 ### 2.1 SessionStart
@@ -59,6 +61,8 @@ L1  Executable verification and exit codes
 | **drift-gate（全量）** | `framework maint update-one-shot`；显式全量探针 | 在隔离 temp root 执行声明 generator（含 `host-integration install` 等慢步骤，默认单 generator **300s** 超时，可用 `ROUTER_RS_GENERATOR_TIMEOUT_SECONDS` 覆盖），再 byte/normalized 对比 checked-in 与再生副本。 |
 
 集成测试与日常 `doctor` 应使用 **metadata-only**；提交前维护流仍须至少一次 **drift-gate** 绿（见 [`skills/update/SKILL.md`](../skills/update/SKILL.md)）。
+
+**Companion 生成物**（`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json` 等）：`source_of_truth: false` stub；默认 `cargo test --test policy_contracts` 只断言闭集与形态，**不**恢复历史 `capability_classes` 富契约（见 `plugin_catalog_routing_metadata_legacy_capabilities_contract`，`#[ignore]`）。
 
 ## 3. 主数据流
 
@@ -159,7 +163,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 **排障**：Stop 仍被 `*_REVIEW_GATE` 拦住时，先在 hook stdin JSON 核对 **`tool_input`/`subagent_type`/`agent_type`/`agentType`/`type`** 规范化结果，以及 **`fork_context`/`forkContext`** 是否解析为逻辑 **`false`**（典型为布尔 `false`，亦可为可走布尔字符串表的 **`"false"` / `"0"`** 等；JSON **整数** **`0`** 与布尔 **`false`** 等价；**整数 `1`** 解析为 **`true`**（非独立 fork）；其它 JSON **Number**（如 `2`、浮点）仍为 **`None`**，与字段缺失同化。**字符串** `"0"` 与 **数值** `0` 在此等价为 false。仍推荐宿主使用 **JSON 布尔** 显式表达 `fork_context`。**Cursor 缺省推断（默认开）**：`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 未关闭时，可数深度 lane 且字段**缺失**可视为 `false`（显式 `true` 仍阻断）；关闭后恢复「缺字段≠false」。**主线程 compact findings**：未 spawn 可数子代理、助手 tail 含 `[P0]`/`[P1]`/`[P2]`/`Caveat:` 时在 **`Stop`** 升 phase 3 清门（本仓默认 **不** 注册 `afterAgentResponse` hook；恢复该事件见 `MIGRATION.md`）。Codex：`PostToolUse` 事件根部与 `tool_input` 内均可携带 `fork_context`（与 Cursor 对齐的 `fork_context_from_values` 次级来源）。
 
-**Cursor `Stop` 与 `GSD_GOAL_CONTINUE` 互斥**：当 `followup_message` 含硬门控（`router-rs REVIEW_GATE incomplete`、`router-rs AG_FOLLOWUP`、closeout 硬拦、hook-state 锁失败强提示等），`finalize_stop_hook_outputs` **不**合并 `GSD_GOAL_CONTINUE`/`RFV_LOOP`（`skip_continuity_merge`）；无硬门控且仅有活跃 goal 时仍经 `additional_context` 续跑。soft-nag 降频轮亦跳过 merge 并注入 `continuity_suppressed=review_soft_nag`。
+**Cursor `Stop` 与 `GSD_GOAL_CONTINUE` 互斥**：当 `followup_message` 含硬门控（`router-rs REVIEW_GATE incomplete`、`router-rs AG_FOLLOWUP`、closeout 硬拦、hook-state 锁失败强提示等），`finalize_stop_hook_outputs` **不**合并 `GSD_GOAL_CONTINUE`/`RFV_LOOP`（`skip_continuity_merge`）；无硬门控且仅有活跃 goal 时仍经 `additional_context` 续跑。**Review soft-nag 超 cap**（`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`）：仍可有 REVIEW 行，但 `skip_continuity_merge` **仅当** `goal_required && !goal_is_satisfied`（见 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) soft 分支）；goal 已满足时**可**合并 `GSD_GOAL_CONTINUE`。仅当 `skip_continuity_merge` 为真时注入 `continuity_suppressed=review_soft_nag`。
 
 **Cursor `Stop`：`review_override` / `delegation_override` / `has_override`（以及门控用的 `delegation_override` 句式）**：仅以**用户本轮 prompt** 为信源；**不**把助手 `response` 拼进 `signal_text` 来匹配这些 override（与 `beforeSubmit` 一致），避免模型在可见回复里复述「不要用子代理」等句式误解除 `REVIEW_GATE`。拒因清门仍遵循 `saw_reject_reason`（整树 + 用户轮粘贴行）既有规则。
 

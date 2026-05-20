@@ -46,6 +46,12 @@ jobs:
 
       - run: uv sync --frozen
 
+      - name: Skills must not teach operator pip
+        run: bash scripts/ci/check-skills-no-operator-pip.sh
+
+      - name: Cursor hooks 7-event parity (hooks.json vs workspace template)
+        run: bash scripts/ci/check-cursor-hooks-parity.sh
+
       - name: Cursor bootstrap + workspace hooks template sanity
         run: |
           bash -n scripts/cursor-bootstrap-framework.sh

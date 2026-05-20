@@ -46,6 +46,8 @@ export PATH="$HOME/.local/bin:...:$HOME/Library/Python/3.11/bin:$PATH"
 
 After login + local overrides, **prepend** only what you still need; do not re-add `Library/Python`.
 
+**Also append** the same `path=(${path:#*Library/Python*})` / `path=(${path:#*Python.framework*})` block at the **end** of `~/.zshrc` (after IDE PATH lines). macOS `path_helper` in `/etc/zshrc` re-injects python.org paths even when `~/.zshrc` text has no `Library/Python`.
+
 ## ADD `~/.zprofile.local` (normative template)
 
 Run once before or right after adding this file:
@@ -77,6 +79,10 @@ python3() {
   fi
   command python3 "$@"
 }
+
+# Strip macOS path_helper re-injection (/etc/paths.d python.org)
+path=(${path:#*Library/Python*})
+path=(${path:#*Python.framework*})
 
 export PATH
 # === end python-env-management ===
@@ -122,4 +128,4 @@ Some embedded terminals run **interactive zsh without login** (only `~/.zshrc`, 
 
 ## Non-interactive shells
 
-Cron/scripts should call `uv run` / `<repo>/.venv/bin/python`, not bare `python3`. No pip guards apply in `#!/bin/sh` scripts.
+Cron/scripts should `cd` to the project root and use `uv run python …`. Do **not** use bare `python3` or legacy `.venv/bin/python` paths. Operator-local helpers (e.g. repo-specific env wrappers) belong in **your** project, not in this framework skill tree. No pip guards apply in `#!/bin/sh` scripts unless they `source` a zsh profile.

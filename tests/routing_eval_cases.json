@@ -600,6 +600,17 @@
       "expected_layer": "L2",
       "first_turn": true,
       "notes": "实验/ablation 编排仍走 research-workbench；与纯数学 do_not_use 不冲突"
+    },
+    {
+      "id": "route-016-python-env-management",
+      "category": "should-trigger",
+      "task": "macOS 上 Python 环境混乱，想长期不用 pip，用 uv 和 uv.lock 治理 PATH。",
+      "focus_skill": "python-env-management",
+      "expected_owner": "python-env-management",
+      "expected_overlay": null,
+      "expected_layer": "runtime",
+      "first_turn": true,
+      "notes": "冷表 skill；manifest/runtime 路由；AGENTS 要求显式 $python-env-management"
     }
   ]
 }

@@ -2222,6 +2222,73 @@ fn installed_project_hooks_are_router_rs_managed() {
 }
 
 #[test]
+fn cursor_hooks_json_matches_workspace_template_seven_event_set() {
+    let hooks = read_json(&project_root().join(".cursor/hooks.json"));
+    let template = read_json(
+        &project_root().join("configs/framework/cursor-hooks.workspace-template.json"),
+    );
+    const REQUIRED: &[&str] = &[
+        "beforeSubmitPrompt",
+        "stop",
+        "sessionStart",
+        "sessionEnd",
+        "postToolUse",
+        "subagentStart",
+        "subagentStop",
+    ];
+    const FORBIDDEN: &[&str] = &[
+        "afterAgentResponse",
+        "beforeShellExecution",
+        "afterShellExecution",
+        "afterFileEdit",
+        "preCompact",
+    ];
+    for doc in [(&hooks, "hooks.json"), (&template, "workspace-template")] {
+        let events = doc.0["hooks"].as_object().expect("hooks object");
+        for ev in REQUIRED {
+            let key = (*ev).to_string();
+            assert!(
+                events.contains_key(&key),
+                "{} missing event {}",
+                doc.1,
+                ev
+            );
+            let cmd = events[&key][0]["command"].as_str().unwrap_or("");
+            assert!(
+                cmd.contains("cursor-router-rs-hook.sh"),
+                "{} {} must use cursor-router-rs-hook.sh",
+                doc.1,
+                ev
+            );
+        }
+        for ev in FORBIDDEN {
+            let key = (*ev).to_string();
+            assert!(
+                !events.contains_key(&key),
+                "{} must not register removed event {}",
+                doc.1,
+                ev
+            );
+        }
+    }
+    let h = hooks["hooks"].as_object().unwrap();
+    let t = template["hooks"].as_object().unwrap();
+    assert_eq!(h.keys().collect::<Vec<_>>(), t.keys().collect::<Vec<_>>());
+    for ev in REQUIRED {
+        let key = ev.to_string();
+        assert_eq!(
+            h[&key][0]["timeout"], t[&key][0]["timeout"],
+            "timeout mismatch on {ev}"
+        );
+        assert_eq!(
+            h[&key][0]["command"], t[&key][0]["command"],
+            "command mismatch on {ev}"
+        );
+    }
+    assert_eq!(h.get("postToolUse").unwrap()[0]["timeout"], 20);
+}
+
+#[test]
 fn repo_local_codex_omits_framework_mcp_entrypoint() {
     let source = read_text(&project_root().join(".codex/config.toml"));
     assert!(!source.contains("python3"));

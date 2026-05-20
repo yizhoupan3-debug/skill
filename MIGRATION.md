@@ -1,6 +1,6 @@
 # Skill 真源迁移（2026-05-19）
 
-- **唯一可写 skill 源**：`$SKILL_FRAMEWORK_ROOT/skills/`（本机示例：`/Users/joe/Developer/skill/skills/`）
+- **唯一可写 skill 源**：`$SKILL_FRAMEWORK_ROOT/skills/`（示例：`$SKILL_FRAMEWORK_ROOT/skills/`）
 - **Codex 全局**：`~/.codex/skills` → `artifacts/codex-skill-surface/skills`
 - **Agents 全局**：`~/.agents/skills` → 同上 surface
 - **已删除（2026-05-19 激进清理）**：`~/Documents/skill`、`~/Documents/skill.nosync` 及同批空壳/无关目录；勿再引用。`~/skills_backup` 此前已删。
@@ -14,6 +14,13 @@ cd "$SKILL_FRAMEWORK_ROOT"
 just publish    # 或：ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 … update-one-shot
 just doctor
 ```
+
+## 投影同步清单（改 AGENTS / 叙事 / GSD 文案后）
+
+1. 仓库根改 `AGENTS.md` 且依赖 Codex：`cargo build --manifest-path scripts/router-rs/Cargo.toml` + `router-rs framework sync-entrypoints --repo-root "$SKILL_FRAMEWORK_ROOT"`（或 `codex sync --repo-root "$SKILL_FRAMEWORK_ROOT"`）。
+2. Cursor 用户级 framework：`router-rs framework host-integration install --to cursor --scope user --framework-root "$SKILL_FRAMEWORK_ROOT" --project-root "$SKILL_FRAMEWORK_ROOT"`.
+3. 改 `configs/framework/host_projection_narrative.json` 或 `RUNTIME_REGISTRY.json` **review_gate**：**无需** rebuild；重启 hook 子进程。
+4. 发布前：`router-rs framework maint update-one-shot`（全量 drift-gate）；日常仅 `framework doctor` **不等于** drift-gate 通过。
 
 ## 默认工作流（全宿主）
 
@@ -53,6 +60,10 @@ cd /path/to/project
 | `beforeShellExecution` / `afterShellExecution` | SessionEnd 终端 PID 账本更全；需 `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS≠0` 才有意义 |
 | `afterFileEdit` | Agent 改 `.rs` 后自动 `rustfmt` |
 | `preCompact` | compaction 前 RFV/门状态摘要 |
+
+**门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「PostToolUse timeout」。
+
+**模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`）。
 
 **内存相关**：见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「内存 / release」；项目 env [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。
 

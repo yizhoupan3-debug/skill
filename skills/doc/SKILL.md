@@ -80,9 +80,9 @@ In that case:
 Use these as the default inspection and verification commands:
 
 ```bash
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx>
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx> --json
-cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --output-dir <dir>
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx>
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx> --json
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --output-dir <dir>
 ```
 
 `docx` reports paragraphs, heading outline, tables, sections, page size, images, hyperlinks, footnotes, endnotes, and comments. `render-docx` converts the document to PNG pages for layout review.

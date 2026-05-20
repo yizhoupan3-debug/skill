@@ -75,7 +75,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 | **Codex CLI** | 见 `.codex/hooks.json`（另述） | [`docs/hosts/codex-cli.md`](hosts/codex-cli.md) |
 
 - **Cursor 已移除**：`afterAgentResponse`（compact 清门改 **`Stop` tail**）、shell 生命周期、`afterFileEdit`、`preCompact`。
-- **`postToolUse`**：仍注册，但 `Read`/`Grep` 等在 router-rs **fast-path** 跳过 tracker 与 hook-state 锁；须 **`cargo build --release`** 且 launcher 命中 release（~8MB）。
+- **`postToolUse`**：仍注册（**`timeout: 20s`**，与门控事件一致；见 [`docs/hosts/cursor.md`](hosts/cursor.md)「PostToolUse timeout」）。`Read`/`Grep` 等在 router-rs **fast-path** 跳过 tracker 与 hook-state 锁；须 **`cargo build --release`** 且 launcher 命中 release（~8MB）。若 Agent 步在工具后卡住，先查 postToolUse 是否超时而非盲目加长 timeout。
 - **Claude**：`PostToolUse` 仅 touched settings/framework 时才有上下文；共享 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（`.claude/router-rs-hook.env`）。
 - **恢复旧 Cursor 事件**：见 [`MIGRATION.md`](../MIGRATION.md)。
 

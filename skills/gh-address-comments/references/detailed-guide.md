@@ -40,7 +40,7 @@ If the task shifts to adjacent skill territory, route to:
 - Resolve the current branch PR:
   - `gh pr view --json number,url,title`
 - Use the bundled helper first:
-  - `cargo run --manifest-path /Users/joe/Developer/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- fetch-comments --repo . --json`
+  - `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- fetch-comments --repo . --json`
   - add `--open-only` when you only need unresolved, non-outdated review threads
 
 ### 2. Fetch and classify feedback
@@ -139,6 +139,6 @@ Recommended structure:
 
 ## Optional supporting assets
 
-- Rust CLI: `/Users/joe/Developer/skill/rust_tools/gh_source_gate_rs`
+- Rust CLI: `${SKILL_FRAMEWORK_ROOT}/rust_tools/gh_source_gate_rs`
 - `assets/`
 - `agents/`

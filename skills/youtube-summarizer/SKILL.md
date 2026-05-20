@@ -56,8 +56,8 @@ Extracts transcripts from YouTube videos and generates comprehensive summaries u
 ## Step 0: Setup
 
 ```bash
-# Check if youtube-transcript-api is installed
-python3 -c "import youtube_transcript_api" 2>/dev/null || uvx --with youtube-transcript-api python -c "import youtube_transcript_api"
+# One-shot import check (no project deps required)
+uvx --with youtube-transcript-api python -c "import youtube_transcript_api"
 ```
 
 ## Main Workflow

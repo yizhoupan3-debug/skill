@@ -617,6 +617,9 @@ pub struct ReviewGateState {
     /// 武装 review gate 后，每次 qualifying subagent **start**（PostToolUse / subagentStart）压入一条 cycle key（multiset）；qualifying **stop** 命中时**移除一条**同 key 记录，**仅当**本队列为空时升相位 3 并记 `subagent_stop_count`。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_subagent_pending_cycle_keys: Vec<String>,
+    /// Set when multiset push refused at cap (operator-visible on Stop).
+    #[serde(default)]
+    pub review_pending_cap_refused: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
 }
@@ -1602,6 +1605,7 @@ fn empty_state() -> ReviewGateState {
         review_subagent_cycle_open: false,
         review_subagent_cycle_key: None,
         review_subagent_pending_cycle_keys: Vec::new(),
+        review_pending_cap_refused: false,
         updated_at: None,
     }
 }
@@ -1867,9 +1871,20 @@ pub(crate) const REVIEW_GATE_FOLLOWUP_HINT_SEGMENT: &str =
     "hint=fork_context_json_false_not_omitted";
 
 fn review_stop_followup_line(state: &ReviewGateState) -> String {
+    let cap_need = if state.review_pending_cap_refused {
+        format!(
+            " need=pending_cycle_keys_at_cap max={}",
+            crate::router_env_flags::router_rs_cursor_review_pending_cycle_max()
+        )
+    } else {
+        String::new()
+    };
     format!(
-        "router-rs REVIEW_GATE incomplete phase={} {} {}",
-        state.phase, REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+        "router-rs REVIEW_GATE incomplete phase={} {}{} {}",
+        state.phase,
+        REVIEW_GATE_FOLLOWUP_NEED_SEGMENT,
+        cap_need,
+        REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
     )
 }
 
@@ -2448,6 +2463,7 @@ fn push_review_pending_cycle_key(
     let max = crate::router_env_flags::router_rs_cursor_review_pending_cycle_max();
     if state.review_subagent_pending_cycle_keys.len() >= max {
         eprintln!("[router-rs] review_pending_cycle_keys_at_cap_refused cap={max} key={k}");
+        state.review_pending_cap_refused = true;
         return false;
     }
     state.review_subagent_pending_cycle_keys.push(k);

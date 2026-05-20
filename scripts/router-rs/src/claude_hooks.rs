@@ -225,6 +225,7 @@ const RETIRED_SURFACE_PATHS: &[&str] = &[
 /// Pre-89ece4c the stdio agent hook accepted kebab-case commands only; CLI adds PascalCase aliases
 /// aligned with Codex hook spelling (`PreToolUse`, `Stop`, …)。
 pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
+    let _registry_guard = crate::registry_loader::HookRegistryRepoGuard::new(repo_root);
     with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
         let canonical = canonical_stdio_agent_hook_command(command)?;
         let payload = read_stdin_payload()?;
