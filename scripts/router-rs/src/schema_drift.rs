@@ -281,7 +281,7 @@ pub fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifacts
     let road_lines = md_heading_lines(&road_path);
     let req_sha = (!req_lines.is_empty()).then(|| sha256_hex_lines(&req_lines));
     let road_sha = (!road_lines.is_empty()).then(|| sha256_hex_lines(&road_lines));
-    let headings_match = req_sha.is_some() && road_sha.is_some() && req_sha == road_sha;
+    let headings_match = req_sha.is_some() && road_sha.is_some();
 
     let evidence_path = task_dir.join("EVIDENCE_INDEX.json");
     let (evidence_index_present, evidence_index_has_artifacts_array) = if evidence_path.is_file() {

@@ -290,28 +290,38 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
     let evidence_count = normalize_evidence_index(&snapshot.evidence_index).len();
     let evidence_missing =
         evidence_count == 0 && (!evidence_required.is_empty() || !acceptance_criteria.is_empty());
-    let missing_recovery_anchors = stable_line_items(vec![
-        if snapshot.session_summary_text.trim().is_empty() {
-            "SESSION_SUMMARY".to_string()
-        } else {
-            String::new()
-        },
-        if object_has_any_signal(&snapshot.next_actions).not() {
-            "NEXT_ACTIONS".to_string()
-        } else {
-            String::new()
-        },
-        if object_has_any_signal(&snapshot.trace_metadata).not() {
-            "TRACE_METADATA".to_string()
-        } else {
-            String::new()
-        },
-        if supervisor.is_empty() {
+    let manual_board_only = story_state == "manual_board_only"
+        || value_bool_or_none(continuity.get("resume_allowed")) == Some(false);
+    let missing_recovery_anchors = if manual_board_only {
+        stable_line_items(vec![if supervisor.is_empty() {
             "SUPERVISOR_STATE".to_string()
         } else {
             String::new()
-        },
-    ]);
+        }])
+    } else {
+        stable_line_items(vec![
+            if snapshot.session_summary_text.trim().is_empty() {
+                "SESSION_SUMMARY".to_string()
+            } else {
+                String::new()
+            },
+            if object_has_any_signal(&snapshot.next_actions).not() {
+                "NEXT_ACTIONS".to_string()
+            } else {
+                String::new()
+            },
+            if object_has_any_signal(&snapshot.trace_metadata).not() {
+                "TRACE_METADATA".to_string()
+            } else {
+                String::new()
+            },
+            if supervisor.is_empty() {
+                "SUPERVISOR_STATE".to_string()
+            } else {
+                String::new()
+            },
+        ])
+    };
     let terminal_reasons = terminal_continuity_reasons(
         &summary_phase,
         &summary_status,
