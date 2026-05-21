@@ -308,35 +308,11 @@ pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) 
         .unwrap_or(false)
 }
 
-/// Profile-scoped review gate off (not global env); includes `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`.
-pub fn review_gate_hard_block_suppressed(
-    repo_root: Option<&std::path::Path>,
-    text: &str,
-) -> bool {
-    if crate::router_env_flags::router_rs_env_enabled_default_false(
-        "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE",
-    ) {
-        return true;
-    }
-    if my_light_profile_active(repo_root, text) {
-        return true;
-    }
-    repo_root
-        .and_then(|root| {
-            crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
-                Some(root),
-                "my-light",
-            )
-            .ok()
-        })
-        .unwrap_or(false)
-}
-
 /// Hook nudge for GSD pre-execution commands (read-only product surface).
-pub const GSD_PRE_EXECUTION_HOOK_NUDGE: &str = "GSD pre-execution (/gsd-new-project, /gsd-plan-phase, /gsd-discuss-phase): product repo is READ-ONLY per skills/_archived/gsd-lifecycle/shared/phase-boundaries.md. Write only under artifacts/current/<task_id>/ and allowed planning docs. Do not set drive_until_done:true, do not run fix/build/test on product code, and do not spawn implementation agents until /gsd-execute-phase.";
+pub const GSD_PRE_EXECUTION_HOOK_NUDGE: &str = "GSD pre-execution (/discussx, /planx, legacy /gsd-discuss-phase): product repo is READ-ONLY. Write only under artifacts/current/<task_id>/ and planning docs. Do not set drive_until_done:true or run product fix/build/test until /implementx or /gsd-execute-phase.";
 
 /// Hook nudge when execution-zone goal drive is armed.
-pub const GSD_GOAL_DRIVE_HOOK_NUDGE: &str = "Framework goal drive (/gsd-execute-phase, /gsd-verify-work, /gsd-ship, /implementx, /verifyx): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched skill_path (see skills/_archived/gsd-lifecycle/execute-phase/SKILL.md or skills/implementx/SKILL.md).";
+pub const GSD_GOAL_DRIVE_HOOK_NUDGE: &str = "Framework goal drive (/implementx, /verifyx, legacy /gsd-execute-phase|verify-work|ship): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched skill_path (skills/implementx/SKILL.md or skills/verifyx/SKILL.md).";
 
 /// Hook nudge for my-* pre-execution (read-only product surface).
 pub const MY_PRE_EXECUTION_HOOK_NUDGE: &str = "My lifecycle pre-execution (/discussx, /planx): product repo READ-ONLY. Write only under artifacts/current/<task_id>/ and planning docs. No drive_until_done until /implementx.";
@@ -408,18 +384,12 @@ pub fn should_inject_spawn_first_review_nudge(
     repo_root: Option<&std::path::Path>,
     prompt_text: &str,
 ) -> bool {
-    if my_light_profile_active(repo_root, prompt_text) {
-        return false;
-    }
-    if repo_root
-        .and_then(|r| {
-            crate::registry_loader::lifecycle_profile_disables_spawn_first_nudge(
-                Some(r),
-                "my-light",
-            )
-            .ok()
-        })
-        .unwrap_or(false)
+    if my_light_profile_active(repo_root, prompt_text)
+        && crate::registry_loader::lifecycle_profile_disables_spawn_first_nudge(
+            repo_root,
+            "my-light",
+        )
+        .unwrap_or(true)
     {
         return false;
     }

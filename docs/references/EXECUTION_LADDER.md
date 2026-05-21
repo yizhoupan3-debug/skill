@@ -5,7 +5,7 @@
 ## 宿主优先级
 
 - **Cursor**：`execution-subagent-gate.mdc` / `review-subagent-gate.mdc` 为执行面差异真源；用户要求不用子代理时豁免。
-- **Review 硬点**：`router-rs` 校验 review 证据链；见 `.cursor/hook-state` 与 Stop 短码 `REVIEW_GATE`。
+- **Review 硬点**：`router-rs` 校验 review 证据链。Cursor：`.cursor/hook-state` + Stop `REVIEW_GATE`（wave-2 phase/multiset）。Codex：`.codex/hook-state` + Stop `CODEX_REVIEW_GATE`（wave-2 部分：PostTool 可数证据 + Stop compact/rg_clear；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭）。
 - **Codex / 无 Cursor 规则**：默认主线程执行；显式 subagent、My 执行区（`/implementx`、`/verifyx`）、`/team` 才 sidecar。
 
 ## Review

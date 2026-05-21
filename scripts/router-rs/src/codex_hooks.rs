@@ -2,13 +2,13 @@ use crate::framework_runtime::{
     build_framework_contract_summary_envelope, try_append_post_tool_shell_evidence,
 };
 use crate::hook_common::{
-    is_deep_review_gate_lane_normalized, normalize_subagent_type, normalize_tool_name,
+    has_override, is_deep_review_gate_lane_normalized, normalize_subagent_type, normalize_tool_name,
 };
 use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
 use crate::host_integration::ensure_codex_skill_surface;
 use crate::review_gate_engine::{
-    fork_context_from_values, independent_reviewer_evidence, review_gate_blocks_stop,
-    ReviewGateFacts,
+    codex_review_gate_satisfied, fork_context_from_values, independent_reviewer_evidence,
+    maybe_bump_codex_review_phase_for_compact_findings, ReviewGateFacts,
 };
 use crate::router_env_flags::{
     router_rs_env_enabled_default_false, router_rs_env_enabled_default_true,
@@ -184,6 +184,12 @@ struct CodexLifecycleContextState {
     review_override: bool,
     #[serde(default)]
     independent_review_subagent_seen: bool,
+    #[serde(default)]
+    phase: u32,
+    #[serde(default)]
+    subagent_start_count: u32,
+    #[serde(default)]
+    reject_reason_seen: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     review_subagent_tool: Option<String>,
 }
@@ -709,7 +715,7 @@ fn codex_tool_fork_context(tool_input: &Value, event: &Value) -> Option<bool> {
     fork_context_from_values(tool_input, Some(event))
 }
 
-/// 与 Cursor `REVIEW_GATE` 深度 lane 对齐：`general-purpose` / `best-of-n-runner`（已 normalize）且显式 `fork_context=false`。
+/// 与 Cursor `REVIEW_GATE` 深度 lane 对齐：`general-purpose` / `best-of-n-runner`（已 normalize）；缺字段推断见 `cursor_review_independent_fork`。
 fn codex_deep_independent_reviewer_evidence(
     recognized_kind: Option<&str>,
     tool_input: &Value,
@@ -739,6 +745,77 @@ fn codex_stop_hook_active_replay(event: &Value) -> bool {
 /// Codex-internal Stop replays (`stop_hook_active`): skip gate enforcement only when explicitly opted in.
 fn codex_stop_hook_active_bypass_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS")
+}
+
+/// **仅当** `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1|true|yes|on` 时关闭 Codex review gate（unset 保持启用）。
+fn codex_review_gate_disabled_by_env() -> bool {
+    router_rs_env_enabled_default_false("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE")
+}
+
+/// Env disable, my-light profile, or registry `lifecycle_profiles.my-light.disable_review_gate_hard_block`.
+fn codex_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
+    if codex_review_gate_disabled_by_env() {
+        return true;
+    }
+    if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
+        return false;
+    }
+    crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
+        Some(repo_root),
+        "my-light",
+    )
+    .unwrap_or(true)
+}
+
+fn codex_agent_response_text(event: &Value) -> String {
+    const KEYS: &[&str] = &[
+        "response",
+        "agent_response",
+        "agentResponse",
+        "content",
+        "text",
+        "output",
+    ];
+    for key in KEYS {
+        if let Some(value) = event.get(key).and_then(Value::as_str) {
+            if !value.trim().is_empty() {
+                return value.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+fn codex_stop_signal_text(event: &Value) -> String {
+    let prompt = codex_prompt_text(event);
+    let response = codex_agent_response_text(event);
+    if prompt.trim().is_empty() {
+        response
+    } else if response.trim().is_empty() {
+        prompt
+    } else {
+        format!("{prompt}\n{response}")
+    }
+}
+
+fn codex_closeout_completion_text(event: &Value) -> String {
+    codex_stop_signal_text(event)
+}
+
+fn codex_review_stop_followup_line(phase: u32) -> String {
+    format!(
+        "router-rs CODEX_REVIEW_GATE incomplete phase={phase} need=deep_reviewer_posttool_and_compact_findings_or_rg_clear hint=fork_context_json_false_not_omitted see=ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1|ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1"
+    )
+}
+
+fn codex_reset_hook_state(repo_root: &Path, event: &Value) {
+    let _ = with_codex_state_lock(repo_root, event, |_loaded| {
+        let reset = CodexLifecycleContextState {
+            seq: 0,
+            ..CodexLifecycleContextState::default()
+        };
+        Ok((Some(reset), ()))
+    });
 }
 
 fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
@@ -771,8 +848,9 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
 
 fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
     let prompt = codex_prompt_text(event);
+    let my_light = crate::hook_common::my_light_profile_active(Some(repo_root), &prompt);
     let mut facts = ReviewGateFacts::from_prompt(&prompt);
-    if crate::hook_common::my_light_profile_active(Some(repo_root), &prompt) {
+    if my_light {
         facts.review_required = false;
     }
     let state = CodexLifecycleContextState {
@@ -786,9 +864,16 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         let mut next = state.clone();
         if let Some(prev) = loaded {
             next.seq = prev.seq.saturating_add(1);
-            next.review_required = prev.review_required || facts.review_required;
+            next.review_required = if my_light {
+                false
+            } else {
+                prev.review_required || facts.review_required
+            };
             next.review_override = prev.review_override || facts.review_override;
             next.independent_review_subagent_seen = prev.independent_review_subagent_seen;
+            next.phase = prev.phase;
+            next.subagent_start_count = prev.subagent_start_count;
+            next.reject_reason_seen = prev.reject_reason_seen;
         } else {
             next.seq = 1;
         }
@@ -873,6 +958,8 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
         state.review_subagent_seen = true;
         if codex_deep_independent_reviewer_evidence(recognized.as_deref(), &tool_input, event) {
             state.independent_review_subagent_seen = true;
+            state.subagent_start_count = state.subagent_start_count.saturating_add(1);
+            state.phase = state.phase.max(2);
         }
         Ok((Some(state), ()))
     }) {
@@ -889,10 +976,28 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
         return None;
     }
 
+    let stop_signal = codex_stop_signal_text(event);
     let prompt_text = codex_prompt_text(event);
-    if let Some(msg) =
-        crate::framework_runtime::closeout_stop_followup_for_completion_text(repo_root, &prompt_text)
-    {
+    let response_full = codex_agent_response_text(event);
+
+    if codex_review_gate_suppressed(repo_root, &stop_signal) {
+        if let Some(msg) = crate::framework_runtime::closeout_stop_followup_for_completion_text(
+            repo_root,
+            &codex_closeout_completion_text(event),
+        ) {
+            return Some(json!({
+                "decision": "block",
+                "followup_message": msg
+            }));
+        }
+        codex_reset_hook_state(repo_root, event);
+        return None;
+    }
+
+    if let Some(msg) = crate::framework_runtime::closeout_stop_followup_for_completion_text(
+        repo_root,
+        &codex_closeout_completion_text(event),
+    ) {
         return Some(json!({
             "decision": "block",
             "followup_message": msg
@@ -907,44 +1012,84 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
                 "followup_message": "router-rs CODEX_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions"
             }));
         }
-        Ok(Some(state)) => {
-            if review_gate_blocks_stop(ReviewGateFacts {
-                review_required: state.review_required,
-                review_override: state.review_override,
-                independent_reviewer_seen: state.independent_review_subagent_seen,
-            }) {
+        Ok(Some(mut state)) => {
+            if has_override(&prompt_text) {
+                state.review_override = true;
+            }
+            if crate::hook_common::saw_reject_reason(&stop_signal, &prompt_text) {
+                state.reject_reason_seen = true;
+            }
+            let assistant_tail = crate::hook_common::hook_assistant_tail_window(
+                &response_full,
+                crate::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+            );
+            if let Some(phase) = maybe_bump_codex_review_phase_for_compact_findings(
+                state.review_required,
+                state.review_override,
+                state.phase,
+                state.subagent_start_count,
+                state.independent_review_subagent_seen,
+                &assistant_tail,
+            ) {
+                state.phase = phase;
+            }
+            let blocks = !codex_review_gate_satisfied(
+                state.review_required,
+                state.review_override,
+                state.reject_reason_seen,
+                state.independent_review_subagent_seen,
+                state.phase,
+            );
+            let persist = with_codex_state_lock(repo_root, event, |_loaded| {
+                Ok((Some(state.clone()), ()))
+            });
+            if persist.is_err() {
+                return Some(codex_hook_state_persist_block_payload());
+            }
+            if blocks {
                 return Some(json!({
                     "decision": "block",
-                    "followup_message": "router-rs CODEX_REVIEW_GATE incomplete need=independent_context_reviewer_subagent_fork_context_false"
+                    "followup_message": codex_review_stop_followup_line(state.phase)
                 }));
             }
         }
         Ok(None) => {
-            let prompt = codex_prompt_text(event);
-            let stop_facts = ReviewGateFacts::from_prompt(&prompt);
-            if review_gate_blocks_stop(ReviewGateFacts {
-                review_required: stop_facts.review_required,
-                review_override: stop_facts.review_override,
-                independent_reviewer_seen: false,
-            }) {
+            let stop_facts = ReviewGateFacts::from_prompt(&prompt_text);
+            let reject = crate::hook_common::saw_reject_reason(&stop_signal, &prompt_text);
+            let assistant_tail = crate::hook_common::hook_assistant_tail_window(
+                &response_full,
+                crate::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+            );
+            let phase = if maybe_bump_codex_review_phase_for_compact_findings(
+                stop_facts.review_required,
+                stop_facts.review_override,
+                0,
+                0,
+                false,
+                &assistant_tail,
+            )
+            .is_some()
+            {
+                3
+            } else {
+                0
+            };
+            if !codex_review_gate_satisfied(
+                stop_facts.review_required,
+                stop_facts.review_override,
+                reject,
+                false,
+                phase,
+            ) {
                 return Some(json!({
                     "decision": "block",
-                    "followup_message": "router-rs CODEX_REVIEW_GATE incomplete need=independent_context_reviewer_subagent_fork_context_false"
+                    "followup_message": codex_review_stop_followup_line(phase)
                 }));
             }
         }
     }
 
-    let reset_result = with_codex_state_lock(repo_root, event, |_loaded| {
-        let reset = CodexLifecycleContextState {
-            seq: 0,
-            ..CodexLifecycleContextState::default()
-        };
-        Ok((Some(reset), ()))
-    });
-    if let Err(err) = reset_result {
-        eprintln!("[router-rs] codex hook state reset skipped (non-fatal): {err}");
-    }
+    codex_reset_hook_state(repo_root, event);
     None
 }
 
@@ -1081,7 +1226,7 @@ Codex hooks are enabled for this repo and are managed by the Rust `router-rs` co
 **Policy snapshot:** the `codex_agent_policy` payload embeds the repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` preserves an existing root `AGENTS.md` from disk and only uses the embedded copy to bootstrap a missing file; rebuild before sync when you need generated Codex payloads to carry policy edits (see `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**).\n\n\
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
-`SessionStart` injects a lightweight workspace pointer (`Repo:` and optional `source`) when operator inject is enabled; it does **not** inject a continuity digest or hook-driven `GOAL_CONTINUE`. `UserPromptSubmit` injects only trigger-specific context. `PreToolUse` blocks direct edits to generated Codex surfaces. `PostToolUse` records subagent/tool telemetry and, when opted in (`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1`, default off), may append verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active. `Stop` enforces closeout and `CODEX_REVIEW_GATE` (broad/deep review prompts require an independent read-only reviewer subagent with `fork_context=false` before Stop can close); it does **not** write an automatic continuity checkpoint (`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` is a no-op). Resume work via `/implementx`, `framework_goal_drive` stdio, and manual boards under `artifacts/current/<task_id>/`. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
+`SessionStart` injects a lightweight workspace pointer (`Repo:` and optional `source`) when operator inject is enabled; it does **not** inject a continuity digest or hook-driven `GOAL_CONTINUE`. `UserPromptSubmit` injects only trigger-specific context. `PreToolUse` blocks direct edits to generated Codex surfaces. `PostToolUse` records subagent/tool telemetry and, when opted in (`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1`, default off), may append verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active. `Stop` enforces closeout and `CODEX_REVIEW_GATE` (wave-2 partial: broad/deep review requires PostTool countable deep-lane evidence **and** Stop compact findings, or bounded `rg_clear` / reject tokens; compact alone cannot clear); set **`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1`** to disable the hard gate (unset keeps enabled). `my-light` lifecycle (`/discussx|planx|implementx|verifyx` or `GOAL_STATE.lifecycle_profile`) suppresses the hard block. It does **not** write an automatic continuity checkpoint (`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` is a no-op). Resume work via `/implementx`, `framework_goal_drive` stdio, and manual boards under `artifacts/current/<task_id>/`. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active. Stable keys require `session_id` / `conversation_id` / `thread_id` in hook payloads (snake_case **or** camelCase, e.g. `sessionId`) or `CODEX_SESSION_ID` / `CODEX_CONVERSATION_ID` in the environment; otherwise hook-state may not persist across invocations (router-rs logs a one-time stderr warning per process).\n\n\
 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`** defaults **on** (`unset` = require stable keys). Set `0`/`false`/`off`/`no` for legacy payloads without `session_id` / env fallbacks (`SessionStart` is unaffected). Without a stable id and with strict mode off, hook-state uses one deterministic repo-wide fallback filename (not per-invocation random keys).\n\n\
 Generated hook commands resolve `router-rs` in order: **`ROUTER_RS_BIN`** when set to an executable path, then `scripts/router-rs/target/{release,debug}/router-rs`, then repo `target/{release,debug}/router-rs`, finally `command -v router-rs` (last resort — prefer pinning `ROUTER_RS_BIN` or building into the repo). If the binary is missing, **all** lifecycle hooks fail closed with a JSON `decision:block` line.\n\n\
@@ -2835,6 +2980,8 @@ mod tests {
             dir
         }
 
+        const TEST_COMPACT_FINDING: &str = "[P1] scripts/router-rs/src/codex_hooks.rs:1 — wave-2 compact gate clear evidence line";
+
         #[test]
         fn operator_inject_off_skips_session_start_additional_context() {
             let _g = env_lock();
@@ -3392,7 +3539,8 @@ mod tests {
                 "hook_event_name":"Stop",
                 "session_id":"sm-event-fork",
                 "cwd": repo.to_string_lossy().to_string(),
-                "prompt":"继续"
+                "prompt":"继续",
+                "response": TEST_COMPACT_FINDING
             });
             let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
             assert!(
@@ -3588,7 +3736,8 @@ mod tests {
                 "hook_event_name":"Stop",
                 "session_id":"sm-7",
                 "cwd": repo.to_string_lossy().to_string(),
-                "prompt":"继续"
+                "prompt":"继续",
+                "response": TEST_COMPACT_FINDING
             });
             let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
             assert!(out.is_none());
@@ -3596,6 +3745,173 @@ mod tests {
             assert_eq!(state.seq, 0);
             assert!(!state.review_subagent_seen);
             assert!(!state.independent_review_subagent_seen);
+        }
+
+        #[test]
+        fn stop_blocks_after_posttool_without_compact_findings() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-wave2-post-only",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-wave2-post-only",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-wave2-post-only",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE"), "posttool alone must not clear: {out:?}");
+            assert!(msg.contains("phase=2"), "expected phase=2 after posttool: {msg}");
+        }
+
+        #[test]
+        fn stop_compact_alone_without_posttool_blocks() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-wave2-compact-only",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-wave2-compact-only",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续",
+                "response": TEST_COMPACT_FINDING
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(
+                msg.contains("CODEX_REVIEW_GATE"),
+                "compact alone must not clear without countable posttool: {out:?}"
+            );
+        }
+
+        #[test]
+        fn stop_rg_clear_clears_review_gate() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-rg-clear",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-rg-clear",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"rg_clear"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none(), "rg_clear must clear codex review gate: {out:?}");
+        }
+
+        #[test]
+        fn my_light_implementx_stop_suppresses_review_gate() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-my-light",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"/implementx run waves"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let armed = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-my-light",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &armed).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-my-light",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"/implementx finish"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(
+                out.is_none(),
+                "my-light must suppress CODEX_REVIEW_GATE on Stop: {out:?}"
+            );
+        }
+
+        #[test]
+        fn codex_review_gate_disable_env_skips_block() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
+            std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-disable",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-disable",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none(), "disable env must skip gate: {out:?}");
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
+                None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+            }
+        }
+
+        #[test]
+        fn stop_clears_after_best_of_n_runner_posttool_and_compact() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-bon",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-bon",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"best-of-n-runner","fork_context":false}
+            });
+            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-bon",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续",
+                "response": TEST_COMPACT_FINDING
+            });
+            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            assert!(out.is_none(), "best-of-n + compact must clear: {out:?}");
         }
 
         #[test]

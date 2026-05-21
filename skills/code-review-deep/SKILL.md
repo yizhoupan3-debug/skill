@@ -100,7 +100,9 @@ For broad/deep/PR-level code review, use **spawn-first pairing**: before the mai
 
 **Narrow scope** (single-path `review ./file`, `small_task`, or explicit「不用子代理」): **no** multi-lane requirement; hosts skip arming `review_required`—**must not** Stop-block for missing subagents.
 
-**REVIEW_GATE clearance (Cursor/Codex)**: requires countable reviewer evidence per wave-2 (`start_count≥1`, multiset drained, no compact-alone forgery)—**not** raised to `≥2`. Main thread delivers **compact** findings only; optional `artifacts/current/<task_id>/review-lanes/<lane_id>.md` (soft—missing files **do not** block Stop). Keep reviewers read-only and artifact-disjoint.
+**REVIEW_GATE clearance (Cursor)**: requires countable reviewer evidence per wave-2 (`start_count≥1`, multiset drained, no compact-alone forgery)—**not** raised to `≥2`. Main thread delivers **compact** findings only; optional `artifacts/current/<task_id>/review-lanes/<lane_id>.md` (soft—missing files **do not** block Stop). Keep reviewers read-only and artifact-disjoint.
+
+**CODEX_REVIEW_GATE clearance (Codex CLI, wave-2 partial)**: PostTool 深度 lane（`deep_gate_lanes` + `fork_context=false`，缺字段推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）→ 可数证据、`phase≥2`；Stop 上 compact findings **仅在有可数证据时** 升 `phase=3`；`rg_clear` / bounded reject token 亦可清门；**compact alone 不得清门**。无 subagentStart/Stop multiset。`my-light` / `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦。
 
 **Host countable evidence (Cursor / Codex `REVIEW_GATE` / Codex Stop ledger)** matches `hook_common::is_deep_review_gate_lane_normalized`: the subagent lane (after host normalization) must be in `configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes` only (`general-purpose` / `best-of-n-runner` and normalized equivalents — see `docs/host_adapter_contract.md` §0.1). **`explore`, `ci-investigator`, `cursor-guide`, `review`/`reviewer`/`critic`/`code-review`, and custom lane names do not count** on Cursor/Codex—even with **`fork_context=false`**. **Claude Code** uses `review_gate.claude_reviewer_lanes` (superset); do not assume those extra strings satisfy Cursor/Codex hooks.
 

@@ -57,10 +57,12 @@
 |------|--------|-----------|-------------|----------------------------|
 | 可数深度 lane 真源 | `deep_gate_lanes` | `deep_gate_lanes` | `claude_reviewer_lanes` | 无 hook 面 |
 | subagentStart/Stop multiset | ✓ | ✗（单次 PostToolUse 证据） | ✗ | ✗ |
-| `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✗ | ✗ | ✗ |
+| wave-2 compact 清门（可数证据后 Stop compact） | ✓ | ✓（部分；无 multiset） | ✗ | ✗ |
+| `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✓（2026-05 wave-2） | ✗ | ✗ |
 | Stop 硬短码 | `router-rs REVIEW_GATE incomplete` | `CODEX_REVIEW_GATE` | `CLAUDE_REVIEW_GATE` | — |
+| Review gate disable env | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` | `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | — |
 | Goal/RFV hook 续跑（`GOAL_CONTINUE` / digest） | ✗ | ✗ | ✗（stdio/MCP advisory） | ✗ |
-| Stop soft-nag / spoof scrub | ✓ | 部分 | 部分 | — |
+| Stop soft-nag / spoof scrub | ✓ | ✗（硬行 + disable/bypass env） | 部分 | — |
 
 细节见 [`harness_architecture.md`](harness_architecture.md) §5.0 与各 [`docs/hosts/*.md`](hosts/cursor.md)。
 
@@ -120,7 +122,7 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（`codex_hooks.rs`） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；默认可清点深度审稿 lane 见 [`harness_architecture.md`](harness_architecture.md) **§5.0** |
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（`codex_hooks.rs`） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2 部分：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
 | 宿主入口对齐 | `router-rs codex sync` | 经 shared `host_entrypoint_sync` engine + Codex provider 生成 `.codex/hooks.json`、`AGENTS.md` 等及 **`host_entrypoints_sync_manifest`** | 受 **`RUNTIME_REGISTRY.host_targets.supported`** 约束 |
@@ -131,7 +133,7 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`（及策略合并字段，见运行时）；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NAGGES`**（[`harness_architecture.md`](harness_architecture.md) §5 表） |
+| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`（及策略合并字段，见运行时）；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`**（[`harness_architecture.md`](harness_architecture.md) §5 表） |
 | Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../scripts/router-rs/src/cursor_hooks/mod.rs) | `REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`、`SESSION_CLOSE_STYLE` 等；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
 | **SessionStart** | SessionStart | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` / 可选 `SESSION_SUMMARY`；**无** continuity digest。`ROUTER_RS_OPERATOR_INJECT=0` 关闭其余 advisory（细则 [`harness_architecture.md`](harness_architecture.md) §2.1） |
 | **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | 生成物为 **metadata-only** `generated-artifacts-status`（不跑慢 generator）；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时打印醒目 WARN（见 harness §2.3 / §3.1） |

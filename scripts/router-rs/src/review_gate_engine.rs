@@ -51,7 +51,9 @@ pub(crate) fn fork_context_from_values(primary: &Value, secondary: Option<&Value
 
 /// 是否将子代理视为「独立 fork」：`fork_context`/`forkContext` **仅当**可解析为布尔 **`false`**（即 `Some(false)`）时为真。
 ///
-/// **`None`（字段缺失）不为真**：与仓库根 `docs/harness_architecture.md` §5.0「排障」一致；缺省不能当作独立上下文证据（REVIEW_GATE 相位 / pre-goal）。
+/// **`None`（字段缺失）不为真**（本函数）。Cursor 可数深度 lane 另有
+/// [`cursor_review_independent_fork`] 缺字段推断路径（env 默认开）；Claude 用
+/// [`claude_review_independent_fork`]。勿与本函数注释混读。
 pub(crate) fn independent_context_fork(fork: Option<bool>) -> bool {
     matches!(fork, Some(false))
 }
@@ -112,6 +114,59 @@ pub(crate) fn review_gate_blocks_stop(facts: ReviewGateFacts) -> bool {
         && !facts.independent_reviewer_seen
 }
 
+/// Codex wave-2 (partial): countable PostTool evidence before Stop compact may clear the gate.
+pub(crate) fn codex_countable_review_subagent_evidence(
+    subagent_start_count: u32,
+    independent_reviewer_seen: bool,
+    phase: u32,
+) -> bool {
+    subagent_start_count > 0 || independent_reviewer_seen || phase >= 2
+}
+
+/// Codex wave-2 Stop satisfaction: phase≥3 with PostTool evidence, or explicit reject/rg_clear.
+pub(crate) fn codex_review_gate_satisfied(
+    review_required: bool,
+    review_override: bool,
+    reject_reason_seen: bool,
+    independent_reviewer_seen: bool,
+    phase: u32,
+) -> bool {
+    if !review_gate_armed(review_required, review_override) {
+        return true;
+    }
+    if review_override || reject_reason_seen {
+        return true;
+    }
+    independent_reviewer_seen && phase >= 3
+}
+
+/// Bump Codex review phase to 3 when compact findings appear after countable PostTool evidence.
+pub(crate) fn maybe_bump_codex_review_phase_for_compact_findings(
+    review_required: bool,
+    review_override: bool,
+    phase: u32,
+    subagent_start_count: u32,
+    independent_reviewer_seen: bool,
+    assistant_tail: &str,
+) -> Option<u32> {
+    if !review_gate_armed(review_required, review_override) || phase >= 3 {
+        return None;
+    }
+    if !codex_countable_review_subagent_evidence(
+        subagent_start_count,
+        independent_reviewer_seen,
+        phase,
+    ) {
+        return None;
+    }
+    if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
+        assistant_tail,
+    ) {
+        return None;
+    }
+    Some(phase.max(3))
+}
+
 #[cfg(test)]
 mod fork_context_parse_tests {
     use super::*;
@@ -164,5 +219,37 @@ mod fork_context_parse_tests {
                 std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
             }
         }
+    }
+
+    #[test]
+    fn codex_wave2_compact_bump_requires_countable_evidence() {
+        let finding = "[P1] foo.rs:1 — substantive compact finding for gate";
+        assert!(maybe_bump_codex_review_phase_for_compact_findings(
+            true,
+            false,
+            0,
+            0,
+            false,
+            finding,
+        )
+        .is_none());
+        assert_eq!(
+            maybe_bump_codex_review_phase_for_compact_findings(
+                true,
+                false,
+                2,
+                1,
+                true,
+                finding,
+            ),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn codex_review_gate_satisfied_wave2() {
+        assert!(codex_review_gate_satisfied(true, false, false, true, 3));
+        assert!(!codex_review_gate_satisfied(true, false, false, true, 2));
+        assert!(codex_review_gate_satisfied(true, false, true, false, 0));
     }
 }

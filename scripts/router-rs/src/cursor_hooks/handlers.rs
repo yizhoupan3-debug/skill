@@ -1887,8 +1887,17 @@ fn cursor_review_gate_disabled_by_env() -> bool {
 
 /// Env disable **or** `lifecycle_profile: my-light` (prompt / GOAL_STATE) — profile-scoped, not global.
 fn cursor_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
-    cursor_review_gate_disabled_by_env()
-        || crate::hook_common::my_light_profile_active(Some(repo_root), text)
+    if cursor_review_gate_disabled_by_env() {
+        return true;
+    }
+    if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
+        return false;
+    }
+    crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
+        Some(repo_root),
+        "my-light",
+    )
+    .unwrap_or(true)
 }
 
 /// `subagentStart` 只能拒绝/提示，不能主动关闭既有 subagent；这里用活跃数避免继续堆积。
@@ -2342,9 +2351,6 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
     }
     state_lock_degraded_followup().to_string()
 }
-/// Legacy fallback when registry nudge unavailable.
-const CURSOR_DEEP_REVIEW_DEFAULT_NUDGE_FALLBACK: &str = "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer。细则 skills/code-review-deep/SKILL.md";
-
 /// 同一条用户提交里同时出现 review 信号与 goal drive 入口时追加；与 `review_arms_for_gate` 语义对齐。
 const CURSOR_REVIEW_GSD_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 GSD 执行区入口（`/gsd-execute-phase` 等）；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/gsd-execute-phase`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
 
@@ -2508,13 +2514,9 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         && !prior_review_required
         && !cursor_review_gate_suppressed(repo_root, &text)
         && !state.review_override
+        && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &text)
     {
-        let nudge = if crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &text)
-        {
-            crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root))
-        } else {
-            CURSOR_DEEP_REVIEW_DEFAULT_NUDGE_FALLBACK.to_string()
-        };
+        let nudge = crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root));
         merge_additional_context(&mut output, &nudge);
     }
     if review && goal_drive_entrypoint && !cursor_review_gate_suppressed(repo_root, &text) {

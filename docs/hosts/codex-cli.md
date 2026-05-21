@@ -35,10 +35,11 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 ## Hook 能力
 
 - 多层 hook **全部加载、并发**；项目 hook 需 trusted project
-- PostTool（opt-in）→ `EVIDENCE_INDEX`；SessionStart → 轻量指针/Repo（**无** continuity digest）；Stop → `REVIEW_GATE` / closeout（**无** `GOAL_CONTINUE` / checkpoint 写盘）
-- REVIEW_GATE 可数 lane：`review_gate.deep_gate_lanes`（与 Cursor 相同；**不含** Claude 的 `review`/`reviewer` 等）。单次 PostToolUse 证据，无 multiset
-- **Spawn-first**：`UserPromptSubmit` 注入 registry `spawn_first_nudge` 一行；窄范围（`review ./file`、`small_task`）不武装 gate
-- **Stop 清门与 Cursor 不对齐**：Codex **无**用户消息粘贴的 **`rg_clear`** / **`/rg_clear`** 或 bounded **`reject_reason`** 令牌清门（[`saw_reject_reason`](../../scripts/router-rs/src/hook_common.rs) 仅 Cursor Stop 消费）。清门须 **PostTool 独立审稿证据**（可数 lane + `fork_context=false`，缺省推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）或运维 env（如 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 仅跳 Stop 门控重放，非粘贴清门）。对照 [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1。
+- PostTool（opt-in）→ `EVIDENCE_INDEX`；SessionStart → 轻量指针/Repo（**无** continuity digest）；Stop → `CODEX_REVIEW_GATE` / closeout（**无** `GOAL_CONTINUE` / checkpoint 写盘）
+- REVIEW_GATE 可数 lane：`review_gate.deep_gate_lanes`（与 Cursor 相同；**不含** Claude 的 `review`/`reviewer` 等）。单次 PostToolUse 证据 + Stop compact（wave-2 部分移植），无 multiset
+- **Spawn-first**：`UserPromptSubmit` 注入 registry `spawn_first_nudge` 一行；窄范围（`review ./file`、`small_task`）不武装 gate；`my-light` 关闭硬拦与 spawn-first
+- **Stop 清门（wave-2 部分）**：PostTool 深度 lane 可数证据 → `phase≥2`；Stop 上 compact findings **仅在有可数证据时** 升 `phase=3` 清门；`rg_clear` / bounded reject token 亦可清门。`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 全局关闭硬门控
+- **Stop 与 Cursor 不对齐（刻意）**：Codex **无** subagentStart/Stop multiset、Cursor phase 软 nag cap、afterAgentResponse hook
 
 ## 独有
 
