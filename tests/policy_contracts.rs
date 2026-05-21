@@ -1105,7 +1105,6 @@ fn plugin_catalog_routing_metadata_companion_schemas_contract() {
 }
 
 #[test]
-#[test]
 fn runtime_registry_review_gate_spawn_first_fields() {
     let root = project_root();
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
@@ -1114,6 +1113,20 @@ fn runtime_registry_review_gate_spawn_first_fields() {
     let nudge = rg["spawn_first_nudge"].as_str().expect("spawn_first_nudge str");
     assert!(nudge.contains("fork_context"));
     assert!(nudge.contains("配对审稿") || nudge.contains("spawn"));
+}
+
+#[test]
+fn runtime_registry_my_light_lifecycle_profile_review_fields() {
+    let root = project_root();
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let my_light = &registry["lifecycle_profiles"]["my-light"];
+    assert_eq!(my_light["disable_review_gate_hard_block"], true);
+    assert_eq!(my_light["disable_spawn_first_nudge"], true);
+    let commands = my_light["commands"].as_array().expect("commands array");
+    assert!(commands
+        .iter()
+        .any(|c| c.as_str() == Some("implementx")));
+    assert!(commands.iter().any(|c| c.as_str() == Some("discussx")));
 }
 
 #[test]
@@ -1893,7 +1906,7 @@ fn gsd_framework_command_not_published_to_skill_surface() {
 
 #[test]
 fn gsd_new_project_skill_forbids_pre_exec_drive_until_done_true() {
-    let text = read_text(&project_root().join("skills/_archived/gsd-lifecycle/new-project/SKILL.md"));
+    let text = read_text(&project_root().join("skills/legacy-gsd-ci-stub/SKILL.md"));
     assert!(
         !text.contains("\"drive_until_done\":true"),
         "new-project must not embed drive_until_done:true in stdio example"
@@ -1940,7 +1953,7 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
     let legacy = &registry["framework_commands"]["gsd"];
     assert_eq!(
         legacy["skill_path"].as_str().expect("legacy gsd skill_path"),
-        "skills/_archived/gsd-lifecycle/SKILL.md"
+        "skills/legacy-gsd-ci-stub/SKILL.md"
     );
     assert!(
         registry["framework_commands"].get("autopilot").is_none(),

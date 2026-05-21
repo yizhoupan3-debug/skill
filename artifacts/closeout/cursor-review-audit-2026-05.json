@@ -1,0 +1,46 @@
+{
+  "schema_version": "closeout-record-v1",
+  "task_id": "cursor-review-audit-2026-05",
+  "started_at": "2026-05-21T10:00:00+08:00",
+  "ended_at": "2026-05-21T19:30:00+08:00",
+  "summary": "Cursor REVIEW_GATE 全链路对齐：wave-2 compact 清门文档修正、spawn-first 零注入、my-light/窄范围/NUDGE=0 集成测；834+96+45 tests PASS。",
+  "verification_status": "passed",
+  "changed_files": [
+    ".cursor/rules/review-subagent-gate.mdc",
+    "AGENTS.md",
+    "MIGRATION.md",
+    "configs/framework/host_projection_narrative.json",
+    "docs/framework_operator_primer.md",
+    "docs/harness_architecture.md",
+    "docs/host_adapter_contract.md",
+    "docs/hosts/cursor.md",
+    "docs/references/AGENTS_OPERATOR_SURFACE.md",
+    "scripts/router-rs/src/cursor_hooks/handlers.rs",
+    "scripts/router-rs/src/cursor_hooks/tests.rs",
+    "scripts/router-rs/src/hook_common.rs",
+    "scripts/router-rs/src/review_gate_engine.rs",
+    "tests/policy_contracts.rs"
+  ],
+  "commands_run": [
+    {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},
+    {"command": "cargo test --test policy_contracts", "exit_code": 0},
+    {"command": "cargo test --test host_integration", "exit_code": 0},
+    {"command": "bash scripts/ci/check-cursor-hooks-parity.sh", "exit_code": 0},
+    {"command": "bash -c '! rg STOP_MAX_NAGGES docs/ MIGRATION.md'", "exit_code": 0},
+    {"command": "schema-drift baseline --task-id cursor-review-audit-2026-05", "exit_code": 0},
+    {"command": "schema-drift check --task-id cursor-review-audit-2026-05", "exit_code": 0}
+  ],
+  "artifacts_checked": [
+    {"path": "artifacts/current/cursor-review-audit-2026-05/VERIFY_REPORT.md", "exists": true},
+    {"path": "artifacts/current/cursor-review-audit-2026-05/EVIDENCE_INDEX.json", "exists": true},
+    {"path": "artifacts/current/cursor-review-audit-2026-05/WAVE_STATE.json", "exists": true},
+    {"path": "artifacts/current/cursor-review-audit-2026-05/GOAL_STATE.json", "exists": true},
+    {"path": "artifacts/current/cursor-review-audit-2026-05/SCHEMA_DRIFT_BASELINE.json", "exists": true}
+  ],
+  "blockers": [],
+  "risks": [
+    "工作区存在与本 task 无关的未提交变更（legacy GSD 归档等）",
+    "registry lifecycle_profile_disables_* 函数现为 dead code（side effect of hook_common cleanup）"
+  ],
+  "notes": "my-light 同条 prompt 含 /implementx 时 beforeSubmit 整段短路（不持久化 hook-state）；T5 已测。verifyx: gsd_artifacts_purged + task_dir_removed post-closeout."
+}

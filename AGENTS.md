@@ -52,8 +52,8 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## Skill Routing
 
-- **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` **一口气**跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。**legacy-gsd**（`/gsd-*`）仅冷表 [`skills/SKILL_MANIFEST.json`](skills/SKILL_MANIFEST.json)；GSD 树在 `skills/_archived/gsd-lifecycle/`（`.cursorignore`），**不会**出现在 Cursor 斜杠列表。
-- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light`；`framework_goal_drive` stdio）。`my-light` 关闭 `REVIEW_GATE` 硬拦。
+- **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` **一口气**跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。**legacy-gsd**（`/gsd-*`）仅冷表 [`skills/SKILL_MANIFEST.json`](skills/SKILL_MANIFEST.json)；CI stub [`skills/legacy-gsd-ci-stub/SKILL.md`](skills/legacy-gsd-ci-stub/SKILL.md)（`surface_publish: false`），**不会**出现在 Cursor 斜杠列表。
+- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light`；`framework_goal_drive` stdio）。`my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge（亦含 pre-execution `/discussx|planx` 与磁盘 `GOAL_STATE.lifecycle_profile: my-light`；hook 层全 suppress，skill 层 findings-only 仍适用）。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
 ## Continuity artifacts（手动画板 only）
@@ -104,7 +104,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 ## Goal drive
 
 - `/implementx`、`/verifyx` + `framework_goal_drive` stdio → `artifacts/current/<task_id>/GOAL_STATE.json`；**无** hook 续跑注入；env 与手动画板见 `docs/references/AGENTS_OPERATOR_SURFACE.md`、`docs/harness_architecture.md`。
-- 执行 wave / 验证：`skills/_archived/gsd-lifecycle/execute-phase/SKILL.md`、`skills/_archived/gsd-lifecycle/verify-work/SKILL.md`。
+- 执行 wave / 验证：`skills/implementx/SKILL.md`、`skills/verifyx/SKILL.md`（verify 后 purge `artifacts/current/<task_id>/`，见 verifyx § Post-verify task-dir purge）。
 
 ## Manuscript / LaTeX file writes
 

@@ -1718,7 +1718,7 @@
       ],
       "project",
       3,
-      "skills/_archived/gsd-lifecycle/SKILL.md",
+      "skills/legacy-gsd-ci-stub/SKILL.md",
       [
         "claude-code",
         "claude-desktop",

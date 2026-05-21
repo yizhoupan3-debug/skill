@@ -117,6 +117,30 @@ impl Drop for GsdPreGoalOptInEnvGuard {
     }
 }
 
+/// 单测临时设置 `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0`，Drop 时还原。
+struct SpawnFirstNudgeDisableEnvGuard {
+    prev: Option<std::ffi::OsString>,
+}
+
+impl SpawnFirstNudgeDisableEnvGuard {
+    fn disable() -> Self {
+        let key = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
+        let prev = env::var_os(key);
+        env::set_var(key, "0");
+        Self { prev }
+    }
+}
+
+impl Drop for SpawnFirstNudgeDisableEnvGuard {
+    fn drop(&mut self) {
+        let key = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
+        match self.prev.take() {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
 /// 单测临时设置 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`，Drop 时还原。
 struct ReviewGateStopMaxNudgesEnvGuard {
     prev: Option<std::ffi::OsString>,
@@ -513,6 +537,102 @@ fn before_submit_first_arm_injects_compact_deep_review_nudge() {
         ac.len() < 400,
         "nudge should stay a single short line; len={} body={ac:?}",
         ac.len()
+    );
+}
+
+#[test]
+fn spawn_first_nudge_disabled_injects_no_additional_context() {
+    let _gate = ReviewGateActiveGuard::new();
+    let _nudge_off = SpawnFirstNudgeDisableEnvGuard::disable();
+    let repo = fresh_repo();
+    let sid = "spawn-first-off";
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    assert!(
+        out.get("additional_context").is_none(),
+        "NUDGE=0 must zero-inject; got {out:?}"
+    );
+}
+
+#[test]
+fn my_light_implementx_stop_suppresses_review_gate_when_review_armed() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "my-light-rg-stop";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    assert!(load_state_for(&repo, sid).review_required);
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "prompt": "/implementx 继续",
+            "response": "[P1] scripts/foo.rs:42: missing edge case"
+        }),
+    );
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !fm.contains("REVIEW_GATE incomplete"),
+        "my-light /implementx stop must suppress REVIEW_GATE; fm={fm:?}"
+    );
+}
+
+#[test]
+fn narrow_path_review_stop_does_not_block() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "narrow-stop";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "review ./README.md"),
+    );
+    assert!(!load_state_for(&repo, sid).review_required);
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "prompt": "review ./README.md",
+            "response": "[P1] README.md:1: typo in title"
+        }),
+    );
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !fm.contains("REVIEW_GATE incomplete"),
+        "narrow review must not Stop-block; fm={fm:?}"
+    );
+}
+
+#[test]
+fn before_submit_review_and_implementx_same_prompt_short_circuits_without_arming() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "dual-review-implementx";
+    let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
+    assert_eq!(out, json!({ "continue": true }));
+    let loaded = load_state(&repo, &event(sid, prompt))
+        .ok()
+        .flatten();
+    assert!(
+        loaded.is_none(),
+        "my-light suppress short-circuits beforeSubmit; must not arm review state"
     );
 }
 

@@ -168,7 +168,7 @@
       "canonical_owner": "legacy-gsd",
       "surface_publish": false,
       "legacy": true,
-      "skill_path": "skills/_archived/gsd-lifecycle/SKILL.md",
+      "skill_path": "skills/legacy-gsd-ci-stub/SKILL.md",
       "official_workflow": {
         "phases": [
           "exploration",

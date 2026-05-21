@@ -299,7 +299,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/_archived/gsd-lifecycle/SKILL.md"
+      "skill_path": "skills/legacy-gsd-ci-stub/SKILL.md"
     },
     "loop": {
       "host_support": {

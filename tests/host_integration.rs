@@ -140,7 +140,7 @@ fn install_native_integration_is_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"legacy-gsd","surface_publish":false,"skill_path":"skills/_archived/gsd-lifecycle/SKILL.md","host_entrypoints":{"codex-cli":"/gsd"}},"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"legacy-gsd","surface_publish":false,"skill_path":"skills/legacy-gsd-ci-stub/SKILL.md","host_entrypoints":{"codex-cli":"/gsd"}},"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),

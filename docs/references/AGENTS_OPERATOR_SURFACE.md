@@ -26,7 +26,9 @@
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | hook-state 按龄清扫（默认 7；`0` 关闭） |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 应急关闭 Cursor REVIEW_GATE 全链 |
+| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 beforeSubmit spawn-first 单行 nudge（**零注入**；清门阈值不变） |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | Stop REVIEW_GATE 硬行次数上限（默认 8；超 cap 降为 soft_nag） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review `pending_cycle_keys` 上限（默认 32） |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `SESSION_CALL_TRACKER` `per_tool` 键上限（默认 128） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0` | 关闭 SessionEnd 终端回收 |
@@ -47,7 +49,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift baseline 
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift check --repo-root "$PWD"
 ```
 
-任务 id 省略时读 `artifacts/current/active_task.json`，否则 `focus_task.json`。基线写入 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`。详见 [`skills/_archived/gsd-lifecycle/verify-work/SKILL.md`](../../skills/_archived/gsd-lifecycle/verify-work/SKILL.md)。
+任务 id 省略时读 `artifacts/current/active_task.json`，否则 `focus_task.json`。基线写入 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`。详见 [`skills/verifyx/SKILL.md`](../../skills/verifyx/SKILL.md) 与 [`configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md`](../../configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md)。
 
 ## Closeout 分层
 

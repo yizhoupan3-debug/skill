@@ -1893,7 +1893,7 @@ fn framework_alias_fails_closed_for_missing_alias_record() {
     fs::create_dir_all(&registry_dir).expect("create registry dir");
     fs::write(
         registry_dir.join("RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/_archived/gsd-lifecycle/SKILL.md"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/legacy-gsd-ci-stub/SKILL.md"}}}"#,
     )
     .expect("write registry");
 

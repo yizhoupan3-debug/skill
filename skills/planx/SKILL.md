@@ -2,7 +2,7 @@
 name: planx
 description: |
   Personal lifecycle — plan/roadmap (doc-only). Writes ROADMAP.md and WAVE_STATE.json with explicit serial/parallel DAG.
-  Use after /discussx. Does not mutate product code.
+  Use when user explicitly requests plan after /discussx. Does not mutate product code.
 routing_layer: L1
 routing_owner: owner
 routing_gate: evidence
@@ -22,6 +22,10 @@ metadata:
 # planx
 
 **Zone**: pre-execution · **profile**: `my-light`
+
+**Entry gate**: user must explicitly invoke `/planx` (or clear plan intent) after `/discussx`; do not enter from agent nudge alone.
+
+**Inputs**: `REQUIREMENTS.md`, `DECISIONS.md`, `OPEN_QUESTIONS.md` (carry unresolved items into plan scope or wave notes).
 
 ## Outputs
 

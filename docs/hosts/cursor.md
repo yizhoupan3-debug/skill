@@ -10,7 +10,7 @@
 |------|-------|------|
 | Framework 叙事（My 默认链） | **User only** | `~/.cursor/rules/framework.mdc` |
 | Harness hooks | **Project** | `<repo>/.cursor/hooks.json` |
-| Review / execution gate 规则 | **Project** | `<repo>/.cursor/rules/*.mdc`（非 framework） |
+| Review / execution gate 规则 | **Project** | `<repo>/.cursor/rules/*.mdc`（非 framework）；含 `review-subagent-gate.mdc` — **不**经 `host-integration install` 投影（仅 user 级 `framework.mdc`） |
 | Hook state | **Project** | `<repo>/.cursor/hook-state/` |
 
 ```bash
@@ -24,7 +24,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
 ## 默认工作流
 
 全闭集宿主默认 **My lifecycle**：`/discussx` → `/planx` → `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave）→ `/verifyx`。  
-Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与无前缀 GSD 残留（`discuss-phase` 等）已归档至 `skills/_archived/gsd-lifecycle/`（`.cursorignore`），不在 surface 发布。
+Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与无前缀 GSD 残留（`discuss-phase` 等）已退役；CI 仅占位 `skills/legacy-gsd-ci-stub/SKILL.md`，不在 surface 发布。
 
 **可见性**：改 routing 后须 `just publish`（或 `ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1` + `framework maint update-one-shot`）并 `framework host-integration install --to cursor --scope user`；项目内 `.cursor/commands/{discussx,planx,implementx,verifyx}.md` 提供斜杠命令正文。
 

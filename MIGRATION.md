@@ -25,7 +25,7 @@ just doctor
 ## 默认工作流（全宿主）
 
 - **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；`lifecycle_profile: my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge。
-- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish` + `framework host-integration install --to cursor --scope user`；**重启 Cursor**。GSD 整树已迁至 `skills/_archived/gsd-lifecycle/`（`.cursorignore`），消除无前缀残留如 `/discuss-phase`、`/plan-phase`、`/execute-phase`、`/verify-work`、`/ship`、`/new-project`。
+- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish` + `framework host-integration install --to cursor --scope user`；**重启 Cursor**。GSD 整树已删除；CI 占位 `skills/legacy-gsd-ci-stub/SKILL.md`，消除无前缀残留如 `/discuss-phase`、`/plan-phase`、`/execute-phase`、`/verify-work`、`/ship`、`/new-project`。
 - **legacy-gsd（冷表）**：`/gsd-*` 六段命令仅在 `skills/SKILL_MANIFEST.json`（`legacy-gsd`）保留，供框架 CI / 回归；**不要**作为个人日常入口。
 - `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
 
@@ -78,7 +78,7 @@ cd /path/to/project
 | 项 | 说明 |
 |----|------|
 | **Registry** | `review_gate.spawn_first_enabled`（默认 true）、`spawn_first_nudge`（一行文案） |
-| **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **仅关闭** beforeSubmit/UPS 单行 nudge；**不** 改变 REVIEW_GATE 清门阈值 |
+| **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **关闭** beforeSubmit/UPS spawn-first 单行 nudge（**零注入**，无 fallback）；**不** 改变 REVIEW_GATE 清门阈值 |
 | **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（四宿主 `is_narrow_review_prompt`） |
 | **禁止** | `start_count≥2` 清门、缺 `review-lanes` 文件即 Stop block |
 | **细则** | [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)、[`docs/references/EXECUTION_LADDER.md`](docs/references/EXECUTION_LADDER.md) |
@@ -122,7 +122,7 @@ cd /path/to/project
 | `router-rs schema-drift baseline --repo-root …` | 捕获 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json` |
 | `router-rs schema-drift check --repo-root …` | 对比基线；hooks parity、gate timeout、REQUIREMENTS↔ROADMAP 标题、`EVIDENCE_INDEX.artifacts[]` |
 
-GSD 验收入口：[`skills/_archived/gsd-lifecycle/verify-work/SKILL.md`](skills/_archived/gsd-lifecycle/verify-work/SKILL.md)。CI 探针：`skill-ci` 跑 `schema-drift contract`。
+验收入口：[`skills/verifyx/SKILL.md`](skills/verifyx/SKILL.md)（verify 后 purge `artifacts/current/<task_id>/`）。CI 探针：`skill-ci` 跑 `schema-drift contract`。
 
 ## Claude Code：hook env 与 Cursor 对齐（2026-05-20）
 
@@ -146,7 +146,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | `generated-artifacts-status` | **`framework doctor`** / `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍要求全量 **drift-gate** `ok: true` |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |
 | active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时 stdio/任务视图可能拒载错误 focus；用 `framework task-state-resolve` 或修正 `active_task.json`（**无** hook `GOAL_CONTINUE`） |
-| Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NAGGES` 后 `followup_message` 降频；细节进 `additional_context`（**无** goal/RFV hook 续跑可合并） |
+| Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后 `followup_message` 降频；细节进 `additional_context`（**无** goal/RFV hook 续跑可合并） |
 | `SKILL_ROUTING_RUNTIME.scope` | `hot_skill_count`/`full_skill_count` = 热表行数；`manifest_skill_count` = 全 manifest 行数 |
 | 文档真源 | 硬化叙述见 [`docs/harness_architecture.md`](docs/harness_architecture.md) §2.3、[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)、[`docs/rust_contracts.md`](docs/rust_contracts.md) |
 
@@ -157,6 +157,6 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | `docs/plans/*.md`（除 [`docs/plans/README.md`](docs/plans/README.md)） | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
 | `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
 | `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
-| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/_archived/gsd-lifecycle/`](skills/_archived/gsd-lifecycle/) + `/implementx` |
+| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/legacy-gsd-ci-stub/`](skills/legacy-gsd-ci-stub/)（CI only）+ `/implementx` |
 
 勿在 issue/评论中链接已删路径；契约以 [`docs/README.md`](docs/README.md) 索引为准。
