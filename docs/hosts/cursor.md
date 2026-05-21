@@ -24,7 +24,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
 ## 默认工作流
 
 全闭集宿主默认 **My lifecycle**：`/discussx` → `/planx` → `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave）→ `/verifyx`。  
-Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与无前缀 GSD 残留（`discuss-phase` 等）已退役；CI 仅占位 `skills/legacy-gsd-ci-stub/SKILL.md`，不在 surface 发布。
+Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与无前缀 GSD 残留（`discuss-phase` 等）已于 **2026-05 彻底移除**；勿再使用。
 
 **可见性**：改 routing 后须 `just publish`（或 `ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1` + `framework maint update-one-shot`）并 `framework host-integration install --to cursor --scope user`；项目内 `.cursor/commands/{discussx,planx,implementx,verifyx}.md` 提供斜杠命令正文。
 
@@ -34,7 +34,7 @@ Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与�
 
 | 事件 | 作用 |
 |------|------|
-| `beforeSubmitPrompt` | Review / pre-goal / GSD；深度 review **spawn-first** 单行 nudge（`review_gate.spawn_first_nudge`） |
+| `beforeSubmitPrompt` | Review / pre-goal / My lifecycle goal；深度 review **spawn-first** 单行 nudge（`review_gate.spawn_first_nudge_by_host.cursor`，回退全局 `spawn_first_nudge`；`my-light` 下零注入）；`/implementx` 注入一口气 WAVE_STATE nudge；同轮 review+`/implementx` **不**注入 mixing 提示；my-light UPS **清** sticky `review_required` |
 | `stop` | `REVIEW_GATE` / closeout / `SESSION_CLOSE_STYLE`（无 `GOAL_CONTINUE`） |
 | `subagentStart` / `subagentStop` | 可数深度 lane + open subagent 限流 |
 | `postToolUse` | Review multiset 兜底 + Shell 账本；**非门控工具**在 router-rs 内 fast-path 跳过。**`timeout: 20`**（与 beforeSubmit/stop/subagent 一致） |
@@ -51,7 +51,7 @@ Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与�
 
 - **Agent 面**：上表事件 → `router-rs cursor hook`（经 [`cursor-router-rs-hook.sh`](../../configs/framework/cursor-router-rs-hook.sh)）
 - **REVIEW_GATE 可清点 lane**（仅）：`general-purpose`、`best-of-n-runner`（registry `review_gate.deep_gate_lanes`）
-- **Goal drive**：`/implementx`、`/verifyx` — **不是** `/discussx`、`/planx`（`/autopilot` 已退役；legacy `/gsd-*` 不发布到 surface）
+- **Goal drive**：`/implementx`、`/verifyx` — **不是** `/discussx`、`/planx`（`/autopilot` 已退役）
 - **Fail-closed**：关键事件经 `cursor-router-rs-hook.sh`；`beforeSubmit` 对 plan 文件无可靠 Plan/Agent 模式信号
 
 ## Subagent 并发上限（勿与 stdio 默认混淆）
@@ -71,7 +71,7 @@ Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与�
      cargo build --release --manifest-path scripts/router-rs/Cargo.toml
    ```
 2. **Launcher** 探测顺序：仓库 `scripts/router-rs/target/release` → `/tmp/skill-cargo-target/release` → debug → `PATH`。可选：`export ROUTER_RS_BIN="$PWD/scripts/router-rs/target/release/router-rs"`。
-3. **项目 env**：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 由 launcher 自动 `source`（本仓 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 减写盘；**router-rs 全局默认 unset=开**，见上表）。另默认关同步 `cargo check`、SessionEnd 杀终端。Claude 对齐模板见 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)。
+3. **项目 env**：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 由 launcher 自动 `source`（本仓 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 减写盘；**router-rs 全局默认 unset=关**，见上表）。另默认关同步 `cargo check`、SessionEnd 杀终端。Claude 对齐模板见 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)。
 4. **主进程索引**：仓库 [`.vscode/settings.json`](../../.vscode/settings.json) 排除 `target/` 等；`rust-analyzer.cargo.targetDir` 指向 `/tmp/skill-cargo-target`。Browser MCP 等在 **Cursor Settings → MCP** 手动关闭（与 hook 正交）。
 
 ## 状态有界 / 内存（hook 子进程）
@@ -99,7 +99,7 @@ Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与�
 | `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 剥 advisory `additional_context`（含 soft-nag detail）；保留 `router-rs ` 硬短码 |
 | `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | hook-state 陈旧清扫天数（见上表） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review pending multiset 上限 |
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | **开**（unset 启用）：验证类 PostTool 可向 `EVIDENCE_INDEX` 追加；**仅** `0`/`false`/`off`/`no` 关闭。本仓 [`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 默认 `=0` 减写盘 |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | **关**（unset 默认关）：**仅** `1`/`true`/`yes`/`on` 启用 PostTool → `EVIDENCE_INDEX` 追加。本仓 [`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env) 显式 `=0` 减写盘 |
 | `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | **开**（unset 启用）：可数深度 lane 在 `fork_context` **缺失**时可推断为 `false`；**仅** `=0`/`false`/`off`/`no` 关闭推断 |
 | `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | **默认 strict**（unset 即禁止仅凭磁盘 GOAL 放行 pre-goal）；legacy 宽松：`0`/`false`/`off`/`no` |
 | `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` | 5 个减法事件未写入 `hooks.json` 时仍跑完整 handler（单测/对照） |

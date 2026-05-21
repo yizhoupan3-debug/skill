@@ -140,7 +140,7 @@ fn install_native_integration_is_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"legacy-gsd","surface_publish":false,"skill_path":"skills/legacy-gsd-ci-stub/SKILL.md","host_entrypoints":{"codex-cli":"/gsd"}},"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -1989,7 +1989,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
             },
             "host_projections": {"codex-cli": {"profile_id": "repo-codex"}},
             "workspace_bootstrap_defaults": {"skills": {"source_rel": "repo-skills"}},
-            "framework_commands": {"gsd": {"canonical_owner": "repo-owner"}}
+            "framework_commands": {"implementx": {"canonical_owner": "repo-owner"}}
         }))
         .unwrap(),
     );
@@ -1999,7 +1999,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
         "repo-codex"
     );
     assert_eq!(
-        payload["framework_commands"]["gsd"]["canonical_owner"],
+        payload["framework_commands"]["implementx"]["canonical_owner"],
         "repo-owner"
     );
 }
@@ -2009,22 +2009,24 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let payload = runtime_registry(&project_root());
     let aliases = &payload["framework_commands"];
     assert!(aliases.get("autopilot").is_none());
-    assert_eq!(aliases["gsd"]["canonical_owner"], "legacy-gsd");
-    assert_eq!(aliases["gsd"]["host_entrypoints"]["codex-cli"], "/gsd");
-    assert_eq!(aliases["gsd"]["host_entrypoints"]["cursor"], "/gsd");
+    assert!(aliases.get("gsd").is_none());
     assert_eq!(
-        aliases["gsd"]["entrypoint_modes"]["execute"]["codex-cli"],
-        "/gsd-execute-phase"
+        aliases["implementx"]["canonical_owner"],
+        "implementx"
     );
-    let gsd_entrypoints = aliases["gsd"]["interaction_invariants"]["explicit_entrypoints"]
+    assert_eq!(
+        aliases["implementx"]["host_entrypoints"]["codex-cli"],
+        "/implementx"
+    );
+    assert_eq!(
+        aliases["implementx"]["host_entrypoints"]["cursor"],
+        "/implementx"
+    );
+    let implementx_eps = aliases["implementx"]["goal_persistence"]["execution_entrypoints"]
         .as_array()
-        .expect("gsd explicit_entrypoints should be an array");
-    assert!(gsd_entrypoints.contains(&json!("/gsd-execute-phase")));
-    assert!(gsd_entrypoints.contains(&json!("/gsd-ship")));
-    assert_eq!(
-        aliases["gsd"]["interaction_invariants"]["implicit_route_policy"],
-        "never"
-    );
+        .expect("implementx execution_entrypoints should be an array");
+    assert!(implementx_eps.contains(&json!("/implementx")));
+    assert!(implementx_eps.contains(&json!("/verifyx")));
     assert_eq!(
         aliases["deepinterview"]["host_entrypoints"]["codex-cli"],
         "/deepinterview"
@@ -2097,13 +2099,9 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         ])
     );
     assert!(payload.get("mcp_clients").is_none());
-    let gsd = &aliases["gsd"];
-    assert_eq!(gsd["lineage"]["source"], "repo-native");
-    assert!(gsd["implementation_bar"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("evidence-driven-verification")));
-    let gp = gsd["goal_persistence"]
+    let implementx = &aliases["implementx"];
+    assert_eq!(implementx["canonical_owner"], "implementx");
+    let gp = implementx["goal_persistence"]
         .as_object()
         .expect("goal_persistence");
     let leader = gp
@@ -2114,7 +2112,6 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         leader.contains("framework_goal_drive") && !leader.contains("GOAL_CONTINUE"),
         "continuation_hook_leader: {leader}"
     );
-    assert_eq!(gsd["reroute_when_root_cause_unknown"], "deepinterview");
 }
 
 #[test]

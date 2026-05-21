@@ -40,13 +40,14 @@ pub(crate) fn cursor_hook_event_is_subtracted(lowered_event: &str) -> bool {
 }
 
 fn hook_entry_has_command(entries: &Value) -> bool {
-    let Some(entry) = entries.as_array().and_then(|a| a.first()) else {
-        return false;
-    };
-    entry
-        .get("command")
-        .and_then(Value::as_str)
-        .is_some_and(|s| !s.trim().is_empty())
+    entries
+        .as_array()
+        .is_some_and(|arr| arr.iter().any(|entry| {
+            entry
+                .get("command")
+                .and_then(Value::as_str)
+                .is_some_and(|s| !s.trim().is_empty())
+        }))
 }
 
 /// 事件是否在仓库 `.cursor/hooks.json` 中有效注册（键存在且首条 hook 含非空 `command`）。

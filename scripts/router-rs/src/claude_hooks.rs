@@ -5,7 +5,8 @@
 //! 不用路径子串扫描，以免合法 Claude 载荷（例如编辑 `.cursor/` 下文件）被误判为 Cursor 而旁路门禁。
 //! stdin 体量上限 4 MiB，与 Codex hook 读取路径对齐，防失控输入撑爆 hook 进程内存。
 use crate::hook_common::{
-    has_override, is_review_prompt, normalize_subagent_type, normalize_tool_name,
+    has_override, is_narrow_review_prompt, is_review_prompt, normalize_subagent_type,
+    normalize_tool_name,
 };
 use crate::review_gate_engine::{
     fork_context_from_values, claude_independent_reviewer_evidence, review_gate_blocks_stop,
@@ -211,6 +212,96 @@ fn agent_review_gate_disabled() -> bool {
     crate::router_env_flags::router_rs_env_enabled_default_false(host.review_gate_disable_env())
 }
 
+/// Env disable, my-light profile, or registry `lifecycle_profiles.my-light.disable_review_gate_hard_block`.
+fn claude_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
+    if agent_review_gate_disabled() {
+        return true;
+    }
+    if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
+        return false;
+    }
+    crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
+        Some(repo_root),
+        "my-light",
+    )
+    .unwrap_or(true)
+}
+
+fn claude_user_prompt_text(payload: &Value) -> String {
+    payload
+        .get("prompt")
+        .or_else(|| payload.get("user_prompt"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn claude_stop_signal_text(payload: &Value) -> String {
+    claude_user_prompt_text(payload)
+}
+
+fn claude_review_gate_incomplete_stop_reason() -> String {
+    if crate::router_env_flags::router_rs_claude_review_fork_context_missing_infer_false_enabled()
+    {
+        "router-rs CLAUDE_REVIEW_GATE incomplete: run an observed independent reviewer lane \
+         (fork_context=false, or omit fork_context when \
+         ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=1) before closing this review turn."
+            .to_string()
+    } else {
+        active_stdio_agent_hook_host()
+            .review_gate_incomplete_stop_reason()
+            .to_string()
+    }
+}
+
+fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
+    crate::hook_common::my_light_profile_active(Some(repo_root), prompt)
+        || is_narrow_review_prompt(prompt)
+        || is_review_prompt(prompt)
+        || has_override(prompt)
+}
+
+fn apply_claude_review_gate_user_prompt(
+    repo_root: &Path,
+    payload: &Value,
+    prompt: &str,
+) -> Result<ReviewGateState, String> {
+    let path = review_state_path(repo_root, payload);
+    let my_light = crate::hook_common::my_light_profile_active(Some(repo_root), prompt);
+    let narrow = is_narrow_review_prompt(prompt);
+    let review_arms = is_review_prompt(prompt);
+    let override_now = has_override(prompt);
+    with_claude_review_state_lock(&path, || {
+        let mut state = match load_review_gate_disk(repo_root, payload) {
+            AgentDiskState::Unreadable => {
+                eprintln!(
+                    "[router-rs] {} review_gate state unreadable: {}",
+                    active_stdio_agent_hook_host().log_label(),
+                    path.display()
+                );
+                return Err("review_gate_unreadable".to_string());
+            }
+            AgentDiskState::Absent => ReviewGateState::default(),
+            AgentDiskState::Ok(s) => s,
+        };
+        if my_light {
+            state.review_required = false;
+            state.independent_reviewer_seen = false;
+        } else if narrow {
+            state.review_required = false;
+            state.independent_reviewer_seen = false;
+        } else {
+            if review_arms && !override_now {
+                state.independent_reviewer_seen = false;
+            }
+            state.review_required = state.review_required || review_arms;
+        }
+        state.review_override = state.review_override || override_now;
+        write_review_state_unlocked(&path, &state)?;
+        Ok(state)
+    })
+}
+
 const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
     "scripts/router-rs/",
     "configs/framework/",
@@ -407,80 +498,44 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
 }
 
 fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
-    let prompt = payload
-        .get("prompt")
-        .or_else(|| payload.get("user_prompt"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if crate::hook_common::is_my_lifecycle_entry_prompt(prompt)
-        && crate::hook_common::is_gsd_pre_execution_entry_prompt(prompt)
+    let prompt = claude_user_prompt_text(payload);
+    let review_sync = if !agent_review_gate_disabled()
+        && should_sync_review_gate_on_user_prompt(repo_root, &prompt)
     {
+        Some(apply_claude_review_gate_user_prompt(repo_root, payload, &prompt))
+    } else {
+        None
+    };
+    if crate::hook_common::is_my_pre_execution_entry_prompt(&prompt) {
         return add_context(
             "UserPromptSubmit",
             crate::hook_common::MY_PRE_EXECUTION_HOOK_NUDGE,
         );
     }
-    if crate::hook_common::is_gsd_pre_execution_entry_prompt(prompt) {
+    if crate::hook_common::is_framework_goal_entry_prompt(&prompt) {
         return add_context(
             "UserPromptSubmit",
-            crate::hook_common::GSD_PRE_EXECUTION_HOOK_NUDGE,
+            crate::hook_common::my_goal_drive_hook_nudge_for_prompt(&prompt),
         );
     }
-    if crate::hook_common::is_my_lifecycle_entry_prompt(prompt)
-        && crate::hook_common::is_framework_goal_entry_prompt(prompt)
-    {
-        return add_context(
-            "UserPromptSubmit",
-            crate::hook_common::MY_GOAL_DRIVE_HOOK_NUDGE,
-        );
-    }
-    if crate::hook_common::is_framework_goal_entry_prompt(prompt) {
-        return add_context(
-            "UserPromptSubmit",
-            crate::hook_common::GSD_GOAL_DRIVE_HOOK_NUDGE,
-        );
-    }
-    if !agent_review_gate_disabled()
-        && !crate::hook_common::my_light_profile_active(Some(repo_root), prompt)
-        && (is_review_prompt(prompt) || has_override(prompt))
-    {
+    if let Some(Err(_)) = review_sync {
         let path = review_state_path(repo_root, payload);
-        let state = match with_claude_review_state_lock(&path, || {
-            let mut state = match load_review_gate_disk(repo_root, payload) {
-                AgentDiskState::Unreadable => {
-                    eprintln!(
-                        "[router-rs] {} review_gate state unreadable: {}",
-                        active_stdio_agent_hook_host().log_label(),
-                        path.display()
-                    );
-                    return Err("review_gate_unreadable".to_string());
-                }
-                AgentDiskState::Absent => ReviewGateState::default(),
-                AgentDiskState::Ok(s) => s,
-            };
-            state.review_required = state.review_required || is_review_prompt(prompt);
-            state.review_override = state.review_override || has_override(prompt);
-            write_review_state_unlocked(&path, &state)?;
-            Ok(state)
-        }) {
-            Ok(s) => s,
-            Err(_) => {
-                return add_context(
-                    "UserPromptSubmit",
-                    &format!(
-                        "{} (path {}). Repair JSON or permissions before continuing.",
-                        active_stdio_agent_hook_host().hook_state_unreadable(),
-                        path.display()
-                    ),
-                );
-            }
-        };
+        return add_context(
+            "UserPromptSubmit",
+            &format!(
+                "{} (path {}). Repair JSON or permissions before continuing.",
+                active_stdio_agent_hook_host().hook_state_unreadable(),
+                path.display()
+            ),
+        );
+    }
+    if let Some(Ok(state)) = review_sync {
         if state.review_required
             && !state.review_override
-            && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), prompt)
+            && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
         {
             let nudge =
-                crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root));
+                crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root), "claude-code");
             return add_context("UserPromptSubmit", &nudge);
         }
     }
@@ -544,14 +599,14 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
             return block_stop(active_stdio_agent_hook_host().hook_state_unreadable());
         }
     };
-    if !agent_review_gate_disabled()
+    if !claude_review_gate_suppressed(repo_root, &claude_stop_signal_text(payload))
         && review_gate_blocks_stop(ReviewGateFacts {
             review_required: review_state.review_required,
             review_override: review_state.review_override,
             independent_reviewer_seen: review_state.independent_reviewer_seen,
         })
     {
-        return block_stop(active_stdio_agent_hook_host().review_gate_incomplete_stop_reason());
+        return block_stop(&claude_review_gate_incomplete_stop_reason());
     }
     let state = match touch_load {
         AgentDiskState::Absent => TouchState::default(),
@@ -579,7 +634,7 @@ struct TouchState {
     framework_tested: bool,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct ReviewGateState {
     review_required: bool,
     review_override: bool,
@@ -697,6 +752,48 @@ fn review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
     ))
 }
 
+fn legacy_review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
+    repo_root.join(".claude").join(format!(
+        "review_gate_{}.json",
+        session_key(repo_root, payload)
+    ))
+}
+
+fn review_gate_state_from_json(value: &Value) -> ReviewGateState {
+    ReviewGateState {
+        review_required: value
+            .get("review_required")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        review_override: value
+            .get("review_override")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        independent_reviewer_seen: value
+            .get("independent_reviewer_seen")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    }
+}
+
+fn read_review_gate_file(path: &Path) -> AgentDiskState<ReviewGateState> {
+    if !path.is_file() {
+        return AgentDiskState::Absent;
+    }
+    let raw = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    if raw.trim().is_empty() {
+        return AgentDiskState::Unreadable;
+    }
+    let value: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    AgentDiskState::Ok(review_gate_state_from_json(&value))
+}
+
 /// Serialize Claude review_gate JSON under `<state>.lock` (ADR P1-5; mirrors Codex hook-state flock).
 #[cfg(unix)]
 struct ClaudeReviewStateLock {
@@ -802,34 +899,25 @@ enum AgentDiskState<T> {
 
 fn load_review_gate_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<ReviewGateState> {
     let path = review_state_path(repo_root, payload);
-    if !path.is_file() {
-        return AgentDiskState::Absent;
+    match read_review_gate_file(&path) {
+        AgentDiskState::Ok(state) => return AgentDiskState::Ok(state),
+        AgentDiskState::Unreadable => return AgentDiskState::Unreadable,
+        AgentDiskState::Absent => {}
     }
-    let raw = match fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    if raw.trim().is_empty() {
-        return AgentDiskState::Unreadable;
+    let legacy = legacy_review_state_path(repo_root, payload);
+    match read_review_gate_file(&legacy) {
+        AgentDiskState::Ok(state) => {
+            if let Err(err) = with_claude_review_state_lock(&path, || {
+                write_review_state_unlocked(&path, &state)
+            }) {
+                eprintln!(
+                    "[router-rs] claude review_gate legacy migrate failed (using in-memory state): {err}"
+                );
+            }
+            AgentDiskState::Ok(state)
+        }
+        other => other,
     }
-    let value: Value = match serde_json::from_str(&raw) {
-        Ok(v) => v,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    AgentDiskState::Ok(ReviewGateState {
-        review_required: value
-            .get("review_required")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        review_override: value
-            .get("review_override")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        independent_reviewer_seen: value
-            .get("independent_reviewer_seen")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-    })
 }
 
 fn load_touch_state_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<TouchState> {
@@ -879,14 +967,6 @@ fn write_review_state_unlocked(path: &Path, state: &ReviewGateState) -> Result<(
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::write(path, &body).map_err(|e| e.to_string())
-}
-
-fn write_review_state(repo_root: &Path, payload: &Value, state: &ReviewGateState) {
-    let path = review_state_path(repo_root, payload);
-    if let Err(err) = with_claude_review_state_lock(&path, || write_review_state_unlocked(&path, state))
-    {
-        eprintln!("[router-rs] stdio agent hook state write failed (review_gate): {err}");
-    }
 }
 
 fn clear_review_state(repo_root: &Path, payload: &Value) {
@@ -969,6 +1049,9 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
         if !state.review_required || state.review_override {
             return Ok(());
         }
+        if !payload_is_successful_tool(payload) {
+            return Ok(());
+        }
         if subagent_tool(payload)
             && claude_independent_reviewer_evidence(reviewer_lane(&tool_input, payload), fork)
         {
@@ -1005,34 +1088,40 @@ fn persist_touch_state(
     settings_validated: bool,
     framework_tested: bool,
 ) {
-    let current = match load_touch_state_disk(repo_root, session_payload) {
-        AgentDiskState::Unreadable => {
-            eprintln!(
-                "[router-rs] {} hook_state unreadable; skip merge (path {}): repair JSON or remove file",
-                active_stdio_agent_hook_host().log_label(),
-                touch_state_path(repo_root, session_payload).display()
-            );
-            return;
-        }
-        AgentDiskState::Absent => TouchState::default(),
-        AgentDiskState::Ok(s) => s,
-    };
-    let state_payload = json!({
-        "settings": current.settings || settings,
-        "framework": current.framework || framework,
-        "settings_validated": current.settings_validated || settings_validated,
-        "framework_tested": current.framework_tested || framework_tested,
-    });
     let path = touch_state_path(repo_root, session_payload);
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    let _ = fs::remove_file(legacy_touch_state_path(repo_root));
-    if let Err(err) = fs::write(path, format!("{}\n", state_payload)) {
-        eprintln!(
-            "[router-rs] {} hook state write failed (hook_state): {err}",
-            active_stdio_agent_hook_host().log_label()
-        );
+    let lock_path = path.clone();
+    if let Err(err) = with_claude_review_state_lock(&lock_path, || {
+        let current = match load_touch_state_disk(repo_root, session_payload) {
+            AgentDiskState::Unreadable => {
+                eprintln!(
+                    "[router-rs] {} hook_state unreadable; skip merge (path {}): repair JSON or remove file",
+                    active_stdio_agent_hook_host().log_label(),
+                    path.display()
+                );
+                return Err("hook_state_unreadable".to_string());
+            }
+            AgentDiskState::Absent => TouchState::default(),
+            AgentDiskState::Ok(s) => s,
+        };
+        let state_payload = json!({
+            "settings": current.settings || settings,
+            "framework": current.framework || framework,
+            "settings_validated": current.settings_validated || settings_validated,
+            "framework_tested": current.framework_tested || framework_tested,
+        });
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let _ = fs::remove_file(legacy_touch_state_path(repo_root));
+        fs::write(&path, format!("{state_payload}\n")).map_err(|e| e.to_string())?;
+        Ok(())
+    }) {
+        if err != "hook_state_unreadable" {
+            eprintln!(
+                "[router-rs] {} hook state write failed (hook_state): {err}",
+                active_stdio_agent_hook_host().log_label()
+            );
+        }
     }
 }
 
@@ -1170,6 +1259,20 @@ fn is_framework_guarded_path(path: &str) -> bool {
 
 fn payload_is_successful_bash(payload: &Value) -> bool {
     if payload.get("tool_name").and_then(Value::as_str) != Some("Bash") {
+        return false;
+    }
+    payload_is_successful_tool(payload)
+}
+
+fn payload_is_successful_tool(payload: &Value) -> bool {
+    if payload
+        .get("is_error")
+        .and_then(Value::as_bool)
+        .is_some_and(|v| v)
+    {
+        return false;
+    }
+    if payload.get("error").is_some_and(|v| !v.is_null()) {
         return false;
     }
     match payload_exit_code(payload) {
@@ -1609,6 +1712,39 @@ mod tests {
     }
 
     #[test]
+    fn load_review_gate_migrates_legacy_flat_file_to_hook_state() {
+        let repo = unique_test_repo("legacy-review-gate-migrate");
+        let sid = "s-legacy-load";
+        let session = json!({ "session_id": sid });
+        let sk = session_key(&repo, &session);
+        let legacy = repo.join(format!(".claude/review_gate_{sk}.json"));
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(
+            &legacy,
+            r#"{"review_required":true,"review_override":false,"independent_reviewer_seen":false}"#,
+        )
+        .unwrap();
+        let loaded = match load_review_gate_disk(&repo, &session) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected legacy load, got {other:?}"),
+        };
+        assert!(loaded.review_required);
+        assert!(!loaded.independent_reviewer_seen);
+        let new_path = review_state_path(&repo, &session);
+        assert!(
+            new_path.is_file(),
+            "legacy load must migrate to hook-state: {}",
+            new_path.display()
+        );
+        let out = run_stop(&repo, &json!({ "session_id": sid, "prompt": "继续" }));
+        assert!(
+            out.is_some(),
+            "armed legacy state must still block Stop until reviewer contract met"
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
     fn review_state_path_lives_under_hook_state_dir() {
         let repo = unique_test_repo("hook-state-dir");
         let session = json!({ "session_id": "s-path" });
@@ -1887,6 +2023,149 @@ mod tests {
                 .contains("deny"),
             "expected deny decision; got {output:?}"
         );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn my_light_implementx_stop_suppresses_review_gate_when_review_armed() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("my-light-stop");
+        let sid = "s-my-light";
+        let armed = json!({ "session_id": sid, "prompt": "全面review" });
+        let _ = run_user_prompt_submit(&repo, &armed);
+        let stop = json!({ "session_id": sid, "prompt": "/implementx finish" });
+        assert!(
+            run_stop(&repo, &stop).is_none(),
+            "my-light must suppress CLAUDE_REVIEW_GATE on Stop"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn my_light_user_prompt_clears_sticky_review_required() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("my-light-clear");
+        let sid = "s-clear";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 这个 PR" }),
+        );
+        let armed = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected armed state, got {other:?}"),
+        };
+        assert!(armed.review_required);
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "/implementx run waves" }),
+        );
+        let cleared = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected cleared state, got {other:?}"),
+        };
+        assert!(
+            !cleared.review_required,
+            "my-light UPS must clear sticky review_required"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn second_review_prompt_in_same_session_requires_fresh_reviewer_evidence() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("rearm-review");
+        let sid = "s-rearm";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 这个 PR" }),
+        );
+        let reviewer = json!({
+            "session_id": sid,
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"agent_type": "general-purpose", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &reviewer).is_none());
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "Please do another code review of this change." }),
+        );
+        let stop = run_stop(&repo, &json!({ "session_id": sid })).expect("stop block");
+        assert_eq!(stop["decision"], "block");
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn narrow_path_review_disarms_sticky_deep_arm() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("narrow-disarm");
+        let sid = "s-narrow";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 整个路由系统" }),
+        );
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "review ./README.md" }),
+        );
+        let cleared = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected state, got {other:?}"),
+        };
+        assert!(!cleared.review_required);
+        assert!(
+            run_stop(&repo, &json!({ "session_id": sid, "prompt": "review ./README.md" })).is_none()
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn failed_subagent_post_tool_does_not_record_reviewer_evidence() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("failed-subagent");
+        let sid = "s-fail";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 这个 PR" }),
+        );
+        let failed = json!({
+            "session_id": sid,
+            "tool_name": "functions.spawn_agent",
+            "exit_code": 1,
+            "tool_input": {"agent_type": "general-purpose", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &failed).is_none());
+        let stop = run_stop(&repo, &json!({ "session_id": sid })).expect("stop block");
+        assert_eq!(stop["decision"], "block");
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
         let _ = fs::remove_dir_all(repo);
     }
 

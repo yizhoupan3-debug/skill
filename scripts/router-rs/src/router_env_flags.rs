@@ -11,6 +11,7 @@
 //! - `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` → [`router_rs_cursor_hook_state_legacy_full_sweep_enabled`]
 //! - `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` → [`router_rs_cursor_pre_goal_strict_disk_enabled`]
 //! - `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` → [`router_rs_cursor_review_fork_context_missing_infer_false_enabled`]
+//! - `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` → [`router_rs_codex_review_fork_context_missing_infer_false_enabled`]
 //! - `ROUTER_RS_TASK_LEDGER_FLOCK` → [`router_rs_task_ledger_flock_enabled`]（跨进程账本 flock，默认启用）
 //! - `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` → [`router_rs_cursor_hook_outbound_context_max_bytes`]（出站 UTF-8 **字节**上限）
 //! - `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` → [`router_rs_cursor_sessionstart_context_max_bytes`]
@@ -37,6 +38,8 @@ const ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP_ENV: &str =
 const ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK_ENV: &str = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
 const ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
     "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
+const ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
+    "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
 const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
 const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
 const ROUTER_RS_CURSOR_CARGO_CHECK_SYNC_ENV: &str = "ROUTER_RS_CURSOR_CARGO_CHECK_SYNC";
@@ -104,6 +107,13 @@ pub fn router_rs_claude_review_fork_context_missing_infer_false_enabled() -> boo
 /// 关闭后恢复 harness §5.0「缺字段≠false」语义。
 pub fn router_rs_cursor_review_fork_context_missing_infer_false_enabled() -> bool {
     router_rs_env_enabled_default_true(ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
+}
+
+/// Codex CLI：可数深度 lane 且 `fork_context` 缺失时是否推断为 independent fork（`false`）。
+///
+/// 默认 **开启**（与 Cursor 同语义）。显式 `fork_context: true` 仍阻断。关闭后缺字段不计 PostTool 深度证据。
+pub fn router_rs_codex_review_fork_context_missing_infer_false_enabled() -> bool {
+    router_rs_env_enabled_default_true(ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
 }
 
 /// `ROUTER_RS_TASK_LEDGER_FLOCK`：是否对「任务账本」写入使用 `artifacts/current` 旁路 sentinel 文件的 `flock`。

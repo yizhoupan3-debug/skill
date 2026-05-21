@@ -1681,7 +1681,7 @@ fn write_framework_alias_registry_fixture(repo_root: &Path) {
 }
 
 #[test]
-fn framework_alias_builds_compact_gsd_payload() {
+fn framework_alias_builds_compact_implementx_payload() {
     let repo_root = std::env::temp_dir().join(format!(
         "router-rs-alias-fixture-{}",
         SystemTime::now()
@@ -1709,7 +1709,7 @@ fn framework_alias_builds_compact_gsd_payload() {
         .expect("write evidence index");
     fs::write(
         task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["gsd"]}"#,
+        r#"{"task":"active bootstrap repair","matched_skills":["implementx"]}"#,
     )
     .expect("write trace metadata");
     write_framework_alias_registry_fixture(&repo_root);
@@ -1736,7 +1736,7 @@ fn framework_alias_builds_compact_gsd_payload() {
 
     let payload = build_framework_alias_envelope(
         &repo_root,
-        "gsd",
+        "implementx",
         FrameworkAliasBuildOptions {
             max_lines: 4,
             compact: false,
@@ -1757,10 +1757,10 @@ fn framework_alias_builds_compact_gsd_payload() {
         payload["schema_version"],
         json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
     );
-    assert_eq!(alias["name"], json!("gsd"));
-    assert_eq!(alias["host_entrypoint"], json!("/gsd"));
+    assert_eq!(alias["name"], json!("implementx"));
+    assert_eq!(alias["host_entrypoint"], json!("/implementx"));
     assert_eq!(alias["compact"], json!(false));
-    assert!(prompt.contains("GSD"));
+    assert!(prompt.contains("My") || prompt.contains("/implementx"));
     assert!(prompt.contains("本地 Rust"));
     assert!(prompt.contains("路由："));
     assert_eq!(
@@ -1774,11 +1774,11 @@ fn framework_alias_builds_compact_gsd_payload() {
     assert_eq!(alias["state_machine"]["evidence_missing"], json!(true));
     assert_eq!(
         alias["entry_contract"]["context"]["execution_readiness"],
-        json!("needs_recovery")
+        json!("use-alias-default")
     );
     assert_eq!(
         alias["entry_contract"]["route_rules"][0],
-        json!("模糊需求 -> `deepinterview`")
+        json!("主 owner -> `implementx`")
     );
 
     let _ = fs::remove_dir_all(&repo_root);
@@ -1867,7 +1867,7 @@ fn framework_alias_builds_compact_deepinterview_payload() {
     assert_eq!(alias["canonical_owner"], json!("deepinterview"));
     assert_eq!(
         alias["state_machine"]["handoff"]["rules"][1]["target"],
-        json!("gsd")
+        json!("implementx")
     );
     assert_eq!(
         alias["entry_contract"]["route_rules"][0],
@@ -1893,7 +1893,7 @@ fn framework_alias_fails_closed_for_missing_alias_record() {
     fs::create_dir_all(&registry_dir).expect("create registry dir");
     fs::write(
         registry_dir.join("RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"gsd":{"canonical_owner":"gsd","skill_path":"skills/legacy-gsd-ci-stub/SKILL.md"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md"}}}"#,
     )
     .expect("write registry");
 
@@ -1941,7 +1941,7 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
         .expect("write evidence index");
     fs::write(
         task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["gsd"]}"#,
+        r#"{"task":"active bootstrap repair","matched_skills":["implementx"]}"#,
     )
     .expect("write trace metadata");
     write_framework_alias_registry_fixture(&repo_root);
@@ -1968,7 +1968,7 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
 
     let payload = build_framework_alias_envelope(
         &repo_root,
-        "gsd",
+        "implementx",
         FrameworkAliasBuildOptions {
             max_lines: 3,
             compact: true,
@@ -1988,7 +1988,7 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
     assert_eq!(alias["state_machine"]["evidence_missing"], json!(true));
     assert_eq!(
         alias["entry_contract"]["context"]["execution_readiness"],
-        json!("needs_recovery")
+        json!("use-alias-default")
     );
     assert_eq!(
         alias["state_machine"]["required_anchors"],

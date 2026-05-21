@@ -1383,7 +1383,7 @@ fn infer_research_mode(payload: &ExecuteRequestPayload) -> ResearchMode {
             return ResearchMode::Deep;
         }
     }
-    if payload.selected_skill == "gsd" {
+    if payload.selected_skill == "implementx" {
         return ResearchMode::Quick;
     }
     ResearchMode::Quick

@@ -100,7 +100,7 @@ approval_required_tools: []
 
 - 不再写旧插件状态或旧插件 spec。
 - 访谈进度和澄清结果写到 `artifacts/current/<task_id>/bootstrap/` 以及 task-scoped `SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`；root 只保留 `.supervisor_state.json`。
-- 达标后的 handoff 交给 `/gsd-execute-phase` 与 Rust supervisor。
+- 达标后的 handoff 交给 `/implementx`（`framework_goal_drive`）。
 
 ## Instructions
 

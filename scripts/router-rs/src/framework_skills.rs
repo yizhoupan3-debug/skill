@@ -51,16 +51,6 @@ pub(crate) fn validate_skills(repo_root: &Path) -> Result<(), String> {
             ));
         }
     }
-    for slug in [
-        "gsd-new-project",
-        "gsd-plan-phase",
-        "gsd-execute-phase",
-        "gsd-ship",
-    ] {
-        if !disk_slugs.contains(slug) {
-            errors.push(format!("disk missing expected legacy GSD lane skill: {slug}"));
-        }
-    }
 
     if errors.is_empty() {
         eprintln!(

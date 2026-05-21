@@ -74,6 +74,9 @@ jobs:
       - name: Run Rust policy tests
         run: cargo test --test policy_contracts
 
+      - name: Run Cursor rules link policy tests
+        run: cargo test --test policy_cursor_rules_links
+
       - name: Run host integration tests
         run: cargo test --test host_integration
 

@@ -259,21 +259,21 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
 fn framework_goal_drive_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        // Pre-execution GSD/my discuss+plan must NOT arm goal drive — see phase-boundaries / my-plan SKILL.
-        Regex::new(
-            r"(?i)(^|\s)/(?:gsd-(?:execute-phase|verify-work|ship)|implementx|verifyx)\b",
-        )
-        .expect("invalid regex")
+        Regex::new(r"(?i)(^|\s)/(?:implementx|verifyx)\b").expect("invalid regex")
     })
 }
 
-fn gsd_pre_execution_entry_re() -> &'static Regex {
+fn framework_implement_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
-            r"(?i)(^|\s)/(?:gsd-(?:new-project|plan-phase|discuss-phase)|discussx|planx)\b",
-        )
-        .expect("invalid regex")
+        Regex::new(r"(?i)(^|\s)/implementx\b").expect("invalid regex")
+    })
+}
+
+fn my_pre_execution_entry_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)(^|\s)/(?:discussx|planx)\b").expect("invalid regex")
     })
 }
 
@@ -308,46 +308,62 @@ pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) 
         .unwrap_or(false)
 }
 
-/// Hook nudge for GSD pre-execution commands (read-only product surface).
-pub const GSD_PRE_EXECUTION_HOOK_NUDGE: &str = "GSD pre-execution (/discussx, /planx, legacy /gsd-discuss-phase): product repo is READ-ONLY. Write only under artifacts/current/<task_id>/ and planning docs. Do not set drive_until_done:true or run product fix/build/test until /implementx or /gsd-execute-phase.";
-
-/// Hook nudge when execution-zone goal drive is armed.
-pub const GSD_GOAL_DRIVE_HOOK_NUDGE: &str = "Framework goal drive (/implementx, /verifyx, legacy /gsd-execute-phase|verify-work|ship): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched skill_path (skills/implementx/SKILL.md or skills/verifyx/SKILL.md).";
-
 /// Hook nudge for my-* pre-execution (read-only product surface).
 pub const MY_PRE_EXECUTION_HOOK_NUDGE: &str = "My lifecycle pre-execution (/discussx, /planx): product repo READ-ONLY. Write only under artifacts/current/<task_id>/ and planning docs. No drive_until_done until /implementx.";
 
+/// Hook nudge when my lifecycle goal drive is armed.
+pub const MY_GOAL_DRIVE_HOOK_NUDGE: &str = "My lifecycle goal drive (/implementx, /verifyx): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched skill_path (skills/implementx/SKILL.md or skills/verifyx/SKILL.md).";
+
 /// Hook nudge when my-implement arms goal drive (one-breath all waves).
-pub const MY_GOAL_DRIVE_HOOK_NUDGE: &str = "My lifecycle implement (/implementx): run ALL waves in WAVE_STATE.json without pausing at wave boundaries; main thread schedules lanes only; lane-notes on disk. See skills/implementx/SKILL.md.";
+pub const MY_IMPLEMENT_GOAL_DRIVE_HOOK_NUDGE: &str = "My lifecycle implement (/implementx): run ALL waves in WAVE_STATE.json without pausing at wave boundaries; main thread schedules lanes only; lane-notes on disk. See skills/implementx/SKILL.md.";
 
 fn framework_non_goal_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/(team|gitx|update|gsd(?:-[a-z0-9-]+)?)\b")
+        Regex::new(r"(?i)(^|\s)/(team|gitx|update)\b")
             .expect("invalid regex")
     })
 }
 
-/// Execution-zone `/gsd-execute-phase|verify-work|ship` — arms goal continuity gates (Cursor hooks).
+/// Execution-zone `/implementx|verifyx` — arms goal continuity gates (Cursor hooks).
 pub fn is_framework_goal_entry_prompt(text: &str) -> bool {
     framework_goal_drive_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
-/// `/gsd-new-project`, `/gsd-plan-phase`, `/gsd-discuss-phase` — planning only; never goal drive.
-pub fn is_gsd_pre_execution_entry_prompt(text: &str) -> bool {
-    gsd_pre_execution_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+/// `/implementx` only — one-breath WAVE_STATE nudge (distinct from verifyx goal drive).
+pub fn is_framework_implement_entry_prompt(text: &str) -> bool {
+    framework_implement_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+}
+
+fn framework_verify_entry_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/verifyx\b").expect("invalid regex"))
+}
+
+/// `/verifyx` only — verify+ship goal drive (distinct from implement one-breath nudge).
+pub fn is_my_verify_entry_prompt(text: &str) -> bool {
+    framework_verify_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+}
+
+/// Goal-drive hook nudge: implement one-breath vs verify+ship generic.
+pub fn my_goal_drive_hook_nudge_for_prompt(text: &str) -> &'static str {
+    if is_framework_implement_entry_prompt(text) {
+        MY_IMPLEMENT_GOAL_DRIVE_HOOK_NUDGE
+    } else if is_my_verify_entry_prompt(text) {
+        MY_GOAL_DRIVE_HOOK_NUDGE
+    } else {
+        MY_GOAL_DRIVE_HOOK_NUDGE
+    }
+}
+
+/// `/discussx`, `/planx` — planning only; never goal drive.
+pub fn is_my_pre_execution_entry_prompt(text: &str) -> bool {
+    my_pre_execution_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
 /// Retired: `/autopilot` is not a framework entrypoint. Always false.
 pub fn is_autopilot_entrypoint_prompt(_text: &str) -> bool {
     false
-}
-
-pub fn is_gsd_entrypoint_prompt(text: &str) -> bool {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re =
-        RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/gsd(?:-[a-z0-9-]+)?\b").expect("invalid regex"));
-    re.is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
 /// Framework slash commands that may arm delegation (excludes goal-only entries).
@@ -625,21 +641,16 @@ mod tests {
     }
 
     #[test]
-    fn gsd_pre_execution_does_not_arm_goal_drive_entry() {
-        assert!(is_gsd_pre_execution_entry_prompt(
-            "please /gsd-new-project on this idea"
-        ));
-        assert!(is_gsd_pre_execution_entry_prompt("/gsd-plan-phase"));
-        assert!(is_gsd_pre_execution_entry_prompt("  /gsd-discuss-phase  "));
-        assert!(!is_framework_goal_entry_prompt("/gsd-new-project"));
-        assert!(!is_framework_goal_entry_prompt("/gsd-plan-phase"));
-        assert!(!is_framework_goal_entry_prompt("/gsd-discuss-phase"));
-        assert!(is_framework_goal_entry_prompt("/gsd-execute-phase"));
-        assert!(is_framework_goal_entry_prompt("/gsd-verify-work"));
-        assert!(is_framework_goal_entry_prompt("/gsd-ship"));
+    fn my_pre_execution_does_not_arm_goal_drive_entry() {
+        assert!(is_my_pre_execution_entry_prompt("/discussx"));
+        assert!(is_my_pre_execution_entry_prompt("/planx"));
+        assert!(!is_framework_goal_entry_prompt("/discussx"));
+        assert!(!is_framework_goal_entry_prompt("/planx"));
+        assert!(is_framework_goal_entry_prompt("/implementx"));
+        assert!(is_framework_goal_entry_prompt("/verifyx"));
         assert!(!is_framework_goal_entry_prompt("/autopilot"));
         assert!(!is_framework_goal_entry_prompt("/autopilot-quick"));
-        assert!(!is_gsd_pre_execution_entry_prompt("/gsd-execute-phase"));
+        assert!(!is_my_pre_execution_entry_prompt("/implementx"));
     }
 
     #[test]
@@ -648,8 +659,8 @@ mod tests {
         assert!(is_my_lifecycle_entry_prompt("/discussx"));
         assert!(is_framework_goal_entry_prompt("/implementx"));
         assert!(is_framework_goal_entry_prompt("/verifyx"));
-        assert!(is_gsd_pre_execution_entry_prompt("/discussx"));
-        assert!(is_gsd_pre_execution_entry_prompt("/planx"));
+        assert!(is_my_pre_execution_entry_prompt("/discussx"));
+        assert!(is_my_pre_execution_entry_prompt("/planx"));
         assert!(!is_framework_goal_entry_prompt("/discussx"));
     }
 

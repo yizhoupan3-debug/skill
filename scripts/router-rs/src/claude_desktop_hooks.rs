@@ -19,6 +19,8 @@ use crate::route::{filter_records_for_host, load_records_cached_for_stdio};
 use crate::session_call_tracker::{
     check_anomalies, init_tracker, read_tracker_state, record_tool_call,
 };
+use crate::hook_common::is_review_prompt;
+use crate::review_gate_engine::{claude_independent_reviewer_evidence, fork_context_from_values};
 use crate::task_state::resolve_task_view;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -872,9 +874,57 @@ fn tool_session_checkpoint(arguments: &Value, repo_root: &Path) -> Result<String
     ))
 }
 
-pub(crate) fn tool_closeout_gate(_arguments: &Value, repo_root: &Path) -> Result<String, String> {
-    let task_view = resolve_task_view(repo_root, None);
+fn goal_suggests_review_work(goal_state: &Value) -> bool {
+    if goal_state
+        .get("goal")
+        .and_then(Value::as_str)
+        .is_some_and(is_review_prompt)
+    {
+        return true;
+    }
+    goal_state
+        .get("done_when")
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items.iter().filter_map(Value::as_str).any(is_review_prompt)
+        })
+}
+
+fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path) -> bool {
+    for key in ["review_evidence_attested", "independent_reviewer_attested"] {
+        if arguments.get(key).and_then(Value::as_bool) == Some(true) {
+            return true;
+        }
+    }
+    if arguments.get("review_evidence").and_then(Value::as_bool) == Some(true) {
+        return true;
+    }
+    let lane = arguments
+        .get("reviewer_lane")
+        .or_else(|| arguments.get("subagent_type"))
+        .or_else(|| arguments.get("agent_type"))
+        .and_then(Value::as_str);
+    let Some(lane) = lane else {
+        return false;
+    };
+    let review_lane =
+        crate::registry_loader::is_claude_reviewer_lane_from_registry(lane, Some(repo_root));
+    let fork = fork_context_from_values(arguments, None);
+    claude_independent_reviewer_evidence(review_lane, fork)
+}
+
+pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let task_id_override = arguments
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let task_view = resolve_task_view(repo_root, task_id_override);
     let mut findings: Vec<String> = Vec::new();
+
+    findings.push(
+        "review_gate: Claude Desktop has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested (prompts/review_gate)".to_string(),
+    );
 
     let goal_present = task_view.goal_state.is_some();
     if !goal_present {
@@ -919,6 +969,19 @@ pub(crate) fn tool_closeout_gate(_arguments: &Value, repo_root: &Path) -> Result
         ));
     } else {
         findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
+    }
+
+    let review_goal = task_view
+        .goal_state
+        .as_ref()
+        .is_some_and(goal_suggests_review_work);
+    if review_goal && !desktop_review_evidence_attested(arguments, repo_root) {
+        findings.push(
+            "WARN: review_gate: GOAL suggests review work but no hook-level reviewer evidence on Desktop — spawn claude_reviewer_lanes with fork_context=false or pass review_evidence_attested=true after independent review"
+                .to_string(),
+        );
+    } else if review_goal {
+        findings.push("review_gate: GOAL suggests review; reviewer evidence attested in closeout_gate args".to_string());
     }
 
     let all_clear = goal_present && evidence_success && has_summary;
@@ -1072,12 +1135,12 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> Value {
+fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let prompt_name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let default_args = json!({});
-    let arguments = params.get("arguments").unwrap_or(&default_args);
+    let _arguments = params.get("arguments").unwrap_or(&default_args);
 
     let description = match prompt_name {
         "framework_routing" => "framework routing",
@@ -1098,12 +1161,17 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> V
             )
         }
         "review_gate" => "[Review Gate -- Claude Desktop advisory]\n\n\
-             This host uses MCP transport, no shell hook observation.\n\n\
+             This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
+             Countable independent reviewer lanes (registry review_gate.claude_reviewer_lanes):\n\
+             - deep_gate_lanes: general-purpose / best-of-n-runner (and normalized spellings)\n\
+             - Claude-only: review / reviewer / critic / code-review\n\
+             explore / explorer does NOT count toward review evidence.\n\
+             Requires fork_context=false for independent reviewer credit (honor system on Desktop).\n\n\
              When user requests review:\n\
-             1) Use subagent with fork_context=false for independent reviewer\n\
-             2) If no subagent, decompose review dimensions locally\n\
-             3) Call closeout_gate after review\n\n\
-             Desktop review gate is advisory only."
+             1) Spawn a read-only reviewer in a claude_reviewer_lanes lane with fork_context=false\n\
+             2) If no subagent, decompose review dimensions locally and document findings\n\
+             3) Call closeout_gate before claiming review complete (self-attest review_evidence_attested if applicable)\n\n\
+             Desktop review gate is advisory only — MCP cannot hard-block Stop."
             .to_string(),
         "closeout_checklist" => "[Closeout Checklist]\n\n\
              Before ending task:\n\

@@ -41,11 +41,13 @@ output/
 .cursor/.framework-projection.json
 .cursor/rules/framework.mdc
 .claude/.framework-projection.json
+.claude/.framework-projection-desktop.json
 .claude/rules/framework.md
 .claude/router-rs-hook.env
 .claude/settings.json
-.claude/hook_state_*.json
+.claude/hook-state/
 .claude/review_gate_*.json
+artifacts/closeout/*.json
 .local/
 archives/artifact-history/
 artifacts/current/

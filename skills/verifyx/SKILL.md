@@ -36,7 +36,7 @@ metadata:
 - Git clean / intentional uncommitted documented
 - `framework_closeout_evaluate` → `artifacts/closeout/<task_id>.json` (**embed** evidence rows / verify summary before purge)
 - `GOAL_STATE` → `status: completed`, `drive_until_done: false`
-- Closeout fields: `gsd_artifacts_purged: true`, `task_dir_removed: true`
+- Closeout fields: `task_artifacts_purged: true`, `task_dir_removed: true`
 
 ### 3. Post-verify task-dir purge (**mandatory**, every my-lifecycle task)
 

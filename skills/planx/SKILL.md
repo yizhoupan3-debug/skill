@@ -27,10 +27,15 @@ metadata:
 
 **Inputs**: `REQUIREMENTS.md`, `DECISIONS.md`, `OPEN_QUESTIONS.md` (carry unresolved items into plan scope or wave notes).
 
-## Outputs
+## Disk outputs
 
-- `ROADMAP.md` — phases, exit criteria, verification commands
-- `WAVE_STATE.json` — each wave: `parallel_group`, `depends_on`, `execution_mode`, `lanes[]`
+| File | Purpose |
+|------|---------|
+| `artifacts/current/<task_id>/ROADMAP.md` | Phases, exit criteria, verification commands |
+| `artifacts/current/<task_id>/WAVE_STATE.json` | Each wave: `parallel_group`, `depends_on`, `execution_mode`, `lanes[]` |
+| `artifacts/current/<task_id>/GOAL_STATE.json` | Update `status: planning`; keep `lifecycle_profile: my-light`, `drive_until_done: false` |
+
+## Outputs (schema)
 
 Topology fields (extend `gsd-wave-state-v1` in place):
 

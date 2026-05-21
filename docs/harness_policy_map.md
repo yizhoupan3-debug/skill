@@ -17,7 +17,7 @@
 | 主题 | `AGENTS.md` 节 |
 |------|----------------|
 | 语言（简体中文默认） | [Language](../AGENTS.md#language) |
-| Subagent / GSD 执行区 / 拒因 token | [Execution Ladder](../AGENTS.md#execution-ladder) |
+| Subagent / My 执行区 / 拒因 token | [Execution Ladder](../AGENTS.md#execution-ladder) |
 | Review 默认与 skill 路由 | 同上节 + [Skill Routing](../AGENTS.md#skill-routing) |
 | Closeout / 证据 | [Closeout](../AGENTS.md#closeout) |
 | 连续性手动画板 | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## Continuity artifacts（手动画板 only）`（避免各渲染器中文锚点不一致）；续跑仅 `framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` |

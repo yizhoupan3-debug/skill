@@ -21,7 +21,7 @@ pub(crate) fn read_stdin_json_from_reader<R: Read>(reader: &mut R) -> Result<Val
     if value.is_object() {
         Ok(value)
     } else {
-        Ok(json!({}))
+        Err("stdin_json_not_object".to_string())
     }
 }
 

@@ -57,7 +57,7 @@ Judgment-focused review for code and change sets **without** rewriting by defaul
 
 ## Default posture
 
-- **Findings-only by default (hard stop)**: On a review request, **do not** edit files, add tests, run fix commits, open PRs, or continue into implement / autopilot / gitx / loop / GSD execute unless the user **explicitly** exits review-only in the same or a follow-up message (e.g. fix these findings, implement, merge, commit). End with findings (+ optional one-line verdict), not execution.
+- **Findings-only by default (hard stop)**: On a review request, **do not** edit files, add tests, run fix commits, open PRs, or continue into implement / autopilot / gitx / loop / `/implementx` unless the user **explicitly** exits review-only in the same or a follow-up message (e.g. fix these findings, implement, merge, commit). End with findings (+ optional one-line verdict), not execution.
 - Assume a **hostile but fair** reviewer: maximize plausible failure under real abuse, regressions,
   flaky ops, closest prior API expectations, dependency churn, or incomplete tests.
 - **Analysis standard is unchanged**: still choose lenses internally, still exhaust findings **within each lens you selected**, still apply the severity evidence gate below. **Compact default output means less prose in chat, not shallower reasoning.**
@@ -100,9 +100,11 @@ For broad/deep/PR-level code review, use **spawn-first pairing**: before the mai
 
 **Narrow scope** (single-path `review ./file`, `small_task`, or explicit「不用子代理」): **no** multi-lane requirement; hosts skip arming `review_required`—**must not** Stop-block for missing subagents.
 
-**REVIEW_GATE clearance (Cursor)**: requires countable reviewer evidence per wave-2 (`start_count≥1`, multiset drained, no compact-alone forgery)—**not** raised to `≥2`. Main thread delivers **compact** findings only; optional `artifacts/current/<task_id>/review-lanes/<lane_id>.md` (soft—missing files **do not** block Stop). Keep reviewers read-only and artifact-disjoint.
+**REVIEW_GATE clearance (Cursor)**: requires countable reviewer evidence per wave-2 (`start_count≥1`, multiset drained, no compact-alone forgery)—**not** raised to `≥2`. Main thread delivers **compact** findings only; optional `artifacts/current/<task_id>/review-lanes/<lane_id>.md` (soft—missing files **do not** block Stop). Keep reviewers read-only and artifact-disjoint. `lifecycle_profile: my-light` does **not** hard-block Stop on REVIEW_GATE.
 
-**CODEX_REVIEW_GATE clearance (Codex CLI, wave-2 partial)**: PostTool 深度 lane（`deep_gate_lanes` + `fork_context=false`，缺字段推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）→ 可数证据、`phase≥2`；Stop 上 compact findings **仅在有可数证据时** 升 `phase=3`；`rg_clear` / bounded reject token 亦可清门；**compact alone 不得清门**。无 subagentStart/Stop multiset。`my-light` / `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦。
+**CODEX_REVIEW_GATE clearance (Codex CLI, wave-2 partial)**: PostTool 深度 lane（`deep_gate_lanes` + `fork_context=false`，缺字段推断用 **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**，默认 on）→ 可数证据、`phase≥2`；Stop 上 compact findings **仅在有可数证据时** 升 `phase=3`；`rg_clear` / bounded reject token 亦可清门；**compact alone 不得清门**。无 subagentStart/Stop multiset。`my-light` / `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦。
+
+**CLAUDE_REVIEW_GATE clearance (Claude Code)**: `PostToolUse` 上观察到 `claude_reviewer_lanes`（`deep_gate_lanes` 四拼写 + `review`/`reviewer`/`critic`/`code-review`）且 **`fork_context` 解析为逻辑 `false`**（JSON 布尔；可选 `ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=1` 在字段缺失时推断 `false`）→ 置 `independent_reviewer_seen`；**re-arm** review 时重置该标志。`Stop` 在 `independent_reviewer_seen` 前硬拦。**无** Cursor/Codex 式 `rg_clear`、wave-2 compact phase 或 subagent multiset；**`explore` 不计入**。`lifecycle_profile: my-light` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` 关闭硬拦。
 
 **Host countable evidence (Cursor / Codex `REVIEW_GATE` / Codex Stop ledger)** matches `hook_common::is_deep_review_gate_lane_normalized`: the subagent lane (after host normalization) must be in `configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes` only (`general-purpose` / `best-of-n-runner` and normalized equivalents — see `docs/host_adapter_contract.md` §0.1). **`explore`, `ci-investigator`, `cursor-guide`, `review`/`reviewer`/`critic`/`code-review`, and custom lane names do not count** on Cursor/Codex—even with **`fork_context=false`**. **Claude Code** uses `review_gate.claude_reviewer_lanes` (superset); do not assume those extra strings satisfy Cursor/Codex hooks.
 

@@ -22,12 +22,24 @@
 - **显式控制面**：`framework_goal_drive`、`framework_rfv_loop`（stdio-json）；My 执行区用 `/implementx`、`/verifyx` 驱动，**非**宿主 Stop 自动续跑。
 - SessionStart：**仅** `Repo:` / 可选 `SESSION_SUMMARY` 前缀（Cursor `summary` 模式）；预算见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` / `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS`。
 
+## Codex CLI 专项
+
+| 变量 | 作用 |
+|------|------|
+| `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` | 关闭 Codex `CODEX_REVIEW_GATE` 硬拦；UPS/PostTool 亦清 hook-state |
+| `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=0` | 允许无 `session_id` 的 legacy payload（默认 **on** = 缺则 lifecycle block） |
+| `ROUTER_RS_CODEX_HOOK_STATE_SALT` | unstable fallback 文件名盐（与 repo+cwd+payload session 组合；生产建议保持 strict session on） |
+| `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 深度 lane 缺 `fork_context` 时不推断 independent 证据 |
+| `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` | `stop_hook_active` 重放时跳过 review gate |
+| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 spawn-first 单行（Cursor beforeSubmit、Codex UPS、Claude UserPromptSubmit）；文案来自 `spawn_first_nudge_by_host.<host>` 或全局回退 |
+| `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` | UPS/SessionStart `additionalContext` UTF-8 字节上限 |
+
 ## Cursor 专项
 
 | 变量 | 作用 |
 |------|------|
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 应急关闭 Cursor REVIEW_GATE 全链 |
-| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 beforeSubmit spawn-first 单行 nudge（**零注入**；清门阈值不变） |
+| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 spawn-first 单行 nudge（Cursor beforeSubmit + Codex UserPromptSubmit；**零注入**；清门阈值不变） |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | Stop REVIEW_GATE 硬行次数上限（默认 8；超 cap 降为 soft_nag） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review `pending_cycle_keys` 上限（默认 32） |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `SESSION_CALL_TRACKER` `per_tool` 键上限（默认 128） |

@@ -33,7 +33,7 @@ metadata:
 
 # plan-mode
 
-把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在 **`.cursor/plans/`**（Cursor 默认，须 **Save to workspace**）；GSD 执行真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 仅索引与指针（见 [`docs/plans/README.md`](../../docs/plans/README.md)），**不**再维护过期 stub 镜像。
+把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在 **`.cursor/plans/`**（Cursor 默认，须 **Save to workspace**）；My `/planx` 执行真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 仅索引与指针（见 [`docs/plans/README.md`](../../docs/plans/README.md)），**不**再维护过期 stub 镜像。
 
 ## When to use
 
@@ -292,7 +292,7 @@ Non-goals: <可选>
 - `skills/SKILL_FRAMEWORK_PROTOCOLS.md` — 讨论 → 规划 → 执行 → 验证 与最小 findings / execution / verification 形状。
 - `skills/gitx/SKILL.md` — `/gitx` / `/gitx plan` 收口与深度 review checklist。
 - `skills/code-review-deep/SKILL.md` — 对抗式/全切片深度代码审（默认 compact findings、`REVIEW_GATE` 可数 lane 与符号锚点习惯与本 skill **强例**对齐）。
-- [`docs/plans/README.md`](../../docs/plans/README.md) — plans 索引与 GSD 真源指针；历史 stub 已移除。
+- [`docs/plans/README.md`](../../docs/plans/README.md) — plans 索引与 My `/planx` 真源指针；历史 stub 已移除。
 - 本文件 [**Todo 可执行性（四元组、对齐与依赖）**](#todo-可执行性四元组对齐与依赖) — 四元组、YAML/正文对齐与拆分依赖。
 - 本文件 [**Workflow**](#workflow四步) 第 3 步 + [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) — 可选审 plan / 深度 review 的 findings 与 Verify 习惯。
 - 本文件 [**执行计划继承面（research→execution）**](#执行计划继承面researchexecution) — 继承指针、外部准入表与减法规则。

@@ -7,7 +7,7 @@ alwaysApply: true
 
 跨宿主 review 叙事与 findings-only 默认见 [AGENTS.md](../../AGENTS.md)、[harness_architecture.md](../../docs/harness_architecture.md)、[harness_policy_map.md](../../docs/harness_policy_map.md) 与 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（compact 信封、透镜、输出 profile）。本文件**仅** Cursor hook / lane 硬约束：
 
-- **`lifecycle_profile: my-light`**（`/discussx|planx|implementx|verifyx` 或 `GOAL_STATE`）：**不**硬拦 `REVIEW_GATE`（profile 级，非全局 env）。
+- **`lifecycle_profile: my-light`**（`/discussx|planx|implementx|verifyx` 或 `GOAL_STATE`）：**不**硬拦 `REVIEW_GATE`（profile 级，非全局 env）；hooks **不**注入 spawn-first nudge。
 - 深度 review：**spawn-first 配对审稿**（首轮工具前先 spawn 可数 reviewer；主线程调研须另开独立 reviewer，`explore` 不计入）。`beforeSubmit` 只注入**一行** registry `spawn_first_nudge`（`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` 或 registry `spawn_first_enabled=false` 时**零注入**，不收紧清门）。
 - **窄范围**（`review ./file`、`small_task`、不用子代理）：**不武装** `review_required`，Stop **不得** 因缺子代理硬拦。
 - **可数 `REVIEW_GATE` lane**（registry `review_gate.deep_gate_lanes`）：`general-purpose`、`best-of-n-runner`（及归一化等价名）；`explore`/CI/`review` 等**不计入**。`fork_context: true` 不计入。`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` **默认开启**（unset 时缺字段可推断 `fork_context=false`）；关闭设 `=0|false|off|no`。见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。

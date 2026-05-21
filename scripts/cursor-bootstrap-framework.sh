@@ -24,9 +24,9 @@ Options:
 
 Environment:
   SKILL_FRAMEWORK_ROOT   Default framework root if --framework-root omitted
-  ROUTER_RS_BIN          Not read by this script; set in your shell profile if the
-                         hooks should use a non-default binary (hooks expand
-                         "${ROUTER_RS_BIN:-router-rs}").
+      ROUTER_RS_BIN          Optional: pin router-rs binary path in your shell profile.
+                         Hooks resolve the binary via cursor-router-rs-hook.sh (repo release,
+                         /tmp target, debug, then PATH) — not via inline expansion in hooks.json.
 
 Example:
   cd /tmp/foo
@@ -152,18 +152,20 @@ safe_symlink() {
 }
 
 install_hook_env() {
-  local src="${FRAMEWORK_ROOT}/.cursor/router-rs-hook.env"
   local dest="${PROJECT_ROOT}/.cursor/router-rs-hook.env"
   if [[ -f "$dest" ]]; then
-    echo "router-rs-hook.env already present; skipping"
-    return
+    if grep -q '^SKILL_FRAMEWORK_ROOT=' "$dest" 2>/dev/null; then
+      echo "router-rs-hook.env already present; skipping"
+      return
+    fi
   fi
-  if [[ ! -f "$src" ]]; then
-    echo "note: no ${src}; skip router-rs-hook.env copy"
-    return
-  fi
-  cp "$src" "$dest"
-  echo "wrote $dest"
+  {
+    if [[ -f "${FRAMEWORK_ROOT}/.cursor/router-rs-hook.env" ]]; then
+      cat "${FRAMEWORK_ROOT}/.cursor/router-rs-hook.env"
+    fi
+    echo "SKILL_FRAMEWORK_ROOT=${FRAMEWORK_ROOT}"
+  } > "$dest"
+  echo "wrote $dest (SKILL_FRAMEWORK_ROOT=${FRAMEWORK_ROOT})"
 }
 
 install_hooks

@@ -46,7 +46,7 @@ struct NudgesBody {
     math_reasoning_harness_line: String,
     #[serde(default)]
     retrieval_trace_harness_line: String,
-    /// Compact one-liner appended when structured external research hint applies (RFV_LOOP_CONTINUE path).
+    /// Compact one-liner appended when structured external research hint applies (RFV operator nudge / stdio path).
     #[serde(default)]
     rfv_loop_external_struct_hint_line: String,
 }

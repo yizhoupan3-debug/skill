@@ -527,19 +527,56 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         &exe,
         &repo_root,
         "UserPromptSubmit",
-        r#"{"hook_event_name":"UserPromptSubmit","session_id":"verify-session","prompt":"review this PR"}"#,
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"verify-session","prompt":"全面 review 这个 PR"}"#,
     )?;
-    codex_hook_smoke(
+    codex_hook_smoke_expect(
         &exe,
         &repo_root,
         "PostToolUse",
-        r#"{"hook_event_name":"PostToolUse","session_id":"verify-session","tool_name":"functions.spawn_agent","tool_input":{"agent_type":"explorer","fork_context":false}}"#,
+        r#"{"hook_event_name":"PostToolUse","session_id":"verify-session","prompt":"全面review","tool_name":"Task","tool_input":{"subagent_type":"general-purpose","fork_context":false}}"#,
+        |stdout| {
+            if !stdout.trim().is_empty() && stdout.contains("block") {
+                return Err(format!(
+                    "verify_codex_hooks: PostTool deep lane unexpected block: {stdout}"
+                ));
+            }
+            Ok(())
+        },
     )?;
-    codex_hook_smoke(
+    codex_hook_smoke_expect(
         &exe,
         &repo_root,
         "Stop",
-        r#"{"hook_event_name":"Stop","session_id":"verify-session","prompt":"review this PR"}"#,
+        r#"{"hook_event_name":"Stop","session_id":"verify-session","prompt":"继续"}"#,
+        |stdout| {
+            if !stdout.contains("CODEX_REVIEW_GATE") || !stdout.contains("decision") {
+                return Err(format!(
+                    "verify_codex_hooks: Stop without compact must block with CODEX_REVIEW_GATE: {stdout}"
+                ));
+            }
+            Ok(())
+        },
+    )?;
+    codex_hook_smoke_expect(
+        &exe,
+        &repo_root,
+        "UserPromptSubmit",
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"verify-compact-only","prompt":"全面review"}"#,
+        |_| Ok(()),
+    )?;
+    codex_hook_smoke_expect(
+        &exe,
+        &repo_root,
+        "Stop",
+        r#"{"hook_event_name":"Stop","session_id":"verify-compact-only","prompt":"继续","response":"[P1] scripts/router-rs/src/codex_hooks.rs:1 — verify-codex-hooks wave-2 compact must not clear without PostTool evidence"}"#,
+        |stdout| {
+            if !stdout.contains("CODEX_REVIEW_GATE incomplete") {
+                return Err(format!(
+                    "verify_codex_hooks: compact alone must not clear gate without countable PostTool evidence: {stdout}"
+                ));
+            }
+            Ok(())
+        },
     )?;
 
     eprintln!("Codex hook projection verified");
@@ -690,6 +727,16 @@ fn codex_hook_smoke(
     label: &str,
     json_line: &str,
 ) -> Result<(), String> {
+    codex_hook_smoke_expect(exe, repo_root, label, json_line, |_| Ok(()))
+}
+
+fn codex_hook_smoke_expect(
+    exe: &Path,
+    repo_root: &Path,
+    label: &str,
+    json_line: &str,
+    check_stdout: impl FnOnce(&str) -> Result<(), String>,
+) -> Result<(), String> {
     let mut child = Command::new(exe)
         .args([
             "host",
@@ -701,7 +748,7 @@ fn codex_hook_smoke(
             &repo_root.to_string_lossy(),
         ])
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| e.to_string())?;
@@ -710,11 +757,15 @@ fn codex_hook_smoke(
             .write_all(format!("{json_line}\n").as_bytes())
             .map_err(|e| e.to_string())?;
     }
-    let status = child.wait().map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err(format!("verify_codex_hooks: smoke {label} exited {status}"));
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "verify_codex_hooks: smoke {label} exited {}",
+            output.status
+        ));
     }
-    Ok(())
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    check_stdout(&stdout)
 }
 
 fn resolve_router_rs_binary(repo_root: &Path) -> Result<PathBuf, String> {

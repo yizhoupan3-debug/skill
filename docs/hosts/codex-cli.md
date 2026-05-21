@@ -28,7 +28,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 
 ## 默认工作流
 
-与全宿主相同：**My lifecycle** `/discussx` → `/planx` → `/implementx`（一口气跑完 `WAVE_STATE`）→ `/verifyx`；执行区 `/implementx` 启动 goal-style 连续执行（`/autopilot` 已退役；legacy 冷表 `/gsd-execute-phase` 见 `MIGRATION.md`）。
+与全宿主相同：**My lifecycle** `/discussx` → `/planx` → `/implementx`（一口气跑完 `WAVE_STATE`）→ `/verifyx`；执行区 `/implementx` 启动 goal-style 连续执行（`/autopilot` 已退役；`/gsd-*` 已移除，见 `MIGRATION.md`）。
 
 **续跑（2026-05）**：Codex/Cursor hooks **均不**注入 `GOAL_CONTINUE`、continuity digest 或 Stop checkpoint（代码 no-op；`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1` 亦不写盘）。连续执行依赖：`/implementx` 一口气、`framework_goal_drive` stdio、以及 `artifacts/current/<task_id>/` 手动画板。
 
@@ -37,14 +37,18 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 - 多层 hook **全部加载、并发**；项目 hook 需 trusted project
 - PostTool（opt-in）→ `EVIDENCE_INDEX`；SessionStart → 轻量指针/Repo（**无** continuity digest）；Stop → `CODEX_REVIEW_GATE` / closeout（**无** `GOAL_CONTINUE` / checkpoint 写盘）
 - REVIEW_GATE 可数 lane：`review_gate.deep_gate_lanes`（与 Cursor 相同；**不含** Claude 的 `review`/`reviewer` 等）。单次 PostToolUse 证据 + Stop compact（wave-2 部分移植），无 multiset
-- **Spawn-first**：`UserPromptSubmit` 注入 registry `spawn_first_nudge` 一行；窄范围（`review ./file`、`small_task`）不武装 gate；`my-light` 关闭硬拦与 spawn-first
+- **Spawn-first**：`UserPromptSubmit` 注入 registry `spawn_first_nudge_by_host.codex-cli`（回退全局 `spawn_first_nudge`）；窄范围（`review ./file`、`small_task`）不武装 gate；`my-light` 关闭硬拦与 spawn-first，且 UPS/PostTool **清** hook-state
 - **Stop 清门（wave-2 部分）**：PostTool 深度 lane 可数证据 → `phase≥2`；Stop 上 compact findings **仅在有可数证据时** 升 `phase=3` 清门；`rg_clear` / bounded reject token 亦可清门。`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 全局关闭硬门控
-- **Stop 与 Cursor 不对齐（刻意）**：Codex **无** subagentStart/Stop multiset、Cursor phase 软 nag cap、afterAgentResponse hook
+- **Session 键（默认严格）**：`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` 默认开启；生产环境勿关。hook JSON 须含 `session_id` / `conversation_id` / `thread_id`（或 env `CODEX_SESSION_ID`）。关闭严格模式后 fallback 按 **repo + cwd + payload session**（可选 `ROUTER_RS_CODEX_HOOK_STATE_SALT`）；`cwd` 空会打 stderr 警告
+- **UPS re-arm**：同 session 再次提交 review 武装 prompt 时重置 `independent_review_subagent_seen` / `phase` / `subagent_start_count`（非 override）；PostTool 深度证据仅在 review 武装或 review prompt 下才设 `review_required`
+- **fork 缺省推断**：`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 默认开启；深度 lane 省略 `fork_context` 时 PostTool 可计证据。关闭后须显式 JSON `fork_context: false`。Stop compact 须 `[P0]`/`[P1]`/`[P2]`/`Caveat:` 实质性行（见 `skills/code-review-deep/SKILL.md`）
+- **PostTool 白名单**：仅 `task` / `functions.spawn_agent` / `functions.subagent` 等（见 `codex_hooks.rs`）；未知 `tool_name` 不计证据
+- **Stop 与 Cursor 不对齐（刻意）**：Codex **无** subagentStart/Stop multiset、Cursor phase 软 nag cap、`loop_limit`、afterAgentResponse hook
 
 ## 独有
 
 - **`session_supervisor`** / tmux 长会话（见 `rust-session-supervisor` skill）
-- `$CODEX_HOME/skills` 为 **27 pinned** surface（`skills/SKILL_ROUTING_RUNTIME.json` `hot_skill_count`），≠ 全量 **52** on-disk skills（`manifest_skill_count`）。仓库内投影目录 `artifacts/codex-skill-surface/skills` 须 `just publish` 或 `framework maint update-one-shot` 生成，克隆后可能为空。
+- `$CODEX_HOME/skills` 为 **30 pinned** surface（`skills/SKILL_ROUTING_RUNTIME.json` `hot_skill_count`），≠ 全量 on-disk skills（`manifest_skill_count`）。仓库内投影目录 `artifacts/codex-skill-surface/skills` 须 `just publish` 或 `framework maint update-one-shot` 生成，克隆后可能为空。
 
 ## 自检
 

@@ -47,7 +47,8 @@
 | 字段 | 含义 |
 |------|------|
 | `review_gate.spawn_first_enabled` | 默认 true；为 false 时跳过 spawn-first 单行 nudge（清门阈值不变） |
-| `review_gate.spawn_first_nudge` | 四宿主 hook 出站一行配对审稿文案（Cursor beforeSubmit、Codex UPS、Claude UserPromptSubmit） |
+| `review_gate.spawn_first_nudge` | 全局回退文案 |
+| `review_gate.spawn_first_nudge_by_host` | 按宿主一行配对审稿（`cursor` / `codex-cli` / `claude-code`）；Cursor/Codex **不含** Claude-only lane 说明 |
 
 **窄范围 skip**（四宿主）：`hook_common::is_narrow_review_prompt` → 不武装 `review_required`（`review ./file`、`small_task`、不用子代理）。**不提高** wave-2 `start_count` 清门阈值。
 
@@ -152,8 +153,8 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/review_gate_*.json`、`hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
-| **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE`（与 Codex `CODEX_HOOK_STATE_UNREADABLE` 同形排障） |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse|Stop|…` | `claude_hooks.rs` | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook-state/hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE`（与 Codex `CODEX_HOOK_STATE_UNREADABLE` 同形排障） |
 | 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | `host_integration.rs` | `.claude/rules/framework.md`、`.claude/settings.json`（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）、`.claude/.framework-projection.json`（project scope） |
 
 ### Claude Desktop（`router-rs claude-desktop agent`）
@@ -186,7 +187,7 @@
 | 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；**Claude Code** 侧 `.claude/settings.json`（四事件 hook）；**Claude Desktop** **不**写入 `.claude/settings.json` hook 表（MCP + 项目 `.claude/CLAUDE.md` 指针，见 [`docs/hosts/claude-desktop.md`](hosts/claude-desktop.md)） |
 | 闭集宿主 id 与 `install_tool` / `host_entrypoints` | `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 与 `host_targets.metadata` |
 | `review_gate` 磁盘 loader | `scripts/router-rs/src/registry_loader.rs` |
-| GSD/review 安装文案 | `configs/framework/host_projection_narrative.json` |
+| My lifecycle / review 安装文案 | `configs/framework/host_projection_narrative.json` |
 | 生成物 drift manifest | `configs/framework/GENERATED_ARTIFACTS.json` |
 
 1. **在 `RUNTIME_REGISTRY.json`** 扩展 `host_targets.supported`、`host_targets.metadata.<host>.install_tool` 与 `host_targets.metadata.<host>.host_entrypoints`（及若需要，`host_projections.*`）；`framework_host_targets.rs` 必须只从注册表读取这些值，并补齐 fail-closed 单测。
@@ -218,7 +219,7 @@
 - [ ] **[`scripts/router-rs/src/framework_host_targets.rs`](../scripts/router-rs/src/framework_host_targets.rs)**：确保只从注册表读取上述字段，fail-closed；必要时补充单元测试。
 - [ ] **新增** `scripts/router-rs/src/<host>_hooks.rs`（命名对齐现有 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) / [`cursor_hooks.rs`](../scripts/router-rs/src/cursor_hooks.rs)）：实现各生命周期分支；在 [`main.rs`](../scripts/router-rs/src/main.rs) 注册 `mod` 并导出入口。
 - [ ] **[`scripts/router-rs/src/cli/dispatch_body.txt`](../scripts/router-rs/src/cli/dispatch_body.txt)** 与 [`scripts/router-rs/src/cli/dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs)：挂上 `router-rs <host> hook <event> …` 分发（与现有 `codex` / `cursor` 子命令并列）。
-- [ ] **[`scripts/router-rs/src/host_integration.rs`](../scripts/router-rs/src/host_integration.rs)**：`framework host-integration install --to <tool>` 能解析注册表中的 `install_tool`；为该宿主增加投影写入（对标 `render_cursor_framework_entrypoint` / `render_codex_framework_entrypoint`），GSD/review 段落从 [`host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) 读取；若产生新的生成物路径，同步 [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（及代码中 `REQUIRED_GENERATED_ARTIFACTS` 等常量，若有）。
+- [ ] **[`scripts/router-rs/src/host_integration.rs`](../scripts/router-rs/src/host_integration.rs)**：`framework host-integration install --to <tool>` 能解析注册表中的 `install_tool`；为该宿主增加投影写入（对标 `render_cursor_framework_entrypoint` / `render_codex_framework_entrypoint`），My lifecycle / review 段落从 [`host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) 读取；若产生新的生成物路径，同步 [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（及代码中 `REQUIRED_GENERATED_ARTIFACTS` 等常量，若有）。
 - [ ] **L4 样例**：检出中的 [`.cursor/hooks.json`](../.cursor/hooks.json)（Cursor）与由 sync 写入的 `.codex/hooks.json`（Codex）应保持 **argv + 超时 + stdin 透传**，不在 shell 内复制 L3 业务分支；新宿主应对照新增同级配置。
 - [ ] **[`tests/host_integration.rs`](../tests/host_integration.rs)**：增加 dry-run 或临时目录安装断言（沿用现有 `host_targets.metadata` / manifest 断言模式）。
 - [ ] **[`tests/policy_contracts.rs`](../tests/policy_contracts.rs)**（根包）：registry / 契约回归。

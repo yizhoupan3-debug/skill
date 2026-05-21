@@ -45,14 +45,14 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## 个人使用（最小操作面）
 
-- **Python 环境（macOS）**：长期治理须显式 **`$python-env-management`**（uv-only、默认 3.12、每仓库 `uv.lock`）；operator 禁止使用 `pip`。该 skill 在冷表 manifest，不在热 `SKILL_ROUTING_RUNTIME` 27 行——环境类请求勿只靠泛化路由。
+- **Python 环境（macOS）**：长期治理须显式 **`$python-env-management`**（uv-only、默认 3.12、每仓库 `uv.lock`）；operator 禁止使用 `pip`。该 skill 在冷表 manifest，不在热 `SKILL_ROUTING_RUNTIME` 30 行——环境类请求勿只靠泛化路由。
 - **路由**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`；冷表见 `skills/SKILL_MANIFEST.json`。
 - **可选 env / 注入 / closeout**：`docs/references/AGENTS_OPERATOR_SURFACE.md`（勿在本文重复全表）。
 - **连续性摘要**：`docs/harness_architecture.md` §2–§3。
 
 ## Skill Routing
 
-- **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` **一口气**跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。**legacy-gsd**（`/gsd-*`）仅冷表 [`skills/SKILL_MANIFEST.json`](skills/SKILL_MANIFEST.json)；CI stub [`skills/legacy-gsd-ci-stub/SKILL.md`](skills/legacy-gsd-ci-stub/SKILL.md)（`surface_publish: false`），**不会**出现在 Cursor 斜杠列表。
+- **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` **一口气**跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。**`/gsd-*` 与 legacy-gsd 已于 2026-05 彻底移除**；勿再使用，见 MIGRATION 退役对照表。
 - **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light`；`framework_goal_drive` stdio）。`my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge（亦含 pre-execution `/discussx|planx` 与磁盘 `GOAL_STATE.lifecycle_profile: my-light`；hook 层全 suppress，skill 层 findings-only 仍适用）。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 

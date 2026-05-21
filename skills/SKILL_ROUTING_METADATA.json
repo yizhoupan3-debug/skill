@@ -67,9 +67,6 @@
     "latex-compile-acceleration": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
-    "legacy-gsd": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
     "loop": {
       "selection_reason": "allowlisted first-turn owner"
     },

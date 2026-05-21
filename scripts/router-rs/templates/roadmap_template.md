@@ -4,7 +4,7 @@
 |-------|-------|
 | **Task ID** | `{{TASK_ID}}` |
 | **Based on** | REQUIREMENTS.md, STATE.md |
-| **Status** | planned (`/gsd-plan-phase`) |
+| **Status** | planned (`/planx`) |
 
 ## 1. Overview
 

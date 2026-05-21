@@ -7,7 +7,7 @@ use crate::hook_common::{
 use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
 use crate::host_integration::ensure_codex_skill_surface;
 use crate::review_gate_engine::{
-    codex_review_gate_satisfied, fork_context_from_values, independent_reviewer_evidence,
+    codex_review_gate_satisfied, codex_review_independent_fork, fork_context_from_values,
     maybe_bump_codex_review_phase_for_compact_findings, ReviewGateFacts,
 };
 use crate::router_env_flags::{
@@ -275,20 +275,50 @@ fn codex_stable_session_raw(event: &Value) -> Option<String> {
     None
 }
 
-const CODEX_UNSTABLE_SESSION_KEY_RAW: &str = "unstable:no-stable-session-id";
-
 fn codex_require_stable_session_key_enabled() -> bool {
     router_rs_env_enabled_default_true("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY")
 }
 
-fn codex_session_key(event: &Value) -> String {
+/// Fallback hook-state key material when no stable session id (repo-scoped, not one global file).
+fn codex_unstable_session_key_raw(repo_root: &Path, event: &Value) -> String {
+    let repo = repo_root.to_string_lossy();
+    let cwd = event
+        .get("cwd")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("");
+    if cwd.is_empty() {
+        eprintln!(
+            "[router-rs] codex hook-state: unstable fallback with empty cwd — prefer stable session ids or set ROUTER_RS_CODEX_HOOK_STATE_SALT"
+        );
+    }
+    let payload_session = codex_stable_session_raw(event).unwrap_or_default();
+    let salt = env::var("ROUTER_RS_CODEX_HOOK_STATE_SALT")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_default();
+    let cwd_key = if cwd.is_empty() {
+        "<empty-cwd>"
+    } else {
+        cwd.as_ref()
+    };
+    if salt.is_empty() {
+        format!("unstable:repo={repo}|cwd={cwd_key}|payload_session={payload_session}")
+    } else {
+        format!("unstable:repo={repo}|cwd={cwd_key}|payload_session={payload_session}|salt={salt}")
+    }
+}
+
+fn codex_session_key(repo_root: &Path, event: &Value) -> String {
     let raw = codex_stable_session_raw(event).unwrap_or_else(|| {
         CODEX_SESSION_KEY_FALLBACK_WARN.call_once(|| {
             eprintln!(
-                "[router-rs] codex hook-state: no stable session id (set CODEX_SESSION_ID / CODEX_CONVERSATION_ID or include session_id / sessionId / conversation_id / thread_id in hook payloads). With ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY disabled, hook-state shares a single repo-wide fallback filename — not per-session."
+                "[router-rs] codex hook-state: no stable session id (set CODEX_SESSION_ID / CODEX_CONVERSATION_ID or include session_id / sessionId / conversation_id / thread_id in hook payloads). With ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY disabled, hook-state uses a deterministic fallback keyed by repo (+ cwd / ROUTER_RS_CODEX_HOOK_STATE_SALT) — not a stable per-conversation id."
             );
         });
-        CODEX_UNSTABLE_SESSION_KEY_RAW.to_string()
+        codex_unstable_session_key_raw(repo_root, event)
     });
     let mut hasher = Sha256::new();
     hasher.update(raw.as_bytes());
@@ -301,7 +331,8 @@ fn codex_session_key(event: &Value) -> String {
 }
 
 fn codex_state_path(repo_root: &Path, event: &Value) -> PathBuf {
-    codex_state_dir(repo_root).join(format!("review-subagent-{}.json", codex_session_key(event)))
+    codex_state_dir(repo_root)
+        .join(format!("review-subagent-{}.json", codex_session_key(repo_root, event)))
 }
 
 fn parse_lock_metadata(text: &str) -> (Option<u32>, Option<u64>) {
@@ -715,16 +746,14 @@ fn codex_tool_fork_context(tool_input: &Value, event: &Value) -> Option<bool> {
     fork_context_from_values(tool_input, Some(event))
 }
 
-/// 与 Cursor `REVIEW_GATE` 深度 lane 对齐：`general-purpose` / `best-of-n-runner`（已 normalize）；缺字段推断见 `cursor_review_independent_fork`。
+/// 与 Cursor `REVIEW_GATE` 深度 lane 对齐：`general-purpose` / `best-of-n-runner`（已 normalize）；缺字段推断见 [`codex_review_independent_fork`].
 fn codex_deep_independent_reviewer_evidence(
     recognized_kind: Option<&str>,
     tool_input: &Value,
     event: &Value,
 ) -> bool {
-    independent_reviewer_evidence(
-        recognized_kind.is_some_and(is_deep_review_gate_lane_normalized),
-        codex_tool_fork_context(tool_input, event),
-    )
+    let deep_lane = recognized_kind.is_some_and(is_deep_review_gate_lane_normalized);
+    codex_review_independent_fork(codex_tool_fork_context(tool_input, event), deep_lane)
 }
 
 fn codex_hook_state_persist_block_payload() -> Value {
@@ -760,11 +789,22 @@ fn codex_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
     if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
         return false;
     }
-    crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
+    match crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
         Some(repo_root),
         "my-light",
-    )
-    .unwrap_or(true)
+    ) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!(
+                "[router-rs] codex review gate: registry read failed ({err}); my-light prompt still suppresses hard block"
+            );
+            true
+        }
+    }
+}
+
+fn clear_codex_review_gate_hook_state(repo_root: &Path, event: &Value) {
+    codex_reset_hook_state(repo_root, event);
 }
 
 fn codex_agent_response_text(event: &Value) -> String {
@@ -804,7 +844,7 @@ fn codex_closeout_completion_text(event: &Value) -> String {
 
 fn codex_review_stop_followup_line(phase: u32) -> String {
     format!(
-        "router-rs CODEX_REVIEW_GATE incomplete phase={phase} need=deep_reviewer_posttool_and_compact_findings_or_rg_clear hint=fork_context_json_false_not_omitted see=ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1|ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1"
+        "router-rs CODEX_REVIEW_GATE incomplete phase={phase} need=deep_reviewer_posttool_and_compact_findings_or_rg_clear hint=fork_context_json_false_or_codex_fork_infer_off; Stop response needs [P0]/[P1]/[P2]/Caveat: substantive line see=skills/code-review-deep/SKILL.md see=ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1|ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1"
     )
 }
 
@@ -848,6 +888,10 @@ fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
 
 fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
     let prompt = codex_prompt_text(event);
+    if codex_review_gate_suppressed(repo_root, &prompt) {
+        clear_codex_review_gate_hook_state(repo_root, event);
+        return None;
+    }
     let my_light = crate::hook_common::my_light_profile_active(Some(repo_root), &prompt);
     let mut facts = ReviewGateFacts::from_prompt(&prompt);
     if my_light {
@@ -860,19 +904,34 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         ..CodexLifecycleContextState::default()
     };
 
+    let narrow = crate::hook_common::is_narrow_review_prompt(&prompt);
+    let review_arms = facts.review_required;
+    let override_now = facts.review_override;
     let write_result = with_codex_state_lock(repo_root, event, |loaded| {
         let mut next = state.clone();
         if let Some(prev) = loaded {
             next.seq = prev.seq.saturating_add(1);
-            next.review_required = if my_light {
-                false
+            if my_light || narrow {
+                next.review_required = false;
+                next.independent_review_subagent_seen = false;
+                next.phase = 0;
+                next.subagent_start_count = 0;
             } else {
-                prev.review_required || facts.review_required
-            };
-            next.review_override = prev.review_override || facts.review_override;
-            next.independent_review_subagent_seen = prev.independent_review_subagent_seen;
-            next.phase = prev.phase;
-            next.subagent_start_count = prev.subagent_start_count;
+                if review_arms && !override_now {
+                    next.independent_review_subagent_seen = false;
+                    next.phase = 0;
+                    next.subagent_start_count = 0;
+                    next.review_subagent_seen = false;
+                    next.generic_subagent_seen = false;
+                } else {
+                    next.independent_review_subagent_seen =
+                        prev.independent_review_subagent_seen;
+                    next.phase = prev.phase;
+                    next.subagent_start_count = prev.subagent_start_count;
+                }
+                next.review_required = prev.review_required || review_arms;
+            }
+            next.review_override = prev.review_override || override_now;
             next.reject_reason_seen = prev.reject_reason_seen;
         } else {
             next.seq = 1;
@@ -895,9 +954,10 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         && !facts.review_override
         && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
     {
-        contexts.push(crate::registry_loader::review_spawn_first_nudge_line(Some(
-            repo_root,
-        )));
+        contexts.push(crate::registry_loader::review_spawn_first_nudge_line(
+            Some(repo_root),
+            "codex-cli",
+        ));
     }
     let additional_context = codex_compact_contexts(contexts);
     if additional_context.is_none() {
@@ -913,6 +973,11 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
 }
 
 fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
+    let prompt_for_profile = codex_prompt_text(event);
+    if codex_review_gate_suppressed(repo_root, &prompt_for_profile) {
+        clear_codex_review_gate_hook_state(repo_root, event);
+        return None;
+    }
     if let Err(err) =
         try_append_post_tool_shell_evidence(repo_root, event, "codex_post_tool_verification")
     {
@@ -960,6 +1025,13 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
             state.independent_review_subagent_seen = true;
             state.subagent_start_count = state.subagent_start_count.saturating_add(1);
             state.phase = state.phase.max(2);
+            let post_facts = ReviewGateFacts::from_prompt(&prompt_for_profile);
+            let should_arm_review = state.review_required || post_facts.review_required;
+            if should_arm_review
+                && !crate::hook_common::my_light_profile_active(Some(repo_root), &prompt_for_profile)
+            {
+                state.review_required = true;
+            }
         }
         Ok((Some(state), ()))
     }) {
@@ -1136,7 +1208,7 @@ fn run_codex_lifecycle_context_hook(
             "userpromptsubmit" | "posttooluse" | "stop" => {
                 if codex_stable_session_raw(payload).is_none() {
                     return Ok(Some(codex_lifecycle_input_error(
-                        "Codex lifecycle hook blocked: stable session key required under ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY. Provide session_id / conversation_id / thread_id (snake_case or camelCase) in hook JSON or set CODEX_SESSION_ID / CODEX_CONVERSATION_ID.",
+                        "Codex lifecycle hook blocked: stable session key required (ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY defaults on). Add session_id / conversation_id / thread_id (snake_case or camelCase) to hook JSON, or set CODEX_SESSION_ID / CODEX_CONVERSATION_ID in the environment. Review gate (CODEX_REVIEW_GATE) cannot run without per-session hook-state.",
                     )));
                 }
             }
@@ -1168,15 +1240,12 @@ pub fn build_codex_hook_manifest() -> Value {
     let mut hooks = serde_json::Map::new();
     for event in INSTALL_EVENTS {
         let timeout = codex_hook_command_timeout_secs(event);
-        let mut hook = json!({
+        let hook = json!({
             "type": "command",
             "command": build_project_hook_command(event),
             "timeout": timeout,
             "statusMessage": hook_event_status_message(event),
         });
-        if event == "Stop" {
-            hook["loop_limit"] = json!(3);
-        }
         let mut entry = json!({
             "hooks": [hook],
         });
@@ -1228,7 +1297,8 @@ Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `Se
 Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
 `SessionStart` injects a lightweight workspace pointer (`Repo:` and optional `source`) when operator inject is enabled; it does **not** inject a continuity digest or hook-driven `GOAL_CONTINUE`. `UserPromptSubmit` injects only trigger-specific context. `PreToolUse` blocks direct edits to generated Codex surfaces. `PostToolUse` records subagent/tool telemetry and, when opted in (`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1`, default off), may append verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active. `Stop` enforces closeout and `CODEX_REVIEW_GATE` (wave-2 partial: broad/deep review requires PostTool countable deep-lane evidence **and** Stop compact findings, or bounded `rg_clear` / reject tokens; compact alone cannot clear); set **`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1`** to disable the hard gate (unset keeps enabled). `my-light` lifecycle (`/discussx|planx|implementx|verifyx` or `GOAL_STATE.lifecycle_profile`) suppresses the hard block. It does **not** write an automatic continuity checkpoint (`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` is a no-op). Resume work via `/implementx`, `framework_goal_drive` stdio, and manual boards under `artifacts/current/<task_id>/`. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active. Stable keys require `session_id` / `conversation_id` / `thread_id` in hook payloads (snake_case **or** camelCase, e.g. `sessionId`) or `CODEX_SESSION_ID` / `CODEX_CONVERSATION_ID` in the environment; otherwise hook-state may not persist across invocations (router-rs logs a one-time stderr warning per process).\n\n\
-**`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`** defaults **on** (`unset` = require stable keys). Set `0`/`false`/`off`/`no` for legacy payloads without `session_id` / env fallbacks (`SessionStart` is unaffected). Without a stable id and with strict mode off, hook-state uses one deterministic repo-wide fallback filename (not per-invocation random keys).\n\n\
+**`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`** defaults **on** (`unset` = require stable keys). Set `0`/`false`/`off`/`no` for legacy payloads without `session_id` / env fallbacks (`SessionStart` is unaffected). Without a stable id and with strict mode off, hook-state uses a deterministic fallback keyed by **repo + cwd** (optional `ROUTER_RS_CODEX_HOOK_STATE_SALT`), not a single global file per machine.\n\n\
+**`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** (default on): deep lane + omitted `fork_context` counts as independent reviewer evidence on PostTool. Set `0`/`false`/`off`/`no` to require explicit JSON `fork_context: false`.\n\n\
 Generated hook commands resolve `router-rs` in order: **`ROUTER_RS_BIN`** when set to an executable path, then `scripts/router-rs/target/{release,debug}/router-rs`, then repo `target/{release,debug}/router-rs`, finally `command -v router-rs` (last resort — prefer pinning `ROUTER_RS_BIN` or building into the repo). If the binary is missing, **all** lifecycle hooks fail closed with a JSON `decision:block` line.\n\n\
 Merged `additionalContext` for SessionStart/UserPromptSubmit is capped by UTF-8 **byte** length (not Unicode character count). Tune with `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` or legacy `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` (same semantics; clamped 256–8192; default 640 bytes).\n\n\
 Successful Codex hook processes always print one JSON object line on stdout (including `{}` when there is no hook-specific output).\n\n\
@@ -2958,16 +3028,11 @@ mod tests {
         use super::*;
         use serde_json::json;
         use std::sync::atomic::{AtomicU64, Ordering};
-        use std::sync::{Mutex, OnceLock};
 
         static SEQ: AtomicU64 = AtomicU64::new(0);
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
-        fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-            ENV_LOCK
-                .get_or_init(|| Mutex::new(()))
-                .lock()
-                .expect("env test lock poisoned")
+        fn env_lock() -> crate::test_env_sync::ProcessEnvLockGuard {
+            crate::test_env_sync::process_env_lock()
         }
 
         fn fresh_repo() -> std::path::PathBuf {
@@ -2978,6 +3043,11 @@ mod tests {
             ));
             std::fs::create_dir_all(dir.join(".codex/hook-state")).unwrap();
             dir
+        }
+
+        fn run_gate(repo: &std::path::Path, payload: &Value) -> Result<Option<Value>, String> {
+            let _g = env_lock();
+            run_codex_review_subagent_gate(repo, payload)
         }
 
         const TEST_COMPACT_FINDING: &str = "[P1] scripts/router-rs/src/codex_hooks.rs:1 — wave-2 compact gate clear evidence line";
@@ -3032,7 +3102,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review全仓找bug"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             let ctx = out
                 .as_ref()
                 .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
@@ -3060,7 +3130,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"review ./README.md"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             assert!(
                 out.is_none(),
                 "narrow single-path review must not arm gate: {out:?}"
@@ -3082,7 +3152,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review全仓找bug，不要用子代理"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             assert!(out.is_none());
         }
 
@@ -3146,7 +3216,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-2",
@@ -3154,7 +3224,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore","fork_context":false}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
@@ -3177,7 +3247,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-2gp",
@@ -3185,7 +3255,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"general-purpose","fork_context":false}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.independent_review_subagent_seen);
@@ -3201,7 +3271,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-2rev",
@@ -3209,7 +3279,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"review","fork_context":false}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(
@@ -3227,7 +3297,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-2b",
@@ -3235,7 +3305,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"prompt":"no type field"}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.generic_subagent_seen);
@@ -3262,7 +3332,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"前端后端测试并行推进"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-6c",
@@ -3270,14 +3340,14 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"worker"}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-6c",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(out.is_none());
         }
 
@@ -3307,10 +3377,37 @@ mod tests {
             let _g = env_lock();
             std::env::remove_var("CODEX_SESSION_ID");
             std::env::remove_var("CODEX_CONVERSATION_ID");
-            let k1 = super::super::codex_session_key(&json!({}));
-            let k2 = super::super::codex_session_key(&json!({}));
+            std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT");
+            let repo = fresh_repo();
+            let event = json!({"cwd": repo.to_string_lossy()});
+            let k1 = super::super::codex_session_key(&repo, &event);
+            let k2 = super::super::codex_session_key(&repo, &event);
             assert_eq!(k1, k2, "fallback keys must alias the same hook-state file");
             assert_eq!(k1.len(), 32);
+        }
+
+        #[test]
+        fn codex_session_key_differs_by_payload_session_when_strict_off() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
+            std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "0");
+            std::env::remove_var("CODEX_SESSION_ID");
+            std::env::remove_var("CODEX_CONVERSATION_ID");
+            let repo = fresh_repo();
+            let cwd = repo.to_string_lossy().to_string();
+            let k1 = super::super::codex_session_key(
+                &repo,
+                &json!({"session_id":"sess-a","cwd":cwd}),
+            );
+            let k2 = super::super::codex_session_key(
+                &repo,
+                &json!({"session_id":"sess-b","cwd":cwd}),
+            );
+            assert_ne!(k1, k2, "payload session_id must isolate hook-state when strict off");
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", v),
+                None => std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY"),
+            }
         }
 
         #[test]
@@ -3322,7 +3419,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"前端后端测试并行推进"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-6b",
@@ -3330,14 +3427,14 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore","fork_context":false}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-6b",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(out.is_none());
         }
 
@@ -3456,7 +3553,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore","fork_context":false}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post)
                 .unwrap()
@@ -3470,49 +3567,86 @@ mod tests {
 
         #[test]
         fn post_tool_use_without_prior_state_persists_independent_deep_reviewer() {
+            let _g = env_lock();
             let repo = fresh_repo();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-no-ups-deep",
                 "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review",
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"general-purpose","fork_context":false}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().expect("state");
             assert!(state.independent_review_subagent_seen);
             assert!(
-                !state.review_required,
-                "lazy init without UPS/prompt: review gate stays unarmed (facts from empty prompt)"
+                state.review_required,
+                "deep PostTool with review prompt must arm review_required (B5 lazy bypass)"
             );
         }
 
         #[test]
-        fn lazy_post_tool_deep_reviewer_allows_stop_without_codex_review_block() {
+        fn post_tool_deep_reviewer_without_review_prompt_does_not_arm_gate() {
+            let repo = fresh_repo();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-no-review-arm",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"前端后端测试并行推进",
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let _ = run_gate(&repo, &post).unwrap();
+            let state = codex_load_state(&repo, &post).unwrap().expect("state");
+            assert!(state.independent_review_subagent_seen);
+            assert!(!state.review_required, "non-review PostTool must not arm review_required");
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-no-review-arm",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_gate(&repo, &stop).unwrap();
+            assert!(
+                out.is_none(),
+                "Stop must not block when review_required was never armed: {out:?}"
+            );
+        }
+
+        #[test]
+        fn lazy_post_tool_deep_reviewer_arms_gate_and_stop_blocks_without_compact() {
+            let _g = env_lock();
             let repo = fresh_repo();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-lazy-stop-contract",
                 "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review",
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"general-purpose","fork_context":false}
             });
-            assert!(run_codex_review_subagent_gate(&repo, &post)
+            assert!(run_gate(&repo, &post)
                 .unwrap()
                 .is_none());
             let loaded = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(loaded.independent_review_subagent_seen);
-            assert!(!loaded.review_required);
+            assert!(loaded.review_required, "deep PostTool must arm review_required");
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-lazy-stop-contract",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":""
             });
+            let out = run_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
             assert!(
-                run_codex_review_subagent_gate(&repo, &stop).unwrap().is_none(),
-                "CODEX_REVIEW_GATE blocks only when review_required arms the gate first; out should not block here"
+                msg.contains("CODEX_REVIEW_GATE"),
+                "armed gate must block Stop without compact: {out:?}"
             );
         }
 
@@ -3525,7 +3659,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-event-fork",
@@ -3534,7 +3668,7 @@ mod tests {
                 "fork_context": false,
                 "tool_input":{"subagent_type":"general-purpose"}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-event-fork",
@@ -3542,7 +3676,7 @@ mod tests {
                 "prompt":"继续",
                 "response": TEST_COMPACT_FINDING
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(
                 out.is_none(),
                 "event-root fork_context should satisfy independent reviewer; out={out:?}"
@@ -3558,7 +3692,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let state_path = codex_state_path(&repo, &start);
             fs::write(&state_path, "{invalid").unwrap();
             let post = json!({
@@ -3568,7 +3702,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore"}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert_eq!(
                 out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str),
                 Some("block"),
@@ -3585,7 +3719,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -3602,7 +3736,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":""
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             assert!(out.is_none());
         }
 
@@ -3615,14 +3749,14 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-5",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -3639,7 +3773,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-5b",
@@ -3647,14 +3781,14 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore","fork_context":true}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-5b",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -3671,7 +3805,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-5c",
@@ -3679,14 +3813,14 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore"}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-5c",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -3703,14 +3837,14 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"前端后端测试并行推进"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-6",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(out.is_none());
         }
 
@@ -3723,7 +3857,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-7",
@@ -3731,7 +3865,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"general-purpose","fork_context":false}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-7",
@@ -3739,7 +3873,7 @@ mod tests {
                 "prompt":"继续",
                 "response": TEST_COMPACT_FINDING
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &stop).unwrap().unwrap();
             assert_eq!(state.seq, 0);
@@ -3756,7 +3890,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-wave2-post-only",
@@ -3764,14 +3898,14 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"general-purpose","fork_context":false}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-wave2-post-only",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -3789,7 +3923,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-wave2-compact-only",
@@ -3797,7 +3931,7 @@ mod tests {
                 "prompt":"继续",
                 "response": TEST_COMPACT_FINDING
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -3817,14 +3951,14 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-rg-clear",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"rg_clear"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(out.is_none(), "rg_clear must clear codex review gate: {out:?}");
         }
 
@@ -3837,24 +3971,74 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"/implementx run waves"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let armed = json!({
                 "hook_event_name":"UserPromptSubmit",
                 "session_id":"sm-my-light",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &armed).unwrap();
+            let _ = run_gate(&repo, &armed).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-my-light",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"/implementx finish"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(
                 out.is_none(),
                 "my-light must suppress CODEX_REVIEW_GATE on Stop: {out:?}"
+            );
+        }
+
+        #[test]
+        fn my_light_post_tool_suppress_clears_hook_state() {
+            let repo = fresh_repo();
+            let sid = "sm-my-light-post";
+            let arm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &arm).unwrap();
+            assert!(
+                codex_load_state(&repo, &arm)
+                    .unwrap()
+                    .map(|s| s.review_required)
+                    .unwrap_or(false)
+            );
+            let my = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"/implementx run waves"
+            });
+            let _ = run_gate(&repo, &my).unwrap();
+            assert!(
+                !codex_load_state(&repo, &my)
+                    .unwrap()
+                    .map(|s| s.review_required)
+                    .unwrap_or(true),
+                "my-light UPS must clear review_required"
+            );
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"/implementx",
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let _ = run_gate(&repo, &post).unwrap();
+            assert!(
+                codex_load_state(&repo, &post)
+                    .unwrap()
+                    .map(|s| s.seq)
+                    .unwrap_or(0)
+                    == 0,
+                "my-light PostTool (suppress) must clear hook-state"
             );
         }
 
@@ -3870,19 +4054,259 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-disable",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(out.is_none(), "disable env must skip gate: {out:?}");
             match prior {
                 Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
                 None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
             }
+        }
+
+        #[test]
+        fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
+            let repo = fresh_repo();
+            let arm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-disable-clear",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &arm).unwrap();
+            assert!(
+                codex_load_state(&repo, &arm)
+                    .unwrap()
+                    .map(|s| s.review_required)
+                    .unwrap_or(false)
+            );
+            std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
+            let ups_disable = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-disable-clear",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let _ = run_gate(&repo, &ups_disable).unwrap();
+            let state = codex_load_state(&repo, &ups_disable).unwrap().unwrap();
+            assert_eq!(state.seq, 0, "disable UPS must reset hook-state");
+            assert!(!state.review_required);
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
+                None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+            }
+        }
+
+        #[test]
+        fn codex_review_gate_disable_clears_state_on_posttool() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
+            let repo = fresh_repo();
+            let arm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-disable-post",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &arm).unwrap();
+            std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-disable-post",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review",
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let _ = run_gate(&repo, &post).unwrap();
+            let state = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert_eq!(state.seq, 0, "disable PostTool must reset hook-state");
+            assert!(!state.review_required);
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
+                None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+            }
+        }
+
+        #[test]
+        fn post_tool_delegate_tool_does_not_count_deep_evidence() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-delegate",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-delegate",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Delegate",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let _ = run_gate(&repo, &post).unwrap();
+            let state = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(!state.independent_review_subagent_seen);
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-delegate",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE") && msg.contains("phase=0"));
+        }
+
+        #[test]
+        fn post_tool_gp_missing_fork_codex_infer_off_blocks_at_stop() {
+            let _g = env_lock();
+            let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+            std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "0");
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-infer-off",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &start).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id":"sm-infer-off",
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose"}
+            });
+            let _ = run_gate(&repo, &post).unwrap();
+            let state = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(!state.independent_review_subagent_seen);
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-infer-off",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续"
+            });
+            let out = run_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(msg.contains("CODEX_REVIEW_GATE"));
+            match prior {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v),
+                None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+            }
+        }
+
+        #[test]
+        fn rearm_review_resets_codex_independent_evidence() {
+            let _g = env_lock();
+            let repo = fresh_repo();
+            let sid = "sm-rearm-evidence";
+            let arm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &arm).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let _ = run_gate(&repo, &post).unwrap();
+            let seeded = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(seeded.independent_review_subagent_seen);
+            assert!(seeded.phase >= 2);
+            let rearm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review全仓找bug"
+            });
+            let _ = run_gate(&repo, &rearm).unwrap();
+            let reset = codex_load_state(&repo, &rearm).unwrap().unwrap();
+            assert!(
+                !reset.independent_review_subagent_seen,
+                "re-arm review must reset PostTool evidence"
+            );
+            assert_eq!(reset.phase, 0);
+            assert_eq!(reset.subagent_start_count, 0);
+            assert!(!reset.review_subagent_seen);
+            assert!(!reset.generic_subagent_seen);
+            assert!(reset.review_required);
+        }
+
+        #[test]
+        fn rearm_review_preserves_evidence_when_override() {
+            let repo = fresh_repo();
+            let sid = "sm-rearm-override";
+            let arm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &arm).unwrap();
+            let post = json!({
+                "hook_event_name":"PostToolUse",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "tool_name":"Task",
+                "tool_input":{"subagent_type":"general-purpose","fork_context":false}
+            });
+            let _ = run_gate(&repo, &post).unwrap();
+            let seeded = codex_load_state(&repo, &post).unwrap().unwrap();
+            assert!(seeded.independent_review_subagent_seen);
+            let override_ups = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review，不要用子代理"
+            });
+            let _ = run_gate(&repo, &override_ups).unwrap();
+            let kept = codex_load_state(&repo, &override_ups).unwrap().unwrap();
+            assert!(
+                kept.independent_review_subagent_seen,
+                "override must not reset prior PostTool reviewer evidence"
+            );
+            assert!(kept.review_override);
+        }
+
+        #[test]
+        fn stop_reject_reason_in_response_clears_gate() {
+            let repo = fresh_repo();
+            let start = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"sm-reject-resp",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &start).unwrap();
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id":"sm-reject-resp",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"",
+                "response":"small_task"
+            });
+            let out = run_gate(&repo, &stop).unwrap();
+            assert!(out.is_none(), "reject token in response must clear: {out:?}");
         }
 
         #[test]
@@ -3894,7 +4318,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-bon",
@@ -3902,7 +4326,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"best-of-n-runner","fork_context":false}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-bon",
@@ -3910,7 +4334,7 @@ mod tests {
                 "prompt":"继续",
                 "response": TEST_COMPACT_FINDING
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             assert!(out.is_none(), "best-of-n + compact must clear: {out:?}");
         }
 
@@ -3923,7 +4347,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-7-explore",
@@ -3931,14 +4355,14 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore","fork_context":false}
             });
-            let _ = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let _ = run_gate(&repo, &post).unwrap();
             let stop = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-7-explore",
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"继续"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -3958,7 +4382,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let payload = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-8-bypass",
@@ -3966,7 +4390,7 @@ mod tests {
                 "prompt":"继续",
                 "stop_hook_active": true
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             assert!(out.is_none(), "bypass env must skip review gate on replay: {out:?}");
             match prior {
                 Some(v) => std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v),
@@ -3986,7 +4410,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"全面review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let payload = json!({
                 "hook_event_name":"Stop",
                 "session_id":"sm-8-default",
@@ -3994,7 +4418,7 @@ mod tests {
                 "prompt":"继续",
                 "stop_hook_active": true
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -4032,7 +4456,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"all done, shipped"
             });
-            let out = run_codex_review_subagent_gate(&repo, &stop).unwrap();
+            let out = run_gate(&repo, &stop).unwrap();
             let msg = out
                 .as_ref()
                 .and_then(|v| v["followup_message"].as_str())
@@ -4077,7 +4501,7 @@ mod tests {
                 let guard = acquire_codex_state_lock(&state_path).unwrap();
                 let _hold = guard;
             }
-            let out = run_codex_review_subagent_gate(&repo, &event).unwrap();
+            let out = run_gate(&repo, &event).unwrap();
             assert_eq!(
                 out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str),
                 Some("block"),
@@ -4101,7 +4525,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"普通提问"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             // Plain prompts no longer arm a hard subagent gate,
             // so the hook may return None (no context to emit). If context IS
             // emitted for other reasons, it must not contain a drift warning.
@@ -4134,7 +4558,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"普通提问"
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload).unwrap();
+            let out = run_gate(&repo, &payload).unwrap();
             if let Some(value) = out {
                 let ctx = value["hookSpecificOutput"]["additionalContext"]
                     .as_str()
@@ -4190,35 +4614,25 @@ mod tests {
             let _guard = env_lock();
             std::env::remove_var("CODEX_SESSION_ID");
             std::env::remove_var("CODEX_CONVERSATION_ID");
-            let event = json!({});
-            let a = codex_session_key(&event);
-            let b = codex_session_key(&event);
+            std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT");
+            let repo = fresh_repo();
+            let event = json!({"cwd": repo.to_string_lossy()});
+            let a = codex_session_key(&repo, &event);
+            let b = codex_session_key(&repo, &event);
             assert_eq!(a, b);
             assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
             assert_eq!(a.len(), 32);
         }
 
         #[test]
-        fn codex_session_key_ignores_cwd_without_identifiers() {
+        fn codex_session_key_differs_by_cwd_when_unstable() {
             let _guard = env_lock();
             std::env::remove_var("CODEX_SESSION_ID");
-            let event = json!({"cwd":"/tmp/shared-worktree"});
-            let key = codex_session_key(&event);
-            let cwd_hash = {
-                let mut hasher = Sha256::new();
-                hasher.update("/tmp/shared-worktree".as_bytes());
-                hasher
-                    .finalize()
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<String>()
-                    .chars()
-                    .take(32)
-                    .collect::<String>()
-            };
-            assert_ne!(key, cwd_hash);
-            assert!(key.chars().all(|c| c.is_ascii_hexdigit()));
-            assert_eq!(key.len(), 32);
+            std::env::remove_var("CODEX_CONVERSATION_ID");
+            let repo = fresh_repo();
+            let a = codex_session_key(&repo, &json!({"cwd":"/tmp/a"}));
+            let b = codex_session_key(&repo, &json!({"cwd":"/tmp/b"}));
+            assert_ne!(a, b, "unstable fallback must not collapse unlike cwd");
         }
 
         #[test]
@@ -4238,7 +4652,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt":"please do deep review"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &start).unwrap();
+            let _ = run_gate(&repo, &start).unwrap();
             let post = json!({
                 "hook_event_name":"PostToolUse",
                 "session_id":"sm-2e",
@@ -4246,7 +4660,7 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"agentType":"explore","fork_context":false}
             });
-            let out = run_codex_review_subagent_gate(&repo, &post).unwrap();
+            let out = run_gate(&repo, &post).unwrap();
             assert!(out.is_none());
             let state = codex_load_state(&repo, &post).unwrap().unwrap();
             assert!(state.review_subagent_seen);
@@ -4268,7 +4682,7 @@ mod tests {
                 "session_id":"sm-9",
                 "cwd": repo.to_string_lossy().to_string()
             });
-            let out = run_codex_review_subagent_gate(&repo, &payload)
+            let out = run_gate(&repo, &payload)
                 .unwrap()
                 .unwrap();
             assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
@@ -4283,7 +4697,7 @@ mod tests {
         fn dispatch_missing_event_blocks_with_message() {
             let repo = fresh_repo();
             let payload = json!({"session_id":"sm-10"});
-            let out = run_codex_review_subagent_gate(&repo, &payload)
+            let out = run_gate(&repo, &payload)
                 .unwrap()
                 .unwrap();
             assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
@@ -4405,7 +4819,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt": "just a simple question about coding"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &event).unwrap();
+            let _ = run_gate(&repo, &event).unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
             assert_eq!(state.seq, 1);
             assert!(!state.review_subagent_seen);
@@ -4420,7 +4834,7 @@ mod tests {
                 "cwd": repo.to_string_lossy().to_string(),
                 "prompt": "please do a deep code review of this module"
             });
-            let _ = run_codex_review_subagent_gate(&repo, &event).unwrap();
+            let _ = run_gate(&repo, &event).unwrap();
             let state = codex_load_state(&repo, &event).unwrap().unwrap();
             assert_eq!(state.seq, 1);
             assert!(state.review_required);
@@ -4460,9 +4874,10 @@ mod tests {
                 SEQ.fetch_add(1, Ordering::SeqCst)
             );
             let event = json!({});
+            let repo = fresh_repo();
             std::env::set_var("CODEX_SESSION_ID", &unique_id);
-            let a = codex_session_key(&event);
-            let b = codex_session_key(&event);
+            let a = codex_session_key(&repo, &event);
+            let b = codex_session_key(&repo, &event);
             std::env::remove_var("CODEX_SESSION_ID");
             assert_eq!(a, b, "env var fallback should produce a stable key");
             assert!(
@@ -4474,9 +4889,10 @@ mod tests {
 
         #[test]
         fn codex_session_key_matches_for_session_id_camel_case() {
+            let repo = fresh_repo();
             let sid = "sess-key-camel-01";
-            let snake = codex_session_key(&json!({"session_id": sid}));
-            let camel = codex_session_key(&json!({"sessionId": sid}));
+            let snake = codex_session_key(&repo, &json!({"session_id": sid}));
+            let camel = codex_session_key(&repo, &json!({"sessionId": sid}));
             assert_eq!(snake, camel);
         }
 
@@ -4490,9 +4906,10 @@ mod tests {
             );
             let event = json!({});
             std::env::remove_var("CODEX_SESSION_ID");
+            let repo = fresh_repo();
             std::env::set_var("CODEX_CONVERSATION_ID", &unique_id);
-            let a = codex_session_key(&event);
-            let b = codex_session_key(&event);
+            let a = codex_session_key(&repo, &event);
+            let b = codex_session_key(&repo, &event);
             std::env::remove_var("CODEX_CONVERSATION_ID");
             assert_eq!(a, b, "CODEX_CONVERSATION_ID fallback should be stable");
             assert_eq!(a.len(), 32);

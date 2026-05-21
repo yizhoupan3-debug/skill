@@ -31,8 +31,10 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | 1 | Append PostTool evidence to EVIDENCE_INDEX |
-| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | 1 | Write checkpoint on Stop |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | off (unset) | **Opt-in** (`=1`): append PostTool evidence to `EVIDENCE_INDEX` |
+| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | — | **No-op**（2026-05；保留 env 名兼容） |
+| `ROUTER_RS_GOAL_CONTINUE_HOOK` | — | **No-op**（2026-05；hook 续跑路径已删；用手动画板 + `framework_goal_drive` stdio） |
+| `ROUTER_RS_RFV_LOOP_HOOK` | — | **No-op**（2026-05；hook 续跑路径已删；用 `framework_rfv_loop` stdio） |
 | `ROUTER_RS_CLOSEOUT_ENFORCEMENT` | soft | Hard/soft closeout enforcement |
 | `ROUTER_RS_DEPTH_SCORE_MODE` | off | Depth scoring mode |
 
@@ -80,7 +82,7 @@ configs/framework/
 ├── CLOSEOUT_RECORD_SCHEMA.json      # Closeout record schema
 ├── FRAMEWORK_SURFACE_POLICY.json     # Framework surface policy
 ├── GENERATED_ARTIFACTS.json          # Generated artifact registry
-├── host_projection_narrative.json    # GSD + review findings-only install copy
+├── host_projection_narrative.json    # My lifecycle + review findings-only install copy
 ├── HARNESS_*.json                    # Harness configuration
 ├── RUNTIME_REGISTRY.json             # Runtime registry (disk-loaded by registry_loader)
 ├── RUNTIME_PROVIDER_REGISTRY.json    # Provider registry

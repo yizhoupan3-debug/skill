@@ -51,7 +51,7 @@ impl Drop for ReviewGateDisableEnvClearGuard {
 
 /// 单测需要已移除事件的完整 handler（`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1`）。
 struct LegacySubtractedEventsGuard {
-    _lock: std::sync::MutexGuard<'static, ()>,
+    _lock: crate::test_env_sync::ProcessEnvLockGuard,
     prev: Option<std::ffi::OsString>,
 }
 
@@ -78,7 +78,7 @@ impl Drop for LegacySubtractedEventsGuard {
     }
 }
 
-/// Gate-active tests (`harness-minimal-gsd`): clear env/thread-local review-gate disable so
+/// Gate-active tests (`harness-minimal-my`): clear env/thread-local review-gate disable so
 /// `beforeSubmit` / `stop` run real handlers (parallel bench hooks may set `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`).
 struct ReviewGateActiveGuard {
     _env: ReviewGateDisableEnvClearGuard,
@@ -94,11 +94,11 @@ impl ReviewGateActiveGuard {
 }
 
 /// Opt-in GSD pre-goal nudge (`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` — legacy env name).
-struct GsdPreGoalOptInEnvGuard {
+struct MyPreGoalOptInEnvGuard {
     prev: Option<std::ffi::OsString>,
 }
 
-impl GsdPreGoalOptInEnvGuard {
+impl MyPreGoalOptInEnvGuard {
     fn enable() -> Self {
         let key = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
         let prev = env::var_os(key);
@@ -107,7 +107,7 @@ impl GsdPreGoalOptInEnvGuard {
     }
 }
 
-impl Drop for GsdPreGoalOptInEnvGuard {
+impl Drop for MyPreGoalOptInEnvGuard {
     fn drop(&mut self) {
         let key = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
         match self.prev.take() {
@@ -207,7 +207,7 @@ impl Drop for AdvisoryOperatorEnvClearGuard {
 
 /// Serialize env and ensure operator advisory inject is enabled (unset `ROUTER_RS_OPERATOR_INJECT`).
 struct OperatorInjectEnabledGuard {
-    _lock: std::sync::MutexGuard<'static, ()>,
+    _lock: crate::test_env_sync::ProcessEnvLockGuard,
     prev_inject: Option<std::ffi::OsString>,
 }
 
@@ -620,20 +620,19 @@ fn narrow_path_review_stop_does_not_block() {
 }
 
 #[test]
-fn before_submit_review_and_implementx_same_prompt_short_circuits_without_arming() {
+fn before_submit_review_and_implementx_same_prompt_suppresses_review_but_arms_goal() {
     let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let sid = "dual-review-implementx";
     let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
-    assert_eq!(out, json!({ "continue": true }));
-    let loaded = load_state(&repo, &event(sid, prompt))
-        .ok()
-        .flatten();
+    assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
+    let state = load_state_for(&repo, sid);
     assert!(
-        loaded.is_none(),
-        "my-light suppress short-circuits beforeSubmit; must not arm review state"
+        !state.review_required,
+        "my-light + goal drive must not arm review; got {state:?}"
     );
+    assert!(state.goal_required, "implementx must arm goal drive; got {state:?}");
 }
 
 /// 未命中「并行 review 候选」三元时仍注入同一行指针；不再追加第二段「≥3」以免刷屏。
@@ -691,7 +690,7 @@ fn parallel_delegation_does_not_latch_delegation_required() {
 }
 
 #[test]
-fn gsd_execute_entry_does_not_arm_delegation_or_review_from_fix_copy() {
+fn my_implement_entry_does_not_arm_delegation_or_review_from_fix_copy() {
     let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
@@ -699,17 +698,17 @@ fn gsd_execute_entry_does_not_arm_delegation_or_review_from_fix_copy() {
         "beforeSubmitPrompt",
         &event(
             "ap-del",
-            "/gsd-execute-phase address all review findings from the last pass",
+            "/implementx address all review findings from the last pass",
         ),
     );
     let state = load_state_for(&repo, "ap-del");
     assert!(
         !state.delegation_required,
-        "GSD execute must not stack delegation_required (was: framework_entrypoint)"
+        "My implement must not stack delegation_required (was: framework_entrypoint)"
     );
     assert!(
         !state.review_required,
-        "GSD execute turn must not re-arm review from findings wording"
+        "My implement turn must not re-arm review from findings wording"
     );
     assert!(state.goal_required);
 }
@@ -720,7 +719,7 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let repo = fresh_repo();
     let sid = "s-dual-review-autopilot-hint";
-    let prompt = "请全面review这个仓库 /gsd-execute-phase 修复刚发现的问题";
+    let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
     assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
     let ac = out
@@ -728,8 +727,8 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        ac.contains("router-rs：本轮提交同时包含") && ac.contains("REVIEW_GATE"),
-        "expected dual-signal mixing nudge; got {ac:?}"
+        !ac.contains("router-rs：本轮提交同时包含"),
+        "my-light /implementx must not inject review+goal mixing nudge; got {ac:?}"
     );
     let state = load_state_for(&repo, sid);
     assert!(
@@ -740,13 +739,50 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
 }
 
 #[test]
-fn before_submit_gsd_new_project_does_not_arm_goal_required() {
+fn before_submit_implementx_injects_one_breath_nudge() {
     let repo = fresh_repo();
-    let sid = "gsd-new-project-pre-exec";
+    let sid = "s-implement-nudge";
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/implementx"));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("ALL waves") || ac.contains("WAVE_STATE"),
+        "implementx must inject MY_IMPLEMENT nudge; got {ac:?}"
+    );
+}
+
+#[test]
+fn before_submit_my_light_clears_sticky_review_required() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-my-light-clear-review";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "请全面review这个仓库"),
+    );
+    let armed = load_state_for(&repo, sid);
+    assert!(armed.review_required, "review prompt should arm before my-light entry");
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/implementx"));
+    assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
+    let cleared = load_state_for(&repo, sid);
+    assert!(
+        !cleared.review_required,
+        "my-light UPS must clear sticky review_required; got {cleared:?}"
+    );
+}
+
+#[test]
+fn before_submit_my_new_project_does_not_arm_goal_required() {
+    let repo = fresh_repo();
+    let sid = "my-new-project-pre-exec";
     let out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event(sid, "请 /gsd-new-project 做迁移后技术债审查"),
+        &event(sid, "请 /discussx 做迁移后技术债审查"),
     );
     assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
     let ac = out
@@ -754,25 +790,25 @@ fn before_submit_gsd_new_project_does_not_arm_goal_required() {
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        ac.contains("GSD pre-execution"),
+        ac.contains("My lifecycle pre-execution"),
         "expected pre-exec nudge; got {ac:?}"
     );
     let state = load_state_for(&repo, sid);
     assert!(
         !state.goal_required,
-        "pre-exec /gsd-new-project must not arm goal_required; got {state:?}"
+        "pre-exec /discussx must not arm goal_required; got {state:?}"
     );
 }
 
 #[test]
-fn before_submit_gsd_plan_phase_does_not_arm_goal_required() {
+fn before_submit_my_plan_phase_does_not_arm_goal_required() {
     let repo = fresh_repo();
     let sid = "gsd-plan-pre-exec";
-    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/gsd-plan-phase"));
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/planx"));
     let state = load_state_for(&repo, sid);
     assert!(
         !state.goal_required,
-        "/gsd-plan-phase must not arm goal_required; got {state:?}"
+        "/planx must not arm goal_required; got {state:?}"
     );
 }
 
@@ -819,7 +855,7 @@ fn stop_completion_claim_requires_closeout_record_when_strict_enabled() {
         &json!({
             "session_id": "s-closeout-1",
             "cwd": repo.display().to_string(),
-            "prompt": "/gsd-execute-phase do thing"
+            "prompt": "/implementx do thing"
         }),
     );
     assert!(
@@ -887,7 +923,7 @@ fn stop_completion_claim_allows_when_closeout_record_passes() {
         &json!({
             "session_id": "s-closeout-2",
             "cwd": repo.display().to_string(),
-            "prompt": "/gsd-execute-phase do thing"
+            "prompt": "/implementx do thing"
         }),
     );
 
@@ -954,7 +990,7 @@ fn closeout_followup_emits_when_strict_and_record_missing() {
 }
 
 #[test]
-fn gsd_skips_pre_goal_nag_when_goal_state_on_disk() {
+fn my_skips_pre_goal_nag_when_goal_state_on_disk() {
     let _env = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     use std::env;
@@ -982,7 +1018,7 @@ fn gsd_skips_pre_goal_nag_when_goal_state_on_disk() {
     let out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ap-disk", "/gsd-execute-phase 继续实现"),
+        &event("ap-disk", "/implementx 继续实现"),
     );
     assert!(
         load_state_for(&repo, "ap-disk").pre_goal_review_satisfied,
@@ -993,7 +1029,7 @@ fn gsd_skips_pre_goal_nag_when_goal_state_on_disk() {
         .and_then(Value::as_str)
         .unwrap_or_default();
     assert!(
-        !msg.contains("GSD execute (/gsd-execute-phase)") && !msg.contains("independent-context"),
+        !msg.contains("My implement (/implementx") && !msg.contains("independent-context"),
         "pre-goal nag should be skipped when GOAL_STATE exists; msg={msg:?}"
     );
 
@@ -1004,7 +1040,7 @@ fn gsd_skips_pre_goal_nag_when_goal_state_on_disk() {
 }
 
 #[test]
-fn gsd_pre_goal_strict_disk_skips_hydrate_pre_goal_on_before_submit() {
+fn my_pre_goal_strict_disk_skips_hydrate_pre_goal_on_before_submit() {
     let _env = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     use std::env;
@@ -1032,7 +1068,7 @@ fn gsd_pre_goal_strict_disk_skips_hydrate_pre_goal_on_before_submit() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ap-disk-strict", "/gsd-execute-phase 继续实现"),
+        &event("ap-disk-strict", "/implementx 继续实现"),
     );
     assert!(
         !load_state_for(&repo, "ap-disk-strict").pre_goal_review_satisfied,
@@ -1080,7 +1116,7 @@ fn stop_goal_gate_hydrates_from_goal_state_and_evidence_without_keywords() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ev-gate", "/gsd-execute-phase finish fixes"),
+        &event("ev-gate", "/implementx finish fixes"),
     );
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -1217,7 +1253,7 @@ fn stop_goal_gate_hydrates_running_goal_without_checkpoints_or_keywords() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("run-gate", "/gsd-execute-phase continue"),
+        &event("run-gate", "/implementx continue"),
     );
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -1261,7 +1297,7 @@ fn stop_goal_gate_hydrates_when_goal_state_omits_status_field() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("ns-gate", "/gsd-execute-phase continue"),
+        &event("ns-gate", "/implementx continue"),
     );
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -1915,7 +1951,7 @@ fn stop_hard_gate_does_not_inject_session_close_style_paragraph() {
 }
 
 #[test]
-fn stop_review_armed_with_active_goal_suppresses_gsd_continue() {
+fn stop_review_armed_with_active_goal_suppresses_my_continue() {
     let _inject_on = OperatorInjectEnabledGuard::new();
     let repo = fresh_repo();
     let sid = "s-review-goal-mutex";
@@ -2591,7 +2627,7 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
 }
 
 #[test]
-fn session_end_skips_state_delete_when_lock_unavailable() {
+fn session_end_best_effort_deletes_state_when_lock_unavailable() {
     let _guard = ForceHookStateLockFailureGuard::new();
     let repo = fresh_repo();
     let payload = event("s-end-no-lock", "全面review这个仓库");
@@ -2607,8 +2643,8 @@ fn session_end_skips_state_delete_when_lock_unavailable() {
     assert!(sp.exists());
     let _ = dispatch_cursor_hook_event(&repo, "sessionEnd", &payload);
     assert!(
-        sp.exists(),
-        "sessionEnd must not delete state when lock acquisition failed"
+        !sp.exists(),
+        "sessionEnd must best-effort delete state even when lock acquisition failed"
     );
 }
 
@@ -2788,9 +2824,11 @@ fn review_pending_cycle_pruned_when_no_open_subagents_and_stale_start() {
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        !fm.contains("REVIEW_GATE incomplete"),
-        "stale pending must be pruned so stop is not blocked; fm={fm}"
+        fm.contains("REVIEW_GATE incomplete"),
+        "stale pending without qualifying stop must not clear REVIEW_GATE; fm={fm}"
     );
+    let st = load_state_for(&repo, sid);
+    assert_eq!(st.phase, 2, "phase must downgrade from 3 when pruning without stop");
 
     match prev {
         Some(v) => std::env::set_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS", v),
@@ -3430,7 +3468,7 @@ fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event(sid, "/gsd-execute-phase continue"),
+        &event(sid, "/implementx continue"),
     );
     let after_submit = load_state_for(&repo, sid);
     assert!(
@@ -4336,7 +4374,7 @@ fn goal_stop_followup_is_short_code_only() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17", "/gsd-execute-phase 完成任务"),
+        &event("s17", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4379,7 +4417,7 @@ fn stop_picks_assistant_goal_contract_from_messages_when_top_level_response_empt
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-msg-goal", "/gsd-execute-phase finish wiring"),
+        &event("s-msg-goal", "/implementx finish wiring"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4419,36 +4457,36 @@ fn stop_picks_assistant_goal_contract_from_messages_when_top_level_response_empt
 }
 
 #[test]
-fn gsd_pre_goal_nudge_when_opt_in_enabled() {
+fn my_pre_goal_nudge_when_opt_in_enabled() {
     let _env = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
-    let _pre_goal = GsdPreGoalOptInEnvGuard::enable();
+    let _pre_goal = MyPreGoalOptInEnvGuard::enable();
     let repo = fresh_repo();
     let out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17b", "/gsd-execute-phase 完成任务"),
+        &event("s17b", "/implementx 完成任务"),
     );
     let msg = hook_user_visible_blob(&out);
     assert!(
-        msg.contains("GSD execute (/gsd-execute-phase)"),
-        "expected GSD pre-goal nudge; surface={msg:?}"
+        msg.contains("My implement (/implementx"),
+        "expected My pre-goal nudge; surface={msg:?}"
     );
     assert!(load_state_for(&repo, "s17b").goal_required);
 }
 
 #[test]
-fn gsd_pre_goal_auto_releases_when_nag_cap_reached() {
+fn my_pre_goal_auto_releases_when_nag_cap_reached() {
     let _env = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     let prev_cap = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES");
-    let _pre_goal = GsdPreGoalOptInEnvGuard::enable();
+    let _pre_goal = MyPreGoalOptInEnvGuard::enable();
     env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES", "2");
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("cap-nag", "/gsd-execute-phase smoke"),
+        &event("cap-nag", "/implementx smoke"),
     );
     let mid = load_state_for(&repo, "cap-nag");
     assert_eq!(mid.pre_goal_nag_count, 1);
@@ -4473,7 +4511,7 @@ fn deep_json_strings_satisfy_pre_goal_reject_on_before_submit() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("deep-s1", "/gsd-execute-phase 任务"),
+        &event("deep-s1", "/implementx 任务"),
     );
     let deep = json!({
         "session_id": "deep-s1",
@@ -4523,7 +4561,7 @@ fn before_submit_reject_reason_token_in_user_prompt_satisfies_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17e", "/gsd-execute-phase 第一轮"),
+        &event("s17e", "/implementx 第一轮"),
     );
     let out = dispatch_cursor_hook_event(
             &repo,
@@ -4541,7 +4579,7 @@ fn before_submit_reject_reason_token_in_user_prompt_satisfies_pre_goal() {
         .and_then(Value::as_str)
         .unwrap_or_default();
     assert!(
-        !msg.contains("GSD execute (/gsd-execute-phase)")
+        !msg.contains("My implement (/implementx")
             && !msg.contains("independent-context reviewer"),
         "reject_reason on submit should skip pre-goal nag; msg={msg:?}"
     );
@@ -4553,7 +4591,7 @@ fn nested_payload_prompt_reject_reason_satisfies_pre_goal_before_submit() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17nest", "/gsd-execute-phase 第一轮"),
+        &event("s17nest", "/implementx 第一轮"),
     );
     let nested = json!({
         "session_id": "s17nest",
@@ -4582,7 +4620,7 @@ fn nested_payload_prompt_reject_reason_updates_stop_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17stop-n", "/gsd-execute-phase 任务"),
+        &event("s17stop-n", "/implementx 任务"),
     );
     let nested_stop = json!({
         "session_id": "s17stop-n",
@@ -4601,7 +4639,7 @@ fn post_tool_use_fork_context_true_does_not_satisfy_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17c", "/gsd-execute-phase 完成任务"),
+        &event("s17c", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4625,7 +4663,7 @@ fn post_tool_use_tool_input_type_field_satisfies_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17d", "/gsd-execute-phase 完成任务"),
+        &event("s17d", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4648,7 +4686,7 @@ fn post_tool_use_heuristic_mcp_subagent_tool_name_satisfies_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17mcp", "/gsd-execute-phase 完成任务"),
+        &event("s17mcp", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4668,7 +4706,7 @@ fn post_tool_use_nested_payload_tool_fields_satisfy_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17nest-tu", "/gsd-execute-phase 完成任务"),
+        &event("s17nest-tu", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4691,7 +4729,7 @@ fn post_tool_use_non_countable_lane_does_not_satisfy_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-lane", "/gsd-execute-phase 完成任务"),
+        &event("s-lane", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4715,7 +4753,7 @@ fn post_tool_use_fork_context_string_true_blocks_pre_goal() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-fkstr", "/gsd-execute-phase 完成任务"),
+        &event("s-fkstr", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4884,7 +4922,7 @@ fn cursor_session_key_nested_workspace_folder_matches_top_cwd() {
 }
 
 #[test]
-fn gsd_pre_goal_persists_when_session_id_only_nested_in_payload() {
+fn my_pre_goal_persists_when_session_id_only_nested_in_payload() {
     let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let cwd = repo.display().to_string();
@@ -4893,7 +4931,7 @@ fn gsd_pre_goal_persists_when_session_id_only_nested_in_payload() {
         "cwd": cwd,
         "payload": {
             "sessionId": sid,
-            "prompt": "/gsd-execute-phase 完成任务"
+            "prompt": "/implementx 完成任务"
         }
     });
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &before);
@@ -4921,7 +4959,7 @@ fn subagent_start_pre_goal_requires_typed_subagent() {
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s-sub-pre", "/gsd-execute-phase 完成任务"),
+        &event("s-sub-pre", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -5028,6 +5066,57 @@ fn cursor_state_save_completes_with_fsync_unix() {
     assert!(save_state(&repo, &payload, &mut state));
     let loaded = load_state(&repo, &payload).expect("load").expect("state");
     assert_eq!(loaded.phase, 2);
+}
+
+#[test]
+fn prompt_from_nested_messages_reads_text_without_content_key() {
+    let payload = json!({
+        "session_id": "msg-text-only",
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "messages": [{"role": "user", "text": "small_task review ./foo.rs"}],
+    });
+    assert_eq!(
+        super::prompt_text(&payload),
+        "small_task review ./foo.rs"
+    );
+}
+
+#[test]
+fn my_light_stop_does_not_suppress_review_when_only_assistant_mentions_implementx() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "my-light-assist-only";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    assert!(load_state_for(&repo, sid).review_required);
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "prompt": "继续",
+            "response": "按 /implementx 流程执行即可",
+        }),
+    );
+    let fm = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "assistant tail must not trigger my-light suppress; fm={fm:?}"
+    );
+}
+
+#[test]
+fn cursor_hook_rejects_non_object_stdin() {
+    let mut reader = Cursor::new(b"[]".to_vec());
+    let err = super::stdin::read_stdin_json_from_reader(&mut reader).expect_err("must reject");
+    assert_eq!(err, "stdin_json_not_object");
 }
 
 #[test]

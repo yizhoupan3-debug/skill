@@ -83,8 +83,8 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
     println!("  2) Prune stale registry tasks and optional empty cursor-stop-* dirs.");
     println!("  3) Align artifacts/current/active_task.json, focus_task.json, and .supervisor_state.json.");
     println!("  4) Run: router-rs framework task-state-resolve --repo-root <repo>");
-    println!("Solo defaults (2026-05): PostTool evidence / Stop checkpoint / depth hint / journal / TASK_STATE auto-sync are OFF unless env =1.");
-    println!("  Enable: ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1, ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1, …");
+    println!("Solo defaults (2026-05): PostTool evidence / depth hint / journal / TASK_STATE auto-sync are OFF unless env =1.");
+    println!("  Optional: ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1 (Stop checkpoint env is no-op; do not set ROUTER_RS_CONTINUITY_STOP_CHECKPOINT).");
     println!("  TASK_STATE projection: router-rs framework task-state-aggregate-sync --repo-root <repo>");
     println!("  Root artifact clutter: router-rs framework maint migrate-current-artifact-clutter --repo-root <repo>");
 

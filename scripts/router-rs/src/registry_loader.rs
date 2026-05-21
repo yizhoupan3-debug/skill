@@ -15,6 +15,7 @@ struct ReviewGateSnapshot {
     claude_reviewer_lanes: HashSet<String>,
     spawn_first_enabled: bool,
     spawn_first_nudge: String,
+    spawn_first_nudge_by_host: HashMap<String, String>,
 }
 
 static CACHE: OnceLock<Mutex<HashMap<PathBuf, ReviewGateSnapshot>>> = OnceLock::new();
@@ -117,11 +118,21 @@ fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, S
         .filter(|s| !s.is_empty())
         .unwrap_or(DEFAULT_SPAWN_FIRST_NUDGE)
         .to_string();
+    let mut spawn_first_nudge_by_host = HashMap::new();
+    if let Some(by_host) = review_gate.get("spawn_first_nudge_by_host").and_then(Value::as_object)
+    {
+        for (host_id, line) in by_host {
+            if let Some(s) = line.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                spawn_first_nudge_by_host.insert(host_id.clone(), s.to_string());
+            }
+        }
+    }
     Ok(ReviewGateSnapshot {
         deep_gate_lanes: lane_set(&root, "deep_gate_lanes")?,
         claude_reviewer_lanes: lane_set(&root, "claude_reviewer_lanes")?,
         spawn_first_enabled,
         spawn_first_nudge,
+        spawn_first_nudge_by_host,
     })
 }
 
@@ -168,10 +179,16 @@ pub fn review_spawn_first_enabled(repo_root: Option<&Path>) -> bool {
 }
 
 /// One-line spawn-first nudge for hook `additional_context` (registry-backed).
-pub fn review_spawn_first_nudge_line(repo_root: Option<&Path>) -> String {
+pub fn review_spawn_first_nudge_line(repo_root: Option<&Path>, host_id: &str) -> String {
     snapshot(repo_root)
-        .map(|s| s.spawn_first_nudge.clone())
-        .unwrap_or_else(|_| DEFAULT_SPAWN_FIRST_NUDGE.to_string())
+        .ok()
+        .and_then(|s| {
+            s.spawn_first_nudge_by_host
+                .get(host_id)
+                .cloned()
+                .or(Some(s.spawn_first_nudge.clone()))
+        })
+        .unwrap_or_else(|| DEFAULT_SPAWN_FIRST_NUDGE.to_string())
 }
 
 fn load_registry_root(repo_root: Option<&Path>) -> Result<Value, String> {
@@ -212,7 +229,7 @@ pub fn lifecycle_profile_disables_spawn_first_nudge(
 #[cfg(test)]
 pub(crate) fn assert_spawn_first_registry_fields(repo_root: Option<&Path>) {
     assert!(review_spawn_first_enabled(repo_root));
-    let line = review_spawn_first_nudge_line(repo_root);
+    let line = review_spawn_first_nudge_line(repo_root, "cursor");
     assert!(line.contains("fork_context"));
     assert!(line.contains("code-review-deep") || line.contains("配对审稿"));
 }

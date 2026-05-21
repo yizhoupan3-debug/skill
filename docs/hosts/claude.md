@@ -3,7 +3,7 @@
 **权威能力矩阵**：`configs/framework/RUNTIME_REGISTRY.json` → `host_projections.claude-code` / `claude-desktop`  
 **接入契约**：[host_adapter_contract.md](../host_adapter_contract.md)
 
-**默认 lifecycle（全宿主）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` 一口气跑完 `WAVE_STATE`；`verifyx` 证据+ship）。`/gsd-*` 仅 legacy 冷表。
+**默认 lifecycle（全宿主）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` 一口气跑完 `WAVE_STATE`；`verifyx` 证据+ship）。`/gsd-*` 已于 2026-05 移除。
 
 ## Claude Code (`claude-code`)
 
@@ -19,14 +19,16 @@
 
 ### `session_key`（与 Cursor 同类）
 
-`.claude/review_gate_*.json` / `hook_state_*.json` 文件名由 **`session_key`** 分流，解析顺序：**显式会话 id**（`session_id` / `sessionId` 等）→ **`ROUTER_RS_CLAUDE_SESSION_NAMESPACE`**（非空时）→ **`cwd` / workspace 路径字段** → **repo 稳定 token**。同仓多会话在无 id 时可能共用状态；并行分流时设 namespace（语义对齐 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`，见 [`harness_architecture.md`](../harness_architecture.md) 环境变量表）。
+`.claude/hook-state/review_gate_*.json` / `.claude/hook-state/hook_state_*.json` 文件名由 **`session_key`** 分流，解析顺序：**显式会话 id**（`session_id` / `sessionId` 等）→ **`ROUTER_RS_CLAUDE_SESSION_NAMESPACE`**（非空时）→ **`cwd` / workspace 路径字段** → **repo 稳定 token**。同仓多会话在无 id 时可能共用状态；并行分流时设 namespace（语义对齐 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`，见 [`harness_architecture.md`](../harness_architecture.md) 环境变量表）。
+
+**Legacy 迁移（2026-05）**：`load_review_gate_disk` 在 hook-state 文件缺失时会 **只读** 旧路径 `.claude/review_gate_<hash>.json` 并 best-effort 写入 hook-state；**PreToolUse 仍 deny** 对 legacy 路径的直接写入。
 
 ### 默认注册的 hook 事件
 
 | 事件 | 作用 |
 |------|------|
 | `PreToolUse` | 可 **deny**；守卫 framework/settings 路径 |
-| `UserPromptSubmit` | Review 武装 / **spawn-first** 单行 nudge（registry）；窄范围不武装 |
+| `UserPromptSubmit` | Review 武装 / **spawn-first** 单行 nudge（`spawn_first_nudge_by_host.claude-code`）；窄范围不武装；my-light UPS 清 sticky `review_required` |
 | `PostToolUse` | settings/framework 变更提示；reviewer 证据（无 Cursor 式每工具 tracker 风暴） |
 | `Stop` | `REVIEW_GATE` / settings 校验 / touch-state 清门 |
 
@@ -65,7 +67,7 @@ Desktop 用户须在 MCP 侧 **手动** `record_evidence` / `session_checkpoint`
 
 ## 默认工作流（两者）
 
-与文首 **默认 lifecycle** 一致：`/discussx` → `/planx` → `/implementx` → `/verifyx`。`/gsd-*` 仅 legacy 冷表；hook 能力差异 **不改变** 该命令顺序。
+与文首 **默认 lifecycle** 一致：`/discussx` → `/planx` → `/implementx` → `/verifyx`。hook 能力差异 **不改变** 该命令顺序。
 
 ## 自检（Code）
 

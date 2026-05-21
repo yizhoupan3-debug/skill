@@ -19,18 +19,18 @@
 | Env 命名与默认值表 | [framework_naming_conventions.md](framework_naming_conventions.md) |
 | 政策分层地图（operator profiles 依赖） | [harness_policy_map.md](harness_policy_map.md) |
 | RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
-| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | GSD 任务 ROADMAP：`artifacts/current/<task_id>/ROADMAP.md`；见 [plans/README.md](plans/README.md) |
+| 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | 任务 ROADMAP：`artifacts/current/<task_id>/ROADMAP.md`；见 [plans/README.md](plans/README.md) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
 | 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`registry_loader`、`host_projection_narrative`、`GENERATED_ARTIFACTS` 见 [harness_architecture.md §2.3](harness_architecture.md#23-控制面配置与生成物2026-05-20-硬化)；多宿主 harness 契约见 [host_adapter_contract.md](host_adapter_contract.md)（**单数**）；[host_adapter_contracts.md](host_adapter_contracts.md)（**复数**）仅为 Codex 投影英文专页，勿混读 |
 | 生成物 drift / doctor 快探针 | [harness_architecture.md §2.3](harness_architecture.md#23-控制面配置与生成物2026-05-20-硬化)；`framework host-integration generated-artifacts-status [--skip-generator-run]` |
 | 任务级 schema drift（hooks 7 事件闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题） | `router-rs schema-drift contract` / `baseline` / `check`（[`schema_drift.rs`](../scripts/router-rs/src/schema_drift.rs)）；验收见 [`skills/verifyx/SKILL.md`](../skills/verifyx/SKILL.md)、[`configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md`](../configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md) |
-| Cursor Plan / GSD 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/planx/SKILL.md`](../skills/planx/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
+| Cursor Plan / My 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/planx/SKILL.md`](../skills/planx/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
 | Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
 | 插件 ABI / routing metadata | [runtime_plugin_contract.md](runtime_plugin_contract.md) |
 | Python 环境治理（uv-only，冷表显式 `$python-env-management`） | [`skills/python-env-management/SKILL.md`](../skills/python-env-management/SKILL.md) |
 | 历史迁移、减法记录 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
-| Plans 索引（GSD ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
+| Plans 索引（ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
 
 ## 概念与源码映射
 

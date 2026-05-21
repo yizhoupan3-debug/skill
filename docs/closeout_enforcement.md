@@ -155,7 +155,7 @@ workstations where programmatic enforcement is **soft**: router-rs may not block
 the artifact write locally, but emitting and evaluating records keeps completion
 honest for operators and for CI.
 
-Each owner skill (gsd execute-phase, team, gh-fix-ci, systematic-debugging,
+Each owner skill (implementx, verifyx, team, gh-fix-ci, systematic-debugging,
 deepinterview, loop) MUST:
 
 1. **Materialize a record** at task end into

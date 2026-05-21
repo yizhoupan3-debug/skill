@@ -62,6 +62,87 @@ mod desktop_mcp_tests {
     }
 
     #[test]
+    fn review_gate_prompt_mentions_claude_reviewer_lanes_and_explore() {
+        let repo = test_repo_dir();
+        let response = crate::claude_desktop_hooks::handle_mcp_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"review_gate"}}"#,
+            &repo,
+        )
+        .expect("prompts/get response");
+        let text = response["result"]["messages"][0]["content"]["text"]
+            .as_str()
+            .expect("prompt text");
+        assert!(
+            text.contains("claude_reviewer_lanes"),
+            "expected claude_reviewer_lanes in review_gate prompt: {text}"
+        );
+        assert!(
+            text.contains("explore"),
+            "expected explore exclusion in review_gate prompt: {text}"
+        );
+        assert!(
+            text.contains("fork_context=false"),
+            "expected fork_context=false in review_gate prompt: {text}"
+        );
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn closeout_gate_warns_when_goal_suggests_review_without_evidence() {
+        let repo = test_repo_dir();
+        let task_id = "test-task";
+        let task_dir = repo.join("artifacts/current").join(task_id);
+        std::fs::create_dir_all(&task_dir).unwrap();
+        std::fs::write(
+            task_dir.join("GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
+        )
+        .unwrap();
+
+        let out = crate::claude_desktop_hooks::tool_closeout_gate(&json!({}), &repo)
+            .expect("closeout_gate");
+        assert!(
+            out.contains("no hook REVIEW_GATE"),
+            "expected static Desktop advisory: {out}"
+        );
+        assert!(
+            out.contains("WARN: review_gate: GOAL suggests review work"),
+            "expected review WARN when goal arms review without attestation: {out}"
+        );
+
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn closeout_gate_accepts_review_evidence_attestation_in_arguments() {
+        let repo = test_repo_dir();
+        let task_id = "test-task";
+        let task_dir = repo.join("artifacts/current").join(task_id);
+        std::fs::create_dir_all(&task_dir).unwrap();
+        std::fs::write(
+            task_dir.join("GOAL_STATE.json"),
+            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
+        )
+        .unwrap();
+
+        let out = crate::claude_desktop_hooks::tool_closeout_gate(
+            &json!({"review_evidence_attested": true}),
+            &repo,
+        )
+        .expect("closeout_gate");
+        assert!(
+            !out.contains("WARN: review_gate: GOAL suggests review work"),
+            "attested review should not WARN: {out}"
+        );
+        assert!(
+            out.contains("reviewer evidence attested"),
+            "expected attestation acknowledgement: {out}"
+        );
+
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
     fn closeout_gate_warns_when_evidence_is_only_self_attested() {
         let repo = test_repo_dir();
         let task_id = "test-task";

@@ -43,7 +43,6 @@
         "hooks": [
           {
             "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" Stop",
-            "loop_limit": 3,
             "statusMessage": "Enforcing Codex review gate",
             "timeout": 8,
             "type": "command"

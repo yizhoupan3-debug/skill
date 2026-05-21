@@ -15,7 +15,7 @@ just publish    # 或：ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 … update-one-sh
 just doctor
 ```
 
-## 投影同步清单（改 AGENTS / 叙事 / GSD 文案后）
+## 投影同步清单（改 AGENTS / 叙事 / My lifecycle 文案后）
 
 1. 仓库根改 `AGENTS.md` 且依赖 Codex：`cargo build --manifest-path scripts/router-rs/Cargo.toml` + `router-rs framework sync-entrypoints --repo-root "$SKILL_FRAMEWORK_ROOT"`（或 `codex sync --repo-root "$SKILL_FRAMEWORK_ROOT"`）。
 2. Cursor 用户级 framework：`router-rs framework host-integration install --to cursor --scope user --framework-root "$SKILL_FRAMEWORK_ROOT" --project-root "$SKILL_FRAMEWORK_ROOT"`.
@@ -25,8 +25,8 @@ just doctor
 ## 默认工作流（全宿主）
 
 - **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；`lifecycle_profile: my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge。
-- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish` + `framework host-integration install --to cursor --scope user`；**重启 Cursor**。GSD 整树已删除；CI 占位 `skills/legacy-gsd-ci-stub/SKILL.md`，消除无前缀残留如 `/discuss-phase`、`/plan-phase`、`/execute-phase`、`/verify-work`、`/ship`、`/new-project`。
-- **legacy-gsd（冷表）**：`/gsd-*` 六段命令仅在 `skills/SKILL_MANIFEST.json`（`legacy-gsd`）保留，供框架 CI / 回归；**不要**作为个人日常入口。
+- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish` + `framework host-integration install --to cursor --scope user`；**重启 Cursor**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**；无前缀残留（`/discuss-phase` 等）亦不可用。
+- **legacy-gsd / `/gsd-*`**：**已删除**（非冷表、非 CI stub）；hook 与 registry **不再识别**。个人入口仅 My 四命令（下表）。
 - `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
 
 | 退役（个人） | 替代 |
@@ -142,7 +142,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | 变更 | 说明 |
 |------|------|
 | `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`registry_loader.rs`](scripts/router-rs/src/registry_loader.rs)（**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
-| 宿主投影 GSD/review 文案 | [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)；`host-integration install` 读取；勿在 `host_integration.rs` 硬编码 |
+| 宿主投影 My/review 文案 | [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)；`host-integration install` 读取；勿在 `host_integration.rs` 硬编码 |
 | `generated-artifacts-status` | **`framework doctor`** / `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍要求全量 **drift-gate** `ok: true` |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |
 | active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时 stdio/任务视图可能拒载错误 focus；用 `framework task-state-resolve` 或修正 `active_task.json`（**无** hook `GOAL_CONTINUE`） |
@@ -157,6 +157,6 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | `docs/plans/*.md`（除 [`docs/plans/README.md`](docs/plans/README.md)） | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
 | `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
 | `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
-| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/legacy-gsd-ci-stub/`](skills/legacy-gsd-ci-stub/)（CI only）+ `/implementx` |
+| `skills/autopilot/`、`skills/_archived/autopilot/`、`skills/legacy-gsd-ci-stub/` | `/implementx` + My 四命令 |
 
 勿在 issue/评论中链接已删路径；契约以 [`docs/README.md`](docs/README.md) 索引为准。

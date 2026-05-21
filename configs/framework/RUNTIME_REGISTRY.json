@@ -76,6 +76,11 @@
   "review_gate": {
     "spawn_first_enabled": true,
     "spawn_first_nudge": "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+    "spawn_first_nudge_by_host": {
+      "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "codex-cli": "配对审稿（Codex）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "claude-code": "配对审稿（Claude Code）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md"
+    },
     "deep_gate_lanes": [
       "general-purpose",
       "generalpurpose",
@@ -164,102 +169,6 @@
         "claude-desktop": "/verifyx"
       }
     },
-    "gsd": {
-      "canonical_owner": "legacy-gsd",
-      "surface_publish": false,
-      "legacy": true,
-      "skill_path": "skills/legacy-gsd-ci-stub/SKILL.md",
-      "official_workflow": {
-        "phases": [
-          "exploration",
-          "discussion",
-          "planning",
-          "execution",
-          "verification",
-          "delivery"
-        ]
-      },
-      "implementation_bar": [
-        "adversarial-first",
-        "evidence-driven-verification",
-        "one-breath-wave-execution",
-        "multi-agent-with-lightweight-main-thread"
-      ],
-      "host_entrypoints": {
-        "codex-cli": "/gsd",
-        "cursor": "/gsd",
-        "claude-code": "/gsd",
-        "claude-desktop": "/gsd"
-      },
-      "entrypoint_modes": {
-        "new-project": {
-          "codex-cli": "/gsd-new-project",
-          "cursor": "/gsd-new-project",
-          "claude-code": "/gsd-new-project",
-          "claude-desktop": "/gsd-new-project"
-        },
-        "discuss": {
-          "codex-cli": "/gsd-discuss-phase",
-          "cursor": "/gsd-discuss-phase",
-          "claude-code": "/gsd-discuss-phase",
-          "claude-desktop": "/gsd-discuss-phase"
-        },
-        "plan": {
-          "codex-cli": "/gsd-plan-phase",
-          "cursor": "/gsd-plan-phase",
-          "claude-code": "/gsd-plan-phase",
-          "claude-desktop": "/gsd-plan-phase"
-        },
-        "execute": {
-          "codex-cli": "/gsd-execute-phase",
-          "cursor": "/gsd-execute-phase",
-          "claude-code": "/gsd-execute-phase",
-          "claude-desktop": "/gsd-execute-phase"
-        },
-        "verify": {
-          "codex-cli": "/gsd-verify-work",
-          "cursor": "/gsd-verify-work",
-          "claude-code": "/gsd-verify-work",
-          "claude-desktop": "/gsd-verify-work"
-        },
-        "ship": {
-          "codex-cli": "/gsd-ship",
-          "cursor": "/gsd-ship",
-          "claude-code": "/gsd-ship",
-          "claude-desktop": "/gsd-ship"
-        }
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/gsd",
-          "/gsd-new-project",
-          "/gsd-discuss-phase",
-          "/gsd-plan-phase",
-          "/gsd-execute-phase",
-          "/gsd-verify-work",
-          "/gsd-ship"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "lineage": {
-        "source": "repo-native",
-        "description": "GSD lifecycle commands for exploration through ship with adversarial review."
-      },
-      "reroute_when_ambiguous": "deepinterview",
-      "reroute_when_root_cause_unknown": "deepinterview",
-      "goal_persistence": {
-        "stdio_op": "framework_goal_drive",
-        "artifact": "artifacts/current/<task_id>/GOAL_STATE.json",
-        "execution_entrypoints": [
-          "/gsd-execute-phase",
-          "/gsd-verify-work",
-          "/gsd-ship"
-        ],
-        "continuation_hook_leader": "framework_goal_drive stdio + manual boards",
-        "rationale": "Legacy GSD alias; continuity exit same as My. Macro goal via framework_goal_drive stdio and artifacts/current/<task_id>/GOAL_STATE.json only."
-      }
-    },
     "team": {
       "canonical_owner": "agent-swarm-orchestration",
       "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
@@ -302,7 +211,7 @@
       "local_adaptations": [
         "store interview progress in continuity artifacts and task-local bootstrap outputs",
         "use live repo evidence first for brownfield clarification before asking the user",
-        "handoff into GSD execute-phase (`/gsd-execute-phase`) and rust-session-supervisor after clarity is sufficient"
+        "handoff into My implement (`/implementx`) via `framework_goal_drive` after clarity is sufficient"
       ],
       "review_lanes": [
         "deepinterview",
@@ -519,8 +428,7 @@
         "workspace_bootstrap",
         "interactive_agent_chat",
         "host_resume_entrypoint",
-        "framework_alias_entrypoints",
-        "post_edit_format_hooks"
+        "framework_alias_entrypoints"
       ]
     },
     "claude-code": {

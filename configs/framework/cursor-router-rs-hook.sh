@@ -30,16 +30,16 @@ emit_fail_closed_json() {
   ev="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
   case "$ev" in
     beforesubmitprompt)
-      printf '%s\n' "{\"continue\":false,\"user_message\":\"$FAIL_MSG\"}"
+      printf '%s\n' "{\"continue\":false,\"followup_message\":\"$FAIL_MSG\",\"user_message\":\"$FAIL_MSG\"}"
       ;;
     subagentstart)
-      printf '%s\n' "{\"permission\":\"deny\",\"user_message\":\"$FAIL_MSG\"}"
+      printf '%s\n' "{\"permission\":\"deny\",\"followup_message\":\"$FAIL_MSG\",\"user_message\":\"$FAIL_MSG\"}"
       ;;
     stop|posttooluse|subagentstop)
-      printf '%s\n' '{"continue":false,"user_message":"'"$FAIL_MSG"'"}'
+      printf '%s\n' "{\"continue\":false,\"followup_message\":\"'"$FAIL_MSG"'\",\"user_message\":\"'"$FAIL_MSG"'\"}"
       ;;
     *)
-      printf '%s\n' "{\"permission\":\"deny\",\"user_message\":\"$FAIL_MSG\"}"
+      printf '%s\n' "{\"permission\":\"deny\",\"followup_message\":\"$FAIL_MSG\",\"user_message\":\"$FAIL_MSG\"}"
       ;;
   esac
 }

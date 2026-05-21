@@ -27,6 +27,6 @@
 - 默认 goal-style：plan → implement → verify → repair → closeout（纯 review 除外）。
 - `/implementx`：goal 契约 + `GOAL_STATE.json` + 一口气跑完 `WAVE_STATE`；续跑仅 `framework_goal_drive` stdio + `artifacts/current/<task_id>/` 手动画板（**无** Stop/SessionStart 的 `GOAL_CONTINUE` / digest hook 注入）。Codex 见 [`docs/hosts/codex-cli.md`](../hosts/codex-cli.md)。
 
-## Review 与 GSD 同轮混写（Cursor）
+## Review 与 My implement 同轮混写（Cursor）
 
 `beforeSubmit`：`review_arms_for_gate = review && !goal_drive_entrypoint`。同条消息里深度 review + `/implementx` 时本回合**不**新武装 review；「先审再 execute」须**拆两轮**。见 [`framework_operator_primer.md`](../framework_operator_primer.md)。

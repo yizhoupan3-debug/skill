@@ -1,4 +1,4 @@
-//! Framework command alias envelopes (`/gsd-execute-phase`, `deepinterview`, …).
+//! Framework command alias envelopes (`/implementx`, `deepinterview`, …).
 
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -137,16 +137,6 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
 
 fn build_framework_alias_routing_hints(alias_name: &str, alias_record: &Value) -> Value {
     match alias_name {
-        "gsd" => json!({
-            "reroute_when_ambiguous": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
-            "reroute_when_root_cause_unknown": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
-            "entrypoint_modes": alias_value_at_path(alias_record, &["entrypoint_modes"])
-                .cloned()
-                .unwrap_or(Value::Null),
-            "research_contract": alias_value_at_path(alias_record, &["research_contract"])
-                .cloned()
-                .unwrap_or(Value::Null),
-        }),
         "deepinterview" => json!({
             "review_lanes": alias_record_list(alias_record, &["review_lanes"]),
         }),
@@ -288,62 +278,18 @@ fn build_framework_alias_entry_contract(
             .cloned()
             .unwrap_or(Value::Null)
     };
-    let blockers = value_string_list(continuity.get("blockers"));
     let verification_status = value_text(continuity.get("verification_status"));
     let evidence_missing = continuity
         .get("evidence_missing")
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
-    let execution_ready = alias_name == "gsd"
-        && continuity_state == "active"
-        && !task.is_empty()
-        && !next_actions.is_empty()
-        && missing_recovery_anchors.is_empty();
-    let needs_recovery =
-        alias_name == "gsd" && matches!(continuity_state.as_str(), "stale" | "inconsistent");
-    let needs_verification = alias_name == "gsd"
-        && evidence_missing
-        && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES);
-    let needs_debugging = alias_name == "gsd"
-        && !blockers.is_empty()
-        && blockers.iter().any(|item| {
-            let lowered = item.to_ascii_lowercase();
-            lowered.contains("unknown")
-                || lowered.contains("root cause")
-                || lowered.contains("根因")
-                || lowered.contains("重复")
-        });
-    let needs_clarification = alias_name == "gsd"
-        && continuity_state == "missing"
-        && task.is_empty()
-        && next_actions.is_empty();
-    let execution_readiness = if alias_name == "gsd" {
-        if needs_recovery {
-            "needs_recovery"
-        } else if needs_verification {
-            "needs_verification"
-        } else if needs_debugging {
-            "needs_debugging"
-        } else if needs_clarification {
-            "needs_clarification"
-        } else if execution_ready {
-            "ready_to_execute"
-        } else {
-            "continue_gsd_execution"
-        }
-    } else {
-        "use-alias-default"
-    };
+    let execution_readiness = "use-alias-default";
     let mut route_rules = Vec::new();
     let summary = match alias_name {
-        "gsd" => {
-            let ambiguous = alias_record_text(alias_record, &["reroute_when_ambiguous"]);
-            let root_cause = alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]);
+        "implementx" => {
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
-            route_rules.push(format!("模糊需求 -> `{ambiguous}`"));
-            route_rules.push(format!("根因未知 -> `{root_cause}`"));
-            route_rules.push(format!("其他情况 -> `{owner}`"));
+            route_rules.push(format!("主 owner -> `{owner}`"));
             if evidence_missing {
                 route_rules
                     .push("缺少验证证据 -> 先补 QA / Validation，再决定是否 closeout".to_string());
@@ -354,7 +300,7 @@ fn build_framework_alias_entry_contract(
                     missing_recovery_anchors.join(", ")
                 ));
             }
-            "进入 GSD 执行流（/gsd-execute-phase）。本仓原生执行流启动，状态、恢复和续跑都走本地 Rust/continuity。"
+            "进入 My 执行流（/implementx）。本仓原生执行流启动，状态、恢复和续跑都走本地 Rust/continuity。"
                 .to_string()
         }
         "deepinterview" => {
@@ -363,7 +309,7 @@ fn build_framework_alias_entry_contract(
             route_rules.push(format!("主 owner -> `{owner}`"));
             route_rules.push("每轮只问一个问题".to_string());
             route_rules.push("先查仓库证据，再问用户".to_string());
-            route_rules.push("清晰度过线后 handoff 到 `/gsd-execute-phase`".to_string());
+            route_rules.push("清晰度过线后 handoff 到 `/implementx`".to_string());
             if !review_lanes.is_empty() {
                 route_rules.push(format!("review lanes -> {}", review_lanes.join(", ")));
             }
@@ -450,115 +396,65 @@ fn build_framework_alias_state_machine(
             }
         })
         .unwrap_or_default();
-    let (current_state, recommended_action, resume_mode, resume_reason) = if alias_name == "gsd" {
-        match state.as_str() {
-            "active"
-                if evidence_missing
-                    && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
-            {
-                (
-                    "resume_active_needs_verification".to_string(),
-                    "verify_before_done".to_string(),
-                    "continue-current-task".to_string(),
-                    "implementation is active but verification evidence is still missing"
-                        .to_string(),
-                )
-            }
-            "active" if !missing_recovery_anchors.is_empty() => (
-                "resume_active_missing_anchors".to_string(),
-                "repair_recovery_anchors_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "active continuity is missing required recovery anchors".to_string(),
-            ),
-            "active" => (
-                "resume_active".to_string(),
-                "resume_current_task".to_string(),
+    let (current_state, recommended_action, resume_mode, resume_reason) = match state.as_str() {
+        "active"
+            if alias_name == "implementx"
+                && evidence_missing
+                && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
+        {
+            (
+                "resume_active_needs_verification".to_string(),
+                "verify_before_done".to_string(),
                 "continue-current-task".to_string(),
-                "live continuity is active".to_string(),
-            ),
-            "completed" => (
-                "resume_blocked_completed".to_string(),
-                "start_new_task".to_string(),
-                "start-new-task".to_string(),
-                "completed work should stay historical; start a new bounded task".to_string(),
-            ),
-            "stale" => (
-                "resume_requires_refresh".to_string(),
-                "refresh_continuity_then_resume".to_string(),
-                "refresh-continuity".to_string(),
-                "stale continuity cannot be resumed directly".to_string(),
-            ),
-            "inconsistent" => (
-                "resume_requires_repair".to_string(),
-                "repair_continuity_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "continuity artifacts disagree and must be repaired first".to_string(),
-            ),
-            _ => (
-                "fresh_entry".to_string(),
-                "start_execution".to_string(),
-                "fresh-start".to_string(),
-                "no active continuity is available; enter as a fresh task".to_string(),
-            ),
+                "implementation is active but verification evidence is still missing".to_string(),
+            )
         }
-    } else {
-        match state.as_str() {
-            "active" => (
-                "resume_active".to_string(),
-                if alias_name == "deepinterview" {
-                    "resume_interview".to_string()
-                } else {
-                    "resume_current_task".to_string()
-                },
-                "continue-current-task".to_string(),
-                "live continuity is active".to_string(),
-            ),
-            "completed" => (
-                "resume_blocked_completed".to_string(),
-                "start_new_task".to_string(),
-                "start-new-task".to_string(),
-                "completed work should stay historical; start a new bounded task".to_string(),
-            ),
-            "stale" => (
-                "resume_requires_refresh".to_string(),
-                "refresh_continuity_then_resume".to_string(),
-                "refresh-continuity".to_string(),
-                "stale continuity cannot be resumed directly".to_string(),
-            ),
-            "inconsistent" => (
-                "resume_requires_repair".to_string(),
-                "repair_continuity_then_resume".to_string(),
-                "repair-continuity".to_string(),
-                "continuity artifacts disagree and must be repaired first".to_string(),
-            ),
-            _ => (
-                "fresh_entry".to_string(),
-                if alias_name == "deepinterview" {
-                    "start_interview".to_string()
-                } else {
-                    "start_execution".to_string()
-                },
-                "fresh-start".to_string(),
-                "no active continuity is available; enter as a fresh task".to_string(),
-            ),
-        }
+        "active" if alias_name == "implementx" && !missing_recovery_anchors.is_empty() => (
+            "resume_active_missing_anchors".to_string(),
+            "repair_recovery_anchors_then_resume".to_string(),
+            "repair-continuity".to_string(),
+            "active continuity is missing required recovery anchors".to_string(),
+        ),
+        "active" => (
+            "resume_active".to_string(),
+            if alias_name == "deepinterview" {
+                "resume_interview".to_string()
+            } else {
+                "resume_current_task".to_string()
+            },
+            "continue-current-task".to_string(),
+            "live continuity is active".to_string(),
+        ),
+        "completed" => (
+            "resume_blocked_completed".to_string(),
+            "start_new_task".to_string(),
+            "start-new-task".to_string(),
+            "completed work should stay historical; start a new bounded task".to_string(),
+        ),
+        "stale" => (
+            "resume_requires_refresh".to_string(),
+            "refresh_continuity_then_resume".to_string(),
+            "refresh-continuity".to_string(),
+            "stale continuity cannot be resumed directly".to_string(),
+        ),
+        "inconsistent" => (
+            "resume_requires_repair".to_string(),
+            "repair_continuity_then_resume".to_string(),
+            "repair-continuity".to_string(),
+            "continuity artifacts disagree and must be repaired first".to_string(),
+        ),
+        _ => (
+            "fresh_entry".to_string(),
+            if alias_name == "deepinterview" {
+                "start_interview".to_string()
+            } else {
+                "start_execution".to_string()
+            },
+            "fresh-start".to_string(),
+            "no active continuity is available; enter as a fresh task".to_string(),
+        ),
     };
     let handoff = match alias_name {
-        "gsd" => json!({
-            "default_mode": "stay-in-gsd-execution",
-            "rules": [
-                {
-                    "when": "task is still ambiguous",
-                    "target": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
-                    "action": "handoff_for_clarification",
-                },
-                {
-                    "when": "root cause is still unknown",
-                    "target": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
-                    "action": "handoff_for_debugging",
-                }
-            ]
-        }),
         "deepinterview" => json!({
             "default_mode": "clarify-in-deepinterview",
             "rules": [
@@ -569,7 +465,7 @@ fn build_framework_alias_state_machine(
                 },
                 {
                     "when": "clarity is high enough to execute",
-                    "target": "gsd",
+                    "target": "implementx",
                     "action": "handoff_to_execution",
                 }
             ]
@@ -582,18 +478,6 @@ fn build_framework_alias_state_machine(
     let mut resume = Map::new();
     resume.insert("allowed".to_string(), Value::Bool(can_resume));
     resume.insert("mode".to_string(), Value::String(resume_mode.clone()));
-    if alias_name == "gsd" {
-        resume.insert(
-            "missing_recovery_anchors".to_string(),
-            Value::Array(
-                missing_recovery_anchors
-                    .iter()
-                    .cloned()
-                    .map(Value::String)
-                    .collect(),
-            ),
-        );
-    }
     resume.insert("reason".to_string(), Value::String(resume_reason.clone()));
     if !compact {
         resume.insert(

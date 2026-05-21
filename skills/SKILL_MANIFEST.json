@@ -1698,35 +1698,6 @@
         "cursor"
       ],
       "cold"
-    ],
-    [
-      "legacy-gsd",
-      "L0",
-      "owner",
-      "none",
-      "P1",
-      "Legacy GSD six-command lifecycle (framework CI / regression only). Personal default is my-* — see skills/discussx/SKILL.md. Triggers: /gsd, /gsd-new-project, /gsd-plan-phase, /gsd-execute-phase, /gsd-verify-work, /gsd-discuss-phase, /gsd-ship.",
-      "n/a",
-      [
-        "/gsd",
-        "/gsd-new-project",
-        "/gsd-plan-phase",
-        "/gsd-execute-phase",
-        "/gsd-verify-work",
-        "/gsd-discuss-phase",
-        "/gsd-ship"
-      ],
-      "project",
-      3,
-      "skills/legacy-gsd-ci-stub/SKILL.md",
-      [
-        "claude-code",
-        "claude-desktop",
-        "codex-app",
-        "codex-cli",
-        "cursor"
-      ],
-      "skill"
     ]
   ]
 }

@@ -1113,6 +1113,86 @@ fn runtime_registry_review_gate_spawn_first_fields() {
     let nudge = rg["spawn_first_nudge"].as_str().expect("spawn_first_nudge str");
     assert!(nudge.contains("fork_context"));
     assert!(nudge.contains("配对审稿") || nudge.contains("spawn"));
+    assert!(
+        !nudge.contains("claude_reviewer_lanes"),
+        "global spawn_first_nudge must not mention Claude-only lanes"
+    );
+    let by_host = rg["spawn_first_nudge_by_host"]
+        .as_object()
+        .expect("spawn_first_nudge_by_host object");
+    for host in ["cursor", "codex-cli"] {
+        let line = by_host[host].as_str().expect("host nudge str");
+        assert!(
+            !line.contains("claude_reviewer_lanes"),
+            "{host} spawn nudge must not mention Claude-only lanes"
+        );
+    }
+    let claude_line = by_host["claude-code"].as_str().expect("claude-code nudge");
+    assert!(
+        claude_line.contains("review") || claude_line.contains("Claude"),
+        "claude-code nudge should mention Claude reviewer lanes"
+    );
+}
+
+#[test]
+fn codex_cli_docs_document_review_gate_env_and_session() {
+    let root = project_root();
+    let codex_doc = read_text(&root.join("docs/hosts/codex-cli.md"));
+    assert!(
+        codex_doc.contains("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+        "codex-cli must document Codex fork infer env"
+    );
+    assert!(
+        codex_doc.contains("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY"),
+        "codex-cli must document stable session key"
+    );
+    let operator = read_text(&root.join("docs/references/AGENTS_OPERATOR_SURFACE.md"));
+    assert!(
+        operator.contains("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+        "operator surface must list Codex review gate disable"
+    );
+    let primer = read_text(&root.join("docs/framework_operator_primer.md"));
+    assert!(
+        primer.contains("codex_review_independent_fork")
+            && primer.contains("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+        "D9 must document Codex fork helper + env, not Cursor env for Codex"
+    );
+    assert!(
+        !primer.contains("Codex PostTool/Stop 独立审稿证据走 `cursor_review_independent_fork`"),
+        "D9 must not claim Codex reads Cursor fork env"
+    );
+    assert!(
+        primer.contains("ROUTER_RS_CODEX_HOOK_STATE_SALT"),
+        "D9 primer must document Codex hook-state salt"
+    );
+    assert!(
+        codex_doc.contains("ROUTER_RS_CODEX_HOOK_STATE_SALT"),
+        "codex-cli must document hook-state salt"
+    );
+    assert!(
+        codex_doc.contains("re-arm") || codex_doc.contains("rearm") || codex_doc.contains("重新武装"),
+        "codex-cli must document UPS re-arm behavior"
+    );
+}
+
+#[test]
+fn gsd_slash_commands_removed_from_runtime_and_hooks() {
+    let root = project_root();
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let registry_text = read_text(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    assert!(
+        !registry.get("framework_commands").and_then(|v| v.get("gsd")).is_some(),
+        "framework_commands.gsd must stay removed"
+    );
+    assert!(
+        !registry_text.contains("/gsd-"),
+        "RUNTIME_REGISTRY must not reference /gsd- commands"
+    );
+    let hook_common = read_text(&root.join("scripts/router-rs/src/hook_common.rs"));
+    assert!(
+        !hook_common.contains("/gsd-"),
+        "hook_common must not recognize /gsd- entrypoints"
+    );
 }
 
 #[test]
@@ -1861,7 +1941,7 @@ fn framework_aliases_reference_manifest_skills() {
 /// `research_contract` is narrative for hosts/docs; router-rs Execute embeds deep prompt text in
 /// `runtime_ops.inc` instead of parsing this JSON at runtime.
 #[test]
-fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
+fn my_goal_persistence_contract_documents_execution_zone() {
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     let gp = registry
         .get("framework_commands")
@@ -1888,14 +1968,13 @@ fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
         .is_none());
 }
 
-/// Pre-execution stdio must not show `drive_until_done: true` (agents copy-paste from SKILL.md).
+/// Legacy GSD framework_command removed; My implementx is the published execution surface.
 #[test]
-fn gsd_framework_command_not_published_to_skill_surface() {
+fn my_framework_commands_exclude_legacy_gsd() {
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
-    let gsd = &registry["framework_commands"]["gsd"];
-    assert_eq!(
-        gsd.get("surface_publish").and_then(|v| v.as_bool()),
-        Some(false)
+    assert!(
+        registry["framework_commands"].get("gsd").is_none(),
+        "framework_commands.gsd must be removed"
     );
     let my_impl = &registry["framework_commands"]["implementx"];
     assert!(
@@ -1905,23 +1984,19 @@ fn gsd_framework_command_not_published_to_skill_surface() {
 }
 
 #[test]
-fn gsd_new_project_skill_forbids_pre_exec_drive_until_done_true() {
-    let text = read_text(&project_root().join("skills/legacy-gsd-ci-stub/SKILL.md"));
+fn discussx_skill_forbids_pre_exec_drive_until_done_true() {
+    let text = read_text(&project_root().join("skills/discussx/SKILL.md"));
     assert!(
         !text.contains("\"drive_until_done\":true"),
-        "new-project must not embed drive_until_done:true in stdio example"
+        "discussx must not embed drive_until_done:true in stdio example"
     );
     assert!(
         !text.contains("\"drive_until_done\": true"),
-        "new-project must not embed drive_until_done: true in stdio example"
+        "discussx must not embed drive_until_done: true in stdio example"
     );
     assert!(
-        text.contains("drive_until_done\":false") || text.contains("drive_until_done\": false"),
-        "new-project stdio must show drive_until_done:false"
-    );
-    assert!(
-        text.contains("status: planned") || text.contains("\"status\":\"planned\""),
-        "new-project stdio must show status planned"
+        text.contains("drive_until_done: false") || text.contains("drive_until_done\": false"),
+        "discussx must show drive_until_done:false"
     );
 }
 
@@ -1950,10 +2025,9 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
         my_impl["skill_path"].as_str().expect("implementx skill_path"),
         "skills/implementx/SKILL.md"
     );
-    let legacy = &registry["framework_commands"]["gsd"];
-    assert_eq!(
-        legacy["skill_path"].as_str().expect("legacy gsd skill_path"),
-        "skills/legacy-gsd-ci-stub/SKILL.md"
+    assert!(
+        registry["framework_commands"].get("gsd").is_none(),
+        "framework_commands.gsd must be removed"
     );
     assert!(
         registry["framework_commands"].get("autopilot").is_none(),
