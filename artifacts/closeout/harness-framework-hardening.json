@@ -3,7 +3,7 @@
   "task_id": "harness-framework-hardening",
   "started_at": "2026-05-20T10:00:00Z",
   "ended_at": "2026-05-20T19:00:00Z",
-  "summary": "Harness control-plane hardening + Hook Repair v2: single continuation source (hydration/checkpoint/GSD), per-host GSD narrative v2, compact review gate tighten, closeout task_id from resolve_task_view; verify PASS (822 tests).",
+  "summary": "Harness control-plane hardening + Hook Repair v2: per-host narrative v2, compact review gate tighten, closeout task_id from resolve_task_view; targeted verify PASS (822 tests).",
   "verification_status": "passed",
   "changed_files": [
     "scripts/router-rs/src/autopilot_goal.rs",
@@ -19,7 +19,7 @@
     {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml -- --test-threads=1", "exit_code": 0},
     {"command": "framework maint update-one-shot --framework-root", "exit_code": 0},
     {"command": "framework doctor --repo-root", "exit_code": 0},
-    {"command": "gsd-verify-work", "exit_code": 0}
+    {"command": "legacy gsd-verify-work (archived skill)", "exit_code": 0}
   ],
   "artifacts_checked": [
     {"path": "artifacts/current/harness-framework-hardening/VERIFICATION_REPORT.md", "exists": true},
@@ -34,5 +34,5 @@
     "RFV 3-round ship loop not run this session (verify PASS + unit tests as substitute)",
     "ADR-003 text superseded by v2 focus-continuation when active not driving"
   ],
-  "notes": "closeout_gate equivalent: closeout evaluate + GOAL completed + SESSION_SUMMARY + EVIDENCE_INDEX gsd-ship row"
+  "notes": "Archival: hydration/checkpoint/GSD continuation model superseded by continuity-evidence-subtraction-2026-05 and continuity-hook-removal-2026-05; daily default is /discussx→/planx→/implementx→/verifyx. closeout evaluate + GOAL completed + SESSION_SUMMARY + EVIDENCE_INDEX at task time."
 }

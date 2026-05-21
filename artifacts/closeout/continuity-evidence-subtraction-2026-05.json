@@ -3,7 +3,7 @@
   "task_id": "continuity-evidence-subtraction-2026-05",
   "started_at": "2026-05-21T08:00:00+08:00",
   "ended_at": "2026-05-21T19:00:00+08:00",
-  "summary": "Continuity/evidence harness subtraction: router-rs defaults off (PostTool/Stop checkpoint/depth hint/journal/TASK_STATE auto); ADR-001 promote; SessionStart goal_only; solo profile + docs; verify PASS after ROADMAP/schema cleanup.",
+  "summary": "Continuity/evidence harness subtraction (2026-05): router-rs defaults off for PostTool auto-write, Stop checkpoint, depth hint, journal, TASK_STATE auto; ADR-001 promote; SessionStart goal_only; solo profile + docs; targeted verify PASS at task time.",
   "verification_status": "passed",
   "changed_files": [
     "scripts/router-rs/src/router_env_flags.rs",
@@ -32,5 +32,5 @@
     "RFV 3-round ship loop and isolated worktree merge not run (solo on main)",
     "P1-5 MigrateCurrentArtifactClutter one-shot CLI deferred (doctor advisory only)"
   ],
-  "notes": "gsd-ship: closeout_gate equivalent; framework_autopilot_goal complete; implementation ready for commit"
+  "notes": "closeout evaluate + goal complete at task time. Continuation is manual via artifacts/current/<task_id>/ — no Stop checkpoint or GOAL_CONTINUE hook injection."
 }

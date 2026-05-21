@@ -65,7 +65,7 @@ Desktop 用户须在 MCP 侧 **手动** `record_evidence` / `session_checkpoint`
 
 ## 默认工作流（两者）
 
-**GSD** 为默认生命周期（`/gsd-*` 已在 registry 注册）；hook 能力差异 **不改变** 默认命令顺序。
+与文首 **默认 lifecycle** 一致：`/discussx` → `/planx` → `/implementx` → `/verifyx`。`/gsd-*` 仅 legacy 冷表；hook 能力差异 **不改变** 该命令顺序。
 
 ## 自检（Code）
 

@@ -200,7 +200,6 @@ pub struct CursorContinuityFrame {
 
 /// beforeSubmit / Stop 入口：一次构建指针视图 + hydration 目标对。
 pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFrame {
-    let _ = maybe_promote_focus_to_active_pointer(repo_root);
     let pointers = read_task_pointers(repo_root);
     let pointer_view = resolve_task_view_with_pointers(repo_root, None, pointers.clone());
     let hydration_goal = crate::autopilot_goal::read_goal_state_for_hydration_from_pointer_ids(

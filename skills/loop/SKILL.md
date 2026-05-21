@@ -62,7 +62,7 @@ LOOP_ROUND_COMPLETE
 
 ## Hook 注入内容（历史摘要）
 
-历史行为：在预算内于用户提交时追加 `additional_context`（tier + 对抗强度要求），**不披露**总轮数。当前树默认 **无** 该注入；需要同等能力时请用 **RFV 账本 + 续跑块**（`RFV_LOOP_CONTINUE`）或恢复 router 中的 adversarial-loop 实现。
+历史行为：在预算内于用户提交时追加 `additional_context`（tier + 对抗强度要求），**不披露**总轮数。当前树默认 **无** 该注入；需要同等能力时请用 **RFV 账本**（`artifacts/current/<task_id>/RFV_LOOP_STATE.json`）+ **`framework_rfv_loop` stdio** 或聊天续跑（**无** `RFV_LOOP_CONTINUE` hook 注入，2026-05 已拔除）。
 
 ## 验证
 

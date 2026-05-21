@@ -13,7 +13,7 @@ Cross-process hook subprocesses serialize continuity writes with **POSIX `flock`
 ## Rules
 
 1. **Allowed nesting**: L1 → L2 → L3 (repo flock first, then narrower locks).
-2. **Forbidden**: Hold **L3** while acquiring **L1** (e.g. Stop checkpoint under session hook lock).
+2. **Forbidden**: Hold **L3** while acquiring **L1** (e.g. Stop finalization that touches task-ledger under session hook lock).
 3. **PostTool evidence** (`append_evidence_index_merged_row`): **L2 only** — must not call `apply_task_ledger_mutation` (deadlock avoidance with concurrent ledger writers).
 4. **PostTool handler order**: `record_tool_call` (L1) → session lock (L3) → release L3 → evidence (L2) → optional `cargo check` (no lock).
 
@@ -41,7 +41,7 @@ Do not share one lock file between Cursor and Codex. See `task_write_lock.rs` an
 
 | 行为 | 实现锚点 | 单测锚点 |
 |------|----------|----------|
-| Stop 先释放 L3 再跑 continuity | `release_lock_then_finalize_stop` | `stop_releases_l3_before_continuity_checkpoint` |
+| Stop 先释放 L3 再 finalize（**无**自动 checkpoint，2026-05） | `release_lock_then_finalize_stop` | `stop_releases_l3_before_continuity_checkpoint` |
 | Stop soft-nag 仍含 `need=` | `handle_stop` soft 分支 | `review_gate_soft_nag_includes_need_segment`（另见 `review_gate_stop_softens_after_max_nudges_env_cap`） |
 | SessionEnd 持锁删 state | `handle_session_end` | `session_end_acquires_lock_before_state_delete` |
 | `ROUTER_RS_CURSOR_CARGO_CHECK_SYNC=0` | `maybe_run_cursor_rust_lint` 早退 | `post_tool_skips_cargo_check_when_env_off` |

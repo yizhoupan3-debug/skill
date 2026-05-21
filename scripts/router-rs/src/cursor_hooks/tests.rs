@@ -5217,41 +5217,29 @@ fn session_start_operator_inject_off_skips_additional_context() {
 fn session_start_additional_context_observes_router_rs_sessionstart_max_env() {
     let _inject_on = OperatorInjectEnabledGuard::new();
     let repo = fresh_repo();
-    fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir ac");
-    fs::write(
-        repo.join("artifacts/current/SESSION_SUMMARY.md"),
-        "SESSIONSTART_BUDGET_LINE\n".repeat(400),
-    )
-    .expect("summary");
     let payload = json!({
         "session_id": "ss-budget",
         "cwd": repo.display().to_string()
     });
     let prev = env::var_os("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS");
-    let prev_mode = env::var_os("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE");
     env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS", "420");
-    env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE", "summary");
     let out = dispatch_cursor_hook_event(&repo, "sessionStart", &payload);
     match prev {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS", v),
         None => env::remove_var("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS"),
     }
-    match prev_mode {
-        Some(v) => env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE", v),
-        None => env::remove_var("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE"),
-    }
     let ctx = out["additional_context"]
         .as_str()
         .expect("additional_context");
+    assert!(
+        ctx.starts_with("Repo: "),
+        "SessionStart must be Repo-only (continuity digest removed): {ctx:?}"
+    );
     assert!(
         ctx.len() <= 420,
         "len={}, ctx.preview={:?}",
         ctx.len(),
         &ctx[..ctx.len().min(80)]
-    );
-    assert!(
-        ctx.ends_with(super::CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX),
-        "expected UTF-8 byte cap truncation with fixed suffix: {ctx:?}"
     );
 }
 
@@ -5278,7 +5266,7 @@ fn session_start_resets_session_call_tracker() {
 }
 
 #[test]
-fn session_start_prepends_active_focus_goal_mismatch_hint() {
+fn session_start_repo_only_no_continuity_hints() {
     let _inject_on = OperatorInjectEnabledGuard::new();
     let _rg = ReviewGateDisableEnvClearGuard::new();
     let repo = fresh_repo();
@@ -5326,12 +5314,12 @@ fn session_start_prepends_active_focus_goal_mismatch_hint() {
         .as_str()
         .expect("additional_context");
     assert!(
-        ctx.starts_with("连续性提示:"),
-        "hint must lead sections for SessionStart prefix truncation: {ctx:?}"
+        ctx.starts_with("Repo: "),
+        "SessionStart must not inject continuity hints: {ctx:?}"
     );
     assert!(
-        ctx.contains(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH),
-        "full zh hint constant must appear: {ctx:?}"
+        !ctx.contains(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH),
+        "continuity hint must not appear: {ctx:?}"
     );
 }
 

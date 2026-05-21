@@ -3,7 +3,7 @@
   "task_id": "post-migration-tech-debt",
   "started_at": "2026-05-20T00:40:00+08:00",
   "ended_at": "2026-05-20T02:50:00+08:00",
-  "summary": "Post-migration tech debt closed: GSD pre-exec stdio fix, tri-host integration verified, doc truth/host cross-links, policy + hook tests; verify-work and ship PASS.",
+  "summary": "Post-migration tech debt closed: archived GSD pre-exec stdio fix, tri-host integration verified, doc truth/host cross-links, policy + hook tests; targeted verify PASS at task time.",
   "verification_status": "passed",
   "changed_files": [
     "skills/_archived/gsd-lifecycle/new-project/SKILL.md",
@@ -34,5 +34,5 @@
     "main ahead origin/main 9 commits — push recommended",
     "Uncommitted hook-perf-deadlock router-rs changes remain in working tree (orthogonal)"
   ],
-  "notes": "closeout_gate equivalent: closeout evaluate + framework_autopilot_goal complete + SHIPPING_STATE pass"
+  "notes": "Archival: GSD pre-exec and verify-work references are historical; personal default is now /discussx→/planx→/implementx→/verifyx; GSD tree archived. closeout evaluate + goal complete + shipping checklist pass at task time."
 }

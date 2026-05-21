@@ -3393,48 +3393,11 @@ fn compact_cursor_sessionstart_context(parts: Vec<String>) -> Option<String> {
 
 fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     maybe_init_session_terminal_ledger(repo_root, event);
-    // Align with Codex `handle_codex_session_start`: advisory continuity text must honor
-    // `ROUTER_RS_OPERATOR_INJECT` kill-switch (terminal baseline init above is not advisory).
     if !crate::router_env_flags::router_rs_operator_inject_globally_enabled() {
         return json!({ "additional_context": "" });
     }
-    let mut sections = Vec::new();
-    let task_view = crate::task_state::resolve_task_view(repo_root, None);
-    if crate::task_state::task_view_has_active_goal_focus_mismatch_note(&task_view) {
-        sections.push(crate::task_state::CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH.to_string());
-    }
-    if crate::task_state::task_view_has_active_goal_not_driving_focus_note(&task_view) {
-        sections.push(
-            crate::task_state::CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH.to_string(),
-        );
-    }
-    let mode = crate::router_env_flags::router_rs_cursor_sessionstart_summary_mode();
-    if matches!(
-        mode,
-        crate::router_env_flags::CursorSessionStartSummaryMode::Summary
-            | crate::router_env_flags::CursorSessionStartSummaryMode::GoalOnly
-    ) {
-        let session_summary_path = repo_root.join("artifacts/current/SESSION_SUMMARY.md");
-        let summary_budget =
-            crate::router_env_flags::router_rs_cursor_sessionstart_context_max_bytes()
-                .saturating_add(512);
-        if matches!(
-            mode,
-            crate::router_env_flags::CursorSessionStartSummaryMode::Summary
-        ) {
-            if let Some(raw) =
-                crate::read_bounded::read_utf8_file_prefix(&session_summary_path, summary_budget)
-            {
-                let block = raw.trim();
-                if !block.is_empty() {
-                    sections.push(block.to_string());
-                }
-            }
-        }
-    }
-    let _ = (&mode, &task_view);
-    sections.push(format!("Repo: {}", repo_root.display()));
-    let ctx = compact_cursor_sessionstart_context(sections).unwrap_or_default();
+    let ctx = format!("Repo: {}", repo_root.display());
+    let ctx = compact_cursor_sessionstart_context(vec![ctx]).unwrap_or_default();
     if let Err(e) = crate::session_call_tracker::init_tracker(repo_root) {
         eprintln!("[router-rs warning] init_tracker failed: {e}");
     }

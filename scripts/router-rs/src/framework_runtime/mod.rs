@@ -1060,7 +1060,7 @@ fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView)
 /// 在宿主 `PostToolUse` 中追加一条「终端类验证命令」到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
 ///
 /// `kind` 用于区分来源（如 `codex_post_tool_verification` / `cursor_post_tool_verification`）。
-/// 仅在连续性已初始化且命令启发式匹配验证类时写入。`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0` 关闭。
+/// 仅在连续性已初始化且命令启发式匹配验证类时写入。默认关；`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` 开启。
 pub fn try_append_post_tool_shell_evidence(
     repo_root: &Path,
     event: &Value,

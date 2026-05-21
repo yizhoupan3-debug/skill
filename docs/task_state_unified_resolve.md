@@ -52,7 +52,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-a
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-ledger-dispatch --input-json '{"schema_version":"router-rs-task-ledger-command-envelope-v1","kind":"autopilot_goal","payload":{"repo_root":"'"$PWD"'","operation":"status"}}'
 ```
 
-输出 JSON，便于与 `framework snapshot` / SessionStart digest / hook 日志对照。
+输出 JSON，便于与 `framework snapshot` / hook 日志对照。
 
 ---
 
@@ -77,4 +77,4 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-ledger-
 - GOAL 续跑判定复用：`autopilot_goal::goal_state_requests_continuation`
 - RFV 活跃判定：`rfv_loop_state.loop_status == active`（大小写不敏感）
 
-维护：若修改 `task_id` 解析或 `control_mode` 分类规则，**同时**更新本文 §2–§3、`task_state.rs` 与 [`runtime_view.rs`](../scripts/router-rs/src/framework_runtime/runtime_view.rs) 中单测。`framework snapshot` / continuity digest 使用的 `active_task_id` 与 `resolve_task_view` 已对齐（`override > active > focus > supervisor`）。
+维护：若修改 `task_id` 解析或 `control_mode` 分类规则，**同时**更新本文 §2–§3、`task_state.rs` 与 [`runtime_view.rs`](../scripts/router-rs/src/framework_runtime/runtime_view.rs) 中单测。`framework snapshot` 使用的 `active_task_id` 与 `resolve_task_view` 已对齐（`override > active > focus`）。

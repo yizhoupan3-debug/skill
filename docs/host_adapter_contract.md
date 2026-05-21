@@ -160,7 +160,7 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| MCP 工具工作流 | Desktop MCP stdio | `router-rs` MCP server（见项目 `.claude/CLAUDE.md`） | `artifacts/current/` 与 Code 共用；`goal_state_manage` / `closeout_gate` / `framework_digest` |
+| MCP 工具工作流 | Desktop MCP stdio | `router-rs` MCP server（见项目 `.claude/CLAUDE.md`） | `artifacts/current/` 与 Code 共用；`goal_state_manage` / `closeout_gate` / `framework_snapshot` |
 | 投影安装 | 一次性接入 | `router-rs framework host-integration install --to claude-desktop` | 项目 `.claude/CLAUDE.md`（短指针）、`.mcp.json`；**不**写入 `.claude/settings.json` hook 四事件 |
 | 操作手册 | — | — | [`docs/hosts/claude-desktop.md`](hosts/claude-desktop.md) |
 

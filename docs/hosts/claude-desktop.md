@@ -20,7 +20,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
 
 ## 推荐 MCP 工作流（降 token）
 
-1. 会话开头：`framework_digest`（一次）
+1. 会话开头：`framework_snapshot`（一次；轻量指针，非 continuity digest）
 2. 路由：`skill_route`
 3. 任务：`goal_state_manage operation=start`
 4. 验证后：`record_evidence`

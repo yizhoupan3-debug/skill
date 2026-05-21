@@ -33,8 +33,7 @@
   "blockers": [],
   "risks": [
     "Git working tree dirty (22 files); operator commit required",
-    "supervisor_state.json may still point at prior task until Stop checkpoint",
     "schema-drift baseline for this task_id optional defer"
   ],
-  "notes": "gsd-ship: verify PASS; Gate A pending user commit"
+  "notes": "Archival: Stop checkpoint / GOAL_CONTINUE hook resume removed in later 2026-05 continuity tasks; gate hardening and host docs remain authoritative. verifyx-equivalent PASS at task time; Gate A pending user commit."
 }

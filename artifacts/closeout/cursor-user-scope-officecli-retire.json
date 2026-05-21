@@ -3,8 +3,8 @@
   "task_id": "cursor-user-scope-officecli-retire",
   "started_at": "2026-05-19T08:00:00Z",
   "ended_at": "2026-05-20T00:30:00Z",
-  "summary": "Host-native adaptation shipped: Cursor framework user-only, officecli removed, GSD default on all closed hosts, pre-exec hook split, docs/hosts operator pages. UAT functional PASS; verify-work noted partial before final commits.",
-  "verification_status": "passed",
+  "summary": "Host-native adaptation shipped: Cursor framework user-only, officecli removed, pre-exec hook split, docs/hosts operator pages. UAT functional PASS; verification PARTIAL — final commit/push left to operator.",
+  "verification_status": "partial",
   "changed_files": [
     "configs/framework/RUNTIME_REGISTRY.json",
     "scripts/router-rs/src/hook_common.rs",
@@ -31,8 +31,8 @@
   "blockers": [],
   "risks": [
     "P1-4 hook event audit table not completed",
-    "schema-drift CLI subcommand not in router-rs",
+    "schema-drift CLI subcommand not in router-rs at task time",
     "Ship RFV 3-round adversarial skipped for doc-only delta; code paths covered by policy_contracts"
   ],
-  "notes": "Closeout pointer tracked in git; follow-up migration-residual sweep (manifest/docs/framework.mdc) completed in a later session."
+  "notes": "Archival: GSD-as-default narrative in early docs superseded by discussx/planx/implementx/verifyx (my-lifecycle-light-2026-05); host integration patterns retained. Closeout pointer tracked in git; follow-up migration-residual sweep (manifest/docs/framework.mdc) completed in a later session."
 }

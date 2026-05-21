@@ -20,7 +20,7 @@
 | Subagent / GSD 执行区 / 拒因 token | [Execution Ladder](../AGENTS.md#execution-ladder) |
 | Review 默认与 skill 路由 | 同上节 + [Skill Routing](../AGENTS.md#skill-routing) |
 | Closeout / 证据 | [Closeout](../AGENTS.md#closeout) |
-| 连续性工件目录 | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## Continuity artifacts（跨会话接力）`（避免各渲染器中文锚点不一致） |
+| 连续性手动画板 | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## Continuity artifacts（手动画板 only）`（避免各渲染器中文锚点不一致）；续跑仅 `framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` |
 | 改哪里才生效（权威分层表） | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## 权威分层（改哪里才生效）`（同上） |
 
 ## `ROUTER_RS_*` 与 hook 行为
@@ -38,7 +38,7 @@
 以下条目属于 **下一阶段 execution** 或独立 RFC；默认不改动 steady-state 行为。
 
 1. **`REVIEW_GATE` 默认路径简化**：将 multiset / `cycle_key` 核销收敛为更弱的默认证据规则，可显著减代码与测试面；**风险**：并行同 lane、残缺宿主 payload 时误放行或误拦；**前置**：宿主 stdin 契约稳定版本化 + 迁移期双轨测试。
-2. **账本合并（`EVIDENCE_INDEX` / `TRACE_EVENTS` / `STEP_LEDGER`）**：单一 append 流可降低锁与排障成本；**风险**：破坏现有工具与 `framework snapshot` 消费方；**前置**：读模型迁移、`TASK_STATE` 聚合语义冻结。草案：[`docs/rfc/continuity-append-stream-merge.md`](rfc/continuity-append-stream-merge.md)。
+2. **账本合并（`EVIDENCE_INDEX` / `TRACE_EVENTS` / `STEP_LEDGER`）**：单一 append 流可降低锁与排障成本；**风险**：破坏现有工具与 `framework snapshot` 消费方；**前置**：读模型迁移、`TASK_STATE` 聚合语义冻结；需独立 RFC（2026-05 已删旧草案）。
 3. **多宿主 hook 生成式减少分叉**：把 lane/`fork_context` 归一等逻辑更多 codegen 到单源；**风险**：生成器 bug 影响三宿主；**前置**：`host_integration` 契约测试覆盖阈值明确。
 4. **`framework_profile` 大表与日常 solo 解耦**：发布面字段与自用 hook 最小面拆分；**风险**：profile 校验与安装路径分裂；**前置**：明确「发行 profile」与「repo dev profile」两个 ID。
 5. **`ROUTER_RS_*` 命名统一（`_CHARS` → 字节）**：减少误读；**风险**：外部脚本依赖旧名；**前置**：别名读取窗口 + 弃用日志（若保留兼容期）。

@@ -531,11 +531,24 @@ fn defaulted_payload_text(payload: &Value, key: &str, fallback: &str) -> String 
 
 fn resolve_session_task_id(payload: &Value, task: &str) -> String {
     let direct = safe_slug(&value_text(payload.get("task_id")));
-    if direct.is_empty() {
+    let candidate = if direct.is_empty() {
         build_task_id(task, None)
     } else {
         direct
+    };
+    if is_unsafe_task_id_slug(&candidate) {
+        build_task_id(task, None)
+    } else {
+        candidate
     }
+}
+
+fn is_unsafe_task_id_slug(slug: &str) -> bool {
+    slug.is_empty()
+        || slug.contains("..")
+        || slug.contains('/')
+        || slug.contains('\\')
+        || slug.starts_with('.')
 }
 
 fn render_session_summary(task: &str, phase: &str, status: &str, summary: &str) -> String {

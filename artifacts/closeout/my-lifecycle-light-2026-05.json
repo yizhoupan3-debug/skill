@@ -3,13 +3,13 @@
   "task_id": "my-lifecycle-light-2026-05",
   "started_at": "2026-05-21T12:00:00+08:00",
   "ended_at": "2026-05-21T18:00:00+08:00",
-  "summary": "Personal my-* lifecycle (四宿主): hot routing, legacy-gsd cold, my-light profile disables REVIEW_GATE hard block + spawn-first nudge, my-implement one-breath all waves; verify PARTIAL on 7 pre-existing/flaky test failures.",
+  "summary": "Personal discussx/planx/implementx/verifyx lifecycle (四宿主): hot routing, legacy-gsd cold, my-light profile disables REVIEW_GATE hard block + spawn-first nudge, implementx one-breath all waves; verifyx PARTIAL on 7 pre-existing/flaky test failures.",
   "verification_status": "partial",
   "changed_files": [
-    "skills/my-discuss/SKILL.md",
-    "skills/my-plan/SKILL.md",
-    "skills/my-implement/SKILL.md",
-    "skills/my-verify/SKILL.md",
+    "skills/discussx/SKILL.md",
+    "skills/planx/SKILL.md",
+    "skills/implementx/SKILL.md",
+    "skills/verifyx/SKILL.md",
     "skills/SKILL_ROUTING_RUNTIME.json",
     "skills/SKILL_MANIFEST.json",
     "configs/framework/RUNTIME_REGISTRY.json",
@@ -29,7 +29,7 @@
     {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 101},
     {"command": "cargo test --test policy_contracts", "exit_code": 101},
     {"command": "bash scripts/ci/check-cursor-hooks-parity.sh", "exit_code": 0},
-    {"command": "rg hot path gsd/my routing", "exit_code": 0},
+    {"command": "rg hot path gsd/discussx routing", "exit_code": 0},
     {"command": "framework doctor --repo-root", "exit_code": 0}
   ],
   "artifacts_checked": [
@@ -44,8 +44,7 @@
   "risks": [
     "844/850 router-rs tests pass; 6 evidence-path failures pre-existing",
     "94/95 policy_contracts pass; 1 ledger test flaky",
-    "Continuity supervisor/pointer split (doctor inconsistent) — reconcile via Stop or session-artifact-write",
     "Host projection install not run in verify turn"
   ],
-  "notes": "Operator happy path: /my-discuss → /my-plan → /my-implement (all waves one breath) → /my-verify"
+  "notes": "Operator happy path: /discussx → /planx → /implementx (all waves one breath) → /verifyx. GSD tree archived under skills/_archived/gsd-lifecycle/ — not a daily default."
 }

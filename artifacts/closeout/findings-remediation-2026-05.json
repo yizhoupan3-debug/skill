@@ -3,7 +3,7 @@
   "task_id": "findings-remediation-2026-05",
   "started_at": "2026-05-20T12:00:00Z",
   "ended_at": "2026-05-20T21:05:00+08:00",
-  "summary": "router-rs hook/continuity remediation + findings plan (docs/router/policy): ADR-001..007 implemented, tests green, verify-work PASS, snapshot continuity completed.",
+  "summary": "router-rs hook/continuity remediation + findings plan (docs/router/policy): ADR-001..007 implemented, tests green, targeted verify PASS; framework snapshot captured.",
   "verification_status": "passed",
   "changed_files": [
     "scripts/router-rs/src/framework_runtime/session_artifacts.rs",
@@ -32,5 +32,5 @@
     "RFV 3-round ship loop and worktree merge not run this session",
     "schema-drift baseline CLI not implemented"
   ],
-  "notes": "gsd-ship: closeout evaluate + goal complete; merge to main is operator follow-up"
+  "notes": "Archival: automatic continuity snapshot/checkpoint defaults later subtracted (continuity-evidence-subtraction-2026-05) and hook injection removed (continuity-hook-removal-2026-05); ADR implementations retained. closeout evaluate + goal complete at task time; merge to main is operator follow-up."
 }

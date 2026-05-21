@@ -10,7 +10,7 @@
 | Cursor framework 叙事 | `router-rs framework host-integration install --to cursor --scope user` → `~/.cursor/rules/framework.mdc` |
 | skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
-| 宿主投影 GSD/review 文案 | `configs/framework/host_projection_narrative.json`（`host-integration install` 读取） |
+| 宿主投影 lifecycle/review 文案 | `configs/framework/host_projection_narrative.json`（`host-integration install` 读取） |
 | hook 行为 | 各宿主 `hooks.json` + `router-rs` |
 
 **文档地图**：`docs/harness_architecture.md` · `docs/host_adapter_contract.md` · `docs/rust_contracts.md` · `docs/README.md`

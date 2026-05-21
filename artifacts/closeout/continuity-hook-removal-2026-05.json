@@ -3,10 +3,10 @@
   "task_id": "continuity-hook-removal-2026-05",
   "started_at": "2026-05-21T08:00:00+08:00",
   "ended_at": "2026-05-21T18:41:30+08:00",
-  "summary": "Continuity hook removal (2026-05): deleted continuity_digest and Stop/SessionStart GOAL_CONTINUE/RFV_LOOP_CONTINUE injection; docs/refs aligned to stdio + artifacts/current manual boards; REVIEW_GATE/closeout/routing retained.",
+  "summary": "Continuity hook removal (2026-05): removed continuity_digest module and Stop/SessionStart GOAL_CONTINUE/RFV_LOOP_CONTINUE hook injection; docs/refs aligned to stdio goal drive + artifacts/current manual boards; REVIEW_GATE, closeout, and routing retained.",
   "verification_status": "passed",
   "changed_files": [
-    "scripts/router-rs/src/framework_runtime/continuity_digest.rs",
+    "scripts/router-rs/src/framework_runtime/continuity_digest.rs (deleted)",
     "scripts/router-rs/src/cursor_hooks/handlers.rs",
     "scripts/router-rs/src/codex_hooks.rs",
     "scripts/router-rs/src/rfv_loop.rs",
@@ -33,5 +33,5 @@
     "Full workspace cargo test not run (targeted suites only)",
     "schema-drift baseline absent for task_id"
   ],
-  "notes": "verifyx PASS; GOAL_STATE completed; hook injection paths removed in Rust"
+  "notes": "verifyx PASS; GOAL_STATE completed; hook injection paths removed in Rust. Continuation is manual via artifacts/current/<task_id>/ and framework_goal_drive stdio — no hook auto-resume."
 }

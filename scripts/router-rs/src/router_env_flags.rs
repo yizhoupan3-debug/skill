@@ -26,12 +26,9 @@ use std::env;
 const ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT_ENV: &str = "ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT";
 const ROUTER_RS_DEPTH_SCORE_MODE_ENV: &str = "ROUTER_RS_DEPTH_SCORE_MODE";
 const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
-const ROUTER_RS_CONTINUITY_STOP_CHECKPOINT_ENV: &str = "ROUTER_RS_CONTINUITY_STOP_CHECKPOINT";
 const ROUTER_RS_DEPTH_COMPLIANCE_HINT_ENV: &str = "ROUTER_RS_DEPTH_COMPLIANCE_HINT";
 const ROUTER_RS_CONTINUITY_WRITE_JOURNAL_ENV: &str = "ROUTER_RS_CONTINUITY_WRITE_JOURNAL";
 const ROUTER_RS_TASK_STATE_AGGREGATE_AUTO_ENV: &str = "ROUTER_RS_TASK_STATE_AGGREGATE_AUTO";
-const ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE_ENV: &str =
-    "ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE";
 const ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV: &str =
     "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
 const ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP_ENV: &str =
@@ -220,11 +217,6 @@ pub fn router_rs_continuity_post_tool_evidence_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV)
 }
 
-/// Codex/Cursor Stop automatic continuity checkpoint. **Default off**; explicit env enables.
-pub fn router_rs_continuity_stop_checkpoint_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_CONTINUITY_STOP_CHECKPOINT_ENV)
-}
-
 /// `深度信号:` line in continuity digest. Default off unless strict depth mode or `ROUTER_RS_DEPTH_COMPLIANCE_HINT=1`.
 pub fn router_rs_depth_compliance_hint_enabled() -> bool {
     router_rs_depth_score_mode_strict()
@@ -239,25 +231,6 @@ pub fn router_rs_continuity_write_journal_enabled() -> bool {
 /// Auto-refresh `TASK_STATE.json` after ledger mutations. Default off; CLI `task-state-aggregate-sync` always runs.
 pub fn router_rs_task_state_aggregate_auto_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_TASK_STATE_AGGREGATE_AUTO_ENV)
-}
-
-/// Cursor SessionStart advisory surface: `goal_only` (default) | `digest` | `summary`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CursorSessionStartSummaryMode {
-    GoalOnly,
-    Digest,
-    Summary,
-}
-
-pub fn router_rs_cursor_sessionstart_summary_mode() -> CursorSessionStartSummaryMode {
-    match env::var(ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE_ENV) {
-        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
-            "digest" => CursorSessionStartSummaryMode::Digest,
-            "summary" => CursorSessionStartSummaryMode::Summary,
-            _ => CursorSessionStartSummaryMode::GoalOnly,
-        },
-        Err(_) => CursorSessionStartSummaryMode::GoalOnly,
-    }
 }
 
 /// Cursor hook：出站 JSON 中 `additional_context` 总站 **UTF-8 字节** 上限。
@@ -433,7 +406,6 @@ mod tests {
         let _g = lock_env();
         let keys = [
             "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE",
-            "ROUTER_RS_CONTINUITY_STOP_CHECKPOINT",
             "ROUTER_RS_DEPTH_COMPLIANCE_HINT",
             "ROUTER_RS_CONTINUITY_WRITE_JOURNAL",
             "ROUTER_RS_TASK_STATE_AGGREGATE_AUTO",
@@ -446,7 +418,6 @@ mod tests {
             env::remove_var(key);
         }
         assert!(!super::router_rs_continuity_post_tool_evidence_enabled());
-        assert!(!super::router_rs_continuity_stop_checkpoint_enabled());
         assert!(!super::router_rs_depth_compliance_hint_enabled());
         assert!(!super::router_rs_continuity_write_journal_enabled());
         assert!(!super::router_rs_task_state_aggregate_auto_enabled());
@@ -457,27 +428,6 @@ mod tests {
                 Some(v) => env::set_var(key, v),
                 None => env::remove_var(key),
             }
-        }
-    }
-
-    #[test]
-    fn sessionstart_summary_mode_defaults_goal_only() {
-        let _g = lock_env();
-        let key = "ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE";
-        let prev = env::var(key).ok();
-        env::remove_var(key);
-        assert_eq!(
-            super::router_rs_cursor_sessionstart_summary_mode(),
-            super::CursorSessionStartSummaryMode::GoalOnly
-        );
-        env::set_var(key, "digest");
-        assert_eq!(
-            super::router_rs_cursor_sessionstart_summary_mode(),
-            super::CursorSessionStartSummaryMode::Digest
-        );
-        match prev {
-            Some(v) => env::set_var(key, v),
-            None => env::remove_var(key),
         }
     }
 

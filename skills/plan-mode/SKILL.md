@@ -80,7 +80,7 @@ metadata:
 | **末条收口** | 调研合成 + 工作区无意外改动（`git status --porcelain` 为空，或输出仅含 `overview` 已声明允许回写的路径，须与窄例外单句一致） | 计划 vs 实际 + **Git 状态证据**（如 `git status --short --branch`、`git diff --stat`；宿主支持时可用 [`/gitx plan`](../gitx/SKILL.md)） |
 | **下游** | 完成后**另开** `plan_profile: execution`（或缺省）写实现 todos | 通常即为终态；如再分阶段，可拆为多份顺序 `execution` 计划 |
 
-**与 GSD 执行区衔接**：`plan_profile: research` **不得**与宏任务写入在同一回合、同一武装语义下混用；调研收口后**另开** execution（或缺省）计划，或用户显式 `/gsd-execute-phase` 启动 goal。execution 的 `Done when` / Horizon 可与 `GOAL_STATE.json` 契约对齐。宿主同轮混写行为见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。
+**与 lifecycle 执行区衔接**：`plan_profile: research` **不得**与宏任务写入在同一回合、同一武装语义下混用；调研收口后**另开** execution（或缺省）计划，或用户显式 `/implementx` 启动 goal。execution 的 `Done when` / Horizon 可与 `GOAL_STATE.json` 契约对齐。宿主同轮混写行为见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。
 
 ### `research`：overview 必填声明模板
 
@@ -208,7 +208,7 @@ Cursor 官方说明：计划默认保存在**用户目录**，需 **「Save to w
 
 - **分层与 hook**：控制面、证据与续跑注入边界以 `docs/harness_architecture.md` 为准；不要在 skill 正文发明第二套账本格式。
 - **计划落盘**：权威草稿/链接建议 `.cursor/plans/`；仓库协作或审计需要的摘要可复制或同步到 `docs/plans/`，与仓库内其它计划文档同一叙事。
-- **Plan Build 与 goal**：Cursor Plan Build **不**自动武装 GSD goal 门控；连续执行仅由用户显式 **`/gsd-execute-phase`**（及 verify/ship）启动。Pre-goal 提示见 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`**（命名保留；语义绑定 GSD execute）。
+- **Plan Build 与 goal**：Cursor Plan Build **不**自动武装 lifecycle goal 门控；连续执行仅由用户显式 **`/implementx`**（及 `/verifyx`）启动。Pre-goal 提示见 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`**（命名保留；语义绑定 `/implementx`）。
 
 ## Todo 可执行性（四元组、对齐与依赖）
 

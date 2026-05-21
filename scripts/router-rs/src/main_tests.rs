@@ -6375,6 +6375,6 @@ fn hook_status_constants_are_stable() {
     );
     assert_eq!(
         hook_status::REVIEW_GATE_ENFORCING,
-        "Writing Codex continuity checkpoint"
+        "Enforcing Codex review gate"
     );
 }

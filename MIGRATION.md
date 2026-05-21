@@ -157,6 +157,6 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | `docs/plans/*.md`（除 [`docs/plans/README.md`](docs/plans/README.md)） | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
 | `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
 | `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
-| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/_archived/gsd-lifecycle/`](skills/_archived/gsd-lifecycle/) + `/gsd-execute-phase` |
+| `skills/autopilot/`、`skills/_archived/autopilot/` | [`skills/_archived/gsd-lifecycle/`](skills/_archived/gsd-lifecycle/) + `/implementx` |
 
 勿在 issue/评论中链接已删路径；契约以 [`docs/README.md`](docs/README.md) 索引为准。

@@ -70,7 +70,7 @@ mod integration_test_prelude;
 pub mod hook_status {
     pub const REVIEW_GATE_CHECKING: &str = "Loading Codex turn context";
     pub const REVIEW_GATE_UPDATING: &str = "Recording Codex tool evidence";
-    pub const REVIEW_GATE_ENFORCING: &str = "Writing Codex continuity checkpoint";
+    pub const REVIEW_GATE_ENFORCING: &str = "Enforcing Codex review gate";
 }
 
 pub(crate) use cli::route_task_with_manifest_fallback;

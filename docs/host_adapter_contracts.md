@@ -1,68 +1,8 @@
-# Codex Host Projection Contract
+# Host adapter contracts (redirect)
 
-> **Redirect**：多宿主 harness 接入、hook 矩阵与工程清单的**主入口**是 [`host_adapter_contract.md`](host_adapter_contract.md)。本文仅描述 **Codex CLI 投影**边界；勿与主契约混读。
+> **Canonical entry**: [`host_adapter_contract.md`](host_adapter_contract.md) — multi-host harness install, hook matrix, and engineering checklist.
 
-**中文 harness 接入（多宿主安装、hook 矩阵、工程清单）**：[`host_adapter_contract.md`](host_adapter_contract.md) — 接新宿主、Cursor/Claude 差异时读该文件。
+This file is a **redirect stub** only. Do not add host policy here.
 
-Documentation index: [`README.md`](README.md) (this directory).
-
-## Goal
-
-Codex CLI consumes one Rust-owned framework core. Host integration is a
-projection/install layer only; routing ownership, continuity state, and
-artifact contracts remain framework-root-native and Rust-generated.
-
-- `codex-cli` reads `AGENTS.md`.
-
-## Default Artifact
-
-- `framework_core`: shared Rust-owned framework contract.
-- `host_projections.codex-cli`: Codex projection metadata.
-- `codex_profile`: native Codex projection output for Codex config paths,
-  context files, MCP config, resume hints, and framework alias entrypoints.
-
-## Default Surface Boundary
-
-- The default artifact surface is the shared core plus the explicit Codex host
-  projection.
-- Host-facing entrypoints are generated projections for discovery and policy
-  bootstrap only; `skills/` remains the only live skill source.
-- Generated entrypoints and settings are not hand-authored truth. Regenerate
-  them through the Rust host-entrypoint sync or `framework host-integration`
-  paths.
-- Removal and cleanup may delete only files with framework ownership metadata
-  or settings keys recorded in the projection manifest. User-authored command
-  files and unrelated settings keys must be skipped.
-- Compatibility aliases are machine-reported through
-  `framework host-integration compatibility-aliases`; each retained alias must
-  name its primary command, owner, reason, kept policy, removal condition, and
-  `independent_behavior: false`.
-- Checked-in generated artifacts are declared by
-  `configs/framework/GENERATED_ARTIFACTS.json` and can be inspected through
-  `framework host-integration generated-artifacts-status`. **Metadata-only**
-  (`--skip-generator-run`) is the default for `framework doctor` and fast CI
-  probes. **Drift-gate** regenerates declared artifacts in an isolated temporary
-  root, validates schema `framework-generated-artifacts-manifest-v1`, compares
-  manifest-declared outputs (`byte-for-byte` or `normalized-text`), and reports
-  undeclared generated framework artifacts across reverse-reference surfaces or
-  forbidden expanded host-private paths. Maintainer flows (`update-one-shot`) must
-  pass drift-gate before merge.
-- Host framework entrypoint GSD/review narrative paragraphs are declared in
-  `configs/framework/host_projection_narrative.json` and rendered by
-  `framework host-integration install`; do not fork duplicate prose in Rust.
-
-## Hard Rules
-
-1. `framework_profile` stays pinned to the shared Rust core; host-private fields
-   stay under explicit host projection payloads.
-2. `workspace_bootstrap.resources` is the only default skill resource source.
-3. `router-rs framework host-integration status/install/remove` is the primary
-   host-neutral command path; `codex host-integration` is a compatibility alias
-   only.
-4. New default artifacts must stay within the shared core plus explicit
-   `codex-cli` projection boundary.
-5. Non-explicit host projections, generic adapters, CLI-common adapters, parity
-   snapshots, Python runtime fallbacks, Node runtime fallbacks, and plugin
-   runtime truth are regressions.
-6. Generated host projections must not copy full skill bodies, routing tables,
-   continuity state, or registry payloads into host-private directories.
+- Rust implementation narrative: [`rust_contracts.md`](rust_contracts.md)
+- Doc index: [`README.md`](README.md)

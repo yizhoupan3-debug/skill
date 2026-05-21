@@ -14,7 +14,6 @@ pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-autopilot-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
 const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
 /// Legacy paragraph prefixes stripped when refreshing hook output (scrub stale injected text).
-pub const GOAL_CONTINUE_PARAGRAPH_PREFIX: &str = "GOAL_CONTINUE";
 pub const LEGACY_AUTOPILOT_DRIVE_PARAGRAPH_PREFIX: &str = "AUTOPILOT_DRIVE";
 
 /// Invalidate route records cache after GOAL_STATE mutations (best-effort).
