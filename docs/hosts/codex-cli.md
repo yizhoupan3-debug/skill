@@ -1,58 +1,78 @@
 # Codex CLI 宿主操作手册
 
-**权威能力矩阵**：`configs/framework/RUNTIME_REGISTRY.json` → `host_projections.codex-cli`  
-**接入契约**：`docs/host_adapter_contract.md`  
-**官方文档**：[Hooks](https://developers.openai.com/codex/hooks) · [AGENTS.md](https://developers.openai.com/codex/guides/agents-md)
+**闭集 id**：`codex-cli` · **传输**：codex-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.codex-cli`
 
-## 安装 scope
+## 代理身份与画风 (Agent Identity & Style)
 
-| 组件 | Scope | 路径 |
-|------|-------|------|
-| `AGENTS.md`、`.codex/hooks.json` | **Project**（trusted project） | 仓库根 |
-| Framework prompt 快照 | **Project** | `.codex/prompts/framework.md` |
-| 全局 skill surface | **User** | `$CODEX_HOME/skills` → 仓库 `artifacts/codex-skill-surface/skills` |
+- **核心身份**：主代理定位为 **MIT 博士级科研与顶级工程专家**，具备端到端、高难度的科研与复杂系统工程执行能力。
+- **回复画风**：严格保持 **专业、严谨、客观、谦逊** 的学术与工程专家风格，避免夸大、浮躁或过度礼貌。
+- **回复语言**：默认面向用户的回复必须使用 **简体中文**（代码、路径、命令或第三方原文除外）。仅当用户在当轮中明确要求使用英文时，方可切换至英文。
 
-## 何时跑 `codex sync` / `sync-entrypoints`
+## 能力边界与 Harness 入口 (Capabilities & Harness Entrypoints)
 
-**要跑**：改了 `router-rs` 嵌入的 AGENTS 文本、Codex hook 模板、或需重材料化 `.codex/*` 入口。  
-**不要跑**：仅为刷新 Cursor user `framework.mdc`（用 `host-integration install --to cursor --scope user`）。  
-**不要**把 sync 当作「三端强行对齐」的默认日常步骤。
+在 Codex CLI 环境下，Harness 和任务管理的核心入口与工作区定义如下：
 
-```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
-# 或
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
-```
+- **Harness 核心入口**：
+  - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
+  - **任务状态治理**：使用 `goal_state_manage` 进行状态的启动与收尾管理。
+- **工作区及状态产物**：
+  - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
+  - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
+- **门控与审稿机制**：
+  - 在 `UserPromptSubmit` 时通过 `spawn_first_nudge` 触发审稿引导；深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](file:///Users/joe/Developer/skill/skills/code-review-deep/SKILL.md)。
+  - 通过 `Stop` 钩子处理 `REVIEW_GATE` 阶段判断与收尾验证。
 
-磁盘上 **已存在** 的 `AGENTS.md` 不应被旧二进制 bootstrap 覆盖（官方近源优先）。
+## 安装与文件分布 (Installation & Scope)
 
-## 默认工作流
+- **文件 Scope 配置**：
+  - **`AGENTS.md`、`.codex/hooks.json`**：**Project**，位于仓库根目录。
+  - **Framework prompt 快照**：**Project**，路径为 `.codex/prompts/framework.md`。
+  - **全局 skill surface**：**User**，路径为 `$CODEX_HOME/skills`，指向仓库中 `artifacts/codex-skill-surface/skills`。
+- **同步与安装命令**：
+  当修改了 `router-rs` 嵌入的 AGENTS 文本、Codex hook 模板或需重新材料化时，运行以下同步命令：
+  ```bash
+  cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
+  ```
 
-与全宿主相同：**My lifecycle** `/discussx` → `/planx` → `/implementx`（一口气跑完 `WAVE_STATE`）→ `/verifyx`；执行区 `/implementx` 启动 goal-style 连续执行（`/autopilot` 已退役；`/gsd-*` 已移除，见 `MIGRATION.md`）。
+## Skill 存放与路由 (Skills & Routing)
 
-**续跑（2026-05）**：Codex/Cursor hooks **均不**注入 `GOAL_CONTINUE`、continuity digest 或 Stop checkpoint（代码 no-op；`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1` 亦不写盘）。连续执行依赖：`/implementx` 一口气、`framework_goal_drive` stdio、以及 `artifacts/current/<task_id>/` 手动画板。
+- **Skill 存放位置**：所有自定义及框架内置 Skill 均统一放置在项目根目录的 `skills/` 文件夹中。
+- **Skill 路由机制**：
+  - **热路由入口**：`skills/SKILL_ROUTING_RUNTIME.json` 为当前的运行期热入口，只读命中项的 `skill_path`。
+  - **冷表清单**：`skills/SKILL_MANIFEST.json` 作为全部已注册 Skill 的完整冷表清单。
+  - **查找原则**：严禁通过模糊匹配或文件名盲目猜测路径，也不得无故预读整个 `skills/` 目录，必须通过路由表进行精确匹配。
 
-## Hook 能力
+## 默认生命周期 (Lifecycle)
 
-- 多层 hook **全部加载、并发**；项目 hook 需 trusted project
-- PostTool（opt-in）→ `EVIDENCE_INDEX`；SessionStart → 轻量指针/Repo（**无** continuity digest）；Stop → `CODEX_REVIEW_GATE` / closeout（**无** `GOAL_CONTINUE` / checkpoint 写盘）
-- REVIEW_GATE 可数 lane：`review_gate.deep_gate_lanes`（与 Cursor 相同；**不含** Claude 的 `review`/`reviewer` 等）。单次 PostToolUse 证据 + Stop compact（wave-2 部分移植），无 multiset
-- **Spawn-first**：`UserPromptSubmit` 注入 registry `spawn_first_nudge_by_host.codex-cli`（回退全局 `spawn_first_nudge`）；窄范围（`review ./file`、`small_task`）不武装 gate；`my-light` 关闭硬拦与 spawn-first，且 UPS/PostTool **清** hook-state
-- **Stop 清门（wave-2 部分）**：PostTool 深度 lane 可数证据 → `phase≥2`；Stop 上 compact findings **仅在有可数证据时** 升 `phase=3` 清门；`rg_clear` / bounded reject token 亦可清门。`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 全局关闭硬门控
-- **Session 键（默认严格）**：`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` 默认开启；生产环境勿关。hook JSON 须含 `session_id` / `conversation_id` / `thread_id`（或 env `CODEX_SESSION_ID`）。关闭严格模式后 fallback 按 **repo + cwd + payload session**（可选 `ROUTER_RS_CODEX_HOOK_STATE_SALT`）；`cwd` 空会打 stderr 警告
-- **UPS re-arm**：同 session 再次提交 review 武装 prompt 时重置 `independent_review_subagent_seen` / `phase` / `subagent_start_count`（非 override）；PostTool 深度证据仅在 review 武装或 review prompt 下才设 `review_required`
-- **fork 缺省推断**：`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 默认开启；深度 lane 省略 `fork_context` 时 PostTool 可计证据。关闭后须显式 JSON `fork_context: false`。Stop compact 须 `[P0]`/`[P1]`/`[P2]`/`Caveat:` 实质性行（见 `skills/code-review-deep/SKILL.md`）
-- **PostTool 白名单**：仅 `task` / `functions.spawn_agent` / `functions.subagent` 等（见 `codex_hooks.rs`）；未知 `tool_name` 不计证据
-- **Stop 与 Cursor 不对齐（刻意）**：Codex **无** subagentStart/Stop multiset、Cursor phase 软 nag cap、`loop_limit`、afterAgentResponse hook
+任务流严格遵循以下标准的渐进生命周期：
 
-## 独有
+$$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \longrightarrow \text{Verify}$$
 
-- **`session_supervisor`** / tmux 长会话（见 `rust-session-supervisor` skill）
-- `$CODEX_HOME/skills` 为 **30 pinned** surface（`skills/SKILL_ROUTING_RUNTIME.json` `hot_skill_count`），≠ 全量 on-disk skills（`manifest_skill_count`）。仓库内投影目录 `artifacts/codex-skill-surface/skills` 须 `just publish` 或 `framework maint update-one-shot` 生成，克隆后可能为空。
+1. **`/discussx`**：初始需求对齐与技术预研阶段。
+2. **`/planx`**：规划阶段，生成或更新 `implementation_plan.md`，明确 minimal delta 与 verification plan，并报用户审批。
+3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
+   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`。在此配置下将关闭 `REVIEW_GATE` 硬拦截和 spawn-first nudge，采用 findings-only 机制，保持极佳的轻量化流畅体验。
+4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
 
-## 自检
+## Python 环境治理 (Python Environment)
 
-```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-codex-hooks
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate
-```
+在 macOS 开发环境下，Python 的运行环境与依赖治理需严格遵循以下准则：
+
+- **环境锁存**：使用专属的 **`$python-env-management`** 进行环境的长效治理，默认运行环境为 **Python 3.12**。
+- **工具链选择**：推行 **uv-only** 机制。每个仓库 of 依赖及环境状态必须通过 `uv.lock` 进行绝对锁定，禁止使用传统的 `pip`。
+- **Skill 支撑**：当环境异常或缺少 `uv` 时，调用 `skills/uv/SKILL.md` 自动进行安装与 PATH 补全。
+
+## 独有长效会话机制 (Session Supervisor)
+
+- **`session_supervisor`**：集成 tmux 长会话管理，具体详见 `rust-session-supervisor` 专项 skill。
+
+## 自检诊断与验证 (Self-Test)
+
+- **自检 Codex Hooks**：
+  ```bash
+  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-codex-hooks
+  ```
+- **验证 Skill 路由及状态**：
+  ```bash
+  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate
+  ```

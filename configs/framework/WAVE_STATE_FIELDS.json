@@ -1,0 +1,25 @@
+{
+  "schema_version": "my-wave-state-v1",
+  "authority": "skills/planx",
+  "description": "Task-local WAVE_STATE.json topology contract for My lifecycle /planx → /implementx. Written under artifacts/current/<task_id>/; consumed by skills/implementx/SKILL.md.",
+  "required_top_level_fields": [
+    "schema_version",
+    "global_status",
+    "current_wave",
+    "waves"
+  ],
+  "wave_fields": {
+    "wave_key": { "type": "string", "non_empty": true },
+    "depends_on": { "type": "array", "items": "wave_key", "description": "Prior wave_key values (serial edge)" },
+    "parallel_group": { "type": "string", "description": "Lanes in the same wave that may run together" },
+    "execution_mode": { "type": "string", "enum": ["parallel", "serial"] },
+    "status": { "type": "string", "description": "Wave lifecycle status (e.g. pending, in_progress, completed)" },
+    "lanes": {
+      "type": "array",
+      "items": {
+        "lane_id": { "type": "string" },
+        "scope_paths": { "type": "array", "items": "string", "description": "Disjoint write scopes per lane" }
+      }
+    }
+  }
+}

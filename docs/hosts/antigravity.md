@@ -1,16 +1,16 @@
-# Claude Code 宿主操作手册
+# Antigravity 宿主操作手册
 
-**闭集 id**：`claude-code` · **传输**：claude-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.claude-code`
+**闭集 id**：`antigravity` · **传输**：gemini-agent · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.antigravity`
 
 ## 代理身份与画风 (Agent Identity & Style)
 
-- **核心身份**：主代理定位为 **MIT 博士级科研与顶级工程专家**，具备端到端、高难度的科研与复杂 system 工程执行能力。
+- **核心身份**：主代理定位为 **MIT 博士级科研与顶级工程专家**，具备端到端、高难度的科研与复杂系统工程执行能力。
 - **回复画风**：严格保持 **专业、严谨、客观、谦逊** 的学术与工程专家风格，避免夸大、浮躁或过度礼貌。
 - **回复语言**：默认面向用户的回复必须使用 **简体中文**（代码、路径、命令或第三方原文除外）。仅当用户在当轮中明确要求使用英文时，方可切换至英文。
 
 ## 能力边界与 Harness 入口 (Capabilities & Harness Entrypoints)
 
-在 Claude Code 环境下，Harness 和任务管理的核心入口与工作区定义如下：
+Antigravity 作为交互式智能体，其 Harness 和任务管理的核心入口与工作区定义如下：
 
 - **Harness 核心入口**：
   - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
@@ -19,21 +19,8 @@
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
-  - 拥有 `PreToolUse`、`UserPromptSubmit`、`PostToolUse` 和 `Stop` 等 4 个核心集成钩子事件。
+  - 无 CLI 级硬拦截或 PreToolUse 物理阻断，安全防线与质量把控主要依赖 **Planning Mode + 规划物化 Artifacts（如 `task.md`、`implementation_plan.md`）**。
   - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](file:///Users/joe/Developer/skill/skills/code-review-deep/SKILL.md)。
-
-## 安装与文件分布 (Installation & Scope)
-
-- **文件 Scope 配置**：
-  - **Hooks 行为配置文件**：路径为 `.claude/settings.json`，绑定脚本为 [`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh)。
-  - **项目环境变量文件**：路径为 [`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)。
-  - **Framework 规则文件**：路径为 `.claude/rules/framework.md`。
-  - **项目叙事文件**：路径为 `.claude/CLAUDE.md`。
-- **环境安装命令**：
-  ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
-    framework host-integration install --to claude --scope project
-  ```
 
 ## Skill 存放与路由 (Skills & Routing)
 
@@ -60,26 +47,18 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 在 macOS 开发环境下，Python 的运行环境与依赖治理需严格遵循以下准则：
 
 - **环境锁存**：使用专属的 **`$python-env-management`** 进行环境的长效治理，默认运行环境为 **Python 3.12**。
-- **工具链选择**：推行 **uv-only** 机制。每个仓库 of 依赖及环境状态必须通过 `uv.lock` 进行绝对锁定，禁止使用传统的 `pip`。
+- **工具链选择**：推行 **uv-only** 机制。每个仓库的依赖及环境状态必须通过 `uv.lock` 进行绝对锁定，禁止使用传统的 `pip`。
 - **Skill 支撑**：当环境异常或缺少 `uv` 时，调用 `skills/uv/SKILL.md` 自动进行安装与 PATH 补全。
 
-## 进程管理与性能调优 (Process & Memory)
+## 安装与状态自检 (Installation & Diagnostic)
 
-1. **构建 Release 二进制**（优化体积与响应速度）：
-   ```bash
-   CARGO_TARGET_DIR="$PWD/scripts/router-rs/target" \
-     cargo build --release --manifest-path scripts/router-rs/Cargo.toml
-   ```
-2. **Launcher 探测顺序**：
-   仓库 `scripts/router-rs/target/release` $\rightarrow$ `/tmp/skill-cargo-target/release` $\rightarrow$ debug $\rightarrow$ `PATH`。
-
-## 自检诊断与验证 (Self-Test)
-
-- **运行 Claude Hook 集成测试**：
+- **环境注入与安装**：
   ```bash
-  cargo test --manifest-path scripts/router-rs/Cargo.toml claude
+  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+    framework host-integration install --to antigravity --repo-root "$PWD"
   ```
-- **自检主机投影状态**：
+- **宿主状态自检**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
+  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+    framework host-integration status
   ```
