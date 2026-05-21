@@ -5,7 +5,7 @@ gate (schema + evaluator rules).
 
 Documentation index (steady-state vs archive): [`README.md`](README.md).
 
-**Skill / AGENTS norms:** Skills that own task execution (`/gsd-execute-phase`, team,
+**Skill / AGENTS norms:** Skills that own task execution (`/implementx`, `/verifyx`, team,
 gh-fix-ci, systematic-debugging, deepinterview, slides,
 paper-*) should emit a closeout record consistent with this contract before
 claiming completion — this stays true even when router-rs is in the **local soft**

@@ -58,11 +58,11 @@ cd /path/to/project
 # 可选：--with-cursor-rules 仅 symlink harness gate 规则（不含 framework.mdc）
 ```
 
-## router-rs 连续性 / 门控（findings-remediation-2026-05）
+## router-rs 门控（findings-remediation-2026-05）
 
 | 变更 | 操作面 |
 |------|--------|
-| **Stop checkpoint + supervisor** | 自动 checkpoint（`focus: false`）会同步 `.supervisor_state.json.task_id` 到刷新任务；**不**移动 `active_task` / `focus_task`。 |
+| **Stop 自动 checkpoint** | **已拔除**（2026-05）；`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` 无操作。显式 `session-artifact-write` / Desktop MCP `session_checkpoint` 仍可用。 |
 | **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset = strict）；仅磁盘 `GOAL_STATE` **不再**满足 pre-goal。宽松 legacy：`0` / `false` / `off` / `no`。 |
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 写失败时 beforeSubmit 仍放行（应急）；**默认 fail-closed**。 |
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | **Claude 专用**；默认 **关闭**（缺失 `fork_context` 不清 `REVIEW_GATE`）。**勿**与 Cursor 同名 env 混用。 |
@@ -71,7 +71,7 @@ cd /path/to/project
 | **Codex stable session + Stop review**（2026-05 wave-1） | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` **默认 on**；legacy `=0`。无稳定键时 hook-state 用确定性 fallback（非 per-invocation 随机）。Stop 在 review 已武装且无独立子代理证据时 block，**含**无 hook-state 文件；Stop 载荷 review 措辞 alone 不能清门。 |
 | **Codex wave-2 P1-4..P1-7**（2026-05） | PostTool hook-state 锁失败 **fail-closed**（与 UserPromptSubmit 同形）。`stop_hook_active` 默认仍执行 review/closeout；仅 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 跳过门控。Stop closeout：`closeout_stop_followup_for_completion_text`。Codex fork 推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`。 |
 
-升级后若 continuity 仍报 supervisor 分歧：触发一次 **Cursor Stop** 或 `router-rs framework session-artifact-write`（`focus: false`）。
+手动画板分歧：用 `router-rs framework session-artifact-write` 或 Desktop MCP `session_checkpoint` 显式对齐 `artifacts/current/<task_id>/`。
 
 ## Spawn-first 配对审稿（deep-review-multiagent-compact-2026-05，2026-05-21）
 
@@ -145,8 +145,8 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | 宿主投影 GSD/review 文案 | [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)；`host-integration install` 读取；勿在 `host_integration.rs` 硬编码 |
 | `generated-artifacts-status` | **`framework doctor`** / `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍要求全量 **drift-gate** `ok: true` |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |
-| active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时**不**注入 `GSD_GOAL_CONTINUE`；用 `framework task-state-resolve` 或修正 `active_task.json` |
-| Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 提示，但**不再**单独以 `continuity_suppressed=review_soft_nag` 阻断 GSD 续跑 |
+| active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时 stdio/任务视图可能拒载错误 focus；用 `framework task-state-resolve` 或修正 `active_task.json`（**无** hook `GOAL_CONTINUE`） |
+| Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NAGGES` 后 `followup_message` 降频；细节进 `additional_context`（**无** goal/RFV hook 续跑可合并） |
 | `SKILL_ROUTING_RUNTIME.scope` | `hot_skill_count`/`full_skill_count` = 热表行数；`manifest_skill_count` = 全 manifest 行数 |
 | 文档真源 | 硬化叙述见 [`docs/harness_architecture.md`](docs/harness_architecture.md) §2.3、[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)、[`docs/rust_contracts.md`](docs/rust_contracts.md) |
 

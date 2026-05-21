@@ -12,9 +12,9 @@ argument-hint: "[framework task...]"
 
 Use `$framework` semantics via the Rust-owned shared core.
 
-**Default lifecycle: GSD** (same chain). Goal drive via `framework_autopilot_goal` stdio and continuity digest; **Codex hooks do not inject `GSD_GOAL_CONTINUE` on Stop** (see `docs/host_adapter_contract.md` §0.1).
+**Default lifecycle: My** (same chain). Goal/RFV via `framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` manual boards only; Codex hooks do not inject continuity digest, `GOAL_CONTINUE`, or `RFV_LOOP_CONTINUE`.
 
-**Code review default (all hosts): findings-only.** Review / 代码审查 / audit of code or a change set delivers severity-sorted findings only — no default edits, fixes, commits, or autopilot/GSD-execute/gitx/loop continuation unless the user explicitly asks to implement or fix. See `skills/code-review-deep/SKILL.md`.
+**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply; my-light profile does not hard-block Stop on REVIEW_GATE. See `skills/code-review-deep/SKILL.md`.
 
 1) Start from `AGENTS.md`.
 2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.

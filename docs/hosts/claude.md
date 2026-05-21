@@ -3,6 +3,8 @@
 **权威能力矩阵**：`configs/framework/RUNTIME_REGISTRY.json` → `host_projections.claude-code` / `claude-desktop`  
 **接入契约**：[host_adapter_contract.md](../host_adapter_contract.md)
 
+**默认 lifecycle（全宿主）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` 一口气跑完 `WAVE_STATE`；`verifyx` 证据+ship）。`/gsd-*` 仅 legacy 冷表。
+
 ## Claude Code (`claude-code`)
 
 **官方**：[Hooks reference](https://code.claude.com/docs/en/hooks)
@@ -75,4 +77,4 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integra
 ## Unsupported（勿假看齐）
 
 - Cursor 式 `subagentStart`/`subagentStop` open 计数与 multiset（Claude 用 Stop + 磁盘 `review_gate_*.json`）
-- Cursor `GSD_GOAL_CONTINUE` Stop 注入形态（Claude 用 MCP / 聊天续跑，见 Desktop 手册）
+- Cursor hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05 已拔除；Claude 续跑用 MCP / 聊天 + `framework_goal_drive` / `framework_rfv_loop` stdio，见 Desktop 手册）

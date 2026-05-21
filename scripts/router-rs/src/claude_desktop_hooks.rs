@@ -7,13 +7,12 @@
 //! dangerous bash guard）在 Desktop 上不可用，依赖 CLAUDE.md 指令自律。
 //! Stop / UserPromptSubmit hard block 降级为 advisory（MCP tool 返回提示而无法阻止代理停止）。
 //!
-//! 与 CLI 共享同一 L2/L3 数据源（连续性 digest、evidence、goal state、路由），
-//! 但出站形态为 MCP JSON-RPC 响应，非 hook JSON。
+//! 与 CLI 共享 L2/L3 手动画板（evidence、goal state、路由、snapshot），出站为 MCP JSON-RPC。
 
 use crate::cli::route_task_with_manifest_fallback;
 use crate::framework_runtime::{
     build_automatic_continuity_checkpoint_payload_with_task_id,
-    build_framework_continuity_digest_prompt, build_framework_runtime_snapshot_envelope,
+    build_framework_runtime_snapshot_envelope,
     resolve_repo_root_arg,
 };
 use crate::route::{filter_records_for_host, load_records_cached_for_stdio};
@@ -28,18 +27,6 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
-
-/// Cache entry for framework_digest responses (5 second TTL).
-struct DigestCache {
-    content: String,
-    expires_at: Instant,
-}
-
-impl DigestCache {
-    fn is_valid(&self) -> bool {
-        Instant::now() < self.expires_at
-    }
-}
 
 /// Cache entry for framework_snapshot responses (30 second TTL).
 struct SnapshotCache {
@@ -84,7 +71,6 @@ impl RateLimiter {
 }
 
 // Global caches and rate limiter (session-scoped via OnceLock)
-static DIGEST_CACHE: OnceLock<Arc<std::sync::Mutex<Option<DigestCache>>>> = OnceLock::new();
 static SNAPSHOT_CACHE: OnceLock<Arc<std::sync::Mutex<Option<SnapshotCache>>>> = OnceLock::new();
 static TASK_VIEW_CACHE: OnceLock<
     Arc<std::sync::Mutex<Option<(crate::task_state::ResolvedTaskView, Instant)>>>,
@@ -107,10 +93,6 @@ macro_rules! poison_safe_lock {
     }};
 }
 
-fn get_digest_cache() -> &'static Arc<std::sync::Mutex<Option<DigestCache>>> {
-    DIGEST_CACHE.get_or_init(|| Arc::new(std::sync::Mutex::new(None)))
-}
-
 fn get_snapshot_cache() -> &'static Arc<std::sync::Mutex<Option<SnapshotCache>>> {
     SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::Mutex::new(None)))
 }
@@ -122,19 +104,6 @@ fn get_task_view_cache(
 
 fn get_rate_limiter() -> &'static Arc<std::sync::Mutex<RateLimiter>> {
     RATE_LIMITER.get_or_init(|| Arc::new(std::sync::Mutex::new(RateLimiter::new(100))))
-}
-
-/// Get digest cache TTL from environment variable.
-/// Default: 5 seconds. Env: ROUTER_RS_DESKTOP_DIGEST_CACHE_TTL_SECS
-fn digest_cache_ttl_secs() -> u64 {
-    static CACHED: OnceLock<u64> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        std::env::var("ROUTER_RS_DESKTOP_DIGEST_CACHE_TTL_SECS")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .filter(|&n| n > 0)
-            .unwrap_or(5)
-    })
 }
 
 /// Get snapshot cache TTL from environment variable.
@@ -402,22 +371,6 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
         "result": {
             "tools": [
                 {
-                    "name": "framework_digest",
-                    "description": "返回当前会话的连续性 digest（与 Claude Code CLI SessionStart 同源），含 active task、evidence count、goal state、verification status 等。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "max_lines": {
-                                "type": "integer",
-                                "description": "最大返回行数，默认 40",
-                                "default": 40,
-                                "minimum": 1,
-                                "maximum": 120,
-                            },
-                        },
-                    },
-                },
-                {
                     "name": "framework_snapshot",
                     "description": "返回当前仓库的框架运行时快照（与 `router-rs framework snapshot` 同源），含完整连续性视图。",
                     "inputSchema": {
@@ -663,7 +616,6 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Va
     }
 
     let result = match tool_name {
-        "framework_digest" => tool_framework_digest(arguments, repo_root),
         "framework_snapshot" => tool_framework_snapshot(repo_root),
         "skill_route" => tool_skill_route(arguments, repo_root),
         "record_evidence" => tool_record_evidence(arguments, repo_root),
@@ -708,43 +660,6 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Va
     }
 }
 
-fn tool_framework_digest(arguments: &Value, repo_root: &Path) -> Result<String, String> {
-    let max_lines = arguments
-        .get("max_lines")
-        .and_then(Value::as_u64)
-        .unwrap_or(40)
-        .clamp(1, 120) as usize;
-
-    let ttl_secs = digest_cache_ttl_secs();
-    // Try to read from cache (configurable TTL, default 5 seconds)
-    {
-        let cache = get_digest_cache();
-        if let Some(guard) = poison_safe_lock!(cache) {
-            if let Some(ref cached) = *guard {
-                if cached.is_valid() {
-                    return Ok(cached.content.clone());
-                }
-            }
-        }
-    }
-
-    // Cache miss: recompute
-    let content = build_framework_continuity_digest_prompt(repo_root, max_lines)?;
-
-    // Update cache with configurable TTL
-    {
-        let cache = get_digest_cache();
-        if let Some(mut guard) = poison_safe_lock!(cache) {
-            *guard = Some(DigestCache {
-                content: content.clone(),
-                expires_at: Instant::now() + Duration::from_secs(ttl_secs),
-            });
-        }
-    }
-
-    Ok(content)
-}
-
 fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
     let ttl_secs = snapshot_cache_ttl_secs();
     // Try to read from cache (configurable TTL, default 30 seconds)
@@ -777,13 +692,8 @@ fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
     Ok(content)
 }
 
-/// Invalidate evidence-dependent caches (digest and snapshot).
-/// Called after record_evidence or session_checkpoint to ensure stale data isn't served.
+/// Invalidate evidence-dependent caches (snapshot / task view).
 fn invalidate_evidence_caches() {
-    // Clear digest cache
-    if let Some(mut guard) = poison_safe_lock!(get_digest_cache()) {
-        *guard = None;
-    }
     // Clear snapshot cache
     if let Some(mut guard) = poison_safe_lock!(get_snapshot_cache()) {
         *guard = None;
@@ -806,7 +716,7 @@ fn tool_skill_route(arguments: &Value, repo_root: &Path) -> Result<String, Strin
         .map(|state| {
             let per_tool = state.get("per_tool").and_then(|v| v.as_object());
             let has_routing = per_tool
-                .map(|m| m.contains_key("framework_digest") || m.contains_key("skill_route"))
+                .map(|m| m.contains_key("skill_route"))
                 .unwrap_or(false);
             !has_routing
         })
@@ -1143,17 +1053,6 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
         "result": {
             "prompts": [
                 {
-                    "name": "continuity_digest",
-                    "description": "digest for session continuity",
-                    "arguments": [
-                        {
-                            "name": "max_lines",
-                            "description": "max lines (default 40)",
-                            "required": false,
-                        },
-                    ],
-                },
-                {
                     "name": "framework_routing",
                     "description": "framework routing guidance",
                     "arguments": [],
@@ -1181,7 +1080,6 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> V
     let arguments = params.get("arguments").unwrap_or(&default_args);
 
     let description = match prompt_name {
-        "continuity_digest" => "continuity digest",
         "framework_routing" => "framework routing",
         "review_gate" => "review gate advisory",
         "closeout_checklist" => "closeout checklist",
@@ -1189,15 +1087,6 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path) -> V
     };
 
     let text = match prompt_name {
-        "continuity_digest" => {
-            let max_lines = arguments
-                .get("max_lines")
-                .and_then(Value::as_u64)
-                .unwrap_or(40)
-                .clamp(1, 120) as usize;
-            build_framework_continuity_digest_prompt(repo_root, max_lines)
-                .unwrap_or_else(|e| format!("Digest unavailable: {e}"))
-        }
         "framework_routing" => {
             let source_rel = "skills/SKILL_ROUTING_RUNTIME.json";
             format!(
@@ -1526,7 +1415,7 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
         _ => return Err(format!("Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear")),
     }
 
-    let result = crate::autopilot_goal::framework_autopilot_goal(payload)?;
+    let result = crate::autopilot_goal::framework_goal_drive(payload)?;
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
@@ -1591,11 +1480,6 @@ pub(crate) fn tool_rfv_loop_manage_test_helper(
 }
 
 #[cfg(test)]
-pub(crate) fn get_digest_ttl_for_test() -> u64 {
-    digest_cache_ttl_secs()
-}
-
-#[cfg(test)]
 pub(crate) fn get_snapshot_ttl_for_test() -> u64 {
     snapshot_cache_ttl_secs()
 }
@@ -1648,9 +1532,8 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 11, "expected 11 tools, got: {:?}", names);
+        assert_eq!(names.len(), 10, "expected 10 tools, got: {:?}", names);
         for tool in &[
-            "framework_digest",
             "framework_snapshot",
             "skill_route",
             "record_evidence",
@@ -1676,7 +1559,6 @@ mod tests {
             .iter()
             .map(|p| p["name"].as_str().unwrap())
             .collect();
-        assert!(names.contains(&"continuity_digest"));
         assert!(names.contains(&"framework_routing"));
         assert!(names.contains(&"review_gate"));
         assert!(names.contains(&"closeout_checklist"));

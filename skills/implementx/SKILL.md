@@ -63,9 +63,11 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 
 ## GOAL_STATE on start
 
+显式 stdio 启动（**无** Stop `GOAL_CONTINUE` hook 注入，2026-05 连续性拔除）：
+
 ```bash
 # status=running, drive_until_done=true, lifecycle_profile=my-light
-printf '%s\n' '{"id":1,"op":"framework_autopilot_goal","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"my-light"}}' | router-rs --stdio-json
+printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"my-light"}}' | router-rs --stdio-json
 ```
 
 ## Next

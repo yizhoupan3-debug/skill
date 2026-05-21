@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 mod alias;
 mod codex_hooks_duplicate;
 mod constants;
-mod continuity_digest;
 mod framework_doctor;
 mod json_io;
 mod json_value;
@@ -42,10 +41,6 @@ pub use constants::FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION;
 pub use constants::{
     FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
     FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-};
-pub use continuity_digest::{
-    build_framework_continuity_digest_prompt,
-    build_framework_continuity_digest_prompt_from_task_view,
 };
 pub use framework_doctor::{run_continuity_audit, run_framework_doctor};
 pub use prompt_compression::build_framework_prompt_compression_envelope;
@@ -618,35 +613,7 @@ pub(crate) fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
 /// Stable task id when no active/focus pointer exists (review-only sessions).
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
-/// Resolve the task to refresh on automatic Stop hooks (continuation-aware; see [`crate::autopilot_goal::resolve_checkpoint_task_id_from_pointer_ids`]).
-pub fn resolve_automatic_stop_checkpoint_task_id(repo_root: &Path) -> String {
-    let pointers = crate::task_state::read_task_pointers(repo_root);
-    crate::autopilot_goal::resolve_checkpoint_task_id_from_pointer_ids(
-        repo_root,
-        &pointers.active_task_id,
-        &pointers.focus_task_id,
-    )
-}
-
-/// Stop-hook checkpoint: in-place refresh of the current task; does not repoint control plane.
-pub fn build_automatic_stop_hook_checkpoint_payload(
-    repo_root: &Path,
-    task_line: &str,
-    summary_text: &str,
-) -> Option<Value> {
-    let task_id = resolve_automatic_stop_checkpoint_task_id(repo_root);
-    let payload = build_automatic_continuity_checkpoint_payload_with_task_id(
-        repo_root,
-        task_line,
-        summary_text,
-        Some(task_id.as_str()),
-        false,
-        true,
-    );
-    Some(payload)
-}
-
-/// 构建自动连续性检查点载荷（非完成态 `status=in_progress`，用于 Codex Stop 等钩子）。
+/// 构建显式 session checkpoint 载荷（Desktop MCP `session_checkpoint` 等；非 Stop hook 自动写）。
 ///
 /// `task_line` 用作路由摘要标题；`summary_text` 写入 SESSION_SUMMARY 正文片段。
 pub fn build_automatic_continuity_checkpoint_payload(

@@ -17,8 +17,8 @@
     "docs/harness_architecture.md",
     "docs/hosts/cursor.md",
     "skills/plan-mode/SKILL.md",
-    "skills/gsd/ship/SKILL.md",
-    "skills/gsd/verify-work/SKILL.md",
+    "skills/_archived/gsd-lifecycle/ship/SKILL.md",
+    "skills/_archived/gsd-lifecycle/verify-work/SKILL.md",
   ],
   "commands_run": [
     {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},

@@ -1,0 +1,10 @@
+{
+  "files": [
+    "/Users/joe/Developer/skill/.claude/mcp.json",
+    "/Users/joe/Developer/skill/.claude/CLAUDE.md"
+  ],
+  "host_projection": "claude-desktop",
+  "managed_by": "skill-framework",
+  "schema_version": "framework-host-projection-v1",
+  "scope": "project"
+}

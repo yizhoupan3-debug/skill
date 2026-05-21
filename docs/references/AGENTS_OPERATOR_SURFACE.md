@@ -2,22 +2,25 @@
 
 真源：`AGENTS.md` 只保留不变量与指针；本文件承载 **可选 env / 注入 / closeout 分层** 完整说明。
 
-## 连续性降噪
+## 连续性退出（2026-05：仅 stdio + 手动画板）
+
+**续跑与 digest 不再经 hook 注入。** Stop / SessionStart **不**产出 `GOAL_CONTINUE`、`RFV_LOOP_CONTINUE` 或 `framework_runtime::continuity_digest` 段落；操作员用 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 **`artifacts/current/<task_id>/`** 手动画板（`GOAL_STATE.json`、`RFV_LOOP_STATE.json`、`EVIDENCE_INDEX` 等）。
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` | **开启** PostTool 向 `EVIDENCE_INDEX` 追加（unset 默认关） |
-| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1` | **开启** Stop 自动检查点（unset 默认关） |
-| `ROUTER_RS_DEPTH_COMPLIANCE_HINT=1` | **开启** digest `深度信号`（unset 默认关；`DEPTH_SCORE_MODE=strict` 亦开启） |
-| `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` | 关闭 Cursor `GOAL_STATE` 续跑提示（兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
-| `ROUTER_RS_RFV_LOOP_HOOK=0` | 关闭 `RFV_LOOP_STATE` 多轮 RFV 提示 |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` | **opt-in** PostTool → `EVIDENCE_INDEX`（unset 默认关） |
+| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1` | **已无操作**（保留 env 名兼容） |
+| `ROUTER_RS_DEPTH_COMPLIANCE_HINT=1` | 遗留测试/stdio；**不**驱动 SessionStart digest |
+| `ROUTER_RS_GOAL_CONTINUE_HOOK` | **已无操作**（历史名；hook 路径已删） |
+| `ROUTER_RS_RFV_LOOP_HOOK` | **已无操作**（历史名；hook 路径已删） |
+| `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 SessionStart advisory 等（**不含**已移除的 goal/RFV 续跑行） |
 | `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 压制非必要 hook 文案（硬阻塞仍可见） |
 
-## Goal 投影（两条路径，勿混读）
+## Goal / RFV（stdio + 手动画板）
 
-- **Codex SessionStart digest**：嵌入 `additional_context`；预算 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX`（256–8192，默认 640 字节）。
-- **Cursor 短码**：`GSD_GOAL_CONTINUE`、`RFV_LOOP_CONTINUE` 等单行 `router-rs …` 注入；Codex `Stop` 不产出同名短码。
-- **长文案**：`ROUTER_RS_GOAL_PROMPT_VERBOSE=1`；磁盘 `GOAL_STATE.json` 仍为权威。
+- **权威磁盘**：`artifacts/current/<task_id>/GOAL_STATE.json`、`RFV_LOOP_STATE.json`。
+- **显式控制面**：`framework_goal_drive`、`framework_rfv_loop`（stdio-json）；My 执行区用 `/implementx`、`/verifyx` 驱动，**非**宿主 Stop 自动续跑。
+- SessionStart：**仅** `Repo:` / 可选 `SESSION_SUMMARY` 前缀（Cursor `summary` 模式）；预算见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` / `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS`。
 
 ## Cursor 专项
 
@@ -44,7 +47,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift baseline 
 cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift check --repo-root "$PWD"
 ```
 
-任务 id 省略时读 `artifacts/current/active_task.json`，否则 `focus_task.json`。基线写入 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`。详见 [`skills/gsd/verify-work/SKILL.md`](../../skills/gsd/verify-work/SKILL.md)。
+任务 id 省略时读 `artifacts/current/active_task.json`，否则 `focus_task.json`。基线写入 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`。详见 [`skills/_archived/gsd-lifecycle/verify-work/SKILL.md`](../../skills/_archived/gsd-lifecycle/verify-work/SKILL.md)。
 
 ## Closeout 分层
 

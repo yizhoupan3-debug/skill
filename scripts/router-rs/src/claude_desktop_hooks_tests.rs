@@ -25,7 +25,6 @@ mod desktop_mcp_tests {
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
         let handler_arms = [
-            "framework_digest",
             "framework_snapshot",
             "skill_route",
             "record_evidence",
@@ -374,12 +373,6 @@ mod parameter_validation_tests {
 
 #[cfg(test)]
 mod cache_ttl_tests {
-    #[test]
-    fn digest_cache_ttl_defaults_to_5_seconds() {
-        let ttl = crate::claude_desktop_hooks::get_digest_ttl_for_test();
-        assert_eq!(ttl, 5);
-    }
-
     #[test]
     fn snapshot_cache_ttl_defaults_to_30_seconds() {
         let ttl = crate::claude_desktop_hooks::get_snapshot_ttl_for_test();

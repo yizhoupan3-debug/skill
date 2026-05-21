@@ -78,17 +78,11 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
 
         let total = payload["total_calls"].as_u64().unwrap_or(0);
 
-        // Rule 1: Skipped routing -- no framework_digest or skill_route after 10+ calls
-        // Desktop sessions are typically short (5-15 calls); CLI sessions are longer.
-        // 10 is a good balance: catches cases where the agent is working but never
-        // checked the routing/hint system.
+        // Rule 1: Skipped routing -- no skill_route after 10+ calls
         if total >= 10 {
-            let has_routing = payload["per_tool"]
-                .get("framework_digest")
-                .or_else(|| payload["per_tool"].get("skill_route"))
-                .is_some();
+            let has_routing = payload["per_tool"].get("skill_route").is_some();
             if !has_routing {
-                warnings.push("Session has 10+ tool calls but never called framework_digest or skill_route -- routing may have been skipped.".to_string());
+                warnings.push("Session has 10+ tool calls but never called skill_route -- routing may have been skipped.".to_string());
             }
         }
 

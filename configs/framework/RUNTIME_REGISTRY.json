@@ -144,15 +144,14 @@
         "multi-agent-with-lightweight-main-thread"
       ],
       "goal_persistence": {
-        "stdio_op": "framework_autopilot_goal",
+        "stdio_op": "framework_goal_drive",
         "artifact": "artifacts/current/<task_id>/GOAL_STATE.json",
         "execution_entrypoints": [
           "/implementx",
           "/verifyx"
         ],
-        "continuation_hook_leader": "router-rs GSD_GOAL_CONTINUE",
-        "disable_hook_env": "ROUTER_RS_GSD_GOAL_CONTINUE_HOOK",
-        "rationale": "Personal lifecycle: implementx runs all WAVE_STATE waves in one breath; verifyx closes with evidence+ship. Pre-exec discussx/planx do not arm goal drive."
+        "continuation_hook_leader": "framework_goal_drive stdio + manual boards",
+        "rationale": "Personal lifecycle: implementx runs all WAVE_STATE waves in one breath; verifyx closes with evidence+ship. Continuity exit: no hook GOAL_CONTINUE/RFV/digest; stdio goal drive and artifacts/current/<task_id>/ boards only."
       }
     },
     "verifyx": {
@@ -250,17 +249,15 @@
       "reroute_when_ambiguous": "deepinterview",
       "reroute_when_root_cause_unknown": "deepinterview",
       "goal_persistence": {
-        "stdio_op": "framework_autopilot_goal",
+        "stdio_op": "framework_goal_drive",
         "artifact": "artifacts/current/<task_id>/GOAL_STATE.json",
         "execution_entrypoints": [
           "/gsd-execute-phase",
           "/gsd-verify-work",
           "/gsd-ship"
         ],
-        "continuation_hook_leader": "router-rs GSD_GOAL_CONTINUE",
-        "disable_hook_env": "ROUTER_RS_GSD_GOAL_CONTINUE_HOOK",
-        "legacy_disable_hook_env": "ROUTER_RS_AUTOPILOT_DRIVE_HOOK",
-        "rationale": "Macro goal drive is GSD execution-zone only. `/autopilot` retired. When drive_until_done and status=running, Cursor hooks inject GSD_GOAL_CONTINUE on Stop (and on hook-state lock failure paths that preserve continuity). Pre-execution GSD commands do not arm goal_required."
+        "continuation_hook_leader": "framework_goal_drive stdio + manual boards",
+        "rationale": "Legacy GSD alias; continuity exit same as My. Macro goal via framework_goal_drive stdio and artifacts/current/<task_id>/GOAL_STATE.json only."
       }
     },
     "team": {

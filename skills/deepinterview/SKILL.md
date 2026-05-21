@@ -78,7 +78,7 @@ approval_required_tools: []
 ## Canonical owner
 
 - 主 owner：`deepinterview` 只负责澄清、收敛和 findings-first handoff。
-- 达到清晰阈值后，交给 `/gsd-execute-phase`（`framework_autopilot_goal`）或当前任务的最窄 skill owner。
+- 达到清晰阈值后，交给 `/implementx`（`framework_goal_drive`）或当前任务的最窄 skill owner。
 - 若需要多 review 面并行取证，先走 [`agent-swarm-orchestration`](../agent-swarm-orchestration/SKILL.md) 判断 bounded sidecar 边界。
 
 ## Workflow

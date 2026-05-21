@@ -14,7 +14,7 @@
     "docs/hosts/cursor.md",
     "docs/hosts/codex-cli.md",
     "docs/hosts/claude.md",
-    "skills/gsd/"
+    "skills/_archived/gsd-lifecycle/"
   ],
   "commands_run": [
     {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0},

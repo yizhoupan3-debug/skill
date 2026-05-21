@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Execution Subagent Gate（仅 Cursor）
 
-跨宿主基线、默认执行方式、拒因集合、`/autopilot` 与 closeout 一律以仓库根 `AGENTS.md` 为准。
+跨宿主基线、默认执行方式、拒因集合、`/autopilot` 与 closeout 一律以 [AGENTS.md](../../AGENTS.md) 为准；连续性见 [harness_architecture.md](../../docs/harness_architecture.md)、[harness_policy_map.md](../../docs/harness_policy_map.md)。
 
 本文件只补 Cursor 独有差异：
 

@@ -1,66 +1,3 @@
-/// 从完整 RFV followup 文案中提取结构化外研 schema 指针行（若存在），供 Goal+RFV 合并进 `GSD_GOAL_CONTINUE` 时保留（原实现只取首行会丢掉该行）。
-fn rfv_external_struct_schema_hint_line(rfv_msg: &str) -> Option<&str> {
-    let needle = crate::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH;
-    rfv_msg.lines().map(str::trim).find(|l| l.contains(needle))
-}
-
-/// 与 `.cursor/hook-state` 锁无关：只读合并 continuity 续跑，避免门控降级或应急短路时 goal/RFV 静默消失。
-fn merge_continuity_followups(
-    repo_root: &Path,
-    output: &mut Value,
-    frame: &crate::task_state::CursorContinuityFrame,
-) {
-    // ADR-007: pointer mismatch alone must not suppress GSD_GOAL_CONTINUE when focus drives.
-    let goal_mismatch_blocks_drive = false;
-    let autopilot = if goal_mismatch_blocks_drive {
-        None
-    } else {
-        build_autopilot_drive_followup_using_frame(repo_root, frame)
-    };
-    let rfv = build_rfv_loop_followup_using_frame(repo_root, frame);
-    match (autopilot, rfv) {
-        (Some(ap_msg), Some(rfv_msg)) if !ap_msg.is_empty() && !rfv_msg.is_empty() => {
-            // Goal + RFV 同时活跃：只保留 **一条** `GSD_GOAL_CONTINUE` 段落，把 RFV 压缩成尾注，
-            // 避免再插第二段 `RFV_LOOP_CONTINUE` 头行（token 与 scan 噪声双高）。
-            let stripped = rfv_msg.lines().next().map(str::trim).unwrap_or("");
-            let note = stripped
-                .strip_prefix("RFV_LOOP_CONTINUE:")
-                .map(str::trim)
-                .unwrap_or(stripped);
-            let struct_hint = rfv_external_struct_schema_hint_line(&rfv_msg);
-            let merged = match (note.is_empty(), struct_hint) {
-                (true, Some(h)) => format!("{ap_msg}\nAlso: RFV active\n{h}"),
-                (true, None) => format!("{ap_msg}\nAlso: RFV active"),
-                (false, Some(h)) => format!("{ap_msg}\nAlso: RFV active ({note})\n{h}"),
-                (false, None) => format!("{ap_msg}\nAlso: RFV active ({note})"),
-            };
-            crate::autopilot_goal::merge_hook_nudge_paragraph(
-                output,
-                &merged,
-                crate::autopilot_goal::GSD_GOAL_CONTINUE_PARAGRAPH_PREFIX,
-                false,
-            );
-        }
-        (Some(msg), _) if !msg.is_empty() => {
-            crate::autopilot_goal::merge_hook_nudge_paragraph(
-                output,
-                &msg,
-                crate::autopilot_goal::GSD_GOAL_CONTINUE_PARAGRAPH_PREFIX,
-                false,
-            );
-        }
-        (_, Some(msg)) if !msg.is_empty() => {
-            crate::autopilot_goal::merge_hook_nudge_paragraph(
-                output,
-                &msg,
-                "RFV_LOOP_CONTINUE",
-                false,
-            );
-        }
-        _ => {}
-    }
-}
-
 /// Stop 收尾：在**无**硬 `followup_message` 时每轮稳定注入一条软提示，避免仅依赖规则时「有时有续跑段落、有时什么也没有」。
 ///
 /// 可用 `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE=0|false|off|no` 关闭（默认开启）。
@@ -111,73 +48,12 @@ fn release_lock_then_finalize_stop(
 }
 
 fn finalize_stop_hook_outputs(
-    repo_root: &Path,
+    _repo_root: &Path,
     output: &mut Value,
-    frame: &crate::task_state::CursorContinuityFrame,
-    skip_continuity_merge: bool,
+    _frame: &crate::task_state::CursorContinuityFrame,
+    _skip_continuity_merge: bool,
 ) {
-    if !skip_continuity_merge {
-        merge_continuity_followups(repo_root, output, frame);
-    } else {
-        merge_additional_context(output, "continuity_suppressed=review_soft_nag");
-    }
     merge_session_close_style_nudge_when_soft_terminal(output);
-    try_write_cursor_continuity_checkpoint_on_stop(repo_root);
-}
-
-pub(crate) fn try_write_cursor_continuity_checkpoint_on_stop(repo_root: &Path) {
-    if !crate::router_env_flags::router_rs_continuity_stop_checkpoint_enabled() {
-        return;
-    }
-    let summary_body = "Stop hook automatic checkpoint (Cursor).";
-    let Some(payload) = crate::framework_runtime::build_automatic_stop_hook_checkpoint_payload(
-        repo_root,
-        "cursor-stop",
-        summary_body,
-    ) else {
-        eprintln!("[router-rs] cursor continuity checkpoint skipped: payload build failed");
-        return;
-    };
-    if let Err(err) = crate::framework_runtime::write_framework_session_artifacts(payload) {
-        eprintln!("[router-rs] cursor continuity checkpoint write failed (non-fatal): {err}");
-    }
-}
-
-fn build_autopilot_drive_followup_using_frame(
-    repo_root: &Path,
-    frame: &crate::task_state::CursorContinuityFrame,
-) -> Option<String> {
-    if let Some((goal, task_id)) = frame.hydration_goal.as_ref() {
-        return crate::autopilot_goal::build_autopilot_drive_followup_message_from_state(
-            repo_root,
-            task_id.as_str(),
-            goal,
-        );
-    }
-    if let (Some(task_id), Some(goal)) = (
-        frame.pointer_view.task_id.as_deref(),
-        frame.pointer_view.goal_state.as_ref(),
-    ) {
-        return crate::autopilot_goal::build_autopilot_drive_followup_message_from_state(
-            repo_root, task_id, goal,
-        );
-    }
-    crate::autopilot_goal::build_autopilot_drive_followup_message(repo_root)
-}
-
-fn build_rfv_loop_followup_using_frame(
-    repo_root: &Path,
-    frame: &crate::task_state::CursorContinuityFrame,
-) -> Option<String> {
-    let active = crate::autopilot_goal::read_active_task_id(repo_root)?;
-    if frame.pointer_view.task_id.as_deref() == Some(active.as_str()) {
-        if let Some(ref s) = frame.pointer_view.rfv_loop_state {
-            return crate::rfv_loop::build_rfv_loop_followup_message_from_state(
-                repo_root, &active, s,
-            );
-        }
-    }
-    crate::rfv_loop::build_rfv_loop_followup_message(repo_root)
 }
 
 /// Assistant 回复文本侧的完成宣称检测：先剥离引文 / 代码块 / URL，再交由 `hook_common`
@@ -3416,10 +3292,6 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
                 state.subagent_start_count,
                 state.subagent_stop_count
             );
-            if let Some(hint) = crate::rfv_loop::rfv_loop_precompact_hint(repo_root) {
-                summary.push_str(" | ");
-                summary.push_str(&hint);
-            }
             json!({ "additional_context": summary })
         }
         _ => json!({}),
@@ -3560,22 +3432,7 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
             }
         }
     }
-    if matches!(
-        mode,
-        crate::router_env_flags::CursorSessionStartSummaryMode::Digest
-            | crate::router_env_flags::CursorSessionStartSummaryMode::GoalOnly
-    ) {
-        if let Ok(digest) =
-            crate::framework_runtime::build_framework_continuity_digest_prompt_from_task_view(
-                repo_root, 4, true, &task_view,
-            )
-        {
-            let trimmed = digest.trim();
-            if !trimmed.is_empty() {
-                sections.push(trimmed.to_string());
-            }
-        }
-    }
+    let _ = (&mode, &task_view);
     sections.push(format!("Repo: {}", repo_root.display()));
     let ctx = compact_cursor_sessionstart_context(sections).unwrap_or_default();
     if let Err(e) = crate::session_call_tracker::init_tracker(repo_root) {

@@ -1,5 +1,4 @@
 use crate::framework_runtime::{
-    build_automatic_stop_hook_checkpoint_payload, build_framework_continuity_digest_prompt,
     build_framework_contract_summary_envelope, try_append_post_tool_shell_evidence,
     write_framework_session_artifacts,
 };
@@ -888,8 +887,6 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
 
 fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
     if codex_stop_hook_active_replay(event) && codex_stop_hook_active_bypass_enabled() {
-        // Codex-internal Stop replays: gate bypass is opt-in; continuity checkpoint stays best-effort.
-        try_write_continuity_checkpoint_on_codex_stop(repo_root, event);
         return None;
     }
 
@@ -949,35 +946,7 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
     if let Err(err) = reset_result {
         eprintln!("[router-rs] codex hook state reset skipped (non-fatal): {err}");
     }
-    try_write_continuity_checkpoint_on_codex_stop(repo_root, event);
     None
-}
-
-fn continuity_stop_checkpoint_env_enabled() -> bool {
-    crate::router_env_flags::router_rs_continuity_stop_checkpoint_enabled()
-}
-
-/// Codex Stop 守门通过后写入 `artifacts/current/*` 与指针文件；失败不阻断 Stop（仅 stderr）。
-fn try_write_continuity_checkpoint_on_codex_stop(repo_root: &Path, event: &Value) {
-    if !continuity_stop_checkpoint_env_enabled() {
-        return;
-    }
-    let text = codex_prompt_text(event);
-    let task_line = codex_first_nonempty_prompt_line(&text);
-    let summary_body = if text.trim().is_empty() {
-        "Stop hook automatic checkpoint. Stop payload had no user prompt text; refine SESSION_SUMMARY manually or rely on prior turns.".to_string()
-    } else {
-        text
-    };
-    let Some(payload) =
-        build_automatic_stop_hook_checkpoint_payload(repo_root, &task_line, &summary_body)
-    else {
-        eprintln!("[router-rs] codex continuity checkpoint skipped: no active/focus task pointer");
-        return;
-    };
-    if let Err(err) = write_framework_session_artifacts(payload) {
-        eprintln!("[router-rs] continuity checkpoint write failed (non-fatal): {err}");
-    }
 }
 
 fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value> {
@@ -990,11 +959,6 @@ fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value
         .and_then(Value::as_str)
         .unwrap_or_default();
     let mut contexts = Vec::new();
-    if let Ok(prompt) = build_framework_continuity_digest_prompt(repo_root, 4) {
-        if !prompt.trim().is_empty() {
-            contexts.push(format!("Continuity digest:\n{}", prompt.trim()));
-        }
-    }
     contexts.push(format!("Repo: {}", repo_root.display()));
     if !source.trim().is_empty() {
         contexts.push(format!("SessionStart source: {source}."));
@@ -2992,7 +2956,7 @@ mod tests {
         }
 
         #[test]
-        fn session_start_uses_single_compact_digest_under_small_budget() {
+        fn session_start_compact_context_under_small_budget_without_digest() {
             let repo = fresh_repo();
             let task_id = "session-priority";
             fs::create_dir_all(repo.join("artifacts/current").join(task_id)).expect("mkdir task");
@@ -3021,10 +2985,9 @@ mod tests {
             let ctx = out["hookSpecificOutput"]["additionalContext"]
                 .as_str()
                 .expect("additionalContext");
-            assert!(ctx.contains("Continuity digest:"), "{ctx}");
+            assert!(!ctx.contains("Continuity digest:"), "{ctx}");
+            assert!(ctx.contains("Repo:"), "{ctx}");
             assert!(!ctx.contains("Goal: running"), "{ctx}");
-            assert!(!ctx.contains("routing truth"), "{ctx}");
-            assert!(!ctx.contains("Hook policy"), "{ctx}");
             assert!(ctx.len() <= 256, "len={} ctx={ctx:?}", ctx.len());
         }
 

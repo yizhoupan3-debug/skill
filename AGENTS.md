@@ -53,14 +53,14 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 ## Skill Routing
 
 - **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` **一口气**跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。**legacy-gsd**（`/gsd-*`）仅冷表 [`skills/SKILL_MANIFEST.json`](skills/SKILL_MANIFEST.json)；GSD 树在 `skills/_archived/gsd-lifecycle/`（`.cursorignore`），**不会**出现在 Cursor 斜杠列表。
-- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light`；`framework_autopilot_goal` stdio）。`my-light` 关闭 `REVIEW_GATE` 硬拦。
+- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light`；`framework_goal_drive` stdio）。`my-light` 关闭 `REVIEW_GATE` 硬拦。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
-## Continuity artifacts
+## Continuity artifacts（手动画板 only）
 
-- 真源：`artifacts/current/`（见 `docs/harness_architecture.md`）。
-- Goal/RFV：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；视图 `router-rs framework snapshot`。
-- 续跑注入开关：见 `docs/references/AGENTS_OPERATOR_SURFACE.md`。
+- 真源：`artifacts/current/<task_id>/`（见 `docs/harness_architecture.md`）；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
+- Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
+- 历史 env 名见 `docs/references/AGENTS_OPERATOR_SURFACE.md`（多数 hook 续跑 env **已无操作**）。
 
 ## Host Boundaries
 
@@ -71,7 +71,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 | `claude-code` | `docs/hosts/claude.md` | ✓（含 PreToolUse） |
 | `claude-desktop` | `docs/hosts/claude-desktop.md` | △ MCP advisory only（无 PreToolUse） |
 
-- **Cursor 机读短码**（宿主注入 `router-rs …` 单行）：`AG_FOLLOWUP`、`REVIEW_GATE`、`GSD_GOAL_CONTINUE`、`RFV_LOOP_CONTINUE` 等；**禁止**自拟仿 hook 长文。
+- **Cursor 机读短码**（宿主注入 `router-rs …` 单行）：`AG_FOLLOWUP`、`REVIEW_GATE` 等；**`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` hook 注入已拔除**（2026-05），续跑用 `/implementx` + `framework_goal_drive` stdio 与 `artifacts/current/<task_id>/` 手动画板；**禁止**自拟仿 hook 长文。
 - **Cursor `updateCurrentStep`**：禁止空载荷；见 `execution-subagent-gate.mdc`。
 - 路由问题 → runtime；hook 问题 → 对应 `hooks.json`。
 
@@ -101,10 +101,16 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 - 必须有验证证据或明确 blocker；聊天回复不必长篇贴 diff。
 - `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 分层见 `docs/references/AGENTS_OPERATOR_SURFACE.md` 与 `docs/harness_architecture.md`。
 
-## GSD goal drive
+## Goal drive
 
-- `/gsd-execute-phase`（及 verify/ship）→ `framework_autopilot_goal` → `artifacts/current/<task_id>/GOAL_STATE.json`；续跑注入与 env 见 `docs/references/AGENTS_OPERATOR_SURFACE.md`、`docs/harness_architecture.md`。
+- `/implementx`、`/verifyx` + `framework_goal_drive` stdio → `artifacts/current/<task_id>/GOAL_STATE.json`；**无** hook 续跑注入；env 与手动画板见 `docs/references/AGENTS_OPERATOR_SURFACE.md`、`docs/harness_architecture.md`。
 - 执行 wave / 验证：`skills/_archived/gsd-lifecycle/execute-phase/SKILL.md`、`skills/_archived/gsd-lifecycle/verify-work/SKILL.md`。
+
+## Manuscript / LaTeX file writes
+
+- **Default: overwrite in place** on `.tex`, `.Rmd`, and manuscript `.md` — use StrReplace or write the same path; do **not** create `*.bak_*`, `*.bak`, or macOS-style numbered duplicates (`file 2.tex`) unless the user explicitly asks for a backup in that turn.
+- **R Markdown projects**: edit **`.Rmd` only** (plus project scripts); regenerate `.tex`/`.pdf` via the repo’s `render_*.R`. Do not treat pandoc-generated `.tex` as the source of truth or leave numbered build artifacts in the report directory.
+- Paper-workbench detail: [`skills/paper-workbench/references/edit-scope-gate.md`](skills/paper-workbench/references/edit-scope-gate.md) §文件写入默认.
 
 ## Git
 

@@ -93,7 +93,7 @@ fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::autopilot_goal::framework_autopilot_goal;
+    use crate::autopilot_goal::framework_goal_drive;
     use serde_json::{json, Value};
     use std::fs;
 
@@ -116,7 +116,7 @@ mod tests {
             r#"{"task_id":"t-agg"}"#,
         )
         .expect("active");
-        framework_autopilot_goal(json!({
+        framework_goal_drive(json!({
             "repo_root": tmp.display().to_string(),
             "operation": "start",
             "task_id": "t-agg",

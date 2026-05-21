@@ -26,14 +26,13 @@ L1  Executable verification and exit codes
 
 ## 2. 热路径真源
 
-### 2.1 SessionStart
+### 2.1 SessionStart（2026-05 连续性拔除后）
 
-- Codex / Cursor SessionStart 只允许注入动态活信息。
-- **`ROUTER_RS_OPERATOR_INJECT` 总闸**：Codex `SessionStart` 与 Cursor `SessionStart` 在闸关时均**不**注入连续性 advisory（Codex 返回无 `additionalContext`；Cursor 返回空字符串 `additional_context`）。**例外**：Cursor 仍可在闸关时执行 `SessionStart` 所需的**非 advisory**副作用（例如终端 baseline ledger 初始化），不视为绕过总闸。
-- 允许内容：以 [`build_framework_continuity_digest_prompt`](../scripts/router-rs/src/framework_runtime/continuity_digest.rs) 为核心的连续性 digest（含 `depth_compliance_refresh_hint`、可选 `GOAL_STATE` 段落等），外加 `Repo:` 与 Codex 侧的 `SessionStart source:`；Cursor 在存在 `continuity:active_goal_missing_focus_has_goal` 观测时，将 [`CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH`](../scripts/router-rs/src/task_state.rs) **置于 digest 正文之前**，以便与 Codex 一样尽量扛前缀截断。
-- 禁止内容：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 之类静态说明。
-- Cursor / Codex SessionStart 出站均按 UTF-8 **字节**预算截断；Cursor 使用与 Stop 等路径相同的 [`truncate_cursor_hook_outbound_context`](../scripts/router-rs/src/cursor_hooks/handlers.rs)（末尾 **`...[~trunc]`** 固定后缀），与 Codex `truncate_codex_additional_context_bytes` 的 `...` 形态不同但语义等价（均为「预算截断」可观测标记）。
-- **Codex vs Cursor 段落顺序**：digest 内 ZH mismatch 行位于 `depth_compliance_refresh_hint` **之前**；Codex 整段 digest 仍可能先于 Repo 行被小预算截断，运维请对照源码拼接顺序与 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX(_BYTES)`。
+- Codex / Cursor SessionStart **不**注入连续性 digest、`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 `depth_compliance_refresh_hint`（模块已删除，2026-05）。
+- **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：`Repo:`、Codex `SessionStart source:`、可选 `ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE=summary` 时的根级 `SESSION_SUMMARY.md` 前缀、以及 pointer 观测短提示（`CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH` 等，**非** digest 正文）。
+- **禁止**：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 等静态说明；禁止恢复 hook 驱动的 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。
+- 出站仍按 UTF-8 **字节**预算截断（Cursor `...[~trunc]`；Codex `...`）。
+- 宏目标 / RFV 多轮：仅 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 `artifacts/current/<task_id>/` 手动画板；见 [`AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)。
 
 ### 2.2 Skill routing
 
@@ -71,7 +70,7 @@ L1  Executable verification and exit codes
 `L1` 验证命令或验证形工具输出
 → `router-rs` 采样/追加
 → `artifacts/current/<task_id>/EVIDENCE_INDEX.json`
-→ closeout / digest / gate 消费。
+→ closeout / gate 消费。
 
 原则：
 
@@ -108,18 +107,18 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 - 硬门控短码进 `followup_message`
 - advisory 提示进 `additional_context`
 
-不再保留“聊天区 vs additional_context”切换开关，也不在多个事件上重复投影同一段 Goal/RFV 续跑文案。
+**2026-05**：hook **不**再投影 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`；续跑仅 stdio + 手动画板（见 §2.1）。
 
-**可读模型**：当 `active_task.json` 指向的任务缺少可读 `GOAL_STATE.json`，但 `focus_task.json` 指向另一任务且该任务盘上存在合法 GOAL 时，[`resolve_task_view`](../scripts/router-rs/src/task_state.rs) 会在 `resolution_notes` 写入短码 `continuity:active_goal_missing_focus_has_goal`（仅观测；[`read_goal_state_for_hydration`](../scripts/router-rs/src/autopilot_goal.rs) 仍不回退 focus）。`framework task-state-resolve` 与连续性 digest（[`continuity_digest.rs`](../scripts/router-rs/src/framework_runtime/continuity_digest.rs)）可透出该行提示。
+**可读模型**：当 `active_task.json` 指向的任务缺少可读 `GOAL_STATE.json`，但 `focus_task.json` 指向另一任务且该任务盘上存在合法 GOAL 时，[`resolve_task_view`](../scripts/router-rs/src/task_state.rs) 会在 `resolution_notes` 写入短码 `continuity:active_goal_missing_focus_has_goal`（仅观测；[`read_goal_state_for_hydration`](../scripts/router-rs/src/autopilot_goal.rs) 仍不回退 focus）。`framework task-state-resolve` 可透出该行提示。
 
-**Stop 自动 checkpoint（Cursor / Codex）**：在 `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` 启用时，Stop 仅**原地刷新**当前任务目录下的 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `TRACE_METADATA`（`resolve_automatic_stop_checkpoint_task_id`：**active → focus**）；**不**改写 `active_task.json` / `focus_task.json` / `.supervisor_state.json`，**不** mint `cursor-stop-*` slug，**不**向 registry 追加未知 task 行（`update_registry_only_if_known`）。无 active/focus 指针时跳过并 stderr 一行。显式用户 checkpoint（Desktop MCP 等）仍可用 `focus: true` 重定向控制面。
+**Stop 自动 checkpoint（已删除，2026-05）**：Cursor/Codex hook **不再**在 Stop 写盘。显式 checkpoint 仅用 Desktop MCP `session_checkpoint` 或 `framework_session_artifact_write` stdio。
 
 **L1 运行时视图与读模型**：[`load_framework_runtime_view`](../scripts/router-rs/src/framework_runtime/runtime_view.rs) 的 `active_task_id` 选择与 [`resolve_task_view`](../scripts/router-rs/src/task_state.rs) 一致（`override > active > focus > supervisor`），见 [`task_state_unified_resolve.md`](task_state_unified_resolve.md)。
 
 ## 4. Hook 文案策略
 
 - 对模型可见的 hook 文案默认短码优先、短句优先。
-- `GSD_GOAL_CONTINUE`、`RFV_LOOP_CONTINUE`、`REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP` 等保留单段紧凑输出。
+- `REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`、`SESSION_CLOSE_STYLE` 等保留单段紧凑输出；**无** `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` hook 注入。
 - lock failure、degraded mode、pre-goal 等提示应压缩为单行或极短段，最多附一个动作提示。
 - 禁止把长策略解释混进 runtime 提示；长解释只留在本文件和相关契约文档。
 
@@ -135,13 +134,13 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 ### 4.2 Cursor `additional_context`：合并链路与出站字节上限
 
 - **合并**：各 hook handler 通过 [`merge_additional_context`](../scripts/router-rs/src/cursor_hooks/handlers.rs) 将 advisory 段落追加进出站 JSON 的 `additional_context` 字符串（多事件可达多次追加）。
-- **出站裁剪**：Cursor CLI 入口 [`review_gate.rs`](../scripts/router-rs/src/review_gate.rs) 在写出 stdout 前调用 [`apply_cursor_hook_output_policy`](../scripts/router-rs/src/cursor_hooks/handlers.rs)：对 `additional_context` 与超长 `followup_message` 使用 **`truncate_cursor_hook_outbound_context_preserving_gate`** / **`truncate_cursor_hook_followup_preserving_review_gate`** — UTF-8 字节上限取自 **`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`**（[`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs) ，默认 8192，clamp 1024–65536）；超长时 **优先保留** 含 `router-rs REVIEW_GATE`、`REVIEW_GATE detail` 前缀与 `continuity_suppressed=` 的行，对其余 filler 做前缀截断并以固定 **`...[~trunc]`** 结束（见 §5 环境变量表脚注）。仍建议将硬门控信息放在 `followup_message` 的 `router-rs …` 行。
+- **出站裁剪**：Cursor CLI 入口 [`review_gate.rs`](../scripts/router-rs/src/review_gate.rs) 在写出 stdout 前调用 [`apply_cursor_hook_output_policy`](../scripts/router-rs/src/cursor_hooks/handlers.rs)：对 `additional_context` 与超长 `followup_message` 使用 **`truncate_cursor_hook_outbound_context_preserving_gate`** / **`truncate_cursor_hook_followup_preserving_review_gate`** — UTF-8 字节上限取自 **`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`**（[`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs) ，默认 8192，clamp 1024–65536）；超长时 **优先保留** 含 `router-rs REVIEW_GATE`、`REVIEW_GATE detail` 前缀的行，对其余 filler 做前缀截断并以固定 **`...[~trunc]`** 结束（见 §5 环境变量表脚注）。仍建议将硬门控信息放在 `followup_message` 的 `router-rs …` 行。
 - **对照**：Codex `additionalContext` 另有字节上限（[`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) `truncate_codex_additional_context_bytes`）；两套宿主互不替代。
 
 ### 4.3 仿宿主续跑行（`RG_FOLLOWUP` 等）与机读真源
 
 - Cursor hook 出站 JSON 中，**深度审稿未完成**与 **Autopilot goal 缺块** 所依赖的机读 leader 真源为 **`router-rs REVIEW_GATE incomplete …`**、**`router-rs AG_FOLLOWUP missing_parts=…`**（均须以 ASCII 前缀 **`router-rs `** 起行；实现见 [`cursor_hooks/handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs)）。审稿链未收尾时以 **`router-rs REVIEW_GATE incomplete`** 行内 `need=`、`hint=` 排障。
-- **其它**由本仓库注入、在 **§4 上文列表** 中的续跑 / 软提示（如 **`GSD_GOAL_CONTINUE`、`RFV_LOOP_CONTINUE`、`CLOSEOUT_FOLLOWUP`** 等）仍按该列表及各自字段形态识别，**不要求** `router-rs ` 前缀；与上条 **router-rs leader** 并存，勿用「凡机读句一律须 `router-rs `」误读。
+- **其它**由本仓库注入的软提示（如 **`CLOSEOUT_FOLLOWUP`、`SESSION_CLOSE_STYLE`** 等）仍按该列表及各自字段形态识别；历史 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 行若出现在旧会话 scrape 中，**不是**当前 harness 注入。
 - **`RG_FOLLOWUP`、`RG FOLLOWUP`、`RG-FOLLOWUP`**，以及**无** `router-rs ` 前缀、却仿照 `*_FOLLOWUP` 与 `missing_parts=` / `escalation=` 组合的整行，**不是**本 harness 的注入格式；常见来源为助手复述或误粘贴。真源里 **`router-rs AG_FOLLOWUP` 的 `missing_parts=`** 仅由 `goal_contract`、`checkpoint_progress`、`verification_or_blocker` 等片段逗号拼接（见同文件 `goal_missing_parts`），**不会出现** `independent_subagent_or_reject_reason` 这类占位串。
 - **出站剥线**：[`review_gate.rs`](../scripts/router-rs/src/review_gate.rs) 写出 stdout 前对 `followup_message` / `additional_context` 调用 [`scrub_followup_fields_in_hook_output`](../scripts/router-rs/src/autopilot_goal.rs)；[`merge_additional_context`](../scripts/router-rs/src/cursor_hooks/handlers.rs) 在合并追加时亦对片段与整段复用 `scrub_spoof_host_followup_lines`。助手**聊天可见正文**不经该剥线，故仍可能看到仿造行——判读时 **优先** 核对 **`router-rs …` 审稿/goal 行** 与 **`.cursor/hook-state` / 磁盘门控**；**不排除** 同字段内 §4 所列其它真源短码段落。
 - **Codex**：`additionalContext` 的截断与注入形态以 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) 及上文 **§4.2「对照」** 为准，与 Cursor 出站 **不互为替身**。
@@ -163,13 +162,12 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 **排障**：Stop 仍被 `*_REVIEW_GATE` 拦住时，先在 hook stdin JSON 核对 **`tool_input`/`subagent_type`/`agent_type`/`agentType`/`type`** 规范化结果，以及 **`fork_context`/`forkContext`** 是否解析为逻辑 **`false`**（典型为布尔 `false`，亦可为可走布尔字符串表的 **`"false"` / `"0"`** 等；JSON **整数** **`0`** 与布尔 **`false`** 等价；**整数 `1`** 解析为 **`true`**（非独立 fork）；其它 JSON **Number**（如 `2`、浮点）仍为 **`None`**，与字段缺失同化。**字符串** `"0"` 与 **数值** `0` 在此等价为 false。仍推荐宿主使用 **JSON 布尔** 显式表达 `fork_context`。**Cursor 缺省推断（默认开）**：`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 未关闭时，可数深度 lane 且字段**缺失**可视为 `false`（显式 `true` 仍阻断）；关闭后恢复「缺字段≠false」。**主线程 compact findings**：未 spawn 可数子代理、助手 tail 含 `[P0]`/`[P1]`/`[P2]`/`Caveat:` 时在 **`Stop`** 升 phase 3 清门（本仓默认 **不** 注册 `afterAgentResponse` hook；恢复该事件见 `MIGRATION.md`）。Codex：`PostToolUse` 事件根部与 `tool_input` 内均可携带 `fork_context`（与 Cursor 对齐的 `fork_context_from_values` 次级来源）；独立审稿证据经 `cursor_review_independent_fork`（**共用** `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）。`Stop` 在 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 硬开时对完成宣称走 `closeout_stop_followup_for_completion_text` → `decision:block` + `CLOSEOUT_FOLLOWUP`（[`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs)）。
 
-**Cursor `Stop` 与 `GSD_GOAL_CONTINUE` 互斥**：当 `followup_message` 含硬门控（`router-rs REVIEW_GATE incomplete`、`router-rs AG_FOLLOWUP`、closeout 硬拦、hook-state 锁失败强提示等），`finalize_stop_hook_outputs` **不**合并 `GSD_GOAL_CONTINUE`/`RFV_LOOP`（`skip_continuity_merge`）；无硬门控且仅有活跃 goal 时仍经 `additional_context` 续跑。**Review soft-nag 超 cap**（`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`）：仍可有 REVIEW 行，但 `skip_continuity_merge` **仅当** `goal_required && !goal_is_satisfied`（见 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) soft 分支）；goal 已满足时**可**合并 `GSD_GOAL_CONTINUE`。仅当 `skip_continuity_merge` 为真时注入 `continuity_suppressed=review_soft_nag`。
+**Cursor `Stop` 收口（2026-05）**：`finalize_stop_hook_outputs` 仅合并可选 `SESSION_CLOSE_STYLE` 软提示；**不**注入 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。硬门控仍在 `followup_message`（`REVIEW_GATE`、`AG_FOLLOWUP`、closeout）。**Review soft-nag 超 cap**（`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`）：超 cap 后 `followup_message` 为短行，细节落入 `additional_context`。
 
 **Cursor `Stop`：`review_override` / `delegation_override` / `has_override`（以及门控用的 `delegation_override` 句式）**：仅以**用户本轮 prompt** 为信源；**不**把助手 `response` 拼进 `signal_text` 来匹配这些 override（与 `beforeSubmit` 一致），避免模型在可见回复里复述「不要用子代理」等句式误解除 `REVIEW_GATE`。拒因清门仍遵循 `saw_reject_reason`（整树 + 用户轮粘贴行）既有规则。
 
-**Cursor 应急关闭审稿门控**：**仅当** `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 为 `1`/`true`/`yes`/`on`（大小写不敏感，与 `cursor_review_gate_disabled_by_env()` 对齐）时关闭 Cursor 审稿门控；unset、空串与其它任意非 truthy 值均保持启用。`beforeSubmitPrompt` / `userPromptSubmit`（归一化后的 `beforesubmitprompt` / `userpromptsubmit`）**不**调用 `handle_before_submit`，stdout **仅** `{"continue":true}`，无 `additional_context`/`followup_message`，故无 review 默认 nudge、pre-goal、`paper_adversarial` 合并，且不读写 `.cursor/hook-state`；**对照**常态路径仍走 [`handle_before_submit`](../scripts/router-rs/src/cursor_hooks/handlers.rs)。`Stop` 仍进入 `handle_stop`，但在获取 `.cursor/hook-state` 锁**之前**即返回：仅合并 closeout 硬拦（若有）并经 `finalize_stop_hook_outputs` 写入 `GSD_GOAL_CONTINUE`/`RFV_LOOP` 与软 `SESSION_CLOSE_STYLE`（与常态 Stop 收口共用同名函数，`include!` 编入 [`cursor_hooks`](../scripts/router-rs/src/cursor_hooks/mod.rs)）；**不进行**常态下的 review / goal Stop 分支与 hook-state 门控推演。
-- **减法事件 dispatch**：[`cursor_hooks/subtraction.rs`](../scripts/router-rs/src/cursor_hooks/subtraction.rs) 对 5 个已移除事件：若 **未**出现在 [`.cursor/hooks.json`](../.cursor/hooks.json) 则返回宿主安全 no-op；**写回 hooks.json 即走真实 handler**。`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 在未注册时亦强制 handler（单测/对照）。compact 清门默认依赖 **`Stop` tail**。仅 **beforeSubmit** 两事件在 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 应急下跳过 `handle_before_submit`。
-- **连续性读盘**：应急 `Stop` 仍可读 `artifacts/current` 等连续性视图以驱动 `finalize_stop_hook_outputs`（续跑/软段），与「不跑常态 hook-state review/goal 推演」**不冲突**。
+**Cursor 应急关闭审稿门控**：**仅当** `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 为 `1`/`true`/`yes`/`on` 时关闭 Cursor 审稿门控。应急下 `beforeSubmitPrompt` / `userPromptSubmit` 仅 `{"continue":true}`；`Stop` 在取 hook-state 锁前返回，仅 closeout 硬拦 + `SESSION_CLOSE_STYLE` 软提示，**无** goal/RFV 续跑。
+- **减法事件 dispatch**：[`cursor_hooks/subtraction.rs`](../scripts/router-rs/src/cursor_hooks/subtraction.rs) 对 5 个已移除事件：未出现在 [`.cursor/hooks.json`](../.cursor/hooks.json) 则 no-op。
 
 **Claude Code：磁盘状态不可读（与 Codex 同形 fail-closed）**：当 `.claude/review_gate_<hash>.json` 或 `.claude/hook_state_<hash>.json` **已存在**但无法读取或 JSON 非法（含空文件）时，`Stop` 硬阻塞，`stopReason` 含 `router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions`；`UserPromptSubmit` 侧若需合并 review gate 状态而遇不可读，会注入 `additionalContext` 提示修复而非覆盖文件。排障：检查权限、修复或删除损坏文件。Codex 侧对照短码见 [`host_adapter_contract.md`](host_adapter_contract.md) 中 **`CODEX_HOOK_STATE_UNREADABLE`** 行。
 
@@ -179,31 +177,26 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 | 环境变量 | 默认 | 作用 |
 |---------|------|------|
-| `ROUTER_RS_OPERATOR_INJECT` | 开 | 总闸：关闭 advisory 注入（含 Codex lifecycle `additionalContext`、**Cursor `SessionStart` `additional_context`**、Cursor `SESSION_CLOSE_STYLE` 软段落，及与 `GSD_GOAL_CONTINUE`/`RFV_LOOP`/`paper_adversarial` 等同样经本闸聚合的子能力）；不影响硬门控短码 |
+| `ROUTER_RS_OPERATOR_INJECT` | 开 | 总闸：关闭 SessionStart 轻量 advisory、`SESSION_CLOSE_STYLE`、`paper_adversarial` 等；不影响 `REVIEW_GATE` / closeout 硬短码 |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES` | 开 | 仅关闭 operator nudge 文案；不改 gate 逻辑 |
-| `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 RFV advisory 结构化外研 hint（[`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs)；仍受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束） |
-| `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK` | 开 | 关闭 Stop 等必要事件上的 `GSD_GOAL_CONTINUE` advisory（兼容读 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK`） |
-| `ROUTER_RS_RFV_LOOP_HOOK` | 开 | 关闭必要事件上的 `RFV_LOOP_CONTINUE` advisory |
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | **关** | **仅** `1`/`true`/`yes`/`on`：开启 PostTool 向 `EVIDENCE_INDEX` 自动追加（2026-05 solo 减法默认关） |
-| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | **关** | **仅** `1`/`true`/`yes`/`on`：开启 Cursor/Codex `Stop` 原地 checkpoint；unset 默认不写 |
-| `ROUTER_RS_DEPTH_COMPLIANCE_HINT` | **关** | **仅** `1`/`true`/`yes`/`on`：SessionStart digest 注入 `深度信号:`；`ROUTER_RS_DEPTH_SCORE_MODE=strict` 时亦开启 |
-| `ROUTER_RS_CONTINUITY_WRITE_JOURNAL` | **关** | **仅** `1`/`true`/`yes`/`on`：session 批量写 `CONTINUITY_JOURNAL.json` |
-| `ROUTER_RS_TASK_STATE_AGGREGATE_AUTO` | **关** | **仅** `1`/`true`/`yes`/`on`：GOAL/RFV/evidence 变更后自动刷新 `TASK_STATE.json`；否则用 `framework task-state-aggregate-sync` |
-| `ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE` | `goal_only` | `goal_only`（默认）：digest 含 GOAL、不读根 `SESSION_SUMMARY`；`digest`：完整 digest；`summary`：仅根摘要 + 提示行 |
+| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | **关** | **仅** `1`：PostTool → `EVIDENCE_INDEX` 自动追加（opt-in） |
+| `ROUTER_RS_CONTINUITY_WRITE_JOURNAL` | **关** | **仅** `1`：`CONTINUITY_JOURNAL.json`（opt-in） |
+| `ROUTER_RS_TASK_STATE_AGGREGATE_AUTO` | **关** | **仅** `1`：自动刷新 `TASK_STATE.json`；否则 `framework task-state-aggregate-sync` |
+| `ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE` | `goal_only` | `summary`：读根 `SESSION_SUMMARY.md` 前缀；`goal_only`：仅 Repo + 指针观测短提示（**无** digest） |
 | `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | **仅** `1`/`true`/`yes`/`on`：剥 `additional_context`（含 soft-nag 的 `REVIEW_GATE detail` 段落）；保留 `followup_message` 中以 `router-rs ` 开头的硬短码（[`apply_cursor_hook_silent_policy`](../scripts/router-rs/src/cursor_hooks/handlers.rs)，[`review_gate.rs`](../scripts/router-rs/src/review_gate.rs)） |
 | `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` | 8192，clamp 1024–65536 | Cursor hook stdout：`additional_context` /（极端长度）`followup_message` 经 [`apply_cursor_hook_output_policy`](../scripts/router-rs/src/cursor_hooks/handlers.rs) UTF-8 **字节**裁剪（变量名为 `_CHARS`，语义为字节上限）；详见 §4.2 |
 | `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` | 1200，clamp 256–8192 | Cursor SessionStart `additional_context` 合成字节上限 |
 | `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 Stop 软 `SESSION_CLOSE_STYLE` 单行收口提示 |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | 关 | Cursor beforeSubmit 中显式开启论文/手稿强对抗审稿短段 |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | 关 | 显式开启 Cursor `/gsd-execute-phase` pre-goal beforeSubmit 提示（env 名保留） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | 关 | 显式开启 Cursor `/implementx` pre-goal beforeSubmit 提示（env 名保留） |
 | `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | 开 | **默认开启**（unset 即 strict，[`router_rs_cursor_pre_goal_strict_disk_enabled`](../scripts/router-rs/src/router_env_flags.rs) 为 default-true）：**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真（beforeSubmit 与 Stop 均适用）；**仅** `0`/`false`/`off`/`no` 恢复历史宽松语义；pre-goal 仍可由 subagent / `reject_reason` / nag cap 等满足 |
 | `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 Cursor 可数深度 lane 在 `fork_context` **缺失**时的 `false` 推断；显式 `fork_context: true` 永不算独立证据 |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | 32，clamp 1–256 | `review_subagent_pending_cycle_keys` multiset 上限；满则拒绝新 key 且 subagentStart 不增加 open 计数 |
 | `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` | 关 | **仅** `1`/`true`/`yes`/`on` 时：Cursor `SessionEnd` 在清当前 `session_key` 与全局 tmp 孤儿之外，对 `.cursor/hook-state/` 再做**全目录前缀清扫**（历史行为），用于单人单会话下清 session_id/cwd 漂移遗留；**默认关**以免同仓库并行 Cursor 会话的门控状态被其它会话的 SessionEnd 误删 |
 | `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS` | 关 | **仅** `1`/`true`/`yes`/`on`：5 个减法事件在未写入 `hooks.json` 时仍走完整 handler（单测/对照）；默认 no-op |
-| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | **仅**当值为 `1`/`true`/`yes`/`on`（大小写不敏感）时关闭 Cursor 审稿门控并走 `dispatch_cursor_hook_event` 应急分支；unset、空串与其它任意值均保持启用。**应急下 beforeSubmit 仅 `continue:true`；`Stop` 仍在取 hook-state 锁前返回并完成 `finalize_stop_hook_outputs`**；其它**已注册**事件仍走各自 handler。机器判定：[cursor_hooks/handlers.rs](../scripts/router-rs/src/cursor_hooks/handlers.rs) → `cursor_review_gate_disabled_by_env` |
-| `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | 内置数值默认 **8**（单测 unset 视为严格不降频） | `REVIEW_GATE` 仍未满足时，**连续多少轮 `Stop`** 仍将完整 `need=`/`hint=` 写入 `followup_message`；超过后 `followup_message` 为短行 **并**附带完整 `need=` 行，细节段落入 `additional_context`，且该轮 **跳过** `GSD_GOAL_CONTINUE`/`RFV` 合并并在 `additional_context` 注入 `continuity_suppressed=review_soft_nag`。`0`/`false`/`off`/`no`：**关闭**降频。非法 env 值 stderr 提示后回落默认 8。机器判定：[`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs) → `router_rs_cursor_review_gate_stop_max_nudges_cap` |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 内置数值默认 | `/gsd-execute-phase` pre-goal beforeSubmit 提示次数上限（[`cursor_hooks/handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs)） |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | 关 | 应急：beforeSubmit 仅 `continue:true`；Stop 仅 closeout + `SESSION_CLOSE_STYLE`（无 goal/RFV 续跑） |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | 默认 **8** | `REVIEW_GATE` 未满足时 Stop 降频；超 cap 后短 `followup_message` + `additional_context` 细节段 |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 内置数值默认 | `/implementx` pre-goal beforeSubmit 提示次数上限（[`cursor_hooks/handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs)） |
 | `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | 内置数值默认 | 仍可打开的并发 subagent 上限，`0` 关闭限制 |
 | `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 内置数值默认（2h） | subagent stale 判定阈值（秒）；**仅** `0`/`false`/`off`/`no`：**关闭**自动 stale 回收（不重置 `active_subagent_count`、不 prune pending）；清门仍用 `rg_clear` / SessionEnd / `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` |
 | `ROUTER_RS_CURSOR_SESSION_NAMESPACE` | unset | 同仓库并行 Cursor 会话时分流 `.cursor/hook-state` 文件名组件（[`cursor_hooks/handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs)） |
@@ -215,7 +208,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` | 640，clamp 256–8192 | Codex SessionStart `additionalContext` **字节**上限（遗留变量名；[`codex_additional_context_max_bytes`](../scripts/router-rs/src/codex_hooks.rs)） |
 | `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` | unset（可选覆盖） | 若设置：**优先于** `_MAX`；二者解析均为 UTF-8 **字节**，clamp 256–8192 |
 | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` | 关 | **仅** `1`/`true`/`yes`/`on`：Codex `UserPromptSubmit` / `PostToolUse` / `Stop` 在无法从 hook stdin（`session_id`/`sessionId`/`conversation_id`/`conversationId`/`thread_id`/`threadId`）或环境 `CODEX_SESSION_ID`/`CODEX_CONVERSATION_ID` 得到稳定会话键时 **block**（`SessionStart` 不受影响）；默认关闭以保持与旧 Codex payload 兼容 |
-| `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS` | 关 | **仅** `1`/`true`/`yes`/`on`：Codex `Stop` 在 `stop_hook_active` 重放时跳过 review/closeout 门控（checkpoint 仍 best-effort）；unset 时重放仍 fail-closed |
+| `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS` | 关 | **仅** `1`：Codex `Stop` 在 `stop_hook_active` 重放时跳过 review/closeout 门控 |
 | `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | 关 | **仅**当值为 `1`/`true`/`yes`/`on`（大小写不敏感）时关闭 Claude Code `CLAUDE_REVIEW_GATE`（含 UserPromptSubmit review 提示）；unset、空串与其它任意值均保持启用（与 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 对称）。可选：在项目根 `.claude/router-rs-hook.env` 写 `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1`（由安装的 Claude hook command 包装自动加载；重装/合并 hook 后以 `scripts/router-rs` 的 Claude settings 投影为准） |
 | `ROUTER_RS_CLAUDE_SESSION_NAMESPACE` | unset | **仅 Claude** session 状态：当 stdin 缺少会话 id、`cwd` 类字段又不足以分流时，同仓多会话可能共用 `.claude/review_gate_*.json` / `hook_state_*.json`；设非空串可为并行会话隔离状态文件名组件（语义对齐 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`；见 [`claude_hooks.rs`](../scripts/router-rs/src/claude_hooks.rs) `claude_session_key`） |
 | `ROUTER_RS_TASK_LEDGER_FLOCK` | 开 | **仅** `0`/`false`/`off`/`no`（与 `ROUTER_RS_OPERATOR_INJECT` 同类 default-true 语义）关闭 `artifacts/current/.router-rs.task-ledger.lock` 的 `flock`；关闭后多进程并行写账本为 best-effort（见 §3.1 证据流下 Task ledger 段） |
@@ -226,7 +219,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS` | 关 | **仅** `1`/`true`/`yes`/`on`：等同 CLI `--skip-generator-run`（metadata-only，不跑 generator、不比 drift） |
 | `ROUTER_RS_SHARED_TARGET` | unset（可选） | `router_self` 共享 target 路径 |
 | `ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS` / `ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS` | unset | framework `/update` maint 流专用（[`framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs)） |
-已退役的文案分叉、beforeSubmit 双续跑、聊天区投影切换、静默例外模式、Plan→Build goal 门控开关都不再支持；相关变量已从活跃代码与主真源文档移除。
+已退役的文案分叉、beforeSubmit 双续跑、聊天区投影切换、静默例外模式、Plan→Build goal 门控开关都不再支持。**2026-05 拔除、env 名保留但无操作**：`ROUTER_RS_GOAL_CONTINUE_HOOK`、`ROUTER_RS_RFV_LOOP_HOOK`（及兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK`）、`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT`、`ROUTER_RS_DEPTH_COMPLIANCE_HINT`；SessionStart `digest` 模式字符串亦不再产出 digest 正文。
 
 ## 6. Closeout 与深度
 

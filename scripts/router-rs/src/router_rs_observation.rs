@@ -279,14 +279,13 @@ mod tests {
     }
 
     #[test]
-    fn classifies_autopilot_from_additional_only() {
+    fn legacy_goal_continue_lines_are_not_classified_as_gate() {
         let v = json!({
             "continue": true,
-            "additional_context": "GSD_GOAL_CONTINUE: stale\nGoal: x",
+            "additional_context": "GOAL_CONTINUE: stale\nGoal: x",
         });
         let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
-        assert_eq!(o["gate"]["code"], "gsd_goal_continue");
-        assert_eq!(o["gate"]["blocking"], false);
+        assert!(o["gate"].is_null(), "GOAL_CONTINUE hook path removed: {:?}", o);
     }
 
     #[test]
@@ -295,7 +294,7 @@ mod tests {
             "continue": true,
             "session_id": "sess-1",
             "task_id": "task-9",
-            "additional_context": "GSD_GOAL_CONTINUE: x",
+            "additional_context": "GOAL_CONTINUE: x",
         });
         let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
         assert_eq!(o["correlation"]["session_id"], "sess-1");
@@ -350,7 +349,7 @@ mod tests {
     fn golden_closeout_followup_wins_in_additional() {
         let v = json!({
             "continue": true,
-            "additional_context": "CLOSEOUT_FOLLOWUP please\nGSD_GOAL_CONTINUE: x",
+            "additional_context": "CLOSEOUT_FOLLOWUP please\nGOAL_CONTINUE: x",
         });
         let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
         assert_eq!(o["gate"]["code"], "closeout_followup");

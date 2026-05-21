@@ -124,6 +124,12 @@ edit_scope: surgical
 edit_scope: refactor
 ```
 
+## 文件写入默认（LaTeX / R Markdown）
+
+- **默认覆盖式修改**：对 `.tex`、`.Rmd`、`.md` 源稿用原地编辑（StrReplace / 写回同一路径），**不要**在用户未明确要求时 `cp` 出 `*.bak_*`、`*.bak`、或 macOS 式 `basename 2.ext` 编号副本。
+- **R Markdown 项目**：只改 **`.Rmd`（与项目脚本约定的源）**；用仓库自带的 `render_*.R` / `Rscript …` 再生 `.tex`/`.pdf`。不要手改 pandoc 吐出的 `.tex` 当作真源，也不要在 `report/` 根目录堆编译副产物。
+- **需要备份时**：仅当用户当轮写明「先备份」「保留副本」等；备份路径由用户指定或单文件单次 `.bak`（勿批量制造编号族）。
+
 ## 与 `$paper-workbench` 外部模式的关系
 
 | 外部模式     | 默认 `edit_scope` | 说明                                       |

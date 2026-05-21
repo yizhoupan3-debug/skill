@@ -20,13 +20,13 @@
 
 ## 可程序化硬门禁（`completion_gates` / `close_gates`）
 
-与 **advisory rollup**（`DepthCompliance` / `resolve_task_view` 的 `depth_score`、continuity digest 一行「深度信号」）分工如下：
+与 **advisory rollup**（`DepthCompliance` / `resolve_task_view` 的 `depth_score`；**非** hook digest 注入）分工如下：
 
 | 维度 | advisory rollup | 硬门禁（opt-in） |
 |------|-----------------|------------------|
-| **默认** | 总是计算、供 digest / statusline 展示 | **默认关闭**；仅当账本中显式写入 gate 对象且 `enabled` 非 `false` 时生效 |
+| **默认** | 总是计算、供 stdio/statusline/手动画板展示 | **默认关闭**；仅当账本中显式写入 gate 对象且 `enabled` 非 `false` 时生效 |
 | **真源** | `task_state::depth_compliance_aggregate` → `ResolvedTaskView.depth_compliance` | 同一条聚合链：**不**在 hook bash 复制第二套深度算法 |
-| **GOAL** | `depth_score` 等字段仅提示 | `GOAL_STATE.completion_gates`：在 `framework_autopilot_goal` **`operation=complete`** 路径校验；失败返回 **Err**、**不写** `status=completed` |
+| **GOAL** | `depth_score` 等提示 | `GOAL_STATE.completion_gates`：在 `framework_goal_drive` **`operation=complete`** 路径校验；失败返回 **Err**、**不写** `status=completed` |
 | **RFV** | 同上 | `RFV_LOOP_STATE.close_gates`：在写入前对「收口轮」预览态跑同一套 `depth_compliance_aggregate` 校验；触发于 **supervisor 显式 `close`/`closed`**，以及 **`max_rounds` 耗尽**（`append_round` 上 `round_n >= max_rounds` 且非 `block`，账本将记 `loop_status=closed`）的自动收口；失败 **Err**、**不写**本轮（磁盘轮次保持追加前状态） |
 | **SKIPPED** | 计数进 rollup | 若 `require_last_round_verify_pass` 等约束开启，**显式 close** 或 **`max_rounds` 耗尽自动 closed** 仍可能被拒（由你 opt-in） |
 
@@ -115,7 +115,7 @@ Advisory rollup 由 `DepthCompliance` 结构体持有；`completion_gates` / `cl
 
 - **契约长文**：[math-reasoning-harness.md](math-reasoning-harness.md)（中间对象、CAS/SMT、依赖图、反事实探针）。
 - **Lane 模板**：[lane-templates.md](lane-templates.md) 中「数理 / STEM 专项」各 lane。
-- **宿主续跑短句**：RFV / AUTOPILOT 默认只输出紧凑状态、证据锚点与必要 schema 路径。以下行来自 `configs/framework/HARNESS_OPERATOR_NUDGES.json`，且受 `ROUTER_RS_OPERATOR_INJECT` 与 `ROUTER_RS_HARNESS_OPERATOR_NUDGES`（及 RFV 外研 struct 子闸 `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`）约束；对应字段为空则不追加该行。
-  - **`math_reasoning_harness_line`**：当 `router-rs` 的 `harness_context_signals` 判定 RFV 的 `goal` / `verify_commands` 或 GSD goal（`GOAL_STATE` / **`validation_commands`**）命中「数理 / 形式化 checker」启发式，且配置行非空时，在 **`RFV_LOOP_CONTINUE`** / **`GSD_GOAL_CONTINUE`** 续跑文案中追加（legacy 段落前缀 `AUTOPILOT_DRIVE` 仍会被剥线）。
-  - **`rfv_loop_external_struct_hint_line`** 与 **`retrieval_trace_harness_line`**：当 RFV 账本满足 `allow_external_research` + `prefer_structured_external_research`、且上一轮 `append_round` 仍缺结构化 `external_research` 对象、`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT` 未关时：先追加 struct 提示行（配置为空则回退英文 schema 一行），再在非空时追加 `retrieval_trace_harness_line`。
+- **操作员参考短句（非 hook 注入）**：`configs/framework/HARNESS_OPERATOR_NUDGES.json` 中的行供 skill / stdio 操作面对照；**2026-05 起** Stop/SessionStart **不**再注入 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 continuity digest。
+  - **`math_reasoning_harness_line`**：`harness_context_signals` 仍用于 PostTool 证据启发式与 stdio 工具；命中「数理 / 形式化 checker」时由操作员在 `/implementx` 或 `framework_rfv_loop` 轮次中自行落实 witness/checker 契约（见 [math-reasoning-harness.md](math-reasoning-harness.md)）。
+  - **`rfv_loop_external_struct_hint_line`** / **`retrieval_trace_harness_line`**：外研 strict 时 supervisor 在 `append_round` 前对照 [external-research-harness.md](external-research-harness.md) 与 `RFV_EXTERNAL_RESEARCH.schema.json`；**无** hook 自动追加 struct 提示行。
 - **结构化落盘与外研单行提示**：参见 [external-research-harness.md](external-research-harness.md)。

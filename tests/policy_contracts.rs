@@ -1861,11 +1861,14 @@ fn gsd_goal_persistence_contract_documents_gsd_execution_zone() {
         .expect("execution_entrypoints array");
     assert!(eps.iter().any(|v| v.as_str() == Some("/implementx")));
     assert!(eps.iter().any(|v| v.as_str() == Some("/verifyx")));
-    assert!(gp
+    let leader = gp
         .get("continuation_hook_leader")
         .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .contains("GSD_GOAL_CONTINUE"));
+        .unwrap_or("");
+    assert!(
+        leader.contains("framework_goal_drive") && !leader.contains("GOAL_CONTINUE"),
+        "continuation_hook_leader should be stdio-only: {leader}"
+    );
     assert!(registry
         .get("framework_commands")
         .and_then(|fc| fc.get("autopilot"))

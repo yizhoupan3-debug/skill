@@ -72,39 +72,6 @@
       "priority": 2,
       "or": [
         {
-          "starts_with": "GSD_GOAL_CONTINUE"
-        },
-        {
-          "contains": "GSD_GOAL_CONTINUE:"
-        },
-        {
-          "starts_with": "AUTOPILOT_DRIVE"
-        },
-        {
-          "contains": "AUTOPILOT_DRIVE:"
-        }
-      ],
-      "code": "gsd_goal_continue",
-      "human_prefix": {
-        "kind": "literal",
-        "text": "GSD_GOAL_CONTINUE"
-      },
-      "stop_scan_after_match": false
-    },
-    {
-      "priority": 3,
-      "contains": "RFV_LOOP_CONTINUE",
-      "code": "rfv_loop_continue",
-      "human_prefix": {
-        "kind": "literal",
-        "text": "RFV_LOOP_CONTINUE"
-      },
-      "stop_scan_after_match": false
-    },
-    {
-      "priority": 5,
-      "or": [
-        {
           "starts_with": "SESSION_CLOSE_STYLE"
         },
         {

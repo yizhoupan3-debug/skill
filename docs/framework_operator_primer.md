@@ -53,7 +53,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 | **active 无 GOAL、focus 有 GOAL** | SessionStart 有中文提示；运行 `framework task-state-resolve` 或修正 `active_task.json`。 |
 | **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
 | **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset 即 strict）：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；宽松 legacy 设 `=0|false|off|no`。 |
-| **Stop 自动 checkpoint 与 supervisor** | `focus: false` checkpoint **会**更新 `.supervisor_state.json.task_id` 为刷新任务，**不**移动 `active_task`/`focus_task`（ADR-001）。supervisor 表「最后 continuity 刷新任务」。 |
+| **Stop 自动 checkpoint** | **已拔除（2026-05）**：Cursor/Codex hook Stop **不写** checkpoint；显式刷新用 Desktop MCP `session_checkpoint` 或 `framework_session_artifact_write` stdio。 |
 | **Cursor hooks 减法闭集** | 默认 **7** 事件；5 个已移除事件 dispatch **no-op**（[`subtraction.rs`](../scripts/router-rs/src/cursor_hooks/subtraction.rs)）。写回 `hooks.json` 即恢复 handler；`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 仅作未注册时对照。 |
 | **`router-rs schema-drift`** | `contract` / `baseline` / `check` 验收 hooks 闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题；见 [`verify-work/SKILL.md`](../skills/_archived/gsd-lifecycle/verify-work/SKILL.md)。 |
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
@@ -61,15 +61,15 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --rep
 | **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |
 | **D9 / fork 推断** | Cursor 默认 **开启** missing-`fork_context`→`false` 推断（`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，unset=on）。Claude **默认关闭**（`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，**不**读 Cursor 同名 env）。Codex PostTool/Stop 独立审稿证据走 `cursor_review_independent_fork`（**读取 Cursor env**，无单独 `ROUTER_RS_CODEX_*` fork 开关）。 |
 | **Codex stable session** | 默认 **要求** 稳定 session 键（`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` unset=on）；legacy `=0`/`false` 时用单一确定性 fallback 文件名（非 per-invocation 随机键）。Stop 上仅 review 措辞、无 UPS 落盘证据时仍 `CODEX_REVIEW_GATE` block。 |
-| **Codex `stop_hook_active`** | Codex 内部 Stop 重放默认**仍**执行 review/closeout 门控；**仅** `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 时跳过门控（checkpoint 仍 best-effort）。 |
+| **Codex `stop_hook_active`** | Codex 内部 Stop 重放默认**仍**执行 review/closeout 门控；**仅** `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 时跳过门控。 |
 | **Codex Stop closeout** | 完成宣称 + `ROUTER_RS_CLOSEOUT_ENFORCEMENT`（CI 默认 on）时 Stop `decision:block` + `CLOSEOUT_FOLLOWUP`（`framework_runtime::closeout_stop_followup_for_completion_text`，与 Cursor 同源 token 表）。 |
-| **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后仍可有 REVIEW 行，但 **不**再以 `continuity_suppressed=review_soft_nag` **单独**阻断 GSD 续跑（硬 `REVIEW_GATE` / `AG_FOLLOWUP` 仍优先）。 |
+| **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后 `followup_message` 降为短行，细节落入 `additional_context`；**无** hook `GOAL_CONTINUE` 合并（2026-05）。 |
 
 ## 混用时的实际武装顺序（Cursor Stop）
 
-- **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**硬门控 Stop 不合并 `GSD_GOAL_CONTINUE`**（避免「门未满足」与续跑 drive 同轮打架）；无硬门控时 goal 续跑仍走 `additional_context`。
+- **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
 - **主线程深度 review**：交付 compact findings（`[P0]`–`[P2]` / `Caveat:`）且未 spawn 可数子代理时，可在 **`Stop`** 清 `REVIEW_GATE`（本仓默认**无** `afterAgentResponse` hook）；多 lane 并行审仍须 `general-purpose` / `best-of-n-runner` 子代理证据。
-- **同一条用户消息里同时写深度 review 与 GSD 执行区入口**（`/gsd-execute-phase`、`/gsd-verify-work`、`/gsd-ship`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。若你本意是「先深度审稿再开连续执行」，请拆成两轮（先 review-only 提交，或先落盘 `GOAL_STATE` 再带 `/gsd-execute-phase`）。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）；同轮写 `/autopilot` **不会**抑制 review 武装。
+- **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`；legacy `/gsd-execute-phase` 等仍识别）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。若你本意是「先深度审稿再开连续执行」，请拆成两轮（先 review-only 提交，或先落盘 `GOAL_STATE` 再带 `/implementx`）。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）；同轮写 `/autopilot` **不会**抑制 review 武装。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 GSD execution 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
 
 ## 深度审稿 `REVIEW_GATE`（Cursor / Codex 可数 lane）

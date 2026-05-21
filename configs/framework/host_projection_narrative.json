@@ -1,11 +1,11 @@
 {
   "schema_version": "framework-host-projection-narrative-v2",
-  "gsd_default_lifecycle_paragraph": "**Default lifecycle (all supported hosts):** `/discussx` → `/planx` → `/implementx` → `/verifyx`. Pre-execution (`discussx`, `planx`) is doc-only; `implementx` runs **all waves in one breath** per `WAVE_STATE.json`; `verifyx` merges verify + ship. Profile `my-light` disables REVIEW_GATE hard block. **legacy-gsd** (`/gsd-*`) is cold-manifest only; tree archived under `skills/_archived/gsd-lifecycle/`.",
-  "gsd_lifecycle_by_host": {
-    "cursor": "**Default lifecycle: My** (`/implementx` one-breath all waves). Goal drive when `drive_until_done` + `status=running`; Cursor Stop may inject `router-rs GSD_GOAL_CONTINUE` (disable: `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0`). `my-light` profile: no REVIEW_GATE hard block.",
-    "codex-cli": "**Default lifecycle: My** (same chain). Goal drive via `framework_autopilot_goal` stdio; Codex hooks do not inject `GSD_GOAL_CONTINUE` on Stop.",
-    "codex-app": "**Default lifecycle: My** (same chain). Goal drive via MCP tools; no CLI Stop hook bundle on this transport.",
-    "claude-code": "**Default lifecycle: My** (same chain). Goal/RFV hints on UserPromptSubmit / Stop via `router-rs claude hook`.",
+  "default_lifecycle_paragraph": "**Default lifecycle (all supported hosts):** `/discussx` → `/planx` → `/implementx` → `/verifyx`. Pre-execution (`discussx`, `planx`) is doc-only; `implementx` runs **all waves in one breath** per `WAVE_STATE.json`; `verifyx` merges verify + ship. Profile `my-light` disables REVIEW_GATE hard block. **legacy-gsd** (`/gsd-*`) is cold-manifest only; tree archived under `skills/_archived/gsd-lifecycle/`.",
+  "lifecycle_by_host": {
+    "cursor": "**Default lifecycle: My** (`/implementx` one-breath all waves). Goal/RFV: `framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` manual boards only (no hook GOAL_CONTINUE/RFV/digest, 2026-05). `my-light` profile: no REVIEW_GATE hard block.",
+    "codex-cli": "**Default lifecycle: My** (same chain). Goal/RFV via `framework_goal_drive` / `framework_rfv_loop` stdio + manual boards only; no continuity digest or GOAL_CONTINUE/RFV_LOOP_CONTINUE on hooks.",
+    "codex-app": "**Default lifecycle: My** (same chain). Goal/RFV via MCP stdio tools + manual boards; no CLI Stop hook bundle on this transport.",
+    "claude-code": "**Default lifecycle: My** (same chain). Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest (review/closeout advisories only).",
     "claude-desktop": "**Default lifecycle: My** (same chain). Goal drive via MCP stdio; MCP advisory only — no PreToolUse/Stop hard gate."
   },
   "review_findings_only_paragraph": "**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply; my-light profile does not hard-block Stop on REVIEW_GATE. See `skills/code-review-deep/SKILL.md`."

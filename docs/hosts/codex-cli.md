@@ -28,14 +28,14 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypo
 
 ## 默认工作流
 
-与全宿主相同：**GSD** 默认链；执行区 `/gsd-execute-phase` 启动 goal-style 连续执行（`/autopilot` 已退役）。
+与全宿主相同：**My lifecycle** `/discussx` → `/planx` → `/implementx`（一口气跑完 `WAVE_STATE`）→ `/verifyx`；执行区 `/implementx` 启动 goal-style 连续执行（`/autopilot` 已退役；legacy 冷表 `/gsd-execute-phase` 见 `MIGRATION.md`）。
 
-**续跑差异（重要）**：Codex **`Stop` 不注入** Cursor 式 `GSD_GOAL_CONTINUE`（`codex_hooks` 无该段落）。连续执行依赖：`GOAL_STATE.json` 盘上契约、Stop 自动 checkpoint（`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT`）、以及你在下一条消息中继续 `/gsd-execute-phase` 或带 goal 上下文。对照 Cursor：见 [`framework_operator_primer.md`](../framework_operator_primer.md)「混用时的实际武装顺序」。
+**续跑（2026-05）**：Codex/Cursor hooks **均不**注入 `GOAL_CONTINUE`、continuity digest 或 Stop checkpoint（代码 no-op；`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1` 亦不写盘）。连续执行依赖：`/implementx` 一口气、`framework_goal_drive` stdio、以及 `artifacts/current/<task_id>/` 手动画板。
 
 ## Hook 能力
 
 - 多层 hook **全部加载、并发**；项目 hook 需 trusted project
-- PostTool / Stop / SessionStart → 证据与 continuity digest
+- PostTool（opt-in）→ `EVIDENCE_INDEX`；SessionStart → 轻量指针/Repo（**无** continuity digest）；Stop → `REVIEW_GATE` / closeout（**无** `GOAL_CONTINUE` / checkpoint 写盘）
 - REVIEW_GATE 可数 lane：`review_gate.deep_gate_lanes`（与 Cursor 相同；**不含** Claude 的 `review`/`reviewer` 等）。单次 PostToolUse 证据，无 multiset
 - **Spawn-first**：`UserPromptSubmit` 注入 registry `spawn_first_nudge` 一行；窄范围（`review ./file`、`small_task`）不武装 gate
 - **Stop 清门与 Cursor 不对齐**：Codex **无**用户消息粘贴的 **`rg_clear`** / **`/rg_clear`** 或 bounded **`reject_reason`** 令牌清门（[`saw_reject_reason`](../../scripts/router-rs/src/hook_common.rs) 仅 Cursor Stop 消费）。清门须 **PostTool 独立审稿证据**（可数 lane + `fork_context=false`，缺省推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）或运维 env（如 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 仅跳 Stop 门控重放，非粘贴清门）。对照 [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1。

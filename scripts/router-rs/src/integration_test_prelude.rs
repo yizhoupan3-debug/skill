@@ -31,10 +31,8 @@ pub(crate) use crate::execution_contract::{
     EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
 };
 pub(crate) use crate::framework_runtime::{
-    build_automatic_stop_hook_checkpoint_payload, build_framework_alias_envelope,
-    build_framework_continuity_digest_prompt, build_framework_runtime_snapshot_envelope,
-    build_framework_statusline, framework_hook_evidence_append,
-    resolve_automatic_stop_checkpoint_task_id, run_continuity_audit,
+    build_framework_alias_envelope, build_framework_runtime_snapshot_envelope,
+    build_framework_statusline, framework_hook_evidence_append, run_continuity_audit,
     write_framework_session_artifacts, FrameworkAliasBuildOptions,
     CONTINUITY_SESSION_CHECKPOINT_TASK_ID,
 };

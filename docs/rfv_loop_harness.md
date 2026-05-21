@@ -19,10 +19,9 @@
   - `operation: append_round` — 每轮结束后 supervisor 写入：`round`、`review_summary`、`external_research_summary`（可空）、可选结构化 **`external_research`**（校验见 [references/rfv-loop/external-research-harness.md](references/rfv-loop/external-research-harness.md)）、`fix_summary`、`verify_result`（`PASS|FAIL|SKIPPED`）、`supervisor_decision`（`continue|close|block`）、`reason`
   - `operation: status`
 - `max_rounds` 在 Rust 侧有 **硬上限 1000**（防止误填天文数字）；超过会截断并在响应中带 `warning`。
-- **Cursor**：若 [`.cursor/hooks.json`](../.cursor/hooks.json) 接入 `router-rs cursor hook`（默认 7 事件），且 **`RFV_LOOP_STATE.json`** 中 **`loop_status=active`**，**`Stop` / `beforeSubmitPrompt`** 可合并 **RFV_LOOP_CONTINUE** 跟进。本仓**不再**默认注册 `preCompact`；RFV 一行摘要仅在实现仍收到该事件时生效（恢复见 [`MIGRATION.md`](../MIGRATION.md)）。关闭注入：`ROUTER_RS_RFV_LOOP_HOOK=0`。
-- **Claude Code**：`Stop` / `UserPromptSubmit` 在 `loop_status=active` 时同样可合并 RFV 续跑提示（无 Cursor `preCompact` 等价事件）。
+- **全宿主 hook（2026-05）**：**不**注入 `RFV_LOOP_CONTINUE` / `GOAL_CONTINUE`。多轮 RFV 仅用 **`framework_rfv_loop` stdio** + `artifacts/current/<task_id>/RFV_LOOP_STATE.json` 手动画板。
 
-**GOAL（`GOAL_STATE.json` / `framework_autopilot_goal`）与 RFV 账本的关系**：
+**GOAL（`GOAL_STATE.json` / `framework_goal_drive`）与 RFV 账本的关系**：
 
 - 同一目录 `artifacts/current/<task_id>/` **可以**先后或交替出现 `GOAL_STATE.json` 与 `RFV_LOOP_STATE.json` 文件。
 - **不能**在同一任务上「双 macro **同时要求续跑**」：`GOAL` 处于需要续跑的 running/drive、且 **`RFV_LOOP_STATE.loop_status=active`** 时，`resolve_task_view` 会得到 **Conflict**（`autopilot_goal_and_rfv_loop_both_active`），真源：[`scripts/router-rs/src/task_state.rs`](../scripts/router-rs/src/task_state.rs) 的 `classify_control_mode`。
@@ -41,7 +40,7 @@
 
 - **真源**：[references/rfv-loop/reasoning-depth-contract.md](references/rfv-loop/reasoning-depth-contract.md) — **不靠单模型拉长 CoT**；靠 **`review ∥ external → fix → verify`** + **`EVIDENCE_INDEX` / `append_round`** 形成可审计链。
 - **提升调研深度的计划（契约级）**：同文件 §**提升调研深度的 harness 方向** — **A** 外研 API 式输出（Claims / Contradiction sweep / Unknowns）；**B** 检索留下可复核轨迹并与定量复算命令同源；**C** 多视角真并行、角色分离（禁止同上下文换帽）。
-- **宿主注入文案**：默认 RFV / Autopilot 续跑保持紧凑；RFV 在 `allow_external_research=true` 时追加检索 / `retrieval_trace` 短句，在 goal/scope/verify 命中数学或 checker 信号时追加数理 witness/checker 短句。`configs/framework/HARNESS_OPERATOR_NUDGES.json` 仍是文案真源；`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 可关闭这些 nudge；`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT=0` 仅关结构化短提示。
+- **Operator nudge（非 hook 续跑）**：`HARNESS_OPERATOR_NUDGES.json` 供 stdio / 契约侧紧凑文案；**不**经 hook 注入 `RFV_LOOP_CONTINUE` / `GOAL_CONTINUE`（2026-05 已拔除）。`ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` 可关闭 nudge；`ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT=0` 仅关 RFV 结构化短提示（仍受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束）。
 - **数理 / STEM 契约长文**：[references/rfv-loop/math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)（witness、符号 verifier、反事实探针；与 lane 模板同目录）。
 - **外研不得顶替 verify**：external 只产出可引用结论与假设；**Pass/Fail 只认可执行验证**。定量复算的 **replay** 与 `cargo test` 同类 spirit：写入 `verify_commands` 或 `quantitative_replays` 并由 verifier / supervisor 执行，证据进 `EVIDENCE_INDEX`（或等价记录）。
 

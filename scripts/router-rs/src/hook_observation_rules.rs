@@ -267,9 +267,9 @@ mod tests {
     }
 
     #[test]
-    fn golden_additional_rfv_priority_over_session() {
+    fn golden_additional_session_close_style_still_classified() {
         let text = "SESSION_CLOSE_STYLE: x\nRFV_LOOP_CONTINUE y";
         let g = classify_additional_context(text).expect("gate");
-        assert_eq!(g.code, "rfv_loop_continue");
+        assert_eq!(g.code, "session_close_style");
     }
 }

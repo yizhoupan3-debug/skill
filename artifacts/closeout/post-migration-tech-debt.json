@@ -6,7 +6,7 @@
   "summary": "Post-migration tech debt closed: GSD pre-exec stdio fix, tri-host integration verified, doc truth/host cross-links, policy + hook tests; verify-work and ship PASS.",
   "verification_status": "passed",
   "changed_files": [
-    "skills/gsd/new-project/SKILL.md",
+    "skills/_archived/gsd-lifecycle/new-project/SKILL.md",
     "tests/policy_contracts.rs",
     "scripts/router-rs/src/cursor_hooks/tests.rs",
     "docs/README.md",

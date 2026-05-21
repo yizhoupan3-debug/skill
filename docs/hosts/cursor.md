@@ -35,10 +35,10 @@ Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与�
 | 事件 | 作用 |
 |------|------|
 | `beforeSubmitPrompt` | Review / pre-goal / GSD；深度 review **spawn-first** 单行 nudge（`review_gate.spawn_first_nudge`） |
-| `stop` | `REVIEW_GATE` / closeout / `GSD_GOAL_CONTINUE` |
+| `stop` | `REVIEW_GATE` / closeout / `SESSION_CLOSE_STYLE`（无 `GOAL_CONTINUE`） |
 | `subagentStart` / `subagentStop` | 可数深度 lane + open subagent 限流 |
 | `postToolUse` | Review multiset 兜底 + Shell 账本；**非门控工具**在 router-rs 内 fast-path 跳过。**`timeout: 20`**（与 beforeSubmit/stop/subagent 一致） |
-| `sessionStart` / `sessionEnd` | 连续性注入 + hook-state 清扫 |
+| `sessionStart` / `sessionEnd` | 轻量指针/Repo 提示（**无** digest / `GOAL_CONTINUE`）+ hook-state 清扫 |
 
 **已默认移除**（勿在 `hooks.json` 恢复）：`afterAgentResponse`、`beforeShellExecution` / `afterShellExecution`、`afterFileEdit`、`preCompact`。对应 handler 仍保留，但 **`dispatch_cursor_hook_event` 默认 no-op**（不写 hook-state / shell 账本 / rustfmt）；清门与 compact findings 走 **`Stop` tail**。手动加回 `hooks.json` 即恢复 handler；未注册时可用 `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 做对照（见 [`MIGRATION.md`](../../MIGRATION.md)）。bootstrap 模板 [`cursor-hooks.workspace-template.json`](../../configs/framework/cursor-hooks.workspace-template.json) **须与** [`.cursor/hooks.json`](../../.cursor/hooks.json) **保持同一 7 事件集**（`scripts/ci/check-cursor-hooks-parity.sh`）。
 
@@ -94,8 +94,7 @@ Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与�
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_GSD_GOAL_CONTINUE_HOOK=0` | 关闭 Stop 续跑注入（兼容 `ROUTER_RS_AUTOPILOT_DRIVE_HOOK=0`） |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（绑定 `/gsd-execute-phase`） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（绑定 `/implementx`） |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES=<n>` | **仅显式设置**时，连续 pre-goal 提示达上限后自动 `pre_goal_review_satisfied`；unset/0 不自动放行 |
 | `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 剥 advisory `additional_context`（含 soft-nag detail）；保留 `router-rs ` 硬短码 |
 | `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` | hook-state 陈旧清扫天数（见上表） |
@@ -107,9 +106,9 @@ Pre-execution（`discussx`、`planx`）**禁止改产品代码**。`/gsd-*` 与�
 | `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` | hook-state 写失败时 beforeSubmit 仍放行（应急；默认 fail-closed） |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | SESSION_CALL_TRACKER `per_tool` 键上限 |
 
-Stop 硬门控（`REVIEW_GATE` / `AG_FOLLOWUP` / closeout）与 `GSD_GOAL_CONTINUE` **互斥**；无硬门控时 goal 续跑仍注入 `additional_context`。
+Stop 硬门控（`REVIEW_GATE` / `AG_FOLLOWUP` / closeout）保留；**不再**注入 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。宏目标用 `framework_goal_drive` stdio + 手动画板。
 
-**Fail-closed（review 武装路径）**：`subagentStart` / `subagentStop` / `postToolUse`（review armed）在 hook-state 锁不可用时返回 `permission: deny`；Stop 在 hook-state 不可读或 review 场景锁丢失时注入硬 `REVIEW_GATE`（不合并 continuity）。主线程 compact findings alone 不得清门，须有可数深度子代理证据（`subagent_start_count` / pending multiset / phase≥2）后再与 substantive compact 行配合升 phase。
+**Fail-closed（review 武装路径）**：`subagentStart` / `subagentStop` / `postToolUse`（review armed）在 hook-state 锁不可用时返回 `permission: deny`；Stop 在 hook-state 不可读或 review 场景锁丢失时注入硬 `REVIEW_GATE`（**不**注入 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`）。主线程 compact findings alone 不得清门，须有可数深度子代理证据（`subagent_start_count` / pending multiset / phase≥2）后再与 substantive compact 行配合升 phase。
 
 ## 自检
 

@@ -460,276 +460,6 @@ fn stdio_request_dispatches_execute_payload() {
 }
 
 #[test]
-fn continuity_digest_copies_compact_prompt_to_configured_file() {
-    let repo_root = std::env::temp_dir().join(format!(
-        "router-rs-refresh-fixture-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock before epoch")
-            .as_nanos()
-    ));
-    let task_root = repo_root
-        .join("artifacts")
-        .join("current")
-        .join("active-bootstrap-repair-20260418210000");
-    fs::create_dir_all(&task_root).expect("create task root");
-    fs::write(
-        task_root.join("SESSION_SUMMARY.md"),
-        "- task: active bootstrap repair\n- phase: implementation\n- status: in_progress\n",
-    )
-    .expect("write session summary");
-    fs::write(
-        task_root.join("NEXT_ACTIONS.json"),
-        r#"{"next_actions":["Patch classifier","Run MCP regression tests"]}"#,
-    )
-    .expect("write next actions");
-    fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
-        .expect("write evidence index");
-    fs::write(
-            task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["autopilot","skill-framework-developer"]}"#,
-        )
-        .expect("write trace metadata");
-    fs::create_dir_all(repo_root.join("artifacts").join("current")).expect("create current root");
-    fs::write(
-        repo_root
-            .join("artifacts")
-            .join("current")
-            .join("active_task.json"),
-        r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
-    )
-    .expect("write active task");
-    fs::write(
-        repo_root
-            .join("artifacts")
-            .join("current")
-            .join("focus_task.json"),
-        r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
-    )
-    .expect("write focus task");
-    fs::write(
-        repo_root
-            .join("artifacts")
-            .join("current")
-            .join("task_registry.json"),
-        r#"{"tasks":[{"task_id":"active-bootstrap-repair-20260418210000","status":"active"}]}"#,
-    )
-    .expect("write task registry");
-    fs::write(
-        repo_root.join(".supervisor_state.json"),
-        r#"{
-                "task_id":"active-bootstrap-repair-20260418210000",
-                "task_summary":"active bootstrap repair",
-                "active_phase":"implementation",
-                "verification":{"verification_status":"in_progress"},
-                "continuity":{"story_state":"active","resume_allowed":true},
-                "primary_owner":"skill-framework-developer",
-                "execution_contract":{
-                    "goal":"Repair stale bootstrap injection",
-                    "scope":["scripts/router-rs/src/framework_runtime.rs"],
-                    "acceptance_criteria":["completed tasks never appear as current execution"]
-                },
-                "blockers":{"open_blockers":["Need regression coverage"]}
-            }"#,
-    )
-    .expect("write supervisor state");
-    let clipboard_path = repo_root.join("clipboard.txt");
-    std::env::set_var("ROUTER_RS_CLIPBOARD_PATH", &clipboard_path);
-    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest prompt");
-    let clipboard = copy_text_to_clipboard(&prompt).expect("copy prompt");
-    std::env::remove_var("ROUTER_RS_CLIPBOARD_PATH");
-
-    let copied = fs::read_to_string(&clipboard_path).expect("read clipboard file");
-    assert_eq!(clipboard["backend"], json!("file"));
-    assert!(copied.contains("任务：active bootstrap repair"));
-    assert!(copied.contains("先做："));
-    assert!(copied.contains("恢复锚点："));
-    assert!(copied
-        .contains("artifacts/current/active-bootstrap-repair-20260418210000/SESSION_SUMMARY.md"));
-    assert!(!copied.contains("按既定串并行分工直接开始执行。"));
-    assert!(!copied.contains("当前上下文："));
-    assert!(!copied.contains("必须先做的下一步："));
-
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn continuity_digest_completed_task_uses_plain_closeout_wording() {
-    let repo_root = std::env::temp_dir().join(format!(
-        "router-rs-refresh-completed-fixture-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock before epoch")
-            .as_nanos()
-    ));
-    let task_root = repo_root
-        .join("artifacts")
-        .join("current")
-        .join("completed-rerun-20260423");
-    fs::create_dir_all(&task_root).expect("create task root");
-    fs::create_dir_all(repo_root.join("artifacts").join("current")).expect("create current root");
-    fs::write(
-        task_root.join("SESSION_SUMMARY.md"),
-        "- task: bounded rerun\n- phase: closeout\n- status: completed\n",
-    )
-    .expect("write session summary");
-    fs::write(
-        task_root.join("NEXT_ACTIONS.json"),
-        r#"{"next_actions":[]}"#,
-    )
-    .expect("write next actions");
-    fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
-        .expect("write evidence index");
-    fs::write(
-        task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"bounded rerun","verification_status":"completed"}"#,
-    )
-    .expect("write trace metadata");
-    fs::write(
-        repo_root
-            .join("artifacts")
-            .join("current")
-            .join("active_task.json"),
-        r#"{"task_id":"completed-rerun-20260423","task":"bounded rerun"}"#,
-    )
-    .expect("write active task");
-    fs::write(
-            repo_root.join(".supervisor_state.json"),
-            r#"{
-                "task_id":"completed-rerun-20260423",
-                "task_summary":"bounded rerun",
-                "active_phase":"closeout",
-                "verification":{"verification_status":"completed","last_verification_summary":"262 passed"},
-                "continuity":{"story_state":"completed","resume_allowed":false},
-                "next_actions":[],
-                "execution_contract":{"goal":"Re-run bounded verification"}
-            }"#,
-        )
-        .expect("write supervisor state");
-    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest prompt");
-
-    assert!(prompt.contains("最近一轮已经收尾："));
-    assert!(prompt.contains("- bounded rerun"));
-    assert!(prompt.contains("- 结果已经稳定，可以直接按已完成上下文来看。"));
-    assert!(prompt.contains("- 如果还要继续相关工作，先新开一个 standalone task"));
-    assert!(!prompt.contains("恢复锚点："));
-    assert!(!prompt.contains("剩余："));
-    assert!(!prompt.contains("先做："));
-    assert!(!prompt.contains("按既定串并行分工直接开始执行。"));
-    assert!(!prompt.contains("Keep this task only as recent-completed context"));
-    assert!(!prompt.contains("Start a new standalone task before resuming related work"));
-
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn continuity_digest_includes_goal_state_attachment() {
-    let repo_root = temp_dir_path("autopilot-followup-goal-merge");
-    let task_id = "goal-task-refresh";
-    let task_root = repo_root.join("artifacts/current").join(task_id);
-    fs::create_dir_all(&task_root).expect("mkdir task");
-    fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir current");
-    fs::write(
-        repo_root.join("artifacts/current/active_task.json"),
-        format!(r#"{{"task_id":"{task_id}"}}"#),
-    )
-    .expect("active_task");
-    fs::write(
-        task_root.join("GOAL_STATE.json"),
-        r#"{
-            "schema_version": "router-rs-autopilot-goal-v1",
-            "goal": "Integration goal text",
-            "status": "running",
-            "drive_until_done": true,
-            "done_when": ["cargo test passes"],
-            "validation_commands": ["cargo test -q"],
-            "non_goals": [],
-            "checkpoints": [],
-            "updated_at": "2026-01-01T00:00:00Z"
-        }"#,
-    )
-    .expect("goal state");
-    let _env = crate::test_env_sync::process_env_lock();
-    let prev_hint = std::env::var_os("ROUTER_RS_DEPTH_COMPLIANCE_HINT");
-    std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1");
-    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
-    assert!(
-        prompt.contains("深度信号") && prompt.contains("d0/3"),
-        "depth hint should surface when ROUTER_RS_DEPTH_COMPLIANCE_HINT=1; prompt={prompt:?}"
-    );
-    match prev_hint {
-        Some(v) => std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", v),
-        None => std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT"),
-    }
-    assert!(
-        prompt.contains("Active goal"),
-        "goal section missing; prompt={prompt:?}"
-    );
-    assert!(prompt.contains("Integration goal text"));
-    assert!(prompt.contains("cargo test -q"));
-    let view = crate::task_state::resolve_task_view(&repo_root, None);
-    assert_eq!(
-        view.depth_compliance.as_ref().map(|d| d.depth_score),
-        Some(0)
-    );
-
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn continuity_digest_goal_prompt_uses_compact_section() {
-    let repo_root = temp_dir_path("autopilot-followup-goal-merge-verbose");
-    let task_id = "goal-task-verbose";
-    let task_root = repo_root.join("artifacts/current").join(task_id);
-    fs::create_dir_all(&task_root).expect("mkdir task");
-    fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir current");
-    fs::write(
-        repo_root.join("artifacts/current/active_task.json"),
-        format!(r#"{{"task_id":"{task_id}"}}"#),
-    )
-    .expect("active_task");
-    fs::write(
-        task_root.join("GOAL_STATE.json"),
-        r#"{
-            "schema_version": "router-rs-autopilot-goal-v1",
-            "goal": "Verbose fixture",
-            "status": "running",
-            "drive_until_done": true,
-            "done_when": ["pass"],
-            "validation_commands": ["cargo test -q"],
-            "non_goals": [],
-            "checkpoints": [],
-            "updated_at": "2026-01-01T00:00:00Z"
-        }"#,
-    )
-    .expect("goal state");
-    let prompt = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
-    assert!(
-        prompt.contains("## Active goal"),
-        "digest should stay compact; prompt={prompt:?}"
-    );
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn continuity_digest_aligns_with_task_state_depth_rollup_on_repo_root() {
-    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let view = crate::task_state::resolve_task_view(&repo_root, None);
-    if let Some(ref dc) = view.depth_compliance {
-        let v = serde_json::to_value(dc).expect("depth rollup serializes");
-        assert!(
-            v.get("depth_score").is_some(),
-            "depth_compliance must include depth_score; got {v:?}"
-        );
-    }
-    let digest = build_framework_continuity_digest_prompt(&repo_root, 6).expect("digest");
-    assert!(
-        !digest.trim().is_empty(),
-        "continuity digest should be non-empty for skill repo root"
-    );
-}
-
-#[test]
 fn framework_statusline_uses_rust_runtime_view() {
     let repo_root = temp_dir_path("framework-statusline");
     let task_id = "statusline-task-20260424120000";
@@ -984,194 +714,8 @@ fn framework_session_writer_skips_journal_by_default() {
     let _ = fs::remove_dir_all(&repo_root);
 }
 
-#[test]
-fn stop_checkpoint_does_not_repoint_focus() {
-    let repo_root = temp_dir_path("stop-checkpoint-in-place");
-    let output_dir = repo_root.join("artifacts").join("current");
-    let task_id = "real-work-task";
-    write_framework_session_artifacts(json!({
-        "repo_root": repo_root,
-        "output_dir": output_dir,
-        "task_id": task_id,
-        "task": "real work",
-        "phase": "execution",
-        "status": "in_progress",
-        "summary": "Primary task",
-        "focus": true,
-        "next_actions": ["Continue"],
-    }))
-    .expect("seed task");
 
-    write_text_fixture(
-        &repo_root.join(".supervisor_state.json"),
-        r#"{"schema_version":"supervisor-state-v2","task_id":"stale-supervisor-task","task_summary":"stale","active_phase":"execution"}"#,
-    );
 
-    let active_before = fs::read_to_string(repo_root.join("artifacts/current/active_task.json"))
-        .expect("read active");
-    let focus_before = fs::read_to_string(repo_root.join("artifacts/current/focus_task.json"))
-        .expect("read focus");
-    let registry_before: Value = serde_json::from_str(
-        &fs::read_to_string(repo_root.join("artifacts/current/task_registry.json"))
-            .expect("read registry"),
-    )
-    .expect("parse registry");
-    let rows_before = registry_before["tasks"]
-        .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
-
-    assert_eq!(
-        resolve_automatic_stop_checkpoint_task_id(&repo_root),
-        task_id
-    );
-    let payload = build_automatic_stop_hook_checkpoint_payload(
-        &repo_root,
-        "cursor-stop",
-        "Stop hook automatic checkpoint (Cursor).",
-    )
-    .expect("checkpoint payload");
-    assert_eq!(payload["focus"], json!(false));
-    assert_eq!(payload["update_registry_only_if_known"], json!(true));
-    write_framework_session_artifacts(payload).expect("write stop checkpoint");
-
-    let active_after = fs::read_to_string(repo_root.join("artifacts/current/active_task.json"))
-        .expect("read active after");
-    let focus_after = fs::read_to_string(repo_root.join("artifacts/current/focus_task.json"))
-        .expect("read focus after");
-    assert_eq!(active_before, active_after, "active pointer must not move");
-    assert_eq!(focus_before, focus_after, "focus pointer must not move");
-
-    let registry_after: Value = serde_json::from_str(
-        &fs::read_to_string(repo_root.join("artifacts/current/task_registry.json"))
-            .expect("read registry after"),
-    )
-    .expect("parse registry after");
-    let rows_after = registry_after["tasks"]
-        .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
-    assert_eq!(
-        rows_before, rows_after,
-        "registry must not grow ephemeral rows"
-    );
-    assert!(
-        !registry_after["tasks"]
-            .as_array()
-            .unwrap_or(&vec![])
-            .iter()
-            .any(|row| {
-                row.get("task_id")
-                    .and_then(Value::as_str)
-                    .is_some_and(|id| id.starts_with("cursor-stop-"))
-            }),
-        "no cursor-stop slug rows"
-    );
-
-    let summary = fs::read_to_string(
-        repo_root
-            .join("artifacts/current")
-            .join(task_id)
-            .join("SESSION_SUMMARY.md"),
-    )
-    .expect("task summary updated");
-    assert!(summary.contains("Stop hook automatic checkpoint"));
-
-    let supervisor: Value = serde_json::from_str(
-        &fs::read_to_string(repo_root.join(".supervisor_state.json")).expect("read supervisor"),
-    )
-    .expect("parse supervisor");
-    assert_eq!(
-        supervisor.get("task_id").and_then(Value::as_str),
-        Some(task_id),
-        "stop checkpoint must sync supervisor to checkpoint task (ADR-001)"
-    );
-
-    let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
-    let reasons = snapshot["runtime_snapshot"]["continuity"]["inconsistency_reasons"]
-        .as_array()
-        .expect("reasons")
-        .iter()
-        .filter_map(Value::as_str)
-        .collect::<Vec<_>>();
-    assert!(
-        !reasons.iter().any(|r| r.contains("disagrees")),
-        "supervisor should align with pointers after stop checkpoint: {reasons:?}"
-    );
-    assert_ne!(
-        snapshot["runtime_snapshot"]["continuity"]["state"],
-        json!("inconsistent"),
-        "continuity should not be inconsistent after ADR-001 stop checkpoint"
-    );
-
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn stop_checkpoint_uses_continuity_session_without_pointers() {
-    use crate::framework_runtime::CONTINUITY_SESSION_CHECKPOINT_TASK_ID;
-
-    let repo_root = temp_dir_path("stop-checkpoint-continuity-session");
-    let current = repo_root.join("artifacts/current");
-    fs::create_dir_all(&current).expect("mkdir current");
-
-    let payload = build_automatic_stop_hook_checkpoint_payload(
-        &repo_root,
-        "cursor-stop",
-        "Stop hook automatic checkpoint (Cursor).",
-    )
-    .expect("payload");
-    assert_eq!(
-        payload["task_id"].as_str(),
-        Some(CONTINUITY_SESSION_CHECKPOINT_TASK_ID)
-    );
-    write_framework_session_artifacts(payload).expect("write");
-
-    let summary_path = current
-        .join(CONTINUITY_SESSION_CHECKPOINT_TASK_ID)
-        .join("SESSION_SUMMARY.md");
-    assert!(summary_path.is_file(), "continuity-session summary written");
-    assert!(
-        !current.join("active_task.json").exists(),
-        "must not create active pointer"
-    );
-    assert!(
-        !current.join("focus_task.json").exists(),
-        "must not create focus pointer"
-    );
-
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn stop_checkpoint_respects_env_disable() {
-    let _env = crate::test_env_sync::process_env_lock();
-    let prev = std::env::var_os("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT");
-    std::env::set_var("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT", "0");
-
-    let repo_root = temp_dir_path("stop-checkpoint-env-off");
-    let task_dir = repo_root.join("artifacts/current").join("env-off-task");
-    fs::create_dir_all(&task_dir).expect("mkdir");
-    let summary_path = task_dir.join("SESSION_SUMMARY.md");
-    fs::write(&summary_path, "# before\n").expect("seed summary");
-    fs::write(
-        repo_root.join("artifacts/current/active_task.json"),
-        r#"{"task_id":"env-off-task"}"#,
-    )
-    .expect("active");
-
-    let before = fs::read_to_string(&summary_path).expect("read before");
-    crate::cursor_hooks::try_write_cursor_continuity_checkpoint_on_stop(&repo_root);
-    let after = fs::read_to_string(&summary_path).expect("read after");
-    assert_eq!(before, after, "checkpoint must not run when env disabled");
-
-    match prev {
-        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT", v),
-        None => std::env::remove_var("ROUTER_RS_CONTINUITY_STOP_CHECKPOINT"),
-    }
-    let _ = fs::remove_dir_all(&repo_root);
-}
 
 #[test]
 fn continuity_audit_flags_ephemeral_registry_row() {
@@ -1480,7 +1024,7 @@ fn hook_evidence_append_allows_autopilot_goal_complete() {
         r#"{"task_id":"hook-goal"}"#,
     )
     .expect("active pointer");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo_root,
         "operation": "start",
         "task_id": "hook-goal",
@@ -1501,7 +1045,7 @@ fn hook_evidence_append_allows_autopilot_goal_complete() {
     }))
     .expect("append evidence");
 
-    let done = crate::autopilot_goal::framework_autopilot_goal(json!({
+    let done = crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo_root,
         "operation": "complete",
         "task_id": "hook-goal",
@@ -2569,7 +2113,7 @@ fn stdio_dispatch_domain_classification_covers_known_ops() {
     assert!(is_trace_stdio_op("trace_stream_replay"));
     assert!(is_framework_stdio_op("framework_prompt_compression"));
     assert!(is_framework_stdio_op("framework_hook_evidence_append"));
-    assert!(is_framework_stdio_op("framework_autopilot_goal"));
+    assert!(is_framework_stdio_op("framework_goal_drive"));
     assert!(is_framework_stdio_op("framework_rfv_loop"));
     assert!(!is_routing_stdio_op("framework_prompt_compression"));
     assert!(!is_runtime_stdio_op("trace_record_event"));
@@ -2590,7 +2134,7 @@ fn stdio_dispatch_domain_classification_covers_known_ops() {
         Some(StdioOpDomain::Framework)
     ));
     assert!(matches!(
-        classify_stdio_op("framework_autopilot_goal"),
+        classify_stdio_op("framework_goal_drive"),
         Some(StdioOpDomain::Framework)
     ));
     assert!(matches!(
@@ -2600,7 +2144,7 @@ fn stdio_dispatch_domain_classification_covers_known_ops() {
 }
 
 #[test]
-fn stdio_framework_autopilot_goal_roundtrip() {
+fn stdio_framework_goal_drive_roundtrip() {
     let repo_root = temp_dir_path("stdio-autopilot-goal");
     let _ = fs::remove_dir_all(&repo_root);
     let output_dir = repo_root.join("artifacts").join("current");
@@ -2620,7 +2164,7 @@ fn stdio_framework_autopilot_goal_roundtrip() {
     let rr = repo_root.display().to_string();
     let req = json!({
         "id": "ag-1",
-        "op": "framework_autopilot_goal",
+        "op": "framework_goal_drive",
         "payload": {
             "repo_root": rr,
             "operation": "start",

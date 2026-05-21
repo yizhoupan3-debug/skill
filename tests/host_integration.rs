@@ -2009,7 +2009,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let payload = runtime_registry(&project_root());
     let aliases = &payload["framework_commands"];
     assert!(aliases.get("autopilot").is_none());
-    assert_eq!(aliases["gsd"]["canonical_owner"], "gsd");
+    assert_eq!(aliases["gsd"]["canonical_owner"], "legacy-gsd");
     assert_eq!(aliases["gsd"]["host_entrypoints"]["codex-cli"], "/gsd");
     assert_eq!(aliases["gsd"]["host_entrypoints"]["cursor"], "/gsd");
     assert_eq!(
@@ -2106,11 +2106,14 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let gp = gsd["goal_persistence"]
         .as_object()
         .expect("goal_persistence");
-    assert!(gp
+    let leader = gp
         .get("continuation_hook_leader")
         .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .contains("GSD_GOAL_CONTINUE"));
+        .unwrap_or("");
+    assert!(
+        leader.contains("framework_goal_drive") && !leader.contains("GOAL_CONTINUE"),
+        "continuation_hook_leader: {leader}"
+    );
     assert_eq!(gsd["reroute_when_root_cause_unknown"], "deepinterview");
 }
 

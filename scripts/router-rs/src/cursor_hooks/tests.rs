@@ -848,7 +848,7 @@ fn gsd_skips_pre_goal_nag_when_goal_state_on_disk() {
         r#"{"task_id":"gt1"}"#,
     )
     .expect("active");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "gt1",
@@ -898,7 +898,7 @@ fn gsd_pre_goal_strict_disk_skips_hydrate_pre_goal_on_before_submit() {
         r#"{"task_id":"gt-strict"}"#,
     )
     .expect("active");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "gt-strict",
@@ -934,7 +934,7 @@ fn stop_goal_gate_hydrates_from_goal_state_and_evidence_without_keywords() {
         r#"{"task_id":"t-ev"}"#,
     )
     .expect("active");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "t-ev",
@@ -945,7 +945,7 @@ fn stop_goal_gate_hydrates_from_goal_state_and_evidence_without_keywords() {
         "drive_until_done": true,
     }))
     .expect("goal start");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "checkpoint",
         "task_id": "t-ev",
@@ -991,7 +991,7 @@ fn stop_hydrates_when_hook_state_lacks_goal_required_but_goal_on_disk() {
         r#"{"task_id":"t-nof"}"#,
     )
     .expect("active");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "t-nof",
@@ -1002,7 +1002,7 @@ fn stop_hydrates_when_hook_state_lacks_goal_required_but_goal_on_disk() {
         "drive_until_done": true,
     }))
     .expect("start");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "checkpoint",
         "task_id": "t-nof",
@@ -1083,7 +1083,7 @@ fn stop_goal_gate_hydrates_running_goal_without_checkpoints_or_keywords() {
         r#"{"task_id":"t-run"}"#,
     )
     .expect("active");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "t-run",
@@ -1625,7 +1625,7 @@ fn stop_lock_failure_still_surfaces_autopilot_drive() {
         r#"{"task_id":"gl-stop-lock"}"#,
     )
     .expect("active_task");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "gl-stop-lock",
@@ -1648,13 +1648,14 @@ fn stop_lock_failure_still_surfaces_autopilot_drive() {
         "review-armed stop lock loss must hard REVIEW_GATE; blob={blob}"
     );
     assert!(
-        !blob.contains("GSD_GOAL_CONTINUE"),
-        "hard lock-failure followup must not merge GSD_GOAL_CONTINUE; blob={blob}"
+        !blob.contains("GOAL_CONTINUE"),
+        "hard lock-failure followup must not merge GOAL_CONTINUE; blob={blob}"
     );
 }
 
 #[test]
-fn continuity_followup_with_existing_hard_message_uses_additional_context_and_dedupes() {
+fn stop_with_active_goal_does_not_inject_goal_continue() {
+    let _inject_on = OperatorInjectEnabledGuard::new();
     let repo = fresh_repo();
     let tid = "existing-followup";
     fs::create_dir_all(repo.join("artifacts/current").join(tid)).expect("mkdir goal");
@@ -1671,28 +1672,12 @@ fn continuity_followup_with_existing_hard_message_uses_additional_context_and_de
             r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"drive while hard message exists","status":"running","drive_until_done":true,"non_goals":["n"],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal");
-    let frame = crate::task_state::resolve_cursor_continuity_frame(&repo);
-    let hard_gate_followup = format!(
-        "router-rs REVIEW_GATE incomplete phase=0 {} {}",
-        REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+    let out = dispatch_cursor_hook_event(&repo, "stop", &event("existing-followup", "hi"));
+    let blob = hook_user_visible_blob(&out);
+    assert!(
+        !blob.contains("GOAL_CONTINUE"),
+        "continuity removal: Stop must not inject GOAL_CONTINUE: {blob}"
     );
-    let mut out = json!({
-        "followup_message": hard_gate_followup.clone(),
-        "additional_context": "GSD_GOAL_CONTINUE: stale\nGoal: old"
-    });
-
-    merge_continuity_followups(&repo, &mut out, &frame);
-    merge_continuity_followups(&repo, &mut out, &frame);
-
-    assert_eq!(
-        out["followup_message"].as_str(),
-        Some(hard_gate_followup.as_str())
-    );
-    let ctx = out["additional_context"].as_str().unwrap_or("");
-    assert!(ctx.contains("GSD_GOAL_CONTINUE"), "{ctx}");
-    assert!(ctx.contains("drive while hard message exists"), "{ctx}");
-    assert!(!ctx.contains("Goal: old"), "{ctx}");
-    assert_eq!(ctx.matches("GSD_GOAL_CONTINUE").count(), 1, "{ctx}");
 }
 
 #[test]
@@ -1723,13 +1708,13 @@ fn before_submit_does_not_merge_goal_or_rfv_continuity() {
         .expect("rfv");
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event("merge-t", "hello"));
     let msg = hook_user_visible_blob(&out);
-    assert!(!msg.contains("GSD_GOAL_CONTINUE"), "{msg}");
+    assert!(!msg.contains("GOAL_CONTINUE"), "{msg}");
     assert!(!msg.contains("RFV_LOOP_CONTINUE"), "{msg}");
     assert!(!msg.contains("## 续跑"), "{msg}");
 }
 
 #[test]
-fn stop_active_goal_continuity_uses_additional_context_by_default() {
+fn stop_active_goal_does_not_inject_goal_continue() {
     let _inject_on = OperatorInjectEnabledGuard::new();
     let repo = fresh_repo();
     fs::create_dir_all(repo.join("artifacts/current/default-ac")).expect("mkdir goal");
@@ -1738,7 +1723,7 @@ fn stop_active_goal_continuity_uses_additional_context_by_default() {
         r#"{"task_id":"default-ac"}"#,
     )
     .expect("active_task");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "default-ac",
@@ -1759,11 +1744,13 @@ fn stop_active_goal_continuity_uses_additional_context_by_default() {
         .get("additional_context")
         .and_then(Value::as_str)
         .unwrap_or("");
-    assert!(ctx.contains("GSD_GOAL_CONTINUE"), "{ctx}");
-    assert!(ctx.contains("default additional context drive"), "{ctx}");
+    assert!(
+        !ctx.contains("GOAL_CONTINUE"),
+        "continuity removal: {ctx}"
+    );
     assert!(
         ctx.contains("SESSION_CLOSE_STYLE"),
-        "soft terminal nudge merges with autopilot continuity: {ctx}"
+        "soft terminal closeout nudge still allowed: {ctx}"
     );
 }
 
@@ -1798,7 +1785,7 @@ fn stop_hard_gate_does_not_inject_session_close_style_paragraph() {
         "hard Stop followup must not bundle soft closeout nudge: {out:?}"
     );
     assert!(
-        !ac.contains("GSD_GOAL_CONTINUE"),
+        !ac.contains("GOAL_CONTINUE"),
         "hard Stop followup must suppress goal continuity merge: {out:?}"
     );
     assert!(
@@ -1818,7 +1805,7 @@ fn stop_review_armed_with_active_goal_suppresses_gsd_continue() {
         r#"{"task_id":"default-rg"}"#,
     )
     .expect("active_task");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "default-rg",
@@ -1841,8 +1828,8 @@ fn stop_review_armed_with_active_goal_suppresses_gsd_continue() {
         "expected hard gate followup: {blob}"
     );
     assert!(
-        !blob.contains("GSD_GOAL_CONTINUE"),
-        "hard gate must not merge GSD_GOAL_CONTINUE: {blob}"
+        !blob.contains("GOAL_CONTINUE"),
+        "hard gate must not merge GOAL_CONTINUE: {blob}"
     );
     assert!(
         !blob.contains("review-output-lint"),
@@ -1954,7 +1941,7 @@ fn review_gate_disabled_stop_still_merges_autopilot_drive() {
         r#"{"task_id":"gl-rgoff"}"#,
     )
     .expect("active_task");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "gl-rgoff",
@@ -1971,15 +1958,21 @@ fn review_gate_disabled_stop_still_merges_autopilot_drive() {
         dispatch_cursor_hook_event(&repo, "stop", &event("sg1", "hi"))
     };
     let blob = hook_user_visible_blob(&out);
-    assert!(blob.contains("GSD_GOAL_CONTINUE"), "{blob}");
+    assert!(
+        !blob.contains("GOAL_CONTINUE"),
+        "continuity removal: {blob}"
+    );
 
     apply_cursor_hook_output_policy(&mut out);
     let preserved = hook_user_visible_blob(&out);
-    assert!(preserved.contains("GSD_GOAL_CONTINUE"), "{preserved}");
+    assert!(
+        !preserved.contains("GOAL_CONTINUE"),
+        "continuity removal: {preserved}"
+    );
 }
 
 #[test]
-fn stop_goal_and_rfv_emit_dual_continuity_followups() {
+fn stop_goal_and_rfv_do_not_emit_continuity_followups() {
     let _lock = crate::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let repo = fresh_repo();
@@ -2018,18 +2011,18 @@ fn stop_goal_and_rfv_emit_dual_continuity_followups() {
         }),
     );
     let blob = hook_user_visible_blob(&out);
-    assert!(blob.contains("GSD_GOAL_CONTINUE"), "{blob}");
-    // Goal+RFV 同时活跃时合并为单段 `GSD_GOAL_CONTINUE`，RFV 信息压缩为尾注（见 `merge_continuity_followups`）。
-    assert!(blob.contains("RFV") || blob.contains("rfv-line"), "{blob}");
     assert!(
-        blob.matches("GSD_GOAL_CONTINUE").count() >= 1,
-        "expected GSD_GOAL_CONTINUE marker in merged continuity blob: {blob}"
+        !blob.contains("GOAL_CONTINUE"),
+        "continuity removal: {blob}"
+    );
+    assert!(
+        !blob.contains("RFV_LOOP_CONTINUE"),
+        "continuity removal: {blob}"
     );
 }
 
-/// Goal+RFV 合并为单段 `GSD_GOAL_CONTINUE` 时须保留结构化外研 schema 指针行（出站前缀裁剪下更易存活）。
 #[test]
-fn stop_goal_and_rfv_merge_preserves_external_struct_schema_hint_line() {
+fn stop_goal_and_rfv_do_not_merge_schema_hint_into_continue() {
     let _lock = crate::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _advisory_env = AdvisoryOperatorEnvClearGuard::new();
@@ -2069,10 +2062,13 @@ fn stop_goal_and_rfv_merge_preserves_external_struct_schema_hint_line() {
         }),
     );
     let blob = hook_user_visible_blob(&out);
-    assert!(blob.contains("GSD_GOAL_CONTINUE"), "{blob}");
     assert!(
-        blob.contains(crate::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH),
-        "merged GSD_GOAL_CONTINUE should retain external struct schema pointer: {blob}"
+        !blob.contains("GOAL_CONTINUE"),
+        "continuity removal: {blob}"
+    );
+    assert!(
+        !blob.contains(crate::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH),
+        "continuity removal must not inject RFV schema pointer via Stop: {blob}"
     );
 }
 
@@ -3301,7 +3297,7 @@ fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
         r#"{"task_id":"strict-stop"}"#,
     )
     .expect("active_task");
-    crate::autopilot_goal::framework_autopilot_goal(json!({
+    crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
         "task_id": "strict-stop",
@@ -5232,11 +5228,17 @@ fn session_start_additional_context_observes_router_rs_sessionstart_max_env() {
         "cwd": repo.display().to_string()
     });
     let prev = env::var_os("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS");
+    let prev_mode = env::var_os("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE");
     env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS", "420");
+    env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE", "summary");
     let out = dispatch_cursor_hook_event(&repo, "sessionStart", &payload);
     match prev {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS", v),
         None => env::remove_var("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS"),
+    }
+    match prev_mode {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE"),
     }
     let ctx = out["additional_context"]
         .as_str()

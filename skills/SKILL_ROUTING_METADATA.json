@@ -52,9 +52,6 @@
     "gitx": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
-    "gsd": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
     "hatch-pet": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -68,6 +65,9 @@
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "latex-compile-acceleration": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "legacy-gsd": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "loop": {

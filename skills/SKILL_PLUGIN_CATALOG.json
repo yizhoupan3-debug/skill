@@ -223,19 +223,6 @@
       "kind": "skill",
       "skill_path": "skills/gitx/SKILL.md"
     },
-    "gsd": {
-      "host_support": {
-        "platforms": [
-          "claude-code",
-          "claude-desktop",
-          "codex-app",
-          "codex-cli",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/_archived/gsd-lifecycle/SKILL.md"
-    },
     "hatch-pet": {
       "host_support": {
         "platforms": [
@@ -300,6 +287,19 @@
       },
       "kind": "skill",
       "skill_path": "skills/latex-compile-acceleration/SKILL.md"
+    },
+    "legacy-gsd": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "claude-desktop",
+          "codex-app",
+          "codex-cli",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/_archived/gsd-lifecycle/SKILL.md"
     },
     "loop": {
       "host_support": {
