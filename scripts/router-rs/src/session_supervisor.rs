@@ -80,6 +80,23 @@ pub struct BlockClassification {
 pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, String> {
     let operation = required_non_empty_string(&payload, "operation", "session supervisor")?;
     let state_path = resolve_state_path(&payload)?;
+
+    // Pure memory fast-path bypass for non-state-mutating operations:
+    if operation == "classify_block" {
+        let host = required_non_empty_string(&payload, "host", "session supervisor")?;
+        let evidence_text =
+            required_non_empty_string(&payload, "evidence_text", "session supervisor")?;
+        let classification = classify_rate_limit_block(&host, &evidence_text)?;
+        return Ok(json!({
+            "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+            "authority": SESSION_SUPERVISOR_AUTHORITY,
+            "operation": operation,
+            "state_path": state_path.display().to_string(),
+            "changed": false,
+            "classification": classification,
+        }));
+    }
+
     let dry_run = optional_bool(&payload, "dry_run").unwrap_or(false);
     let now = now_from_payload(&payload)?;
     let _store_lock = acquire_runtime_path_lock(&state_path)?;
@@ -158,18 +175,8 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             }))
         }
         "classify_block" => {
-            let host = required_non_empty_string(&payload, "host", "session supervisor")?;
-            let evidence_text =
-                required_non_empty_string(&payload, "evidence_text", "session supervisor")?;
-            let classification = classify_rate_limit_block(&host, &evidence_text)?;
-            Ok(json!({
-                "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
-                "authority": SESSION_SUPERVISOR_AUTHORITY,
-                "operation": operation,
-                "state_path": state_path.display().to_string(),
-                "changed": false,
-                "classification": classification,
-            }))
+            // Already handled by in-memory fast-path above
+            unreachable!("classify_block should be intercepted by the in-memory fast-path")
         }
         "mark_blocked" => {
             let worker_id = required_non_empty_string(&payload, "worker_id", "session supervisor")?;

@@ -13,7 +13,7 @@
 自检命令（在仓库根，已构建 `router-rs` 时）：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
 ```
 
 ## 宿主 × 策略强度（易误解点）

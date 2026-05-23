@@ -1109,11 +1109,6 @@ fn review_subagent_live_evidence_seen(state: &ReviewGateState) -> bool {
         || !state.review_subagent_pending_cycle_keys.is_empty()
 }
 
-/// Wave-2 / P0-4: countable deep-gate subagent evidence before any main-thread compact may clear REVIEW_GATE.
-fn countable_review_subagent_evidence_seen(state: &ReviewGateState) -> bool {
-    review_subagent_live_evidence_seen(state)
-}
-
 /// My execution-zone commands arm goal continuity gates (`/implementx`, `/verifyx`).
 fn is_framework_goal_drive_entry_prompt(prompt: &str, signal_text: &str) -> bool {
     let _ = signal_text;

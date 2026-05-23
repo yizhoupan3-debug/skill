@@ -16,12 +16,12 @@
   适合：需要 **Cursor/Codex/Claude hooks**、`.cursor/hook-state` 门控、连续性 `artifacts/current/`、证据索引等。必须先 **构建并安装 `router-rs`**，再按宿主配置 hooks；关键事件在二进制缺失时常 **fail-closed**（见下文 Codex hooks 解析顺序）。  
   **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 `AGENTS.md` → **Codex：`AGENTS.md` 构建快照（策略 A）**。  
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
-  `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
+  `cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
 
 ## 这套系统包含什么
 
 - `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
-  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
+  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
 - `docs/README.md`：契约与分层文档索引（阅读顺序、主题表、`target-dir`/hook 清理边界）。
 - `docs/harness_architecture.md`：连续性控制面 **L1–L5** 上层设计（证据流、续跑流、扩展规则）。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。
@@ -114,7 +114,7 @@ cd codex-skill-system
 进入仓库后运行：
 
 ```powershell
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- `
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- `
   framework skills refresh --framework-root . --write
 ```
 
@@ -123,7 +123,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- `
 再运行测试：
 
 ```powershell
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate --framework-root .
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate --framework-root .
 cargo test --test policy_contracts
 ```
 
@@ -176,7 +176,7 @@ codex
 ### Claude Code 侧（项目级）
 
 - Hooks：`.claude/settings.json` 合并 **4 事件**（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）→ [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](configs/framework/claude-router-rs-hook.env)）。
-- 安装：`cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --to claude --scope project`（详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)）。
+- 安装：`cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --to claude --scope project`（详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)）。
 
 **别的目录验收清单（Cursor 工作区 = 目标项目根）**
 
@@ -197,7 +197,7 @@ export FW=/abs/path/to/skill   # 改成你的框架仓库根
 command -v router-rs && router-rs --help | head -n 1
 # 若未安装：cargo install --path "$FW/scripts/router-rs"
 # 若 `router-rs framework --help` 看不到 `maint`，说明本机安装的二进制偏旧；
-# 维护类命令请改用下文的 `cargo run --manifest-path ... -- framework maint ...`
+# 维护类命令请改用下文的 `cargo run --release --manifest-path ... -- framework maint ...`
 # 或先重新安装/重建 router-rs。
 
 # 2) 在「目标项目根」执行 bootstrap（按需加规则与 configs）
@@ -213,7 +213,7 @@ cd /abs/path/to/your-other-repo
 printf '{}' | router-rs cursor hook --event=SessionStart --repo-root "$(pwd)"
 
 # 5) 在「非框架 cwd」下跑维护类命令须显式走框架源码入口（示例）
-cargo run --manifest-path "$FW/scripts/router-rs/Cargo.toml" -- framework maint verify-cursor-hooks
+cargo run --release --manifest-path "$FW/scripts/router-rs/Cargo.toml" -- framework maint verify-cursor-hooks
 # 注意：上条校验的是框架仓 $FW 内的 .cursor/hooks.json（本仓库多为 embedded 路径）。
 # 若要确认「目标仓」hooks 与跨仓模板一致：
 cmp .cursor/hooks.json "$FW/configs/framework/cursor-hooks.workspace-template.json" && echo "hooks match workspace template"
@@ -225,7 +225,7 @@ cmp .cursor/hooks.json "$FW/configs/framework/cursor-hooks.workspace-template.js
 
 ```bash
 export SKILL_FRAMEWORK_ROOT=/abs/path/to/framework-repo   # 或与 Cursor 单根一致的 CURSOR_WORKSPACE_ROOT
-cargo run --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
+cargo run --release --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
 ```
 
 ```bash
@@ -235,8 +235,8 @@ router-rs framework maint update-one-shot
 你更新 skill 后若只需最小验证，可拆步：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
 cargo test --test policy_contracts
 git status --short
 git add skills scripts tests AGENTS.md README.md
@@ -249,7 +249,7 @@ git push
 ```powershell
 cd $HOME\Documents\codex-skill-system
 git pull
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- `
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- `
   framework skills refresh --framework-root . --write
 ```
 
@@ -317,7 +317,7 @@ PowerShell 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` 续行。READ
 `.cursor/hooks.json` 由 Cursor 自动读取；自检可用：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
 ```
 
 ### Codex CLI
@@ -325,7 +325,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify
 写入 `~/.codex/{config.toml,hooks.json}` 的用户级安装（替代已移除的 bash 包装脚本）：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks
 ```
 
 快速检查：

@@ -32,7 +32,7 @@
   - **Hook state**：**Project**，路径为 `<repo>/.cursor/hook-state/`。
 - **环境安装命令**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
     framework host-integration install --to cursor --scope user
   ```
 
@@ -80,11 +80,11 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 - **校验 Cursor Hooks**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
   ```
 - **校验集成状态**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
   ```
 - **运行集成测试**：
   ```bash

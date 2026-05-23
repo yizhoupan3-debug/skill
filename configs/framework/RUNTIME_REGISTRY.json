@@ -146,7 +146,7 @@
       },
       "lineage": {
         "source": "repo-native",
-        "description": "Personal lifecycle discuss (replaces gsd-new-project + discuss)."
+        "description": "Personal lifecycle discuss."
       }
     },
     "planx": {

@@ -56,11 +56,11 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 - **环境注入与安装**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
     framework host-integration install --to antigravity --repo-root "$PWD"
   ```
 - **宿主状态自检**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
     framework host-integration status
   ```

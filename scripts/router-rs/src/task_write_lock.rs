@@ -18,6 +18,8 @@ use crate::router_env_flags::router_rs_task_ledger_flock_enabled;
 use fs2::FileExt;
 use std::fs::{self, OpenOptions};
 use std::path::Path;
+use std::time::{Duration, Instant};
+use std::thread;
 
 pub(crate) const TASK_LEDGER_LOCK_BASENAME: &str = ".router-rs.task-ledger.lock";
 
@@ -60,12 +62,33 @@ pub(crate) fn acquire_task_ledger_repo_lock(
                 lock_path.display()
             )
         })?;
-    file.lock_exclusive().map_err(|err| {
-        format!(
-            "task ledger lock: flock {} failed: {err}",
-            lock_path.display()
-        )
-    })?;
+    let mut delay = Duration::from_millis(10);
+    let max_delay = Duration::from_millis(50);
+    let timeout = Duration::from_secs(30);
+    let start = Instant::now();
+
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(_) => break,
+            Err(err) => {
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    return Err(format!(
+                        "task ledger lock: flock {} failed with fatal error: {err}",
+                        lock_path.display()
+                    ));
+                }
+                if start.elapsed() > timeout {
+                    return Err(format!(
+                        "task ledger lock: flock {} timeout after {:?} (concurrent write contention): {err}",
+                        lock_path.display(),
+                        timeout
+                    ));
+                }
+                thread::sleep(delay);
+                delay = std::cmp::min(delay * 2, max_delay);
+            }
+        }
+    }
     Ok(TaskLedgerRepoLockGuard { _file: Some(file) })
 }
 

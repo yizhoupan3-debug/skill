@@ -3,7 +3,6 @@
 use crate::atomic_write::write_atomic_json;
 use crate::autopilot_goal::read_active_task_id;
 use crate::framework_runtime::resolve_repo_root_arg;
-use crate::router_env_flags::router_rs_rfv_external_struct_hint_enabled;
 use chrono::Utc;
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -341,19 +340,6 @@ pub fn validate_external_research_structured(v: &Value) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-fn last_round_missing_external_structured_research(state: &Value) -> bool {
-    let Some(rounds) = state.get("rounds").and_then(Value::as_array) else {
-        return false;
-    };
-    let Some(last) = rounds.last() else {
-        return false;
-    };
-    match last.get("external_research") {
-        None | Some(Value::Null) => true,
-        Some(v) => !v.is_object(),
-    }
 }
 
 fn normalize_verify_result(raw: &str) -> Result<String, String> {
@@ -1158,14 +1144,6 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             "framework_rfv_loop: unknown operation '{operation}'"
         )),
     }
-}
-
-fn rfv_loop_requests_continuation(state: &Value) -> bool {
-    state
-        .get("loop_status")
-        .and_then(Value::as_str)
-        .map(|s| s.eq_ignore_ascii_case("active"))
-        .unwrap_or(false)
 }
 
 #[cfg(test)]

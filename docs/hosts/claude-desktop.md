@@ -29,7 +29,7 @@
   - **MCP 联动配置与工作流描述**：主要指引保存在项目文件 `.claude/CLAUDE.md` 中。
 - **环境安装与注册命令**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
     framework host-integration install --to claude-desktop --repo-root "$PWD"
   ```
 
@@ -65,6 +65,6 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 - **校验宿主投影状态**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
     framework host-integration status
   ```

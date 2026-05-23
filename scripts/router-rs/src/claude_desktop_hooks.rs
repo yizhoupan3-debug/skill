@@ -1648,6 +1648,7 @@ pub(crate) fn tool_goal_state_manage_test_helper(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn tool_record_evidence_test_helper(
     arguments: &Value,
     repo_path: &Path,
@@ -1656,6 +1657,7 @@ pub(crate) fn tool_record_evidence_test_helper(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn read_evidence_index(path: &Path) -> Result<serde_json::Value, String> {
     let evidence_path = path.join("artifacts/current/EVIDENCE_INDEX.json");
     let content = std::fs::read_to_string(&evidence_path)

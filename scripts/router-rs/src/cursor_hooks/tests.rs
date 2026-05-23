@@ -540,15 +540,6 @@ fn event(session: &str, prompt: &str) -> Value {
     })
 }
 
-fn merge_event(mut base: Value, extra: Value) -> Value {
-    if let (Some(base_obj), Some(extra_obj)) = (base.as_object_mut(), extra.as_object()) {
-        for (k, v) in extra_obj {
-            base_obj.insert(k.clone(), v.clone());
-        }
-    }
-    base
-}
-
 fn load_state_for(repo: &Path, session: &str) -> ReviewGateState {
     let payload = json!({ "session_id": session, "cwd": FRAMEWORK_HARNESS_TEST_CWD });
     load_state(repo, &payload)
@@ -569,32 +560,6 @@ fn write_closeout_record(repo: &Path, task_id: &str, body: &str) {
         .join(format!("{task_id}.json"));
     fs::create_dir_all(p.parent().unwrap()).expect("mkdir artifacts/closeout");
     fs::write(p, body).expect("write closeout record");
-}
-
-fn write_goal_state_team_active(repo: &Path, task_id: &str) {
-    fs::write(
-        repo.join("artifacts/current")
-            .join(task_id)
-            .join("GOAL_STATE.json"),
-        format!(
-            r#"{{
-  "schema_version": "router-rs-autopilot-goal-v1",
-  "task_id": "{task_id}",
-  "lifecycle_profile": "team",
-  "drive_until_done": true,
-  "status": "running",
-  "goal": "ship feature",
-  "non_goals": ["ng"],
-  "done_when": ["dw1", "dw2"],
-  "validation_commands": ["cargo test"],
-  "current_horizon": "h",
-  "checkpoints": [{{"note":"cp"}}],
-  "blocker": null,
-  "updated_at": "2026-05-10T00:00:00Z"
-}}"#
-        ),
-    )
-    .expect("write GOAL_STATE");
 }
 
 fn write_goal_state_completed(repo: &Path, task_id: &str) {

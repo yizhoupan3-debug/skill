@@ -1776,55 +1776,6 @@ pub(crate) fn required_non_empty_string(
         .ok_or_else(|| format!("{context} requires non-empty {key}"))
 }
 
-// Retained for integration tests (`main_tests.rs::copy_text_to_clipboard`); retired top-level
-// continuity refresh CLI path was removed. Gated `#[cfg(test)]` to make the "test-only" intent
-// machine-checked: prod builds neither emit nor link it.
-#[cfg(test)]
-pub(crate) fn copy_text_to_clipboard(text: &str) -> Result<Value, String> {
-    if let Ok(path_value) = std::env::var("ROUTER_RS_CLIPBOARD_PATH") {
-        let path = PathBuf::from(path_value);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|err| format!("create clipboard file parent failed: {err}"))?;
-        }
-        fs::write(&path, text).map_err(|err| format!("write clipboard file failed: {err}"))?;
-        return Ok(json!({
-            "backend": "file",
-            "target_path": path.display().to_string(),
-        }));
-    }
-
-    let mut child = Command::new("pbcopy")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| format!("launch pbcopy failed: {err}"))?;
-    {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .ok_or_else(|| "pbcopy stdin is unavailable".to_string())?;
-        stdin
-            .write_all(text.as_bytes())
-            .map_err(|err| format!("write pbcopy stdin failed: {err}"))?;
-    }
-    let output = child
-        .wait_with_output()
-        .map_err(|err| format!("wait for pbcopy failed: {err}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if stderr.is_empty() {
-            "pbcopy exited with a non-zero status".to_string()
-        } else {
-            format!("pbcopy failed: {stderr}")
-        });
-    }
-    Ok(json!({
-        "backend": "pbcopy",
-    }))
-}
-
 pub(crate) fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
     payload
         .get(key)
@@ -4909,7 +4860,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         cached_records.as_ref()
     };
     let owned_host_records = if host_id.is_some() {
-        Some(filter_records_for_host(records.clone(), host_id.as_deref())?)
+        Some(filter_records_for_host(records, host_id.as_deref())?)
     } else {
         None
     };

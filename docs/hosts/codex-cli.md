@@ -32,7 +32,7 @@
 - **同步与安装命令**：
   当修改了 `router-rs` 嵌入的 AGENTS 文本、Codex hook 模板或需重新材料化时，运行以下同步命令：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
   ```
 
 ## Skill 存放与路由 (Skills & Routing)
@@ -71,9 +71,23 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 - **自检 Codex Hooks**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-codex-hooks
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-codex-hooks
   ```
 - **验证 Skill 路由及状态**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate
   ```
+
+## 独有环境变量与参数 (Environment Variables & Parameters)
+
+为确保 Codex CLI 与审稿机制的稳定执行，支持以下独有环境变量：
+
+- **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**：当 Codex 的独立审稿分支（fork context）缺失时，是否默认推断为假（False）。设置为 `1` 或相应值可启动该推断控制。
+- **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`**：规定是否在会话交互过程中严格要求稳定的 Session Key，防止非幂等会话串线。
+- **`ROUTER_RS_CODEX_HOOK_STATE_SALT`**：用于设定 Codex hook 的状态盐（salt），用以保障钩子状态存取的安全性。
+
+## 会话周期与重新武装 (Session Lifecycle & Re-arm)
+
+- **UserPromptSubmit 重新武装 (re-arm) 机制**：在每次用户提问提交（UserPromptSubmit / UPS）后，系统会执行重新武装（re-arm），重置特定拦截门控，允许新一轮的动态指令判断。
+
+

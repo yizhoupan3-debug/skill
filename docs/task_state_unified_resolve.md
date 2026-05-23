@@ -43,13 +43,13 @@
 ## 4. CLI / 调试
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD"
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD" --task-id "<uuid>"
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD"
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD" --task-id "<uuid>"
 # 阶段 3：刷新单文件投影（缺省从 active_task.json 取 task_id）
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD"
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD" --task-id "<uuid>"
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD"
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD" --task-id "<uuid>"
 # 阶段 2.5：`kind` 为 autopilot_goal | rfv_loop | session_artifacts | hook_evidence_append；`payload` 与对应直连 API 相同。
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework task-ledger-dispatch --input-json '{"schema_version":"router-rs-task-ledger-command-envelope-v1","kind":"autopilot_goal","payload":{"repo_root":"'"$PWD"'","operation":"status"}}'
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-ledger-dispatch --input-json '{"schema_version":"router-rs-task-ledger-command-envelope-v1","kind":"autopilot_goal","payload":{"repo_root":"'"$PWD"'","operation":"status"}}'
 ```
 
 输出 JSON，便于与 `framework snapshot` / hook 日志对照。

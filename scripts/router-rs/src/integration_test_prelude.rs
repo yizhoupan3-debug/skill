@@ -18,7 +18,7 @@ pub(crate) use crate::cli::runtime_ops::{
     build_live_execute_response, build_runtime_control_plane_payload, build_runtime_metric_record,
     build_runtime_observability_exporter_descriptor, build_runtime_observability_health_snapshot,
     build_runtime_observability_metric_catalog_payload, build_sandbox_control_response,
-    copy_text_to_clipboard, execute_request, extract_chat_completion_content, inspect_trace_stream,
+    execute_request, extract_chat_completion_content, inspect_trace_stream,
     live_execute_http_client, normalize_chat_completions_endpoint,
     perform_live_execute_with_sender, replay_trace_stream, runtime_observability_dashboard_schema,
     sha256_hex, subscribe_attached_runtime_events, validate_live_execute_aggregator_base_url,
@@ -34,7 +34,6 @@ pub(crate) use crate::framework_runtime::{
     build_framework_alias_envelope, build_framework_runtime_snapshot_envelope,
     build_framework_statusline, framework_hook_evidence_append, run_continuity_audit,
     write_framework_session_artifacts, FrameworkAliasBuildOptions,
-    CONTINUITY_SESSION_CHECKPOINT_TASK_ID,
 };
 pub(crate) use crate::route::{
     build_route_diff_report, build_route_policy, build_route_snapshot, load_records,

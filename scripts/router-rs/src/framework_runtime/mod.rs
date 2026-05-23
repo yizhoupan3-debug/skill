@@ -24,7 +24,7 @@ mod types;
 
 use json_io::{read_json_strict, read_text_if_exists};
 use json_value::{
-    first_nonempty, join_lines, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
+    first_nonempty, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
     value_string_list, value_text,
 };
 
@@ -613,23 +613,7 @@ pub(crate) fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
 /// Stable task id when no active/focus pointer exists (review-only sessions).
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
-/// 构建显式 session checkpoint 载荷（Desktop MCP `session_checkpoint` 等；非 Stop hook 自动写）。
-///
-/// `task_line` 用作路由摘要标题；`summary_text` 写入 SESSION_SUMMARY 正文片段。
-pub fn build_automatic_continuity_checkpoint_payload(
-    repo_root: &Path,
-    task_line: &str,
-    summary_text: &str,
-) -> Value {
-    build_automatic_continuity_checkpoint_payload_with_task_id(
-        repo_root,
-        task_line,
-        summary_text,
-        None,
-        false,
-        false,
-    )
-}
+
 
 /// 带可选 task_id 的版本（用于 Desktop MCP session_checkpoint tool）。
 ///

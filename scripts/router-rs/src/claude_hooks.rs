@@ -20,7 +20,6 @@ use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 

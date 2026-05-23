@@ -45,7 +45,7 @@ just doctor
 
 ```bash
 cd "$SKILL_FRAMEWORK_ROOT"
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
   framework host-integration install --framework-root "$PWD" --project-root "$PWD" \
   --artifact-root "$PWD/artifacts" --scope user --to cursor
 ```

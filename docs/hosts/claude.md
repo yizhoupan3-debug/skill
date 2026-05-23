@@ -32,7 +32,7 @@
   - **项目叙事文件**：路径为 `.claude/CLAUDE.md`。
 - **环境安装命令**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
     framework host-integration install --to claude --scope project
   ```
 
@@ -82,5 +82,5 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
   ```
 - **自检主机投影状态**：
   ```bash
-  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
+  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
   ```

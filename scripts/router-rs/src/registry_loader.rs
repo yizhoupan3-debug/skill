@@ -311,6 +311,7 @@ pub(crate) fn assert_subagent_model_inherit_registry_fields(repo_root: Option<&P
 }
 
 /// Smoke matrix for tests (uses disk registry at `repo_root` or crate-relative default).
+#[cfg(test)]
 pub(crate) fn assert_deep_review_gate_lane_matrix(repo_root: Option<&Path>) {
     assert!(is_deep_review_gate_lane_from_registry("general-purpose", repo_root));
     assert!(is_deep_review_gate_lane_from_registry("generalpurpose", repo_root));
@@ -328,6 +329,7 @@ pub(crate) fn assert_deep_review_gate_lane_matrix(repo_root: Option<&Path>) {
     assert!(is_deep_review_gate_lane_from_registry("Best_Of_N_Runner", repo_root));
 }
 
+#[cfg(test)]
 pub(crate) fn assert_claude_reviewer_lane_matrix(repo_root: Option<&Path>) {
     assert_deep_review_gate_lane_matrix(repo_root);
     assert!(is_claude_reviewer_lane_from_registry("review", repo_root));
@@ -340,7 +342,6 @@ pub(crate) fn assert_claude_reviewer_lane_matrix(repo_root: Option<&Path>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn deep_review_gate_lane_matrix_disk_default() {

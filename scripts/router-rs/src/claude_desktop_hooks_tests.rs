@@ -14,10 +14,6 @@ mod desktop_mcp_tests {
         path
     }
 
-    fn evidence_content(repo_path: &Path) -> serde_json::Value {
-        crate::claude_desktop_hooks::read_evidence_index(repo_path).unwrap_or(json!({}))
-    }
-
     #[test]
     fn tools_list_matches_handler() {
         let response = crate::claude_desktop_hooks::handle_tools_list(Some(json!(1)));

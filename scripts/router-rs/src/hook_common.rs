@@ -611,7 +611,7 @@ mod tests {
 
     #[test]
     fn deep_review_gate_lane_normalized_matches_registry_matrix() {
-        crate::registry_review_gate::assert_deep_review_gate_lane_matrix(None);
+        crate::registry_loader::assert_deep_review_gate_lane_matrix(None);
     }
 
     #[test]

@@ -36,7 +36,7 @@ thread_local! {
 
 /// 与运行时「subagent 并发上限契约」对齐（`runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT`）；可用 `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` 调低或设为 `0` 关闭计数限流。
 const DEFAULT_CURSOR_MAX_OPEN_SUBAGENTS: u32 = MAX_CONCURRENT_SUBAGENTS_LIMIT as u32;
-const DEFAULT_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS: i64 = 2 * 60 * 60;
+const DEFAULT_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS: i64 = 15 * 60;
 
 /// Shell 钩子 pending 队列长度上限，防止极长会话把 ledger 胀得过大。
 const MAX_PENDING_SHELL_RECORDS: usize = 64;
