@@ -99,6 +99,23 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
 
     let dry_run = optional_bool(&payload, "dry_run").unwrap_or(false);
     let now = now_from_payload(&payload)?;
+
+    // Pure memory fast-path bypass for non-state-mutating operations:
+    if operation == "classify_block" {
+        let host = required_non_empty_string(&payload, "host", "session supervisor")?;
+        let evidence_text =
+            required_non_empty_string(&payload, "evidence_text", "session supervisor")?;
+        let classification = classify_rate_limit_block(&host, &evidence_text)?;
+        return Ok(json!({
+            "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
+            "authority": SESSION_SUPERVISOR_AUTHORITY,
+            "operation": operation,
+            "state_path": state_path.display().to_string(),
+            "changed": false,
+            "classification": classification,
+        }));
+    }
+
     let _store_lock = acquire_runtime_path_lock(&state_path)?;
     let mut store = load_store(&state_path)?;
 
