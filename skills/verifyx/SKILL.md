@@ -28,15 +28,15 @@ metadata:
 ### 1. Verify
 
 - Run `GOAL_STATE.validation_commands` and ROADMAP global verification commands
-- Append each run to `EVIDENCE_INDEX.json` (`exit_code`, `command`)
+- Append each run to `EVIDENCE_INDEX.json` `artifacts[]` rows (`command_preview`, `recorded_at`, `exit_code`, `success`, optional `kind` / `lifecycle_command` / `tags`)
 - `VERIFY_REPORT.md` summary on disk
 
 ### 2. Ship
 
 - Git clean / intentional uncommitted documented
-- `framework_closeout_evaluate` → `artifacts/closeout/<task_id>.json` (**embed** evidence rows / verify summary before purge)
+- `closeout_evaluate` stdio（或 CLI `router-rs closeout evaluate --record-path artifacts/closeout/<task_id>.json`）→ 写入 closeout record（**embed** evidence rows / verify summary before purge）
 - `GOAL_STATE` → `status: completed`, `drive_until_done: false`
-- Closeout fields: `task_artifacts_purged: true`, `task_dir_removed: true`
+- Closeout `notes` may record purge intent (e.g. `task_artifacts_purged; task_dir_removed`) — **not** separate schema fields; `CLOSEOUT_RECORD_SCHEMA.json` / `CloseoutRecord` use `deny_unknown_fields`
 
 ### 3. Post-verify task-dir purge (**mandatory**, every my-lifecycle task)
 
@@ -48,7 +48,7 @@ TASK_ID=<task_id>
 rm -rf "artifacts/current/${TASK_ID}"
 ```
 
-Removes all four-phase traces under `artifacts/current/<task_id>/` (including `REQUIREMENTS.md`, `DECISIONS.md`, `OPEN_QUESTIONS.md`, `ROADMAP.md`, `WAVE_STATE.json`, `GOAL_STATE.json`, `EVIDENCE_INDEX.json`, `VERIFY_REPORT.md`, `lane-notes/`, `SCHEMA_DRIFT_BASELINE.json`).
+Removes all My lifecycle task-dir artifacts under `artifacts/current/<task_id>/` (including `REQUIREMENTS.md`, `DECISIONS.md`, `OPEN_QUESTIONS.md`, `ROADMAP.md`, `WAVE_STATE.json`, `GOAL_STATE.json`, `EVIDENCE_INDEX.json`, `VERIFY_REPORT.md`, `lane-notes/`, `SCHEMA_DRIFT_BASELINE.json`).
 
 **Only ship artifact**: `artifacts/closeout/<task_id>.json`.
 

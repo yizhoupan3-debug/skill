@@ -37,7 +37,7 @@ metadata:
 
 ## Outputs (schema)
 
-Topology fields (extend `gsd-wave-state-v1` in place):
+Topology fields (schema id **`my-wave-state-v1`**; field manifest [`configs/framework/WAVE_STATE_FIELDS.json`](../../configs/framework/WAVE_STATE_FIELDS.json)):
 
 | Field | Meaning |
 |-------|---------|

@@ -2,13 +2,18 @@
   "mcpServers": {
     "router-rs-framework": {
       "args": [
+        "run",
+        "--quiet",
+        "--manifest-path",
+        "/Users/joe/Developer/skill/scripts/router-rs/Cargo.toml",
+        "--",
         "claude-desktop",
         "agent",
         "--repo-root",
         "${workspaceRoot}"
       ],
-      "command": "/tmp/skill-cargo-target/debug/router-rs",
-      "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory",
+      "command": "cargo",
+      "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory (via Cargo bootstrap)",
       "type": "stdio"
     }
   }

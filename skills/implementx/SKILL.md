@@ -40,7 +40,8 @@ When invoked, run **every wave** in `WAVE_STATE.json` from current `wave_id` thr
 ## Main thread (scheduler only)
 
 1. Read `WAVE_STATE.json` + `ROADMAP.md`
-2. For each wave (in order): spawn all lanes in `parallel_group` when `execution_mode=parallel`
+2. For each wave (in order): spawn all lanes in `parallel_group` when `execution_mode=parallel`.
+   - **Antigravity 强化约束**：在 `antigravity` 宿主下，若任务包含多文件或跨模块设计（且总体 Delta > 50 行），**必须优先选用并行模式并派生子代理**。主线程严格担任 scheduler 角色。**例外豁免**：(1) 当子代理遭遇并发故障、模型或 Region 不可用时，允许优雅降级为串行主线程；(2) 允许主线程在 Verification 阶段对于简单错误执行 "fix obvious" 自愈，其余实质性代码编写必须分流并发。
 3. Merge: read `lane-notes/<lane_id>.md` only; chat ≤3 bullets + paths
 4. Update wave `status` → `completed`; `current_wave`++; checkpoint `EVIDENCE_INDEX`
 5. After final wave → suggest `/verifyx` (or auto-chain if user asked full pipeline)
@@ -60,6 +61,8 @@ Target: coordinator visible content ≤35% of turn.
 ```
 
 Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allows.
+
+**Model (Cursor)**: omit `Task` `model` (inherit parent session); do not default `claude-*` / `sonnet*`. See `.cursor/rules/subagent-model-inherit.mdc`.
 
 ## GOAL_STATE on start
 

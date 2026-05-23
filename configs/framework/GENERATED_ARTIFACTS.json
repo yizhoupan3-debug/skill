@@ -37,6 +37,21 @@
       "compare": "normalized-text"
     },
     {
+      "path": ".gemini/antigravity/rules/framework.md",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "compare": "normalized-text"
+    },
+    {
+      "path": ".gemini/settings.json",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "compare": "normalized-text"
+    },
+    {
+      "path": ".gemini/mcp.json",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "compare": "normalized-text"
+    },
+    {
       "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
       "generator": "true",
       "compare": "byte-for-byte"

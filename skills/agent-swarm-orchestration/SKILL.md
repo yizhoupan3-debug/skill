@@ -112,7 +112,7 @@ Allow bounded sidecars when at least one condition is true:
 
 For these allowed cases, the supervisor should spawn sidecars promptly and keep local ownership of integration and final verification.
 
-Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [推理深度契约](../docs/references/rfv-loop/reasoning-depth-contract.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
+Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [推理深度契约](../../docs/references/rfv-loop/reasoning-depth-contract.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
 
 Reject spawning with an explicit reason:
 
@@ -126,6 +126,8 @@ Reject spawning with an explicit reason:
 ## Codex sidecar prompt contract
 
 Codex sidecars should feel like precise lane workers, not vague assistants.
+
+**Cursor**: omit `Task` `model` so subagents inherit the parent session model; do not default Claude/Sonnet unless the parent already uses Anthropic (see `.cursor/rules/subagent-model-inherit.mdc`).
 
 Use `fork_context=false` by default and pass only:
 
@@ -170,7 +172,7 @@ If the discussion touches current-session execution:
 - Do not create a new agent role, mailbox, graph, or state artifact unless an existing `team` / lane contract cannot express the need.
 - Do not let workers write outside their assigned lane-local scope.
 - Supervisor owns integration and final verification.
-- **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
+- **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
 
 ## Trigger examples
 - "强制进行 Agent 编排深度审计 / 检查协作链路与任务达成结果。"

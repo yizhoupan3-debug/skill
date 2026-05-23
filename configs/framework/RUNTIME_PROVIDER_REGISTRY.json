@@ -247,6 +247,15 @@
       ],
       "notes": "MCP-based host; uses advisory-only gating (no hard gate hooks). Projection shares mcp_capability_profile."
     },
+    "antigravity": {
+      "status": "implemented",
+      "projection": "mcp_capability_profile",
+      "capabilities": [
+        "context_files",
+        "mcp_config_paths"
+      ],
+      "notes": "MCP-based host; no CLI hook hooks, but hard closeout gate is enforced on goal_state_manage and closeout_gate tool execution."
+    },
     "mcp": {
       "status": "declared",
       "projection": "mcp_capability_profile",

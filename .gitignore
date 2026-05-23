@@ -32,6 +32,7 @@ configs/codex/sub_accounts.state.json
 .agents/plugins/marketplace.json
 skill/
 tmp/
+.tmp-binary-test/
 output/
 .aionrs/
 .aionui_patch_tree
@@ -99,3 +100,7 @@ opencode.jsonc
 codex-aggregator/
 $TMPDIR/
 .cargo-target/
+
+# IDE & Antigravity Client runtime folders
+.antigravitycli/
+.gemini/

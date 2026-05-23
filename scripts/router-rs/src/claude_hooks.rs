@@ -256,6 +256,8 @@ fn claude_review_gate_incomplete_stop_reason() -> String {
 
 fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
     crate::hook_common::my_light_profile_active(Some(repo_root), prompt)
+        || crate::hook_common::is_framework_goal_entry_prompt(prompt)
+        || crate::hook_common::is_my_pre_execution_entry_prompt(prompt)
         || is_narrow_review_prompt(prompt)
         || is_review_prompt(prompt)
         || has_override(prompt)
@@ -269,7 +271,8 @@ fn apply_claude_review_gate_user_prompt(
     let path = review_state_path(repo_root, payload);
     let my_light = crate::hook_common::my_light_profile_active(Some(repo_root), prompt);
     let narrow = is_narrow_review_prompt(prompt);
-    let review_arms = is_review_prompt(prompt);
+    let goal_drive = crate::hook_common::is_framework_goal_entry_prompt(prompt);
+    let review_arms = is_review_prompt(prompt) && !goal_drive;
     let override_now = has_override(prompt);
     with_claude_review_state_lock(&path, || {
         let mut state = match load_review_gate_disk(repo_root, payload) {
@@ -284,7 +287,7 @@ fn apply_claude_review_gate_user_prompt(
             AgentDiskState::Absent => ReviewGateState::default(),
             AgentDiskState::Ok(s) => s,
         };
-        if my_light {
+        if my_light || goal_drive {
             state.review_required = false;
             state.independent_reviewer_seen = false;
         } else if narrow {
@@ -506,6 +509,17 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
     } else {
         None
     };
+    if let Some(Err(_)) = review_sync {
+        let path = review_state_path(repo_root, payload);
+        return add_context(
+            "UserPromptSubmit",
+            &format!(
+                "{} (path {}). Repair JSON or permissions before continuing.",
+                active_stdio_agent_hook_host().hook_state_unreadable(),
+                path.display()
+            ),
+        );
+    }
     if crate::hook_common::is_my_pre_execution_entry_prompt(&prompt) {
         return add_context(
             "UserPromptSubmit",
@@ -516,17 +530,6 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
         return add_context(
             "UserPromptSubmit",
             crate::hook_common::my_goal_drive_hook_nudge_for_prompt(&prompt),
-        );
-    }
-    if let Some(Err(_)) = review_sync {
-        let path = review_state_path(repo_root, payload);
-        return add_context(
-            "UserPromptSubmit",
-            &format!(
-                "{} (path {}). Repair JSON or permissions before continuing.",
-                active_stdio_agent_hook_host().hook_state_unreadable(),
-                path.display()
-            ),
         );
     }
     if let Some(Ok(state)) = review_sync {
@@ -1840,6 +1843,91 @@ mod tests {
             None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
         }
         let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_implementx_returns_unreadable_when_review_gate_corrupt() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("corrupt-review-implementx");
+        let session = json!({ "session_id": "s-corrupt-impl", "prompt": "/implementx" });
+        let path = review_state_path(&repo, &session);
+        fs::write(&path, "{not json").unwrap();
+        let out = run_user_prompt_submit(&repo, &session).expect("context");
+        let ctx = out["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap();
+        assert!(
+            ctx.contains(CLAUDE_HOOK_STATE_UNREADABLE),
+            "corrupt hook-state must surface unreadable; got {ctx:?}"
+        );
+        assert!(
+            !ctx.contains("ALL waves"),
+            "must not mask corrupt state with implement nudge; got {ctx:?}"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_discussx_returns_unreadable_when_review_gate_corrupt() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("corrupt-review-discussx");
+        let session = json!({ "session_id": "s-corrupt-discuss", "prompt": "/discussx" });
+        let path = review_state_path(&repo, &session);
+        fs::write(&path, "{not json").unwrap();
+        let out = run_user_prompt_submit(&repo, &session).expect("context");
+        let ctx = out["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap();
+        assert!(
+            ctx.contains(CLAUDE_HOOK_STATE_UNREADABLE),
+            "corrupt hook-state must surface unreadable before pre-exec nudge; got {ctx:?}"
+        );
+        assert!(
+            !ctx.contains("READ-ONLY"),
+            "must not mask corrupt state with pre-exec nudge; got {ctx:?}"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_review_and_implementx_suppresses_review_arming() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("claude-dual-review-implementx");
+        let sid = "s-claude-dual";
+        let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": prompt }),
+        );
+        let state = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected state, got {other:?}"),
+        };
+        assert!(
+            !state.review_required,
+            "goal drive must suppress review arming on Claude UPS; got {state:?}"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
         let _ = fs::remove_dir_all(repo);
     }
 

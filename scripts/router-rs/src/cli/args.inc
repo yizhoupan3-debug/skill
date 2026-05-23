@@ -247,6 +247,10 @@ pub(crate) enum HostCommand {
         #[command(subcommand)]
         command: ClaudeDesktopSubcommand,
     },
+    Antigravity {
+        #[command(subcommand)]
+        command: AntigravitySubcommand,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -274,6 +278,19 @@ pub(crate) enum ClaudeDesktopSubcommand {
     /// Run MCP stdio agent loop (skills, evidence, closeout advisory).
     #[command(name = "agent")]
     Agent(ClaudeDesktopAgentCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum AntigravitySubcommand {
+    /// Run MCP stdio agent loop (skills, evidence, closeout advisory).
+    #[command(name = "agent")]
+    Agent(AntigravityAgentCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct AntigravityAgentCommand {
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
 }
 
 /// Diagnostic commands (merged: profile, browser)

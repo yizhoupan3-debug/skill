@@ -23,7 +23,7 @@ If the task shifts to adjacent skill territory, route to:
 
 ## Finding-driven framework role
 
-This skill is a **Phase-2 artifact gate / detector / verifier** in the shared finding-driven framework. It should keep PDF work PDF-native, then emit findings or verification results that downstream domain owners can consume without repeating render checks. Use the shared structures in [`../SKILL_FRAMEWORK_PROTOCOLS.md`](../SKILL_FRAMEWORK_PROTOCOLS.md) and the verification protocol when layout correctness matters.
+This skill is a **Phase-2 artifact gate / detector / verifier** in the shared finding-driven framework. It should keep PDF work PDF-native, then emit findings or verification results that downstream domain owners can consume without repeating render checks. Use the shared structures in [`../../SKILL_FRAMEWORK_PROTOCOLS.md`](../../SKILL_FRAMEWORK_PROTOCOLS.md) and the verification protocol when layout correctness matters.
 
 For PDF audits, preserve at least:
 - `finding_id`

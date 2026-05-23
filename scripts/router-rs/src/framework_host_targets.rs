@@ -246,7 +246,7 @@ mod tests {
             assert!(
                 matches!(
                     tool.as_str(),
-                    "codex" | "cursor" | "claude" | "claude-desktop"
+                    "codex" | "cursor" | "claude" | "claude-desktop" | "antigravity"
                 ),
                 "unexpected mapping {host_id} -> {tool}"
             );

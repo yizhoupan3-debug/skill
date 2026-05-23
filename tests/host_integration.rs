@@ -2063,7 +2063,8 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
             "codex-app",
             "cursor",
             "claude-code",
-            "claude-desktop"
+            "claude-desktop",
+            "antigravity"
         ])
     );
     assert_eq!(

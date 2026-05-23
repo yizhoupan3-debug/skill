@@ -35,7 +35,7 @@
 
 | 字段 | 消费宿主 | 含义 |
 |------|----------|------|
-| `review_gate.deep_gate_lanes` | **Cursor**、**Codex CLI**（`hook_common::is_deep_review_gate_lane_normalized`） | 可数深度审稿 lane：**仅** `general-purpose`、`best-of-n-runner` 及归一化等价名 `generalpurpose`/`bestofnrunner` |
+| `review_gate.deep_gate_lanes` | **Cursor**、**Codex CLI**（`hook_common::is_deep_review_gate_lane_normalized`） | 可数深度审稿 lane：**仅** `general-purpose`、`best-of-n-runner`、`deep-reviewer` 及归一化等价名 `generalpurpose`/`bestofnrunner`/`deepreviewer` |
 | `review_gate.claude_reviewer_lanes` | **Claude Code**（`claude_hooks::reviewer_lane` → `is_claude_reviewer_lane_from_registry`） | 上表四拼写 **加上** `review`、`reviewer`、`critic`、`code-review` |
 
 **勿混读**：`deep_gate_lanes` **不是** Claude 超集；在 Cursor/Codex 上使用 `subagent_type: "review"` 且 `fork_context=false` **不会**计入独立审稿证据。
@@ -54,21 +54,21 @@
 
 ### 跨宿主 REVIEW_GATE 差异（operator）
 
-| 能力 | Cursor | Codex CLI | Claude Code | Claude Desktop / codex-app |
-|------|--------|-----------|-------------|----------------------------|
-| 可数深度 lane 真源 | `deep_gate_lanes` | `deep_gate_lanes` | `claude_reviewer_lanes` | 无 hook 面 |
-| subagentStart/Stop multiset | ✓ | ✗（单次 PostToolUse 证据） | ✗ | ✗ |
-| wave-2 compact 清门（可数证据后 Stop compact） | ✓ | ✓（部分；无 multiset） | ✗ | ✗ |
-| `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✓（2026-05 wave-2） | ✗ | ✗ |
-| Stop 硬短码 | `router-rs REVIEW_GATE incomplete` | `CODEX_REVIEW_GATE` | `CLAUDE_REVIEW_GATE` | — |
-| Review gate disable env | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` | `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | — |
-| Goal/RFV hook 续跑（`GOAL_CONTINUE` / digest） | ✗ | ✗ | ✗（stdio/MCP advisory） | ✗ |
-| Stop soft-nag / spoof scrub | ✓ | ✗（硬行 + disable/bypass env） | 部分 | — |
+| 能力 | Cursor | Codex CLI | Claude Code | Claude Desktop / codex-app | Antigravity |
+|------|--------|-----------|-------------|----------------------------|-------------|
+| 可数深度 lane 真源 | `deep_gate_lanes` | `deep_gate_lanes` | `claude_reviewer_lanes` | 无 hook 面 | 物理 `review-lanes/` 目录 |
+| subagentStart/Stop multiset | ✓ | ✗（单次 PostToolUse 证据） | ✗ | ✗ | ✗ |
+| wave-2 compact 清门（可数证据后 Stop compact） | ✓ | ✓（部分；无 multiset） | ✗ | ✗ | ✗（需物理文件） |
+| `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✓（2026-05 wave-2） | ✗ | ✗ | ✗ |
+| Stop 硬短码 | `router-rs REVIEW_GATE incomplete` | `CODEX_REVIEW_GATE` | `CLAUDE_REVIEW_GATE` | — | `[Antigravity Hard Block]` |
+| Review gate disable env | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` | `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | — | 无（受 `my-light` 模式控制） |
+| Goal/RFV hook 续跑（`GOAL_CONTINUE` / digest） | ✗ | ✗ | ✗（stdio/MCP advisory） | ✗ | ✗ |
+| Stop soft-nag / spoof scrub | ✓ | ✗（硬行 + disable/bypass env） | 部分 | — | — |
 
-细节见 [`harness_architecture.md`](harness_architecture.md) §5.0 与各 [`docs/hosts/*.md`](hosts/cursor.md)。
+细节见 [`harness_architecture.md`](harness_architecture.md) §5.0 与各 [`docs/hosts/cursor.md`](hosts/cursor.md)（其它 hosts 手册见 [`docs/README.md`](README.md)）。
 
 - **产品级外部能力**（tmux `session_supervisor`、原生 MCP 配置面、桌面线程宿主等）可以按宿主不同；这些以 `RUNTIME_REGISTRY.host_projections.*.capabilities` 与相关 status 字段为显式真源，**不得**从 skill `platforms` 或热路由里“假看齐”。
-- **Harness hook 面严格矩阵**：`host_projections.*.harness_capabilities` 默认必须满足 [`configs/framework/RUNTIME_REGISTRY_SCHEMA.json`](configs/framework/RUNTIME_REGISTRY_SCHEMA.json) 中的 `harness_capability_policy`（`core_always` + `cli_agent_hook_baseline`）。**若某宿主无法提供** `cli_agent_hook_baseline` 中的某项，必须在同一投影对象上声明 `harness_capability_exceptions`（`cap` + `status: unsupported` + 非空 `rationale`）；根目录 `tests/policy_contracts.rs` 的 `runtime_registry_host_projections_split_harness_capabilities` 从 schema + registry **机读**校验，禁止再用宿主名字硬编码例外。
+- **Harness hook 面严格矩阵**：`host_projections.*.harness_capabilities` 默认必须满足 [`configs/framework/RUNTIME_REGISTRY_SCHEMA.json`](../configs/framework/RUNTIME_REGISTRY_SCHEMA.json) 中的 `harness_capability_policy`（`core_always` + `cli_agent_hook_baseline`）。**若某宿主无法提供** `cli_agent_hook_baseline` 中的某项，必须在同一投影对象上声明 `harness_capability_exceptions`（`cap` + `status: unsupported` + 非空 `rationale`）；根目录 `tests/policy_contracts.rs` 的 `runtime_registry_host_projections_split_harness_capabilities` 从 schema + registry **机读**校验，禁止再用宿主名字硬编码例外。
 - **热路由宿主展开**：`SKILL.md` 未声明 `platforms` 或声明 `supported` / `all-hosts` 时，`router-rs framework skills refresh` 将 `host_support.platforms` 展开为 **`host_targets.supported` 全量**；热路由技能（`SKILL_ROUTING_RUNTIME.json`）在策略上应对每一闭集 id 可路由，**豁免**仅保留给确属 Codex 安装面 skills（见根 `tests/policy_contracts.rs` 常量）。**与上条分工**：NL 热路由默认闭集全覆盖；**hook 级 harness 能力**以 registry 矩阵与例外为准，不与 skill `platforms` 混读。
 - **NL 热路由 suppress/boost 数据面**：按记录（slug / gate 等）与 `signals.rs` 谓词组合的 suppress、boost 规则真源在 [`configs/framework/NL_ROUTE_ADJUSTMENTS.json`](../configs/framework/NL_ROUTE_ADJUSTMENTS.json)（`router-rs` 嵌入，`route/nl_route_adjustments.rs`）。跨查询的短语 marker（如 meta-routing 子串表）在 [`configs/framework/ROUTING_SIGNAL_MARKERS.json`](../configs/framework/ROUTING_SIGNAL_MARKERS.json)；**不要**把两类规则塞进同一文件以免双真源争用。
 - **Review gate lane 闭集（Cursor/Codex）**：`review_gate.deep_gate_lanes`；Claude Code 用 `review_gate.claude_reviewer_lanes`（见 §0.1 表）。
@@ -87,11 +87,11 @@
 | 宿主安装/入口 | 闭集宿主 id 来自 `host_targets.supported`，缺元数据 fail-closed；install 遍历只使用 `projection_status=implemented && installable=true` | `host_targets.metadata.<host>.install_tool`、`projection_status`、`installable` 与 `host_entrypoints` | `installable_host_id_and_skills_install_tool_pairs` |
 | L4 / L5 边界 | L4 只做 argv/stdin/超时/路径转发；L5 只承载 skill 契约与可读叙事 | `.cursor/rules/*.mdc`、Codex `AGENTS.md` 投影形状不同 | `host_entrypoints_sync_manifest` |
 | `${CODEX_HOME}/skills` | 表示 Codex 用户级 skill 投影根；仓库开发态优先 `skills/` | 仅 Codex install/sync 使用该 HOME 语义，Cursor 不复用 | `workspace_bootstrap_defaults.skills.user_dir` |
-| **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；**缺省或未写**时按 `RUNTIME_REGISTRY.host_targets.supported` **全集**展开；可用 **`supported` / `all-hosts`** 令牌显式表达同一语义；维护后运行 **`router-rs framework skills validate`**（可选 **`refresh --write`** 写 `SKILL_TIERS.json`） | 闭集 id 为 `codex-cli` / `codex-app` / `cursor` / `claude-code` / `claude-desktop`；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由路由层归一 | `tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`**、**`hot_runtime_skill_records_cover_all_supported_hosts`** |
+| **Skill 宿主元数据（`host_support.platforms`）** | 编辑 **`skills/<slug>/SKILL.md`** 顶层或 `metadata.platforms`（YAML）；**缺省或未写**时按 `RUNTIME_REGISTRY.host_targets.supported` **全集**展开；可用 **`supported` / `all-hosts`** 令牌显式表达同一语义；维护后运行 **`router-rs framework skills validate`**（可选 **`refresh --write`** 写 `SKILL_TIERS.json`） | 闭集 id 为 `codex-cli` / `codex-app` / `cursor` / `claude-code` / `claude-desktop` / `antigravity`；历史别名 `codex`→双 Codex id、`claude`→`claude-code` 由路由层归一 | `tests/policy_contracts.rs` **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`**、**`hot_runtime_skill_records_cover_all_supported_hosts`** |
 
 单行指针：五层模型见 [`harness_architecture.md`](harness_architecture.md)；Rust API / CLI 契约见 [`rust_contracts.md`](rust_contracts.md)；跨宿主语言、路由与执行协议见仓库根 [`../AGENTS.md`](../AGENTS.md)。
 
-**闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework host-integration install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；门控经 **MCP stdio**（`router-rs claude-desktop agent`），投影安装 **`router-rs framework host-integration install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。**Claude Code** 的 CLI hook 走 **`router-rs claude hook`**（`claude_hooks.rs`）；Desktop **不**复用该 stdio hook 分发路径（无 PreToolUse/Stop 硬拦截表）。两者 host id、投影（Code：`.claude/settings.json`；Desktop：项目 `.claude/CLAUDE.md` 短指针 + `.mcp.json`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。
+**闭集宿主扩展**：除 Codex / Cursor 外，Claude Code 闭集 id 为 **`claude-code`**（注册表 `host_targets.supported`）；hooks 通过 **`router-rs claude hook`**，投影安装 **`router-rs framework host-integration install --to claude`**（`install_tool` 名 **`claude`** 见 `RUNTIME_REGISTRY.json`）。**Claude Desktop** 闭集 id 为 **`claude-desktop`**；门控经 **MCP stdio**（`router-rs claude-desktop agent`），投影安装 **`router-rs framework host-integration install --to claude-desktop`**（`install_tool` 名 **`claude-desktop`**）。**Claude Code** 的 CLI hook 走 **`router-rs claude hook`**（`claude_hooks.rs`）；Desktop **不**复用该 stdio hook 分发路径（无 PreToolUse/Stop 硬拦截表）。两者 host id、投影（Code：`.claude/settings.json`；Desktop：项目 `.claude/CLAUDE.md` 短指针 + `.mcp.json`）、环境变量、gate token 与 `router_rs_observation.host` 必须保持独立。**Antigravity** 闭集 id 为 **`antigravity`**；门控经 **Planning Mode + 规划物化 Artifacts**，投影安装 **`router-rs framework host-integration install --to antigravity`**（`install_tool` 名 **`antigravity`**）。其项目投影包含 `.gemini/antigravity/rules/framework.md`，`.gemini/settings.json` 与 `.gemini/mcp.json`，无 CLI-level hook。
 
 **单行指针**：跨 Cursor 工作区接入与操作步骤见 [`docs/hosts/cursor.md`](hosts/cursor.md)；仓库级一键接入见根 [`README.md`](../README.md) →「其它仓库一键接入」「建议自检命令序列」（约 L147–L192）。**其它宿主操作手册（≤1 页）**：[`docs/hosts/codex-cli.md`](hosts/codex-cli.md)、[`docs/hosts/claude.md`](hosts/claude.md)。
 
@@ -167,6 +167,16 @@
 | 投影安装 | 一次性接入 | `router-rs framework host-integration install --to claude-desktop` | 项目 `.claude/CLAUDE.md`（短指针）、`.mcp.json`；**不**写入 `.claude/settings.json` hook 四事件 |
 | 操作手册 | — | — | [`docs/hosts/claude-desktop.md`](hosts/claude-desktop.md) |
 
+### Antigravity（Planning Mode + 规划物化）
+
+**能力边界**：无 CLI 级 shell hook（registry `harness_capability_exceptions`）；门控完全靠 **Planning Mode 规划流** + 规划物化 Artifacts + 专用 Markdown 投影规则。不复用任何 CLI hook 事件表。
+
+| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
+|--------|----------|----------------|-----------------|
+| 规划流与项目投影 | 宿主交互中遵循 Planning Mode / `/implementx` 等技能 | `host_integration.rs` / `framework_maint.rs` | `artifacts/current/` 与其它宿主共用；`goal_state_manage` / `closeout_gate` / `framework_digest` |
+| 投影安装 | 一次性接入 | `router-rs framework host-integration install --to antigravity` | 项目 `.gemini/antigravity/rules/framework.md`（短指针）、`.gemini/settings.json` 与 `.gemini/mcp.json` |
+| 操作手册 | — | — | [`docs/hosts/antigravity.md`](hosts/antigravity.md) |
+
 **统一原则**：宿主配置中的命令应保持 **短命 + 超时**；语义在 Rust，不在宿主脚本里分支业务规则。
 
 ---
@@ -183,8 +193,8 @@
 | Codex host entrypoint provider | `scripts/router-rs/src/codex_hooks.rs` |
 | Claude Code hook 语义（stdin JSON） | `scripts/router-rs/src/claude_hooks.rs` → **`router-rs claude hook`**；Claude Desktop 为 **MCP**（`claude_desktop_hooks.rs` / `router-rs claude-desktop agent`），**不**与 Code 共用 CLI hook 四事件表 |
 | `framework host-integration install`、投影 manifest、入口模板 | `scripts/router-rs/src/host_integration.rs` |
-| CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude`/`claude-desktop` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
-| 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；**Claude Code** 侧 `.claude/settings.json`（四事件 hook）；**Claude Desktop** **不**写入 `.claude/settings.json` hook 表（MCP + 项目 `.claude/CLAUDE.md` 指针，见 [`docs/hosts/claude-desktop.md`](hosts/claude-desktop.md)） |
+| CLI 子命令注册与 `framework`/`cursor`/`codex`/`claude`/`claude-desktop`/`antigravity` 分发 | `scripts/router-rs/src/cli/dispatch.rs`（及 `cli/dispatch_body.txt`） |
+| 宿主侧事件绑定 | 仓库根 `.cursor/hooks.json`；Codex 侧 `.codex/hooks.json`（由 sync/install 写入）；**Claude Code** 侧 `.claude/settings.json`（四事件 hook）；**Claude Desktop** **不**写入 `.claude/settings.json` hook 表（MCP + 项目 `.claude/CLAUDE.md` 指针，见 [`docs/hosts/claude-desktop.md`](hosts/claude-desktop.md)）；**Antigravity** 写入 `.gemini/`（MCP + `.gemini/antigravity/rules/framework.md`，见 [`docs/hosts/antigravity.md`](hosts/antigravity.md)） |
 | 闭集宿主 id 与 `install_tool` / `host_entrypoints` | `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported` 与 `host_targets.metadata` |
 | `review_gate` 磁盘 loader | `scripts/router-rs/src/registry_loader.rs` |
 | My lifecycle / review 安装文案 | `configs/framework/host_projection_narrative.json` |
@@ -209,7 +219,7 @@
 | 阶段 | 主要落点 |
 |------|----------|
 | 注册表 / 契约 | `RUNTIME_REGISTRY.json`，[`tests/common/mod.rs`](../tests/common/mod.rs)，[`framework_host_targets.rs`](../scripts/router-rs/src/framework_host_targets.rs) |
-| L3 入口 | 新增 `scripts/router-rs/src/<host>_hooks.rs`（命名对齐 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) / [`cursor_hooks.rs`](../scripts/router-rs/src/cursor_hooks.rs)），[`main.rs`](../scripts/router-rs/src/main.rs) |
+| L3 入口 | 新增 `scripts/router-rs/src/<host>_hooks.rs`（命名对齐 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) / [`cursor_hooks/mod.rs`](../scripts/router-rs/src/cursor_hooks/mod.rs)），[`main.rs`](../scripts/router-rs/src/main.rs) |
 | CLI 分发 | [`dispatch_body.txt`](../scripts/router-rs/src/cli/dispatch_body.txt)，[`dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs) |
 | 安装 / 投影 | [`host_integration.rs`](../scripts/router-rs/src/host_integration.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（若新增生成物） |
 | L4 + 验证 | 宿主 `hooks.json`，[`tests/host_integration.rs`](../tests/host_integration.rs)，[`tests/policy_contracts.rs`](../tests/policy_contracts.rs) |
@@ -217,7 +227,7 @@
 - [ ] **[`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)**：在 `host_targets.supported` 追加宿主 id；补齐 `host_targets.metadata.<id>.install_tool` 与 `host_entrypoints`（字符串或 JSON 数组形状需与现网 `codex-cli` / `cursor` **对称**，避免半套映射）；若改动 `framework_commands` 等按宿主分列的表，逐键对照现有列。
 - [ ] **[`tests/common/mod.rs`](../tests/common/mod.rs)**（及任何内嵌最小 registry 的测试夹具）：与真实 `RUNTIME_REGISTRY.json` 的 `host_targets` 块对齐，避免 CI 用「缩水 registry」与真源分叉。
 - [ ] **[`scripts/router-rs/src/framework_host_targets.rs`](../scripts/router-rs/src/framework_host_targets.rs)**：确保只从注册表读取上述字段，fail-closed；必要时补充单元测试。
-- [ ] **新增** `scripts/router-rs/src/<host>_hooks.rs`（命名对齐现有 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) / [`cursor_hooks.rs`](../scripts/router-rs/src/cursor_hooks.rs)）：实现各生命周期分支；在 [`main.rs`](../scripts/router-rs/src/main.rs) 注册 `mod` 并导出入口。
+- [ ] **新增** `scripts/router-rs/src/<host>_hooks.rs`（命名对齐现有 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) / [`cursor_hooks/mod.rs`](../scripts/router-rs/src/cursor_hooks/mod.rs)）：实现各生命周期分支；在 [`main.rs`](../scripts/router-rs/src/main.rs) 注册 `mod` 并导出入口。
 - [ ] **[`scripts/router-rs/src/cli/dispatch_body.txt`](../scripts/router-rs/src/cli/dispatch_body.txt)** 与 [`scripts/router-rs/src/cli/dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs)：挂上 `router-rs <host> hook <event> …` 分发（与现有 `codex` / `cursor` 子命令并列）。
 - [ ] **[`scripts/router-rs/src/host_integration.rs`](../scripts/router-rs/src/host_integration.rs)**：`framework host-integration install --to <tool>` 能解析注册表中的 `install_tool`；为该宿主增加投影写入（对标 `render_cursor_framework_entrypoint` / `render_codex_framework_entrypoint`），My lifecycle / review 段落从 [`host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) 读取；若产生新的生成物路径，同步 [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（及代码中 `REQUIRED_GENERATED_ARTIFACTS` 等常量，若有）。
 - [ ] **L4 样例**：检出中的 [`.cursor/hooks.json`](../.cursor/hooks.json)（Cursor）与由 sync 写入的 `.codex/hooks.json`（Codex）应保持 **argv + 超时 + stdin 透传**，不在 shell 内复制 L3 业务分支；新宿主应对照新增同级配置。
@@ -260,7 +270,7 @@ Codex 侧 [`codex_hooks.rs`](../scripts/router-rs/src/codex_hooks.rs) 中 `PostT
 | **L4** | 调用 `router-rs` 子命令、固定超时、环境透传 | 长段策略 prose、复制 L3 门控、手写 `EVIDENCE_INDEX` 规则 |
 | **L5** | SKILL 契约、`verify_commands`、拒因枚举、编排叙事 | 第二套连续性目录、或与 L2 schema 冲突的并行真源 |
 
-L3（`cursor_hooks` / `codex_hooks` / `framework_runtime` 等）负责合并续跑提示、采样 PostTool、持久化 gate 状态；**不得**承载领域产品长篇文案（应进配置文件或 L5 文档）。
+L3（`cursor_hooks` / `codex_hooks` / `framework_runtime` 等）负责合并 review/closeout/`AG_FOLLOWUP` 门控短码、采样 PostTool、持久化 gate 状态；宏目标续跑仅 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 `artifacts/current/<task_id>/` 手动画板（**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`，2026-05）。**不得**承载领域产品长篇文案（应进配置文件或 L5 文档）。
 
 ---
 

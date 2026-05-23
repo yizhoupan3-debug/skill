@@ -30,8 +30,9 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## Language
 
-- **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外）。
+- **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外），且使用自然的学术中文表达，避免翻译腔。
 - 仅当用户当轮明确要求英文回复时才可切换。
+- **回答避免空话**，直接给出具体的、可执行的建议；**对不确定的信息直接说明**，严禁凭空编造。
 
 ## Agent Identity
 
@@ -70,6 +71,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 | `codex-cli` | `docs/hosts/codex-cli.md` | ✓ |
 | `claude-code` | `docs/hosts/claude.md` | ✓（含 PreToolUse） |
 | `claude-desktop` | `docs/hosts/claude-desktop.md` | △ MCP advisory only（无 PreToolUse） |
+| `antigravity` | `docs/hosts/antigravity.md` | △ Hard block on MCP tools（无 CLI hook 面） |
 
 - **Cursor 机读短码**（宿主注入 `router-rs …` 单行）：`AG_FOLLOWUP`、`REVIEW_GATE` 等；**`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` hook 注入已拔除**（2026-05），续跑用 `/implementx` + `framework_goal_drive` stdio 与 `artifacts/current/<task_id>/` 手动画板；**禁止**自拟仿 hook 长文。
 - **Cursor `updateCurrentStep`**：禁止空载荷；见 `execution-subagent-gate.mdc`。
@@ -92,8 +94,9 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint instal
 
 ## Execution Ladder
 
-- **Cursor 宿主差异**：`.cursor/rules/execution-subagent-gate.mdc`、`review-subagent-gate.mdc`（仅 lane / hook / `updateCurrentStep` 等 Cursor 硬约束）。
-- **Review findings-only**（全宿主）：[`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)（compact 信封、透镜、默认只读 findings）；深度可数 lane 见 `host_adapter_contract.md` §0.1。
+- **Cursor 宿主差异**：`.cursor/rules/execution-subagent-gate.mdc`、`review-subagent-gate.mdc`（仅 lane / hook / `updateCurrentStep` 等 Cursor 硬约束）；并行 `Task`/子代理 **默认继承主会话模型**（`.cursor/rules/subagent-model-inherit.mdc`），禁止在未确认主会话使用 Anthropic 时指定 Claude/Sonnet；地区不可用见 `docs/hosts/cursor.md`。
+- **Antigravity 积极调用子代理**：由于 `antigravity` 宿主在默认的 `my-light` 下关闭了 hook-level 硬门控 nudge，**主代理在处理包含多文件修改（>1 个文件且预期 Delta > 50 行，非 small_task）、复杂跨模块设计或高风险/深度调研的任务时，必须积极拆解为并行并发模式**，通过 `invoke_subagent` 派生子代理完成主要工作。若子代理遭遇物理故障（Region 不可用、配额耗尽等）或任务包含硬性串行逻辑，允许自动降级为串行主线程推进，主线程保持 "scheduler only" 的协调者定位。
+- **Review findings-only**（全宿主）：[`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)（compact 信封、透镜、默认只读 findings）；深度可数 lane 见 `docs/host_adapter_contract.md` §0.1。
 - **并行 subagent / Codex 侧车 / 完整梯子**：[`docs/references/EXECUTION_LADDER.md`](docs/references/EXECUTION_LADDER.md)。
 
 ## Closeout

@@ -162,7 +162,7 @@ This skill does not own:
 - Use the project's existing documentation conventions if they exist
 - Flag any documentation that contradicts the current codebase
 - ADRs should be immutable once accepted; create new ADRs to supersede old ones
-- **Superior Quality Audit**: For production-grade documentation, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
+- **Superior Quality Audit**: For production-grade documentation, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
 
 ## Trigger examples
 - "强制进行文档工程深度审计 / 检查内容完整性与链接有效性。"

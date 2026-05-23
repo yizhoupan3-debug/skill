@@ -168,7 +168,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 **Cursor `Stop`：`review_override` / `delegation_override` / `has_override`（以及门控用的 `delegation_override` 句式）**：仅以**用户本轮 prompt** 为信源；**不**把助手 `response` 拼进 `signal_text` 来匹配这些 override（与 `beforeSubmit` 一致），避免模型在可见回复里复述「不要用子代理」等句式误解除 `REVIEW_GATE`。拒因清门仍遵循 `saw_reject_reason`（整树 + 用户轮粘贴行）既有规则。
 
-**Cursor 应急关闭审稿门控**：**仅当** `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 为 `1`/`true`/`yes`/`on` 时关闭 Cursor 审稿门控。应急下 `beforeSubmitPrompt` / `userPromptSubmit` 仅 `{"continue":true}`；`Stop` 在取 hook-state 锁前返回，仅 closeout 硬拦 + `SESSION_CLOSE_STYLE` 软提示，**无** goal/RFV 续跑。
+**Cursor 应急关闭审稿门控**：**仅当** `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 为 `1`/`true`/`yes`/`on` 时关闭 Cursor 审稿门控（`review_required` / `REVIEW_GATE` Stop 硬拦等）。**不**关闭 `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE`：应急下 `beforeSubmit` 仍可在 review/delegation/`/implementx|verifyx` 注入 model-inherit 单行。`Stop` 在取 hook-state 锁前返回时仅 closeout 硬拦 + `SESSION_CLOSE_STYLE` 软提示，**无** goal/RFV 续跑。
 - **减法事件 dispatch**：[`cursor_hooks/subtraction.rs`](../scripts/router-rs/src/cursor_hooks/subtraction.rs) 对 5 个已移除事件：未出现在 [`.cursor/hooks.json`](../.cursor/hooks.json) 则 no-op。
 
 **Claude Code：磁盘状态不可读（与 Codex 同形 fail-closed）**：当 `.claude/hook-state/review_gate_<hash>.json` 或 `.claude/hook-state/hook_state_<hash>.json` **已存在**但无法读取或 JSON 非法（含空文件）时，`Stop` 硬阻塞，`stopReason` 含 `router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions`；`UserPromptSubmit` 侧若需合并 review gate 状态而遇不可读，会注入 `additionalContext` 提示修复而非覆盖文件。排障：检查权限、修复或删除损坏文件。Codex 侧对照短码见 [`host_adapter_contract.md`](host_adapter_contract.md) 中 **`CODEX_HOOK_STATE_UNREADABLE`** 行。
@@ -192,6 +192,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` | 1200，clamp 256–8192 | Cursor SessionStart `additional_context` 合成字节上限 |
 | `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 Stop 软 `SESSION_CLOSE_STYLE` 单行收口提示 |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | 关 | Cursor beforeSubmit 中显式开启论文/手稿强对抗审稿短段 |
+| `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` | 开 | Cursor beforeSubmit：子代理/Task **继承主会话模型** 单行 nudge（registry `subagent_model_inherit_nudge`）；**仅** `0`/`false`/`off`/`no` 关闭；与 my-light / REVIEW_GATE 无关 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | 关 | 显式开启 Cursor `/implementx` pre-goal beforeSubmit 提示（env 名保留） |
 | `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | 开 | **默认开启**（unset 即 strict，[`router_rs_cursor_pre_goal_strict_disk_enabled`](../scripts/router-rs/src/router_env_flags.rs) 为 default-true）：**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真（beforeSubmit 与 Stop 均适用）；**仅** `0`/`false`/`off`/`no` 恢复历史宽松语义；pre-goal 仍可由 subagent / `reject_reason` / nag cap 等满足 |
 | `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 Cursor 可数深度 lane 在 `fork_context` **缺失**时的 `false` 推断；显式 `fork_context: true` 永不算独立证据 |

@@ -5,7 +5,18 @@
 
 use regex::Regex;
 use serde_json::{Map, Value};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+
+fn test_my_light_override() -> &'static Mutex<Option<bool>> {
+    static OVERRIDE: OnceLock<Mutex<Option<bool>>> = OnceLock::new();
+    OVERRIDE.get_or_init(|| Mutex::new(None))
+}
+
+/// Test-only override for [`my_light_profile_active`].
+#[cfg(test)]
+pub fn set_test_my_light_override(v: Option<bool>) {
+    *test_my_light_override().lock().expect("my_light override lock") = v;
+}
 
 /// Default UTF-8 **char** budget for assistant text on Cursor hook signal / lint paths.
 pub const CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 4096;
@@ -291,6 +302,11 @@ pub fn is_my_lifecycle_entry_prompt(text: &str) -> bool {
 
 /// `GOAL_STATE.lifecycle_profile` or active my-* prompt → my-light harness behavior.
 pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) -> bool {
+    if let Ok(guard) = test_my_light_override().lock() {
+        if let Some(v) = *guard {
+            return v;
+        }
+    }
     if is_my_lifecycle_entry_prompt(text) {
         return true;
     }
@@ -393,6 +409,26 @@ pub fn is_narrow_review_prompt(text: &str) -> bool {
         return false;
     }
     narrow_review_prefix_re().is_match(text)
+}
+
+/// Whether Cursor beforeSubmit may inject the subagent model inherit one-liner (independent of my-light / REVIEW_GATE).
+pub fn should_inject_subagent_model_inherit_nudge(
+    prompt_text: &str,
+    user_gate_override: bool,
+    goal_drive_entrypoint: bool,
+    delegation: bool,
+    review: bool,
+) -> bool {
+    if !crate::router_env_flags::router_rs_cursor_subagent_model_inherit_nudge_enabled() {
+        return false;
+    }
+    if user_gate_override {
+        return false;
+    }
+    if is_narrow_review_prompt(prompt_text) {
+        return false;
+    }
+    goal_drive_entrypoint || delegation || review
 }
 
 /// Whether hooks may inject the spawn-first pairing reviewer one-liner.
@@ -633,6 +669,10 @@ mod tests {
         );
         assert!(is_review_prompt("Please do a code review of this change."));
         assert!(
+            is_review_prompt("请全面review这个路由系统 /implementx 修复刚发现的问题"),
+            "dual review+implementx with routing anchor must still count as review prompt"
+        );
+        assert!(
             !is_review_prompt(
                 "cursor 对话频繁触发 claude 的 hook，深度review，我的设计是主 harness + 三个独立宿主"
             ),
@@ -662,6 +702,39 @@ mod tests {
         assert!(is_my_pre_execution_entry_prompt("/discussx"));
         assert!(is_my_pre_execution_entry_prompt("/planx"));
         assert!(!is_framework_goal_entry_prompt("/discussx"));
+    }
+
+    #[test]
+    fn should_inject_subagent_model_inherit_for_implementx_and_review() {
+        let _lock = crate::test_env_sync::process_env_lock();
+        let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
+        let prev = std::env::var_os(key);
+        std::env::set_var(key, "1");
+        assert!(should_inject_subagent_model_inherit_nudge(
+            "/implementx",
+            false,
+            true,
+            false,
+            false
+        ));
+        assert!(should_inject_subagent_model_inherit_nudge(
+            "Please do a code review of this change.",
+            false,
+            false,
+            false,
+            true
+        ));
+        assert!(!should_inject_subagent_model_inherit_nudge(
+            "small_task",
+            false,
+            true,
+            false,
+            true
+        ));
+        match prev {
+            Some(v) => std::env::set_var(key, v),
+            None => std::env::remove_var(key),
+        }
     }
 
     #[test]

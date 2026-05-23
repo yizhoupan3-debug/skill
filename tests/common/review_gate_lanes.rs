@@ -35,6 +35,8 @@ pub fn expected_deep_gate_lanes() -> HashSet<String> {
         "generalpurpose",
         "best-of-n-runner",
         "bestofnrunner",
+        "deep-reviewer",
+        "deepreviewer",
     ]
     .into_iter()
     .map(str::to_string)

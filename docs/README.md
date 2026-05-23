@@ -7,7 +7,7 @@
 1. [仓库根 README.md](../README.md) — 分享、安装、Cursor/Codex hook 快速入门  
 2. [framework_operator_primer.md](framework_operator_primer.md) — 使用者一页纸：宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检 `framework doctor`  
 3. [AGENTS.md](../AGENTS.md) — Skill 路由、Continuity、Closeout、Execution Ladder  
-4. [harness_architecture.md](harness_architecture.md) — 五层模型、证据流、续跑流、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
+4. [harness_architecture.md](harness_architecture.md) — 五层模型、证据流、续跑（stdio + 手动画板，非 hook `GOAL_CONTINUE`）、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
 5. [rust_contracts.md](rust_contracts.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
 6. [task_state_unified_resolve.md](task_state_unified_resolve.md) — `ResolvedTaskView` / `framework task-state-resolve`  
 

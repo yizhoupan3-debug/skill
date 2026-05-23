@@ -353,7 +353,7 @@ fn cursor_subagent_type_pair(tool_input: &Value, event: &Value) -> (String, Stri
     )
 }
 
-/// GSD goal pre-goal（`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
+/// My implement pre-goal（`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
 /// `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 应急开启时退化为「任一带名 lane/agent 字段」以免应急路径过严。
 fn pre_goal_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
     if cursor_review_gate_disabled_by_env() {
@@ -470,7 +470,7 @@ pub struct ReviewGateState {
     pub goal_contract_seen: bool,
     pub goal_progress_seen: bool,
     pub goal_verify_or_block_seen: bool,
-    /// GSD goal pre-goal：在 goal 契约与收口证据之前，要求独立上下文 subagent 预检（或拒绝原因词）。
+    /// My implement pre-goal：在 goal 契约与收口证据之前，要求独立上下文 subagent 预检（或拒绝原因词）。
     #[serde(default)]
     pub pre_goal_review_satisfied: bool,
     /// 连续触发 beforeSubmit 的 pre-goal 提示次数（清门或自动放行后归零）。
@@ -1102,12 +1102,16 @@ fn hook_state_lock_failure_output(repo_root: &Path, event: &Value) -> Value {
     }
 }
 
-/// Wave-2 / P0-4: countable deep-gate subagent evidence before any main-thread compact may clear REVIEW_GATE.
-fn countable_review_subagent_evidence_seen(state: &ReviewGateState) -> bool {
+/// Live subagent cycle evidence (start/stop/pending). Excludes legacy `phase>=2` alone (wave-2 / P0-4).
+fn review_subagent_live_evidence_seen(state: &ReviewGateState) -> bool {
     state.subagent_start_count > 0
         || state.subagent_stop_count > 0
         || !state.review_subagent_pending_cycle_keys.is_empty()
-        || state.phase >= 2
+}
+
+/// Wave-2 / P0-4: countable deep-gate subagent evidence before any main-thread compact may clear REVIEW_GATE.
+fn countable_review_subagent_evidence_seen(state: &ReviewGateState) -> bool {
+    review_subagent_live_evidence_seen(state)
 }
 
 /// My execution-zone commands arm goal continuity gates (`/implementx`, `/verifyx`).
@@ -1747,6 +1751,12 @@ fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
     review_hard_armed(state) && !review_subagent_evidence_satisfied(state)
 }
 
+/// Compact bump requires live cycle progress beyond orphan `subagent_start_count` (stale hygiene may clear pending).
+fn compact_bump_review_evidence_seen(state: &ReviewGateState) -> bool {
+    review_subagent_live_evidence_seen(state)
+        && (state.subagent_stop_count > 0 || !state.review_subagent_pending_cycle_keys.is_empty())
+}
+
 /// 主线程 compact findings **不得**在无可数深度子代理证据时单独升 phase 3 清 REVIEW_GATE（P0-4 / wave-2）。
 fn maybe_bump_review_phase_for_main_thread_compact_findings(
     state: &mut ReviewGateState,
@@ -1755,7 +1765,7 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
     if !review_hard_armed(state) || state.phase >= 3 {
         return false;
     }
-    if !countable_review_subagent_evidence_seen(state) {
+    if !compact_bump_review_evidence_seen(state) {
         return false;
     }
     if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
@@ -1768,14 +1778,14 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
     true
 }
 
-/// Stop 硬门控（REVIEW_GATE / AG_FOLLOWUP）与 GSD/RFV 续跑注入互斥。
+/// Stop 硬门控（REVIEW_GATE / AG_FOLLOWUP）与 My/RFV 续跑注入互斥。
 fn stop_hard_gate_blocks_continuity_merge(state: &ReviewGateState) -> bool {
     review_stop_followup_needed(state) || (state.goal_required && !goal_is_satisfied(state))
 }
 
 /// Stop / 观测 fixture 共用的 `need=` 段（前缀仍须含 `REVIEW_GATE` 供 `router_rs_observation` 分类）。
 pub(crate) const REVIEW_GATE_FOLLOWUP_NEED_SEGMENT: &str =
-    "need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false";
+    "need=deep_reviewer_cycle general-purpose|best-of-n|deep-reviewer fork_context=false";
 
 /// Short, stable tail for `REVIEW_GATE incomplete` lines (after `need=`). Does not change the first
 /// `router-rs` token (`REVIEW_GATE`) used by observation classification.
@@ -1802,6 +1812,9 @@ fn review_stop_followup_line(state: &ReviewGateState) -> String {
 
 /// `merge_hook_nudge_paragraph` 去重前缀：首行须与 `REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX` 常量一致以便每轮刷新同一段落。
 pub(crate) const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str = "router-rs REVIEW_GATE detail";
+
+pub(crate) const CURSOR_HOOK_STATE_UNREADABLE: &str =
+    "router-rs CURSOR_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
 
 /// 超过「完整硬行」上限后写入 `followup_message` 的短行（仍以 `router-rs REVIEW_GATE` 开头供观测分类）。
 pub(crate) fn review_stop_followup_soft_line(
@@ -2174,6 +2187,29 @@ fn clear_review_gate_escalation_counters(state: &mut ReviewGateState) {
     state.pre_goal_nag_count = 0;
 }
 
+/// Reset review-cycle progress (phase / pending / subagent counters). Parity with Codex UPS
+/// when my-light disarms review, goal drive suppresses review, or a fresh deep-review cycle starts.
+///
+/// When `preserve_session_guards` is true (fresh deep-review re-arm), retain open-subagent count
+/// and pending-cap refusal so `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` cannot be bypassed via UPS.
+fn reset_review_cycle_progress(state: &mut ReviewGateState, preserve_session_guards: bool) {
+    state.phase = 0;
+    state.subagent_start_count = 0;
+    state.subagent_stop_count = 0;
+    if !preserve_session_guards {
+        state.active_subagent_count = 0;
+        state.active_subagent_last_started_at = None;
+        state.review_pending_cap_refused = false;
+    }
+    state.review_subagent_pending_cycle_keys.clear();
+    state.review_pending_last_pushed_at = None;
+    state.review_followup_count = 0;
+    sync_review_cycle_legacy_fields(state);
+}
+
+/// Same-submit review + My goal drive: review stays disarmed; operator-visible split hint (non-my-light only).
+const CURSOR_REVIEW_MY_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 My 执行区入口（`/implementx`、`/verifyx`）；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/implementx`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
+
 /// `GOAL_STATE` 列表字段是否含至少一条非空字符串（避免 `[""]` 这种伪非空数组）。
 fn goal_state_list_any_nonempty_string(goal: &Value, key: &str) -> bool {
     match goal.get(key) {
@@ -2326,7 +2362,7 @@ fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
     if strong_constraint {
         return (
             false,
-            "router-rs：hook-state 锁不可用，本条为严格 review/委托/autopilot，**已拦截提交**。请修锁/权限后重试，或起 subagent / 写明拒因。"
+            "router-rs：hook-state 锁不可用，本条为严格 review/委托/My 执行区门控，**已拦截提交**。请修锁/权限后重试，或起 subagent / 写明拒因。"
                 .to_string(),
         );
     }
@@ -2363,9 +2399,6 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
     }
     state_lock_degraded_followup().to_string()
 }
-/// 同一条用户提交里同时出现 review 信号与 goal drive 入口时追加；与 `review_arms_for_gate` 语义对齐。
-const CURSOR_REVIEW_MY_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 My 执行区入口（`/implementx`、`/verifyx`）；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/implementx`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
-
 /// 将一条 `review_subagent_cycle_key` 压入 multiset 并同步 legacy 字段。
 ///
 /// **双事件去重**：宿主可能对同一子代理先发 `subagentStart` 再发 `PostToolUse`（同一 `subagent_id`）。对 **`id:`** 前缀的稳定 key，若 pending 已含该字符串，则 **PostToolUse 路径不再 push**，避免「一次 stop 只核销一条」语义下出现双 pending。
@@ -2459,6 +2492,8 @@ fn apply_subagent_stale_hygiene(state: &mut ReviewGateState) -> bool {
     let stale_reset = reset_stale_active_subagents(state);
     if stale_reset {
         state.review_subagent_pending_cycle_keys.clear();
+        state.subagent_start_count = 0;
+        state.subagent_stop_count = 0;
         sync_review_cycle_legacy_fields(state);
     } else {
         prune_stale_review_pending_cycle_keys(state);
@@ -2479,15 +2514,27 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         }
         return out;
     }
-    let mut state = load_state(repo_root, event)
-        .ok()
-        .flatten()
-        .unwrap_or_else(empty_state);
+    let text = prompt_text(event);
+    let signal_text = hook_event_signal_text(event, &text, "");
+    let state_load = load_state(repo_root, event);
+    if let Err(ref load_err) = state_load {
+        release_state_lock(&mut lock);
+        let path = state_path(repo_root, event);
+        let mut out = json!({ "continue": true });
+        merge_additional_context(
+            &mut out,
+            &format!(
+                "{} (path {}, err={load_err}). Repair JSON or permissions before continuing.",
+                CURSOR_HOOK_STATE_UNREADABLE,
+                path.display()
+            ),
+        );
+        return out;
+    }
+    let mut state = state_load.ok().flatten().unwrap_or_else(empty_state);
     let _stale_reset = apply_subagent_stale_hygiene(&mut state);
     // delegation 启发式不再持久化进 hook-state，避免与 review 相位门控长期粘连。
     state.delegation_required = false;
-    let text = prompt_text(event);
-    let signal_text = hook_event_signal_text(event, &text, "");
     let review = is_review_prompt(&text);
     let goal_drive_entrypoint = is_framework_goal_drive_entry_prompt(&text, &signal_text);
     let review_arms_for_gate = review && !goal_drive_entrypoint;
@@ -2497,14 +2544,22 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
 
     let prior_review_required = state.review_required;
     let my_light = crate::hook_common::my_light_profile_active(Some(repo_root), &text);
+    let review_gate_live = !cursor_review_gate_suppressed(repo_root, &text);
+    let mut fresh_review_cycle = false;
     if my_light {
         state.review_required = false;
+        reset_review_cycle_progress(&mut state, false);
     } else {
+        if review_arms_for_gate && !user_gate_override && review_gate_live {
+            reset_review_cycle_progress(&mut state, true);
+            fresh_review_cycle = true;
+        }
         state.review_required = state.review_required || review_arms_for_gate;
     }
     if goal_drive_entrypoint && !review_arms_for_gate {
         state.review_required = false;
         clear_review_gate_escalation_counters(&mut state);
+        reset_review_cycle_progress(&mut state, false);
     }
     state.review_override = state.review_override || user_gate_override;
     state.delegation_override = state.delegation_override || user_gate_override;
@@ -2540,22 +2595,44 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
             && !is_overridden(&state)
             && !state.reject_reason_seen;
     let mut output = json!({ "continue": true });
+    let mut spawn_first_line: Option<String> = None;
     if review_arms_for_gate
-        && !prior_review_required
+        && (fresh_review_cycle || !prior_review_required)
         && !cursor_review_gate_suppressed(repo_root, &text)
         && !state.review_override
         && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &text)
     {
         let nudge =
             crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root), "cursor");
+        spawn_first_line = Some(nudge.clone());
         merge_additional_context(&mut output, &nudge);
     }
-    if review
-        && goal_drive_entrypoint
+    let skip_model_nudge = spawn_first_line.is_some()
+        && crate::registry_loader::spawn_first_includes_model_inherit_for_host(
+            Some(repo_root),
+            "cursor",
+        );
+    if state.goal_required
         && !my_light
         && !cursor_review_gate_suppressed(repo_root, &text)
+        && (review_arms_for_gate || (review && goal_drive_entrypoint))
     {
         merge_additional_context(&mut output, CURSOR_REVIEW_MY_SAME_ROUND_NUDGE);
+    }
+    if !skip_model_nudge
+        && crate::hook_common::should_inject_subagent_model_inherit_nudge(
+            &text,
+            user_gate_override,
+            goal_drive_entrypoint,
+            delegation,
+            review,
+        )
+    {
+        let model_nudge = crate::registry_loader::review_subagent_model_inherit_nudge_line(
+            Some(repo_root),
+            "cursor",
+        );
+        merge_additional_context(&mut output, &model_nudge);
     }
     if needs_autopilot_pre_goal {
         // 仅计入总 follow-up 次数；不要把 goal_followup_count 算进去，否则首次 stop 会误判成「非首条」而跳过完整 goal 提示。
@@ -2593,8 +2670,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     };
     let gate_needs_persist = review_arms_for_gate
         || state.goal_required
-        || needs_autopilot_pre_goal
-        || (review && !cursor_review_gate_suppressed(repo_root, &text));
+        || needs_autopilot_pre_goal;
     if !persisted || !persisted_after_followup {
         if gate_needs_persist
             && !crate::router_env_flags::router_rs_cursor_hook_state_fail_open_enabled()
@@ -2650,6 +2726,13 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         mutated = true;
     }
     if armed && independent_fork_review && review_kind {
+        if state.review_pending_cap_refused {
+            let _ = save_state(repo_root, event, &mut state);
+            release_state_lock(&mut lock);
+            return review_pending_cycle_cap_denial(
+                crate::router_env_flags::router_rs_cursor_review_pending_cycle_max() as usize,
+            );
+        }
         if push_review_pending_cycle_key(&mut state, cycle_key, false) {
             let was_below_2 = state.phase < 2;
             bump_phase(&mut state, 2);
@@ -2666,6 +2749,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
             }
             mutated = true;
         } else {
+            let _ = save_state(repo_root, event, &mut state);
             release_state_lock(&mut lock);
             return review_pending_cycle_cap_denial(
                 crate::router_env_flags::router_rs_cursor_review_pending_cycle_max() as usize,
@@ -2741,6 +2825,7 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
         }
         sync_review_cycle_legacy_fields(&mut state);
         if state.review_subagent_pending_cycle_keys.is_empty() {
+            state.review_pending_cap_refused = false;
             bump_phase(&mut state, 3);
             state.subagent_stop_count += 1;
             state.lane_intent_matches = Some(true);
@@ -2884,6 +2969,8 @@ fn handle_post_tool_use_with_lock(
             if was_below_2 {
                 clear_review_gate_escalation_counters(&mut state);
             }
+            mutated = true;
+        } else if state.review_pending_cap_refused {
             mutated = true;
         }
     }
@@ -3227,7 +3314,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                     None => true,
                     Some(n) => state.review_followup_count <= n,
                 };
-                // soft_nag 超 cap：仍注入 REVIEW 提示，但不阻断 GSD/RFV 续跑（ADR / P1-4）。
+                // soft_nag 超 cap：仍注入 REVIEW 提示，但不阻断 My/RFV 续跑（ADR / P1-4）。
                 let skip_continuity_merge = if use_full {
                     gate_blocks_continuity
                 } else {
@@ -3275,7 +3362,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         }
     };
     // Advisory: lint review output format (compact envelope checks).
-    // Skip when Stop already carries a hard followup or continuity merge is suppressed (same as GSD/RFV).
+    // Skip when Stop already carries a hard followup or continuity merge is suppressed (same as My/RFV).
     let hard_stop_followup = output
         .get("followup_message")
         .and_then(Value::as_str)

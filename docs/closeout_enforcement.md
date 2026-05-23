@@ -160,12 +160,22 @@ deepinterview, loop) MUST:
 
 1. **Materialize a record** at task end into
    `artifacts/closeout/<task_id>.json`.
-2. **Run the evaluator** before printing a final user-facing summary.
+2. **Run the evaluator** (`closeout_evaluate` stdio or
+   `router-rs closeout evaluate`) before printing a final user-facing summary.
 3. **Refuse to declare completion** if `closeout_allowed=false`; instead either
    add the missing evidence or downgrade `verification_status` to `partial`
    /`not_run` and record a `risk`/`blocker`.
 4. **Surface the violations** to the user in the closeout message so the gap is
    visible, not silent.
+
+**verifyx** (my-lifecycle ship) additionally MUST, after a successful closeout
+evaluate:
+
+5. **Purge** `artifacts/current/<task_id>/` (closeout JSON first, then delete
+   the task dir). Optional purge intent in the closeout record `notes` field
+   (e.g. `task_artifacts_purged; task_dir_removed`) — not separate schema fields.
+   See [`skills/verifyx/SKILL.md`](../skills/verifyx/SKILL.md) §Post-verify
+   task-dir purge.
 
 Skills with smaller surface (gitx, slides one-shot rebuild) should still emit
 records when they touch files; the evaluator's bar for partial/risk-only

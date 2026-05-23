@@ -6,23 +6,28 @@ Evidence is the foundation of verifyx / framework verification.
 
 Evidence = verification command + result + timestamp + provenance
 
-## Evidence Entry Schema
+## Evidence Index Schema (`evidence-index-v2`)
+
+`EVIDENCE_INDEX.json` uses `schema_version: evidence-index-v2` with a top-level **`artifacts[]`** array. Each artifact row:
 
 ```json
 {
-  "id": "uuid-v4",
-  "timestamp": "2026-05-19T10:30:00Z",
-  "command": "cargo test --lib",
-  "exit_code": 0,
-  "duration_ms": 5234,
-  "result_summary": "50 tests passed, 0 failed, 0 ignored",
-  "stdout_snippet": "test result: ok. 50 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
-  "kind": "cursor_post_tool_verification | codex_post_tool_verification | manual_verification | hook_evidence | verifyx",
-  "lifecycle_command": "/verifyx | /implementx | null",
-  "tags": ["test", "unit", "core"],
-  "artifact_path": "path/to/test/results/log"
+  "schema_version": "evidence-index-v2",
+  "artifacts": [
+    {
+      "recorded_at": "2026-05-19T10:30:00Z",
+      "command_preview": "cargo test --lib",
+      "exit_code": 0,
+      "success": true,
+      "kind": "verifyx",
+      "lifecycle_command": "/verifyx",
+      "tags": ["test", "unit", "core"]
+    }
+  ]
 }
 ```
+
+Common fields on each `artifacts[]` row: `command_preview`, `recorded_at`, `exit_code`, `success`, `kind` (`cursor_post_tool_verification` | `codex_post_tool_verification` | `manual_verification` | `hook_evidence` | `verifyx` | `missing_evidence`), optional `lifecycle_command` (`/verifyx` | `/implementx`), optional `tags`, optional `stdout_snippet`.
 
 ## Evidence Collection Rules
 
@@ -92,18 +97,21 @@ grep -A5 '"kind": ".*test.*"' artifacts/current/<task_id>/EVIDENCE_INDEX.json
 grep -A5 '"kind": "verifyx"' artifacts/current/<task_id>/EVIDENCE_INDEX.json
 ```
 
-### By Wave
+### By Tag or lifecycle
 
 ```bash
-# Get evidence for wave 1
-grep -B2 -A3 '"wave": 1' artifacts/current/<task_id>/EVIDENCE_INDEX.json
+# Optional tags on artifact rows (when present)
+grep -B2 -A3 '"tags".*"wave"' artifacts/current/<task_id>/EVIDENCE_INDEX.json
+
+# Filter by lifecycle command
+jq '.artifacts[] | select(.lifecycle_command == "/implementx")' artifacts/current/<task_id>/EVIDENCE_INDEX.json
 ```
 
 ### Summary Statistics
 
 ```bash
 # Count evidence by type
-jq '[.entries[].kind] | group_by(.) | map({kind: .[0], count: length})' artifacts/current/<task_id>/EVIDENCE_INDEX.json
+jq '[.artifacts[].kind] | group_by(.) | map({kind: .[0], count: length})' artifacts/current/<task_id>/EVIDENCE_INDEX.json
 ```
 
 ## Evidence-Based Decisions
@@ -136,11 +144,20 @@ Evidence is kept in:
 
 Evidence is removed when verifyx purges the task dir after ship (see `skills/verifyx/SKILL.md`).
 
+## Post-verify purge and closeout notes
+
+After `router-rs closeout evaluate` writes `artifacts/closeout/<task_id>.json`:
+
+1. Delete `artifacts/current/<task_id>/` (mandatory purge).
+2. Record purge intent in the closeout record **`notes`** field if useful (e.g. `task_artifacts_purged; task_dir_removed`).
+
+These purge markers are **operator checklist text only**. They are **not** fields on `CLOSEOUT_RECORD_SCHEMA.json` / `CloseoutRecord` (`deny_unknown_fields` rejects unknown keys).
+
 ## Evidence Audit
 
 Before ship, audit evidence:
 
 1. Every planned verification has evidence
-2. All evidence has valid timestamps
+2. All evidence has valid `recorded_at` timestamps
 3. No conflicting evidence (same command, different results)
 4. Evidence chain is complete (start → end)

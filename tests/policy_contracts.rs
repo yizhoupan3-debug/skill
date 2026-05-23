@@ -344,7 +344,8 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
             "codex-app",
             "cursor",
             "claude-code",
-            "claude-desktop"
+            "claude-desktop",
+            "antigravity"
         ])
     );
     assert_eq!(
@@ -370,6 +371,13 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["claude-desktop"],
         serde_json::json!(["AGENTS.md", ".claude/CLAUDE.md"])
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["antigravity"],
+        serde_json::json!([
+            "AGENTS.md",
+            ".gemini/antigravity/rules/framework.md"
+        ])
     );
     assert_eq!(
         manifest["shared_system"]["policy"],
@@ -968,6 +976,7 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
             "cursor".to_string(),
             "claude".to_string(),
             "claude-desktop".to_string(),
+            "antigravity".to_string(),
         ],
         &supported,
         false,

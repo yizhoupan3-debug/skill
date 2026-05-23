@@ -208,7 +208,7 @@ Cursor 官方说明：计划默认保存在**用户目录**，需 **「Save to w
 
 - **分层与 hook**：控制面、证据与续跑注入边界以 `docs/harness_architecture.md` 为准；不要在 skill 正文发明第二套账本格式。
 - **计划落盘**：权威草稿/链接建议 `.cursor/plans/`；仓库协作或审计需要的摘要可复制或同步到 `docs/plans/`，与仓库内其它计划文档同一叙事。
-- **Plan Build 与 goal**：Cursor Plan Build **不**自动武装 lifecycle goal 门控；连续执行仅由用户显式 **`/implementx`**（及 `/verifyx`）启动。Pre-goal 提示见 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`**（命名保留；语义绑定 `/implementx`）。
+- **Plan Build 与 goal**：Cursor Plan Build **不**自动武装 lifecycle goal 门控；连续执行仅由用户显式 **`/implementx`**（及 `/verifyx`）启动。Pre-goal 提示见 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`**（`AUTOPILOT_*` 仅为 env 遗留名；`/autopilot` 斜杠已退役）。
 
 ## Todo 可执行性（四元组、对齐与依赖）
 

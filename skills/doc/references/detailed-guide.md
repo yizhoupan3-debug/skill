@@ -25,7 +25,7 @@ This skill is a Phase-2 artifact gate / detector / verifier in the shared
 finding-driven framework. It should keep Word work `.docx`-native, then emit
 findings or verification results that downstream owners can consume without
 repeating render checks. Use the shared structures in
-[`../SKILL_FRAMEWORK_PROTOCOLS.md`](../SKILL_FRAMEWORK_PROTOCOLS.md) and the
+[`../../SKILL_FRAMEWORK_PROTOCOLS.md`](../../SKILL_FRAMEWORK_PROTOCOLS.md) and the
 verification protocol when layout or pagination correctness matters.
 
 ## Required workflow

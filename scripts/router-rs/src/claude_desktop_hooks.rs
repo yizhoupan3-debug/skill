@@ -105,7 +105,10 @@ fn get_task_view_cache(
 }
 
 fn get_rate_limiter() -> &'static Arc<std::sync::Mutex<RateLimiter>> {
-    RATE_LIMITER.get_or_init(|| Arc::new(std::sync::Mutex::new(RateLimiter::new(100))))
+    RATE_LIMITER.get_or_init(|| {
+        let interval = if cfg!(test) { 0 } else { 100 };
+        Arc::new(std::sync::Mutex::new(RateLimiter::new(interval)))
+    })
 }
 
 /// Get snapshot cache TTL from environment variable.
@@ -177,13 +180,21 @@ pub fn run_claude_desktop_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), S
     let repo_root = resolve_repo_root_arg(repo_root_arg)?;
     let stdin = io::stdin();
     let stdout = io::stdout();
-    run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root)
+    run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, "claude-desktop")
+}
+
+pub fn run_antigravity_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), String> {
+    let repo_root = resolve_repo_root_arg(repo_root_arg)?;
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, "antigravity")
 }
 
 fn run_mcp_stdio<R: BufRead, W: Write>(
     mut input: R,
     mut output: W,
     repo_root: &Path,
+    host_id: &str,
 ) -> Result<(), String> {
     // 初始化 session tracker（session 级别，只执行一次）
     // 注意：init_tracker 失败不会阻塞 MCP 服务，因为某些环境可能不支持 tracker 文件
@@ -196,7 +207,7 @@ fn run_mcp_stdio<R: BufRead, W: Write>(
     }
     let mut transport_mode = None;
     while let Some(message) = read_mcp_message(&mut input, &mut transport_mode)? {
-        if let Some(response) = handle_mcp_request(&message, repo_root) {
+        if let Some(response) = handle_mcp_request(&message, repo_root, host_id) {
             write_mcp_response(
                 &mut output,
                 transport_mode.unwrap_or(McpTransportMode::NewlineDelimited),
@@ -315,7 +326,7 @@ fn write_mcp_response<W: Write>(
     Ok(())
 }
 
-pub(crate) fn handle_mcp_request(message: &str, repo_root: &Path) -> Option<Value> {
+pub(crate) fn handle_mcp_request(message: &str, repo_root: &Path, host_id: &str) -> Option<Value> {
     let request: Value = match serde_json::from_str(message) {
         Ok(v) => v,
         Err(err) => {
@@ -333,9 +344,9 @@ pub(crate) fn handle_mcp_request(message: &str, repo_root: &Path) -> Option<Valu
         "notifications/initialized" => None,
         "notifications/cancelled" => None, // Per JSON-RPC spec, notifications should not receive responses
         "tools/list" => Some(handle_tools_list(id)),
-        "tools/call" => Some(handle_tools_call(id, &request, repo_root)),
+        "tools/call" => Some(handle_tools_call(id, &request, repo_root, host_id)),
         "prompts/list" => Some(handle_prompts_list(id)),
-        "prompts/get" => Some(handle_prompts_get(id, &request, repo_root)),
+        "prompts/get" => Some(handle_prompts_get(id, &request, repo_root, host_id)),
         "resources/list" => Some(handle_resources_list(id, repo_root)),
         "resources/read" => Some(handle_resources_read(id, &request, repo_root)),
         "ping" => id.map(|id| json!({"jsonrpc": "2.0", "id": id, "result": {}})),
@@ -588,7 +599,7 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Value {
+fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -617,12 +628,65 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Va
         eprintln!("[router-rs warning] record_tool_call failed: {e}");
     }
 
-    let result = match tool_name {
+    // Antigravity Host hard interception rules
+    if host_id == "antigravity" {
+        let task_id_override = arguments
+            .get("task_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let task_view = resolve_task_view(repo_root, task_id_override);
+        let lifecycle_profile = task_view.goal_state.as_ref()
+            .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
+            .unwrap_or("");
+        
+        let is_my_light = lifecycle_profile == "my-light";
+
+        if !is_my_light {
+            if tool_name == "goal_state_manage" {
+                if let Some("complete") = arguments.get("operation").and_then(Value::as_str) {
+                    // Check closeout gate before marking complete
+                    match tool_closeout_gate(arguments, repo_root, host_id) {
+                        Ok(content) => {
+                            if content.contains("[Closeout Gate] ADVISORY:") {
+                                return json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "result": {
+                                        "content": [{
+                                            "type": "text",
+                                            "text": format!(
+                                                "Error: [Antigravity Hard Block] Cannot mark goal as complete because closeout gates are not satisfied. Detail:\n{}",
+                                                content
+                                            )
+                                        }],
+                                        "isError": true,
+                                    },
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            return json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "content": [{ "type": "text", "text": format!("Error during pre-closeout check: {e}") }],
+                                    "isError": true,
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut result = match tool_name {
         "framework_snapshot" => tool_framework_snapshot(repo_root),
-        "skill_route" => tool_skill_route(arguments, repo_root),
+        "skill_route" => tool_skill_route(arguments, repo_root, host_id),
         "record_evidence" => tool_record_evidence(arguments, repo_root),
         "session_checkpoint" => tool_session_checkpoint(arguments, repo_root),
-        "closeout_gate" => tool_closeout_gate(arguments, repo_root),
+        "closeout_gate" => tool_closeout_gate(arguments, repo_root, host_id),
         "rfv_loop_status" => tool_rfv_loop_status(arguments, repo_root),
         "rfv_loop_manage" => tool_rfv_loop_manage(arguments, repo_root),
         "goal_state_manage" => tool_goal_state_manage(arguments, repo_root),
@@ -630,6 +694,30 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path) -> Va
         "closeout_record_write" => tool_closeout_record_write(arguments, repo_root),
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
+
+    if host_id == "antigravity" && tool_name == "closeout_gate" {
+        if let Ok(ref content) = result {
+            if content.contains("[Closeout Gate] ADVISORY:") {
+                let task_id_override = arguments
+                    .get("task_id")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty());
+                let task_view = resolve_task_view(repo_root, task_id_override);
+                let lifecycle_profile = task_view.goal_state.as_ref()
+                    .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
+                    .unwrap_or("");
+                let is_my_light = lifecycle_profile == "my-light";
+
+                if !is_my_light {
+                    result = Err(format!(
+                        "[Antigravity Hard Block] Closeout Gate not satisfied. Details:\n{}",
+                        content
+                    ));
+                }
+            }
+        }
+    }
 
     match result {
         Ok(content) => {
@@ -706,7 +794,7 @@ fn invalidate_evidence_caches() {
     }
 }
 
-fn tool_skill_route(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+fn tool_skill_route(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
     let query = arguments
         .get("query")
         .and_then(Value::as_str)
@@ -725,12 +813,12 @@ fn tool_skill_route(arguments: &Value, repo_root: &Path) -> Result<String, Strin
         .unwrap_or(true); // Default to first_turn=true on error
 
     let records = load_records_cached_for_stdio(Some(repo_root), None)?;
-    let records = filter_records_for_host(records.as_ref(), Some("claude-desktop"))?;
+    let records = filter_records_for_host(records.as_ref(), Some(host_id))?;
     let decision = route_task_with_manifest_fallback(
         &records,
         Some(repo_root),
         None,
-        Some("claude-desktop"),
+        Some(host_id),
         query,
         "session",
         true, // allow_overlay: true
@@ -890,7 +978,7 @@ fn goal_suggests_review_work(goal_state: &Value) -> bool {
         })
 }
 
-fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path) -> bool {
+fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path, task_id: &str) -> bool {
     for key in ["review_evidence_attested", "independent_reviewer_attested"] {
         if arguments.get(key).and_then(Value::as_bool) == Some(true) {
             return true;
@@ -899,6 +987,34 @@ fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path) -> bool
     if arguments.get("review_evidence").and_then(Value::as_bool) == Some(true) {
         return true;
     }
+
+    // 自动扫描 artifacts/current/<task_id>/review-lanes 目录下的 Markdown 证据工件
+    let review_lanes_dir = if task_id.is_empty() {
+        repo_root.join("artifacts/current/review-lanes")
+    } else {
+        repo_root.join("artifacts/current").join(task_id).join("review-lanes")
+    };
+
+    if review_lanes_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&review_lanes_dir) {
+            let mut valid_findings_found = false;
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md") {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        if !content.trim().is_empty() {
+                            valid_findings_found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if valid_findings_found {
+                return true;
+            }
+        }
+    }
+
     let lane = arguments
         .get("reviewer_lane")
         .or_else(|| arguments.get("subagent_type"))
@@ -913,7 +1029,7 @@ fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path) -> bool
     claude_independent_reviewer_evidence(review_lane, fork)
 }
 
-pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
     let task_id_override = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -922,8 +1038,14 @@ pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path) -> Result<
     let task_view = resolve_task_view(repo_root, task_id_override);
     let mut findings: Vec<String> = Vec::new();
 
+    let host_name = if host_id == "antigravity" {
+        "Antigravity"
+    } else {
+        "Claude Desktop"
+    };
+
     findings.push(
-        "review_gate: Claude Desktop has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested (prompts/review_gate)".to_string(),
+        format!("review_gate: {host_name} has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested (prompts/review_gate)"),
     );
 
     let goal_present = task_view.goal_state.is_some();
@@ -975,19 +1097,28 @@ pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path) -> Result<
         .goal_state
         .as_ref()
         .is_some_and(goal_suggests_review_work);
-    if review_goal && !desktop_review_evidence_attested(arguments, repo_root) {
+    
+    let has_review_evidence = desktop_review_evidence_attested(arguments, repo_root, task_id);
+
+    if review_goal && !has_review_evidence {
         findings.push(
-            "WARN: review_gate: GOAL suggests review work but no hook-level reviewer evidence on Desktop — spawn claude_reviewer_lanes with fork_context=false or pass review_evidence_attested=true after independent review"
-                .to_string(),
+            format!(
+                "WARN: review_gate: GOAL suggests review work but no hook-level reviewer evidence on {host_name} — spawn claude_reviewer_lanes with fork_context=false, upload review-lanes/*.md reports, or pass review_evidence_attested=true after independent review"
+            )
         );
     } else if review_goal {
-        findings.push("review_gate: GOAL suggests review; reviewer evidence attested in closeout_gate args".to_string());
+        findings.push("review_gate: GOAL suggests review; reviewer evidence attested in closeout_gate args or review-lanes".to_string());
     }
 
-    let all_clear = goal_present && evidence_success && has_summary;
+    // 强性拦截：如果属于 review_goal 任务，但完全缺失审稿证据，all_clear 判定必须失败！
+    let mut all_clear = goal_present && evidence_success && has_summary;
+    if review_goal && !has_review_evidence {
+        all_clear = false;
+    }
+
     let verdict = if all_clear {
         "PASS: all closeout gates satisfied (advisory)"
-    } else if goal_present && evidence_success {
+    } else if goal_present && evidence_success && (!review_goal || has_review_evidence) {
         "ADVISORY: checkpoint missing — call session_checkpoint before claiming PASS"
     } else {
         "ADVISORY: some gates not satisfied (MCP cannot hard-block, self-discipline required)"
@@ -1135,7 +1266,7 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path) -> Value {
+fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, host_id: &str) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let prompt_name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -1160,19 +1291,28 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path) -> 
                  Framework root: scripts/router-rs/"
             )
         }
-        "review_gate" => "[Review Gate -- Claude Desktop advisory]\n\n\
-             This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
-             Countable independent reviewer lanes (registry review_gate.claude_reviewer_lanes):\n\
-             - deep_gate_lanes: general-purpose / best-of-n-runner (and normalized spellings)\n\
-             - Claude-only: review / reviewer / critic / code-review\n\
-             explore / explorer does NOT count toward review evidence.\n\
-             Requires fork_context=false for independent reviewer credit (honor system on Desktop).\n\n\
-             When user requests review:\n\
-             1) Spawn a read-only reviewer in a claude_reviewer_lanes lane with fork_context=false\n\
-             2) If no subagent, decompose review dimensions locally and document findings\n\
-             3) Call closeout_gate before claiming review complete (self-attest review_evidence_attested if applicable)\n\n\
-             Desktop review gate is advisory only — MCP cannot hard-block Stop."
-            .to_string(),
+        "review_gate" => {
+            let host_name = if host_id == "antigravity" { "Antigravity" } else { "Claude Desktop" };
+            let gate_mode = if host_id == "antigravity" {
+                "Antigravity review gate is physically hard-blocked — unsatisfied closeout will block goal mark complete."
+            } else {
+                "Desktop review gate is advisory only — MCP cannot hard-block Stop."
+            };
+            format!(
+                "[Review Gate -- {host_name} gating]\n\n\
+                 This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
+                 Countable independent reviewer lanes (registry review_gate.claude_reviewer_lanes):\n\
+                 - deep_gate_lanes: general-purpose / best-of-n-runner (and normalized spellings)\n\
+                 - Claude-only: review / reviewer / critic / code-review\n\
+                 explore / explorer does NOT count toward review evidence.\n\
+                 Requires fork_context=false for independent reviewer credit (written to review-lanes/*.md for {host_name}).\n\n\
+                 When user requests review:\n\
+                 1) Spawn a read-only reviewer in a claude_reviewer_lanes lane with fork_context=false\n\
+                 2) If no subagent, decompose review dimensions locally and document findings\n\
+                 3) Call closeout_gate before claiming review complete (and ensure review-lanes/*.md exists or pass review_evidence_attested=true)\n\n\
+                 {gate_mode}"
+            )
+        }
         "closeout_checklist" => "[Closeout Checklist]\n\n\
              Before ending task:\n\
              - [ ] GOAL_STATE exists\n\
@@ -1637,6 +1777,7 @@ mod tests {
         let response = handle_mcp_request(
             r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
             &unique_test_repo("ping"),
+            "claude-desktop",
         )
         .unwrap();
         assert_eq!(response["jsonrpc"], "2.0");
@@ -1649,6 +1790,7 @@ mod tests {
         let response = handle_mcp_request(
             r#"{"jsonrpc":"2.0","id":2,"method":"nonexistent"}"#,
             &unique_test_repo("unknown-method"),
+            "claude-desktop",
         )
         .unwrap();
         assert_eq!(response["error"]["code"], -32601);

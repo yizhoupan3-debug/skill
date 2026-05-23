@@ -93,7 +93,7 @@ impl ReviewGateActiveGuard {
     }
 }
 
-/// Opt-in GSD pre-goal nudge (`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` — legacy env name).
+/// Opt-in My implement pre-goal nudge (`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` — legacy env name).
 struct MyPreGoalOptInEnvGuard {
     prev: Option<std::ffi::OsString>,
 }
@@ -141,6 +141,82 @@ impl Drop for SpawnFirstNudgeDisableEnvGuard {
     }
 }
 
+/// 单测临时设置 `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=1`，Drop 时还原。
+struct SpawnFirstNudgeEnableEnvGuard {
+    prev: Option<std::ffi::OsString>,
+}
+
+impl SpawnFirstNudgeEnableEnvGuard {
+    fn enable() -> Self {
+        let key = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
+        let prev = env::var_os(key);
+        env::set_var(key, "1");
+        Self { prev }
+    }
+}
+
+impl Drop for SpawnFirstNudgeEnableEnvGuard {
+    fn drop(&mut self) {
+        let key = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
+        match self.prev.take() {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
+/// 单测临时设置 `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE=0`，Drop 时还原。
+struct SubagentModelInheritNudgeDisableEnvGuard {
+    _lock: crate::test_env_sync::ProcessEnvLockGuard,
+    prev: Option<std::ffi::OsString>,
+}
+
+impl SubagentModelInheritNudgeDisableEnvGuard {
+    fn disable() -> Self {
+        let _lock = crate::test_env_sync::process_env_lock();
+        let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
+        let prev = env::var_os(key);
+        env::set_var(key, "0");
+        Self { _lock, prev }
+    }
+}
+
+impl Drop for SubagentModelInheritNudgeDisableEnvGuard {
+    fn drop(&mut self) {
+        let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
+        match self.prev.take() {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
+/// 单测强制 `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE=1`（避免并行用例泄漏 `=0`）。
+struct SubagentModelInheritNudgeForceOnEnvGuard {
+    _lock: crate::test_env_sync::ProcessEnvLockGuard,
+    prev: Option<std::ffi::OsString>,
+}
+
+impl SubagentModelInheritNudgeForceOnEnvGuard {
+    fn new() -> Self {
+        let _lock = crate::test_env_sync::process_env_lock();
+        let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
+        let prev = env::var_os(key);
+        env::set_var(key, "1");
+        Self { _lock, prev }
+    }
+}
+
+impl Drop for SubagentModelInheritNudgeForceOnEnvGuard {
+    fn drop(&mut self) {
+        let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
+        match self.prev.take() {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
 /// 单测临时设置 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`，Drop 时还原。
 struct ReviewGateStopMaxNudgesEnvGuard {
     prev: Option<std::ffi::OsString>,
@@ -161,6 +237,37 @@ impl Drop for ReviewGateStopMaxNudgesEnvGuard {
         match self.prev.take() {
             Some(v) => env::set_var(key, v),
             None => env::remove_var(key),
+        }
+    }
+}
+
+/// Unix: chmod hook-state dir read-only for persist-fail tests; Drop restores prior mode.
+#[cfg(unix)]
+struct HookStateDirReadonlyGuard {
+    path: PathBuf,
+    prev_mode: u32,
+}
+
+#[cfg(unix)]
+impl HookStateDirReadonlyGuard {
+    fn readonly(path: PathBuf) -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        let prev_mode = fs::metadata(&path).expect("meta").permissions().mode();
+        let mut perms = fs::metadata(&path).expect("meta").permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&path, perms).expect("chmod readonly");
+        Self { path, prev_mode }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for HookStateDirReadonlyGuard {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(&self.path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(self.prev_mode);
+            let _ = fs::set_permissions(&self.path, perms);
         }
     }
 }
@@ -464,6 +571,32 @@ fn write_closeout_record(repo: &Path, task_id: &str, body: &str) {
     fs::write(p, body).expect("write closeout record");
 }
 
+fn write_goal_state_team_active(repo: &Path, task_id: &str) {
+    fs::write(
+        repo.join("artifacts/current")
+            .join(task_id)
+            .join("GOAL_STATE.json"),
+        format!(
+            r#"{{
+  "schema_version": "router-rs-autopilot-goal-v1",
+  "task_id": "{task_id}",
+  "lifecycle_profile": "team",
+  "drive_until_done": true,
+  "status": "running",
+  "goal": "ship feature",
+  "non_goals": ["ng"],
+  "done_when": ["dw1", "dw2"],
+  "validation_commands": ["cargo test"],
+  "current_horizon": "h",
+  "checkpoints": [{{"note":"cp"}}],
+  "blocker": null,
+  "updated_at": "2026-05-10T00:00:00Z"
+}}"#
+        ),
+    )
+    .expect("write GOAL_STATE");
+}
+
 fn write_goal_state_completed(repo: &Path, task_id: &str) {
     fs::write(
         repo.join("artifacts/current")
@@ -506,6 +639,9 @@ fn review_prompt_chinese_full_review_arms_state() {
 /// 首次武装 review 门控时，`beforeSubmit` 仅注入**一行**紧凑指针（细则在 skill）。
 #[test]
 fn before_submit_first_arm_injects_compact_deep_review_nudge() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let _spawn_on = SpawnFirstNudgeEnableEnvGuard::enable();
     let repo = fresh_repo();
     let sid = "s-parallel-nudge-contract";
     let out = dispatch_cursor_hook_event(
@@ -542,8 +678,10 @@ fn before_submit_first_arm_injects_compact_deep_review_nudge() {
 
 #[test]
 fn spawn_first_nudge_disabled_injects_no_additional_context() {
+    let _lock = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     let _nudge_off = SpawnFirstNudgeDisableEnvGuard::disable();
+    let _model_off = SubagentModelInheritNudgeDisableEnvGuard::disable();
     let repo = fresh_repo();
     let sid = "spawn-first-off";
     let out = dispatch_cursor_hook_event(
@@ -638,6 +776,9 @@ fn before_submit_review_and_implementx_same_prompt_suppresses_review_but_arms_go
 /// 未命中「并行 review 候选」三元时仍注入同一行指针；不再追加第二段「≥3」以免刷屏。
 #[test]
 fn before_submit_review_prompt_compact_nudge_has_no_second_breadth_paragraph() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let _spawn_on = SpawnFirstNudgeEnableEnvGuard::enable();
     let repo = fresh_repo();
     let sid = "s-review-no-breadth-scope";
     let out = dispatch_cursor_hook_event(
@@ -662,7 +803,9 @@ fn before_submit_review_prompt_compact_nudge_has_no_second_breadth_paragraph() {
 /// 应急关闭审稿门控时，即使用户轮为 review 也不注入深度审并行提示。
 #[test]
 fn review_gate_disabled_before_submit_suppresses_deep_review_nudge_for_review_prompt() {
+    let _lock = crate::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    let _model_off = SubagentModelInheritNudgeDisableEnvGuard::disable();
     let repo = fresh_repo();
     let _rg = ReviewGateDisableTestGuard::new();
     let out = dispatch_cursor_hook_event(
@@ -670,7 +813,15 @@ fn review_gate_disabled_before_submit_suppresses_deep_review_nudge_for_review_pr
         "beforeSubmitPrompt",
         &event("rg-off-review-text", "全面review这个仓库"),
     );
-    assert_eq!(out, json!({ "continue": true }));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !ac.contains("skills/code-review-deep/SKILL.md"),
+        "review gate disabled must not inject spawn-first review nudge; got {out:?}"
+    );
+    assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
 }
 
 #[test]
@@ -717,6 +868,7 @@ fn my_implement_entry_does_not_arm_delegation_or_review_from_fix_copy() {
 fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
     let _lock = crate::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
+    crate::hook_common::set_test_my_light_override(None);
     let repo = fresh_repo();
     let sid = "s-dual-review-autopilot-hint";
     let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
@@ -734,6 +886,45 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
     assert!(
         !state.review_required,
         "same-submit autopilot must suppress review arming; got {state:?}"
+    );
+    assert!(state.goal_required);
+}
+
+#[test]
+fn review_goal_mixing_nudge_predicate_requires_non_my_light() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    crate::hook_common::set_test_my_light_override(None);
+    assert!(
+        crate::hook_common::my_light_profile_active(None, "/implementx"),
+        "implementx in prompt always activates my-light profile"
+    );
+    assert!(
+        !crate::hook_common::my_light_profile_active(None, "全面review这个仓库"),
+        "review-only prompt without my-* slash is not my-light from prompt alone"
+    );
+}
+
+#[test]
+fn before_submit_review_with_disk_goal_non_my_light_injects_mixing_hint() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _my_light = MyLightOverrideGuard::force_non_my_light();
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-team-mix-hint";
+    let payload = event(sid, "深度 review 整个路由系统 /implementx 继续");
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("router-rs：本轮提交同时包含"),
+        "non-my-light review+implementx must inject split hint; got {ac:?}"
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(
+        !state.review_required,
+        "same-submit implementx must disarm review arming; got {state:?}"
     );
     assert!(state.goal_required);
 }
@@ -773,6 +964,303 @@ fn before_submit_my_light_clears_sticky_review_required() {
         !cleared.review_required,
         "my-light UPS must clear sticky review_required; got {cleared:?}"
     );
+    assert_eq!(
+        cleared.phase, 0,
+        "my-light UPS must reset review phase; got {cleared:?}"
+    );
+    assert!(
+        cleared.review_subagent_pending_cycle_keys.is_empty(),
+        "my-light UPS must clear pending cycle keys; got {cleared:?}"
+    );
+}
+
+#[test]
+fn before_submit_implementx_injects_subagent_model_inherit_nudge() {
+    let _env = SubagentModelInheritNudgeForceOnEnvGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-model-nudge-impl";
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/implementx"));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("继承主会话"),
+        "implementx must inject model inherit nudge; got {ac:?}"
+    );
+    let model_pos = ac.find("继承主会话").expect("model nudge");
+    let goal_pos = ac
+        .find("ALL waves")
+        .or_else(|| ac.find("WAVE_STATE"))
+        .expect("implement goal nudge");
+    assert!(
+        model_pos < goal_pos,
+        "model inherit must precede implement one-breath nudge; got {ac:?}"
+    );
+}
+
+#[test]
+fn before_submit_spawn_first_and_model_inherit_not_duplicated() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _env = SubagentModelInheritNudgeForceOnEnvGuard::new();
+    let _gate = ReviewGateActiveGuard::new();
+    let _spawn_on = SpawnFirstNudgeEnableEnvGuard::enable();
+    let repo = fresh_repo();
+    let sid = "s-spawn-model-dedup";
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个路由系统"),
+    );
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let count = ac.matches("继承主会话").count();
+    assert_eq!(
+        count, 1,
+        "spawn-first already includes model inherit; must not duplicate; got {ac:?}"
+    );
+}
+
+#[test]
+fn before_submit_model_inherit_survives_output_policy_truncation() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _env = SubagentModelInheritNudgeForceOnEnvGuard::new();
+    let _cap_lock = cursor_hook_outbound_context_max_chars_env_lock();
+    let prev_cap = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
+    env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "900");
+    let repo = fresh_repo();
+    let sid = "s-model-trunc-survive";
+    let mut out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/implementx"));
+    super::apply_cursor_hook_output_policy(&mut out);
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("继承主会话"),
+        "model inherit must stay in prefix after outbound truncation; got {ac:?}"
+    );
+    match prev_cap {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS"),
+    }
+}
+
+#[test]
+fn before_submit_my_light_review_still_injects_model_inherit_without_spawn_first() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _env = SubagentModelInheritNudgeForceOnEnvGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-model-nudge-my-light";
+    let _nudge_off = SpawnFirstNudgeDisableEnvGuard::disable();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "/discussx then 全面review这个路由系统"),
+    );
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("继承主会话"),
+        "my-light must still get model inherit nudge when spawn-first off; got {ac:?}"
+    );
+}
+
+#[test]
+fn subagent_model_inherit_nudge_disabled_injects_no_model_line() {
+    let _off = SubagentModelInheritNudgeDisableEnvGuard::disable();
+    let repo = fresh_repo();
+    let sid = "s-model-nudge-off";
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/implementx"));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !ac.contains("继承主会话"),
+        "MODEL_INHERIT_NUDGE=0 must omit model line; got {ac:?}"
+    );
+}
+
+#[test]
+fn before_submit_verifyx_injects_generic_goal_nudge() {
+    let repo = fresh_repo();
+    let sid = "s-verify-nudge";
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/verifyx"));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("skills/verifyx/SKILL.md"),
+        "verifyx must inject MY_GOAL_DRIVE nudge; got {ac:?}"
+    );
+    assert!(
+        !ac.contains("ALL waves") && !ac.contains("WAVE_STATE"),
+        "verifyx must not inject implement one-breath nudge; got {ac:?}"
+    );
+}
+
+#[test]
+fn cursor_second_review_prompt_in_same_session_requires_fresh_subagent_evidence() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-cursor-rearm-review";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "深度 review 这个 PR"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "review-first",
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "review-first",
+        }),
+    );
+    let completed = load_state_for(&repo, sid);
+    assert_eq!(completed.phase, 3, "first cycle should complete at phase 3");
+    let rearm_out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "Please do another code review of this change."),
+    );
+    let rearm_ac = rearm_out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        rearm_ac.contains("fork_context=false") || rearm_ac.contains("code-review-deep"),
+        "second deep review must inject spawn-first nudge; got {rearm_ac:?}"
+    );
+    let rearmed = load_state_for(&repo, sid);
+    assert_eq!(
+        rearmed.phase, 0,
+        "second deep review must reset phase; got {rearmed:?}"
+    );
+    assert_eq!(
+        rearmed.active_subagent_count, 0,
+        "re-arm after completed cycle should leave no open subagents; got {rearmed:?}"
+    );
+    let stop = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "done"));
+    let fm = stop
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "second review without new subagent must block Stop; fm={fm:?}"
+    );
+}
+
+#[test]
+fn before_submit_implementx_returns_unreadable_when_hook_state_corrupt() {
+    let repo = fresh_repo();
+    let sid = "s-corrupt-impl-cursor";
+    let payload = event(sid, "/implementx");
+    if let Some(parent) = state_path(&repo, &payload).parent() {
+        fs::create_dir_all(parent).expect("mkdir hook-state");
+    }
+    fs::write(state_path(&repo, &payload), b"{not json").expect("bad state");
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
+        "corrupt hook-state must surface unreadable; got {ac:?}"
+    );
+    assert!(
+        !ac.contains("ALL waves"),
+        "must not mask corrupt state with implement nudge; got {ac:?}"
+    );
+}
+
+#[test]
+fn cursor_rearm_review_resets_review_followup_count_after_soft_nag() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let _spawn_on = SpawnFirstNudgeEnableEnvGuard::enable();
+    let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("2");
+    let repo = fresh_repo();
+    let sid = "s-rearm-followup-reset";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "深度 review 这个 PR"),
+    );
+    for _ in 0..3 {
+        let stop = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "继续"));
+        assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&stop));
+    }
+    assert!(
+        load_state_for(&repo, sid).review_followup_count >= 3,
+        "blocked stops must accumulate review_followup_count"
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "review-first",
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "review-first",
+        }),
+    );
+    assert_eq!(load_state_for(&repo, sid).phase, 3);
+    let rearm_out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "Please do another code review of this change."),
+    );
+    let rearmed = load_state_for(&repo, sid);
+    assert_eq!(
+        rearmed.review_followup_count, 0,
+        "re-arm must reset review_followup_count; got {rearmed:?}"
+    );
+    let ac = rearm_out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("skills/code-review-deep/SKILL.md"),
+        "re-arm must reinject spawn-first nudge; got {ac:?}"
+    );
+    let stop = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "done"));
+    let fm = stop
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains(REVIEW_GATE_FOLLOWUP_NEED_SEGMENT) && !fm.contains("mode=soft_nag"),
+        "fresh review cycle must not inherit prior soft_nag on first Stop; fm={fm:?}"
+    );
 }
 
 #[test]
@@ -803,7 +1291,7 @@ fn before_submit_my_new_project_does_not_arm_goal_required() {
 #[test]
 fn before_submit_my_plan_phase_does_not_arm_goal_required() {
     let repo = fresh_repo();
-    let sid = "gsd-plan-pre-exec";
+    let sid = "my-plan-pre-exec";
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, "/planx"));
     let state = load_state_for(&repo, sid);
     assert!(
@@ -2622,7 +3110,7 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
     );
     assert!(
         !blob3.contains("continuity_suppressed=review_soft_nag"),
-        "soft-nag over cap must not block GSD/RFV merge (P1-4); blob3={blob3:?}"
+        "soft-nag over cap must not block My/RFV merge (P1-4); blob3={blob3:?}"
     );
 }
 
@@ -3207,6 +3695,407 @@ fn before_submit_fail_closed_when_hook_state_dir_readonly() {
             || blocked.contains("锁不可用")
             || blocked.contains("已拦截"),
         "expected blocked persist or lock message: {out:?}"
+    );
+}
+
+#[test]
+fn before_submit_planx_persist_fail_soft_warning_not_block() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _rg = ReviewGateDisableEnvClearGuard::new();
+    let repo = fresh_repo();
+    let sid = "save-fail-soft-planx";
+    let dir = repo.join(".cursor/hook-state");
+    fs::create_dir_all(&dir).expect("mkdir hook-state");
+    #[cfg(unix)]
+    let _readonly = HookStateDirReadonlyGuard::readonly(dir.clone());
+    #[cfg(not(unix))]
+    {
+        let _ = &dir;
+    }
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "/planx"),
+    );
+    assert_eq!(
+        out.get("continue").and_then(Value::as_bool),
+        Some(true),
+        "pre-exec /planx must not fail-closed on persist when review/goal unarmed: {out:?}"
+    );
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("未能持久化") || ac.contains("锁不可用"),
+        "expected soft persist/lock degrade warning in additional_context: {out:?}"
+    );
+}
+
+#[test]
+fn cursor_rearm_review_resets_active_subagent_count_after_start_without_stop() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-rearm-open-subagent";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "深度 review 这个 PR"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "review-open",
+        }),
+    );
+    let open = load_state_for(&repo, sid);
+    assert!(
+        open.active_subagent_count > 0,
+        "subagentStart must increment open count; got {open:?}"
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "Please do another code review of this change."),
+    );
+    let rearmed = load_state_for(&repo, sid);
+    assert_eq!(
+        rearmed.active_subagent_count, 1,
+        "re-arm must preserve open subagent count when subagent still running; got {rearmed:?}"
+    );
+    assert_eq!(rearmed.phase, 0, "re-arm must reset phase; got {rearmed:?}");
+}
+
+#[test]
+fn pending_cap_refused_survives_review_rearm_ups() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "1");
+    let repo = fresh_repo();
+    let sid = "s-cap-rearm";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "sa-cap-1",
+        }),
+    );
+    let cap_denied = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "sa-cap-2",
+        }),
+    );
+    assert_eq!(
+        cap_denied.get("permission").and_then(Value::as_str),
+        Some("deny"),
+        "cap must deny second spawn: {cap_denied:?}"
+    );
+    assert!(
+        load_state_for(&repo, sid).review_pending_cap_refused,
+        "cap denial must latch review_pending_cap_refused"
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "Please do another code review of this change."),
+    );
+    assert!(
+        load_state_for(&repo, sid).review_pending_cap_refused,
+        "review re-arm UPS must not clear cap refusal"
+    );
+    let cap_denied_again = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "sa-cap-3",
+        }),
+    );
+    assert_eq!(
+        cap_denied_again.get("permission").and_then(Value::as_str),
+        Some("deny"),
+        "cap refusal must survive re-arm: {cap_denied_again:?}"
+    );
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
+}
+
+#[test]
+fn legacy_phase_two_alone_compact_does_not_clear_review_gate() {
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-legacy-phase2";
+    let state_path = state_path(&repo, &event(sid, ""));
+    if let Some(parent) = state_path.parent() {
+        fs::create_dir_all(parent).expect("mkdir hook-state");
+    }
+    fs::write(
+        &state_path,
+        r#"{"version":1,"review_required":true,"review_subagent_seen":true}"#,
+    )
+    .expect("write v1 legacy state");
+    let stop = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "status": "completed",
+            "loop_count": 0,
+            "response": "[P1] scripts/foo.rs:1 — issue — impact — verify",
+        }),
+    );
+    let fm = stop
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "legacy phase=2 without live subagent evidence must not clear gate; fm={fm:?}"
+    );
+    assert!(
+        load_state_for(&repo, sid).phase < 3,
+        "compact must not bump to phase 3 without live evidence"
+    );
+}
+
+struct MyLightOverrideGuard;
+
+impl MyLightOverrideGuard {
+    fn force_non_my_light() -> Self {
+        crate::hook_common::set_test_my_light_override(Some(false));
+        Self
+    }
+}
+
+impl Drop for MyLightOverrideGuard {
+    fn drop(&mut self) {
+        crate::hook_common::set_test_my_light_override(None);
+    }
+}
+
+#[test]
+fn stale_hygiene_compact_does_not_clear_review_gate() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = std::env::var_os("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS");
+    std::env::set_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS", "1");
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-stale-compact";
+    let payload = event(sid, "全面review这个仓库");
+    let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "stale-compact-1",
+        }),
+    );
+    let sp = state_path(&repo, &payload);
+    let mut state: Value =
+        serde_json::from_str(&fs::read_to_string(&sp).expect("read state")).expect("parse state");
+    state["active_subagent_count"] = json!(1);
+    state["active_subagent_last_started_at"] = json!("2000-01-01T00:00:00+00:00");
+    fs::write(
+        &sp,
+        serde_json::to_string(&state).expect("serialize"),
+    )
+    .expect("write stale state");
+    let stop = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "status": "completed",
+            "loop_count": 0,
+            "response": "[P1] scripts/foo.rs:1 — issue — impact — verify",
+        }),
+    );
+    let fm = stop
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "stale hygiene + compact must not clear gate; fm={fm:?}"
+    );
+    let st = load_state_for(&repo, sid);
+    assert_eq!(
+        st.subagent_start_count, 0,
+        "stale hygiene must invalidate orphan start_count"
+    );
+    assert!(st.phase < 3, "compact must not bump phase without stop/pending");
+    match prev {
+        Some(v) => std::env::set_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS", v),
+        None => std::env::remove_var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS"),
+    }
+}
+
+#[test]
+fn posttool_at_pending_cap_persists_refused_latch() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "1");
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-posttool-cap-persist";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "cap-1",
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "functions.subagent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "fork_context": false,
+                "subagent_id": "cap-2"
+            }
+        }),
+    );
+    let st = load_state_for(&repo, sid);
+    assert!(
+        st.review_pending_cap_refused,
+        "PostTool cap refusal must persist review_pending_cap_refused; got {st:?}"
+    );
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
+}
+
+#[test]
+fn before_submit_review_and_implementx_injects_mixing_nudge_when_not_my_light() {
+    let _lock = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let _my_light = MyLightOverrideGuard::force_non_my_light();
+    let repo = fresh_repo();
+    let sid = "dual-review-implementx-non-my-light";
+    let prompt = "深度 review 整个路由系统 /implementx 修复刚发现的问题";
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains("router-rs：本轮提交同时包含"),
+        "non-my-light dual prompt must inject mixing nudge; got {ac:?}"
+    );
+    let state = load_state_for(&repo, sid);
+    assert!(!state.review_required);
+    assert!(state.goal_required);
+}
+
+#[test]
+fn before_submit_benign_ups_returns_unreadable_when_hook_state_corrupt() {
+    let repo = fresh_repo();
+    let sid = "s-corrupt-benign-ups";
+    let payload = event(sid, "hello there");
+    if let Some(parent) = state_path(&repo, &payload).parent() {
+        fs::create_dir_all(parent).expect("mkdir hook-state");
+    }
+    fs::write(state_path(&repo, &payload), b"{not json").expect("bad state");
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
+        "corrupt hook-state must surface unreadable for benign UPS; got {ac:?}"
+    );
+    let raw = fs::read_to_string(state_path(&repo, &payload)).expect("state still corrupt");
+    assert!(
+        raw.starts_with("{not json"),
+        "benign UPS must not overwrite corrupt hook-state with empty_state"
+    );
+}
+
+#[test]
+fn deep_reviewer_lane_counts_for_review_gate() {
+    let _gate = ReviewGateActiveGuard::new();
+    assert!(crate::hook_common::is_deep_review_gate_lane_normalized("deep-reviewer"));
+    let repo = fresh_repo();
+    let sid = "s-deep-reviewer-lane";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "deep-reviewer",
+            "fork_context": false,
+            "subagent_id": "dr-1",
+        }),
+    );
+    let state = load_state_for(&repo, sid);
+    assert_eq!(state.subagent_start_count, 1);
+    assert_eq!(state.phase, 2);
+}
+
+#[test]
+fn before_submit_discussx_returns_unreadable_when_hook_state_corrupt() {
+    let repo = fresh_repo();
+    let sid = "s-corrupt-discussx-cursor";
+    let payload = event(sid, "/discussx");
+    if let Some(parent) = state_path(&repo, &payload).parent() {
+        fs::create_dir_all(parent).expect("mkdir hook-state");
+    }
+    fs::write(state_path(&repo, &payload), b"{not json").expect("bad state");
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
+    let ac = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ac.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
+        "corrupt hook-state must surface unreadable for /discussx; got {ac:?}"
+    );
+    assert!(
+        !ac.contains("pre-execution"),
+        "must not mask corrupt state with discussx nudge; got {ac:?}"
     );
 }
 

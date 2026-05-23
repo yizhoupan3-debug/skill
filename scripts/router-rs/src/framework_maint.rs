@@ -184,6 +184,7 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
             "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
             "claude" => verify_claude_code_projection(repo_root)?,
             "claude-desktop" => verify_claude_desktop_projection(repo_root)?,
+            "antigravity" => verify_antigravity_projection(repo_root)?,
             other => {
                 return Err(format!(
                     "installable projection tool `{other}` has no maint verifier"
@@ -267,7 +268,7 @@ fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
     for needle in [
         "emit_fail_closed_json",
         "exit 2",
-        "\"continue\":false",
+        "\\\"continue\\\":false",
         "beforesubmitprompt",
     ] {
         if !script.contains(needle) {
@@ -411,6 +412,94 @@ fn verify_claude_desktop_projection(repo_root: &Path) -> Result<(), String> {
         );
     }
     eprintln!("verify_claude_desktop_projection: ok");
+    Ok(())
+}
+
+fn verify_antigravity_projection(repo_root: &Path) -> Result<(), String> {
+    let roots = crate::host_integration::resolve_projection_roots(
+        None,
+        Some(repo_root),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )?;
+
+    let mut last_error = None;
+    for scope in ["project", "user"] {
+        match verify_antigravity_projection_scope(&roots, scope) {
+            Ok(()) => {
+                eprintln!("verify_antigravity_projection: ok");
+                return Ok(());
+            }
+            Err(e) => {
+                last_error = Some(e);
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| "verify_antigravity_projection: failed to resolve projection roots".to_string()))
+}
+
+fn verify_antigravity_projection_scope(
+    roots: &crate::host_integration::ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<(), String> {
+    let mcp = if scope == "user" {
+        roots.antigravity_home_root.join("mcp.json")
+    } else {
+        roots.project_root.join(".gemini/mcp.json")
+    };
+    let settings = if scope == "user" {
+        roots.antigravity_home_root.join("settings.json")
+    } else {
+        roots.project_root.join(".gemini/settings.json")
+    };
+    let framework_md = if scope == "user" {
+        roots.antigravity_home_root.join("antigravity/rules/framework.md")
+    } else {
+        roots.project_root.join(".gemini/antigravity/rules/framework.md")
+    };
+    let manifest = if scope == "user" {
+        roots.antigravity_home_root.join(".framework-projection-antigravity.json")
+    } else {
+        roots.project_root.join(".gemini/.framework-projection-antigravity.json")
+    };
+
+    for path in [&mcp, &settings, &framework_md, &manifest] {
+        if !path.is_file() {
+            return Err(format!(
+                "verify_antigravity_projection: missing {} in scope {}",
+                path.display(),
+                scope
+            ));
+        }
+    }
+
+    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
+    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
+    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("antigravity") {
+        return Err(format!(
+            "verify_antigravity_projection: manifest must declare antigravity in scope {}",
+            scope
+        ));
+    }
+    let mcp_text = fs::read_to_string(&mcp).map_err(|e| e.to_string())?;
+    if !mcp_text.contains("router-rs-framework") {
+        return Err(format!(
+            "verify_antigravity_projection: mcp.json must register router-rs-framework in scope {}",
+            scope
+        ));
+    }
+    let md_text = fs::read_to_string(&framework_md).map_err(|e| e.to_string())?;
+    if !md_text.contains("antigravity") {
+        return Err(format!(
+            "verify_antigravity_projection: framework.md must reference antigravity in scope {}",
+            scope
+        ));
+    }
     Ok(())
 }
 

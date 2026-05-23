@@ -165,7 +165,7 @@ cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/financial_data_rs/C
 ```
 
 - Only call a source **verified here** if its probe returns `ok: true`.
-- **Superior Quality Audit**: For research-grade financial pipelines, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
+- **Superior Quality Audit**: For research-grade financial pipelines, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
 
 ## Trigger examples
 

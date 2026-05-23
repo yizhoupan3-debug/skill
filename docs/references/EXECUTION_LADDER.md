@@ -5,19 +5,20 @@
 ## 宿主优先级
 
 - **Cursor**：`execution-subagent-gate.mdc` / `review-subagent-gate.mdc` 为执行面差异真源；用户要求不用子代理时豁免。
-- **Review 硬点**：`router-rs` 校验 review 证据链。Cursor：`.cursor/hook-state` + Stop `REVIEW_GATE`（wave-2 phase/multiset）。Codex：`.codex/hook-state` + Stop `CODEX_REVIEW_GATE`（wave-2 部分：PostTool 可数证据 + Stop compact/rg_clear；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭）。
+- **Review 硬点**：`router-rs` 校验 review 证据链。Cursor：`.cursor/hook-state` + Stop `REVIEW_GATE`（wave-2 phase/multiset）。Codex：`.codex/hook-state` + Stop `CODEX_REVIEW_GATE`（wave-2 部分：PostTool 可数证据 + Stop compact/rg_clear；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭）。Antigravity：依赖 MCP `goal_state_manage` 的强拦截与物理 `review-lanes/*.md` 文件的扫描。
 - **Codex / 无 Cursor 规则**：默认主线程执行；显式 subagent、My 执行区（`/implementx`、`/verifyx`）、`/team` 才 sidecar。
 
 ## Review
 
-- 深度 review：**spawn-first 配对审稿**——首轮主线程工具前先 spawn 可数只读 reviewer（`fork_context=false`）；主线程调研须 **另开** 独立 reviewer（`explore` 不计入证据）。细则 `skills/code-review-deep/SKILL.md`。
-- lane 闭集见 `host_adapter_contract.md` §0.1；**不提高** wave-2 Stop 清门阈值。
+- 深度 review：**spawn-first 配对审稿**——首轮主线程工具前先 spawn 可数只读 reviewer（`fork_context=false`）；主线程调研须 **另开** 独立 reviewer（`explore` 不计入证据）。Cursor 可显式 `Task` + `subagent_type=deep-reviewer`（见 [`.cursor/agents/deep-reviewer.md`](../../.cursor/agents/deep-reviewer.md)）。细则 `skills/code-review-deep/SKILL.md`。
+- lane 闭集见 `docs/host_adapter_contract.md` §0.1；**不提高** wave-2 Stop 清门阈值。
 - **窄范围**（单文件路径 review、`small_task`、不用子代理）：不武装 review gate，**不得** Stop-block。
 - 默认 **review-only**，禁止默认改代码。
 - 清门 token（单独一行）：`small_task`、`shared_context_heavy`、`write_scope_overlap`、`next_step_blocked`、`verification_missing`、`token_overhead_dominates`。
 
 ## 并行与 subagent
 
+- **Cursor 模型**：并行 `Task`/子代理 **默认继承主会话模型**（省略 `model`）；禁止默认 Claude/Sonnet，除非主会话已选 Anthropic。见 `.cursor/rules/subagent-model-inherit.mdc`、`docs/hosts/cursor.md`（`Couldn't start` / region）。
 - 可拆 ≥2 独立子问题时默认并行；通常 3–5 个 `fork_context=false` lane。
 - 写入 disjoint；不修改共享 continuity artifact。
 - `/team` 仅显式调用或需 worker 协作时。

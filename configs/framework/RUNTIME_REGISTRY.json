@@ -14,7 +14,8 @@
       "codex-app",
       "cursor",
       "claude-code",
-      "claude-desktop"
+      "claude-desktop",
+      "antigravity"
     ],
     "shared_system_source": "skills",
     "metadata": {
@@ -62,6 +63,16 @@
           "AGENTS.md",
           ".claude/CLAUDE.md"
         ]
+      },
+      "antigravity": {
+        "install_tool": "antigravity",
+        "projection_status": "implemented",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": [
+          "AGENTS.md",
+          ".gemini/antigravity/rules/framework.md"
+        ]
       }
     }
   },
@@ -76,22 +87,34 @@
   "review_gate": {
     "spawn_first_enabled": true,
     "spawn_first_nudge": "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+    "subagent_model_inherit_nudge": "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions",
+    "subagent_model_inherit_nudge_by_host": {
+      "cursor": "子代理模型（Cursor）：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions"
+    },
     "spawn_first_nudge_by_host": {
-      "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据；Task 省略 model、继承主会话，禁止默认 claude/sonnet。细则 skills/code-review-deep/SKILL.md",
       "codex-cli": "配对审稿（Codex）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "claude-code": "配对审稿（Claude Code）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md"
+      "claude-code": "配对审稿（Claude Code）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md"
+    },
+    "spawn_first_includes_model_inherit_by_host": {
+      "cursor": true
     },
     "deep_gate_lanes": [
       "general-purpose",
       "generalpurpose",
       "best-of-n-runner",
-      "bestofnrunner"
+      "bestofnrunner",
+      "deep-reviewer",
+      "deepreviewer"
     ],
     "claude_reviewer_lanes": [
       "general-purpose",
       "generalpurpose",
       "best-of-n-runner",
       "bestofnrunner",
+      "deep-reviewer",
+      "deepreviewer",
       "review",
       "reviewer",
       "critic",
@@ -118,7 +141,8 @@
         "codex-cli": "/discussx",
         "cursor": "/discussx",
         "claude-code": "/discussx",
-        "claude-desktop": "/discussx"
+        "claude-desktop": "/discussx",
+        "antigravity": "/discussx"
       },
       "lineage": {
         "source": "repo-native",
@@ -132,7 +156,8 @@
         "codex-cli": "/planx",
         "cursor": "/planx",
         "claude-code": "/planx",
-        "claude-desktop": "/planx"
+        "claude-desktop": "/planx",
+        "antigravity": "/planx"
       }
     },
     "implementx": {
@@ -142,7 +167,8 @@
         "codex-cli": "/implementx",
         "cursor": "/implementx",
         "claude-code": "/implementx",
-        "claude-desktop": "/implementx"
+        "claude-desktop": "/implementx",
+        "antigravity": "/implementx"
       },
       "implementation_bar": [
         "one-breath-all-waves",
@@ -166,7 +192,8 @@
         "codex-cli": "/verifyx",
         "cursor": "/verifyx",
         "claude-code": "/verifyx",
-        "claude-desktop": "/verifyx"
+        "claude-desktop": "/verifyx",
+        "antigravity": "/verifyx"
       }
     },
     "team": {
@@ -176,7 +203,8 @@
         "codex-cli": "/team",
         "cursor": "/team",
         "claude-code": "/team",
-        "claude-desktop": "/team"
+        "claude-desktop": "/team",
+        "antigravity": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -224,7 +252,8 @@
         "codex-cli": "/deepinterview",
         "cursor": "/deepinterview",
         "claude-code": "/deepinterview",
-        "claude-desktop": "/deepinterview"
+        "claude-desktop": "/deepinterview",
+        "antigravity": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -245,7 +274,8 @@
         "codex-cli": "/gitx",
         "cursor": "/gitx",
         "claude-code": "/gitx",
-        "claude-desktop": "/gitx"
+        "claude-desktop": "/gitx",
+        "antigravity": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -267,7 +297,8 @@
         "codex-cli": "/update",
         "cursor": "/update",
         "claude-code": "/update",
-        "claude-desktop": "/update"
+        "claude-desktop": "/update",
+        "antigravity": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -512,6 +543,63 @@
           "cap": "review_gate_router_observation",
           "status": "unsupported",
           "rationale": "Desktop MCP has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
+        }
+      ]
+    },
+    "antigravity": {
+      "profile_id": "antigravity_profile",
+      "host_id": "antigravity",
+      "transport": "mcp-stdio",
+      "context_files": [
+        "AGENTS.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "project",
+          "relative": ".gemini/settings.json"
+        },
+        {
+          "scope": "user",
+          "host_root": "antigravity",
+          "relative": "settings.json"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "project",
+          "relative": ".gemini/mcp.json"
+        },
+        {
+          "scope": "user",
+          "host_root": "antigravity",
+          "relative": "mcp.json"
+        }
+      ],
+      "session_supervisor_driver": "unsupported",
+      "resume_command_examples": [
+        "Continue in the same Antigravity thread"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
+        "framework_alias_entrypoints"
+      ],
+      "harness_capability_exceptions": [
+        {
+          "cap": "closeout_evidence_hooks",
+          "status": "unsupported",
+          "rationale": "Antigravity MCP transport cannot install CLI-level PreToolUse hard gates; however, closeout verification is hard-blocked at the MCP tool execution level (goal_state_manage complete & closeout_gate)."
+        },
+        {
+          "cap": "review_gate_router_observation",
+          "status": "unsupported",
+          "rationale": "Antigravity has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
         }
       ]
     }

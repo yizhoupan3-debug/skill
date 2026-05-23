@@ -1,4 +1,4 @@
-use crate::hook_common::{has_override, is_review_prompt};
+use crate::hook_common::{has_override, is_framework_goal_entry_prompt, is_review_prompt};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,7 +11,7 @@ pub(crate) struct ReviewGateFacts {
 impl ReviewGateFacts {
     pub(crate) fn from_prompt(prompt: &str) -> Self {
         Self {
-            review_required: is_review_prompt(prompt),
+            review_required: is_review_prompt(prompt) && !is_framework_goal_entry_prompt(prompt),
             review_override: has_override(prompt),
             independent_reviewer_seen: false,
         }
@@ -133,12 +133,12 @@ pub(crate) fn review_gate_blocks_stop(facts: ReviewGateFacts) -> bool {
 }
 
 /// Codex wave-2 (partial): countable PostTool evidence before Stop compact may clear the gate.
+/// Excludes legacy `phase>=2` alone (aligned with Cursor wave-2 / P0-4).
 pub(crate) fn codex_countable_review_subagent_evidence(
     subagent_start_count: u32,
     independent_reviewer_seen: bool,
-    phase: u32,
 ) -> bool {
-    subagent_start_count > 0 || independent_reviewer_seen || phase >= 2
+    subagent_start_count > 0 || independent_reviewer_seen
 }
 
 /// Codex wave-2 Stop satisfaction: phase≥3 with PostTool evidence, or explicit reject/rg_clear.
@@ -170,11 +170,7 @@ pub(crate) fn maybe_bump_codex_review_phase_for_compact_findings(
     if !review_gate_armed(review_required, review_override) || phase >= 3 {
         return None;
     }
-    if !codex_countable_review_subagent_evidence(
-        subagent_start_count,
-        independent_reviewer_seen,
-        phase,
-    ) {
+    if !codex_countable_review_subagent_evidence(subagent_start_count, independent_reviewer_seen) {
         return None;
     }
     if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
@@ -266,6 +262,13 @@ mod fork_context_parse_tests {
     }
 
     #[test]
+    fn codex_countable_evidence_excludes_start_zero_without_independent() {
+        assert!(!codex_countable_review_subagent_evidence(0, false));
+        assert!(codex_countable_review_subagent_evidence(1, false));
+        assert!(codex_countable_review_subagent_evidence(0, true));
+    }
+
+    #[test]
     fn codex_review_independent_fork_respects_infer_env_off() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
@@ -299,6 +302,18 @@ mod fork_context_parse_tests {
             finding,
         )
         .is_none());
+        assert!(
+            maybe_bump_codex_review_phase_for_compact_findings(
+                true,
+                false,
+                2,
+                0,
+                false,
+                finding,
+            )
+            .is_none(),
+            "legacy phase>=2 alone must not count as countable evidence"
+        );
         assert_eq!(
             maybe_bump_codex_review_phase_for_compact_findings(
                 true,
@@ -317,5 +332,16 @@ mod fork_context_parse_tests {
         assert!(codex_review_gate_satisfied(true, false, false, true, 3));
         assert!(!codex_review_gate_satisfied(true, false, false, true, 2));
         assert!(codex_review_gate_satisfied(true, false, true, false, 0));
+    }
+
+    #[test]
+    fn review_gate_facts_suppresses_review_when_goal_drive_in_same_prompt() {
+        let dual = ReviewGateFacts::from_prompt("请全面review这个仓库 /implementx 修复刚发现的问题");
+        assert!(
+            !dual.review_required,
+            "goal drive entry must suppress review arming in facts"
+        );
+        let review_only = ReviewGateFacts::from_prompt("全面review这个仓库");
+        assert!(review_only.review_required);
     }
 }

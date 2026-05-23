@@ -100,7 +100,7 @@ If you must edit raw JSON, review `references/notebook-structure.md` first.
 6. Validate the result.
 Run the notebook top-to-bottom when the environment allows.
 - If execution is not possible, say so explicitly and call out how to validate locally.
-- **Superior Quality Audit**: For production notebooks or shared experiments, apply the runtime verification gate to verify against [Superior Quality Bar](runtime verification criteria).
+- **Superior Quality Audit**: For production notebooks or shared experiments, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
 - Use the final pass checklist in `references/quality-checklist.md`.
 
 ## Templates

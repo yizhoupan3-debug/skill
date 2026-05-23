@@ -4211,6 +4211,34 @@ mod tests {
         }
 
         #[test]
+        fn user_prompt_submit_review_and_implementx_suppresses_review_arming() {
+            let _g = env_lock();
+            let repo = fresh_repo();
+            let sid = "sm-dual-review-implementx";
+            let arm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review这个仓库"
+            });
+            let _ = run_gate(&repo, &arm).unwrap();
+            let armed = codex_load_state(&repo, &arm).unwrap().unwrap();
+            assert!(armed.review_required, "review-only UPS should arm; got {armed:?}");
+            let dual = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"请全面review这个仓库 /implementx 修复刚发现的问题"
+            });
+            let _ = run_gate(&repo, &dual).unwrap();
+            let cleared = codex_load_state(&repo, &dual).unwrap().unwrap();
+            assert!(
+                !cleared.review_required,
+                "my-light goal drive must clear/disarm review on Codex UPS; got {cleared:?}"
+            );
+        }
+
+        #[test]
         fn rearm_review_resets_codex_independent_evidence() {
             let _g = env_lock();
             let repo = fresh_repo();
@@ -4286,6 +4314,48 @@ mod tests {
                 "override must not reset prior PostTool reviewer evidence"
             );
             assert!(kept.review_override);
+        }
+
+        #[test]
+        fn legacy_phase_two_alone_compact_does_not_clear_codex_review_gate() {
+            let _g = env_lock();
+            let repo = fresh_repo();
+            let sid = "sm-legacy-phase2-compact";
+            let arm = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"全面review"
+            });
+            let _ = run_gate(&repo, &arm).unwrap();
+            let sp = codex_state_path(&repo, &arm);
+            let mut state = codex_load_state(&repo, &arm).unwrap().unwrap();
+            state.phase = 2;
+            state.subagent_start_count = 0;
+            state.independent_review_subagent_seen = false;
+            state.review_required = true;
+            assert!(codex_save_state_to_path(&sp, &state));
+            let stop = json!({
+                "hook_event_name":"Stop",
+                "session_id": sid,
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"继续",
+                "response":"[P1] scripts/foo.rs:1 — issue — impact — verify",
+            });
+            let out = run_gate(&repo, &stop).unwrap();
+            let msg = out
+                .as_ref()
+                .and_then(|v| v["followup_message"].as_str())
+                .unwrap_or_default();
+            assert!(
+                msg.contains("CODEX_REVIEW_GATE"),
+                "legacy phase=2 without PostTool start/independent must not clear gate; msg={msg:?}"
+            );
+            let loaded = codex_load_state(&repo, &stop).unwrap().unwrap();
+            assert!(
+                loaded.phase < 3,
+                "compact must not bump to phase 3 without countable evidence"
+            );
         }
 
         #[test]

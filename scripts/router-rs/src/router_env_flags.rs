@@ -50,10 +50,12 @@ const ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV: &str =
     "ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX";
 const ROUTER_RS_CURSOR_HOOK_SILENT_ENV: &str = "ROUTER_RS_CURSOR_HOOK_SILENT";
 const ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
+const ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
+    "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
 const ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV: &str =
     "ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX";
 
-/// GSD **pre-goal** nudge（legacy env 名 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）仍保持显式 opt-in。
+/// My implement **pre-goal** nudge（legacy env 名 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）仍保持显式 opt-in。
 pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV)
 }
@@ -91,6 +93,11 @@ pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
 /// Spawn-first pairing reviewer one-line nudge in hook outbound context (all hosts). Default **on**; `0|false|off|no` disables nudge only (gate thresholds unchanged).
 pub fn router_rs_review_spawn_first_nudge_enabled() -> bool {
     router_rs_env_enabled_default_true(ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV)
+}
+
+/// Cursor beforeSubmit: subagent/Task model inherit one-liner (independent of REVIEW_GATE / my-light). Default **on**; `0|false|off|no` disables.
+pub fn router_rs_cursor_subagent_model_inherit_nudge_enabled() -> bool {
+    router_rs_env_enabled_default_true(ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV)
 }
 
 const ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =

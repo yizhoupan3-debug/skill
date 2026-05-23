@@ -39,12 +39,12 @@ pub fn normalize_skill_host_platforms(
                 out.insert("claude-code".to_string());
                 out.insert("claude-desktop".to_string());
             }
-            "codex-cli" | "codex-app" | "cursor" | "claude-code" | "claude-desktop" => {
+            "codex-cli" | "codex-app" | "cursor" | "claude-code" | "claude-desktop" | "antigravity" => {
                 out.insert(t);
             }
             other => {
                 return Err(format!(
-                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, codex-app, cursor, claude, claude-code, claude-desktop)"
+                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, codex-app, cursor, claude, claude-code, claude-desktop, antigravity)"
                 ));
             }
         }

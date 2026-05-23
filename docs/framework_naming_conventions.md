@@ -43,8 +43,8 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | false | Disable review gate |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | false | Enable pre-goal autopilot |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 8 | Max autopilot nudges |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | false | Enable beforeSubmit pre-goal（命名保留；绑定 `/implementx`；`/autopilot` 已退役） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 8 | Max pre-goal nudges |
 | `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | 24 | Max open subagents counted on hook path（`MAX_CONCURRENT_SUBAGENTS_LIMIT`；可调低或 `0` 关闭） |
 | `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 7200 | Stale subagent threshold（秒，默认 2h） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS` | true | Kill stale terminals on session end |

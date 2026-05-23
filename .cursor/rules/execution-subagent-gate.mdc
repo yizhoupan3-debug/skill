@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Execution Subagent Gate（仅 Cursor）
 
-跨宿主基线、默认执行方式、拒因集合、`/autopilot` 与 closeout 一律以 [AGENTS.md](../../AGENTS.md) 为准；连续性见 [harness_architecture.md](../../docs/harness_architecture.md)、[harness_policy_map.md](../../docs/harness_policy_map.md)。
+跨宿主基线、默认执行方式、拒因集合与 closeout 一律以 [AGENTS.md](../../AGENTS.md) 为准（`/autopilot` 已退役，执行入口为 `/implementx`）；连续性见 [harness_architecture.md](../../docs/harness_architecture.md)、[harness_policy_map.md](../../docs/harness_policy_map.md)。
 
 本文件只补 Cursor 独有差异：
 
@@ -13,3 +13,4 @@ alwaysApply: true
 - 不要在可见回复里自拟长篇仿宿主机读块；Cursor 真源只认宿主实际注入的短码。
 - `updateCurrentStep` 不接受空载荷；进行中传非空 `current_step`，收尾传非空 `final_summary` / `completed_subtitle`。
 - 用户明确要求“不用子代理”时，本 gate 不适用。
+- 子代理 **模型继承**（禁止默认 Sonnet/Claude）：见 [subagent-model-inherit.mdc](subagent-model-inherit.mdc)。

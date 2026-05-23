@@ -19,8 +19,9 @@ just doctor
 
 1. 仓库根改 `AGENTS.md` 且依赖 Codex：`cargo build --manifest-path scripts/router-rs/Cargo.toml` + `router-rs framework sync-entrypoints --repo-root "$SKILL_FRAMEWORK_ROOT"`（或 `codex sync --repo-root "$SKILL_FRAMEWORK_ROOT"`）。
 2. Cursor 用户级 framework：`router-rs framework host-integration install --to cursor --scope user --framework-root "$SKILL_FRAMEWORK_ROOT" --project-root "$SKILL_FRAMEWORK_ROOT"`.
-3. 改 `configs/framework/host_projection_narrative.json` 或 `RUNTIME_REGISTRY.json` **review_gate**：**无需** rebuild；重启 hook 子进程。
-4. 发布前：`router-rs framework maint update-one-shot`（全量 drift-gate）；日常仅 `framework doctor` **不等于** drift-gate 通过。
+3. 业务仓 harness gate 规则（含 `subagent-model-inherit.mdc`）：`cursor-bootstrap-framework.sh --with-cursor-rules` 或手动 symlink `.cursor/rules/*.mdc`。
+4. 改 `configs/framework/host_projection_narrative.json` 或 `RUNTIME_REGISTRY.json` **review_gate**：**无需** rebuild；重启 hook 子进程。
+5. 发布前：`router-rs framework maint update-one-shot`（全量 drift-gate）；日常仅 `framework doctor` **不等于** drift-gate 通过。
 
 ## 默认工作流（全宿主）
 
@@ -69,7 +70,7 @@ cd /path/to/project
 | **Review pending cap** | 达 `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` 时 `subagentStart` 返回 `permission: deny`。 |
 | **Claude review_gate** | `.claude/hook-state/review_gate_*.json` 写入使用 `flock`（与 Codex 对齐）。 |
 | **Codex stable session + Stop review**（2026-05 wave-1） | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` **默认 on**；legacy `=0`。无稳定键时 hook-state 用确定性 fallback（非 per-invocation 随机）。Stop 在 review 已武装且无独立子代理证据时 block，**含**无 hook-state 文件；Stop 载荷 review 措辞 alone 不能清门。 |
-| **Codex wave-2 P1-4..P1-7**（2026-05） | PostTool hook-state 锁失败 **fail-closed**（与 UserPromptSubmit 同形）。`stop_hook_active` 默认仍执行 review/closeout；仅 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 跳过门控。Stop closeout：`closeout_stop_followup_for_completion_text`。Codex fork 推断共用 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`。 |
+| **Codex wave-2 P1-4..P1-7**（2026-05） | PostTool hook-state 锁失败 **fail-closed**（与 UserPromptSubmit 同形）。`stop_hook_active` 默认仍执行 review/closeout；仅 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 跳过门控。Stop closeout：`closeout_stop_followup_for_completion_text`。Codex fork 推断用 **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（**不**读 Cursor env）。 |
 
 手动画板分歧：用 `router-rs framework session-artifact-write` 或 Desktop MCP `session_checkpoint` 显式对齐 `artifacts/current/<task_id>/`。
 
@@ -77,7 +78,9 @@ cd /path/to/project
 
 | 项 | 说明 |
 |----|------|
-| **Registry** | `review_gate.spawn_first_enabled`（默认 true）、`spawn_first_nudge`（一行文案） |
+| **Registry** | `review_gate.spawn_first_enabled`（默认 true）、`spawn_first_nudge`（一行文案）、`spawn_first_includes_model_inherit_by_host.cursor`（去重 model inherit nudge）、`subagent_model_inherit_nudge_by_host` |
+| **`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE`** | `0`/`false`/`off`/`no` 关闭 Cursor beforeSubmit model inherit 单行（默认开；与 my-light / REVIEW_GATE 无关） |
+| **Cursor UPS re-arm** | fresh deep-review cycle 调用 `reset_review_cycle_progress(preserve_session_guards=true)`；保留 `review_pending_cap_refused` 与 open subagent 计数；见 [`framework_operator_primer.md`](docs/framework_operator_primer.md) Harness 表「Cursor UPS re-arm」 |
 | **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **关闭** beforeSubmit/UPS spawn-first 单行 nudge（**零注入**，无 fallback）；**不** 改变 REVIEW_GATE 清门阈值 |
 | **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（四宿主 `is_narrow_review_prompt`） |
 | **禁止** | `start_count≥2` 清门、缺 `review-lanes` 文件即 Stop block |
@@ -87,10 +90,10 @@ cd /path/to/project
 
 | 主题 | 行为 |
 |------|------|
-| **主线程 compact 清门（Cursor）** | 无可数 `deep_gate_lanes` + `fork_context=false` 子代理证据时，**不得**仅凭 compact findings 清 `REVIEW_GATE`（默认无 `afterAgentResponse`；须 `subagent_start_count` / pending multiset / phase≥2 后再与 `Stop` tail 配合）。 |
-| **`fork_context` 缺省推断** | Cursor：**默认开**（`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，unset=on）。Codex PostTool/Stop 独立审稿证据**共用**该 env（无 `ROUTER_RS_CODEX_*` fork 开关）。Claude 用 **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**，默认**关**。 |
+| **主线程 compact 清门（Cursor）** | 无可数 `deep_gate_lanes` + `fork_context=false` 子代理证据时，**不得**仅凭 compact findings 清 `REVIEW_GATE`（默认无 `afterAgentResponse`；须 `subagent_start_count` / pending multiset / qualifying stop 后再与 `Stop` tail 配合；**裸** v1 `phase≥2` alone 不足）。 |
+| **`fork_context` 缺省推断** | Cursor：**默认开**（`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，unset=on）。Codex：**`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（默认 on；**不**读 Cursor env）。Claude：**`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**，默认**关**。 |
 | **hook-state fail-closed** | Cursor review 武装路径与 Codex PostTool（wave-2 P1-4..）在锁不可用时 deny / Stop 硬门控。 |
-| **Codex Stop 清门** | **无** Cursor 式 `rg_clear` / `reject_reason` 粘贴清门；须独立审稿证据或文档列出的 bypass env。 |
+| **Codex Stop 清门** | **无** Cursor 式 subagent multiset / pending cycle；可用 bounded **`rg_clear`** / reject token 或 PostTool 可数深度 lane + Stop compact findings（见 [`docs/hosts/codex-cli.md`](docs/hosts/codex-cli.md)）。 |
 | **细则** | [`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)、[`docs/hosts/codex-cli.md`](docs/hosts/codex-cli.md) |
 
 ## Cursor：hooks 减法闭集（2026-05-20）
@@ -157,6 +160,6 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | `docs/plans/*.md`（除 [`docs/plans/README.md`](docs/plans/README.md)） | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
 | `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
 | `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
-| `skills/autopilot/`、`skills/_archived/autopilot/`、`skills/legacy-gsd-ci-stub/` | `/implementx` + My 四命令 |
+| `skills/autopilot/`、`skills/_archived/autopilot/`、`skills/legacy-gsd-ci-stub/`（**仅迁移对照**；磁盘路径已删） | `/implementx` + My 四命令 |
 
 勿在 issue/评论中链接已删路径；契约以 [`docs/README.md`](docs/README.md) 索引为准。

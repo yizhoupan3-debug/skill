@@ -185,6 +185,7 @@ fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
         HostCommand::Cursor { command } => dispatch_cursor_command(command),
         HostCommand::Claude { command } => dispatch_claude_command(command),
         HostCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
+        HostCommand::Antigravity { command } => dispatch_antigravity_command(command),
     }
 }
 
@@ -260,6 +261,14 @@ fn dispatch_claude_desktop_command(command: ClaudeDesktopSubcommand) -> Result<(
         ClaudeDesktopSubcommand::Agent(command) => {
             let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             run_claude_desktop_mcp_loop(Some(&root))
+        }
+    }
+}
+fn dispatch_antigravity_command(command: AntigravitySubcommand) -> Result<(), String> {
+    match command {
+        AntigravitySubcommand::Agent(command) => {
+            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            run_antigravity_mcp_loop(Some(&root))
         }
     }
 }

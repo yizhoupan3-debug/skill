@@ -9,7 +9,7 @@ fi
 NEEDS_SKILL_REFRESH=0
 for path in $STAGED_FILES; do
     case "$path" in
-        skills/*/SKILL.md|skills/.system/*/SKILL.md|skills/legacy-gsd-ci-stub/SKILL.md|skills/discussx/SKILL.md|skills/planx/SKILL.md|skills/implementx/SKILL.md|skills/verifyx/SKILL.md|configs/framework/FRAMEWORK_SURFACE_POLICY.json)
+        skills/*/SKILL.md|skills/.system/*/SKILL.md|skills/discussx/SKILL.md|skills/planx/SKILL.md|skills/implementx/SKILL.md|skills/verifyx/SKILL.md|configs/framework/FRAMEWORK_SURFACE_POLICY.json)
             NEEDS_SKILL_REFRESH=1
             ;;
     esac

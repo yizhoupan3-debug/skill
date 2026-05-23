@@ -6,7 +6,8 @@
     "codex-app",
     "cursor",
     "claude-code",
-    "claude-desktop"
+    "claude-desktop",
+    "antigravity"
   ],
   "projection_status_values": [
     "implemented",
@@ -24,7 +25,8 @@
     "codex",
     "cursor",
     "claude",
-    "claude-desktop"
+    "claude-desktop",
+    "antigravity"
   ],
   "framework_command_required_fields": [
     "canonical_owner",

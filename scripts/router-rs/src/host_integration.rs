@@ -41,6 +41,7 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME: &str = ".framework-projection-desktop.json";
+const FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME: &str = ".framework-projection-antigravity.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
 const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
     "discussx",
@@ -56,7 +57,7 @@ const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
 ];
 /// Subset checked by `framework doctor` metadata-only mode. Full drift-gate list:
 /// `configs/framework/GENERATED_ARTIFACTS.json` (`framework maint update-one-shot`).
-const REQUIRED_GENERATED_ARTIFACTS: [&str; 12] = [
+const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
     "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
     "skills/SKILL_ROUTING_REGISTRY.md",
     "skills/SKILL_ROUTING_INDEX.md",
@@ -69,6 +70,9 @@ const REQUIRED_GENERATED_ARTIFACTS: [&str; 12] = [
     ".codex/host_entrypoints_sync_manifest.json",
     ".claude/rules/framework.md",
     ".claude/settings.json",
+    ".gemini/antigravity/rules/framework.md",
+    ".gemini/settings.json",
+    ".gemini/mcp.json",
 ];
 const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
     "imagegen",
@@ -206,6 +210,7 @@ enum Commands {
         #[arg(long)]
         claude_home: Option<PathBuf>,
         #[arg(long)]
+        antigravity_home: Option<PathBuf>,
         #[arg(long)]
         to: Vec<String>,
         #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
@@ -250,6 +255,8 @@ struct ProjectionCommand {
     #[arg(long)]
     claude_home: Option<PathBuf>,
     #[arg(long)]
+    antigravity_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
     #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
     scope: String,
@@ -274,17 +281,20 @@ struct ProjectionStatusCommand {
     #[arg(long)]
     claude_home: Option<PathBuf>,
     #[arg(long)]
+    antigravity_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
-struct ResolvedProjectionRoots {
-    framework_root: PathBuf,
-    project_root: PathBuf,
-    artifact_root: PathBuf,
-    codex_home_root: PathBuf,
-    cursor_home_root: PathBuf,
-    claude_home_root: PathBuf,
+pub(crate) struct ResolvedProjectionRoots {
+    pub(crate) framework_root: PathBuf,
+    pub(crate) project_root: PathBuf,
+    pub(crate) artifact_root: PathBuf,
+    pub(crate) codex_home_root: PathBuf,
+    pub(crate) cursor_home_root: PathBuf,
+    pub(crate) claude_home_root: PathBuf,
+    pub(crate) antigravity_home_root: PathBuf,
 }
 
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
@@ -373,6 +383,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             codex_home,
             cursor_home,
             claude_home,
+            antigravity_home,
             to,
             scope,
             bootstrap_output_dir,
@@ -390,6 +401,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 codex_home,
                 cursor_home,
                 claude_home,
+                antigravity_home: antigravity_home.clone(),
                 home,
                 scope,
                 to: selected,
@@ -406,6 +418,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         codex_home: projection_command.codex_home.clone(),
                         cursor_home: projection_command.cursor_home.clone(),
                         claude_home: projection_command.claude_home.clone(),
+                        antigravity_home: projection_command.antigravity_home.clone(),
                         home: projection_command.home.clone(),
                     })?
                 }
@@ -618,13 +631,14 @@ fn resolve_host_home(
     Ok(default_home_dir().join(default_leaf))
 }
 
-fn resolve_projection_roots(
+pub(crate) fn resolve_projection_roots(
     framework_root: Option<&Path>,
     project_root: Option<&Path>,
     artifact_root: Option<&Path>,
     codex_home: Option<&Path>,
     cursor_home: Option<&Path>,
     claude_home: Option<&Path>,
+    antigravity_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
@@ -633,6 +647,7 @@ fn resolve_projection_roots(
     let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
     let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
     let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
+    let antigravity_home_root = resolve_host_home(antigravity_home, shared_home, "ANTIGRAVITY_HOME", ".gemini")?;
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
@@ -640,6 +655,7 @@ fn resolve_projection_roots(
         codex_home_root,
         cursor_home_root,
         claude_home_root,
+        antigravity_home_root,
     })
 }
 
@@ -977,6 +993,9 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
             | ".claude/settings.json"
             | ".claude/CLAUDE.md"
             | ".claude/mcp.json"
+            | ".gemini/antigravity/rules/framework.md"
+            | ".gemini/settings.json"
+            | ".gemini/mcp.json"
     )
 }
 
@@ -1500,6 +1519,7 @@ fn projection_install_command(
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
+        command.antigravity_home.as_deref(),
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1523,6 +1543,7 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
+        command.antigravity_home.as_deref(),
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
@@ -1556,6 +1577,7 @@ fn projection_remove_or_cleanup_command(
         command.codex_home.as_deref(),
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
+        command.antigravity_home.as_deref(),
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1764,6 +1786,16 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
         home_root: claude_home_root_string,
         explicit_home: claude_home_explicit,
     },
+    HostProjectionAdapter {
+        tool: "antigravity",
+        host_id: "antigravity",
+        aliases: &[],
+        install: install_antigravity_projection,
+        status: antigravity_projection_status,
+        remove: remove_antigravity_projection,
+        home_root: antigravity_home_root_string,
+        explicit_home: antigravity_home_explicit,
+    },
 ];
 
 fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
@@ -1914,6 +1946,14 @@ fn cursor_home_explicit(command: &ProjectionCommand) -> bool {
 
 fn claude_home_explicit(command: &ProjectionCommand) -> bool {
     command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some()
+}
+
+fn antigravity_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+    roots.antigravity_home_root.to_string_lossy().into_owned()
+}
+
+fn antigravity_home_explicit(command: &ProjectionCommand) -> bool {
+    command.antigravity_home.is_some() || std::env::var_os("ANTIGRAVITY_HOME").is_some()
 }
 
 fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
@@ -2693,19 +2733,60 @@ fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str)
     }
 }
 
+fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
+    let mut use_cargo = false;
+    let command = if let Some(exe) = cargo_router_rs_executable(&roots.framework_root) {
+        if exe.exists() && !exe.to_string_lossy().contains("/tmp/") {
+            exe.to_string_lossy().to_string()
+        } else {
+            use_cargo = true;
+            "cargo".to_string()
+        }
+    } else if let Some(exe) = which::which("router-rs").ok() {
+        exe.to_string_lossy().to_string()
+    } else {
+        use_cargo = true;
+        "cargo".to_string()
+    };
+
+    if use_cargo {
+        let manifest_path = roots.project_root.join("scripts/router-rs/Cargo.toml");
+        let mut args = vec![
+            "run".to_string(),
+            "--quiet".to_string(),
+            "--manifest-path".to_string(),
+            manifest_path.to_string_lossy().into_owned(),
+            "--".to_string(),
+        ];
+        for arg in host_args {
+            args.push(arg.to_string());
+        }
+        json!({
+            "command": "cargo",
+            "args": args,
+            "type": "stdio",
+            "description": format!("{} (via Cargo bootstrap)", description),
+        })
+    } else {
+        let mut args = Vec::new();
+        for arg in host_args {
+            args.push(arg.to_string());
+        }
+        json!({
+            "command": command,
+            "args": args,
+            "type": "stdio",
+            "description": description.to_string(),
+        })
+    }
+}
+
 fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
-    let exe = cargo_router_rs_executable(&roots.framework_root)
-        .or_else(|| which::which("router-rs").ok());
-    let command = exe
-        .as_ref()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "router-rs".to_string());
-    json!({
-        "command": command,
-        "args": ["claude-desktop", "agent", "--repo-root", "${workspaceRoot}"],
-        "type": "stdio",
-        "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory",
-    })
+    make_mcp_server_payload(
+        roots,
+        &["claude-desktop", "agent", "--repo-root", "${workspaceRoot}"],
+        "Framework runtime snapshot, continuity, skill routing, closeout advisory",
+    )
 }
 
 fn write_claude_desktop_mcp_json(
@@ -2789,6 +2870,306 @@ fn write_claude_desktop_projection_manifest(
             "host_projection": "claude-desktop",
             "scope": scope,
             "files": [mcp_path.to_string_lossy(), claude_md_path.to_string_lossy()],
+        }),
+    )
+}
+
+fn install_antigravity_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
+    let mcp_target = antigravity_mcp_target(roots, scope);
+    let settings_target = antigravity_settings_target(roots, scope);
+    let framework_md_target = antigravity_framework_md_target(roots, scope);
+
+    let mcp_changed = write_antigravity_mcp_json(&mcp_target, roots)?;
+    let settings_changed = write_antigravity_settings_json(&settings_target, roots, scope)?;
+    let md_changed = write_antigravity_framework_md(&framework_md_target, roots, scope)?;
+    let manifest_changed = write_antigravity_projection_manifest(
+        roots,
+        scope,
+        &mcp_target,
+        &settings_target,
+        &framework_md_target,
+    )?;
+
+    Ok(json!({
+        "status": "installed",
+        "changed": mcp_changed || settings_changed || md_changed || manifest_changed,
+        "scope": scope,
+        "mcp_config": {
+            "scope": scope,
+            "path": mcp_target.to_string_lossy(),
+            "changed": mcp_changed,
+        },
+        "settings": {
+            "scope": scope,
+            "path": settings_target.to_string_lossy(),
+            "changed": settings_changed,
+        },
+        "framework_md": {
+            "scope": scope,
+            "path": framework_md_target.to_string_lossy(),
+            "changed": md_changed,
+        },
+    }))
+}
+
+fn antigravity_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    let project_mcp_path = roots.project_root.join(".gemini/mcp.json");
+    let project_settings_path = roots.project_root.join(".gemini/settings.json");
+    let project_framework_md_path = roots.project_root.join(".gemini/antigravity/rules/framework.md");
+    let user_mcp_path = roots.antigravity_home_root.join("mcp.json");
+    let user_settings_path = roots.antigravity_home_root.join("settings.json");
+    let user_framework_md_path = roots.antigravity_home_root.join("antigravity/rules/framework.md");
+
+    let mcp_exists = project_mcp_path.exists() || user_mcp_path.exists();
+    let md_exists = project_framework_md_path.exists() || user_framework_md_path.exists();
+
+    let mut binary_valid = true;
+    let mut status_error = None;
+
+    if mcp_exists {
+        let mcp_to_check = if project_mcp_path.exists() { &project_mcp_path } else { &user_mcp_path };
+        if let Ok(Some(mcp_json)) = read_json_if_exists(mcp_to_check) {
+            if let Some(cmd) = mcp_json.get("mcpServers")
+                .and_then(|v| v.get("router-rs-framework"))
+                .and_then(|v| v.get("command"))
+                .and_then(|v| v.as_str()) {
+                
+                if cmd == "cargo" {
+                    if which::which("cargo").is_err() {
+                        binary_valid = false;
+                        status_error = Some("Cargo is not found on system PATH".to_string());
+                    }
+                } else if cmd == "router-rs" {
+                    if which::which("router-rs").is_err() {
+                        binary_valid = false;
+                        status_error = Some("router-rs is not found on system PATH".to_string());
+                    }
+                } else {
+                    let p = Path::new(cmd);
+                    if !p.is_file() {
+                        binary_valid = false;
+                        status_error = Some(format!("MCP executable binary '{}' is missing on disk", cmd));
+                    }
+                }
+            } else {
+                binary_valid = false;
+                status_error = Some("Invalid or incomplete mcpServers payload structure".to_string());
+            }
+        } else {
+            binary_valid = false;
+            status_error = Some("Failed to read or parse mcp.json config".to_string());
+        }
+    } else {
+        binary_valid = false;
+        status_error = Some("mcp.json does not exist in project or user scope".to_string());
+    }
+
+    let ready = md_exists && mcp_exists && binary_valid;
+
+    Ok(json!({
+        "ready": ready,
+        "status": "projection-status",
+        "error": status_error,
+        "mcp_config": {
+            "project_scope": project_mcp_path.exists(),
+            "user_scope": user_mcp_path.exists(),
+            "binary_valid": binary_valid,
+        },
+        "settings": {
+            "project_scope": project_settings_path.exists(),
+            "user_scope": user_settings_path.exists(),
+        },
+        "framework_md": {
+            "project_scope": project_framework_md_path.exists(),
+            "user_scope": user_framework_md_path.exists(),
+        },
+    }))
+}
+
+fn remove_antigravity_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    dry_run: bool,
+) -> Result<Value, String> {
+    let mcp_target = antigravity_mcp_target(roots, scope);
+    let settings_target = antigravity_settings_target(roots, scope);
+    let framework_md_target = antigravity_framework_md_target(roots, scope);
+    let manifest_path = projection_manifest_path(roots, "antigravity", scope);
+
+    let mut changed = false;
+    let mut would_change = false;
+    let mut removed_paths = Vec::new();
+    let mut would_remove_paths = Vec::new();
+
+    for (target, label) in [
+        (&mcp_target, "mcp_config"),
+        (&settings_target, "settings"),
+        (&framework_md_target, "framework_md"),
+    ] {
+        let managed =
+            projection_manifest_ownership(&manifest_path, "antigravity", scope, target)
+                .map(|o| o.owns_projection_file)
+                .unwrap_or(false);
+        if target.exists() && managed {
+            if !dry_run {
+                let _ = std::fs::remove_file(target);
+                removed_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
+            }
+            changed = true;
+            would_change = true;
+            if dry_run {
+                would_remove_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
+            }
+        }
+    }
+
+    let manifest_managed = manifest_path.exists() &&
+        projection_manifest_ownership(&manifest_path, "antigravity", scope, &framework_md_target)
+            .map(|o| o.managed)
+            .unwrap_or(false);
+    if manifest_managed {
+        if !dry_run {
+            let _ = std::fs::remove_file(&manifest_path);
+            removed_paths.push(json!({"path": manifest_path.to_string_lossy(), "type": "manifest"}));
+        } else {
+            would_remove_paths.push(json!({"path": manifest_path.to_string_lossy(), "type": "manifest"}));
+            would_change = true;
+        }
+        changed = true;
+    }
+
+    Ok(json!({
+        "status": if dry_run && would_change { "would-remove" } else if changed { "removed" } else { "not-installed-or-user-owned" },
+        "changed": changed,
+        "dry_run": dry_run,
+        "scope": scope,
+        "removed_paths": removed_paths,
+        "would_remove_paths": would_remove_paths,
+    }))
+}
+
+fn antigravity_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.antigravity_home_root.join("mcp.json")
+    } else {
+        roots.project_root.join(".gemini/mcp.json")
+    }
+}
+
+fn antigravity_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.antigravity_home_root.join("settings.json")
+    } else {
+        roots.project_root.join(".gemini/settings.json")
+    }
+}
+
+fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.antigravity_home_root.join("antigravity/rules/framework.md")
+    } else {
+        roots.project_root.join(".gemini/antigravity/rules/framework.md")
+    }
+}
+
+fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+    make_mcp_server_payload(
+        roots,
+        &["antigravity", "agent", "--repo-root", "${workspaceRoot}"],
+        "Framework runtime snapshot, continuity, skill routing, closeout gating",
+    )
+}
+
+fn write_antigravity_mcp_json(
+    path: &Path,
+    roots: &ResolvedProjectionRoots,
+) -> Result<bool, String> {
+    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    let servers = payload
+        .as_object_mut()
+        .ok_or_else(|| "mcp.json root must be an object".to_string())?;
+    let mcp_servers = servers
+        .entry("mcpServers".to_string())
+        .or_insert_with(|| json!({}));
+    if !mcp_servers.is_object() {
+        *mcp_servers = json!({});
+    }
+    let entries = mcp_servers
+        .as_object_mut()
+        .ok_or_else(|| "mcpServers must be an object".to_string())?;
+    entries.insert(
+        "router-rs-framework".to_string(),
+        antigravity_mcp_server_payload(roots),
+    );
+    write_json_if_changed(path, &payload)
+}
+
+fn write_antigravity_settings_json(
+    path: &Path,
+    _roots: &ResolvedProjectionRoots,
+    _scope: &str,
+) -> Result<bool, String> {
+    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    write_json_if_changed(path, &payload)
+}
+
+fn write_antigravity_framework_md(
+    path: &Path,
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<bool, String> {
+    let runtime_rel = skills_source_rel(&roots.framework_root)
+        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
+        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
+    let content = format!(
+        "<!-- managed_by: skill-framework · antigravity · keep ≤40 lines -->\n\
+         <!-- projection_id: antigravity-self-discipline -->\n\
+         <!-- host_projection: antigravity -->\n\
+         <!-- install_scope: {scope} -->\n\n\
+         # Antigravity Framework\n\n\
+         Antigravity **`router-rs-framework`**。协议与限制：**`docs/hosts/antigravity.md`**；政策：**`AGENTS.md`**。\n\n\
+         ## 会话操作（按序）\n\n\
+         1. `framework_digest` — 开头一次\n\
+         2. `skill_route` → 只读 `skill_path`\n\
+         3. `goal_state_manage operation=start`（宏任务）\n\
+         4. 验证后 `record_evidence`\n\
+         5. `closeout_gate` → `goal_state_manage operation=complete`\n\n\
+         ## 门控说明\n\n\
+         - 无 CLI 级 PreToolUse 等硬阻断，但 `goal_state_manage complete` 与 `closeout_gate` 在 MCP 工具层实施硬拦截（[Antigravity Hard Block]）；其余流程防线依赖 Planning Mode。\n\n\
+         ## 共享资源\n\n\
+         与其它宿主共用 `artifacts/current/` 工作区。路由：`{runtime_rel}`。\n"
+    );
+    write_text_if_changed(path, &content)
+}
+
+fn write_antigravity_projection_manifest(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    mcp_path: &Path,
+    settings_path: &Path,
+    framework_md_path: &Path,
+) -> Result<bool, String> {
+    write_json_if_changed(
+        &projection_manifest_path(roots, "antigravity", scope),
+        &json!({
+            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
+            "managed_by": "skill-framework",
+            "host_projection": "antigravity",
+            "scope": scope,
+            "files": [
+                mcp_path.to_string_lossy(),
+                settings_path.to_string_lossy(),
+                framework_md_path.to_string_lossy()
+            ],
         }),
     )
 }
@@ -2983,6 +3364,13 @@ fn projection_manifest_path(
             .project_root
             .join(".claude")
             .join(FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME),
+        ("antigravity", "user") => roots
+            .antigravity_home_root
+            .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
+        ("antigravity", _) => roots
+            .project_root
+            .join(".gemini")
+            .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
         _ => roots.project_root.join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
     }
 }
@@ -4483,7 +4871,7 @@ mod tests {
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         assert!(
-            err.contains("Supported tools: codex, cursor, claude, claude-desktop, codex-app"),
+            err.contains("Supported tools: codex, cursor, claude, claude-desktop, antigravity, codex-app"),
             "{err}"
         );
         assert!(err.contains("codex-cli"), "{err}");
@@ -4502,6 +4890,7 @@ mod tests {
                 "cursor".to_string(),
                 "claude".to_string(),
                 "claude-desktop".to_string(),
+                "antigravity".to_string(),
             ]
         );
     }

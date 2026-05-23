@@ -31,7 +31,7 @@
 | `ROUTER_RS_CODEX_HOOK_STATE_SALT` | unstable fallback 文件名盐（与 repo+cwd+payload session 组合；生产建议保持 strict session on） |
 | `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 深度 lane 缺 `fork_context` 时不推断 independent 证据 |
 | `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` | `stop_hook_active` 重放时跳过 review gate |
-| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 spawn-first 单行（Cursor beforeSubmit、Codex UPS、Claude UserPromptSubmit）；文案来自 `spawn_first_nudge_by_host.<host>` 或全局回退 |
+| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 Codex UPS / Claude UserPromptSubmit spawn-first 单行（文案来自 `spawn_first_nudge_by_host.<host>` 或全局回退） |
 | `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` | UPS/SessionStart `additionalContext` UTF-8 字节上限 |
 
 ## Cursor 专项
@@ -39,14 +39,15 @@
 | 变量 | 作用 |
 |------|------|
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 应急关闭 Cursor REVIEW_GATE 全链 |
-| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 spawn-first 单行 nudge（Cursor beforeSubmit + Codex UserPromptSubmit；**零注入**；清门阈值不变） |
+| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 Cursor beforeSubmit spawn-first 单行 nudge（**零注入**；清门阈值不变） |
+| `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE=0` | 关闭 Cursor beforeSubmit **model inherit** 单行（默认开；与 REVIEW_GATE / my-light 无关） |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | Stop REVIEW_GATE 硬行次数上限（默认 8；超 cap 降为 soft_nag） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review `pending_cycle_keys` 上限（默认 32） |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `SESSION_CALL_TRACKER` `per_tool` 键上限（默认 128） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0` | 关闭 SessionEnd 终端回收 |
 | `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy` | 旧「全仓库 active terminal」清扫 |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 自动放行次数（默认 8；`0` 关闭） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（env 名保留；**仅** `/implementx` 入口；`/autopilot` 已退役） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | pre-goal 自动放行次数（默认 8；`0` 关闭） |
 | `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | **默认 strict**（unset 禁止仅凭磁盘 GOAL 满足 pre-goal）；legacy：`0`/`false`/`off`/`no` |
 | `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` | 5 个已从默认 `hooks.json` 移除的事件在未注册时仍 dispatch 完整 handler |
 | `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` | hook-state 写失败时 beforeSubmit 仍 `continue:true`（应急） |
