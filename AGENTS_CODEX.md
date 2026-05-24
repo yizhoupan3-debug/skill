@@ -8,7 +8,7 @@
 |------|----------|
 | 跨宿主叙述性协议 | 仓库根 [`AGENTS.md`](AGENTS.md) |
 | Codex 宿主差异 | **`AGENTS_CODEX.md`**（本文件） |
-| Codex 策略快照 | `~/.codex/AGENTS.md`；`codex sync` + **编译嵌入**（见下） |
+| Codex 策略快照 | 编译 embed（`AGENTS.md` + 本文件）；项目 sync 材料化 **`AGENTS_CODEX.md`** + `.codex/*` |
 | skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
 | hook 行为 | `.codex/hooks.json` + `router-rs` |
@@ -22,14 +22,13 @@
 ```bash
 cargo build --release --manifest-path scripts/router-rs/Cargo.toml
 cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
-cp AGENTS_CODEX.md ~/.codex/AGENTS.md   # 可选：用户级 Codex 策略对齐
 cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks --framework-root "$PWD"
 ```
 
 ### 核心物化与同步机制
 
-- **材料化**：`~/.codex/AGENTS.md` 与项目 `.codex/*` 经 `sync-entrypoints` 材料化；以仓库源为准。
-- **编译嵌入**：`cargo build --release` 将 `AGENTS.md` + `AGENTS_CODEX.md` 静态嵌入二进制；hook 运行期不读盘。
+- **材料化**：`framework sync-entrypoints` 材料化 **`AGENTS_CODEX.md`**、**`.codex/README.md`** 与项目 `.codex/*`（见 `.codex/host_entrypoints_sync_manifest.json`）；**不** overwrite 仓库根 [`AGENTS.md`](AGENTS.md)（跨宿主内核，人工维护）。勿仅复制本文件到 `~/.codex/AGENTS.md`（会丢失跨宿主内核）。
+- **编译嵌入**：`cargo build --release` 将 `AGENTS.md` + `AGENTS_CODEX.md` 静态嵌入二进制；hook 运行期不读盘。用户级 Codex 策略对齐见宿主文档；勿单独 cp 宿主 delta。
 
 ## Root
 

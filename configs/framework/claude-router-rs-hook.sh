@@ -32,14 +32,14 @@ for candidate in \
   "$FW/target/release/router-rs" \
   "$FW/target/debug/router-rs"
 do
-  if [ -z "$ROUTER_RS_BIN" ] && [ -x "$candidate" ] && "$candidate" claude hook --help >/dev/null 2>&1; then
+  if [ -z "$ROUTER_RS_BIN" ] && [ -x "$candidate" ] && "$candidate" host claude hook --help >/dev/null 2>&1; then
     ROUTER_RS_BIN="$candidate"
   fi
 done
 
 if [ -z "$ROUTER_RS_BIN" ]; then
   ROUTER_RS_BIN="$(command -v router-rs 2>/dev/null || true)"
-  if [ -n "$ROUTER_RS_BIN" ] && ! "$ROUTER_RS_BIN" claude hook --help >/dev/null 2>&1; then
+  if [ -n "$ROUTER_RS_BIN" ] && ! "$ROUTER_RS_BIN" host claude hook --help >/dev/null 2>&1; then
     ROUTER_RS_BIN=""
   fi
 fi
@@ -53,4 +53,4 @@ if [ ! -x "${ROUTER_RS_BIN:-}" ]; then
   exit 0
 fi
 
-printf '%s' "$HOOK_PAYLOAD" | "$ROUTER_RS_BIN" claude hook --event="$HOOK_EVENT" --repo-root "$ROOT"
+printf '%s' "$HOOK_PAYLOAD" | "$ROUTER_RS_BIN" host claude hook --event="$HOOK_EVENT" --repo-root "$ROOT"

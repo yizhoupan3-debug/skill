@@ -658,7 +658,7 @@ pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
         seq: None,
         schema_version: Some(1),
     };
-    if let Err(e) = crate::task_ledger::append_transaction(repo_root, task_id, tx) {
+    if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(repo_root, task_id, tx) {
         eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
     }
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, task_id);
@@ -933,7 +933,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
                 eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
             }
             let goal_state_cleared =
@@ -1159,7 +1159,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
                 eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
             }
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(

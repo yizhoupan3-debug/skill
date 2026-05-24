@@ -801,38 +801,39 @@ pub(crate) fn append_evidence_index_merged_row(
         fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
     }
 
-    // 单一锁：evidence path flock 保护 read-modify-write 原子性
-    let _evidence_lock = crate::runtime_storage::acquire_runtime_path_lock(&evidence_path)?;
+    let tx_payload = {
+        let _evidence_lock = crate::runtime_storage::acquire_runtime_path_lock(&evidence_path)?;
 
-    let existing = read_json_strict(&evidence_path)?;
-    let mut rows: Vec<Map<String, Value>> = normalize_evidence_index(&existing);
+        let existing = read_json_strict(&evidence_path)?;
+        let mut rows: Vec<Map<String, Value>> = normalize_evidence_index(&existing);
 
-    // 精确去重：基于 command_preview + recorded_at
-    let is_duplicate = rows.iter().any(|row| {
-        let sig_cmd = row
-            .get("command_preview")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let sig_at = row
-            .get("recorded_at")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        sig_cmd == entry_signature && sig_at == entry_recorded_at
-    });
-    let tx_payload = Value::Object(entry.clone());
-    if !is_duplicate {
-        rows.push(entry);
-    }
+        let is_duplicate = rows.iter().any(|row| {
+            let sig_cmd = row
+                .get("command_preview")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let sig_at = row
+                .get("recorded_at")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            sig_cmd == entry_signature && sig_at == entry_recorded_at
+        });
+        let tx_payload = Value::Object(entry.clone());
+        if !is_duplicate {
+            rows.push(entry);
+        }
 
-    if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
-        let drain = rows.len() - MAX_POST_TOOL_EVIDENCE_ARTIFACTS;
-        rows.drain(0..drain);
-    }
-    let payload = json!({
-        "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
-        "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
-    });
-    write_json_if_changed_unlocked(&evidence_path, &payload)?;
+        if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
+            let drain = rows.len() - MAX_POST_TOOL_EVIDENCE_ARTIFACTS;
+            rows.drain(0..drain);
+        }
+        let payload = json!({
+            "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
+            "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
+        });
+        write_json_if_changed_unlocked(&evidence_path, &payload)?;
+        tx_payload
+    };
     if let Some(tid) = resolved_task_id {
         let tx = crate::task_ledger::LedgerTransaction {
             ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -1490,6 +1491,36 @@ mod evidence_lock_order_tests {
         assert!(
             body.contains("acquire_runtime_path_lock"),
             "evidence append must use path flock"
+        );
+    }
+
+    #[test]
+    fn append_evidence_index_merged_row_does_not_call_append_transaction_under_l2() {
+        let src = include_str!("mod.rs");
+        let start = src
+            .find("fn append_evidence_index_merged_row")
+            .expect("append_evidence_index_merged_row");
+        let rest = &src[start..];
+        let end = rest
+            .find("\npub fn framework_hook_evidence_append")
+            .unwrap_or(rest.len());
+        let body = &rest[..end];
+        let lock_pos = body
+            .find("acquire_runtime_path_lock")
+            .expect("acquire_runtime_path_lock");
+        let append_pos = body
+            .find("append_transaction(")
+            .expect("append_transaction after L2 block");
+        let l2_block_end = body[lock_pos..append_pos]
+            .rfind('}')
+            .expect("L2 block closes before append_transaction");
+        assert!(
+            lock_pos + l2_block_end < append_pos,
+            "append_transaction must run only after L2 path lock is released"
+        );
+        assert!(
+            !body[lock_pos..lock_pos + l2_block_end].contains("append_transaction("),
+            "must not call append_transaction while holding L2 lock"
         );
     }
 }

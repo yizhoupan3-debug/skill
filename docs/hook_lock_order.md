@@ -14,8 +14,8 @@ Cross-process hook subprocesses serialize continuity writes with **POSIX `flock`
 
 1. **Allowed nesting**: L1 → L2 → L3 (repo flock first, then narrower locks).
 2. **Forbidden**: Hold **L3** while acquiring **L1** (e.g. Stop finalization that touches task-ledger under session hook lock).
-3. **PostTool evidence** (`append_evidence_index_merged_row`): **L2 only** — must not call `apply_task_ledger_mutation` (deadlock avoidance with concurrent ledger writers).
-4. **PostTool handler order**: `record_tool_call` (L1) → session lock (L3) → release L3 → evidence (L2) → optional `cargo check` (no lock).
+3. **PostTool evidence** (`append_evidence_index_merged_row`): **L2 only while holding the evidence path lock** — must not call `apply_task_ledger_mutation` or acquire **L1** during the L2 RMW block (deadlock avoidance with concurrent ledger writers). After **L2 is released**, an independent **L1** `append_transaction` to `TASK_LEDGER.jsonl` is allowed (audit trail; not nested under L2).
+4. **PostTool handler order**: `record_tool_call` (L1) → session lock (L3) → release L3 → evidence (L2 RMW, then optional L1 ledger append) → optional `cargo check` (no lock).
 
 ## Host differences
 
@@ -26,7 +26,7 @@ Cross-process hook subprocesses serialize continuity writes with **POSIX `flock`
 
 **Cursor L3 stale recovery**（`acquire_state_lock` 重试路径）：**仅当 holder PID 已死**时 `remove_file` lock 路径；`age_ms > 30s` 且 PID 仍存活时**只重试、不删路径**（避免双 inode 双 flock）。孤儿 lock 文件（无持有者）靠 `try_lock_exclusive` 直接成功。**7d age sweep**（`sweep_stale_hook_state_by_age`）：`.lock` **仅**在 holder PID 已死（或 lock 缺失/不可读）时可删；存活 holder 即使 `age>30s` 也不 unlink；关联 json 仍按 mtime/`updated_at` 判 7d 陈旧。**SessionEnd 清扫顺序**：当前 `session_key` state（持锁删除）→ `sweep_hook_state_tmp_orphans` → `SESSION_CALL_TRACKER.tmp` → **`sweep_stale_hook_state_by_age`**（默认 7d）→ 可选 `LEGACY_FULL_SWEEP` 全目录。锁不可用则 stderr `session_end_state_delete_skipped=lock_unavailable` 且保留 state 文件。
 
-Do not share one lock file between Cursor and Codex. See `task_write_lock.rs` and `codex_hooks.rs`.
+Do not share one lock file between Cursor and Codex. See `task_write_lock.rs` and `hosts/codex_hooks/mod.rs`.
 
 ## Env
 

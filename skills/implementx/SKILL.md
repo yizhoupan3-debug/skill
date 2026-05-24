@@ -4,9 +4,9 @@ description: |
   Personal lifecycle — execute ALL waves in one breath. Main thread schedules lanes only; subagents write compact lane-notes.
   Sets drive_until_done true. REVIEW_GATE hard block off under lifecycle_profile my-light.
   Use for /implementx after /planx.
-routing_layer: L1
+routing_layer: L0
 routing_owner: owner
-routing_gate: evidence
+routing_gate: none
 routing_gate_evidence: "ROADMAP.md and WAVE_STATE.json exist"
 routing_priority: P1
 session_start: n/a
@@ -23,6 +23,8 @@ metadata:
 # implementx
 
 **Zone**: execution+ · **profile**: `my-light`
+
+Under **`lifecycle_profile: my-light`**, Cursor **Stop** does **not** emit hard `router-rs AG_FOLLOWUP` (goal continuity is manual: `framework_goal_drive` stdio + `artifacts/current/<task_id>/` boards). **`beforeSubmit` does not arm `goal_required`** (uses `goal_drive_entry_active` for pre-goal only). Closeout / `CLOSEOUT_FOLLOWUP` may still apply when completion is claimed.
 
 ## One-breath all-waves (HARD)
 
@@ -53,7 +55,7 @@ Target: coordinator visible content ≤35% of turn.
 ```json
 {
   "lane_id": "w3-lane-cursor",
-  "scope_paths": ["scripts/router-rs/src/cursor_hooks/"],
+  "scope_paths": ["scripts/router-rs/src/hosts/cursor_hooks/"],
   "output_path": "artifacts/current/<task_id>/lane-notes/w3-lane-cursor.md",
   "max_lines": 15,
   "forbidden": ["paste full transcript to main chat"]
@@ -63,6 +65,11 @@ Target: coordinator visible content ≤35% of turn.
 Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allows.
 
 **Model (Cursor)**: omit `Task` `model` (inherit parent session); do not default `claude-*` / `sonnet*`. See `.cursor/rules/subagent-model-inherit.mdc`.
+
+## GOAL_STATE writes (HARD)
+
+- All **`GOAL_STATE.json`** mutations during execution use **`framework_goal_drive`** (`checkpoint`, `complete`, etc.) — not direct `Write` on the JSON file.
+- Wave progress → `checkpoint` notes; evidence → `EVIDENCE_INDEX` / validation commands per skill.
 
 ## GOAL_STATE on start
 

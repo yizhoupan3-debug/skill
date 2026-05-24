@@ -58,14 +58,63 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
         println!("{label}: {status} ({})", path.display());
     }
 
+    println!("\n--- host install projections (optional in framework source repo) ---");
+    let host_install_checks = [
+        (
+            ".claude/settings.json (claude-code hooks)",
+            repo_root.join(".claude").join("settings.json"),
+        ),
+        (
+            ".claude/rules/framework.md",
+            repo_root.join(".claude").join("rules").join("framework.md"),
+        ),
+        (
+            ".gemini/antigravity/rules/framework.md",
+            repo_root
+                .join(".gemini")
+                .join("antigravity")
+                .join("rules")
+                .join("framework.md"),
+        ),
+        (
+            ".gemini/mcp.json",
+            repo_root.join(".gemini").join("mcp.json"),
+        ),
+    ];
+    let mut host_install_missing = 0usize;
+    for (label, path) in &host_install_checks {
+        let status = if path.is_file() {
+            "ok (file)"
+        } else {
+            host_install_missing += 1;
+            "missing (run host-integration install)"
+        };
+        println!("{label}: {status} ({})", path.display());
+    }
+    if host_install_missing > 0 {
+        println!(
+            "hint: router-rs framework host-integration install --to claude-code|claude-desktop|antigravity --scope project"
+        );
+        let deprecated_shim = repo_root
+            .join(".claude")
+            .join("hooks")
+            .join("router-rs-hook.sh");
+        if deprecated_shim.is_file() {
+            println!(
+                "WARN: deprecated shim still present at {} — prefer .claude/settings.json hooks (see docs/hosts/claude.md)",
+                deprecated_shim.display()
+            );
+        }
+    }
+
     println!("\n--- Codex projection reminder ---");
     println!(
-        "If you edited repo-root AGENTS.md and rely on Codex hooks that embed policy from router-rs,"
+        "If you edited repo-root AGENTS.md or AGENTS_CODEX.md and rely on Codex hooks that embed policy from router-rs,"
     );
     println!("rebuild this binary then run:");
     println!("  router-rs framework sync-entrypoints --repo-root <repo>");
     println!(
-        "(or `codex sync --repo-root` with the same sync engine). See AGENTS.md (Codex Sync)."
+        "(or `codex sync --repo-root` with the same sync engine). See AGENTS_CODEX.md (Codex Sync)."
     );
 
     println!("\n--- hook follow-up tokens (quick ref) ---");
@@ -104,7 +153,10 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
                 "generated-artifacts-status: {}",
                 if ok { "ok" } else { "DRIFT or FAIL" }
             );
-            if let Some(arr) = summary.get("drifted_artifacts").and_then(|v| v.as_array()) {
+            if let Some(arr) = summary
+                .pointer("/manifest_status/drifted_artifacts")
+                .and_then(|v| v.as_array())
+            {
                 let n = arr.len();
                 if n > 0 {
                     println!("  drifted_count: {n}");

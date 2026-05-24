@@ -161,17 +161,17 @@ const REVIEW_GATE_LINE_CLEAR_MARKERS: &[&str] = &["rg_clear", "/rg_clear"];
 pub(crate) const COMPLETION_DETECT_EN: &[&str] =
     &["done", "finished", "completed", "succeeded", "passed"];
 
+/// 完成宣称（触发 closeout）：不含「验证通过/测试通过」等，避免与 goal verify 聊天轨打架。
 pub(crate) const COMPLETION_DETECT_ZH_PHRASES: &[&str] = &[
     "已完成",
     "已经完成",
     "全部完成",
     "完成了",
-    "验证通过",
-    "测试通过",
-    "审核通过",
-    "已通过",
     "搞定",
 ];
+
+/// 仅用于无磁盘 GOAL 时的聊天 progress/verify 提示（不进 closeout 词表）。
+pub(crate) const GOAL_CHAT_VERIFY_ZH_PHRASES: &[&str] = &["验证通过", "测试通过", "审核通过", "已通过"];
 
 /// 在已剥离/未剥离的文本中查找完成宣称 token。空串直接返回 false；EN 走 ASCII 大小写不敏感，ZH 走原文子串匹配。
 pub(crate) fn contains_completion_claim_token(text: &str) -> bool {

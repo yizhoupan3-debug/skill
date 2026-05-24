@@ -20,7 +20,7 @@
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
-  - 在 `UserPromptSubmit` 时通过 `spawn_first_nudge` 触发审稿引导；深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
+  - **非 my-light** 时，`UserPromptSubmit` 可注入 `spawn_first_nudge` 触发审稿引导；**`lifecycle_profile: my-light`**（默认 My 链）下 **不**注入 spawn-first，Stop 上 **`REVIEW_GATE` 硬拦关闭**，仍可用 findings-only review。深度 Review 规范见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
   - 通过 `Stop` 钩子处理 `REVIEW_GATE` 阶段判断与收尾验证。
 
 ## Hook 事件矩阵
@@ -29,17 +29,17 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks.rs`](../../scripts/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../scripts/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
-| 宿主入口对齐 | `router-rs codex sync` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、`AGENTS.md` 等及 **`host_entrypoints_sync_manifest`**；受 **`RUNTIME_REGISTRY.host_targets.supported`** 约束 |
+| 宿主入口对齐 | `router-rs codex sync` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；跨宿主内核 **[`AGENTS.md`](../../AGENTS.md)** 人工维护、不由 sync 覆盖 |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
 
 ## 安装与文件分布 (Installation & Scope)
 
 - **文件 Scope 配置**：
-  - **`AGENTS.md`、`.codex/hooks.json`**：**Project**，位于仓库根目录。
+  - **[`AGENTS.md`](../../AGENTS.md)**（跨宿主内核，人工维护）、**[`AGENTS_CODEX.md`](../../AGENTS_CODEX.md)**（Codex delta，sync 材料化）、**`.codex/hooks.json`**：**Project**，位于仓库根或 `.codex/`。
   - **Framework prompt 快照**：**Project**，路径为 `.codex/prompts/framework.md`。
   - **全局 skill surface**：**User**，路径为 `$CODEX_HOME/skills`，指向仓库中 `artifacts/codex-skill-surface/skills`。
 - **同步与安装命令**：
@@ -63,9 +63,9 @@
 $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \longrightarrow \text{Verify}$$
 
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
-2. **`/planx`**：规划阶段，生成或更新 `implementation_plan.md`，明确 minimal delta 与 verification plan，并报用户审批。
+2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`，明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
-   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`。在此配置下将关闭 `REVIEW_GATE` 硬拦截和 spawn-first nudge，采用 findings-only 机制，保持极佳的轻量化流畅体验。
+   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`（关闭 Stop 上 `REVIEW_GATE` 硬拦与 UPS spawn-first nudge；findings-only review 仍可用）。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
 
 ## Python 环境治理 (Python Environment)
@@ -73,7 +73,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 在 macOS 开发环境下，Python 的运行环境与依赖治理需严格遵循以下准则：
 
 - **环境锁存**：使用专属的 **`$python-env-management`** 进行环境的长效治理，默认运行环境为 **Python 3.12**。
-- **工具链选择**：推行 **uv-only** 机制。每个仓库 of 依赖及环境状态必须通过 `uv.lock` 进行绝对锁定，禁止使用传统的 `pip`。
+- **工具链选择**：推行 **uv-only** 机制。每个仓库的依赖及环境状态必须通过 `uv.lock` 进行绝对锁定，禁止使用传统的 `pip`。
 - **Skill 支撑**：当环境异常或缺少 `uv` 时，调用 `skills/uv/SKILL.md` 自动进行安装与 PATH 补全。
 
 ## 独有长效会话机制 (Session Supervisor)
@@ -95,7 +95,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 为确保 Codex CLI 与审稿机制的稳定执行，支持以下独有环境变量：
 
-- **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**：当 Codex 的独立审稿分支（fork context）缺失时，是否默认推断为假（False）。设置为 `1` 或相应值可启动该推断控制。
+- **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**：**默认开启**（`unset` = 开）。PostTool 深度 lane 且省略 `fork_context` 时可计为独立 reviewer 证据。设 `0`/`false`/`off`/`no` 则要求 JSON 显式 `fork_context: false`。
 - **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`**：规定是否在会话交互过程中严格要求稳定的 Session Key，防止非幂等会话串线。
 - **`ROUTER_RS_CODEX_HOOK_STATE_SALT`**：用于设定 Codex hook 的状态盐（salt），用以保障钩子状态存取的安全性。
 

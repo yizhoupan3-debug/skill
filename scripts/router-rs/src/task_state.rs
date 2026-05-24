@@ -474,7 +474,10 @@ pub fn read_task_ledger_transactions(
     repo_root: &Path,
     task_id: &str,
 ) -> Vec<crate::task_ledger::LedgerTransaction> {
-    let path = crate::task_ledger::task_ledger_path(repo_root, task_id);
+    let path = match crate::task_ledger::task_ledger_path(repo_root, task_id) {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
     if !path.is_file() {
         return Vec::new();
     }
@@ -1482,6 +1485,86 @@ mod tests {
             frame.hydration_goal.is_none(),
             "orphan goal must not hydrate current task"
         );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn hydrate_replays_ledger_tail_after_projection() {
+        let tmp = unique_repo("hydrate-replay");
+        let tid = "t-replay";
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("TASK_STATE.json"),
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "router-rs-task-state-aggregate-v1",
+                "task_id": tid,
+                "last_seq": 0,
+                "goal_state": {"status": "planned", "goal": "old"},
+                "rfv_loop_state": null,
+                "evidence": {"evidence_rows_non_empty": false, "has_successful_verification": false}
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let ledger_line = serde_json::json!({
+            "ts": "2026-01-02T00:00:00Z",
+            "tx_type": "goal_state",
+            "payload": {"status": "running", "goal": "from-ledger"},
+            "seq": 1,
+            "schema_version": 1
+        });
+        fs::write(
+            task_dir.join("TASK_LEDGER.jsonl"),
+            format!("{}\n", serde_json::to_string(&ledger_line).unwrap()),
+        )
+        .unwrap();
+        let (goal, _, _, _) = hydrate_task_state_hybrid(&tmp, tid);
+        let goal = goal.expect("goal");
+        assert_eq!(goal["goal"], json!("from-ledger"));
+        assert_eq!(goal["status"], json!("running"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn hydrate_falls_back_to_physical_files() {
+        let tmp = unique_repo("hydrate-fallback");
+        let tid = "t-fallback";
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("GOAL_STATE.json"),
+            r#"{"status":"running","goal":"physical-file"}"#,
+        )
+        .unwrap();
+        let (goal, _, _, _) = hydrate_task_state_hybrid(&tmp, tid);
+        let goal = goal.expect("goal");
+        assert_eq!(goal["goal"], json!("physical-file"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn hydrate_skips_corrupt_ledger_lines() {
+        let tmp = unique_repo("hydrate-corrupt");
+        let tid = "t-corrupt";
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        let good = serde_json::json!({
+            "ts": "2026-01-02T00:00:00Z",
+            "tx_type": "goal_state",
+            "payload": {"status": "running", "goal": "good-line"},
+            "seq": 0,
+            "schema_version": 1
+        });
+        fs::write(
+            task_dir.join("TASK_LEDGER.jsonl"),
+            format!("not-json\n{}\n", serde_json::to_string(&good).unwrap()),
+        )
+        .unwrap();
+        let txs = read_task_ledger_transactions(&tmp, tid);
+        assert_eq!(txs.len(), 1);
+        let (goal, _, _, _) = hydrate_task_state_hybrid(&tmp, tid);
+        assert_eq!(goal.expect("goal")["goal"], json!("good-line"));
         let _ = fs::remove_dir_all(&tmp);
     }
 }

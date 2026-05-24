@@ -28,7 +28,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     let track_open_subagent = true;
     let mut mutated = false;
     // 与 PostToolUse 对齐：pre-goal 在独立 fork 且存在 lane 类型证据时满足（含非白名单 lane 名）。
-    if state.goal_required && pre_goal_kind && independent_fork_pre_goal {
+    if tracks_goal_or_drive_entry(&state) && pre_goal_kind && independent_fork_pre_goal {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
         mutated = true;
@@ -41,7 +41,8 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
                 crate::router_env_flags::router_rs_cursor_review_pending_cycle_max() as usize,
             );
         }
-        if push_review_pending_cycle_key(&mut state, cycle_key, false) {
+        match push_review_pending_cycle_key(&mut state, cycle_key, false) {
+            PendingCyclePush::NewlyInserted => {
             let was_below_2 = state.phase < 2;
             bump_phase(&mut state, 2);
             // 仅 SubagentStart 事件计数；PostToolUse 入 multiset 不递增（见 `push_review_pending_cycle_key` 模块注释）。
@@ -56,12 +57,17 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
                 clear_review_gate_escalation_counters(&mut state);
             }
             mutated = true;
-        } else {
+            }
+            PendingCyclePush::AlreadyPresent => {
+                // Duplicate `id:` subagentStart: open count still tracked; do not inflate start_count.
+            }
+            PendingCyclePush::AtCap => {
             let _ = save_state(repo_root, event, &mut state);
             release_state_lock(&mut lock);
             return review_pending_cycle_cap_denial(
                 crate::router_env_flags::router_rs_cursor_review_pending_cycle_max() as usize,
             );
+            }
         }
     }
     if track_open_subagent {
@@ -100,12 +106,8 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
                 .iter()
                 .any(|p| p == k)
         });
-    let decrement_open_count = if review_hard_armed(&state) && review_kind {
-        cycle_matches
-    } else {
-        state.active_subagent_count > 0
-    };
-    if decrement_open_count && state.active_subagent_count > 0 {
+    // Always decrement open count on stop when tracked (P0-1); pending multiset核销与 open 计数解耦。
+    if state.active_subagent_count > 0 {
         state.active_subagent_count -= 1;
         if state.active_subagent_count == 0 {
             state.active_subagent_last_started_at = None;

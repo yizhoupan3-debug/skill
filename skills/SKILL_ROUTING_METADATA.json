@@ -95,7 +95,16 @@
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "plan-mode": {
-      "selection_reason": "allowlisted first-turn owner"
+      "selection_reason": "allowlisted first-turn owner",
+      "negative_triggers": [
+        "/planx",
+        "/discussx",
+        "/implementx",
+        "/verifyx",
+        "WAVE_STATE.json",
+        "ROADMAP.md under artifacts/current",
+        "My lifecycle"
+      ]
     },
     "plugin-creator": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"

@@ -493,6 +493,9 @@ fn install_skills_codex_target_installs_only_codex() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["codex"]["status"], "installed");
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
+    let framework_prompt = read_text(&repo_root.join(".codex/prompts/framework.md"));
+    assert!(framework_prompt.contains("跨宿主内核"));
+    assert!(framework_prompt.contains("AGENTS_CODEX.md"));
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
@@ -527,6 +530,9 @@ fn install_skills_cursor_target_installs_only_cursor() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["cursor"]["status"], "installed");
     assert!(home.join(".cursor/rules/framework.mdc").exists());
+    let framework_rule = read_text(&home.join(".cursor/rules/framework.mdc"));
+    assert!(framework_rule.contains("跨宿主内核"));
+    assert!(framework_rule.contains("AGENTS_CURSOR.md"));
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/framework.md").exists());
 }
@@ -559,6 +565,9 @@ fn install_skills_claude_target_installs_only_claude() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["claude"]["status"], "installed");
     assert!(repo_root.join(".claude/rules/framework.md").exists());
+    let framework_rule = read_text(&repo_root.join(".claude/rules/framework.md"));
+    assert!(framework_rule.contains("跨宿主内核"));
+    assert!(framework_rule.contains("AGENTS_CLAUDE.md"));
     let settings_path = repo_root.join(".claude/settings.json");
     assert!(settings_path.exists());
     let settings = read_json(&settings_path);
@@ -587,6 +596,8 @@ fn install_skills_claude_target_installs_only_claude() {
         .arg(pre_tool_command)
         .env("CLAUDE_PROJECT_ROOT", &repo_root)
         .env("SKILL_FRAMEWORK_ROOT", project_root())
+        .env("CARGO_TARGET_DIR", "/nonexistent")
+        .env("ROUTER_RS_BIN", "/nonexistent/router-rs")
         .env("PATH", "/bin:/usr/bin")
         .output()
         .expect("run claude fallback command");
@@ -1245,24 +1256,24 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         status["drift_gate"]["compare"],
         json!(["byte-for-byte", "normalized-text"])
     );
-    assert_eq!(
-        status["manifest_status"]["missing_required_generated_artifacts"],
-        json!([])
+    assert!(
+        status["manifest_status"]
+            .get("missing_required_generated_artifacts")
+            .is_none(),
+        "manifest-only status must not expose missing_required_generated_artifacts"
     );
-    for required in [
-        "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
-        "skills/SKILL_ROUTING_REGISTRY.md",
-        "skills/SKILL_ROUTING_INDEX.md",
-        "skills/SKILL_MANIFEST.json",
-        "skills/SKILL_ROUTING_RUNTIME.json",
-        "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
-        "skills/SKILL_PLUGIN_CATALOG.json",
-        "skills/SKILL_ROUTING_METADATA.json",
-        "skills/SKILL_HEALTH_MANIFEST.json",
-        "skills/SKILL_APPROVAL_POLICY.json",
-        "AGENTS.md",
-        ".codex/host_entrypoints_sync_manifest.json",
-    ] {
+    assert!(
+        status["manifest_status"]
+            .get("required_generated_artifacts")
+            .is_none(),
+        "manifest-only status must not expose required_generated_artifacts"
+    );
+    let declared_paths = status["manifest_status"]["declared_generated_artifact_paths"]
+        .as_array()
+        .unwrap();
+    assert!(!declared_paths.is_empty());
+    for required in declared_paths {
+        let required = required.as_str().unwrap();
         assert!(
             status["generated_artifacts"]
                 .as_array()
@@ -1277,7 +1288,7 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
 }
 
 #[test]
-fn generated_artifacts_status_reports_missing_required_manifest_entries() {
+fn generated_artifacts_status_fails_when_declared_artifact_missing_on_disk() {
     let tmp = tempdir().unwrap();
     let framework_root = tmp.path().join("framework");
     let artifact_root = tmp.path().join("artifacts");
@@ -1286,11 +1297,18 @@ fn generated_artifacts_status_reports_missing_required_manifest_entries() {
         &framework_root.join("configs/framework/GENERATED_ARTIFACTS.json"),
         &json!({
             "schema_version": "framework-generated-artifacts-manifest-v1",
-            "generated_artifacts": [{
-                "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
-                "generator": "sh scripts/generate-surface.sh",
-                "compare": "byte-for-byte"
-            }]
+            "generated_artifacts": [
+                {
+                    "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+                    "generator": "sh scripts/generate-surface.sh",
+                    "compare": "byte-for-byte"
+                },
+                {
+                    "path": "skills/SKILL_ROUTING_RUNTIME.json",
+                    "generator": "sh scripts/generate-surface.sh",
+                    "compare": "byte-for-byte"
+                }
+            ]
         }),
     );
     write_text(
@@ -1313,19 +1331,74 @@ printf '%s\n' '{"status":"fresh"}' > configs/framework/FRAMEWORK_SURFACE_POLICY.
         framework_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--skip-generator-run",
     ]);
 
     assert_eq!(status["ok"], false);
-    let missing = status["manifest_status"]["missing_required_generated_artifacts"]
+    let runtime = status["generated_artifacts"]
         .as_array()
-        .unwrap();
-    assert!(missing.contains(&json!("skills/SKILL_ROUTING_RUNTIME.json")));
-    assert!(missing.contains(&json!("skills/SKILL_HEALTH_MANIFEST.json")));
+        .unwrap()
+        .iter()
+        .find(|artifact| artifact["path"] == "skills/SKILL_ROUTING_RUNTIME.json")
+        .expect("manifest-declared runtime artifact must be reported");
+    assert_eq!(runtime["exists"], false);
+    assert_eq!(runtime["clean"], false);
+    assert!(
+        status["manifest_status"]
+            .get("missing_required_generated_artifacts")
+            .is_none(),
+        "manifest-only status must not expose missing_required_generated_artifacts"
+    );
     assert!(
         !artifact_root
             .join("generated-artifacts-drift-check")
             .exists(),
         "generated-artifacts-status should clean temporary drift-check copies"
+    );
+}
+
+#[test]
+fn generated_artifacts_status_fails_when_manifest_omits_checked_in_projection() {
+    let tmp = tempdir().unwrap();
+    let framework_root = tmp.path().join("framework");
+    seed_framework_markers(&framework_root);
+    write_json(
+        &framework_root.join("configs/framework/GENERATED_ARTIFACTS.json"),
+        &json!({
+            "schema_version": "framework-generated-artifacts-manifest-v1",
+            "generated_artifacts": [{
+                "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+                "generator": "true",
+                "compare": "byte-for-byte"
+            }]
+        }),
+    );
+    write_text(
+        &framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"),
+        r#"{"status":"fresh"}
+"#,
+    );
+    write_text(
+        &framework_root.join(".claude/rules/framework.md"),
+        "---\ndescription: test\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: framework-host-projection-v1 -->\n<!-- install_scope: project -->\n\nprojection\n",
+    );
+
+    let status = router_rs_json(&[
+        "framework",
+        "host-integration",
+        "generated-artifacts-status",
+        "--framework-root",
+        framework_root.to_str().unwrap(),
+        "--skip-generator-run",
+    ]);
+
+    assert_eq!(status["ok"], false);
+    let undeclared = status["manifest_status"]["undeclared_generated_artifacts"]
+        .as_array()
+        .unwrap();
+    assert!(
+        undeclared.iter().any(|path| path == ".claude/rules/framework.md"),
+        "expected undeclared projection, got {undeclared:?}"
     );
 }
 

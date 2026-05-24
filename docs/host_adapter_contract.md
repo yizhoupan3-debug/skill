@@ -25,7 +25,7 @@
 
 ## 0.1 Countable REVIEW_GATE deep review lanes
 
-**权威真源**（[`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，[`registry_loader.rs`](../scripts/router-rs/src/registry_loader.rs)，ADR-005）：
+**权威真源**（[`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，[`runtime_registry/mod.rs`](../scripts/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export），ADR-005）：
 
 | 字段 | 消费宿主 | 含义 |
 |------|----------|------|
@@ -48,7 +48,7 @@
 |------|--------|-----------|-------------|----------------------------|-------------|
 | 可数深度 lane 真源 | `deep_gate_lanes` | `deep_gate_lanes` | `claude_reviewer_lanes` | 无 hook 面 | 物理 `review-lanes/` 目录 |
 | subagentStart/Stop multiset | ✓ | ✗ | ✗ | ✗ | ✗ |
-| wave-2 compact 清门 | ✓ | ✓（部分） | ✗ | ✗ | ✗（需物理文件） |
+| wave-2 compact 清门（Stop tail + 可数 subagent；非 `afterAgentResponse`） | ✓ | ✓（部分） | ✗ | ✗ | ✗（需物理文件） |
 | `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Stop 硬短码 | `router-rs REVIEW_GATE incomplete` | `CODEX_REVIEW_GATE` | `CLAUDE_REVIEW_GATE` | — | `[Antigravity Hard Block]` |
 | Review gate disable env | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` | `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | — | 无（`my-light` 控制） |
@@ -80,14 +80,14 @@
 | 职责 | 仓库路径 |
 |------|----------|
 | Cursor hook | [`cursor_hooks/mod.rs`](../scripts/router-rs/src/hosts/cursor_hooks/mod.rs) |
-| Codex hook | [`codex_hooks.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) |
+| Codex hook | [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) |
 | Claude Code hook | [`claude_hooks.rs`](../scripts/router-rs/src/hosts/claude_hooks.rs) |
 | Claude Desktop MCP | `claude_desktop_hooks.rs` / `router-rs claude-desktop agent` |
 | entrypoint sync | [`host_entrypoint_sync.rs`](../scripts/router-rs/src/host_entrypoint_sync.rs) |
 | install / 投影 | [`host_integration.rs`](../scripts/router-rs/src/host_integration.rs) |
 | CLI 分发 | [`dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs) |
 | 闭集 id / install_tool | `configs/framework/RUNTIME_REGISTRY.json` |
-| review_gate loader | [`registry_loader.rs`](../scripts/router-rs/src/registry_loader.rs) |
+| review_gate loader | [`runtime_registry/mod.rs`](../scripts/router-rs/src/runtime_registry/mod.rs) |
 | lifecycle 文案 | [`host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) |
 | 生成物 manifest | [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
 
@@ -106,7 +106,7 @@
 | 阶段 | 主要落点 |
 |------|----------|
 | 注册表 | `RUNTIME_REGISTRY.json`，[`tests/common/mod.rs`](../tests/common/mod.rs)，[`framework_host_targets.rs`](../scripts/router-rs/src/framework_host_targets.rs) |
-| L3 入口 | `<host>_hooks.rs`，[`main.rs`](../scripts/router-rs/src/main.rs) |
+| L3 入口 | `hosts/<host>_hooks/`（如 [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs)）或 `<host>_hooks.rs`，[`main.rs`](../scripts/router-rs/src/main.rs) |
 | CLI 分发 | [`dispatch_body.txt`](../scripts/router-rs/src/cli/dispatch_body.txt)，[`dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs) |
 | 安装 / 投影 | [`host_integration.rs`](../scripts/router-rs/src/host_integration.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
 | L4 + 验证 | 宿主 `hooks.json`，[`tests/host_integration.rs`](../tests/host_integration.rs)，[`tests/policy_contracts.rs`](../tests/policy_contracts.rs) |
@@ -114,7 +114,7 @@
 - [ ] **`RUNTIME_REGISTRY.json`**：`host_targets.supported`、`install_tool`、`host_entrypoints` 与现网对称。
 - [ ] **`tests/common/mod.rs`**：测试夹具 registry 与真源对齐。
 - [ ] **`framework_host_targets.rs`**：只读注册表，fail-closed。
-- [ ] **`<host>_hooks.rs`** + **`main.rs`** mod。
+- [ ] **`hosts/<host>_hooks/`** 或 **`<host>_hooks.rs`** + **`main.rs`** mod。
 - [ ] **`dispatch_body.txt`** / **`dispatch.rs`**：`router-rs <host> hook <event> …`。
 - [ ] **`host_integration.rs`**：install + 投影 + `GENERATED_ARTIFACTS.json`。
 - [ ] **L4 样例**：argv + 超时 + stdin 透传，shell 不复制 L3。
@@ -132,7 +132,7 @@
 
 ### 3.3 Host entrypoint sync engine / provider 边界
 
-[`host_entrypoint_sync.rs`](../scripts/router-rs/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、`AGENTS.md` bootstrap）在 [`codex_hooks.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs)。`router-rs codex sync` 为兼容 CLI 名。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
+[`host_entrypoint_sync.rs`](../scripts/router-rs/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md`）在 [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs)。hook 编译期 embed **`AGENTS.md` + `AGENTS_CODEX.md`**（见 `policy_embed.rs`）；**不** materialize 或 overwrite 仓库根 [`AGENTS.md`](../AGENTS.md)。`router-rs codex sync` 为兼容 CLI 名。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
 
 ### 3.4 PostTool / 终端证据归一化
 

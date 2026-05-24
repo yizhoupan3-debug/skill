@@ -24,6 +24,12 @@ fn invalidate_route_records_cache_on_write() {
 }
 
 /// 从 `artifacts/current/active_task.json` 读取 `task_id`。
+/// Active task pointer, else focus — used by `framework_goal_drive` write paths when override absent.
+pub fn read_primary_task_id(repo_root: &Path) -> Option<String> {
+    let (active, focus) = read_task_pointer_pair(repo_root);
+    active.or(focus)
+}
+
 pub fn read_active_task_id(repo_root: &Path) -> Option<String> {
     let path = repo_root.join("artifacts/current/active_task.json");
     let raw = fs::read_to_string(&path).ok()?;
@@ -199,11 +205,14 @@ pub fn select_goal_state_from_pointer_ids(
         }
         return Ok(Some((goal, tid)));
     }
-    // Active pointer set but GOAL unreadable: fail-closed (no silent focus fallback).
+    // Active pointer set but GOAL unreadable: fall back to focus when readable (P1-11).
     if active_task_id
         .as_ref()
         .is_some_and(|id| !id.trim().is_empty())
     {
+        if let Some(pair) = focus_pair {
+            return Ok(Some(pair));
+        }
         return Ok(None);
     }
     if let Some((goal, tid)) = focus_pair {
@@ -637,9 +646,9 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
         "start" | "upsert" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
-                .or_else(|| read_active_task_id(&repo_root))
+                .or_else(|| read_primary_task_id(&repo_root))
                 .ok_or_else(|| {
-                    "framework_goal_drive start requires task_id in payload or active_task.json"
+                    "framework_goal_drive start requires task_id in payload or active_task.json / focus_task.json"
                         .to_string()
                 })?;
             crate::path_guard::validate_task_id_component(&task_id)?;
@@ -723,9 +732,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
-                eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
-            }
+            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
             invalidate_route_records_cache_on_write();
             let rfv_loop_superseded =
                 crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(&repo_root, &task_id)?;
@@ -744,7 +752,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
         "checkpoint" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
-                .or_else(|| read_active_task_id(&repo_root))
+                .or_else(|| read_primary_task_id(&repo_root))
                 .ok_or_else(|| {
                     "framework_goal_drive checkpoint requires task_id or active_task.json"
                         .to_string()
@@ -779,9 +787,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
-                eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
-            }
+            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
             invalidate_route_records_cache_on_write();
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
@@ -805,7 +812,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
         "complete" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
-                .or_else(|| read_active_task_id(&repo_root))
+                .or_else(|| read_primary_task_id(&repo_root))
                 .ok_or_else(|| {
                     "framework_goal_drive complete requires task_id or active_task.json"
                         .to_string()
@@ -939,7 +946,7 @@ pub(crate) fn strip_followup_paragraphs_with_line_prefix(
 fn clear_goal_state(repo_root: &Path, task_id_override: Option<&str>) -> Result<Value, String> {
     let task_id = task_id_override
         .map(|s| s.to_string())
-        .or_else(|| read_active_task_id(repo_root))
+        .or_else(|| read_primary_task_id(repo_root))
         .ok_or_else(|| {
             "framework_goal_drive clear requires task_id or active_task.json".to_string()
         })?;
@@ -966,7 +973,7 @@ fn resume_goal_running(
 ) -> Result<Value, String> {
     let task_id = task_id_override
         .map(|s| s.to_string())
-        .or_else(|| read_active_task_id(repo_root))
+        .or_else(|| read_primary_task_id(repo_root))
         .ok_or_else(|| {
             "framework_goal_drive requires task_id or active_task.json".to_string()
         })?;
@@ -988,9 +995,8 @@ fn resume_goal_running(
         seq: None,
         schema_version: Some(1),
     };
-    if let Err(e) = crate::task_ledger::append_transaction(repo_root, &task_id, tx) {
-        eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
-    }
+    crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
+        .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
     invalidate_route_records_cache_on_write();
     let rfv_loop_superseded =
         crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
@@ -1014,7 +1020,7 @@ fn set_terminal_flags(
 ) -> Result<Value, String> {
     let task_id = task_id_override
         .map(|s| s.to_string())
-        .or_else(|| read_active_task_id(repo_root))
+        .or_else(|| read_primary_task_id(repo_root))
         .ok_or_else(|| {
             "framework_goal_drive requires task_id or active_task.json".to_string()
         })?;
@@ -1043,9 +1049,8 @@ fn set_terminal_flags(
         seq: None,
         schema_version: Some(1),
     };
-    if let Err(e) = crate::task_ledger::append_transaction(repo_root, &task_id, tx) {
-        eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
-    }
+    crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
+        .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
     invalidate_route_records_cache_on_write();
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     Ok(json!({
@@ -1722,7 +1727,7 @@ mod tests {
     }
 
     #[test]
-    fn hydration_does_not_fallback_from_corrupt_active_to_focus_goal() {
+    fn hydration_falls_back_to_focus_when_active_goal_corrupt() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1752,10 +1757,9 @@ mod tests {
         )
         .expect("focus goal");
         let got = read_goal_state_for_hydration(&repo).expect("hydr");
-        assert!(
-            got.is_none(),
-            "non-empty corrupt active pointer must not fallback to focus"
-        );
+        let (g, tid) = got.expect("focus fallback when active GOAL unreadable");
+        assert_eq!(tid, "old-focus");
+        assert_eq!(g["goal"], json!("stale focus"));
         let _ = fs::remove_dir_all(&repo);
     }
 

@@ -44,7 +44,7 @@ configs/framework/
 ├── GENERATED_ARTIFACTS.json          # Generated artifact registry
 ├── host_projection_narrative.json    # My lifecycle + review findings-only install copy
 ├── HARNESS_*.json                    # Harness configuration
-├── RUNTIME_REGISTRY.json             # Runtime registry (disk-loaded by registry_loader)
+├── RUNTIME_REGISTRY.json             # Runtime registry (disk-loaded by runtime_registry/mod.rs)
 ├── RUNTIME_PROVIDER_REGISTRY.json    # Provider registry
 ├── NL_ROUTE_ADJUSTMENTS.json         # Natural language route adjustments
 ├── ROUTER_RS_HOOK_OBSERVATION_RULES.json

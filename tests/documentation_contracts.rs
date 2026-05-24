@@ -243,6 +243,50 @@ fn runtime_plugin_contract_freezes_plugin_abi_and_health_loop() {
 }
 
 #[test]
+fn host_and_contract_docs_avoid_stale_codex_and_planx_wording() {
+    let root = project_root();
+    let mut paths = vec![
+        "docs/host_adapter_contract.md".to_string(),
+        "docs/rust_contracts.md".to_string(),
+        "AGENTS_CLAUDE.md".to_string(),
+    ];
+    let hosts_dir = root.join("docs/hosts");
+    if hosts_dir.is_dir() {
+        for entry in std::fs::read_dir(&hosts_dir).expect("read docs/hosts") {
+            let entry = entry.expect("hosts dir entry");
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                paths.push(
+                    path.strip_prefix(&root)
+                        .expect("host doc under repo root")
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+    }
+    paths.sort();
+    paths.dedup();
+
+    let joined = paths
+        .iter()
+        .map(|rel| read_text(&root.join(rel)))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        !joined.contains("AGENTS.md bootstrap"),
+        "stale Codex bootstrap wording in host/contract docs"
+    );
+
+    let planx_impl = Regex::new(r"(?is)/planx[^\n]{0,400}implementation_plan\.md").unwrap();
+    assert!(
+        !planx_impl.is_match(&joined),
+        "stale /planx + implementation_plan.md pairing in host/contract docs"
+    );
+}
+
+#[test]
 fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
     let root = project_root();
     let scoped_docs = [
@@ -279,6 +323,24 @@ fn runtime_compaction_contract() -> String {
 
 fn rust_contracts_doc() -> String {
     read_text(&project_root().join("docs/rust_contracts.md"))
+}
+
+#[test]
+fn harness_policy_map_documents_ship_readiness_stop_orchestration() {
+    let policy = read_text(&project_root().join("docs/harness_policy_map.md"));
+    assert!(
+        policy.contains("ship_readiness.rs"),
+        "harness_policy_map must name ship_readiness.rs as Cursor Stop goal disk source"
+    );
+    assert!(
+        policy.contains("handlers_stop.inc.rs"),
+        "harness_policy_map must reference Stop handler orchestration"
+    );
+    let arch = read_text(&project_root().join("docs/harness_architecture.md"));
+    assert!(
+        arch.contains("ship_readiness") || arch.contains("AG_FOLLOWUP"),
+        "harness_architecture must document Stop goal/closeout layering"
+    );
 }
 
 fn load_sandbox_contract_schema() -> Value {

@@ -23,6 +23,7 @@
 3. **控制面互斥**：`TaskControlMode` 在视图中显式分类：`idle` / `autopilot` / `rfv_loop` / `conflict`（GOAL 续跑与 RFV `loop_status=active` 同时成立时标记冲突，并附 `resolution_notes`）。**术语**：`autopilot` / `autopilot_goal` 为 **Rust 内部模块与 ledger kind 名**，**不是**已退役的 `/autopilot` 斜杠；用户执行入口为 **`/implementx`** + `framework_goal_drive` stdio。当 `GOAL_STATE.json` 或 `RFV_LOOP_STATE.json` **不可解析**（读盘/JSON 失败）时，`resolve_task_view` 在 `resolution_notes` 填入 `*_read_failed` 短句，`goal_state` / `rfv_loop_state` 字段为 `null`，区别于「文件缺失」。
 4. **性能**：本地小 JSON、低频 hook；聚合为内存操作。若未来需要缓存，仅在单 hook 进程内按 `mtime` 短路。
 5. **适配器保持薄**：Cursor/Codex 仅 stdin/out；不在本文件写宿主策略长文。
+6. **GOAL 写路径**：`GOAL_STATE.json` 的 mutating 真源为 **`framework_goal_drive` stdio**（经 `task_write_lock` + `TASK_LEDGER.jsonl`）；My 四命令 skill **禁止**代理直接 `Write` 整文件。Hook/Stop 只读盘上 GOAL + `EVIDENCE_INDEX`。
 
 ---
 
@@ -70,8 +71,9 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework ta
 
 ## 6. 代码真源
 
-- 读模型 / frame：`scripts/router-rs/src/task_state.rs`
+- 读模型 / frame：`scripts/router-rs/src/task_state.rs`（含 `hydrate_task_state_hybrid`：先读 `TASK_STATE.json` 投影，再 replay `TASK_LEDGER.jsonl` 中 `seq > last_seq` 的 tail）
 - 阶段 3 投影刷新：`scripts/router-rs/src/task_state_aggregate.rs`
+- Ledger append-only 审计：`scripts/router-rs/src/task_ledger.rs`（`TASK_LEDGER.jsonl`；replay 支持的 `tx_type`：`goal_state`、`rfv_loop_state`、`evidence`；`step` 等其它类型当前不 replay 进读模型）
 - 命名写分发（2.5）：`scripts/router-rs/src/task_command.rs`
 - 写串行：`scripts/router-rs/src/task_write_lock.rs`
 - GOAL 续跑判定复用：`autopilot_goal::goal_state_requests_continuation`

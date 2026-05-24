@@ -12,11 +12,11 @@ argument-hint: "[framework task...]"
 
 Use `$framework` semantics via the Rust-owned shared core.
 
-**Default lifecycle: My** (same chain). Goal/RFV via `framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` manual boards only; Codex hooks do not inject continuity digest, `GOAL_CONTINUE`, or `RFV_LOOP_CONTINUE`.
+**Default lifecycle: My** (same chain). Goal/RFV via `framework_goal_drive` / `framework_rfv_loop` stdio + manual boards only; no continuity digest or GOAL_CONTINUE/RFV_LOOP_CONTINUE on hooks.
 
-**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply; my-light profile does not hard-block Stop on REVIEW_GATE. See `skills/code-review-deep/SKILL.md`.
+**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply at skill layer; under `my-light`, Cursor/Codex hooks do not hard-block Stop on REVIEW_GATE or inject spawn-first nudge. See `skills/code-review-deep/SKILL.md`.
 
-1) Start from `AGENTS.md`.
+1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `AGENTS_CODEX.md`。
 2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.
 3) Read only the matched `skill_path`.
 

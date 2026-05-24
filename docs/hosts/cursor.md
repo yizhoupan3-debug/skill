@@ -15,13 +15,13 @@
 
 - **Harness 核心入口**：
   - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
-  - **任务状态治理**：使用 `goal_state_manage` 进行状态的启动与收尾管理。
+  - **任务状态治理**：`framework_goal_drive` stdio（及 MCP `goal_state_manage`）写 `GOAL_STATE.json`；Cursor **Stop** hook 用同一 `resolve_cursor_continuity_frame` / hydration 指针选 task，**不**单独扫 orphan。
 - **工作区及状态产物**：
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
   - 结合 `beforeSubmitPrompt`、`stop`、`subagentStart`/`subagentStop`、`postToolUse`、`sessionStart`/`sessionEnd` 等 7 个核心事件进行行为守卫。
-  - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
+  - **默认 `lifecycle_profile: my-light`**：Stop **不**硬拦 `REVIEW_GATE`，`beforeSubmitPrompt` **不**注入 spawn-first nudge；findings-only review 仍可用。非 my-light 时 UPS 可注入 spawn-first，Stop 可走硬 `REVIEW_GATE`（见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)）。
 
 ## Hook 事件矩阵
 
@@ -30,7 +30,7 @@
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
-| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../scripts/router-rs/src/hosts/cursor_hooks/mod.rs) | `REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`、`SESSION_CLOSE_STYLE` 等；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
+| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../scripts/router-rs/src/hosts/cursor_hooks/mod.rs) | **my-light Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 my-light 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
 | **SessionStart** | SessionStart | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` / 可选 `SESSION_SUMMARY`；**无** continuity digest。`ROUTER_RS_OPERATOR_INJECT=0` 关闭其余 advisory |
 | **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | **metadata-only** `generated-artifacts-status`；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时打印 WARN |
 
@@ -72,9 +72,9 @@
 $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \longrightarrow \text{Verify}$$
 
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
-2. **`/planx`**：规划阶段，生成或更新 `implementation_plan.md`，明确 minimal delta 与 verification plan，并报用户审批。
+2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](../../skills/planx/SKILL.md)），明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
-   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`。在此配置下将关闭 `REVIEW_GATE` 硬拦截和 spawn-first nudge，采用 findings-only 机制，保持极佳的轻量化流畅体验。
+   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`（关闭 Stop 上 `REVIEW_GATE` 硬拦与 UPS spawn-first nudge；findings-only review 仍可用）。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
 
 ## Python 环境治理 (Python Environment)

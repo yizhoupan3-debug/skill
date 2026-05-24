@@ -2,7 +2,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let frame = crate::task_state::resolve_cursor_continuity_frame(repo_root);
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
-        let (allow_continue, followup) = lock_failure_followup_for_before_submit(event);
+        let (allow_continue, followup) = lock_failure_followup_for_before_submit(repo_root, event);
         let mut out = json!({ "continue": allow_continue });
         if !allow_continue {
             out["followup_message"] = Value::String(followup);
@@ -17,15 +17,12 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     if let Err(ref load_err) = state_load {
         release_state_lock(&mut lock);
         let path = state_path(repo_root, event);
-        let mut out = json!({ "continue": true });
-        merge_additional_context(
-            &mut out,
-            &format!(
-                "{} (path {}, err={load_err}). Repair JSON or permissions before continuing.",
-                CURSOR_HOOK_STATE_UNREADABLE,
-                path.display()
-            ),
-        );
+        let mut out = json!({ "continue": false });
+        out["followup_message"] = Value::String(format!(
+            "{} (path {}, err={load_err}). Repair JSON or permissions before submitting.",
+            CURSOR_HOOK_STATE_UNREADABLE,
+            path.display()
+        ));
         return out;
     }
     let mut state = state_load.ok().flatten().unwrap_or_else(empty_state);
@@ -60,22 +57,36 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     }
     state.review_override = state.review_override || user_gate_override;
     state.delegation_override = state.delegation_override || user_gate_override;
-    state.goal_required = state.goal_required || goal_drive_entrypoint;
-    state.goal_contract_seen =
-        state.goal_contract_seen || has_structured_goal_contract(&signal_text);
-    state.goal_progress_seen = state.goal_progress_seen || has_goal_progress_signal(&signal_text);
-    state.goal_verify_or_block_seen =
-        state.goal_verify_or_block_seen || has_goal_verify_or_block_signal(&signal_text);
+    if goal_drive_entrypoint {
+        state.goal_drive_entry_active = true;
+    }
+    state.goal_required =
+        state.goal_required || (goal_drive_entrypoint && !my_light);
+    let disk_goal = frame.hydration_goal.is_some();
+    if !disk_goal {
+        state.goal_contract_seen =
+            state.goal_contract_seen || has_structured_goal_contract(&signal_text);
+        state.goal_progress_seen =
+            state.goal_progress_seen || has_goal_progress_signal(&signal_text);
+        state.goal_verify_or_block_seen = state.goal_verify_or_block_seen
+            || has_goal_verify_or_block_signal(&signal_text);
+    }
     // 用户在本轮提交里写出 reject_reason token 时须即时生效；否则仅能在助手回复或 Stop 里识别，导致 autopilot pre-goal 与 AG_FOLLOWUP 循环。
     // `signal_text` 含整树字符串，覆盖仅出现在 `messages[].content` 等深层路径的 token。
     if saw_reject_reason(&signal_text, &text) {
         state.reject_reason_seen = true;
-        if state.goal_required {
+        if tracks_goal_or_drive_entry(&state) {
             state.pre_goal_review_satisfied = true;
         }
         clear_review_gate_escalation_counters(&mut state);
     }
-    hydrate_goal_gate_from_disk(repo_root, &mut state, false, &frame);
+    hydrate_goal_gate_from_disk(
+        repo_root,
+        &mut state,
+        false,
+        &frame,
+        goal_drive_entrypoint,
+    );
     if review || delegation || goal_drive_entrypoint {
         state.last_prompt = Some(text.chars().take(500).collect());
     }
@@ -87,7 +98,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     // Review：首次武装门控时注入默认「深度+广度」契约指针（短）；相位仍只靠 subagent/PostToolUse（仅 review_hard_armed）。
     let needs_autopilot_pre_goal =
         crate::router_env_flags::router_rs_cursor_autopilot_pre_goal_enabled()
-            && state.goal_required
+            && tracks_goal_or_drive_entry(&state)
             && !state.pre_goal_review_satisfied
             && !is_overridden(&state)
             && !state.reject_reason_seen;
@@ -109,7 +120,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
             Some(repo_root),
             "cursor",
         );
-    if state.goal_required
+    if tracks_goal_or_drive_entry(&state)
         && !my_light
         && !cursor_review_gate_suppressed(repo_root, &text)
         && (review_arms_for_gate || (review && goal_drive_entrypoint))

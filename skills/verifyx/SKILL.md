@@ -3,9 +3,9 @@ name: verifyx
 description: |
   Personal lifecycle — verify + ship in one command. Evidence index, tests, closeout, goal complete.
   Use after /implementx. Merges legacy verify-work and ship checklists.
-routing_layer: L1
+routing_layer: L0
 routing_owner: owner
-routing_gate: evidence
+routing_gate: none
 routing_gate_evidence: "WAVE_STATE.json global_status=completed"
 routing_priority: P1
 session_start: n/a
@@ -35,7 +35,7 @@ metadata:
 
 - Git clean / intentional uncommitted documented
 - `closeout_evaluate` stdio（或 CLI `router-rs closeout evaluate --record-path artifacts/closeout/<task_id>.json`）→ 写入 closeout record（**embed** evidence rows / verify summary before purge）
-- `GOAL_STATE` → `status: completed`, `drive_until_done: false`
+- `framework_goal_drive` → `operation: complete` (sets `status: completed`, `drive_until_done: false`) — **not** a raw `Write` on `GOAL_STATE.json`
 - Closeout `notes` may record purge intent (e.g. `task_artifacts_purged; task_dir_removed`) — **not** separate schema fields; `CLOSEOUT_RECORD_SCHEMA.json` / `CloseoutRecord` use `deny_unknown_fields`
 
 ### 3. Post-verify task-dir purge (**mandatory**, every my-lifecycle task)

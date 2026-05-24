@@ -48,7 +48,7 @@ L1  Executable verification and exit codes
 
 | 真源 | 用途 |
 |------|------|
-| [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) | 闭集宿主、`review_gate.deep_gate_lanes`、profile 投影；**运行时**经 [`registry_loader.rs`](../scripts/router-rs/src/registry_loader.rs) 从磁盘读取（**非** `include_str!` 嵌入）。读盘失败时 lane 判定 **fail-closed**（不计入深度 lane）；`framework doctor` 探测 snapshot。改 lane 后重启 hook 子进程即可，**无需** `cargo build`。 |
+| [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) | 闭集宿主、`review_gate.deep_gate_lanes`、profile 投影；**运行时**经 [`runtime_registry/mod.rs`](../scripts/router-rs/src/runtime_registry/mod.rs) 从磁盘读取（`registry_loader.rs` 仅为 re-export shim；**非** `include_str!` 嵌入）。读盘失败时 lane 判定 **fail-closed**（不计入深度 lane）；`framework doctor` 探测 snapshot。改 lane 后重启 hook 子进程即可，**无需** `cargo build`。 |
 | [`configs/framework/host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) | 各宿主 framework 投影内的 **My lifecycle 默认链** 与 **review findings-only** 英文段落；`framework host-integration install` 渲染时读取。叙事政策仍以 [`AGENTS.md`](../AGENTS.md) 为跨宿主真源，本 JSON 仅为安装产物文案真源。 |
 | [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) | 声明须纳入版本库的生成物路径、generator 命令与 `compare` 模式（`byte-for-byte` / `normalized-text`）。 |
 
@@ -56,7 +56,7 @@ L1  Executable verification and exit codes
 
 | 模式 | 触发 | 行为 |
 |------|------|------|
-| **metadata-only** | `framework doctor`（默认）；CLI `--skip-generator-run`；env `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` | 不跑 manifest generator；检查声明路径存在、forbidden marker、undeclared/missing required；`manifest_status.mode` = `manifest-backed-generated-artifact-metadata-only`。 |
+| **metadata-only** | `framework doctor`（默认）；CLI `--skip-generator-run`；env `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` | 不跑 manifest generator；检查声明路径存在、forbidden marker、undeclared 路径与 per-artifact `clean`；`manifest_status.mode` = `manifest-backed-generated-artifact-metadata-only`。 |
 | **drift-gate（全量）** | `framework maint update-one-shot`；显式全量探针 | 在隔离 temp root 执行声明 generator（含 `host-integration install` 等慢步骤，默认单 generator **300s** 超时，可用 `ROUTER_RS_GENERATOR_TIMEOUT_SECONDS` 覆盖），再 byte/normalized 对比 checked-in 与再生副本。 |
 
 集成测试与日常 `doctor` 应使用 **metadata-only**；提交前维护流仍须至少一次 **drift-gate** 绿（见 [`skills/update/SKILL.md`](../skills/update/SKILL.md)）。
@@ -135,15 +135,15 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 - **合并**：各 hook handler 通过 [`merge_additional_context`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs) 将 advisory 段落追加进出站 JSON 的 `additional_context` 字符串（多事件可达多次追加）。
 - **出站裁剪**：Cursor CLI 入口 [`review_gate.rs`](../scripts/router-rs/src/review_gate.rs) 在写出 stdout 前调用 [`apply_cursor_hook_output_policy`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs)：对 `additional_context` 与超长 `followup_message` 使用 **`truncate_cursor_hook_outbound_context_preserving_gate`** / **`truncate_cursor_hook_followup_preserving_review_gate`** — UTF-8 字节上限取自 **`ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`**（[`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs) ，默认 8192，clamp 1024–65536）；超长时 **优先保留** 含 `router-rs REVIEW_GATE`、`REVIEW_GATE detail` 前缀的行，对其余 filler 做前缀截断并以固定 **`...[~trunc]`** 结束（见 §5 环境变量表脚注）。仍建议将硬门控信息放在 `followup_message` 的 `router-rs …` 行。
-- **对照**：Codex `additionalContext` 另有字节上限（[`codex_hooks.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) `truncate_codex_additional_context_bytes`）；两套宿主互不替代。
+- **对照**：Codex `additionalContext` 另有字节上限（[`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) `truncate_codex_additional_context_bytes`）；两套宿主互不替代。
 
 ### 4.3 仿宿主续跑行（`RG_FOLLOWUP` 等）与机读真源
 
 - Cursor hook 出站 JSON 中，**深度审稿未完成**与 **Autopilot goal 缺块** 所依赖的机读 leader 真源为 **`router-rs REVIEW_GATE incomplete …`**、**`router-rs AG_FOLLOWUP missing_parts=…`**（均须以 ASCII 前缀 **`router-rs `** 起行；实现见 [`cursor_hooks/handlers.rs`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs)）。审稿链未收尾时以 **`router-rs REVIEW_GATE incomplete`** 行内 `need=`、`hint=` 排障。
 - **其它**由本仓库注入的软提示（如 **`CLOSEOUT_FOLLOWUP`、`SESSION_CLOSE_STYLE`** 等）仍按该列表及各自字段形态识别；历史 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 行若出现在旧会话 scrape 中，**不是**当前 harness 注入。
-- **`RG_FOLLOWUP`、`RG FOLLOWUP`、`RG-FOLLOWUP`**，以及**无** `router-rs ` 前缀、却仿照 `*_FOLLOWUP` 与 `missing_parts=` / `escalation=` 组合的整行，**不是**本 harness 的注入格式；常见来源为助手复述或误粘贴。真源里 **`router-rs AG_FOLLOWUP` 的 `missing_parts=`** 仅由 `goal_contract`、`checkpoint_progress`、`verification_or_blocker` 等片段逗号拼接（见同文件 `goal_missing_parts`），**不会出现** `independent_subagent_or_reject_reason` 这类占位串。
+- **`RG_FOLLOWUP`、`RG FOLLOWUP`、`RG-FOLLOWUP`**，以及**无** `router-rs ` 前缀、却仿照 `*_FOLLOWUP` 与 `missing_parts=` / `escalation=` 组合的整行，**不是**本 harness 的注入格式；常见来源为助手复述或误粘贴。真源里 **`router-rs AG_FOLLOWUP` 的 `missing_parts=`** 由 [`ship_readiness.rs`](../scripts/router-rs/src/ship_readiness.rs) 拼接，并附 **`primary_fix=`**；盘上已有 `GOAL_STATE` 时 Stop **不**再读聊天 `Goal:` 标题。不会出现 `independent_subagent_or_reject_reason` 这类占位串。
 - **出站剥线**：[`review_gate.rs`](../scripts/router-rs/src/review_gate.rs) 写出 stdout 前对 `followup_message` / `additional_context` 调用 [`scrub_followup_fields_in_hook_output`](../scripts/router-rs/src/autopilot_goal.rs)；[`merge_additional_context`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs) 在合并追加时亦对片段与整段复用 `scrub_spoof_host_followup_lines`。助手**聊天可见正文**不经该剥线，故仍可能看到仿造行——判读时 **优先** 核对 **`router-rs …` 审稿/goal 行** 与 **`.cursor/hook-state` / 磁盘门控**；**不排除** 同字段内 §4 所列其它真源短码段落。
-- **Codex**：`additionalContext` 的截断与注入形态以 [`codex_hooks.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) 及上文 **§4.2「对照」** 为准，与 Cursor 出站 **不互为替身**。
+- **Codex**：`additionalContext` 的截断与注入形态以 [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) 及上文 **§4.2「对照」** 为准，与 Cursor 出站 **不互为替身**。
 - **清门**：不得以整段会话 scrape 误认拒因；[`saw_reject_reason`](../scripts/router-rs/src/hook_common.rs) 仅承认：`signal_text` 中的拒因 token、单独成行的 `rg_clear` / `/rg_clear`，以及**用户本轮**粘贴的 **goal** `ag_followup…` 前缀行。**用户粘贴 `RG_FOLLOWUP…` 不作为合法清门**（与上条「仿冒」一致）；曾依赖旧行为时请改用 `rg_clear` 或拒因 token。
 
 ## 5. 开关面
@@ -156,7 +156,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 - **Lane 闭集**：`configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes`（Cursor/Codex）；Claude 另见 `claude_reviewer_lanes`。跨宿主差异表：[`host_adapter_contract.md`](host_adapter_contract.md) §0.1。
 - **机器判定**：[`hook_common.rs`](../scripts/router-rs/src/hook_common.rs) `is_deep_review_gate_lane_normalized`；`fork_context` 解析：[`review_gate_engine.rs`](../scripts/router-rs/src/review_gate_engine.rs) `fork_context_from_values`。
-- **状态机实现**：Cursor multiset — [`cursor_hooks/handlers.rs`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs) `ReviewGateState`；Codex phase — [`codex_hooks.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) `CodexLifecycleContextState`；Claude — [`claude_hooks.rs`](../scripts/router-rs/src/hosts/claude_hooks.rs)。
+- **状态机实现**：Cursor multiset — [`cursor_hooks/handlers.rs`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs) `ReviewGateState`；Codex phase — [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) `CodexLifecycleContextState`；Claude — [`claude_hooks.rs`](../scripts/router-rs/src/hosts/claude_hooks.rs)。
 - **透镜与产出形状**：[`skills/code-review-deep/SKILL.md`](../skills/code-review-deep/SKILL.md)（本文件不展开 checklist）。
 - **应急关闭**：`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` / `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE`（见下表）。
 
@@ -243,10 +243,10 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | L2 continuity | `artifacts/current/`、`TRACE_EVENTS.jsonl`、`STEP_LEDGER.jsonl`、`configs/framework/*SCHEMA*` |
 | Skill 热路由（router-rs hot path） | `skills/SKILL_ROUTING_RUNTIME.json` |
 | Skill 伴生元数据（**非**每 prompt 热路径；`SKILL_PLUGIN_CATALOG` / `SKILL_ROUTING_RUNTIME_EXPLAIN` 由 refresh / policy / CI 消费；**`SKILL_ROUTING_METADATA.json` 在 `load_records_from_runtime` 时 merge**，见 `route/records.rs` `merge_sidecar_route_metadata_from_runtime`） | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`（EXPLAIN：CI/companion/人读，router route 模块不读） |
-| Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `scripts/router-rs/src/registry_loader.rs` |
+| Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `scripts/router-rs/src/runtime_registry/mod.rs`（shim：`registry_loader.rs`） |
 | 宿主投影 My/review 文案 | `configs/framework/host_projection_narrative.json` |
 | 生成物 manifest / drift | `configs/framework/GENERATED_ARTIFACTS.json` + `framework host-integration generated-artifacts-status` |
-| 任务 schema drift / Cursor hooks 减法闭集 | `scripts/router-rs/src/schema_drift.rs`、`cursor_hooks/subtraction.rs`；CLI `router-rs schema-drift {contract,baseline,check}` |
+| 任务 schema drift / Cursor hooks 减法闭集 | `scripts/router-rs/src/schema_drift.rs`、`hosts/cursor_hooks/subtraction.rs`；CLI `router-rs schema-drift {contract,baseline,check}` |
 | 弱模型 / 上下文预算调研索引 | 见 `skills/SKILL_ROUTING_RUNTIME.json` 的 hot/cold 分布，或运行 `router-rs eval route` |
 | 全面自检清单（减法审计，非合并门槛） | 运行 `router-rs framework maint update-audit --repo-root .` |
 

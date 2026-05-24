@@ -112,7 +112,7 @@ jobs:
           if not status.get("ok"):
               print(json.dumps(status.get("manifest_status", {}), ensure_ascii=False, indent=2))
               for artifact in status.get("generated_artifacts", []):
-                  if artifact.get("status") != "ok":
+                  if artifact.get("clean") is False or artifact.get("drifted") is True:
                       print(json.dumps(artifact, ensure_ascii=False, indent=2))
               sys.exit(1)
           print("generated-artifacts-status: ok")

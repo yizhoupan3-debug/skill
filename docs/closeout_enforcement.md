@@ -183,8 +183,8 @@ closeouts is intentionally low.
 
 ## Hook integration（已接线）
 
-- **Codex Stop** — 在 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 硬 tier（CI 或显式开启）且助手宣称完成时：`decision: block` + `CLOSEOUT_FOLLOWUP`（见 `codex_hooks.rs`）。
-- **Cursor Stop** — 同源评估（`closeout_stop_followup_for_completion_text`）；硬 tier 注入 `followup_message`；本地 solo 默认**软** tier（unset 且非 CI 可不附 record）。
+- **Codex Stop** — 在 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 硬 tier（CI 或显式开启）且助手宣称完成时：`decision: block` + `CLOSEOUT_FOLLOWUP`（见 `hosts/codex_hooks/mod.rs`）。
+- **Cursor Stop** — 同源评估（`stop_hard_closeout_followup_for_assistant_response` → `closeout_followup_for_completion_claim`；task id 与 hydration 指针一致）；硬 tier 注入 `followup_message`；本地 solo 默认**软** tier（unset 且非 CI 可不附 record）。
 - **Session write** — `write_framework_session_artifacts` 在硬 tier 下可拒写（`enforce_closeout_for_session_payload`）。
 
 CLI / stdio `closeout evaluate` 仍为裁判真源；hook 为投影，见 [`harness_architecture.md`](harness_architecture.md) §3.2。

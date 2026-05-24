@@ -113,7 +113,7 @@ violations={}\nmissing_evidence={}\n\
     )))
 }
 
-/// Strict closeout：**助手回复文本**中出现完成宣称且存在 `active_task` 时的硬 Stop 文案（与 `dispatch`/`handle_stop` 共用，避免分叉）。
+/// Strict closeout：**助手回复文本**中出现完成宣称且存在 continuation task（与 hydration 同指针语义）时的硬 Stop 文案（与 `dispatch`/`handle_stop` 共用，避免分叉）。
 ///
 /// `Err(evaluator)` 与 `Ok(Some(..))` 均返回 `Some`；未宣称完成、`Ok(None)` 或无 task 时返回 `None`。
 fn stop_hard_closeout_followup_for_assistant_response(
@@ -123,8 +123,9 @@ fn stop_hard_closeout_followup_for_assistant_response(
     if !completion_claimed_in_text(response_text) {
         return None;
     }
-    let tid = crate::task_state::resolve_task_view(repo_root, None)
-        .task_id
+    let tid = crate::task_state::resolve_cursor_continuity_frame(repo_root)
+        .hydration_goal
+        .map(|(_, task_id)| task_id)
         .filter(|s| !s.is_empty())?;
     match closeout_followup_for_completion_claim(repo_root, &tid) {
         Ok(Some(msg)) => Some(msg),
@@ -177,11 +178,15 @@ fn goal_progress_re() -> &'static Regex {
 fn goal_verify_or_block_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
-            r"(?i)\b(verified|verification|test passed|blocker)\b|(已验证|验证通过|测试通过|阻塞)",
-        )
-        .expect("invalid regex")
+        Regex::new(r"(?i)\b(verified|verification|test passed|blocker)\b|(已验证|阻塞)")
+            .expect("invalid regex")
     })
+}
+
+fn goal_chat_verify_zh_signal(text: &str) -> bool {
+    crate::hook_common::GOAL_CHAT_VERIFY_ZH_PHRASES
+        .iter()
+        .any(|p| text.contains(p))
 }
 
 /// Task/subagent 调用里明示 `fork_context: true` 时视为与主会话共享上下文，不满足 autopilot 要求的「独立上下文」预检。
@@ -325,7 +330,7 @@ fn has_goal_progress_signal(text: &str) -> bool {
 }
 
 fn has_goal_verify_or_block_signal(text: &str) -> bool {
-    goal_verify_or_block_re().is_match(text)
+    goal_verify_or_block_re().is_match(text) || goal_chat_verify_zh_signal(text)
 }
 
 /// Task/subagent 工具载荷上的类型字段（与 Codex `codex_subagent_type_evidence` 对齐）：部分宿主用 `type` 代替 `subagent_type`。
@@ -467,6 +472,9 @@ pub struct ReviewGateState {
     pub review_followup_count: u32,
     pub goal_followup_count: u32,
     pub goal_required: bool,
+    /// `/implementx|/verifyx` 本轮已武装（my-light 下可不设 `goal_required` 但仍跟踪 pre-goal）。
+    #[serde(default)]
+    pub goal_drive_entry_active: bool,
     pub goal_contract_seen: bool,
     pub goal_progress_seen: bool,
     pub goal_verify_or_block_seen: bool,
@@ -1504,6 +1512,7 @@ fn empty_state() -> ReviewGateState {
         review_followup_count: 0,
         goal_followup_count: 0,
         goal_required: false,
+        goal_drive_entry_active: false,
         goal_contract_seen: false,
         goal_progress_seen: false,
         goal_verify_or_block_seen: false,
@@ -1766,6 +1775,9 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
     if !compact_bump_review_evidence_seen(state) {
         return false;
     }
+    if !state.review_subagent_pending_cycle_keys.is_empty() {
+        return false;
+    }
     if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
         assistant_tail,
     ) {
@@ -1778,7 +1790,8 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
 
 /// Stop 硬门控（REVIEW_GATE / AG_FOLLOWUP）与 My/RFV 续跑注入互斥。
 fn stop_hard_gate_blocks_continuity_merge(state: &ReviewGateState) -> bool {
-    review_stop_followup_needed(state) || (state.goal_required && !goal_is_satisfied(state))
+    review_stop_followup_needed(state)
+        || (tracks_goal_or_drive_entry(state) && !goal_is_satisfied(state))
 }
 
 /// Stop / 观测 fixture 共用的 `need=` 段（前缀仍须含 `REVIEW_GATE` 供 `router_rs_observation` 分类）。
@@ -1838,8 +1851,12 @@ fn is_overridden(state: &ReviewGateState) -> bool {
     state.review_override || state.delegation_override
 }
 
+fn tracks_goal_or_drive_entry(state: &ReviewGateState) -> bool {
+    state.goal_required || state.goal_drive_entry_active
+}
+
 fn goal_is_satisfied(state: &ReviewGateState) -> bool {
-    if !state.goal_required {
+    if !tracks_goal_or_drive_entry(state) {
         return true;
     }
     // 全局 override（例如不要用子代理）仍可跳过整套 gate。
@@ -1876,7 +1893,7 @@ fn maybe_autopilot_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Opti
     if !crate::router_env_flags::router_rs_cursor_autopilot_pre_goal_enabled() {
         return None;
     }
-    if !state.goal_required
+    if !tracks_goal_or_drive_entry(state)
         || state.pre_goal_review_satisfied
         || is_overridden(state)
         || state.reject_reason_seen
@@ -2188,15 +2205,16 @@ fn clear_review_gate_escalation_counters(state: &mut ReviewGateState) {
 /// Reset review-cycle progress (phase / pending / subagent counters). Parity with Codex UPS
 /// when my-light disarms review, goal drive suppresses review, or a fresh deep-review cycle starts.
 ///
-/// When `preserve_session_guards` is true (fresh deep-review re-arm), retain open-subagent count
-/// and pending-cap refusal so `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` cannot be bypassed via UPS.
+/// When `preserve_session_guards` is true (fresh deep-review re-arm), retain pending-cap refusal
+/// so `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` cannot be bypassed via UPS. Open-subagent count
+/// always resets on re-arm (P1-16: stale count without matching subagentStop).
 fn reset_review_cycle_progress(state: &mut ReviewGateState, preserve_session_guards: bool) {
     state.phase = 0;
     state.subagent_start_count = 0;
     state.subagent_stop_count = 0;
+    state.active_subagent_count = 0;
+    state.active_subagent_last_started_at = None;
     if !preserve_session_guards {
-        state.active_subagent_count = 0;
-        state.active_subagent_last_started_at = None;
         state.review_pending_cap_refused = false;
     }
     state.review_subagent_pending_cycle_keys.clear();
@@ -2209,21 +2227,11 @@ fn reset_review_cycle_progress(state: &mut ReviewGateState, preserve_session_gua
 const CURSOR_REVIEW_MY_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时包含「代码审查 / review」信号与 My 执行区入口（`/implementx`、`/verifyx`）；门控下 **不会** 在本回合因 review 措辞新武装 `REVIEW_GATE`。若需先跑独立审稿，请拆开用户消息（先发 review-only，再发 `/implementx`）或先落盘 `GOAL_STATE`。详见 `docs/framework_operator_primer.md`。";
 
 /// `GOAL_STATE` 列表字段是否含至少一条非空字符串（避免 `[""]` 这种伪非空数组）。
-fn goal_state_list_any_nonempty_string(goal: &Value, key: &str) -> bool {
-    match goal.get(key) {
-        Some(Value::Array(a)) => a
-            .iter()
-            .any(|v| v.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false)),
-        Some(Value::String(s)) => !s.trim().is_empty(),
-        _ => false,
-    }
-}
-
-/// 用 `GOAL_STATE.json` + `EVIDENCE_INDEX.json` 补全 goal 门控（只置 true，不收回），避免助手未写
-/// 「Goal / Checkpoint / verified」等关键词时 Stop 报 `AG_FOLLOWUP` 四项全缺。
+/// 用 `GOAL_STATE.json` + `EVIDENCE_INDEX.json` 补全 goal 门控（只置 true，不收回）；逻辑在 `ship_readiness.rs`。
 ///
-/// `arm_if_goal_file`：**Stop** 等收口路径传 `true`，在磁盘已有 GOAL 但 hook-state 未写 `goal_required` 时仍回补；
-/// **beforeSubmit** 传 `false`，避免普通消息因残留 GOAL 文件被误标为 autopilot。
+/// `arm_if_goal_file`：**Stop** 路径传 `true` 以便在 GOAL 被 purge 时清除陈旧的 `goal_required`；
+/// **不再**因盘上残留 GOAL 而武装 `goal_required`。
+/// **beforeSubmit** 传 `false`。
 ///
 /// **`pre_goal_review_satisfied`（磁盘旁路）**：在 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` 开启时
 /// **不**因仅存在磁盘 GOAL 而置真（beforeSubmit 与 Stop 均适用）；其余 goal 字段的 hydrate
@@ -2233,120 +2241,63 @@ fn hydrate_goal_gate_from_disk(
     state: &mut ReviewGateState,
     arm_if_goal_file: bool,
     frame: &crate::task_state::CursorContinuityFrame,
+    goal_drive_entrypoint: bool,
 ) {
-    if !state.goal_required && !arm_if_goal_file {
+    if !state.goal_required
+        && !arm_if_goal_file
+        && !goal_drive_entrypoint
+        && !state.goal_drive_entry_active
+    {
         return;
     }
     let Some((goal, task_id)) = frame.hydration_goal.as_ref() else {
+        // Stop-only: verifyx purge removes GOAL_STATE while hook-state may still carry
+        // `goal_required` from an earlier /implementx|/verifyx arm.
+        if arm_if_goal_file && state.goal_required {
+            state.goal_required = false;
+            state.goal_drive_entry_active = false;
+        }
         return;
     };
-    if arm_if_goal_file {
-        state.goal_required = true;
-    }
-    if !crate::router_env_flags::router_rs_cursor_pre_goal_strict_disk_enabled() {
+    if !crate::router_env_flags::router_rs_cursor_pre_goal_strict_disk_enabled()
+        && (state.goal_required || goal_drive_entrypoint)
+    {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
     }
-    let gtext = goal
-        .get("goal")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or("");
-    let has_goal_text = !gtext.is_empty();
-    let validation_nonempty = goal_state_list_any_nonempty_string(goal, "validation_commands");
-    let non_goals_nonempty = goal_state_list_any_nonempty_string(goal, "non_goals");
-    // Contract should be "deep enough" even when hydrated from disk: require non-empty goal,
-    // non-goals, validation commands, and done_when (with >=2 items).
-    let done_when_items = goal
-        .get("done_when")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .count()
-        })
-        .unwrap_or(0);
-    if has_goal_text && non_goals_nonempty && validation_nonempty && done_when_items >= 2 {
-        state.goal_contract_seen = true;
-    }
-    let checkpointed = goal
-        .get("checkpoints")
-        .and_then(Value::as_array)
-        .map(|a| !a.is_empty())
-        .unwrap_or(false);
-    let (evidence_rows, evidence_ok) =
-        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+    if state.goal_required || arm_if_goal_file || state.goal_drive_entry_active {
+        let readiness = crate::ship_readiness::evaluate_goal_readiness_from_disk(
             repo_root,
+            goal,
             task_id.as_str(),
         );
-    let st_raw = goal.get("status").and_then(Value::as_str).unwrap_or("");
-    let st_lc = st_raw.trim().to_ascii_lowercase();
-    // `running` 为真源默认；`in_progress` 偶见于外部模板；缺省 status 且已有 goal 文本则按进行中回补。
-    let active_like =
-        matches!(st_lc.as_str(), "running" | "in_progress") || (has_goal_text && st_lc.is_empty());
-    let disk_contract_signal = (done_when_items >= 2) && validation_nonempty && non_goals_nonempty;
-    // 进行中状态或磁盘契约字段：进展/验收由 GOAL_STATE 承载，Stop 不强求聊天关键词。
-    if checkpointed || evidence_rows || (has_goal_text && (disk_contract_signal || active_like)) {
-        state.goal_progress_seen = true;
-    }
-    let blocker = goal
-        .get("blocker")
-        .and_then(Value::as_str)
-        .map(|s| !s.trim().is_empty())
-        .unwrap_or(false);
-    // Tightened (review P0-C): plain "running goal with disk contract" is no longer enough to
-    // claim `verification_or_blocker`. Explicit signals required:
-    //   1) terminal status (blocked / completed / paused), OR
-    //   2) explicit blocker text, OR
-    //   3) at least one successful EVIDENCE_INDEX row, OR
-    //   4) a checkpoint already recorded (model wrote progress at least once).
-    // Without one of these, the gate stays open so the model is asked to either run a verifier
-    // command, post a blocker, or record a checkpoint before being treated as having "verified".
-    if matches!(st_lc.as_str(), "blocked" | "completed" | "paused")
-        || blocker
-        || evidence_ok
-        || checkpointed
-    {
-        state.goal_verify_or_block_seen = true;
-    }
-    // Pre-execution / planning: do not require L1 verification on Stop (P0-9 / solo subtraction).
-    let drive = goal.get("drive_until_done").and_then(Value::as_bool).unwrap_or(false);
-    if !drive && matches!(st_lc.as_str(), "planned" | "draft") {
-        state.goal_verify_or_block_seen = true;
+        if readiness.contract {
+            state.goal_contract_seen = true;
+        }
+        if readiness.progress {
+            state.goal_progress_seen = true;
+        }
+        if readiness.verification {
+            state.goal_verify_or_block_seen = true;
+        }
     }
 }
 
-fn goal_missing_parts(state: &ReviewGateState) -> String {
-    let mut missing = Vec::new();
-    if !state.goal_contract_seen {
-        missing.push("goal_contract");
-    }
-    if !state.goal_progress_seen {
-        missing.push("checkpoint_progress");
-    }
-    if !state.goal_verify_or_block_seen {
-        missing.push("verification_or_blocker");
-    }
-    missing.join(", ")
-}
-
-/// Stop 上的 goal 门控短码：固定带 `router-rs AG_FOLLOWUP` 前缀，避免与陈旧/错误的自拟续跑标签混淆；附一行可执行脱困提示（仍保持单行优先）。
+/// Stop 上的 goal 门控短码（磁盘优先 evaluator；见 `ship_readiness.rs`）。
 fn goal_stop_followup_line(state: &ReviewGateState) -> String {
-    let parts = goal_missing_parts(state);
-    let mut line = format!("router-rs AG_FOLLOWUP missing_parts={parts}");
-    if state.goal_followup_count >= 3 {
-        line.push_str(" | 已连续多轮 Stop 未满足门控；若确为小任务请直接单独一行 small_task");
-    }
-    line
+    crate::ship_readiness::goal_stop_followup_line(
+        state.goal_contract_seen,
+        state.goal_progress_seen,
+        state.goal_verify_or_block_seen,
+        state.goal_followup_count,
+    )
 }
 
 fn state_lock_degraded_followup() -> &'static str {
     "router-rs：hook-state 锁不可用，本闸门控降级。收口前须见独立 subagent lane，或在**用户消息**中单独一行写拒因。"
 }
 
-fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
+fn lock_failure_followup_for_before_submit(repo_root: &Path, event: &Value) -> (bool, String) {
     let text = prompt_text(event);
     let signal_text = hook_event_signal_text(event, &text, "");
     let review = is_review_prompt(&text);
@@ -2355,8 +2306,13 @@ fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let overridden = has_override(&text);
+    let disk_review_armed = load_state(repo_root, event)
+        .ok()
+        .flatten()
+        .is_some_and(|s| review_hard_armed(&s));
 
-    let strong_constraint = (review_arms || delegation || goal_drive_entrypoint) && !overridden;
+    let strong_constraint =
+        ((review_arms || delegation || goal_drive_entrypoint) && !overridden) || disk_review_armed;
     if strong_constraint {
         return (
             false,
@@ -2371,7 +2327,7 @@ fn lock_failure_followup_for_before_submit(event: &Value) -> (bool, String) {
     )
 }
 
-fn stop_lock_failure_is_fail_closed(event: &Value) -> bool {
+fn stop_lock_failure_is_fail_closed(repo_root: &Path, event: &Value) -> bool {
     let text = prompt_text(event);
     let response_text = agent_response_text(event);
     let signal_text = hook_event_signal_text(event, &text, &response_text);
@@ -2381,7 +2337,11 @@ fn stop_lock_failure_is_fail_closed(event: &Value) -> bool {
     let delegation =
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let overridden = has_override(&text) || saw_reject_reason(&signal_text, &text);
-    (review_arms || delegation || goal_drive_entrypoint) && !overridden
+    let disk_review_armed = load_state(repo_root, event)
+        .ok()
+        .flatten()
+        .is_some_and(|s| review_hard_armed(&s) || s.goal_required);
+    ((review_arms || delegation || goal_drive_entrypoint) && !overridden) || disk_review_armed
 }
 
 fn review_gate_stop_lock_unavailable_line() -> String {
@@ -2391,8 +2351,8 @@ fn review_gate_stop_lock_unavailable_line() -> String {
     )
 }
 
-fn lock_failure_followup_for_stop(event: &Value) -> String {
-    if stop_lock_failure_is_fail_closed(event) {
+fn lock_failure_followup_for_stop(repo_root: &Path, event: &Value) -> String {
+    if stop_lock_failure_is_fail_closed(repo_root, event) {
         return review_gate_stop_lock_unavailable_line();
     }
     state_lock_degraded_followup().to_string()
@@ -2402,34 +2362,40 @@ fn lock_failure_followup_for_stop(event: &Value) -> String {
 /// **双事件去重**：宿主可能对同一子代理先发 `subagentStart` 再发 `PostToolUse`（同一 `subagent_id`）。对 **`id:`** 前缀的稳定 key，若 pending 已含该字符串，则 **PostToolUse 路径不再 push**，避免「一次 stop 只核销一条」语义下出现双 pending。
 ///
 /// **`subagent_start_count`** 仅在 **`handle_subagent_start`** 的 qualifying review 分支递增；PostToolUse 仅负责 multiset 入队（及 phase bump），**不**增加该计数，以免与宿主双事件重复计数。
-/// Returns whether the key is tracked in pending (new push or already present).
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum PendingCyclePush {
+    NewlyInserted,
+    AlreadyPresent,
+    AtCap,
+}
+
 fn push_review_pending_cycle_key(
     state: &mut ReviewGateState,
     cycle_key: Option<String>,
     from_posttool: bool,
-) -> bool {
+) -> PendingCyclePush {
     let Some(k) = cycle_key else {
-        return false;
+        return PendingCyclePush::AtCap;
     };
     if from_posttool && state.review_subagent_pending_cycle_keys.contains(&k) {
-        return true;
+        return PendingCyclePush::AlreadyPresent;
     }
     if !from_posttool
         && k.starts_with("id:")
         && state.review_subagent_pending_cycle_keys.contains(&k)
     {
-        return true;
+        return PendingCyclePush::AlreadyPresent;
     }
     let max = crate::router_env_flags::router_rs_cursor_review_pending_cycle_max();
     if state.review_subagent_pending_cycle_keys.len() >= max {
         eprintln!("[router-rs] review_pending_cycle_keys_at_cap_refused cap={max} key={k}");
         state.review_pending_cap_refused = true;
-        return false;
+        return PendingCyclePush::AtCap;
     }
     state.review_subagent_pending_cycle_keys.push(k);
     state.review_pending_last_pushed_at = Some(Utc::now().to_rfc3339());
     sync_review_cycle_legacy_fields(state);
-    true
+    PendingCyclePush::NewlyInserted
 }
 
 /// Clear pending review cycle keys when subagent activity is stale (avoids permanent REVIEW_GATE).
@@ -2458,7 +2424,7 @@ fn prune_stale_review_pending_cycle_keys(state: &mut ReviewGateState) {
                 let age = Utc::now().signed_duration_since(started_at.with_timezone(&Utc));
                 age.num_seconds() > stale_after_secs
             })
-            .unwrap_or(true);
+            .unwrap_or(false);
         if clear {
             // Anti false-negative: stale orphan recovery must not satisfy Stop without qualifying stop.
             if state.subagent_stop_count == 0 && state.phase >= 3 {

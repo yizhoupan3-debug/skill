@@ -7,7 +7,8 @@
 | 跨宿主语言、执行梯子、review 清门叙事、Git 边界、Knowledge hygiene | 仓库根 [`AGENTS.md`](../AGENTS.md)（对应章节见下表） | Cursor alwaysApply [`.cursor/rules/*.mdc`](../.cursor/rules/) **只写宿主硬差异**；须含指向 [`harness_policy_map.md`](harness_policy_map.md)、[`AGENTS.md`](../AGENTS.md)、[`harness_architecture.md`](harness_architecture.md) 的 markdown 链接。**CI**（[`tests/policy_cursor_rules_links.rs`](../tests/policy_cursor_rules_links.rs)）**仅**校验：`alwaysApply: true` 且首段 frontmatter 可被该测试解析闭合的 `.mdc`；目录内其它 `.mdc` 不在此项内。CI 还约定：链接须形如 `](url)` 且 `url` 满足相对指针形（`../`、`./`、`docs/`、或路径段中的 `/docs/`）；枚举规则文件时 `read_dir` **只扫 `.cursor/rules/` 一层**（不递归子目录）；**正文不要写独占行 `alwaysApply:`**（避免「opening `---` 后缺闭合 `---`」的畸形分支误判）。 |
 | 五层模型、证据流、续跑/门控、`ROUTER_RS_*` 语义与默认值 | [`harness_architecture.md`](harness_architecture.md)（尤其 **§5 开关面**） | [`router_env_flags.rs`](../scripts/router-rs/src/router_env_flags.rs) 仅提供 **helper 子集** + 注释索引；散落 `std::env::var` 仍以 harness §5 为准 |
 | Skill 命中路径与 trigger | [`skills/SKILL_ROUTING_RUNTIME.json`](../skills/SKILL_ROUTING_RUNTIME.json) 的 `skill_path` | 各 `skills/**/SKILL.md` **不得**顶替 `AGENTS.md` 的总协议；命中后只读该 skill，不把 skill 全文当「第二 AGENTS」 |
-| 验证命令成功/失败（机读） | [`artifacts/current/<task_id>/EVIDENCE_INDEX.json`](../artifacts/current/) | 聊天复述、Plan todo 勾选、`GOAL_STATE.checkpoints` 字段**不能**单独充当 ship 证据（区别于已删除的 Stop hook 自动 checkpoint 写盘，2026-05） |
+| 验证命令成功/失败（机读） | [`artifacts/current/<task_id>/EVIDENCE_INDEX.json`](../artifacts/current/) | 聊天复述、Plan todo 勾选**不能**单独充当 ship 证据；`GOAL_STATE` + `EVIDENCE_INDEX` 为 Cursor Stop `AG_FOLLOWUP` 磁盘真源（`ship_readiness.rs`）；「验证通过」等词**不**再触发 closeout 与 goal verify 双拦 |
+| Cursor Stop 门控编排 | [`ship_readiness.rs`](../scripts/router-rs/src/ship_readiness.rs) + [`handlers_stop.inc.rs`](../scripts/router-rs/src/hosts/cursor_hooks/handlers_parts/handlers_stop.inc.rs) | 每轮 Stop **最多一条** hard `followup_message`：closeout → REVIEW_GATE → AG_FOLLOWUP（`primary_fix=`）；`my-light` 仅 closeout + 软提示 |
 | 深度 review 产出形状（compact envelope、lane） | [`skills/code-review-deep/SKILL.md`](../skills/code-review-deep/SKILL.md) | `AGENTS.md` Execution Ladder 只指向该 skill，不复制 lens 表 |
 | Cursor 子代理模型继承 | [`.cursor/rules/subagent-model-inherit.mdc`](../.cursor/rules/subagent-model-inherit.mdc) + registry `subagent_model_inherit_nudge` | [`docs/hosts/cursor.md`](hosts/cursor.md)；`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 见 harness §5 |
 | Cursor Plan / CreatePlan 契约 | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md) | [`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc) 保留 CreatePlan 硬自检条（宿主工具差异） |
@@ -43,6 +44,6 @@
 3. **多宿主 hook 生成式减少分叉**：把 lane/`fork_context` 归一等逻辑更多 codegen 到单源；**风险**：生成器 bug 影响三宿主；**前置**：`host_integration` 契约测试覆盖阈值明确。
 4. **`framework_profile` 大表与日常 solo 解耦**：发布面字段与自用 hook 最小面拆分；**风险**：profile 校验与安装路径分裂；**前置**：明确「发行 profile」与「repo dev profile」两个 ID。
 5. **`ROUTER_RS_*` 命名统一（`_CHARS` → 字节）**：减少误读；**风险**：外部脚本依赖旧名；**前置**：别名读取窗口 + 弃用日志（若保留兼容期）。
-6. **Codex 嵌入 `AGENTS.md` 与磁盘真源漂移**：继续依赖 `codex sync` 流程；**不建议**默认改为每次 hook 读盘（性能与确定性 trade-off）；可选加强 CI 对比嵌入哈希。
+6. **Codex embed（`AGENTS.md` + `AGENTS_CODEX.md`）与 sync 材料化（`AGENTS_CODEX.md`）漂移**：继续依赖 rebuild + `framework sync-entrypoints` / `codex sync`；**不建议**默认改为每次 hook 读盘（性能与确定性 trade-off）；可选加强 CI 对比 compile-time embed 哈希。
 
 每条均需单独计划、测试矩阵与回滚策略；**不要**与本「叙事地图 + profile + 漂移哨兵」交付混为单次 PR。

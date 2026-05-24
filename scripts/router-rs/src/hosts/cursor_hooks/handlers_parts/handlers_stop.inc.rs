@@ -16,13 +16,13 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         let skip_continuity_merge = true;
-        let mut out = if stop_lock_failure_is_fail_closed(event) {
+        let mut out = if stop_lock_failure_is_fail_closed(repo_root, event) {
             json!({
                 "followup_message": review_gate_stop_lock_unavailable_line()
             })
         } else {
             json!({
-                "followup_message": lock_failure_followup_for_stop(event)
+                "followup_message": lock_failure_followup_for_stop(repo_root, event)
             })
         };
         finalize_stop_hook_outputs(repo_root, &mut out, &frame, skip_continuity_merge);
@@ -63,23 +63,34 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 state.review_override = true;
                 state.delegation_override = true;
             }
-            if has_structured_goal_contract(&signal_text) {
-                state.goal_contract_seen = true;
-            }
-            if has_goal_progress_signal(&signal_text) {
-                state.goal_progress_seen = true;
-            }
-            if has_goal_verify_or_block_signal(&signal_text) {
-                state.goal_verify_or_block_seen = true;
+            let disk_goal = frame.hydration_goal.is_some();
+            if !disk_goal {
+                if has_structured_goal_contract(&signal_text) {
+                    state.goal_contract_seen = true;
+                }
+                if has_goal_progress_signal(&signal_text) {
+                    state.goal_progress_seen = true;
+                }
+                if has_goal_verify_or_block_signal(&signal_text) {
+                    state.goal_verify_or_block_seen = true;
+                }
             }
             if saw_reject_reason(&signal_text, &text) {
                 state.reject_reason_seen = true;
-                if state.goal_required {
+                if tracks_goal_or_drive_entry(&state) {
                     state.pre_goal_review_satisfied = true;
                 }
                 clear_review_gate_escalation_counters(&mut state);
             }
-            hydrate_goal_gate_from_disk(repo_root, &mut state, true, &frame);
+            let goal_drive_entrypoint =
+                is_framework_goal_drive_entry_prompt(&text, &signal_text);
+            hydrate_goal_gate_from_disk(
+                repo_root,
+                &mut state,
+                true,
+                &frame,
+                goal_drive_entrypoint,
+            );
             if maybe_bump_review_phase_for_main_thread_compact_findings(
                 &mut state,
                 &response_for_lint,
@@ -100,7 +111,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 let skip_continuity_merge = if use_full {
                     gate_blocks_continuity
                 } else {
-                    state.goal_required && !goal_is_satisfied(&state)
+                    tracks_goal_or_drive_entry(&state) && !goal_is_satisfied(&state)
                 };
                 let out = if use_full {
                     json!({ "followup_message": review_stop_followup_line(&state) })
@@ -120,7 +131,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 };
                 let _ = save_state(repo_root, event, &mut state);
                 (out, skip_continuity_merge)
-            } else if !goal_is_satisfied(&state) {
+            } else if tracks_goal_or_drive_entry(&state) && !goal_is_satisfied(&state) {
                 state.followup_count += 1;
                 state.goal_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
@@ -133,7 +144,10 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             } else {
                 // Do not clear gate state on Stop for sessions that still track goal/review:
                 // the next Stop should still enforce the same requirements until satisfied/overridden.
-                if state.review_required || state.goal_required || state.reject_reason_seen {
+                if state.review_required
+                    || tracks_goal_or_drive_entry(&state)
+                    || state.reject_reason_seen
+                {
                     let _ = save_state(repo_root, event, &mut state);
                 } else {
                     let mut reset = empty_state();

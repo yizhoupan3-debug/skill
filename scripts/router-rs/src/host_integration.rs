@@ -58,27 +58,8 @@ const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
     "plan-mode",
     "update",
 ];
-/// Subset checked by `framework doctor` metadata-only mode. Full drift-gate list:
+/// Metadata-only doctor and full drift-gate both use paths declared in
 /// `configs/framework/GENERATED_ARTIFACTS.json` (`framework maint update-one-shot`).
-const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
-    "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
-    "skills/SKILL_ROUTING_REGISTRY.md",
-    "skills/SKILL_ROUTING_INDEX.md",
-    "skills/SKILL_MANIFEST.json",
-    "skills/SKILL_ROUTING_RUNTIME.json",
-    "skills/SKILL_ROUTING_METADATA.json",
-    "skills/SKILL_HEALTH_MANIFEST.json",
-    "skills/SKILL_APPROVAL_POLICY.json",
-    "AGENTS.md",
-    ".codex/host_entrypoints_sync_manifest.json",
-    ".claude/rules/framework.md",
-    ".claude/settings.json",
-    ".gemini/antigravity/rules/framework.md",
-    ".gemini/settings.json",
-    ".gemini/mcp.json",
-];
-/// Metadata-only doctor checks all paths declared in `GENERATED_ARTIFACTS.json`.
-/// Full drift-gate uses the same manifest (`framework maint update-one-shot`).
 const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
     "imagegen",
     "openai-docs",
@@ -801,8 +782,7 @@ fn generated_artifacts_status(
     }
 
     let undeclared = undeclared_generated_framework_artifacts(&framework_root, &declared_paths)?;
-    let missing_required = missing_required_generated_artifacts(&declared_paths);
-    ok &= undeclared.is_empty() && missing_required.is_empty();
+    ok &= undeclared.is_empty();
     let drifted_artifacts: Vec<Value> = results
         .iter()
         .filter(|artifact| artifact.get("drifted").and_then(Value::as_bool) == Some(true))
@@ -830,8 +810,6 @@ fn generated_artifacts_status(
                 .unwrap_or_default(),
             "skip_generator_run": skip_generator_run,
             "undeclared_generated_artifacts": undeclared,
-            "missing_required_generated_artifacts": missing_required,
-            "required_generated_artifacts": REQUIRED_GENERATED_ARTIFACTS,
             "declared_generated_artifact_paths": declared_paths.iter().cloned().collect::<Vec<_>>(),
             "drifted_artifacts": drifted_artifacts,
         },
@@ -923,6 +901,7 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
     matches!(
         path,
         ".codex/host_entrypoints_sync_manifest.json"
+            | ".codex/README.md"
             | ".codex/prompts/framework.md"
             | ".claude/rules/framework.md"
             | ".claude/settings.json"
@@ -1132,14 +1111,6 @@ fn generated_artifact_forbidden_markers(path: &str, content: &str) -> Vec<&'stat
     markers
 }
 
-fn missing_required_generated_artifacts(declared_paths: &BTreeSet<String>) -> Vec<&'static str> {
-    REQUIRED_GENERATED_ARTIFACTS
-        .iter()
-        .copied()
-        .filter(|path| !declared_paths.contains(*path))
-        .collect()
-}
-
 fn undeclared_generated_framework_artifacts(
     framework_root: &Path,
     declared_paths: &BTreeSet<String>,
@@ -1192,6 +1163,9 @@ fn generated_artifact_reverse_reference_candidates(
         "tests",
         ".github/workflows",
         ".codex",
+        ".claude",
+        ".gemini",
+        ".cursor/rules",
     ] {
         collect_generated_artifact_marker_files(
             framework_root,
@@ -1257,7 +1231,7 @@ fn collect_generated_artifact_marker_files(
     let Some(content) = read_text_if_exists(path)? else {
         return Ok(());
     };
-    if !content.contains("generated-by-") {
+    if !content.contains("generated-by-") && !is_managed_projection_content(&content) {
         return Ok(());
     }
     let rel = path
@@ -2470,7 +2444,7 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS_CLAUDE.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `AGENTS_CLAUDE.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
         gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
         review = narrative.review_findings_only_paragraph,
     )
@@ -3071,7 +3045,7 @@ fn write_antigravity_framework_md(
          <!-- host_projection: antigravity -->\n\
          <!-- install_scope: {scope} -->\n\n\
          # Antigravity Framework\n\n\
-         Antigravity **`router-rs-framework`**。协议与限制：**`docs/hosts/antigravity.md`**；政策：**`AGENTS_ANTIGRAVITY.md`**。\n\n\
+         Antigravity **`router-rs-framework`**。协议与限制：**`docs/hosts/antigravity.md`**；跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_ANTIGRAVITY.md`**。\n\n\
          ## 会话操作（按序）\n\n\
          1. `framework_digest` — 开头一次\n\
          2. `skill_route` → 只读 `skill_path`\n\
@@ -3333,8 +3307,11 @@ fn write_codex_projection_manifest(
 fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
     let narrative = load_host_projection_narrative(&roots.framework_root)
         .expect("host projection narrative must load before rendering codex entrypoint");
+    let runtime_rel = skills_source_rel(&roots.framework_root)
+        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
+        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS_CODEX.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `AGENTS_CODEX.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
         gsd = lifecycle_paragraph_for_host(&narrative, "codex-cli"),
         review = narrative.review_findings_only_paragraph,
     )
@@ -3541,7 +3518,7 @@ fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS_CURSOR.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `AGENTS_CURSOR.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
         gsd = lifecycle_paragraph_for_host(&narrative, "cursor"),
         review = narrative.review_findings_only_paragraph,
     )

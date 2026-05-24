@@ -155,4 +155,22 @@ mod tests {
         }
         let _ = fs::remove_dir_all(&tmp);
     }
+
+    #[test]
+    fn apply_task_ledger_mutation_callers_use_assume_l1_held() {
+        for (label, src) in [
+            ("autopilot_goal", include_str!("../autopilot_goal.rs")),
+            ("rfv_loop", include_str!("../rfv_loop.rs")),
+            ("step_ledger", include_str!("../step_ledger.rs")),
+        ] {
+            assert!(
+                src.contains("append_transaction_assuming_l1_held"),
+                "{label} must append ledger rows via assume-l1-held API"
+            );
+            assert!(
+                !src.contains("append_transaction("),
+                "{label} must not re-acquire L1 via append_transaction inside mutation paths"
+            );
+        }
+    }
 }

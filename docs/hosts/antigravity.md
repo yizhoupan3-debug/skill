@@ -20,7 +20,7 @@ Antigravity 作为交互式智能体，其 Harness 和任务管理的核心入�
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
-  - 无 CLI 级 PreToolUse 等硬阻断，但 `goal_state_manage complete` 与 `closeout_gate` 将在 MCP 工具层实施硬拦截阻断（[Antigravity Hard Block]）。其余流程防线依赖 **Planning Mode + 规划物化 Artifacts（如 `task.md`、`implementation_plan.md`）**。
+  - 无 CLI 级 PreToolUse 等硬阻断，但 `goal_state_manage complete` 与 `closeout_gate` 将在 MCP 工具层实施硬拦截阻断（[Antigravity Hard Block]）。其余流程防线依赖 **Planning Mode + 规划物化 Artifacts（如 `task.md`、`artifacts/current/<task_id>/ROADMAP.md`、`WAVE_STATE.json`）**。
   - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
 ## Hook 事件矩阵
@@ -49,7 +49,7 @@ Antigravity 作为交互式智能体，其 Harness 和任务管理的核心入�
 $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \longrightarrow \text{Verify}$$
 
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
-2. **`/planx`**：规划阶段，生成或更新 `implementation_plan.md`，明确 minimal delta 与 verification plan，并报用户审批。
+2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](../../skills/planx/SKILL.md)），明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
    - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`。在此配置下将关闭 `REVIEW_GATE` 硬拦截和 spawn-first nudge，采用 findings-only 机制，保持极佳的轻量化流畅体验。
    - **Subagent 积极并行调用**：即便在 `my-light` 下关闭了 nudge 提示，当任务涉及多文件修改（>1 个文件且预期 Delta > 50 行）或复杂跨模块场景时，**主代理在执行中必须积极将其规划为并行并发模式**，通过 `invoke_subagent` 派生子代理执行具体波次，主线程仅做统筹、合并和状态控制。在子代理遭遇环境故障（如 Region 不可用、配额耗尽）时，允许优雅退避（Fallback）为串行主线程执行；同时，主线程保留在验证阶段对简单错误执行 "fix obvious" 的自愈特权。

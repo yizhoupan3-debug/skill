@@ -33,7 +33,7 @@ graph TD
 ### Advisory + MCP 后置拦截 (`claude-desktop`)
 
 - 无 PreToolUse 物理拦截；MCP tool 服务端对未授权写操作 **Hard block**。
-- 代理须主动对齐 `GOAL_STATE.json` 与 `implementation_plan.md`。
+- 代理须主动对齐 `GOAL_STATE.json` 与 plan 工件 `artifacts/current/<task_id>/ROADMAP.md`、`WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](skills/planx/SKILL.md)）。
 
 ## 标准框架命令流
 

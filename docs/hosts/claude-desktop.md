@@ -20,7 +20,7 @@
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
-  - 本宿主没有 CLI 级硬拦截，门控质量主要依赖 **Planning Mode + 规划物化 Artifacts（如 `task.md`、`implementation_plan.md`）**。
+  - 本宿主没有 CLI 级硬拦截，门控质量主要依赖 **Planning Mode + 规划物化 Artifacts（如 `task.md`、`artifacts/current/<task_id>/ROADMAP.md`、`WAVE_STATE.json`）**。
   - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
 ## Hook 事件矩阵
@@ -59,7 +59,7 @@
 $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \longrightarrow \text{Verify}$$
 
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
-2. **`/planx`**：规划阶段，生成或更新 `implementation_plan.md`，明确 minimal delta 与 verification plan，并报用户审批。
+2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](../../skills/planx/SKILL.md)），明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
    - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`。在此配置下将关闭 `REVIEW_GATE` 硬拦截和 spawn-first nudge，采用 findings-only 机制，保持极佳的轻量化流畅体验。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。

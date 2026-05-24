@@ -3,9 +3,9 @@ name: planx
 description: |
   Personal lifecycle — plan/roadmap (doc-only). Writes ROADMAP.md and WAVE_STATE.json with explicit serial/parallel DAG.
   Use when user explicitly requests plan after /discussx. Does not mutate product code.
-routing_layer: L1
+routing_layer: L0
 routing_owner: owner
-routing_gate: evidence
+routing_gate: none
 routing_gate_evidence: "REQUIREMENTS.md exists"
 routing_priority: P1
 session_start: n/a
@@ -33,7 +33,11 @@ metadata:
 |------|---------|
 | `artifacts/current/<task_id>/ROADMAP.md` | Phases, exit criteria, verification commands |
 | `artifacts/current/<task_id>/WAVE_STATE.json` | Each wave: `parallel_group`, `depends_on`, `execution_mode`, `lanes[]` |
-| `artifacts/current/<task_id>/GOAL_STATE.json` | Update `status: planning`; keep `lifecycle_profile: my-light`, `drive_until_done: false` |
+| `artifacts/current/<task_id>/GOAL_STATE.json` | **`framework_goal_drive` stdio** only — set `status` via ledger-backed ops (`start` / `checkpoint` / `pause`); keep `lifecycle_profile: my-light`, `drive_until_done: false` |
+
+### GOAL_STATE writes (HARD)
+
+Same contract as `skills/discussx/SKILL.md` §GOAL_STATE writes. **Forbidden**: direct file edit of `GOAL_STATE.json`.
 
 ## Outputs (schema)
 

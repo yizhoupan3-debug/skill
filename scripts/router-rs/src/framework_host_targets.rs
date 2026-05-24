@@ -1,6 +1,7 @@
 //! Host projection identifiers and `--to` tool names aligned with
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`.
 
+use crate::hosts::codex_hooks::CODEX_AGENT_POLICY_PATH;
 use crate::runtime_registry::{
     load_runtime_registry_json, HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH,
     RUNTIME_REGISTRY_SCHEMA_VERSION,
@@ -161,7 +162,7 @@ pub(crate) fn sync_manifest_shared_system_block(repo_root: &Path) -> Result<Valu
     Ok(json!({
         "policy": "host-specific-agent-policy-v1",
         "routing_source_of_truth": "skills/",
-        "agent_policy_entrypoint": "AGENTS.md",
+        "agent_policy_entrypoint": CODEX_AGENT_POLICY_PATH,
         "supported_hosts": supported_hosts,
         "host_entrypoints": Value::Object(host_entrypoints),
     }))

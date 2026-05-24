@@ -735,7 +735,10 @@ fn before_submit_review_and_implementx_same_prompt_suppresses_review_but_arms_go
         !state.review_required,
         "my-light + goal drive must not arm review; got {state:?}"
     );
-    assert!(state.goal_required, "implementx must arm goal drive; got {state:?}");
+    assert!(
+        !state.goal_required,
+        "my-light /implementx must not arm goal_required on Stop path; got {state:?}"
+    );
 }
 
 /// 未命中「并行 review 候选」三元时仍注入同一行指针；不再追加第二段「≥3」以免刷屏。
@@ -826,7 +829,10 @@ fn my_implement_entry_does_not_arm_delegation_or_review_from_fix_copy() {
         !state.review_required,
         "My implement turn must not re-arm review from findings wording"
     );
-    assert!(state.goal_required);
+    assert!(
+        !state.goal_required,
+        "my-light implementx must not arm goal_required"
+    );
 }
 
 #[test]
@@ -852,7 +858,10 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
         !state.review_required,
         "same-submit autopilot must suppress review arming; got {state:?}"
     );
-    assert!(state.goal_required);
+    assert!(
+        !state.goal_required,
+        "my-light implementx must not arm goal_required"
+    );
 }
 
 #[test]
@@ -876,7 +885,12 @@ fn before_submit_review_with_disk_goal_non_my_light_injects_mixing_hint() {
     let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let sid = "s-team-mix-hint";
-    let payload = event(sid, "深度 review 整个路由系统 /implementx 继续");
+    let cwd = repo.display().to_string();
+    let payload = json!({
+        "session_id": sid,
+        "cwd": cwd,
+        "prompt": "深度 review 整个路由系统 /implementx 继续"
+    });
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
     let ac = out
         .get("additional_context")
@@ -886,7 +900,9 @@ fn before_submit_review_with_disk_goal_non_my_light_injects_mixing_hint() {
         ac.contains("router-rs：本轮提交同时包含"),
         "non-my-light review+implementx must inject split hint; got {ac:?}"
     );
-    let state = load_state_for(&repo, sid);
+    let state = load_state(&repo, &json!({ "session_id": sid, "cwd": cwd }))
+        .expect("load ok")
+        .expect("state exists");
     assert!(
         !state.review_required,
         "same-submit implementx must disarm review arming; got {state:?}"
@@ -1144,17 +1160,22 @@ fn before_submit_implementx_returns_unreadable_when_hook_state_corrupt() {
     }
     fs::write(state_path(&repo, &payload), b"{not json").expect("bad state");
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
-    let ac = out
-        .get("additional_context")
+    assert_eq!(
+        out.get("continue").and_then(Value::as_bool),
+        Some(false),
+        "corrupt hook-state UPS must fail-closed (symmetric with Stop); got {out:?}"
+    );
+    let msg = out
+        .get("followup_message")
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        ac.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
-        "corrupt hook-state must surface unreadable; got {ac:?}"
+        msg.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
+        "corrupt hook-state must surface unreadable; got {out:?}"
     );
     assert!(
-        !ac.contains("ALL waves"),
-        "must not mask corrupt state with implement nudge; got {ac:?}"
+        !msg.contains("ALL waves"),
+        "must not mask corrupt state with implement nudge; got {out:?}"
     );
 }
 
@@ -1340,6 +1361,51 @@ fn stop_completion_claim_requires_closeout_record_when_strict_enabled() {
 }
 
 #[test]
+fn stop_closeout_uses_hydration_task_when_active_completed_and_focus_running() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
+    env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1");
+
+    let repo = fresh_repo();
+    for id in ["done-active", "drive-focus"] {
+        fs::create_dir_all(repo.join("artifacts/current").join(id)).expect("mkdir");
+    }
+    fs::write(
+        repo.join("artifacts/current/active_task.json"),
+        r#"{"task_id":"done-active"}"#,
+    )
+    .expect("active ptr");
+    fs::write(
+        repo.join("artifacts/current/focus_task.json"),
+        r#"{"task_id":"drive-focus"}"#,
+    )
+    .expect("focus ptr");
+    fs::write(
+        repo.join("artifacts/current/done-active/GOAL_STATE.json"),
+        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"done","status":"completed","drive_until_done":false,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
+    )
+    .expect("active goal");
+    fs::write(
+        repo.join("artifacts/current/drive-focus/GOAL_STATE.json"),
+        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"drive","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
+    )
+    .expect("focus goal");
+
+    let msg = stop_hard_closeout_followup_for_assistant_response(&repo, "已完成")
+        .expect("closeout followup");
+    assert!(
+        msg.contains("task_id=drive-focus"),
+        "closeout must align with hydration pointer, not stale active; got {msg}"
+    );
+
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
+        None => env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+    }
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
 fn stop_completion_claim_allows_when_closeout_record_passes() {
     let _env = crate::test_env_sync::process_env_lock();
     use std::env;
@@ -1407,7 +1473,12 @@ fn stop_completion_claim_allows_when_closeout_record_passes() {
 fn completion_claim_detector_matches_basic_tokens() {
     assert!(completion_claimed_in_text("done"));
     assert!(completion_claimed_in_text("已完成"));
-    assert!(completion_claimed_in_text("验证通过"));
+    assert!(!completion_claimed_in_text("验证通过"));
+    assert!(
+        crate::hook_common::GOAL_CHAT_VERIFY_ZH_PHRASES
+            .iter()
+            .any(|p| "验证通过".contains(p))
+    );
     assert!(completion_claimed_in_text("tests passed"));
     assert!(!completion_claimed_in_text("still working"));
 }
@@ -1649,6 +1720,54 @@ fn stop_hydrates_when_hook_state_lacks_goal_required_but_goal_on_disk() {
 }
 
 #[test]
+fn stop_clears_stale_goal_required_when_goal_purged_from_disk() {
+    let _my_light = MyLightOverrideGuard::force_non_my_light();
+    let repo = fresh_repo();
+    let cwd = repo.display().to_string();
+    let sid = "purge-goal";
+    let hook_ev = |session: &str, prompt: &str| {
+        json!({ "session_id": session, "cwd": cwd, "prompt": prompt })
+    };
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &hook_ev(sid, "/implementx ship"),
+    );
+    let loaded = load_state(&repo, &hook_ev(sid, ""))
+        .expect("load ok")
+        .expect("state exists");
+    assert!(
+        loaded.goal_required,
+        "implementx must arm goal_required"
+    );
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": sid,
+            "cwd": cwd,
+            "prompt": "bye",
+            "response": "summary without contract headings"
+        }),
+    );
+    let msg = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(
+        !msg.contains("AG_FOLLOWUP"),
+        "post-purge Stop must not require chat goal_contract; msg={msg:?}"
+    );
+    let after = load_state(&repo, &hook_ev(sid, ""))
+        .expect("load ok")
+        .expect("state exists");
+    assert!(
+        !after.goal_required,
+        "hydrate must disarm orphan goal_required"
+    );
+}
+
+#[test]
 fn stop_hydrates_when_active_task_missing_but_goal_on_disk() {
     let repo = fresh_repo();
     fs::create_dir_all(repo.join("artifacts/current/t-orph")).expect("mkdir");
@@ -1701,8 +1820,16 @@ fn stop_goal_gate_hydrates_running_goal_without_checkpoints_or_keywords() {
         "done_when": ["d1", "d2"],
         "validation_commands": ["cargo test -q"],
         "drive_until_done": true,
+        "lifecycle_profile": "my-light",
     }))
     .expect("goal start");
+    crate::autopilot_goal::framework_goal_drive(json!({
+        "repo_root": repo.display().to_string(),
+        "operation": "checkpoint",
+        "task_id": "t-run",
+        "note": "w0",
+    }))
+    .expect("cp");
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
@@ -3729,8 +3856,8 @@ fn cursor_rearm_review_resets_active_subagent_count_after_start_without_stop() {
     );
     let rearmed = load_state_for(&repo, sid);
     assert_eq!(
-        rearmed.active_subagent_count, 1,
-        "re-arm must preserve open subagent count when subagent still running; got {rearmed:?}"
+        rearmed.active_subagent_count, 0,
+        "re-arm must reset open subagent count (P1-16); got {rearmed:?}"
     );
     assert_eq!(rearmed.phase, 0, "re-arm must reset phase; got {rearmed:?}");
 }
@@ -3973,9 +4100,11 @@ fn before_submit_review_and_implementx_injects_mixing_nudge_when_not_my_light() 
     let _gate = ReviewGateActiveGuard::new();
     let _my_light = MyLightOverrideGuard::force_non_my_light();
     let repo = fresh_repo();
+    let cwd = repo.display().to_string();
     let sid = "dual-review-implementx-non-my-light";
     let prompt = "深度 review 整个路由系统 /implementx 修复刚发现的问题";
-    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
+    let payload = json!({ "session_id": sid, "cwd": cwd, "prompt": prompt });
+    let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
     let ac = out
         .get("additional_context")
         .and_then(Value::as_str)
@@ -3984,7 +4113,9 @@ fn before_submit_review_and_implementx_injects_mixing_nudge_when_not_my_light() 
         ac.contains("router-rs：本轮提交同时包含"),
         "non-my-light dual prompt must inject mixing nudge; got {ac:?}"
     );
-    let state = load_state_for(&repo, sid);
+    let state = load_state(&repo, &json!({ "session_id": sid, "cwd": cwd }))
+        .expect("load ok")
+        .expect("state exists");
     assert!(!state.review_required);
     assert!(state.goal_required);
 }
@@ -3999,13 +4130,18 @@ fn before_submit_benign_ups_returns_unreadable_when_hook_state_corrupt() {
     }
     fs::write(state_path(&repo, &payload), b"{not json").expect("bad state");
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
-    let ac = out
-        .get("additional_context")
+    assert_eq!(
+        out.get("continue").and_then(Value::as_bool),
+        Some(false),
+        "corrupt hook-state benign UPS must fail-closed; got {out:?}"
+    );
+    let msg = out
+        .get("followup_message")
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        ac.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
-        "corrupt hook-state must surface unreadable for benign UPS; got {ac:?}"
+        msg.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
+        "corrupt hook-state must surface unreadable for benign UPS; got {out:?}"
     );
     let raw = fs::read_to_string(state_path(&repo, &payload)).expect("state still corrupt");
     assert!(
@@ -4050,17 +4186,22 @@ fn before_submit_discussx_returns_unreadable_when_hook_state_corrupt() {
     }
     fs::write(state_path(&repo, &payload), b"{not json").expect("bad state");
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
-    let ac = out
-        .get("additional_context")
+    assert_eq!(
+        out.get("continue").and_then(Value::as_bool),
+        Some(false),
+        "corrupt hook-state /discussx UPS must fail-closed; got {out:?}"
+    );
+    let msg = out
+        .get("followup_message")
         .and_then(Value::as_str)
         .unwrap_or("");
     assert!(
-        ac.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
-        "corrupt hook-state must surface unreadable for /discussx; got {ac:?}"
+        msg.contains(super::CURSOR_HOOK_STATE_UNREADABLE),
+        "corrupt hook-state must surface unreadable for /discussx; got {out:?}"
     );
     assert!(
-        !ac.contains("pre-execution"),
-        "must not mask corrupt state with discussx nudge; got {ac:?}"
+        !msg.contains("pre-execution"),
+        "must not mask corrupt state with discussx nudge; got {out:?}"
     );
 }
 
@@ -4294,6 +4435,7 @@ fn main_thread_deferential_compact_does_not_clear_gate_on_stop() {
 
 #[test]
 fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
+    let _my_light = MyLightOverrideGuard::force_non_my_light();
     let _env = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     let prev_pre = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED");
@@ -4440,6 +4582,32 @@ fn subagent_stop_must_match_open_reviewer_cycle() {
     let state = load_state_for(&repo, "s6c");
     assert_eq!(state.phase, 2);
     assert_eq!(state.subagent_stop_count, 0);
+    assert_eq!(
+        state.active_subagent_count, 0,
+        "wrong-cycle subagentStop must still decrement open count (P0-1)"
+    );
+}
+
+#[test]
+fn duplicate_subagent_start_same_id_does_not_inflate_start_count() {
+    let repo = fresh_repo();
+    let sid = "s-dup-start";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let start_payload = json!({
+        "session_id": sid,
+        "subagent_type": "general-purpose",
+        "fork_context": false,
+        "subagent_id": "review-dup"
+    });
+    let _ = dispatch_cursor_hook_event(&repo, "subagentStart", &start_payload);
+    let _ = dispatch_cursor_hook_event(&repo, "subagentStart", &start_payload);
+    let state = load_state_for(&repo, sid);
+    assert_eq!(state.subagent_start_count, 1, "duplicate id: start must not double-count");
+    assert_eq!(state.review_subagent_pending_cycle_keys.len(), 1);
 }
 
 /// 两个不同 subagent id 并行 start：各自 stop 各核销一条 pending；**第二次** stop 排空 multiset 后才 phase 3。
@@ -5224,22 +5392,45 @@ fn review_armed_first_submit_injects_deep_default_nudge_without_legacy_tokens() 
 
 #[test]
 fn goal_stop_followup_is_short_code_only() {
+    let _my_light = MyLightOverrideGuard::force_non_my_light();
     let repo = fresh_repo();
+    let cwd = repo.display().to_string();
+    fs::create_dir_all(repo.join("artifacts/current/t-s17")).expect("mkdir");
+    fs::write(
+        repo.join("artifacts/current/active_task.json"),
+        r#"{"task_id":"t-s17"}"#,
+    )
+    .expect("active");
+    crate::autopilot_goal::framework_goal_drive(json!({
+        "repo_root": cwd,
+        "operation": "start",
+        "task_id": "t-s17",
+        "goal": "short code stop test",
+        "non_goals": ["scope creep"],
+        "done_when": ["a", "b"],
+        "validation_commands": ["cargo test -q"],
+        "drive_until_done": true,
+    }))
+    .expect("goal start");
+    let hook_ev = |session: &str, prompt: &str| {
+        json!({ "session_id": session, "cwd": cwd, "prompt": prompt })
+    };
     let _ = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
-        &event("s17", "/implementx 完成任务"),
+        &hook_ev("s17", "/implementx 完成任务"),
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
         "postToolUse",
         &json!({
             "session_id":"s17",
+            "cwd": cwd,
             "tool_name":"functions.subagent",
             "tool_input":{"subagent_type":"explore"}
         }),
     );
-    let first = dispatch_cursor_hook_event(&repo, "stop", &event("s17", "继续"));
+    let first = dispatch_cursor_hook_event(&repo, "stop", &hook_ev("s17", "继续"));
     let first_msg = hook_user_visible_blob(&first);
     assert!(
         first_msg.contains("router-rs AG_FOLLOWUP missing_parts="),
@@ -5249,7 +5440,7 @@ fn goal_stop_followup_is_short_code_only() {
         !first_msg.contains("Autopilot goal mode:"),
         "Stop must not dump full goal contract prose; msg={first_msg:?}"
     );
-    let second = dispatch_cursor_hook_event(&repo, "stop", &event("s17", "继续"));
+    let second = dispatch_cursor_hook_event(&repo, "stop", &hook_ev("s17", "继续"));
     let second_msg = hook_user_visible_blob(&second);
     // The invariant: Stop must keep the followup short. If a followup is emitted, it must
     // be the short AG_FOLLOWUP code, not long prose.
@@ -5315,6 +5506,7 @@ fn my_pre_goal_nudge_when_opt_in_enabled() {
     let _env = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     let _pre_goal = MyPreGoalOptInEnvGuard::enable();
+    let _my_light = MyLightOverrideGuard::force_non_my_light();
     let repo = fresh_repo();
     let out = dispatch_cursor_hook_event(
         &repo,
@@ -5333,6 +5525,7 @@ fn my_pre_goal_nudge_when_opt_in_enabled() {
 fn my_pre_goal_auto_releases_when_nag_cap_reached() {
     let _env = crate::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
+    let _my_light = MyLightOverrideGuard::force_non_my_light();
     let prev_cap = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES");
     let _pre_goal = MyPreGoalOptInEnvGuard::enable();
     env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES", "2");

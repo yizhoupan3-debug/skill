@@ -7,9 +7,14 @@
       "compare": "normalized-text"
     },
     {
-      "path": "AGENTS.md",
+      "path": "AGENTS_CODEX.md",
       "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
       "compare": "byte-for-byte"
+    },
+    {
+      "path": ".codex/README.md",
+      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
+      "compare": "normalized-text"
     },
     {
       "path": ".codex/host_entrypoints_sync_manifest.json",

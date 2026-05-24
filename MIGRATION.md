@@ -23,6 +23,11 @@ just doctor
 4. 改 `configs/framework/host_projection_narrative.json` 或 `RUNTIME_REGISTRY.json` **review_gate**：**无需** rebuild；重启 hook 子进程。
 5. 发布前：`router-rs framework maint update-one-shot`（全量 drift-gate）；日常仅 `framework doctor` **不等于** drift-gate 通过。
 
+### Claude Code / Antigravity（framework 源码仓）
+
+- **`.claude/settings.json`**、**`.gemini/*`** 由 `framework host-integration install --to claude-code|claude-desktop|antigravity` 材料化；源码仓可缺省，但 `framework doctor` 会列出 missing 并提示 install。
+- 勿再依赖 **`.claude/hooks/router-rs-hook.sh`**（deprecated shim）；真源为 `configs/framework/claude-router-rs-hook.sh` + settings hooks。
+
 ## 默认工作流（全宿主）
 
 - **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；`lifecycle_profile: my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge。
@@ -144,7 +149,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 
 | 变更 | 说明 |
 |------|------|
-| `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`registry_loader.rs`](scripts/router-rs/src/registry_loader.rs)（**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
+| `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`runtime_registry/mod.rs`](scripts/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export shim；**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
 | 宿主投影 My/review 文案 | [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)；`host-integration install` 读取；勿在 `host_integration.rs` 硬编码 |
 | `generated-artifacts-status` | **`framework doctor`** / `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍要求全量 **drift-gate** `ok: true` |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |

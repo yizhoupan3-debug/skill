@@ -58,7 +58,7 @@ fn handle_post_tool_use_with_lock(
     let mut mutated = false;
     if tool_name_matches_subagent_lane(&name)
         && pre_goal_kind
-        && state.goal_required
+        && tracks_goal_or_drive_entry(&state)
         && independent_fork_pre_goal
     {
         state.pre_goal_review_satisfied = true;
@@ -77,7 +77,7 @@ fn handle_post_tool_use_with_lock(
             }
         }
         let start_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
-        if push_review_pending_cycle_key(&mut state, start_key, true) {
+        if push_review_pending_cycle_key(&mut state, start_key, true) != PendingCyclePush::AtCap {
             let was_below_2 = state.phase < 2;
             bump_phase(&mut state, 2);
             if state.active_subagent_last_started_at.is_none() {
@@ -294,6 +294,7 @@ fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String>
 }
 
 fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
+    let frame = crate::task_state::resolve_cursor_continuity_frame(repo_root);
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         return hook_lock_unavailable_notice_json();
@@ -307,25 +308,32 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
     let prompt = prompt_text(event);
     let text = agent_response_text(event);
     let signal = hook_event_signal_text(event, &prompt, &text);
+    let disk_goal = frame.hydration_goal.is_some();
     let mut dirty = false;
     if saw_reject_reason(&signal, &prompt) {
         state.reject_reason_seen = true;
-        if state.goal_required {
+        if tracks_goal_or_drive_entry(&state) {
             state.pre_goal_review_satisfied = true;
         }
         clear_review_gate_escalation_counters(&mut state);
         dirty = true;
     }
-    if track_goal && has_structured_goal_contract(&signal) {
-        state.goal_contract_seen = true;
-        dirty = true;
+    if track_goal && !disk_goal {
+        if has_structured_goal_contract(&signal) {
+            state.goal_contract_seen = true;
+            dirty = true;
+        }
+        if has_goal_progress_signal(&signal) {
+            state.goal_progress_seen = true;
+            dirty = true;
+        }
+        if has_goal_verify_or_block_signal(&signal) {
+            state.goal_verify_or_block_seen = true;
+            dirty = true;
+        }
     }
-    if track_goal && has_goal_progress_signal(&signal) {
-        state.goal_progress_seen = true;
-        dirty = true;
-    }
-    if track_goal && has_goal_verify_or_block_signal(&signal) {
-        state.goal_verify_or_block_seen = true;
+    if track_goal {
+        hydrate_goal_gate_from_disk(repo_root, &mut state, false, &frame, false);
         dirty = true;
     }
     let tail = crate::hook_common::hook_assistant_tail_window(

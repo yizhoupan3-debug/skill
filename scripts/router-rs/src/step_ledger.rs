@@ -145,7 +145,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
                 eprintln!("[router-rs] failed to append step transaction to TASK_LEDGER: {e}");
             }
             let _ = crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id);

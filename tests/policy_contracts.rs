@@ -355,32 +355,32 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-cli"],
-        "AGENTS.md"
+        "AGENTS_CODEX.md"
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["cursor"],
-        serde_json::json!(["AGENTS.md", ".cursor/rules/*.mdc"])
+        serde_json::json!(["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex-app"],
-        "AGENTS.md"
+        "AGENTS_CODEX.md"
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["claude-code"],
         serde_json::json!([
-            "AGENTS.md",
+            "AGENTS_CLAUDE.md",
             ".claude/rules/framework.md",
             ".claude/settings.json"
         ])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["claude-desktop"],
-        serde_json::json!(["AGENTS.md", ".claude/CLAUDE.md"])
+        serde_json::json!(["AGENTS_CLAUDE.md", ".claude/CLAUDE.md"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["antigravity"],
         serde_json::json!([
-            "AGENTS.md",
+            "AGENTS_ANTIGRAVITY.md",
             ".gemini/antigravity/rules/framework.md"
         ])
     );
@@ -397,8 +397,8 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         "AGENTS_CODEX.md"
     );
     let codex_policy = read_text(&repo_root.join("AGENTS_CODEX.md"));
-    assert!(codex_policy.contains("Review findings-only"));
-    assert!(codex_policy.contains("docs/references/EXECUTION_LADDER.md"));
+    assert!(codex_policy.contains("Codex Agent Policy"));
+    assert!(codex_policy.contains("AGENTS.md"));
     assert!(manifest["full_sync"]["text_files"]
         .as_array()
         .unwrap()
@@ -427,12 +427,12 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
 }
 
 #[test]
-fn codex_sync_preserves_existing_agents_policy_file() {
+fn codex_sync_does_not_write_root_agents_md() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
     seed_framework_markers(&repo_root);
-    let policy = "custom policy from disk\nbounded sidecar admission\n同一轮并发启动\n";
+    let policy = "custom kernel policy from disk\n";
     std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
 
     let sync_report = router_rs_json(&[
@@ -446,9 +446,32 @@ fn codex_sync_preserves_existing_agents_policy_file() {
             .as_array()
             .unwrap()
             .contains(&serde_json::json!("AGENTS.md")),
-        "codex sync must not overwrite an existing AGENTS.md: {sync_report}"
+        "codex sync must not write repo-root AGENTS.md: {sync_report}"
     );
     assert_eq!(read_text(&repo_root.join("AGENTS.md")), policy);
+}
+
+#[test]
+fn codex_sync_preserves_existing_agents_codex_delta_file() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(&repo_root).unwrap();
+    seed_framework_markers(&repo_root);
+    let delta = "custom codex delta from disk\nReview findings-only\n";
+    std::fs::write(repo_root.join("AGENTS_CODEX.md"), delta).unwrap();
+
+    let sync_report = router_rs_json(&[
+        "framework",
+        "sync-entrypoints",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    let written = sync_report["written"].as_array().unwrap();
+    assert!(
+        !written.contains(&serde_json::json!("AGENTS_CODEX.md")),
+        "sync must not rewrite unchanged AGENTS_CODEX.md: {sync_report}"
+    );
+    assert_eq!(read_text(&repo_root.join("AGENTS_CODEX.md")), delta);
 }
 
 #[test]

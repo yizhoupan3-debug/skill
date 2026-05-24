@@ -33,4 +33,4 @@ if [ ! -x "$ROUTER_RS_BIN" ]; then
   exit 1
 fi
 
-exec "$ROUTER_RS_BIN" codex hook --event="$EVENT" --repo-root "$ROOT"
+exec "$ROUTER_RS_BIN" host codex hook --event="$EVENT" --repo-root "$ROOT"

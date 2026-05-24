@@ -1292,7 +1292,7 @@ pub(crate) fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
 Codex hooks are enabled for this repo and are managed by the Rust `router-rs` control plane.\n\n\
 <!-- managed_by: router-rs codex sync -->\n\n\
-**Policy snapshot:** the `codex_agent_policy` payload embeds the repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` preserves an existing root `AGENTS.md` from disk and only uses the embedded copy to bootstrap a missing file; rebuild before sync when you need generated Codex payloads to carry policy edits (see `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**).\n\n\
+**Policy snapshot:** the `codex_agent_policy` payload embeds repository `AGENTS.md` + `AGENTS_CODEX.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` / `framework sync-entrypoints` materialize **`AGENTS_CODEX.md`** and **`.codex/README.md`** (see `.codex/host_entrypoints_sync_manifest.json`); an existing `AGENTS_CODEX.md` on disk is preserved. When the delta file is missing, sync bootstraps **delta-only** content (not a merged kernel+delta blob). Rebuild before sync when hook payloads must carry policy edits (see `AGENTS_CODEX.md` → **Codex 构建快照与同步逻辑**).\n\n\
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
 `SessionStart` injects a lightweight workspace pointer (`Repo:` and optional `source`) when operator inject is enabled; it does **not** inject a continuity digest or hook-driven `GOAL_CONTINUE`. `UserPromptSubmit` injects only trigger-specific context. `PreToolUse` blocks direct edits to generated Codex surfaces. `PostToolUse` records subagent/tool telemetry and, when opted in (`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1`, default off), may append verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active. `Stop` enforces closeout and `CODEX_REVIEW_GATE` (wave-2 partial: broad/deep review requires PostTool countable deep-lane evidence **and** Stop compact findings, or bounded `rg_clear` / reject tokens; compact alone cannot clear); set **`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1`** to disable the hard gate (unset keeps enabled). `my-light` lifecycle (`/discussx|planx|implementx|verifyx` or `GOAL_STATE.lifecycle_profile`) suppresses the hard block. It does **not** write an automatic continuity checkpoint (`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` is a no-op). Resume work via `/implementx`, `framework_goal_drive` stdio, and manual boards under `artifacts/current/<task_id>/`. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
@@ -1321,7 +1321,7 @@ pub(crate) fn codex_host_entrypoint_provider(
     let policy = match fs::read(&policy_path) {
         Ok(bytes) => bytes,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            build_codex_agent_policy().into_bytes()
+            include_str!("../../../../../AGENTS_CODEX.md").as_bytes().to_vec()
         }
         Err(err) => {
             return Err(format!(
@@ -3050,7 +3050,7 @@ mod tests {
             run_codex_review_subagent_gate(repo, payload)
         }
 
-        const TEST_COMPACT_FINDING: &str = "[P1] scripts/router-rs/src/codex_hooks.rs:1 — wave-2 compact gate clear evidence line";
+        const TEST_COMPACT_FINDING: &str = "[P1] scripts/router-rs/src/hosts/codex_hooks/mod.rs:1 — wave-2 compact gate clear evidence line";
 
         #[test]
         fn operator_inject_off_skips_session_start_additional_context() {

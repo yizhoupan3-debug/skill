@@ -3,7 +3,7 @@ name: discussx
 description: |
   Personal lifecycle — discuss/requirements (doc-only). Multi-round, user-gated depth; stay in discuss until explicit /planx.
   Use for /discussx or starting a task. Does not mutate product code.
-routing_layer: L1
+routing_layer: L0
 routing_owner: owner
 routing_gate: none
 routing_priority: P1
@@ -63,7 +63,14 @@ Visible chat **structure** (adapt depth to turn; omit empty sections):
 | `artifacts/current/<task_id>/REQUIREMENTS.md` | Living requirements — **update every round** |
 | `artifacts/current/<task_id>/DECISIONS.md` | Locked choices only |
 | `artifacts/current/<task_id>/OPEN_QUESTIONS.md` | **Unresolved items only** — separate file (required once discuss starts) |
-| `artifacts/current/<task_id>/GOAL_STATE.json` | `lifecycle_profile: my-light`, `status: discussing`, `drive_until_done: false` |
+| `artifacts/current/<task_id>/GOAL_STATE.json` | Via **`framework_goal_drive` stdio** only (see below); `lifecycle_profile: my-light`, `drive_until_done: false` |
+
+### GOAL_STATE writes (HARD)
+
+- **Do not** `Write` / `StrReplace` `GOAL_STATE.json` directly — mutating paths go through **`framework_goal_drive`** (`router-rs --stdio-json`, op `framework_goal_drive`) so `TASK_LEDGER.jsonl` stays consistent with Stop hydration.
+- **Initial**: `operation: start` with `drive_until_done: false`, `lifecycle_profile: my-light`, goal contract fields from `REQUIREMENTS.md`.
+- **Status / checkpoint**: `checkpoint` with `note`; terminal transitions use `pause` / `complete` as appropriate before `/planx`.
+- Hook layer **reads** GOAL only; it does not write checkpoints.
 
 ### OPEN_QUESTIONS.md (HARD)
 
