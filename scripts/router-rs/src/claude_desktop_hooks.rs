@@ -1190,7 +1190,7 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<Str
     }
 
     // Write the record
-    let content = serde_json::to_string_pretty(&record).map_err(|e| e.to_string())?;
+    let content = serde_json::to_string_pretty(&record).map_err(|e| format!("serialize closeout record failed: {e}"))?;
     fs::write(&record_path, &content).map_err(|e| format!("write closeout record failed: {e}"))?;
 
     // Evaluate the record
@@ -1231,7 +1231,7 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<Str
         "violations": violations,
     });
 
-    Ok(serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?)
+    Ok(serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))?)
 }
 
 fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {

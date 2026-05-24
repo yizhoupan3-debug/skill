@@ -145,6 +145,20 @@ pub fn router_rs_cursor_hook_state_dir_sync_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC_ENV)
 }
 
+/// `ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC=1`: fsync hook-state file after each save (slower). Default false.
+pub fn router_rs_cursor_hook_state_file_sync_enabled() -> bool {
+    router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
+}
+
+/// `ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES`: how many times to retry hook-state flock (50ms interval). Default 100.
+pub fn router_rs_cursor_hook_state_lock_retries() -> u32 {
+    env::var("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u32>().ok())
+        .unwrap_or(100)
+}
+
+
 /// Age-based stale sweep for `.cursor/hook-state/` owned files (default **7** days).
 ///
 /// `0` / `false` / `off` / `no` disables; `LEGACY_FULL_SWEEP` remains opt-in full wipe.

@@ -255,7 +255,7 @@ Non-goals: <可选>
 
 ## CreatePlan 输出契约（Cursor）
 
-**适用范围**：宿主通过 **CreatePlan** 新建或更新、落盘为 **`.plan.md`** 的计划（常见路径：工作区 [`.cursor/plans/`](../../.cursor/plans/)；以 Cursor 实际写入为准）。**Skill 路由不会改写磁盘上的 plan 文件**；合规依赖主线程在调用 CreatePlan **之后**对照本节自检，必要时编辑该 `.plan.md` 补齐。
+**适用范围**：宿主通过 **CreatePlan** 新建或更新、落盘为 **`.plan.md`** 的计划（常见路径：工作区 `.cursor/plans/`；以 Cursor 实际写入为准）。**Skill 路由不会改写磁盘上的 plan 文件**；合规依赖主线程在调用 CreatePlan **之后**对照本节自检，必要时编辑该 `.plan.md` 补齐。
 
 **Profile 分岔**：`plan_profile: research` 时须同时满足 **Plan profile（`plan_profile`）** 与下表 **`research` 列**；**缺省**或 **`execution`** 时满足 **`execution` 列**。
 

@@ -24,7 +24,7 @@
         "projection_status": "implemented",
         "installable": true,
         "default_framework_command": "implementx",
-        "host_entrypoints": "AGENTS.md"
+        "host_entrypoints": "AGENTS_CODEX.md"
       },
       "cursor": {
         "install_tool": "cursor",
@@ -32,7 +32,7 @@
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": [
-          "AGENTS.md",
+          "AGENTS_CURSOR.md",
           ".cursor/rules/*.mdc"
         ]
       },
@@ -41,7 +41,7 @@
         "projection_status": "implemented",
         "installable": false,
         "unsupported_reason": "Codex app is runtime-supported through the desktop thread host; it does not install file projections.",
-        "host_entrypoints": "AGENTS.md"
+        "host_entrypoints": "AGENTS_CODEX.md"
       },
       "claude-code": {
         "install_tool": "claude",
@@ -49,7 +49,7 @@
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": [
-          "AGENTS.md",
+          "AGENTS_CLAUDE.md",
           ".claude/rules/framework.md",
           ".claude/settings.json"
         ]
@@ -60,7 +60,7 @@
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": [
-          "AGENTS.md",
+          "AGENTS_CLAUDE.md",
           ".claude/CLAUDE.md"
         ]
       },
@@ -70,7 +70,7 @@
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": [
-          "AGENTS.md",
+          "AGENTS_ANTIGRAVITY.md",
           ".gemini/antigravity/rules/framework.md"
         ]
       }
@@ -329,7 +329,7 @@
       "host_id": "codex-cli",
       "transport": "native-codex",
       "context_files": [
-        "AGENTS.md"
+        "AGENTS_CODEX.md"
       ],
       "settings_paths": [
         {
@@ -391,7 +391,7 @@
         }
       ],
       "context_files": [
-        "AGENTS.md"
+        "AGENTS_CODEX.md"
       ],
       "settings_paths": [],
       "session_supervisor_driver": "unsupported",
@@ -419,7 +419,7 @@
       "host_id": "cursor",
       "transport": "cursor-agent",
       "context_files": [
-        "AGENTS.md"
+        "AGENTS_CURSOR.md"
       ],
       "settings_paths": [
         {
@@ -467,7 +467,7 @@
       "host_id": "claude-code",
       "transport": "anthropic-claude-code",
       "context_files": [
-        "AGENTS.md"
+        "AGENTS_CLAUDE.md"
       ],
       "settings_paths": [
         {
@@ -498,7 +498,7 @@
       "host_id": "claude-desktop",
       "transport": "mcp-stdio",
       "context_files": [
-        "AGENTS.md"
+        "AGENTS_CLAUDE.md"
       ],
       "settings_paths": [
         {
@@ -551,7 +551,7 @@
       "host_id": "antigravity",
       "transport": "mcp-stdio",
       "context_files": [
-        "AGENTS.md"
+        "AGENTS_ANTIGRAVITY.md"
       ],
       "settings_paths": [
         {

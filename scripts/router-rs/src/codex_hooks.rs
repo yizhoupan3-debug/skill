@@ -42,12 +42,13 @@ pub(crate) const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str =
     ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"";
-pub(crate) const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
+pub(crate) const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
 pub(crate) const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub(crate) const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
 pub(crate) const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [CODEX_HOOKS_PATH];
-const PROTECTED_GENERATED_PATHS: [&str; 4] = [
+const PROTECTED_GENERATED_PATHS: [&str; 5] = [
     CODEX_AGENT_POLICY_PATH,
+    "AGENTS.md",
     CODEX_HOOKS_PATH,
     CODEX_HOOKS_README_PATH,
     HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
@@ -1285,7 +1286,7 @@ pub fn build_codex_hook_projection() -> Value {
 }
 
 pub(crate) fn build_codex_agent_policy() -> String {
-    include_str!("../../../AGENTS.md").to_string()
+    include_str!("../../../AGENTS_CODEX.md").to_string()
 }
 
 pub(crate) fn build_codex_hooks_readme() -> String {

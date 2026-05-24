@@ -7,7 +7,7 @@ members = [
   "financial_data_rs",
   "gh_source_gate_rs",
   "pptx_tool_rs",
-  "screenshot_rs",
+  "screenshot_rs", "pubmed_tool_rs",
 ]
 resolver = "2"
 

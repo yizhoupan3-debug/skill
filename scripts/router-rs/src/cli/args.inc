@@ -15,6 +15,15 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: HostCommand,
     },
+    Antigravity {
+        #[command(subcommand)]
+        command: AntigravitySubcommand,
+    },
+    #[command(name = "claude-desktop")]
+    ClaudeDesktop {
+        #[command(subcommand)]
+        command: ClaudeDesktopSubcommand,
+    },
     Trace {
         #[command(subcommand)]
         command: TraceCommand,

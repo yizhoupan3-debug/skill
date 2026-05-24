@@ -20,6 +20,10 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
+pub mod office;
+pub mod qa;
+
+
 const EMU_PER_INCH: f64 = 914_400.0;
 const POINTS_PER_INCH: f64 = 72.0;
 const DEFAULT_PAD_PX: u32 = 100;
@@ -51,14 +55,14 @@ enum Commands {
 }
 
 #[derive(ValueEnum, Clone, Debug)]
-enum DeckTemplate {
+pub(crate) enum DeckTemplate {
     Dark,
     Light,
     Corporate,
 }
 
 #[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
-enum QualityMode {
+pub(crate) enum QualityMode {
     Standard,
     Strict,
 }
@@ -209,7 +213,7 @@ struct SanitizePptxArgs {
 }
 
 #[derive(Args)]
-struct QaArgs {
+pub struct QaArgs {
     deck: String,
     #[arg(long, default_value = "rendered")]
     rendered_dir: String,
@@ -243,13 +247,13 @@ struct BuildQaArgs {
 }
 
 #[derive(Args)]
-struct OfficeArgs {
+pub struct OfficeArgs {
     #[command(subcommand)]
     command: OfficeCommands,
 }
 
 #[derive(Subcommand)]
-enum OfficeCommands {
+pub enum OfficeCommands {
     Probe(OfficeProbeArgs),
     Doctor(OfficeDoctorArgs),
     Outline(OfficeFileArgs),
@@ -262,13 +266,13 @@ enum OfficeCommands {
 }
 
 #[derive(Args)]
-struct OfficeProbeArgs {
+pub struct OfficeProbeArgs {
     #[arg(long, default_value_t = false)]
     json: bool,
 }
 
 #[derive(Args)]
-struct OfficeDoctorArgs {
+pub struct OfficeDoctorArgs {
     file: String,
     #[arg(long, default_value_t = false)]
     json: bool,
@@ -279,14 +283,14 @@ struct OfficeDoctorArgs {
 }
 
 #[derive(Args)]
-struct OfficeFileArgs {
+pub struct OfficeFileArgs {
     file: String,
     #[arg(long, default_value_t = false)]
     json: bool,
 }
 
 #[derive(Args)]
-struct OfficeGetArgs {
+pub struct OfficeGetArgs {
     file: String,
     #[arg(default_value = "/")]
     path: String,
@@ -297,7 +301,7 @@ struct OfficeGetArgs {
 }
 
 #[derive(Args)]
-struct OfficeQueryArgs {
+pub struct OfficeQueryArgs {
     file: String,
     selector: String,
     #[arg(long)]
@@ -307,7 +311,7 @@ struct OfficeQueryArgs {
 }
 
 #[derive(Args)]
-struct OfficeWatchArgs {
+pub struct OfficeWatchArgs {
     file: String,
     #[arg(long, default_value_t = 18080)]
     port: u16,
@@ -316,7 +320,7 @@ struct OfficeWatchArgs {
 }
 
 #[derive(Args)]
-struct OfficeBatchArgs {
+pub struct OfficeBatchArgs {
     file: String,
     #[arg(long)]
     input: Option<String>,
@@ -347,7 +351,7 @@ struct OutlineSummary {
 }
 
 #[derive(Debug, Clone)]
-struct ZipBundle {
+pub(crate) struct ZipBundle {
     files: HashMap<String, Vec<u8>>,
 }
 
@@ -426,6 +430,7 @@ struct LayoutInfo {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct QaRenderSummary {
     rendered_dir: String,
     png_count: usize,
@@ -433,6 +438,7 @@ struct QaRenderSummary {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct QaOverflowSummary {
     ok: bool,
     stdout: String,
@@ -440,6 +446,7 @@ struct QaOverflowSummary {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct QaSummary {
     ok: bool,
     deck: String,
@@ -452,6 +459,7 @@ struct QaSummary {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct QaAestheticSummary {
     ok: bool,
     failing_slides: Vec<usize>,
@@ -460,6 +468,7 @@ struct QaAestheticSummary {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct OfficeProbeSummary {
     available: bool,
     engine: String,
@@ -467,6 +476,7 @@ struct OfficeProbeSummary {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct OfficeDoctorSummary {
     inspector_version: Option<String>,
     file: String,
@@ -476,7 +486,7 @@ struct OfficeDoctorSummary {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum EmitFormat {
+pub(crate) enum EmitFormat {
     Json,
     Text,
 }
@@ -575,21 +585,7 @@ fn outline_command(args: OutlineArgs) -> Result<()> {
 }
 
 fn qa_command(args: QaArgs) -> Result<()> {
-    let payload = qa_summary(&args.deck, &args.rendered_dir)?;
-    emit_value(
-        serde_json::to_value(&payload)?,
-        if args.json {
-            EmitFormat::Json
-        } else {
-            EmitFormat::Text
-        },
-    )?;
-    if args.fail_on_issues && !payload.ok {
-        bail!(
-            "qa failed: overflow, overlap, aesthetic, font, or Rust inspector issue detected"
-        );
-    }
-    Ok(())
+    qa::qa_command(args)
 }
 
 fn intake_command(args: IntakeArgs) -> Result<()> {
@@ -2631,7 +2627,7 @@ fn inch_emu(value: f64) -> i64 {
     (value * EMU_PER_INCH).round() as i64
 }
 
-fn xml_escape(value: &str) -> String {
+pub(crate) fn xml_escape(value: &str) -> String {
     value
         .replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -2644,135 +2640,27 @@ fn outline_str<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or(default)
 }
 
-fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
-    let deck = expand_path(deck_path);
-    let rendered_dir_path = expand_path(rendered_dir);
-    let rendered = render_paths(&deck, &rendered_dir_path, 1600, 900)?;
-    let overflow = slide_overflow_summary(&deck)?;
-    let overlap = slide_overlap_summary(&deck)?;
-    let aesthetic = slide_aesthetic_summary(&deck)?;
-    let font_check = detect_fonts_payload(&deck)?;
-    let inspector = office_doctor_value(&deck.display().to_string())?;
-    let ok = overflow.ok
-        && overlap.ok
-        && aesthetic.ok
-        && font_check_ok(&font_check)
-        && inspector_ok(&inspector);
-    Ok(QaSummary {
-        ok,
-        deck: deck.display().to_string(),
-        render: QaRenderSummary {
-            rendered_dir: rendered_dir_path.display().to_string(),
-            png_count: rendered.len(),
-            paths: rendered
-                .iter()
-                .map(|path| path.display().to_string())
-                .collect(),
-        },
-        overflow_check: overflow,
-        overlap_check: overlap,
-        aesthetic_check: aesthetic,
-        font_check,
-        inspector,
-    })
+#[allow(dead_code)]
+fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<qa::QaSummary> {
+    qa::qa_summary(deck_path, rendered_dir)
 }
 
+#[allow(dead_code)]
 fn strict_quality_gate(payload: &Value) -> Result<()> {
-    if payload.pointer("/ok").and_then(Value::as_bool) == Some(false) {
-        bail!("strict quality failed: combined QA status is false");
-    }
-    let overflow_ok = payload
-        .pointer("/overflow_check/ok")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("strict quality failed: overflow check status missing"))?;
-    if !overflow_ok {
-        bail!("strict quality failed: slide overflow detected");
-    }
-    let overlap_ok = payload
-        .pointer("/overlap_check/ok")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("strict quality failed: overlap check status missing"))?;
-    if !overlap_ok {
-        bail!("strict quality failed: slide overlap detected");
-    }
-    let aesthetic_ok = payload
-        .pointer("/aesthetic_check/ok")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("strict quality failed: aesthetic check status missing"))?;
-    if !aesthetic_ok {
-        let failing = payload
-            .pointer("/aesthetic_check/failing_slides")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_u64)
-                    .map(|n| n.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            })
-            .unwrap_or_default();
-        if failing.is_empty() {
-            bail!("strict quality failed: aesthetic check reported dense text overlap risk");
-        }
-        bail!(
-            "strict quality failed: aesthetic check reported dense text overlap risk on slides {}",
-            failing
-        );
-    }
-    let font_ok = payload
-        .pointer("/font_check/ok")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("strict quality failed: font check status missing"))?;
-    if !font_ok {
-        bail!("strict quality failed: font check reported issues");
-    }
-    let inspector_validation_ok = payload
-        .pointer("/inspector/validation/ok")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("strict quality failed: inspector validation status missing"))?;
-    if !inspector_validation_ok {
-        bail!("strict quality failed: Rust inspector validation failed");
-    }
-    let inspector_issue_count = payload
-        .pointer("/inspector/issues/count")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("strict quality failed: inspector issue count missing"))?;
-    if inspector_issue_count > 0 {
-        bail!("strict quality failed: Rust inspector reported deck issues");
-    }
-    Ok(())
+    qa::strict_quality_gate(payload)
 }
 
+#[allow(dead_code)]
 fn font_check_ok(payload: &Value) -> bool {
-    payload
-        .get("ok")
-        .and_then(Value::as_bool)
-        .unwrap_or_else(|| {
-            payload
-                .get("font_missing_overall")
-                .and_then(Value::as_array)
-                .is_none_or(Vec::is_empty)
-                && payload
-                    .get("font_substituted_overall")
-                    .and_then(Value::as_array)
-                    .is_none_or(Vec::is_empty)
-        })
+    qa::font_check_ok(payload)
 }
 
+#[allow(dead_code)]
 fn inspector_ok(payload: &Value) -> bool {
-    payload
-        .pointer("/validation/ok")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        && payload
-            .pointer("/issues/count")
-            .and_then(Value::as_u64)
-            .unwrap_or(0)
-            == 0
+    qa::inspector_ok(payload)
 }
 
-fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
+pub(crate) fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
     let dpi = if has_extension(input, "pdf") {
         calc_dpi_via_pdf(input, width, height)?
     } else {
@@ -2781,148 +2669,22 @@ fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Res
     rasterize_to_pngs(input, output_dir, dpi)
 }
 
-fn slide_overflow_summary(input: &Path) -> Result<QaOverflowSummary> {
-    let bundle = ZipBundle::from_path(input)?;
-    let structure = extract_pptx_structure(&bundle, input, false, None)?;
-    let slide_w = structure
-        .get("slide_width")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| anyhow!("missing slide_width"))?;
-    let slide_h = structure
-        .get("slide_height")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| anyhow!("missing slide_height"))?;
-    let slides = structure
-        .get("slides")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("missing slides"))?;
-    let mut failing = Vec::new();
-    for slide in slides {
-        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
-        let mut overflow = false;
-        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
-            overflow = elements
-                .iter()
-                .any(|item| element_overflows(item, slide_w, slide_h));
-        }
-        if overflow {
-            failing.push(index);
-        }
-    }
-    if failing.is_empty() {
-        return Ok(QaOverflowSummary {
-            ok: true,
-            stdout: "Test passed. No overflow detected.".to_string(),
-            stderr: String::new(),
-        });
-    }
-    Ok(QaOverflowSummary {
-        ok: false,
-        stdout: format!(
-            "ERROR: Slides with content overflowing original canvas (1-based indexing): {}",
-            failing
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        stderr: String::new(),
-    })
+#[allow(dead_code)]
+fn slide_overflow_summary(input: &Path) -> Result<qa::QaOverflowSummary> {
+    qa::slide_overflow_summary(input)
 }
 
-fn slide_overlap_summary(input: &Path) -> Result<QaOverflowSummary> {
-    let bundle = ZipBundle::from_path(input)?;
-    let structure = extract_pptx_structure(&bundle, input, false, None)?;
-    let slides = structure
-        .get("slides")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("missing slides"))?;
-    let mut failing = Vec::new();
-    for slide in slides {
-        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
-        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
-            if has_text_bbox_overlap(elements) {
-                failing.push(index);
-            }
-        }
-    }
-    if failing.is_empty() {
-        return Ok(QaOverflowSummary {
-            ok: true,
-            stdout: "Test passed. No overlap detected.".to_string(),
-            stderr: String::new(),
-        });
-    }
-    Ok(QaOverflowSummary {
-        ok: false,
-        stdout: format!(
-            "ERROR: Slides with overlapping text shape bounding boxes (1-based indexing): {}",
-            failing
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        stderr: String::new(),
-    })
+#[allow(dead_code)]
+fn slide_overlap_summary(input: &Path) -> Result<qa::QaOverflowSummary> {
+    qa::slide_overlap_summary(input)
 }
 
-fn slide_aesthetic_summary(input: &Path) -> Result<QaAestheticSummary> {
-    let bundle = ZipBundle::from_path(input)?;
-    let structure = extract_pptx_structure(&bundle, input, false, None)?;
-    let slides = structure
-        .get("slides")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("missing slides"))?;
-    let slide_w = structure
-        .get("slide_width")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| anyhow!("missing slide_width"))?;
-    let slide_h = structure
-        .get("slide_height")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| anyhow!("missing slide_height"))?;
-
-    let mut failing: BTreeSet<usize> = BTreeSet::new();
-    failing.extend(layout_rhythm_failing_slides(slides));
-
-    for slide in slides {
-        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
-        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
-            if has_dense_text_overlap_risk(elements)
-                || has_dense_text_density_risk(elements)
-                || has_decorative_title_underline_risk(elements, slide_w, slide_h)
-                || has_ai_copy_slop_risk(elements)
-            {
-                failing.insert(index);
-            }
-        }
-    }
-    let failing = failing.into_iter().collect::<Vec<_>>();
-    if failing.is_empty() {
-        return Ok(QaAestheticSummary {
-            ok: true,
-            failing_slides: Vec::new(),
-            stdout: "Test passed. No dense text aesthetic risk detected.".to_string(),
-            stderr: String::new(),
-        });
-    }
-    Ok(QaAestheticSummary {
-        ok: false,
-        failing_slides: failing.clone(),
-        stdout: format!(
-            "ERROR: Aesthetic risk detected (dense text overload, layout repetition, or decorative title underline) on slides (1-based indexing): {}",
-            failing
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        stderr: String::new(),
-    })
+#[allow(dead_code)]
+fn slide_aesthetic_summary(input: &Path) -> Result<qa::QaAestheticSummary> {
+    qa::slide_aesthetic_summary(input)
 }
 
-fn detect_fonts_payload(input: &Path) -> Result<Value> {
+pub(crate) fn detect_fonts_payload(input: &Path) -> Result<Value> {
     let bundle = ZipBundle::from_path(input)?;
     let requested = extract_requested_fonts_by_slide(&bundle)?;
     let installed = build_font_synonym_map()?;
@@ -2981,496 +2743,104 @@ fn detect_fonts_payload(input: &Path) -> Result<Value> {
     }))
 }
 
-fn extract_structure_payload(input_path: &str) -> Result<Value> {
+pub(crate) fn extract_structure_payload(input_path: &str) -> Result<Value> {
     let input = expand_path(input_path);
     let bundle = ZipBundle::from_path(&input)?;
     extract_pptx_structure(&bundle, &input, false, None)
 }
 
+#[allow(dead_code)]
 fn office_doctor_value(file: &str) -> Result<Value> {
-    Ok(serde_json::to_value(office_doctor_summary(file)?)?)
+    office::office_doctor_value(file)
 }
 
-fn office_doctor_summary(file: &str) -> Result<OfficeDoctorSummary> {
-    let outline_payload = rust_office_outline_value(file)?;
-    let issues_payload = rust_office_issues_value(file)?;
-    let validate_payload = rust_office_validate_value(file)?;
-    summarize_office_doctor(
-        file,
-        outline_payload,
-        issues_payload,
-        validate_payload,
-        Some(env!("CARGO_PKG_VERSION").to_string()),
-    )
+#[allow(dead_code)]
+fn office_doctor_summary(file: &str) -> Result<office::OfficeDoctorSummary> {
+    office::office_doctor_summary(file)
 }
 
+#[allow(dead_code)]
 fn rust_office_outline_value(file: &str) -> Result<Value> {
-    let structure = extract_structure_payload(file)?;
-    let slides = structure
-        .get("slides")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|slide| {
-            let title = first_slide_title(&slide).unwrap_or_else(|| "Untitled".to_string());
-            let elements = slide
-                .get("elements")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            let text_boxes = elements
-                .iter()
-                .filter(|element| {
-                    element
-                        .get("text")
-                        .and_then(|text| text.get("fullText"))
-                        .and_then(Value::as_str)
-                        .is_some_and(|text| !text.trim().is_empty())
-                })
-                .count();
-            let images = elements
-                .iter()
-                .filter(|element| element.get("image").is_some())
-                .count();
-            json!({
-                "index": slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1,
-                "title": title,
-                "layout": slide.get("layout").cloned().unwrap_or(Value::Null),
-                "elementCount": elements.len(),
-                "textBoxCount": text_boxes,
-                "imageCount": images,
-                "notes": slide.get("notes").cloned().unwrap_or(Value::Null),
-            })
-        })
-        .collect::<Vec<_>>();
-    Ok(json!({
-        "success": true,
-        "data": {
-            "engine": "rust-pptx-inspector",
-            "totalSlides": structure.get("slide_count").cloned().unwrap_or(Value::Null),
-            "slides": slides,
-        }
-    }))
+    office::rust_office_outline_value(file)
 }
 
+#[allow(dead_code)]
 fn rust_office_issues_value(file: &str) -> Result<Value> {
-    let structure = extract_structure_payload(file)?;
-    let slide_w = structure
-        .get("slide_width")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| anyhow!("missing slide_width"))?;
-    let slide_h = structure
-        .get("slide_height")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| anyhow!("missing slide_height"))?;
-    let mut issues = Vec::new();
-    for slide in structure
-        .get("slides")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let slide_no = slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1;
-        let elements = slide
-            .get("elements")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        if first_slide_title(slide).is_none() {
-            issues.push(json!({
-                "Slide": slide_no,
-                "Severity": "warning",
-                "Message": "No title text found",
-            }));
-        }
-        for element in &elements {
-            if element_overflows(element, slide_w, slide_h) {
-                issues.push(json!({
-                    "Slide": slide_no,
-                    "Shape": element.get("name").cloned().unwrap_or(Value::Null),
-                    "Severity": "error",
-                    "Message": "Shape overflow outside slide canvas",
-                }));
-            }
-        }
-    }
-    Ok(json!({
-        "success": true,
-        "data": {
-            "Engine": "rust-pptx-inspector",
-            "Count": issues.len(),
-            "Issues": issues,
-        }
-    }))
+    office::rust_office_issues_value(file)
 }
 
+#[allow(dead_code)]
 fn rust_office_validate_value(file: &str) -> Result<Value> {
-    let input = expand_path(file);
-    let bundle = ZipBundle::from_path(&input)?;
-    let required = [
-        "[Content_Types].xml",
-        "_rels/.rels",
-        "ppt/presentation.xml",
-        "ppt/_rels/presentation.xml.rels",
-    ];
-    let mut errors = Vec::new();
-    for path in required {
-        if !bundle.files.contains_key(path) {
-            errors.push(format!("missing {path}"));
-        }
-    }
-    let structure = extract_pptx_structure(&bundle, &input, false, None)?;
-    if structure
-        .get("slide_count")
-        .and_then(Value::as_u64)
-        .unwrap_or(0)
-        == 0
-    {
-        errors.push("presentation contains no slides".to_string());
-    }
-    let ok = errors.is_empty();
-    let message = if ok {
-        "0 validation errors from Rust inspector".to_string()
-    } else {
-        format!("{} validation errors: {}", errors.len(), errors.join("; "))
-    };
-    Ok(json!({
-        "success": ok,
-        "message": message,
-        "data": {
-            "engine": "rust-pptx-inspector",
-            "errors": errors,
-        }
-    }))
+    office::rust_office_validate_value(file)
 }
 
+#[allow(dead_code)]
 fn rust_office_get_value(file: &str, selector: &str, depth: i32) -> Result<Value> {
-    let structure = extract_structure_payload(file)?;
-    let selected = select_structure_path(&structure, selector)?;
-    Ok(json!({
-        "success": true,
-        "selector": selector,
-        "depth": depth,
-        "data": trim_json_depth(selected, depth.max(0) as usize),
-    }))
+    office::rust_office_get_value(file, selector, depth)
 }
 
+#[allow(dead_code)]
 fn rust_office_query_value(file: &str, selector: &str, text: Option<&str>) -> Result<Value> {
-    let structure = extract_structure_payload(file)?;
-    let matches = query_structure(&structure, selector, text);
-    Ok(json!({
-        "success": true,
-        "selector": selector,
-        "text": text,
-        "count": matches.len(),
-        "data": matches,
-    }))
+    office::rust_office_query_value(file, selector, text)
 }
 
-fn write_rust_office_preview(file: &str, _port: u16) -> Result<PathBuf> {
-    let input = expand_path(file);
-    let structure = extract_structure_payload(file)?;
-    let preview = input.with_extension("preview.html");
-    let mut html = String::from(
-        "<!doctype html><meta charset=\"utf-8\"><title>PPTX Preview</title><style>body{font-family:Arial,sans-serif;background:#111;color:#eee;margin:24px}.slide{border:1px solid #444;border-radius:12px;padding:18px;margin:0 0 16px;background:#1b1b1b}.meta{color:#aaa;font-size:12px}pre{white-space:pre-wrap}</style>",
-    );
-    for slide in structure
-        .get("slides")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let slide_no = slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1;
-        html.push_str(&format!(
-            "<section class=\"slide\"><div class=\"meta\">Slide {slide_no}</div><h2>{}</h2>",
-            xml_escape(&first_slide_title(slide).unwrap_or_else(|| "Untitled".to_string()))
-        ));
-        for text in slide_texts(slide) {
-            html.push_str(&format!("<pre>{}</pre>", xml_escape(&text)));
-        }
-        html.push_str("</section>");
-    }
-    fs::write(&preview, html)?;
-    Ok(preview)
+#[allow(dead_code)]
+fn write_rust_office_preview(file: &str, port: u16) -> Result<PathBuf> {
+    office::write_rust_office_preview(file, port)
 }
 
+#[allow(dead_code)]
 fn rust_office_batch_value(
     file: &str,
     input: Option<&str>,
     commands: Option<&str>,
     force: bool,
 ) -> Result<Value> {
-    let source = if commands.is_some() {
-        "inline --commands".to_string()
-    } else if let Some(path) = input {
-        fs::read_to_string(expand_path(path))
-            .with_context(|| format!("failed to read batch input {}", path))?;
-        format!("--input {}", path)
-    } else {
-        "no batch commands".to_string()
-    };
-    bail!(
-        "ppt office batch is not supported by the read-only Rust inspector \
-         (file: {file}, force: {force}, source: {source}); rebuild editable changes through deck.plan.json"
-    )
+    office::rust_office_batch_value(file, input, commands, force)
 }
 
+#[allow(dead_code)]
 fn first_slide_title(slide: &Value) -> Option<String> {
-    slide_texts(slide)
-        .into_iter()
-        .map(|text| text.trim().to_string())
-        .find(|text| !text.is_empty())
+    office::first_slide_title(slide)
 }
 
+#[allow(dead_code)]
 fn slide_texts(slide: &Value) -> Vec<String> {
-    slide
-        .get("elements")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|element| {
-            element
-                .get("text")
-                .and_then(|text| text.get("fullText"))
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .filter(|text| !text.trim().is_empty())
-        .collect()
+    office::slide_texts(slide)
 }
 
+#[allow(dead_code)]
 fn select_structure_path(root: &Value, selector: &str) -> Result<Value> {
-    if selector == "/" {
-        return Ok(root.clone());
-    }
-    let slide_re = Regex::new(r"^/slide\[(\d+)\]$")?;
-    if let Some(caps) = slide_re.captures(selector) {
-        let index = caps[1].parse::<usize>()?.saturating_sub(1);
-        return root
-            .get("slides")
-            .and_then(Value::as_array)
-            .and_then(|slides| slides.get(index))
-            .cloned()
-            .ok_or_else(|| anyhow!("slide selector out of range: {selector}"));
-    }
-    let shape_re = Regex::new(r"^/slide\[(\d+)\]/shape\[(\d+)\]$")?;
-    if let Some(caps) = shape_re.captures(selector) {
-        let slide_index = caps[1].parse::<usize>()?.saturating_sub(1);
-        let shape_index = caps[2].parse::<usize>()?.saturating_sub(1);
-        return root
-            .get("slides")
-            .and_then(Value::as_array)
-            .and_then(|slides| slides.get(slide_index))
-            .and_then(|slide| slide.get("elements"))
-            .and_then(Value::as_array)
-            .and_then(|elements| elements.get(shape_index))
-            .cloned()
-            .ok_or_else(|| anyhow!("shape selector out of range: {selector}"));
-    }
-    bail!("unsupported selector: {selector}. Use /, /slide[N], or /slide[N]/shape[N].")
+    office::select_structure_path(root, selector)
 }
 
+#[allow(dead_code)]
 fn trim_json_depth(value: Value, depth: usize) -> Value {
-    if depth == 0 {
-        return match value {
-            Value::Array(items) => json!({"type": "array", "len": items.len()}),
-            Value::Object(map) => json!({"type": "object", "keys": map.keys().collect::<Vec<_>>()}),
-            other => other,
-        };
-    }
-    match value {
-        Value::Array(items) => Value::Array(
-            items
-                .into_iter()
-                .map(|item| trim_json_depth(item, depth - 1))
-                .collect(),
-        ),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, value)| (key, trim_json_depth(value, depth - 1)))
-                .collect(),
-        ),
-        other => other,
-    }
+    office::trim_json_depth(value, depth)
 }
 
+#[allow(dead_code)]
 fn query_structure(structure: &Value, selector: &str, text: Option<&str>) -> Vec<Value> {
-    let needle = text.map(|value| value.to_lowercase());
-    let font_filter = selector
-        .strip_prefix("shape[font=")
-        .and_then(|rest| rest.strip_suffix(']'))
-        .map(|font| font.trim_matches('"').trim_matches('\'').to_lowercase());
-    let wants_shape = selector == "shape" || selector.starts_with("shape[");
-    if !wants_shape {
-        return Vec::new();
-    }
-    let mut out = Vec::new();
-    for slide in structure
-        .get("slides")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let slide_no = slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1;
-        for element in slide
-            .get("elements")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            let full_text = element
-                .get("text")
-                .and_then(|text| text.get("fullText"))
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            if let Some(needle) = &needle {
-                if !full_text.to_lowercase().contains(needle) {
-                    continue;
-                }
-            }
-            if let Some(font) = &font_filter {
-                let shape_text = serde_json::to_string(element)
-                    .unwrap_or_default()
-                    .to_lowercase();
-                if !shape_text.contains(font) {
-                    continue;
-                }
-            }
-            let mut cloned = element.clone();
-            if let Some(object) = cloned.as_object_mut() {
-                object.insert("slide".to_string(), json!(slide_no));
-            }
-            out.push(cloned);
-        }
-    }
-    out
+    office::query_structure(structure, selector, text)
 }
 
+#[allow(dead_code)]
 fn summarize_office_doctor(
     file: &str,
     outline_payload: Value,
     issues_payload: Value,
     validate_payload: Value,
     version: Option<String>,
-) -> Result<OfficeDoctorSummary> {
-    let outline_data = outline_payload
-        .get("data")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    let issues_data = issues_payload
-        .get("data")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    let issue_list = issues_data
-        .get("Issues")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let validate_message = validate_payload
-        .get("message")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let validation_ok = validate_message
-        .to_lowercase()
-        .contains("0 validation error")
-        || (validate_payload.get("success").and_then(Value::as_bool) == Some(true)
-            && !validate_message.to_lowercase().contains("validation error"));
-    let overflow_count = issue_list
-        .iter()
-        .filter(|item| {
-            item.get("Message")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_lowercase()
-                .contains("overflow")
-        })
-        .count();
-    let title_count = issue_list
-        .iter()
-        .filter(|item| {
-            item.get("Message")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_lowercase()
-                .contains("no title")
-        })
-        .count();
-    Ok(OfficeDoctorSummary {
-        inspector_version: version,
-        file: file.to_string(),
-        outline: json!({
-            "total_slides": outline_data.get("totalSlides").cloned().unwrap_or(Value::Null),
-            "slides": outline_data.get("slides").cloned().unwrap_or_else(|| json!([])),
-        }),
-        issues: json!({
-            "count": issues_data
-                .get("Count")
-                .and_then(Value::as_u64)
-                .unwrap_or(issue_list.len() as u64),
-            "overflow_count": overflow_count,
-            "title_count": title_count,
-            "items": issue_list,
-        }),
-        validation: json!({
-            "ok": validation_ok,
-            "message": validate_message,
-        }),
-    })
+) -> Result<office::OfficeDoctorSummary> {
+    office::summarize_office_doctor(file, outline_payload, issues_payload, validate_payload, version)
 }
 
-fn print_office_doctor_summary(summary: &OfficeDoctorSummary) {
-    println!(
-        "inspector: {}",
-        summary
-            .inspector_version
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string())
-    );
-    println!("file: {}", summary.file);
-    println!(
-        "slides: {}",
-        summary
-            .outline
-            .get("total_slides")
-            .and_then(Value::as_u64)
-            .unwrap_or(0)
-    );
-    println!(
-        "issues: total={} overflow={} missing_title={}",
-        summary
-            .issues
-            .get("count")
-            .and_then(Value::as_u64)
-            .unwrap_or(0),
-        summary
-            .issues
-            .get("overflow_count")
-            .and_then(Value::as_u64)
-            .unwrap_or(0),
-        summary
-            .issues
-            .get("title_count")
-            .and_then(Value::as_u64)
-            .unwrap_or(0)
-    );
-    println!(
-        "validation_ok: {}",
-        summary
-            .validation
-            .get("ok")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    );
-    if let Some(message) = summary.validation.get("message").and_then(Value::as_str) {
-        if !message.is_empty() {
-            println!("validation_message: {}", message);
-        }
-    }
+#[allow(dead_code)]
+fn print_office_doctor_summary(summary: &office::OfficeDoctorSummary) {
+    office::print_office_doctor_summary(summary);
 }
 
-fn emit_value(value: Value, format: EmitFormat) -> Result<()> {
+pub(crate) fn emit_value(value: Value, format: EmitFormat) -> Result<()> {
     match format {
         EmitFormat::Json => println!("{}", serde_json::to_string_pretty(&value)?),
         EmitFormat::Text => print_text_value(&value)?,
@@ -3826,7 +3196,7 @@ fn sanitize_pptx_command(args: SanitizePptxArgs) -> Result<()> {
     Ok(())
 }
 
-fn expand_path(input: &str) -> PathBuf {
+pub(crate) fn expand_path(input: &str) -> PathBuf {
     if let Some(rest) = input.strip_prefix("~/") {
         if let Ok(home) = std::env::var("HOME") {
             return Path::new(&home).join(rest);
@@ -3962,7 +3332,7 @@ fn parse_pdf_page_size(value: &str) -> Result<(f64, f64)> {
     bail!("Unrecognized PDF page size format: {}", value);
 }
 
-fn rasterize_to_pngs(input: &Path, out_dir: &Path, dpi: u32) -> Result<Vec<PathBuf>> {
+pub(crate) fn rasterize_to_pngs(input: &Path, out_dir: &Path, dpi: u32) -> Result<Vec<PathBuf>> {
     fs::create_dir_all(out_dir)?;
     let temp_profile = TempDir::new().context("failed to create soffice profile")?;
     let temp_convert = TempDir::new().context("failed to create convert dir")?;
@@ -4378,7 +3748,7 @@ fn draw_text_bitmap(img: &mut RgbaImage, x: u32, y: u32, text: &str, color: Rgba
     }
 }
 
-fn extract_pptx_structure(
+pub(crate) fn extract_pptx_structure(
     bundle: &ZipBundle,
     input: &Path,
     extract_images: bool,
@@ -4867,7 +4237,7 @@ fn round4(value: f64) -> f64 {
     (value * 10_000.0).round() / 10_000.0
 }
 
-fn element_overflows(element: &Value, slide_w: f64, slide_h: f64) -> bool {
+pub(crate) fn element_overflows(element: &Value, slide_w: f64, slide_h: f64) -> bool {
     let position = element.get("position");
     let x = position
         .and_then(|pos| pos.get("x"))
@@ -4900,7 +4270,7 @@ fn element_overflows(element: &Value, slide_w: f64, slide_h: f64) -> bool {
         .unwrap_or(false)
 }
 
-fn has_text_bbox_overlap(elements: &[Value]) -> bool {
+pub(crate) fn has_text_bbox_overlap(elements: &[Value]) -> bool {
     let mut boxes = Vec::new();
     for element in elements {
         collect_text_boxes(element, &mut boxes);
@@ -4915,7 +4285,7 @@ fn has_text_bbox_overlap(elements: &[Value]) -> bool {
     false
 }
 
-fn has_dense_text_overlap_risk(elements: &[Value]) -> bool {
+pub(crate) fn has_dense_text_overlap_risk(elements: &[Value]) -> bool {
     let mut boxes = Vec::new();
     for element in elements {
         collect_text_boxes(element, &mut boxes);
@@ -4936,7 +4306,7 @@ fn has_dense_text_overlap_risk(elements: &[Value]) -> bool {
     overlap_density >= 0.20
 }
 
-fn has_dense_text_density_risk(elements: &[Value]) -> bool {
+pub(crate) fn has_dense_text_density_risk(elements: &[Value]) -> bool {
     let stats = slide_text_stats(elements);
     // Conservative thresholds tuned to catch document-like slides:
     // - too many text boxes (card farm / label spam)
@@ -4946,7 +4316,7 @@ fn has_dense_text_density_risk(elements: &[Value]) -> bool {
         || stats.text_char_count >= 520
 }
 
-fn has_ai_copy_slop_risk(elements: &[Value]) -> bool {
+pub(crate) fn has_ai_copy_slop_risk(elements: &[Value]) -> bool {
     let mut hits = 0usize;
     for element in elements {
         hits += count_ai_slop_hits_in_element(element);
@@ -5138,7 +4508,7 @@ fn deck_notes_have_semantic_markers(slides: &[Value]) -> bool {
     slides.iter().any(slide_has_rust_semantic_marker)
 }
 
-fn layout_rhythm_failing_slides(slides: &[Value]) -> Vec<usize> {
+pub(crate) fn layout_rhythm_failing_slides(slides: &[Value]) -> Vec<usize> {
     let slide_count = slides.len();
     if slide_count < 6 {
         return Vec::new();
@@ -5192,7 +4562,7 @@ fn layout_rhythm_failing_slides(slides: &[Value]) -> Vec<usize> {
     failing.into_iter().collect()
 }
 
-fn has_decorative_title_underline_risk(elements: &[Value], slide_w: f64, slide_h: f64) -> bool {
+pub(crate) fn has_decorative_title_underline_risk(elements: &[Value], slide_w: f64, slide_h: f64) -> bool {
     let title_box = match find_title_candidate(elements, slide_h) {
         Some(rect) => rect,
         None => return false,

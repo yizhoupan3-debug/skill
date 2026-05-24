@@ -2535,7 +2535,7 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS_CLAUDE.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
         gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
         review = narrative.review_findings_only_paragraph,
     )
@@ -2832,7 +2832,7 @@ fn write_claude_desktop_claude_md(
 
          # Claude Desktop
 
-         MCP **`router-rs-framework`**。协议与限制：**`docs/hosts/claude-desktop.md`**；政策：**`AGENTS.md`**。
+         MCP **`router-rs-framework`**。协议与限制：**`docs/hosts/claude-desktop.md`**；政策：**`AGENTS_CLAUDE.md`**。
 
          ## 会话（按序）
 
@@ -3136,7 +3136,7 @@ fn write_antigravity_framework_md(
          <!-- host_projection: antigravity -->\n\
          <!-- install_scope: {scope} -->\n\n\
          # Antigravity Framework\n\n\
-         Antigravity **`router-rs-framework`**。协议与限制：**`docs/hosts/antigravity.md`**；政策：**`AGENTS.md`**。\n\n\
+         Antigravity **`router-rs-framework`**。协议与限制：**`docs/hosts/antigravity.md`**；政策：**`AGENTS_ANTIGRAVITY.md`**。\n\n\
          ## 会话操作（按序）\n\n\
          1. `framework_digest` — 开头一次\n\
          2. `skill_route` → 只读 `skill_path`\n\
@@ -3399,7 +3399,7 @@ fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &st
     let narrative = load_host_projection_narrative(&roots.framework_root)
         .expect("host projection narrative must load before rendering codex entrypoint");
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS_CODEX.md`.\n2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
         gsd = lifecycle_paragraph_for_host(&narrative, "codex-cli"),
         review = narrative.review_findings_only_paragraph,
     )
@@ -3606,7 +3606,7 @@ fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS_CURSOR.md`.\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
         gsd = lifecycle_paragraph_for_host(&narrative, "cursor"),
         review = narrative.review_findings_only_paragraph,
     )

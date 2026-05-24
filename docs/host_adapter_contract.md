@@ -6,7 +6,7 @@
 
 **历史字段**：`host_targets.entrypoint_files` 已从注册表移除，请勿再添加；宿主策略入口与同步 manifest 的入口集合以 `host_targets.metadata.<host>.host_entrypoints` 为唯一权威（消费路径：`framework_host_targets::host_entrypoints_value_for_id`）。
 
-**相关契约**（英文实现侧叙事）：[`rust_contracts.md`](rust_contracts.md)。**Codex 投影专用英文契约**：[`host_adapter_contracts.md`](host_adapter_contracts.md)（勿与本文混读）。
+**相关契约**（英文实现侧叙事）：[`rust_contracts.md`](rust_contracts.md)。
 
 **手稿技能（paper-workbench 栈）**：论文前门与专科 lane 的可读契约以仓库 `skills/` 下对应 `SKILL.md` 与 reference 为内容真源；**安装与宿主投影**不以某一 IDE 为专属——闭集宿主列表与安装工具名以 **`configs/framework/RUNTIME_REGISTRY.json`** 为准，落地到 Cursor/Codex 等工作区时使用 **`router-rs framework host-integration install --to <host>`**（实现见 `host_integration.rs`）。技能栈索引见 [`../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md`](../skills/paper-workbench/references/RESEARCH_PAPER_STACK.md)。
 

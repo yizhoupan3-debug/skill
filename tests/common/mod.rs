@@ -2,6 +2,7 @@
 
 mod review_gate_lanes;
 
+#[allow(unused_imports)]
 pub use review_gate_lanes::{
     assert_review_gate_lane_sets_closed, review_gate_lane_sets_from_registry,
 };

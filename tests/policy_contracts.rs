@@ -1190,7 +1190,7 @@ fn gsd_slash_commands_removed_from_runtime_and_hooks() {
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
     let registry_text = read_text(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
     assert!(
-        !registry.get("framework_commands").and_then(|v| v.get("gsd")).is_some(),
+        registry.get("framework_commands").and_then(|v| v.get("gsd")).is_none(),
         "framework_commands.gsd must stay removed"
     );
     assert!(

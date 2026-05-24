@@ -263,7 +263,10 @@ fn run_batch(args: BatchArgs) -> Result<()> {
             .collect::<VecDeque<_>>(),
     ));
     let any_failed = Arc::new(AtomicBool::new(false));
-    let total = queue.lock().expect("queue lock").len();
+    let total = match queue.lock() {
+        Ok(q) => q.len(),
+        Err(p) => p.into_inner().len(),
+    };
     let workers = usize::min(args.concurrency, total.max(1));
     let mut handles = Vec::new();
 
@@ -274,7 +277,10 @@ fn run_batch(args: BatchArgs) -> Result<()> {
         let base_fields = base_fields.clone();
         handles.push(thread::spawn(move || -> Result<()> {
             loop {
-                let next = queue.lock().expect("queue lock").pop_front();
+                let next = match queue.lock() {
+                    Ok(mut q) => q.pop_front(),
+                    Err(p) => p.into_inner().pop_front(),
+                };
                 let Some((idx, job)) = next else {
                     return Ok(());
                 };

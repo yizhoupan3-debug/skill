@@ -314,7 +314,7 @@ const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
 
 const SETTINGS_GUARDED_PATHS_CLAUDE: &[&str] =
     &[".claude/settings.json", ".claude/settings.local.json"];
-const GENERATED_ENTRYPOINT_PATHS_CLAUDE: &[&str] = &["AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md"];
+const GENERATED_ENTRYPOINT_PATHS_CLAUDE: &[&str] = &["AGENTS_CLAUDE.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md"];
 const RETIRED_SURFACE_PATHS: &[&str] = &[
     ".codex/hooks.json",
     ".agents",

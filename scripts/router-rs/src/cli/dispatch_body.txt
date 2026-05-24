@@ -34,6 +34,8 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Host { command } => dispatch_host_command(command),
+        RouterCommand::Antigravity { command } => dispatch_antigravity_command(command),
+        RouterCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
         RouterCommand::Browser { command } => dispatch_browser_command(command),

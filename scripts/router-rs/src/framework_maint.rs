@@ -534,7 +534,7 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         ".codex/config.toml",
         ".codex/hooks.json",
         ".codex/README.md",
-        "AGENTS.md",
+        "AGENTS_CODEX.md",
     ] {
         let p = repo_root.join(rel);
         if !p.is_file() {
@@ -1101,7 +1101,7 @@ fn is_key_document_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     let is_root_doc = matches!(
         path,
-        "README.md" | "AGENTS.md" | "RTK.md" | "docs/README.md"
+        "README.md" | "AGENTS.md" | "AGENTS_ANTIGRAVITY.md" | "AGENTS_CURSOR.md" | "AGENTS_CODEX.md" | "AGENTS_CLAUDE.md" | "RTK.md" | "docs/README.md"
     );
     let is_research_doc = lower.contains("research")
         || lower.contains("paper")

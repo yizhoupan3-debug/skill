@@ -1385,7 +1385,8 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
         return None;
     }
     let lock_path = state_lock_path(repo_root, event);
-    for _ in 0..30 {
+    let retries = crate::router_env_flags::router_rs_cursor_hook_state_lock_retries();
+    for _ in 0..retries {
         let file = match OpenOptions::new()
             .read(true)
             .write(true)
@@ -1716,9 +1717,11 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
         let _ = fs::remove_file(&tmp);
         return false;
     }
-    if file.sync_all().is_err() {
-        let _ = fs::remove_file(&tmp);
-        return false;
+    if crate::router_env_flags::router_rs_cursor_hook_state_file_sync_enabled() {
+        if file.sync_all().is_err() {
+            let _ = fs::remove_file(&tmp);
+            return false;
+        }
     }
     if fs::rename(&tmp, &target).is_err() {
         let _ = fs::remove_file(&tmp);

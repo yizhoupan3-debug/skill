@@ -6,7 +6,7 @@
     ],
     "text_files": [
       ".codex/README.md",
-      "AGENTS.md"
+      "AGENTS_CODEX.md"
     ]
   },
   "partial_sync": {
@@ -18,25 +18,25 @@
   },
   "schema_version": "host-entrypoints-sync-manifest-v1",
   "shared_system": {
-    "agent_policy_entrypoint": "AGENTS.md",
+    "agent_policy_entrypoint": "AGENTS_CODEX.md",
     "host_entrypoints": {
       "antigravity": [
-        "AGENTS.md",
+        "AGENTS_ANTIGRAVITY.md",
         ".gemini/antigravity/rules/framework.md"
       ],
       "claude-code": [
-        "AGENTS.md",
+        "AGENTS_CLAUDE.md",
         ".claude/rules/framework.md",
         ".claude/settings.json"
       ],
       "claude-desktop": [
-        "AGENTS.md",
+        "AGENTS_CLAUDE.md",
         ".claude/CLAUDE.md"
       ],
-      "codex-app": "AGENTS.md",
-      "codex-cli": "AGENTS.md",
+      "codex-app": "AGENTS_CODEX.md",
+      "codex-cli": "AGENTS_CODEX.md",
       "cursor": [
-        "AGENTS.md",
+        "AGENTS_CURSOR.md",
         ".cursor/rules/*.mdc"
       ]
     },

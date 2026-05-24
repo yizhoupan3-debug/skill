@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+#![allow(dead_code, unused_variables, unused_mut)]
 
 mod atomic_write;
 mod autopilot_goal;
