@@ -219,7 +219,7 @@ fn claude_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
     if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
         return false;
     }
-    crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
+    crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
         Some(repo_root),
         "my-light",
     )
@@ -323,7 +323,7 @@ const RETIRED_SURFACE_PATHS: &[&str] = &[
 /// Pre-89ece4c the stdio agent hook accepted kebab-case commands only; CLI adds PascalCase aliases
 /// aligned with Codex hook spelling (`PreToolUse`, `Stop`, …)。
 pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
-    let _registry_guard = crate::registry_loader::HookRegistryRepoGuard::new(repo_root);
+    let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(repo_root);
     with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
         let canonical = canonical_stdio_agent_hook_command(command)?;
         let payload = read_stdin_payload()?;
@@ -537,7 +537,7 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
             && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
         {
             let nudge =
-                crate::registry_loader::review_spawn_first_nudge_line(Some(repo_root), "claude-code");
+                crate::runtime_registry::review_spawn_first_nudge_line(Some(repo_root), "claude-code");
             return add_context("UserPromptSubmit", &nudge);
         }
     }
@@ -993,7 +993,7 @@ fn reviewer_lane(tool_input: &Value, payload: &Value) -> bool {
             .and_then(Value::as_str),
     );
     !subagent_type.is_empty()
-        && crate::registry_loader::is_claude_reviewer_lane_from_registry(&subagent_type, None)
+        && crate::runtime_registry::is_claude_reviewer_lane_from_registry(&subagent_type, None)
 }
 
 fn subagent_tool(payload: &Value) -> bool {

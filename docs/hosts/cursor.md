@@ -23,6 +23,27 @@
   - 结合 `beforeSubmitPrompt`、`stop`、`subagentStart`/`subagentStop`、`postToolUse`、`sessionStart`/`sessionEnd` 等 7 个核心事件进行行为守卫。
   - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
+## Hook 事件矩阵
+
+**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../../MIGRATION.md)）。项目 env：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env)；`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs)）。
+
+| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
+|--------|----------|----------------|-----------------|
+| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
+| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../scripts/router-rs/src/hosts/cursor_hooks/mod.rs) | `REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`、`SESSION_CLOSE_STYLE` 等；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
+| **SessionStart** | SessionStart | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` / 可选 `SESSION_SUMMARY`；**无** continuity digest。`ROUTER_RS_OPERATOR_INJECT=0` 关闭其余 advisory |
+| **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | **metadata-only** `generated-artifacts-status`；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时打印 WARN |
+
+**排障（短）**：
+
+- **`fork_context` 缺省**：默认 **`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 开启**时可推断 `false`；关闭后仅布尔 `false` 计独立证据。显式 `fork_context: true` 永不算。
+- **磁盘 `GOAL_STATE` 与 pre-goal**：默认 strict；legacy 宽松设 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=0|false|off|no`。
+- **`cursor-router-rs-hook.sh` exit code**：critical 事件（beforeSubmit/Stop/postToolUse/subagentStart/subagentStop）在 `router-rs` 缺失时 **fail-closed**；其余 **fail-open**。
+- **仿宿主续跑行**：聊天区无 `router-rs ` 前缀的仿机读行勿当 hook 真源；以 hook stdout JSON 为准。
+- **清门粘贴**：勿把 **`RG_FOLLOWUP`…** 当清门令牌；请用 **`rg_clear`**、拒因 token，或自然语言 override。
+
+**统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
+
 ## 安装与文件分布 (Installation & Scope)
 
 - **文件 Scope 配置**：

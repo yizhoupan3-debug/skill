@@ -150,7 +150,7 @@
       ],
       "project",
       3,
-      "skills/algo-trading/SKILL.md",
+      "skills/.archive-cold/algo-trading/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -183,7 +183,7 @@
       ],
       "project",
       3,
-      "skills/assignment-compliance/SKILL.md",
+      "skills/.archive-cold/assignment-compliance/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -294,7 +294,7 @@
       ],
       "project",
       3,
-      "skills/copywriting/SKILL.md",
+      "skills/.archive-cold/copywriting/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -401,7 +401,7 @@
       ],
       "project",
       3,
-      "skills/diagramming/SKILL.md",
+      "skills/.archive-cold/diagramming/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -465,7 +465,7 @@
       ],
       "project",
       3,
-      "skills/documentation-engineering/SKILL.md",
+      "skills/.archive-cold/documentation-engineering/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -498,7 +498,7 @@
       ],
       "project",
       3,
-      "skills/email-template/SKILL.md",
+      "skills/.archive-cold/email-template/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -564,7 +564,7 @@
       ],
       "project",
       3,
-      "skills/financial-data-fetching/SKILL.md",
+      "skills/.archive-cold/financial-data-fetching/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -697,7 +697,7 @@
       ],
       "project",
       3,
-      "skills/hatch-pet/SKILL.md",
+      "skills/.archive-cold/hatch-pet/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -730,7 +730,7 @@
       ],
       "project",
       3,
-      "skills/image-generated/SKILL.md",
+      "skills/.archive-cold/image-generated/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -763,7 +763,7 @@
       ],
       "project",
       3,
-      "skills/infographic/SKILL.md",
+      "skills/.archive-cold/infographic/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -795,7 +795,7 @@
       ],
       "project",
       3,
-      "skills/jupyter-notebook/SKILL.md",
+      "skills/.archive-cold/jupyter-notebook/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -834,7 +834,7 @@
       ],
       "project",
       3,
-      "skills/latex-compile-acceleration/SKILL.md",
+      "skills/.archive-cold/latex-compile-acceleration/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -899,7 +899,7 @@
       ],
       "project",
       3,
-      "skills/mac-memory-management/SKILL.md",
+      "skills/.archive-cold/mac-memory-management/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -934,7 +934,7 @@
       ],
       "project",
       3,
-      "skills/python-env-management/SKILL.md",
+      "skills/.archive-cold/python-env-management/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1031,7 +1031,7 @@
       ],
       "project",
       3,
-      "skills/paper-reviewer/SKILL.md",
+      "skills/.archive-cold/paper-reviewer/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1070,7 +1070,7 @@
       ],
       "project",
       3,
-      "skills/paper-reviser/SKILL.md",
+      "skills/.archive-cold/paper-reviser/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1242,7 +1242,7 @@
       ],
       "project",
       3,
-      "skills/ppt-beamer/SKILL.md",
+      "skills/.archive-cold/ppt-beamer/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1372,7 +1372,7 @@
       ],
       "project",
       3,
-      "skills/screenshot/SKILL.md",
+      "skills/.archive-cold/screenshot/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1505,7 +1505,7 @@
       ],
       "project",
       3,
-      "skills/source-slide-formats/SKILL.md",
+      "skills/.archive-cold/source-slide-formats/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1571,7 +1571,7 @@
       ],
       "project",
       3,
-      "skills/systematic-debugging/SKILL.md",
+      "skills/.archive-cold/systematic-debugging/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1602,7 +1602,7 @@
       ],
       "project",
       3,
-      "skills/tao-ci/SKILL.md",
+      "skills/.archive-cold/tao-ci/SKILL.md",
       [
         "codex-app",
         "codex-cli"
@@ -1635,7 +1635,7 @@
       ],
       "project",
       3,
-      "skills/tikz-paper-figure/SKILL.md",
+      "skills/.archive-cold/tikz-paper-figure/SKILL.md",
       [
         "antigravity",
         "claude-code",
@@ -1736,7 +1736,7 @@
       ],
       "project",
       3,
-      "skills/youtube-summarizer/SKILL.md",
+      "skills/.archive-cold/youtube-summarizer/SKILL.md",
       [
         "antigravity",
         "claude-code",

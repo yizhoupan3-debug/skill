@@ -12,3 +12,32 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
 tempfile = "3.15"
+
+[workspace]
+members = [
+    ".",
+    "scripts/router-rs",
+    "scripts/autoresearch-rs",
+    "scripts/evolution-rs",
+    "rust_tools/citation_tool_rs",
+    "rust_tools/financial_data_rs",
+    "rust_tools/gh_source_gate_rs",
+    "rust_tools/image_gen_rs",
+    "rust_tools/image_process_rs",
+    "rust_tools/ooxml_parser_rs",
+    "rust_tools/pptx_tool_rs",
+    "rust_tools/pubmed_tool_rs",
+    "rust_tools/screenshot_rs"
+]
+exclude = [
+    "codex-aggregator"
+]
+resolver = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+strip = true
+

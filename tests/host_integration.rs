@@ -2085,7 +2085,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["cursor"]["host_entrypoints"],
-        json!(["AGENTS.md", ".cursor/rules/*.mdc"])
+        json!(["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["claude-code"]["install_tool"],
@@ -2094,7 +2094,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert_eq!(
         payload["host_targets"]["metadata"]["claude-code"]["host_entrypoints"],
         json!([
-            "AGENTS.md",
+            "AGENTS_CLAUDE.md",
             ".claude/rules/framework.md",
             ".claude/settings.json"
         ])

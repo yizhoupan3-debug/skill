@@ -6577,7 +6577,10 @@ fn cursor_launcher_fail_open_session_start_when_router_rs_missing() {
 
 #[test]
 fn stop_handler_releases_session_lock_before_task_ledger_checkpoint() {
-    let src = include_str!("handlers.rs");
+    let src = concat!(
+        include_str!("handlers.rs"),
+        include_str!("handlers_parts/handlers_stop.inc.rs"),
+    );
     assert!(
         src.contains("release_lock_then_finalize_stop"),
         "Stop must release L3 before finalize_stop_hook_outputs (L1 checkpoint)"

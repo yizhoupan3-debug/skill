@@ -1024,7 +1024,7 @@ fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path, task_id
         return false;
     };
     let review_lane =
-        crate::registry_loader::is_claude_reviewer_lane_from_registry(lane, Some(repo_root));
+        crate::runtime_registry::is_claude_reviewer_lane_from_registry(lane, Some(repo_root));
     let fork = fork_context_from_values(arguments, None);
     claude_independent_reviewer_evidence(review_lane, fork)
 }

@@ -37,6 +37,9 @@ use std::sync::Once;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod policy_embed;
+pub(crate) use policy_embed::build_codex_agent_policy;
+
 const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 pub(crate) const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str =
     ".codex/host_entrypoints_sync_manifest.json";
@@ -790,7 +793,7 @@ fn codex_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
     if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
         return false;
     }
-    match crate::registry_loader::lifecycle_profile_disables_review_gate_hard_block(
+    match crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
         Some(repo_root),
         "my-light",
     ) {
@@ -955,7 +958,7 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
         && !facts.review_override
         && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
     {
-        contexts.push(crate::registry_loader::review_spawn_first_nudge_line(
+        contexts.push(crate::runtime_registry::review_spawn_first_nudge_line(
             Some(repo_root),
             "codex-cli",
         ));
@@ -1283,10 +1286,6 @@ pub fn build_codex_hook_projection() -> Value {
             "legacy_review_subagent_gate": build_codex_hook_command("review-subagent-gate"),
         },
     })
-}
-
-pub(crate) fn build_codex_agent_policy() -> String {
-    include_str!("../../../AGENTS_CODEX.md").to_string()
 }
 
 pub(crate) fn build_codex_hooks_readme() -> String {
@@ -1952,7 +1951,7 @@ fn attach_codex_hook_observation(mut value: Option<Value>) -> Option<Value> {
 }
 
 pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Value>, String> {
-    let _registry_guard = crate::registry_loader::HookRegistryRepoGuard::new(repo_root);
+    let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(repo_root);
     let canonical = canonical_codex_audit_command(command)?;
     let mut payload = match read_stdin_payload() {
         Ok(payload) => payload,

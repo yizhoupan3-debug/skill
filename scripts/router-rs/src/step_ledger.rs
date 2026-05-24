@@ -137,6 +137,17 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
     let changed = crate::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
         let inner_changed = append_jsonl_entry(&path, &entry_value, idempotency_key.as_deref())?;
         if inner_changed {
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+                tx_type: "step".to_string(),
+                payload: entry_value.clone(),
+                idempotency_key: idempotency_key.clone(),
+                seq: None,
+                schema_version: Some(1),
+            };
+            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+                eprintln!("[router-rs] failed to append step transaction to TASK_LEDGER: {e}");
+            }
             let _ = crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id);
         }
         Ok(inner_changed)

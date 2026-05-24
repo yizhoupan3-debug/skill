@@ -280,6 +280,11 @@ fn walk_skill_md(base: &Path, dir: &Path, slugs: &mut BTreeSet<String>) -> Resul
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         if path.is_dir() {
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if name.starts_with('.') {
+                    continue;
+                }
+            }
             walk_skill_md(base, &path, slugs)?;
         } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md") {
             if let Some(name) = parse_skill_name(&path)? {

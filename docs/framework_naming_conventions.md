@@ -25,49 +25,9 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
 
-### Known Env Vars
+**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`harness_architecture.md`](harness_architecture.md) **§5 开关面**（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
 
-#### Claude/Cursor Shared
-
-| Env Var | Default | Description |
-|---------|---------|-------------|
-| `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | off (unset) | **Opt-in** (`=1`): append PostTool evidence to `EVIDENCE_INDEX` |
-| `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` | — | **No-op**（2026-05；保留 env 名兼容） |
-| `ROUTER_RS_GOAL_CONTINUE_HOOK` | — | **No-op**（2026-05；hook 续跑路径已删；用手动画板 + `framework_goal_drive` stdio） |
-| `ROUTER_RS_RFV_LOOP_HOOK` | — | **No-op**（2026-05；hook 续跑路径已删；用 `framework_rfv_loop` stdio） |
-| `ROUTER_RS_CLOSEOUT_ENFORCEMENT` | soft | Hard/soft closeout enforcement |
-| `ROUTER_RS_DEPTH_SCORE_MODE` | off | Depth scoring mode |
-
-#### Cursor-specific
-
-| Env Var | Default | Description |
-|---------|---------|-------------|
-| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | false | Disable review gate |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | false | Enable beforeSubmit pre-goal（命名保留；绑定 `/implementx`；`/autopilot` 已退役） |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | 8 | Max pre-goal nudges |
-| `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` | 24 | Max open subagents counted on hook path（`MAX_CONCURRENT_SUBAGENTS_LIMIT`；可调低或 `0` 关闭） |
-| `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | 7200 | Stale subagent threshold（秒，默认 2h） |
-| `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS` | true | Kill stale terminals on session end |
-| `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE` | default | Terminal kill mode |
-| `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` | - | Session close style |
-| `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` | false | Full hook-state prefix sweep on SessionEnd |
-| `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | true | Forbid disk-only GOAL hydration for pre-goal (`0`/`false`/`off`/`no` = legacy loose) |
-| `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS` | false | Run full handlers for 5 subtracted events when absent from hooks.json |
-| `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN` | false | beforeSubmit continues when hook-state persist fails |
-| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | true | Infer `fork_context=false` when field missing on countable lanes |
-
-#### Claude-specific
-
-| Env Var | Default | Description |
-|---------|---------|-------------|
-| `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | false | Disable review gate |
-| `ROUTER_RS_CLAUDE_SESSION_NAMESPACE` | - | Session namespace |
-
-#### Codex-specific
-
-| Env Var | Default | Description |
-|---------|---------|-------------|
-| `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` | 640 | Max SessionStart context (256-8192) |
+场景子集与 closeout 分层见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)；可复制 profile 见 [`operator_profiles.md`](operator_profiles.md)。
 
 ---
 

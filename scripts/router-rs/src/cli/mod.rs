@@ -1,6 +1,6 @@
 //! CLI 子命令、stdio 与 live execute 控制面（从 `main.rs` 拆分，阶段 1）。
 
-pub(crate) mod args;
+pub mod args;
 pub(crate) mod common;
 mod dispatch;
 pub(crate) mod runtime_ops;
@@ -16,7 +16,7 @@ pub(crate) use runtime_ops::{
     is_runtime_stdio_op, is_trace_stdio_op, StdioOpDomain,
 };
 
-pub(crate) fn run(args: &args::Cli) -> Result<(), String> {
+pub fn run(args: &args::Cli) -> Result<(), String> {
     configure_compute_parallelism(args.compute_threads)?;
     if let Some(command) = args.command.clone() {
         return dispatch::dispatch_router_command(command);
@@ -27,4 +27,4 @@ pub(crate) fn run(args: &args::Cli) -> Result<(), String> {
     Err("missing router-rs command; use `router-rs --help` for canonical subcommands".to_string())
 }
 
-pub(crate) use args::Cli;
+pub use args::Cli;

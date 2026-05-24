@@ -23,6 +23,17 @@
   - 本宿主没有 CLI 级硬拦截，门控质量主要依赖 **Planning Mode + 规划物化 Artifacts（如 `task.md`、`implementation_plan.md`）**。
   - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
+## Hook 事件矩阵
+
+**能力边界**：无 CLI 级 PreToolUse / Stop 硬拦截（registry `harness_capability_exceptions`）；门控靠 **MCP 工具工作流** + 短投影文案。勿与 Claude Code 的四事件 hook 表混读。
+
+| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
+|--------|----------|----------------|-----------------|
+| MCP 工具工作流 | Desktop MCP stdio | `router-rs` MCP server（见项目 `.claude/CLAUDE.md`） | `artifacts/current/` 与 Code 共用；`goal_state_manage` / `closeout_gate` / `framework_snapshot` |
+| 投影安装 | 一次性接入 | `router-rs framework host-integration install --to claude-desktop` | 项目 `.claude/CLAUDE.md`（短指针）、`.mcp.json`；**不**写入 `.claude/settings.json` hook 四事件 |
+
+**统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
+
 ## 安装与文件分布 (Installation & Scope)
 
 - **文件 Scope 配置**：

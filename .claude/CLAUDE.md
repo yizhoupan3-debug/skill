@@ -5,7 +5,7 @@
 
          # Claude Desktop
 
-         MCP **`router-rs-framework`**。协议与限制：**`docs/hosts/claude-desktop.md`**；政策：**`AGENTS.md`**。
+         MCP **`router-rs-framework`**。协议与限制：**`docs/hosts/claude-desktop.md`**；政策：**`AGENTS_CLAUDE.md`**。
 
          ## 会话（按序）
 

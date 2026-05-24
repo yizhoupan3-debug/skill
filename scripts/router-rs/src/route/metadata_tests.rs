@@ -611,7 +611,7 @@ mod route_metadata_tests {
     fn paper_stack_plain_slug_counts_as_explicit_framework_alias_when_hint_has_sigil() {
         let record = SkillRecord::from_raw(RawSkillRecord {
             slug: "paper-reviewer".to_string(),
-            skill_path: Some("skills/paper-reviewer/SKILL.md".to_string()),
+            skill_path: Some("skills/.archive-cold/paper-reviewer/SKILL.md".to_string()),
             layer: "L2".to_string(),
             owner: "owner".to_string(),
             gate: "none".to_string(),

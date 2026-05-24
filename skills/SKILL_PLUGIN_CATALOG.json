@@ -28,7 +28,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/algo-trading/SKILL.md"
+      "skill_path": "skills/.archive-cold/algo-trading/SKILL.md"
     },
     "assignment-compliance": {
       "host_support": {
@@ -42,7 +42,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/assignment-compliance/SKILL.md"
+      "skill_path": "skills/.archive-cold/assignment-compliance/SKILL.md"
     },
     "citation-management": {
       "host_support": {
@@ -84,7 +84,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/copywriting/SKILL.md"
+      "skill_path": "skills/.archive-cold/copywriting/SKILL.md"
     },
     "deepinterview": {
       "host_support": {
@@ -126,7 +126,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/diagramming/SKILL.md"
+      "skill_path": "skills/.archive-cold/diagramming/SKILL.md"
     },
     "doc": {
       "host_support": {
@@ -154,7 +154,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/documentation-engineering/SKILL.md"
+      "skill_path": "skills/.archive-cold/documentation-engineering/SKILL.md"
     },
     "email-template": {
       "host_support": {
@@ -168,7 +168,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/email-template/SKILL.md"
+      "skill_path": "skills/.archive-cold/email-template/SKILL.md"
     },
     "experiment-reproducibility": {
       "host_support": {
@@ -196,7 +196,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/financial-data-fetching/SKILL.md"
+      "skill_path": "skills/.archive-cold/financial-data-fetching/SKILL.md"
     },
     "gh-address-comments": {
       "host_support": {
@@ -252,7 +252,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/hatch-pet/SKILL.md"
+      "skill_path": "skills/.archive-cold/hatch-pet/SKILL.md"
     },
     "image-generated": {
       "host_support": {
@@ -266,7 +266,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/image-generated/SKILL.md"
+      "skill_path": "skills/.archive-cold/image-generated/SKILL.md"
     },
     "infographic": {
       "host_support": {
@@ -280,7 +280,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/infographic/SKILL.md"
+      "skill_path": "skills/.archive-cold/infographic/SKILL.md"
     },
     "jupyter-notebook": {
       "host_support": {
@@ -294,7 +294,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/jupyter-notebook/SKILL.md"
+      "skill_path": "skills/.archive-cold/jupyter-notebook/SKILL.md"
     },
     "latex-compile-acceleration": {
       "host_support": {
@@ -308,7 +308,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/latex-compile-acceleration/SKILL.md"
+      "skill_path": "skills/.archive-cold/latex-compile-acceleration/SKILL.md"
     },
     "loop": {
       "host_support": {
@@ -336,7 +336,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/mac-memory-management/SKILL.md"
+      "skill_path": "skills/.archive-cold/mac-memory-management/SKILL.md"
     },
     "math-derivation": {
       "host_support": {
@@ -374,7 +374,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/paper-reviewer/SKILL.md"
+      "skill_path": "skills/.archive-cold/paper-reviewer/SKILL.md"
     },
     "paper-reviser": {
       "host_support": {
@@ -388,7 +388,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/paper-reviser/SKILL.md"
+      "skill_path": "skills/.archive-cold/paper-reviser/SKILL.md"
     },
     "paper-workbench": {
       "host_support": {
@@ -468,7 +468,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/ppt-beamer/SKILL.md"
+      "skill_path": "skills/.archive-cold/ppt-beamer/SKILL.md"
     },
     "python-env-management": {
       "host_support": {
@@ -482,7 +482,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/python-env-management/SKILL.md"
+      "skill_path": "skills/.archive-cold/python-env-management/SKILL.md"
     },
     "research-workbench": {
       "host_support": {
@@ -524,7 +524,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/screenshot/SKILL.md"
+      "skill_path": "skills/.archive-cold/screenshot/SKILL.md"
     },
     "sentry": {
       "host_support": {
@@ -604,7 +604,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/source-slide-formats/SKILL.md"
+      "skill_path": "skills/.archive-cold/source-slide-formats/SKILL.md"
     },
     "spreadsheets": {
       "host_support": {
@@ -646,7 +646,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/systematic-debugging/SKILL.md"
+      "skill_path": "skills/.archive-cold/systematic-debugging/SKILL.md"
     },
     "tao-ci": {
       "host_support": {
@@ -656,7 +656,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/tao-ci/SKILL.md"
+      "skill_path": "skills/.archive-cold/tao-ci/SKILL.md"
     },
     "tikz-paper-figure": {
       "host_support": {
@@ -670,7 +670,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/tikz-paper-figure/SKILL.md"
+      "skill_path": "skills/.archive-cold/tikz-paper-figure/SKILL.md"
     },
     "update": {
       "host_support": {
@@ -712,7 +712,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/youtube-summarizer/SKILL.md"
+      "skill_path": "skills/.archive-cold/youtube-summarizer/SKILL.md"
     }
   },
   "source_of_truth": false

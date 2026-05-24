@@ -23,6 +23,19 @@
   - 在 `UserPromptSubmit` 时通过 `spawn_first_nudge` 触发审稿引导；深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
   - 通过 `Stop` 钩子处理 `REVIEW_GATE` 阶段判断与收尾验证。
 
+## Hook 事件矩阵
+
+细则见 [`harness_architecture.md`](../harness_architecture.md) §3、「主数据流」与 `.codex/hooks.json`。
+
+| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
+|--------|----------|----------------|-----------------|
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks.rs`](../../scripts/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
+| **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
+| **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
+| 宿主入口对齐 | `router-rs codex sync` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、`AGENTS.md` 等及 **`host_entrypoints_sync_manifest`**；受 **`RUNTIME_REGISTRY.host_targets.supported`** 约束 |
+
+**统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
+
 ## 安装与文件分布 (Installation & Scope)
 
 - **文件 Scope 配置**：

@@ -23,6 +23,18 @@
   - 拥有 `PreToolUse`、`UserPromptSubmit`、`PostToolUse` 和 `Stop` 等 4 个核心集成钩子事件。
   - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
+## Hook 事件矩阵
+
+**默认注册 4 事件**（减法闭集）：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`。项目 env：[`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)）；launcher **release 优先** 同 Cursor（[`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh)）。
+
+| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
+|--------|----------|----------------|-----------------|
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../scripts/router-rs/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
+| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration.rs`](../../scripts/router-rs/src/host_integration.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
+
+**统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
+
 ## 安装与文件分布 (Installation & Scope)
 
 - **文件 Scope 配置**：

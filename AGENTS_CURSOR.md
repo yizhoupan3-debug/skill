@@ -1,97 +1,36 @@
 # Cursor Agent Policy
 
+跨宿主协议见 [`AGENTS.md`](AGENTS.md)。本文仅 Cursor 宿主差异。
+
 ## 权威分层（改哪里才生效）
 
 | 类别 | 权威落点 |
 |------|----------|
-| 跨宿主叙述性协议（语言、路由、Continuity、Execution Ladder、Closeout） | 仓库根 `AGENTS.md` |
-| Cursor 执行面默认值 | `AGENTS_CURSOR.md` + `.cursor/rules/*-gate.mdc`（仅宿主差异） |
+| 跨宿主叙述性协议 | 仓库根 [`AGENTS.md`](AGENTS.md) |
+| Cursor 执行面默认值 | **`AGENTS_CURSOR.md`**（本文件）+ [`.cursor/rules/*-gate.mdc`](.cursor/rules/) |
 | Cursor framework 叙事 | `router-rs framework host-integration install --to cursor --scope user` → `~/.cursor/rules/framework.mdc` |
 | skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
-| 宿主投影 lifecycle/review 文案 | `configs/framework/host_projection_narrative.json`（`host-integration install` 读取） |
-| hook 行为 | 各宿主 `hooks.json` + `router-rs` |
+| hook 行为 | `.cursor/hooks.json` + `router-rs` |
 
-**文档地图**：`docs/harness_architecture.md` · `docs/host_adapter_contract.md` · `docs/rust_contracts.md` · `docs/README.md`
-
-## Language
-
-- **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外），且使用自然的学术中文表达，避免翻译腔。
-- 仅当用户当轮明确要求英文回复时才可切换。
-- **回答避免空话**，直接给出具体的、可执行的建议；**对不确定的信息直接说明**，严禁凭空编造。
-
-## Agent Identity
-
-- 主代理按 MIT 博士级科研与工程专家标准约束判断与端到端执行；非履历声明。
-- 适用于 Cursor 宿主的同一高质量执行与质量标准。
+**文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/hosts/cursor.md`](docs/hosts/cursor.md)
 
 ## Root
 
 - Cursor：`CURSOR_HOME`；仓库内优先 `skills/` 与 `skills/SKILL_ROUTING_RUNTIME.json`。
-- **禁止**把本机绝对路径写入策略真源；用仓库根、`CURSOR_HOME` 或 `$HOME` 解析。
-
-## 个人使用（最小操作面）
-
-- **Python 环境（macOS）**：长期治理须显式使用项目统一的 Python 环境（uv-only、默认 3.12、每仓库 `uv.lock`）；禁止使用全局 `pip`。环境类请求勿只靠泛化路由。
-- **路由**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`；冷表见 `skills/SKILL_MANIFEST.json`。
-- **可选 env / 注入 / closeout**：`docs/references/AGENTS_OPERATOR_SURFACE.md`（勿在本文重复全表）。
-- **连续性摘要**：`docs/harness_architecture.md` §2–§3。
-
-## Skill Routing
-
-- **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` 一口气跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。**`/gsd-*` 与 legacy-gsd 已于 2026-05 彻底移除**；勿再使用，见 MIGRATION 退役对照表。
-- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light`；`framework_goal_drive` stdio）。`my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge（亦含 pre-execution `/discussx|planx` 与磁盘 `GOAL_STATE.lifecycle_profile: my-light`；hook 层全 suppress，skill 层 findings-only 仍适用）。
-- 勿用 slug 猜路径；勿预读整个 `skills/`。
-
-## Continuity artifacts（手动画板 only）
-
-- 真源：`artifacts/current/<task_id>/`（见 `docs/harness_architecture.md`）；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
-- Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
-- 历史 env 名见 `docs/references/AGENTS_OPERATOR_SURFACE.md`（多数 hook 续跑 env **已无操作**）。
 
 ## Host Boundaries (Cursor 专属硬约束与门控)
 
-- **Cursor 机读短码注入约束**：系统通过宿主层以机读短码的形式向会话中注入控制指令（如单行 `AG_FOLLOWUP`、`REVIEW_GATE` 等）。主代理与子代理在解析和响应这些机读短码时，必须遵守严格的格式契约，**严禁自拟、伪造或扩展任何仿 hook 长文**（如模拟其他宿主的 PreToolUse 或多行门控拦截文案）。如果需要续跑或状态转移，必须显式通过 `/implementx` 触发，并配合 `framework_goal_drive` 的标准 I/O 以及 `artifacts/current/<task_id>/` 目录下的手动画板状态文件进行。
-- **Cursor `updateCurrentStep` 载荷约束**：在调用 `updateCurrentStep`（或等价的步骤状态更新接口）时，**严禁发送空载荷或无实质内容的空更新**。每次调用必须包含清晰、具体、可被宿主或测试套件机读的状态、步骤索引或执行描述。
-- **子代理模型继承约束**：并行或派生的 Task 子会话在创建和执行时，**默认必须继承主会话的模型配置**。在未确认主会话当前使用的是 Anthropic 模型（如 Claude 3.5 Sonnet 等）的环境下，**严禁在参数中默认指定或硬编码 claude/sonnet 系列模型**。必须保持模型的自适应性或与主会话严格对齐，以防因跨服务商或地区限制（如不同地区的 API 可用性差异 cursor.com/docs/account/regions）导致物理故障。
-- 路由问题 → runtime；hook 问题 → 对应 `hooks.json`。
+- **机读短码**：宿主注入单行 `AG_FOLLOWUP`、`REVIEW_GATE` 等；**严禁自拟、伪造或扩展仿 hook 长文**。续跑须 `/implementx` + `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。
+- **`updateCurrentStep`**：**严禁空载荷**；须含可机读的状态、步骤索引或执行描述。
+- **子代理模型继承**：并行 `Task` **默认继承主会话模型**（省略 `model`）；禁止默认 claude/sonnet，除非主会话已用 Anthropic。见 [`.cursor/rules/subagent-model-inherit.mdc`](.cursor/rules/subagent-model-inherit.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)。
+- 路由问题 → runtime；hook 问题 → `.cursor/hooks.json`。
 
-## Task Intake
+## Execution Ladder（Cursor 差异）
 
-- 抽取目标、约束、交付与成功标准；选最窄 owner；最小可验证 delta。
-- 关键不可逆选择才问用户。
-
-## Coding First Principles
-
-- 五门槛：Goal / Non-goals / Existing owner / Minimal delta / Validation。
-- 减法优先；禁止为不确定未来加抽象；证据收口（测试/diff/blocker）。
+- 遵从 [`.cursor/rules/execution-subagent-gate.mdc`](.cursor/rules/execution-subagent-gate.mdc)、[`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)（lane / hook / `updateCurrentStep` 硬约束）。
+- 完整梯子：[`docs/references/EXECUTION_LADDER.md`](docs/references/EXECUTION_LADDER.md)；REVIEW_GATE 操作：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)。
 
 ## Knowledge Hygiene
 
-- `AGENTS_CURSOR.md` 是地图，不是百科；真源在 runtime、skill、`docs/`、artifacts。
-- 改 policy 前查路径是否仍由 runtime 决定。
-
-## Execution Ladder
-
-- **Cursor 专属限制**：遵从 `.cursor/rules/execution-subagent-gate.mdc`、`review-subagent-gate.mdc`（仅限于 lane / hook / `updateCurrentStep` 等 Cursor 硬约束）。
-- **Review findings-only**：[`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)（compact 信封、透镜、默认只读 findings）；深度可数 lane 见 `docs/host_adapter_contract.md` §0.1。
-
-## Closeout
-
-- 必须有验证证据或明确 blocker；聊天回复不必长篇贴 diff。
-- `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 分层见 `docs/references/AGENTS_OPERATOR_SURFACE.md` 与 `docs/harness_architecture.md`。
-
-## Goal drive
-
-- `/implementx`、`/verifyx` + `framework_goal_drive` stdio → `artifacts/current/<task_id>/GOAL_STATE.json`；**无** hook 续跑注入；env 与手动画板见 `docs/references/AGENTS_OPERATOR_SURFACE.md`、`docs/harness_architecture.md`。
-- 执行 wave / 验证：`skills/implementx/SKILL.md`、`skills/verifyx/SKILL.md`（verify 后 purge `artifacts/current/<task_id>/`，见 verifyx § Post-verify task-dir purge）。
-
-## Manuscript / LaTeX file writes
-
-- **Default: overwrite in place** on `.tex`, `.Rmd`, and manuscript `.md` — use StrReplace or write the same path; do **not** create `*.bak_*`, `*.bak`, or macOS-style numbered duplicates (`file 2.tex`) unless the user explicitly asks for a backup in that turn.
-- **R Markdown projects**: edit **`.Rmd` only** (plus project scripts); regenerate `.tex`/`.pdf` via the repo’s `render_*.R`. Do not treat pandoc-generated `.tex` as the source of truth or leave numbered build artifacts in the report directory.
-- Paper-workbench detail: [`skills/paper-workbench/references/edit-scope-gate.md`](skills/paper-workbench/references/edit-scope-gate.md) §文件写入默认.
-
-## Git
-
-- 未经用户明确要求不得创建分支/worktree；只读检查现有状态。
+- 本文件是 Cursor 地图；跨宿主正文在 [`AGENTS.md`](AGENTS.md)。

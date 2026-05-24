@@ -23,6 +23,17 @@ Antigravity 作为交互式智能体，其 Harness 和任务管理的核心入�
   - 无 CLI 级 PreToolUse 等硬阻断，但 `goal_state_manage complete` 与 `closeout_gate` 将在 MCP 工具层实施硬拦截阻断（[Antigravity Hard Block]）。其余流程防线依赖 **Planning Mode + 规划物化 Artifacts（如 `task.md`、`implementation_plan.md`）**。
   - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
+## Hook 事件矩阵
+
+**能力边界**：无 CLI 级 shell hook（registry `harness_capability_exceptions`）；门控完全靠 **Planning Mode 规划流** + 规划物化 Artifacts + 专用 Markdown 投影规则。不复用任何 CLI hook 事件表。
+
+| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
+|--------|----------|----------------|-----------------|
+| 规划流与项目投影 | 宿主交互中遵循 Planning Mode / `/implementx` 等技能 | [`host_integration.rs`](../../scripts/router-rs/src/host_integration.rs) / [`framework_maint.rs`](../../scripts/router-rs/src/framework_maint.rs) | `artifacts/current/` 与其它宿主共用；`goal_state_manage` / `closeout_gate` / `framework_digest` |
+| 投影安装 | 一次性接入 | `router-rs framework host-integration install --to antigravity` | 项目 `.gemini/antigravity/rules/framework.md`（短指针）、`.gemini/settings.json` 与 `.gemini/mcp.json` |
+
+**统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
+
 ## Skill 存放与路由 (Skills & Routing)
 
 - **Skill 存放位置**：所有自定义及框架内置 Skill 均统一放置在项目根目录的 `skills/` 文件夹中。

@@ -37,6 +37,12 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
     let (evidence_rows, evidence_ok) = task_evidence_artifacts_summary_for_task(repo_root, tid);
     let step_ledger = crate::step_ledger::summarize_step_ledger_for_task(repo_root, tid);
 
+    // Read TASK_LEDGER.jsonl to find the highest seq number
+    let last_seq = crate::task_state::read_task_ledger_transactions(repo_root, tid)
+        .iter()
+        .filter_map(|tx| tx.seq)
+        .max();
+
     let payload = json!({
         "schema_version": TASK_STATE_AGGREGATE_SCHEMA_VERSION,
         "task_id": tid,
@@ -48,6 +54,7 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
             "has_successful_verification": evidence_ok,
         },
         "step_ledger": step_ledger,
+        "last_seq": last_seq,
         "note": "Projection only; canonical GOAL_STATE.json / RFV_LOOP_STATE.json / EVIDENCE_INDEX.json / STEP_LEDGER.jsonl remain authoritative."
     });
     let path = task_state_aggregate_path(repo_root, tid);

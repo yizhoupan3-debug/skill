@@ -470,6 +470,123 @@ pub fn resolve_task_view(repo_root: &Path, task_id_override: Option<&str>) -> Re
     resolve_task_view_with_pointers(repo_root, task_id_override, pointers)
 }
 
+pub fn read_task_ledger_transactions(
+    repo_root: &Path,
+    task_id: &str,
+) -> Vec<crate::task_ledger::LedgerTransaction> {
+    let path = crate::task_ledger::task_ledger_path(repo_root, task_id);
+    if !path.is_file() {
+        return Vec::new();
+    }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[router-rs] failed to read TASK_LEDGER.jsonl for task {task_id}: {e}");
+            return Vec::new();
+        }
+    };
+    let mut txs = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        let line_trim = line.trim();
+        if line_trim.is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<crate::task_ledger::LedgerTransaction>(line_trim) {
+            Ok(tx) => txs.push(tx),
+            Err(e) => {
+                eprintln!(
+                    "[router-rs] WARNING: Forgiving JSON Reader skipped corrupt line {} in TASK_LEDGER.jsonl for task {}: {}",
+                    i + 1,
+                    task_id,
+                    e
+                );
+            }
+        }
+    }
+    txs
+}
+
+pub fn hydrate_task_state_hybrid(
+    repo_root: &Path,
+    task_id: &str,
+) -> (Option<Value>, Option<Value>, Option<EvidenceRollup>, Vec<String>) {
+    let mut resolution_notes = Vec::new();
+    let mut goal_state: Option<Value> = None;
+    let mut rfv_loop_state: Option<Value> = None;
+    let mut evidence_rows_non_empty = false;
+    let mut has_successful_verification = false;
+    let mut base_loaded = false;
+    let mut last_seq: Option<u64> = None;
+
+    // 1. Try to load from TASK_STATE.json
+    let agg_path = crate::task_state_aggregate::task_state_aggregate_path(repo_root, task_id);
+    if agg_path.is_file() {
+        if let Ok(raw) = std::fs::read_to_string(&agg_path) {
+            if let Ok(agg) = serde_json::from_str::<Value>(&raw) {
+                goal_state = agg.get("goal_state").cloned().filter(|v| !v.is_null());
+                rfv_loop_state = agg.get("rfv_loop_state").cloned().filter(|v| !v.is_null());
+                if let Some(ev) = agg.get("evidence") {
+                    evidence_rows_non_empty = ev.get("evidence_rows_non_empty").and_then(Value::as_bool).unwrap_or(false);
+                    has_successful_verification = ev.get("has_successful_verification").and_then(Value::as_bool).unwrap_or(false);
+                }
+                last_seq = agg.get("last_seq").and_then(Value::as_u64);
+                base_loaded = true;
+            }
+        }
+    }
+
+    // 2. If TASK_STATE.json not found or failed, fall back to raw physical files
+    if !base_loaded {
+        match read_goal_state(repo_root, Some(task_id)) {
+            Ok(g) => goal_state = g,
+            Err(e) => push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e),
+        }
+        match read_rfv_loop_state(repo_root, Some(task_id)) {
+            Ok(v) => rfv_loop_state = v,
+            Err(e) => push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e),
+        }
+        let (rows, ok) = task_evidence_artifacts_summary_for_task(repo_root, task_id);
+        evidence_rows_non_empty = rows;
+        has_successful_verification = ok;
+    }
+
+    // 3. Read TASK_LEDGER.jsonl and replay transactions beyond last_seq
+    let txs = read_task_ledger_transactions(repo_root, task_id);
+    for tx in txs {
+        if let Some(seq) = tx.seq {
+            if let Some(l_seq) = last_seq {
+                if seq <= l_seq {
+                    continue;
+                }
+            }
+        }
+        // Replay
+        match tx.tx_type.as_str() {
+            "goal_state" => {
+                goal_state = Some(tx.payload).filter(|v| !v.is_null());
+            }
+            "rfv_loop_state" => {
+                rfv_loop_state = Some(tx.payload).filter(|v| !v.is_null());
+            }
+            "evidence" => {
+                evidence_rows_non_empty = true;
+                if crate::hook_common::evidence_index_entry_implies_success(&tx.payload) {
+                    has_successful_verification = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let evidence = Some(EvidenceRollup {
+        task_id: task_id.to_string(),
+        evidence_rows_non_empty,
+        has_successful_verification,
+    });
+
+    (goal_state, rfv_loop_state, evidence, resolution_notes)
+}
+
 /// Like [`resolve_task_view`], but uses a caller-supplied [`TaskPointers`] snapshot (e.g. paired
 /// with [`read_goal_state_for_hydration_from_pointer_ids`] in [`resolve_cursor_continuity_frame`]).
 pub fn resolve_task_view_with_pointers(
@@ -502,34 +619,11 @@ pub fn resolve_task_view_with_pointers(
         };
     };
 
-    let task_id_for_reads = task_id.clone();
-    let repo_for_reads = repo_root.to_path_buf();
-    let (goal_result, rfv_result) = rayon::join(
-        || read_goal_state(&repo_for_reads, Some(task_id_for_reads.as_str())),
-        || read_rfv_loop_state(&repo_for_reads, Some(task_id_for_reads.as_str())),
-    );
-    let goal_state = match goal_result {
-        Ok(g) => g,
-        Err(e) => {
-            push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e);
-            None
-        }
-    };
-    let rfv_loop_state = match rfv_result {
-        Ok(v) => v,
-        Err(e) => {
-            push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e);
-            None
-        }
-    };
+    let (goal_state, rfv_loop_state, evidence, mut read_notes) =
+        hydrate_task_state_hybrid(repo_root, task_id.as_str());
+    resolution_notes.append(&mut read_notes);
 
-    let (evidence_rows, evidence_ok) =
-        task_evidence_artifacts_summary_for_task(repo_root, task_id.as_str());
-    let evidence = Some(EvidenceRollup {
-        task_id: task_id.clone(),
-        evidence_rows_non_empty: evidence_rows,
-        has_successful_verification: evidence_ok,
-    });
+    let evidence_ok = evidence.as_ref().map(|e| e.has_successful_verification).unwrap_or(false);
 
     let depth_compliance = Some(depth_compliance_aggregate(
         goal_state.as_ref(),

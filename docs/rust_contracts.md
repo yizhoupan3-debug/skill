@@ -7,7 +7,7 @@ Historical migration notes live in git history and `MIGRATION.md`; this file des
 the current runtime truth in `router-rs` and related Rust tools.
 
 Upper-layer control-plane narrative (L1–L5, evidence/resume injection boundaries):
-[`harness_architecture.md`](harness_architecture.md). Host adapter portability (portable core, event→CLI pointers, new-host checklist):
+[`harness_architecture.md`](harness_architecture.md). Host adapter portability (portable core, per-host Hook event matrices in `docs/hosts/`, new-host checklist):
 [`host_adapter_contract.md`](host_adapter_contract.md). Steady-state doc index:
 [`README.md`](README.md) in this directory.
 
@@ -40,7 +40,7 @@ Rust owns the default runtime and contract path.
 - Stdio op `framework_hook_evidence_append` mirrors `router-rs framework hook-evidence-append --input-json …` for scripted callers appending rows to `EVIDENCE_INDEX.json` under continuity (same payload shape as the CLI).
 - `router-rs codex sync` and **`router-rs framework sync-entrypoints`** remain compatible CLIs for repo host-entrypoint materialization; internally, `host_entrypoint_sync` is the shared sync engine and `codex_hooks` supplies the `codex provider` for `.codex/hooks.json`, `AGENTS.md` bootstrap, and Codex skill surface refresh. Full sync applies to the current root; matched sibling worktrees receive JSON hook/manifest updates only, so local policy text entrypoints are not overwritten across worktrees.
 - `router-rs framework host-integration ...` owns native install/status/remove, bootstrap, projection, and related host integration flows. `router-rs codex host-integration ...` is a thin compatibility alias only.
-- **`router-rs schema-drift {contract,baseline,check}`** (`scripts/router-rs/src/schema_drift.rs`) captures per-task baselines under `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`. Required/forbidden Cursor hook event sets are shared with [`cursor_hooks/subtraction.rs`](../scripts/router-rs/src/cursor_hooks/subtraction.rs) and [`check-cursor-hooks-parity.sh`](../scripts/ci/check-cursor-hooks-parity.sh) (parity script loads lists via `schema-drift contract`). Check compares hooks.json vs workspace template (commands/timeouts), gate timeout table, REQUIREMENTS↔ROADMAP `##`/`###` heading fingerprints, and `EVIDENCE_INDEX.artifacts[]` when present.
+- **`router-rs schema-drift {contract,baseline,check}`** (`scripts/router-rs/src/schema_drift.rs`) captures per-task baselines under `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`. Required/forbidden Cursor hook event sets are shared with [`cursor_hooks/subtraction.rs`](../scripts/router-rs/src/hosts/cursor_hooks/subtraction.rs) and [`check-cursor-hooks-parity.sh`](../scripts/ci/check-cursor-hooks-parity.sh) (parity script loads lists via `schema-drift contract`). Check compares hooks.json vs workspace template (commands/timeouts), gate timeout table, REQUIREMENTS↔ROADMAP `##`/`###` heading fingerprints, and `EVIDENCE_INDEX.artifacts[]` when present.
 
 ## Current Status Ledger
 
@@ -123,6 +123,63 @@ Invariants:
 - unknown selected skills fail closed in consumers
 - fallback selection may choose a safe owner from `SKILL_MANIFEST.json`, but must not introduce a second route authority
 - generated framework command aliases must name an existing manifest owner as `canonical_owner`; deleted historical owners must not appear in steady-state registry or routing
+
+## Plugin and Routing Contract
+
+This section freezes the skill runtime plugin ABI (V1): Rust keeps control-plane authority while skills, storage backends, and routing policies evolve as declarative records.
+
+### Core rules
+
+- **Control-plane authority**: The Rust runtime remains the control-plane authority.
+- **Declarative records**: Plugin records are declarative data structures, not dynamically loaded executable binaries.
+- **Fail-closed capability classes**: Unknown capability classes must fail closed.
+- **Hot/cold split**: `SKILL_ROUTING_RUNTIME.json` stays a minimal hot index; full metadata and explain data live in cold catalogs.
+
+### Plugin ABI (V1)
+
+Each plugin declaration record must provide:
+
+- `slug`: stable unique identifier
+- `kind`: e.g. `skill`, `framework_command`
+- `skill_path`: repo-relative skill path
+- `entrypoint`: runtime entrypoint class
+- `capabilities`: declared routing, tool, artifact, network, and gate boundaries
+- `risk`: priority, review policy, and destructive-risk projection
+
+Capability validation uses a closed-set mapping:
+
+- `routing_layer` → `routing`
+- `routing_owner` → `routing_owner`
+- `routing_gate` → `routing_gate`
+- `allowed_tools` → `tool`
+- `approval_required_tools` → `high_risk`
+- `artifact_outputs` → `artifact`
+- `network_access` → `networked`
+
+Unknown mappings or capability declarations fail closed during static self-check.
+
+### Routing metadata and catalogs
+
+Routing metadata is declarative and includes:
+
+- `intent_tags`: normalized semantic tags
+- `positive_triggers` / `negative_triggers`: confidence boost/suppress signals
+- `gate_policy` / `overlay_policy` / `fallback_policy`: scheduling gates and fallback rules
+
+Catalog locations:
+
+- **Hot routing index**: `skills/SKILL_ROUTING_RUNTIME.json` (schema id + minimal skill index only; no explain prose)
+- **Cold plugin catalog**: `skills/SKILL_PLUGIN_CATALOG.json`
+- **Cold routing companion metadata**: `skills/SKILL_ROUTING_METADATA.json`
+- **Routing explain**: `skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`
+- **Health manifest**: `skills/SKILL_HEALTH_MANIFEST.json`
+- **Provider registry**: `configs/framework/RUNTIME_PROVIDER_REGISTRY.json`
+
+Invariants:
+
+- The Rust runtime remains the control-plane authority.
+- Unknown capability classes must fail closed.
+- `SKILL_ROUTING_RUNTIME.json` stays a minimal hot index.
 
 ## Runtime Control Contracts
 

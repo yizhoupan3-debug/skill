@@ -437,7 +437,7 @@ pub fn should_inject_spawn_first_review_nudge(
     prompt_text: &str,
 ) -> bool {
     if my_light_profile_active(repo_root, prompt_text)
-        && crate::registry_loader::lifecycle_profile_disables_spawn_first_nudge(
+        && crate::runtime_registry::lifecycle_profile_disables_spawn_first_nudge(
             repo_root,
             "my-light",
         )
@@ -446,7 +446,7 @@ pub fn should_inject_spawn_first_review_nudge(
         return false;
     }
     crate::router_env_flags::router_rs_review_spawn_first_nudge_enabled()
-        && crate::registry_loader::review_spawn_first_enabled(repo_root)
+        && crate::runtime_registry::review_spawn_first_enabled(repo_root)
 }
 
 fn strong_code_review_anchor(sanitized: &str, tokens: &[String]) -> bool {
@@ -576,7 +576,7 @@ pub fn normalize_subagent_type(value: Option<&str>) -> String {
 ///
 /// **不是** Claude stdio-agent reviewer lane 的超集（Claude 另含 review/critic 等）；勿把本函数结果套到 Claude 门控。
 pub fn is_deep_review_gate_lane_normalized(lane: &str) -> bool {
-    crate::registry_loader::is_deep_review_gate_lane_from_registry(lane, None)
+    crate::runtime_registry::is_deep_review_gate_lane_from_registry(lane, None)
 }
 
 pub fn normalize_tool_name(value: Option<&str>) -> String {
@@ -611,7 +611,7 @@ mod tests {
 
     #[test]
     fn deep_review_gate_lane_normalized_matches_registry_matrix() {
-        crate::registry_loader::assert_deep_review_gate_lane_matrix(None);
+        crate::runtime_registry::assert_deep_review_gate_lane_matrix(None);
     }
 
     #[test]

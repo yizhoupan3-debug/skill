@@ -1,47 +1,12 @@
 //! Host projection identifiers and `--to` tool names aligned with
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`.
 
+use crate::runtime_registry::{
+    load_runtime_registry_json, HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH,
+    RUNTIME_REGISTRY_SCHEMA_VERSION,
+};
 use serde_json::{json, Map, Value};
 use std::path::Path;
-
-const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
-const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
-const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/host_adapter_contract.md";
-
-pub(crate) fn load_runtime_registry_json(framework_root: &Path) -> Result<Value, String> {
-    let path = framework_root.join("configs/framework/RUNTIME_REGISTRY.json");
-    if !path.is_file() {
-        return Err(format!(
-            "runtime registry not found under framework root {} (expected {})",
-            framework_root.display(),
-            path.display()
-        ));
-    }
-    let payload = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let parsed: Value = serde_json::from_str(&payload).map_err(|e| {
-        format!(
-            "invalid JSON in {}: {e}; see {HOST_ADAPTER_CONTRACT_PATH}",
-            path.display()
-        )
-    })?;
-    let sv = parsed
-        .get("schema_version")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            format!(
-                "RUNTIME_REGISTRY.json missing schema_version at {}",
-                path.display()
-            )
-        })?;
-    if sv != RUNTIME_REGISTRY_SCHEMA_VERSION {
-        return Err(format!(
-            "unsupported RUNTIME_REGISTRY schema_version {:?} at {}",
-            sv,
-            path.display()
-        ));
-    }
-    Ok(parsed)
-}
 
 pub(crate) fn host_targets_supported_host_ids(registry: &Value) -> Result<Vec<String>, String> {
     let out = registry

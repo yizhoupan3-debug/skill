@@ -715,6 +715,17 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                tx_type: "goal_state".to_string(),
+                payload: value.clone(),
+                idempotency_key: None,
+                seq: None,
+                schema_version: Some(1),
+            };
+            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+                eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
+            }
             invalidate_route_records_cache_on_write();
             let rfv_loop_superseded =
                 crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(&repo_root, &task_id)?;
@@ -760,6 +771,17 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 o.insert("updated_at".to_string(), json!(now_iso()));
             }
             write_atomic_json(&path, &state)?;
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                tx_type: "goal_state".to_string(),
+                payload: state.clone(),
+                idempotency_key: None,
+                seq: None,
+                schema_version: Some(1),
+            };
+            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+                eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
+            }
             invalidate_route_records_cache_on_write();
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
@@ -958,6 +980,17 @@ fn resume_goal_running(
     obj.insert("drive_until_done".to_string(), json!(drive_until_done));
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
+    let tx = crate::task_ledger::LedgerTransaction {
+        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        tx_type: "goal_state".to_string(),
+        payload: state.clone(),
+        idempotency_key: None,
+        seq: None,
+        schema_version: Some(1),
+    };
+    if let Err(e) = crate::task_ledger::append_transaction(repo_root, &task_id, tx) {
+        eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
+    }
     invalidate_route_records_cache_on_write();
     let rfv_loop_superseded =
         crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
@@ -1002,6 +1035,17 @@ fn set_terminal_flags(
     };
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
+    let tx = crate::task_ledger::LedgerTransaction {
+        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        tx_type: "goal_state".to_string(),
+        payload: state.clone(),
+        idempotency_key: None,
+        seq: None,
+        schema_version: Some(1),
+    };
+    if let Err(e) = crate::task_ledger::append_transaction(repo_root, &task_id, tx) {
+        eprintln!("[router-rs] failed to append goal transaction to TASK_LEDGER: {e}");
+    }
     invalidate_route_records_cache_on_write();
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     Ok(json!({

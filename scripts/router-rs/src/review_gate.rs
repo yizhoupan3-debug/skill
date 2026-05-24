@@ -67,7 +67,7 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
         let repo_root =
             crate::cursor_hooks::resolve_cursor_hook_repo_root(cli_repo_root, &payload)?;
         let _registry_guard =
-            crate::registry_loader::HookRegistryRepoGuard::new(&repo_root);
+            crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
         let mut output =
             crate::cursor_hooks::dispatch_cursor_hook_event(&repo_root, event, &payload);
         crate::autopilot_goal::scrub_followup_fields_in_hook_output(&mut output);

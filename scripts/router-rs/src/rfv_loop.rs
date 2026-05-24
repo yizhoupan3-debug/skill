@@ -650,6 +650,17 @@ pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
     obj.insert("superseded_by".to_string(), json!("autopilot_goal"));
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
+    let tx = crate::task_ledger::LedgerTransaction {
+        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        tx_type: "rfv_loop_state".to_string(),
+        payload: state.clone(),
+        idempotency_key: None,
+        seq: None,
+        schema_version: Some(1),
+    };
+    if let Err(e) = crate::task_ledger::append_transaction(repo_root, task_id, tx) {
+        eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
+    }
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, task_id);
     Ok(true)
 }
@@ -914,6 +925,17 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             let path = rfv_loop_state_path(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                tx_type: "rfv_loop_state".to_string(),
+                payload: value.clone(),
+                idempotency_key: None,
+                seq: None,
+                schema_version: Some(1),
+            };
+            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+                eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
+            }
             let goal_state_cleared =
                 crate::autopilot_goal::deactivate_goal_for_conflict_with_rfv(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
@@ -1129,6 +1151,17 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             obj.insert("loop_status".to_string(), json!(loop_status));
 
             write_atomic_json(&path, &state)?;
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                tx_type: "rfv_loop_state".to_string(),
+                payload: state.clone(),
+                idempotency_key: None,
+                seq: None,
+                schema_version: Some(1),
+            };
+            if let Err(e) = crate::task_ledger::append_transaction(&repo_root, &task_id, tx) {
+                eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
+            }
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );

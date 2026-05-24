@@ -66,7 +66,7 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework do
 | **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
 | **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset 即 strict）：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；宽松 legacy 设 `=0|false|off|no`。 |
 | **Stop 自动 checkpoint** | **已拔除（2026-05）**：Cursor/Codex hook Stop **不写** checkpoint；显式刷新用 Desktop MCP `session_checkpoint` 或 `framework_session_artifact_write` stdio。 |
-| **Cursor hooks 减法闭集** | 默认 **7** 事件；5 个已移除事件 dispatch **no-op**（[`subtraction.rs`](../scripts/router-rs/src/cursor_hooks/subtraction.rs)）。写回 `hooks.json` 即恢复 handler；`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 仅作未注册时对照。 |
+| **Cursor hooks 减法闭集** | 默认 **7** 事件；5 个已移除事件 dispatch **no-op**（[`subtraction.rs`](../scripts/router-rs/src/hosts/cursor_hooks/subtraction.rs)）。写回 `hooks.json` 即恢复 handler；`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 仅作未注册时对照。 |
 | **`router-rs schema-drift`** | `contract` / `baseline` / `check` 验收 hooks 闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题；见 [`skills/verifyx/SKILL.md`](../skills/verifyx/SKILL.md) 与 [`SCHEMA_DRIFT_HEADINGS_CONTRACT.md`](../configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md)。 |
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | Claude 专用；默认 **关闭**（不读 Cursor 同名 env）。 |
@@ -81,7 +81,7 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework do
 
 ## 混用时的实际武装顺序（Cursor Stop）
 
-- **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
+- **Stop 优先级**（实现 [`handlers.rs`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
 - **主线程深度 review（wave-2）**：**不得**在未 spawn 可数子代理（`general-purpose` / `best-of-n-runner` / `deep-reviewer` + `fork_context=false`）时仅凭 compact findings 清 `REVIEW_GATE`；须先有可数子代理证据（`subagent_start_count` / pending multiset / qualifying stop），再与 **`Stop` tail** 含 substantive `[P0]`–`[P2]` / `Caveat:` 行配合升 phase（**裸** legacy `phase≥2` alone 不足；stale hygiene 作废 orphan start；本仓默认**无** `afterAgentResponse` hook）。
 - **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。**My 默认（`my-light`）**：同轮 review + `/implementx|/verifyx` **不**注入拆分提示（静默 disarm，见 [`docs/hosts/cursor.md`](hosts/cursor.md) beforeSubmit 表）。**非 my-light**（例如磁盘 `GOAL_STATE.lifecycle_profile` 非 `my-light` 且本轮无 My 斜杠、但 hook-state 已 `goal_required`）：会注入一行 **`router-rs：本轮提交同时包含…`** 拆分提示，避免误以为 review 门控失效。若你本意是「先深度审稿再开连续执行」，请拆成两轮。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 My implement / goal drive 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
@@ -116,7 +116,7 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework do
 
 ## Codex：`AGENTS.md` 与二进制快照
 
-若修改仓库根 `AGENTS.md` 且依赖 Codex 侧投影：策略正文可能在 **编译期嵌入** 的 `router-rs` 中；改文后须重新构建并执行 `codex sync` / `framework sync-entrypoints`（见 [AGENTS.md](../AGENTS.md) → **Codex：`AGENTS.md` 构建快照（策略 A）** 与 [README.md](../README.md)）。
+若修改跨宿主策略 [`AGENTS.md`](../AGENTS.md) 或 Codex 差异 [`AGENTS_CODEX.md`](../AGENTS_CODEX.md) 且依赖 Codex 侧投影：策略正文在 **编译期嵌入** 的 `router-rs` 中（`AGENTS.md` + `AGENTS_CODEX.md` concat）；改文后须 rebuild + `framework sync-entrypoints`（见 [`AGENTS_CODEX.md`](../AGENTS_CODEX.md) §Codex 构建快照）。
 
 ## 出站文本被「砍一半」
 

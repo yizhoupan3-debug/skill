@@ -16,6 +16,9 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
         Err(e) => println!("router_rs_current_exe: <unavailable: {e}>"),
     }
 
+    println!("\n--- auto self-healing: cleaning broken symlinks ---");
+    let _ = auto_clean_broken_symlinks(repo_root);
+
     let checks = [
         ("AGENTS.md", repo_root.join("AGENTS.md")),
         (
@@ -40,7 +43,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
     ];
 
     println!("\n--- path checks ---");
-    match crate::registry_loader::check_review_gate_registry_snapshot(repo_root) {
+    match crate::runtime_registry::check_review_gate_registry_snapshot(repo_root) {
         Ok(()) => println!("RUNTIME_REGISTRY review_gate snapshot: ok"),
         Err(e) => println!("WARN: RUNTIME_REGISTRY review_gate snapshot failed: {e}"),
     }
@@ -422,6 +425,58 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
             "focus_task_id": focus_task_id,
         }
     }))
+}
+
+/// Auto-detect and safely clean broken symlinks inside multi-host client directories.
+pub fn auto_clean_broken_symlinks(repo_root: &Path) -> Result<(), String> {
+    let targets = [
+        ".antigravitycli",
+        ".claude",
+        ".cursor",
+        ".codex",
+        ".gemini",
+        "artifacts",
+    ];
+    let mut cleaned_count = 0;
+    for sub in &targets {
+        let dir_path = repo_root.join(sub);
+        if !dir_path.is_dir() {
+            continue;
+        }
+        if let Err(e) = clean_broken_symlinks_in_dir(&dir_path, &mut cleaned_count) {
+            println!("WARN: failed to clean broken symlinks in {}: {e}", dir_path.display());
+        }
+    }
+    if cleaned_count > 0 {
+        println!("INFO: Successfully auto-cleaned {cleaned_count} broken symlink(s) to secure system integrity.");
+    } else {
+        println!("INFO: No broken symlinks detected. Multi-host workspace is healthy.");
+    }
+    Ok(())
+}
+
+fn clean_broken_symlinks_in_dir(dir: &Path, cleaned_count: &mut usize) -> Result<(), String> {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Ok(metadata) = fs::symlink_metadata(&path) {
+                if metadata.is_symlink() {
+                    // Check if the symlink target exists
+                    if !path.exists() {
+                        if let Err(e) = fs::remove_file(&path) {
+                            println!("WARN: failed to remove broken symlink {}: {e}", path.display());
+                        } else {
+                            println!("REPAIRED: Removed broken symlink {}", path.display());
+                            *cleaned_count += 1;
+                        }
+                    }
+                } else if metadata.is_dir() {
+                    let _ = clean_broken_symlinks_in_dir(&path, cleaned_count);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

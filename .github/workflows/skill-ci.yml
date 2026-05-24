@@ -73,6 +73,8 @@ jobs:
 
       - name: Run Rust policy tests
         run: cargo test --test policy_contracts
+      - name: policy registry review gate
+        run: cargo test --test policy_registry_review_gate
 
       - name: Run Cursor rules link policy tests
         run: cargo test --test policy_cursor_rules_links

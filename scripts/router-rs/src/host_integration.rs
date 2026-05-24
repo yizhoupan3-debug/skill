@@ -1,4 +1,8 @@
 use crate::framework_runtime::{framework_root_from_executable_path, is_framework_root};
+use crate::runtime_registry::{
+    load_runtime_registry, load_runtime_registry_json, load_runtime_registry_payload,
+    load_runtime_registry_payload_if_repo_local, RUNTIME_REGISTRY_SCHEMA_VERSION,
+};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
@@ -13,7 +17,6 @@ use std::time::{Duration, Instant};
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
-const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
     "fast-mode",
@@ -74,6 +77,8 @@ const REQUIRED_GENERATED_ARTIFACTS: [&str; 15] = [
     ".gemini/settings.json",
     ".gemini/mcp.json",
 ];
+/// Metadata-only doctor checks all paths declared in `GENERATED_ARTIFACTS.json`.
+/// Full drift-gate uses the same manifest (`framework maint update-one-shot`).
 const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
     "imagegen",
     "openai-docs",
@@ -93,14 +98,6 @@ const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [
 ];
 
 #[derive(Debug, Clone, Deserialize)]
-struct RuntimeRegistry {
-    #[serde(rename = "schema_version")]
-    _schema_version: String,
-    #[serde(default)]
-    workspace_bootstrap_defaults: RuntimeWorkspaceBootstrapDefaults,
-}
-
-#[derive(Debug, Clone, Deserialize)]
 struct GeneratedArtifactsManifest {
     schema_version: String,
     generated_artifacts: Vec<GeneratedArtifactManifestEntry>,
@@ -111,18 +108,6 @@ struct GeneratedArtifactManifestEntry {
     path: String,
     generator: String,
     compare: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-struct RuntimeWorkspaceBootstrapDefaults {
-    #[serde(default)]
-    skills: RuntimeSkillsDefaults,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-struct RuntimeSkillsDefaults {
-    #[serde(default)]
-    source_rel: Option<String>,
 }
 
 #[derive(Parser)]
@@ -666,57 +651,6 @@ fn nearest_marker_root(start: &Path, marker: &str) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, String> {
-    let repo_candidate = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
-    if repo_candidate.is_file() {
-        return Ok(repo_candidate);
-    }
-    Err(format!(
-        "Runtime registry not found at active workspace root: {}. Expected {}. Fix by opening the framework repo root as the active workspace or passing --framework-root <framework-repo-root>.",
-        repo_root.to_string_lossy(),
-        repo_candidate.to_string_lossy()
-    ))
-}
-
-fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
-    match runtime_registry_path(repo_root) {
-        Ok(_) => {}
-        Err(e) => return Err(e),
-    }
-    crate::framework_host_targets::load_runtime_registry_json(repo_root)
-}
-
-fn load_runtime_registry_payload_if_repo_local(repo_root: &Path) -> Result<Option<Value>, String> {
-    let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let payload = fs::read_to_string(&path).map_err(|err| err.to_string())?;
-    let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| err.to_string())?;
-    let schema_version = parsed
-        .get("schema_version")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            format!(
-                "Runtime registry missing schema_version at {}",
-                path.to_string_lossy()
-            )
-        })?;
-    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
-        return Err(format!(
-            "Unsupported runtime registry schema_version {:?} at {}",
-            schema_version,
-            path.to_string_lossy()
-        ));
-    }
-    Ok(Some(parsed))
-}
-
-fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
-    let payload = load_runtime_registry_payload(repo_root)?;
-    serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| err.to_string())
-}
-
 fn compatibility_alias_inventory() -> Value {
     json!({
         "schema_version": "framework-compatibility-alias-inventory-v1",
@@ -898,6 +832,7 @@ fn generated_artifacts_status(
             "undeclared_generated_artifacts": undeclared,
             "missing_required_generated_artifacts": missing_required,
             "required_generated_artifacts": REQUIRED_GENERATED_ARTIFACTS,
+            "declared_generated_artifact_paths": declared_paths.iter().cloned().collect::<Vec<_>>(),
             "drifted_artifacts": drifted_artifacts,
         },
         "drift_gate": {
@@ -1633,7 +1568,7 @@ fn projection_envelope(
         &roots.framework_root,
     )?;
     let registry =
-        crate::framework_host_targets::load_runtime_registry_json(&roots.framework_root)?;
+        crate::runtime_registry::load_runtime_registry_json(&roots.framework_root)?;
     let mut host_targets_map = serde_json::Map::new();
     for (host_id, tool) in &pairs {
         let value = if crate::framework_host_targets::host_is_installable(&registry, host_id)? {
@@ -1667,7 +1602,7 @@ fn resolved_roots_payload(
 ) -> Result<Value, String> {
     let mut host_home_roots = serde_json::Map::new();
     let registry =
-        crate::framework_host_targets::load_runtime_registry_json(&roots.framework_root)?;
+        crate::runtime_registry::load_runtime_registry_json(&roots.framework_root)?;
     for (host_id, tool) in pairs {
         if !crate::framework_host_targets::host_is_installable(&registry, host_id)? {
             host_home_roots.insert(host_id.clone(), Value::Null);
@@ -1832,7 +1767,7 @@ fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, Strin
 }
 
 fn validate_projection_adapters_against_registry(framework_root: &Path) -> Result<(), String> {
-    let registry = crate::framework_host_targets::load_runtime_registry_json(framework_root)?;
+    let registry = crate::runtime_registry::load_runtime_registry_json(framework_root)?;
     let supported = crate::framework_host_targets::host_targets_supported_host_ids(&registry)?;
     for adapter in HOST_PROJECTION_ADAPTERS {
         if !supported.iter().any(|host_id| host_id == adapter.host_id) {
@@ -3691,7 +3626,7 @@ fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String
 fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
     let normalized = raw.trim().to_lowercase();
     if normalized == "codex-app" {
-        let registry = crate::framework_host_targets::load_runtime_registry_json(framework_root)?;
+        let registry = crate::runtime_registry::load_runtime_registry_json(framework_root)?;
         if crate::framework_host_targets::host_targets_supported_host_ids(&registry)?
             .iter()
             .any(|host_id| host_id == "codex-app")

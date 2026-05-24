@@ -104,6 +104,11 @@ fn walkdir_light(dir: &Path) -> Vec<PathBuf> {
     for ent in read.flatten() {
         let path = ent.path();
         if path.is_dir() {
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if name.starts_with('.') {
+                    continue;
+                }
+            }
             out.extend(walkdir_light(&path));
         } else {
             out.push(path);

@@ -91,7 +91,7 @@ approval_required_tools: []
 
 ## Review Lanes After Clarification
 
-- 架构、测试、安全或实现风险：留在 native runtime 中做证据优先 review，必要时用 [`systematic-debugging`](../systematic-debugging/SKILL.md) 查未知失败。
+- 架构、测试、安全或实现风险：留在 native runtime 中做证据优先 review，必要时用 [`systematic-debugging`](../.archive-cold/systematic-debugging/SKILL.md) 查未知失败。
 - 多面向 review：用 [`agent-swarm-orchestration`](../agent-swarm-orchestration/SKILL.md) 先决定是否拆 bounded sidecar；不要引用不存在的 reviewer lane。
 - 产物或界面 review：按 artifact/evidence gate 进入 [`visual-review`](../visual-review/SKILL.md)、[`pdf`](../pdf/SKILL.md)、[`doc`](../doc/SKILL.md)、[`slides`](../slides/SKILL.md) 或 [`spreadsheets`](../primary-runtime/spreadsheets/SKILL.md)。
 - 收敛验收：以本轮实际测试、diff、截图、生成产物或明确 blocker 为准。

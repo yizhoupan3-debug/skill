@@ -3,7 +3,7 @@ fn default_true() -> bool {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub(crate) enum RouterCommand {
+pub enum RouterCommand {
     Route(RouteCommand),
     Search(SearchCommand),
     Framework {
@@ -592,7 +592,7 @@ pub(crate) struct FrameworkContractsCommand {
 #[command(
     help_template = "{about-section}\nUsage: {usage}\n\nCommands:\n{subcommands}\n\nUse `router-rs <command> --help` for command-specific options.\n"
 )]
-pub(crate) struct Cli {
+pub struct Cli {
     #[command(subcommand)]
     pub(crate) command: Option<RouterCommand>,
     #[arg(long)]

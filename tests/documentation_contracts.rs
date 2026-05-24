@@ -164,7 +164,7 @@ fn runtime_sandbox_contract_schema_freezes_control_plane_semantics() {
 
 #[test]
 fn runtime_sandbox_contract_text_mentions_required_policy_boundaries() {
-    let text = read_text(&project_root().join("docs/runtime_sandbox_contract.md")).to_lowercase();
+    let text = read_text(&project_root().join("docs/runtime_unified_spec.md")).to_lowercase();
     for phrase in [
         "async cleanup",
         "failure isolation",
@@ -225,7 +225,7 @@ fn rust_contracts_doc_records_current_minimal_implementation_truth() {
 
 #[test]
 fn runtime_plugin_contract_freezes_plugin_abi_and_health_loop() {
-    let text = read_text(&project_root().join("docs/runtime_plugin_contract.md"));
+    let text = rust_contracts_doc();
     for required_phrase in [
         "The Rust runtime remains the control-plane authority.",
         "Unknown capability classes must fail closed.",
@@ -249,9 +249,7 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
         "docs/rust_contracts.md",
         "docs/framework_profile_contract.md",
         "docs/host_adapter_contract.md",
-        "docs/runtime_observability_contract.md",
-        "docs/runtime_plugin_contract.md",
-        "docs/runtime_sandbox_contract.md",
+        "docs/runtime_unified_spec.md",
     ];
     let joined = scoped_docs
         .iter()
@@ -276,7 +274,7 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
 }
 
 fn runtime_compaction_contract() -> String {
-    read_text(&project_root().join("docs/runtime_compaction_contract.md"))
+    read_text(&project_root().join("docs/runtime_unified_spec.md"))
 }
 
 fn rust_contracts_doc() -> String {
@@ -284,7 +282,7 @@ fn rust_contracts_doc() -> String {
 }
 
 fn load_sandbox_contract_schema() -> Value {
-    let text = read_text(&project_root().join("docs/runtime_sandbox_contract.md"));
+    let text = read_text(&project_root().join("docs/runtime_unified_spec.md"));
     let pattern = Regex::new(r"(?s)```json sandbox-contract-v1\n(.*?)\n```").unwrap();
     let captures = pattern
         .captures(&text)

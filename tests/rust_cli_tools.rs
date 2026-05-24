@@ -311,7 +311,17 @@ fn collect_files(
     extension: &str,
     visitor: &mut dyn FnMut(&std::path::Path),
 ) {
-    let Ok(entries) = std::fs::read_dir(root) else {
+    let mut resolved_root = root.to_path_buf();
+    if !resolved_root.exists() {
+        let path_str = resolved_root.to_string_lossy();
+        if path_str.contains("/skills/") && !path_str.contains("/skills/.archive-cold/") {
+            let alternative = std::path::PathBuf::from(path_str.replace("/skills/", "/skills/.archive-cold/"));
+            if alternative.exists() {
+                resolved_root = alternative;
+            }
+        }
+    }
+    let Ok(entries) = std::fs::read_dir(&resolved_root) else {
         return;
     };
     for entry in entries.flatten() {
