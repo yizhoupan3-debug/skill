@@ -120,10 +120,10 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
             Some(repo_root),
             "cursor",
         );
-    if tracks_goal_or_drive_entry(&state)
-        && !my_light
+    if !my_light
         && !cursor_review_gate_suppressed(repo_root, &text)
-        && (review_arms_for_gate || (review && goal_drive_entrypoint))
+        && review
+        && goal_drive_entrypoint
     {
         merge_additional_context(&mut output, CURSOR_REVIEW_MY_SAME_ROUND_NUDGE);
     }

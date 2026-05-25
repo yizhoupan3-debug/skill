@@ -3,6 +3,12 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let review_armed_peek = peek_review_hard_armed(repo_root, event);
 
     if review_armed_peek {
+        if !post_tool_use_needs_work(repo_root, event, &name, None) {
+            return json!({});
+        }
+        if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name) {
+            eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
+        }
         let mut lock = acquire_state_lock(repo_root, event);
         if lock.is_none() {
             return hook_state_lock_fail_closed_for_review_json();
@@ -14,9 +20,6 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
         if !post_tool_use_needs_work(repo_root, event, &name, Some(&state)) {
             release_state_lock(&mut lock);
             return json!({});
-        }
-        if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name) {
-            eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
         }
         return handle_post_tool_use_with_lock(repo_root, event, &name, &mut lock, state);
     }

@@ -523,6 +523,25 @@ fn session_key_prefers_root_session_over_nested_child_conversation() {
 }
 
 #[test]
+fn cursor_session_key_child_conversation_with_parent_session_id_in_tool_input() {
+    let parent = "parent-chat-42";
+    let subagent_only = json!({
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+        "hookPayload": {"conversation_id": "child-thread-only"},
+        "tool_input": {"session_id": parent},
+    });
+    let parent_top = json!({
+        "session_id": parent,
+        "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+    });
+    assert_eq!(
+        super::session_key(&subagent_only),
+        super::session_key(&parent_top),
+        "subagent payload must bucket with parent session_id"
+    );
+}
+
+#[test]
 fn session_key_ignores_lonely_agent_id_for_cwd_fallback_match() {
     let only_agent = json!({"agent_id": "sub-agent-1", "cwd": "/workspace/z"});
     let cwd_only = json!({"cwd": "/workspace/z"});
@@ -3207,7 +3226,7 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
 }
 
 #[test]
-fn session_end_best_effort_deletes_state_when_lock_unavailable() {
+fn session_end_skips_state_delete_when_lock_unavailable() {
     let _guard = ForceHookStateLockFailureGuard::new();
     let repo = fresh_repo();
     let payload = event("s-end-no-lock", "全面review这个仓库");
@@ -3223,8 +3242,8 @@ fn session_end_best_effort_deletes_state_when_lock_unavailable() {
     assert!(sp.exists());
     let _ = dispatch_cursor_hook_event(&repo, "sessionEnd", &payload);
     assert!(
-        !sp.exists(),
-        "sessionEnd must best-effort delete state even when lock acquisition failed"
+        sp.exists(),
+        "sessionEnd must skip delete when lock unavailable (D7)"
     );
 }
 
@@ -4608,6 +4627,25 @@ fn duplicate_subagent_start_same_id_does_not_inflate_start_count() {
     let state = load_state_for(&repo, sid);
     assert_eq!(state.subagent_start_count, 1, "duplicate id: start must not double-count");
     assert_eq!(state.review_subagent_pending_cycle_keys.len(), 1);
+    assert_eq!(
+        state.active_subagent_count, 1,
+        "duplicate id: open count must increment once"
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "review-dup"
+        }),
+    );
+    let after_stop = load_state_for(&repo, sid);
+    assert_eq!(
+        after_stop.active_subagent_count, 0,
+        "single stop after duplicate start must zero open count"
+    );
+    assert!(after_stop.review_subagent_pending_cycle_keys.is_empty());
 }
 
 /// 两个不同 subagent id 并行 start：各自 stop 各核销一条 pending；**第二次** stop 排空 multiset 后才 phase 3。
@@ -6816,6 +6854,71 @@ fn terminal_observation_cache_avoids_repeat_dir_scan() {
     );
     let _ = fs::remove_dir_all(&dir);
     reset_terminal_cache_for_tests();
+}
+
+#[test]
+fn armed_post_tool_read_fast_path_skips_l3_when_no_pending_work() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-armed-read-fast";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    assert!(load_state_for(&repo, sid).review_required);
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "tool_name": "Read",
+            "tool_path": "README.md"
+        }),
+    );
+    assert!(
+        out.get("permission").is_none(),
+        "armed Read with no pending must not deny; out={out:?}"
+    );
+}
+
+#[test]
+fn armed_post_tool_l1_before_l3_lock_order_under_review() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let _gate = ReviewGateActiveGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-armed-lock-order";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "r1"
+        }),
+    );
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "tool_name": "Task",
+            "tool_input": {"subagent_type": "general-purpose", "fork_context": false}
+        }),
+    );
+    assert!(
+        out.get("permission").is_none(),
+        "armed Task postTool must complete without deny; out={out:?}"
+    );
 }
 
 #[test]

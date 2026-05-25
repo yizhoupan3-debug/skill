@@ -116,7 +116,7 @@ cd /path/to/project
 
 手动把事件加回 `hooks.json` 后，dispatch **自动**走真实 handler（无需 env）。仅当**未**注册但仍想跑 handler（单测/对照）时：`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1`（见 [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env) 注释）。
 
-**门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「PostToolUse timeout」。
+**门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「对话中断排障」。
 
 **模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`；事件列表真源：`router-rs schema-drift contract` ↔ [`subtraction.rs`](scripts/router-rs/src/hosts/cursor_hooks/subtraction.rs)）。
 

@@ -223,8 +223,7 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
     if lock.is_some() {
         let _ = fs::remove_file(&sp);
     } else {
-        eprintln!("[router-rs] session_end_state_delete_best_effort=lock_unavailable");
-        let _ = fs::remove_file(&sp);
+        eprintln!("[router-rs] session_end_state_delete_skipped=lock_unavailable");
     }
     release_state_lock(&mut lock);
     remove_adversarial_loop(repo_root, event);

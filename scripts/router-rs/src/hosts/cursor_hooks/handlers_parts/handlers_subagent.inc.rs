@@ -25,7 +25,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         crate::review_gate_engine::cursor_review_independent_fork(fork, review_kind);
     let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
     let armed = review_hard_armed(&state);
-    let track_open_subagent = true;
+    let mut track_open_subagent = true;
     let mut mutated = false;
     // 与 PostToolUse 对齐：pre-goal 在独立 fork 且存在 lane 类型证据时满足（含非白名单 lane 名）。
     if tracks_goal_or_drive_entry(&state) && pre_goal_kind && independent_fork_pre_goal {
@@ -59,7 +59,8 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
             mutated = true;
             }
             PendingCyclePush::AlreadyPresent => {
-                // Duplicate `id:` subagentStart: open count still tracked; do not inflate start_count.
+                // Duplicate `id:` subagentStart: multiset deduped; do not inflate start_count or open count.
+                track_open_subagent = false;
             }
             PendingCyclePush::AtCap => {
             let _ = save_state(repo_root, event, &mut state);
@@ -176,9 +177,17 @@ fn post_tool_use_needs_work(
     }
     if let Some(state) = state {
         if review_hard_armed(state) {
-            return true;
+            return review_armed_posttool_requires_l3(state, name);
         }
     }
     false
+}
+
+/// Armed review: `Read` skips L3 when multiset/open count show no in-flight subagent work (D6/D12).
+fn review_armed_posttool_requires_l3(state: &ReviewGateState, name: &str) -> bool {
+    if name.eq_ignore_ascii_case("read") {
+        return !state.review_subagent_pending_cycle_keys.is_empty() || state.active_subagent_count > 0;
+    }
+    true
 }
 

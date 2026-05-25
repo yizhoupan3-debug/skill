@@ -42,6 +42,27 @@
 - **仿宿主续跑行**：聊天区无 `router-rs ` 前缀的仿机读行勿当 hook 真源；以 hook stdout JSON 为准。
 - **清门粘贴**：勿把 **`RG_FOLLOWUP`…** 当清门令牌；请用 **`rg_clear`**、拒因 token，或自然语言 override。
 
+## 对话中断排障
+
+症状：对话像被掐断、无法提交、子代理 `permission: deny`、Stop 后又自动续跑。
+
+| 现象 | 常见根因 | 处理 |
+|------|----------|------|
+| Stop 后出现 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` | 非 **my-light** 或 review 未清门 | 先 spawn `fork_context=false` 深度 lane；或 `rg_clear` / 拆开 review 与 `/implementx` |
+| `beforeSubmit` 无法继续（`continue:false`） | hook-state 锁/持久化失败 | 查 `.cursor/hook-state` 权限；应急 `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` |
+| 子代理 `permission: deny`（open count） | 重复 `subagentStart` 或 session 分片 | 看 `review-subagent-*.json` 的 `active_subagent_count` vs pending；升级后旧 state 可删或等新会话 |
+| PostTool 卡 ~20s | L1/L3 争用或 armed 全路径 L3 | 默认已修 L3→L1 逆序；仍慢则 w2 压测后可将 gate timeout 提到 25（见 `.cursor/hooks.json`） |
+| 双聊天互相影响 | 同 `cwd` 共桶 | 各聊天设 **`ROUTER_RS_CURSOR_SESSION_NAMESPACE`**（见 `.cursor/router-rs-hook.env` 注释） |
+| `CLOSEOUT_FOLLOWUP`（my-light） | 无磁盘 goal 仍声称完成 | 仅 hydration 有 `GOAL_STATE` 时触发；口语「完成了」不应再拦 |
+
+**PostToolUse timeout**：门控事件默认 **20s**（`hooks.json`）；`postToolUse` 超时会导致 review multiset 不完整 → Stop 循环。慢盘先查 hook-state 体积与锁 stderr（`hook-state lock held`）。
+
+**router-rs 缺失**：critical 事件 **fail-closed**（`continue:false` / 工具拒绝）；确保 `scripts/router-rs/target/release/router-rs` 存在或 `ROUTER_RS_BIN` 指向二进制。
+
+**SESSION_CLOSE_STYLE**：每轮 Stop 可能注入软提示；不需要时设 `ROUTER_RS_OPERATOR_INJECT=0`。
+
+**session_key 升级**：修复后 hook-state 文件名 hash 可能变化；首会话门控状态重置，可用 `rg_clear` 或删 `.cursor/hook-state/review-subagent-*.json`（仅本机调试）。
+
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
 
 ## 安装与文件分布 (Installation & Scope)

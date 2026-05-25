@@ -925,16 +925,16 @@ fn try_extract_session_from_object(obj: &serde_json::Map<String, Value>) -> Opti
 ///
 /// **显式不包含 `agent_id`**；扫描有节点预算，防止极大 payload 卡住 hook。
 const SESSION_HOOK_IDENTITY_FIELDS_DEEP_PRIORITY: &[&str] = &[
-    "conversation_id",
-    "conversationId",
-    "thread_id",
-    "threadId",
-    "chat_id",
     "session_id",
     "sessionId",
     "parent_session_id",
     "parentSessionId",
     "root_session_id",
+    "thread_id",
+    "threadId",
+    "chat_id",
+    "conversation_id",
+    "conversationId",
     "composer_id",
     "composerId",
 ];
@@ -1048,9 +1048,19 @@ fn try_extract_parent_session_from_tool_json(tool: &Value) -> Option<String> {
 }
 
 fn extract_first_session_string_including_tool_input(event: &Value) -> Option<String> {
-    extract_first_session_string(event)
-        .or_else(|| try_extract_parent_session_from_tool_json(&tool_input_of(event)))
-        .or_else(|| min_priority_session_identity_from_hook_json(event))
+    if let Some(root) = event.as_object() {
+        if let Some(s) = try_extract_session_from_object(root) {
+            return Some(s);
+        }
+    }
+    // Parent session in tool_input must win over nested `hookPayload.conversation_id` (subagent threads).
+    if let Some(s) = try_extract_parent_session_from_tool_json(&tool_input_of(event)) {
+        return Some(s);
+    }
+    if let Some(s) = extract_first_session_string(event) {
+        return Some(s);
+    }
+    min_priority_session_identity_from_hook_json(event)
 }
 
 /// 派生 `.cursor/hook-state/review-subagent-<key>.json` 文件名组件。

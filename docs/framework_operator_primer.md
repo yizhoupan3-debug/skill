@@ -106,7 +106,9 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework do
 | **Codex CLI** | 见 `.codex/hooks.json`（另述） | [`docs/hosts/codex-cli.md`](hosts/codex-cli.md) |
 
 - **Cursor 已移除**：`afterAgentResponse`（compact 清门改 **`Stop` tail**）、shell 生命周期、`afterFileEdit`、`preCompact`。
-- **`postToolUse`**：仍注册（**`timeout: 20s`**，与门控事件一致；见 [`docs/hosts/cursor.md`](hosts/cursor.md)「PostToolUse timeout」）。`Read`/`Grep` 等在 router-rs **fast-path** 跳过 tracker 与 hook-state 锁；须 **`cargo build --release`** 且 launcher 命中 release（~8MB）。若 Agent 步在工具后卡住，先查 postToolUse 是否超时而非盲目加长 timeout。
+- **`postToolUse`**：仍注册（**`timeout: 20s`**，与门控事件一致；见 [`docs/hosts/cursor.md`](hosts/cursor.md)「对话中断排障」）。review 武装时 `Read` 在无 pending/open 时可 fast-path；须 **`cargo build --release`** 且 launcher 命中 release（~8MB）。若 Agent 步在工具后卡住，先查 postToolUse 是否超时而非盲目加长 timeout。
+
+**对话中断最小复现（5 步）**：(1) 查 hook stdout 是否 `permission: deny` 或 `followup_message` 含 `router-rs REVIEW_GATE`；(2) 读 `.cursor/hook-state/review-subagent-*.json` 的 `active_subagent_count` vs pending；(3) 双聊天同 repo 时设 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`；(4) 确认 `router-rs` release 存在；(5) 深度 review 先 spawn `fork_context=false` lane 再工具密集调用。
 - **Claude**：`PostToolUse` 仅 touched settings/framework 时才有上下文；共享 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（`.claude/router-rs-hook.env`）。
 - **恢复旧 Cursor 事件**：见 [`MIGRATION.md`](../MIGRATION.md)。
 

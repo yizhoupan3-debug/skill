@@ -3,8 +3,11 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     let stop_prompt_for_profile = prompt_text(event);
     if cursor_review_gate_suppressed(repo_root, &stop_prompt_for_profile) {
         let response_text = agent_response_text(event);
-        let closeout_msg =
-            stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text);
+        let closeout_msg = frame
+            .hydration_goal
+            .is_some()
+            .then(|| stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text))
+            .flatten();
         let mut out = json!({});
         if let Some(msg) = closeout_msg {
             out["followup_message"] = Value::String(msg);
