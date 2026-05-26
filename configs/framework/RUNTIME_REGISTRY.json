@@ -434,8 +434,9 @@
       ],
       "mcp_config_paths": [
         {
-          "scope": "project",
-          "relative": ".cursor/mcp.json"
+          "scope": "user",
+          "host_root": "cursor",
+          "relative": "mcp.json"
         }
       ],
       "session_supervisor_driver": "unsupported",

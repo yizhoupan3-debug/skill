@@ -570,13 +570,123 @@ pub(crate) fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBu
     let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
     let td = meta.get("target_directory")?.as_str()?;
     let base = PathBuf::from(td);
-    for tail in ["debug/router-rs", "release/router-rs"] {
+    for tail in ["release/router-rs", "debug/router-rs"] {
         let candidate = base.join(tail);
         if candidate.is_file() {
             return Some(candidate);
         }
     }
     None
+}
+
+fn is_ephemeral_executable_path(path: &str) -> bool {
+    crate::router_self::is_ephemeral_router_rs_path(path)
+}
+
+fn is_repo_build_executable_path(path: &str, framework_root: &Path) -> bool {
+    crate::router_self::is_repo_build_router_rs_path(path, framework_root)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum McpRouterRsCommand {
+    OnPath,
+    Absolute(PathBuf),
+    CargoBootstrap,
+}
+
+fn resolve_mcp_router_rs_command(framework_root: &Path) -> McpRouterRsCommand {
+    if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
+        if Path::new(&raw).is_file() && !is_ephemeral_executable_path(&raw) {
+            return McpRouterRsCommand::Absolute(PathBuf::from(raw));
+        }
+    }
+    if let Ok(exe) = which::which("router-rs") {
+        let path_text = exe.to_string_lossy();
+        if !is_ephemeral_executable_path(&path_text)
+            && !is_repo_build_executable_path(&path_text, framework_root)
+        {
+            return McpRouterRsCommand::OnPath;
+        }
+    }
+    let installed = crate::router_self::default_router_rs_install_path();
+    if installed.is_file() {
+        return McpRouterRsCommand::Absolute(installed);
+    }
+    McpRouterRsCommand::CargoBootstrap
+}
+
+fn mcp_router_rs_command_value(command: &McpRouterRsCommand) -> Value {
+    match command {
+        McpRouterRsCommand::OnPath => json!("router-rs"),
+        McpRouterRsCommand::Absolute(path) => json!(path.to_string_lossy()),
+        McpRouterRsCommand::CargoBootstrap => json!("cargo"),
+    }
+}
+
+fn ensure_router_rs_installed_for_mcp_with_roots(roots: &ResolvedProjectionRoots) -> Result<(), String> {
+    if matches!(
+        resolve_mcp_router_rs_command(&roots.framework_root),
+        McpRouterRsCommand::CargoBootstrap
+    ) {
+        crate::router_self::ensure_router_rs_installed_for_runtime()?;
+    }
+    Ok(())
+}
+
+fn resolve_stable_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
+    match resolve_mcp_router_rs_command(framework_root) {
+        McpRouterRsCommand::OnPath => which::which("router-rs").ok(),
+        McpRouterRsCommand::Absolute(path) => Some(path),
+        McpRouterRsCommand::CargoBootstrap => None,
+    }
+}
+
+fn router_rs_cargo_bootstrap_args(framework_root: &Path, host_args: &[&str]) -> Vec<String> {
+    let manifest_path = framework_root.join("scripts/router-rs/Cargo.toml");
+    let mut args = vec![
+        "run".to_string(),
+        "--release".to_string(),
+        "--quiet".to_string(),
+        "--manifest-path".to_string(),
+        manifest_path.to_string_lossy().into_owned(),
+        "--".to_string(),
+    ];
+    for arg in host_args {
+        args.push(arg.to_string());
+    }
+    args
+}
+
+fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> Result<(), String> {
+    if cmd == "cargo" {
+        if which::which("cargo").is_err() {
+            return Err("Cargo is not found on system PATH".to_string());
+        }
+        return Ok(());
+    }
+    if cmd == "router-rs" {
+        if which::which("router-rs").is_err() {
+            return Err(
+                "router-rs is not found on system PATH; run `router-rs self install`".to_string(),
+            );
+        }
+        return Ok(());
+    }
+    let path = Path::new(cmd);
+    if !path.is_file() {
+        return Err(format!("MCP executable binary '{cmd}' is missing on disk"));
+    }
+    if is_ephemeral_executable_path(cmd) {
+        return Err(format!(
+            "MCP executable '{cmd}' points at an ephemeral build path; run `router-rs self install` then `framework host-integration install --to <host>`"
+        ));
+    }
+    if framework_root.is_some_and(|root| is_repo_build_executable_path(cmd, root)) {
+        return Err(format!(
+            "MCP executable '{cmd}' points at a repo build artifact; run `router-rs self install` then `framework host-integration install --to <host>`"
+        ));
+    }
+    Ok(())
 }
 
 fn resolve_host_home(
@@ -1301,6 +1411,16 @@ fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String> {
             return Ok(path);
         }
     }
+    let installed = crate::router_self::default_router_rs_install_path();
+    if installed.is_file() {
+        return Ok(installed);
+    }
+    if let Ok(exe) = which::which("router-rs") {
+        let path_text = exe.to_string_lossy();
+        if !is_ephemeral_executable_path(&path_text) {
+            return Ok(exe);
+        }
+    }
     if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
         let base = PathBuf::from(td);
         for candidate in [base.join("release/router-rs"), base.join("debug/router-rs")] {
@@ -1930,6 +2050,7 @@ fn install_cursor_projection(
         "reason": "user-scope-only",
     });
     if scope == "user" {
+        ensure_router_rs_installed_for_mcp_with_roots(roots)?;
         let mcp_path = cursor_mcp_config_path(roots);
         let mcp_install = install_cursor_mcp_server(roots, &mcp_path)?;
         changed |= mcp_install.changed;
@@ -1968,13 +2089,51 @@ fn install_cursor_projection(
 
 fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let user_target = cursor_entrypoint_target(roots, "user");
+    let mcp_path = cursor_mcp_config_path(roots);
+    let rules_ready = managed_projection_file_exists(&user_target)?;
+    let mcp_exists = mcp_path.is_file();
+    let mut binary_valid = false;
+    let mut status_error = None;
+
+    if mcp_exists {
+        if let Ok(Some(mcp_json)) = read_json_if_exists(&mcp_path) {
+            if let Some(cmd) = mcp_json
+                .get("mcp_servers")
+                .and_then(|v| v.get("browser-mcp"))
+                .and_then(|v| v.get("command"))
+                .and_then(|v| v.as_str())
+            {
+                match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
+                    Ok(()) => binary_valid = true,
+                    Err(err) => status_error = Some(err),
+                }
+            } else {
+                status_error =
+                    Some("Invalid or incomplete mcp_servers.browser-mcp payload structure".to_string());
+            }
+        } else {
+            status_error = Some("Failed to read or parse ~/.cursor/mcp.json".to_string());
+        }
+    } else {
+        status_error = Some("~/.cursor/mcp.json does not exist".to_string());
+    }
+
+    let ready = rules_ready && mcp_exists && binary_valid;
     Ok(json!({
-        "ready": managed_projection_file_exists(&user_target)?,
+        "ready": ready,
         "status": "projection-status",
+        "error": status_error,
         "rules": {
             "framework": {
                 "user": cursor_projection_file_status(&user_target)?,
             }
+        },
+        "mcp_config": {
+            "user_scope": mcp_exists,
+            "project_scope": false,
+            "binary_valid": binary_valid,
+            "path": mcp_path.to_string_lossy(),
+            "server": "browser-mcp",
         },
         "manifest": {
             "user": projection_manifest_status(&projection_manifest_path(roots, "cursor", "user"))?,
@@ -2524,6 +2683,7 @@ fn install_claude_desktop_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
+    ensure_router_rs_installed_for_mcp_with_roots(roots)?;
     // Claude Desktop uses MCP protocol (via mcp.json), not shell hooks.
     let mcp_target = claude_desktop_mcp_target(roots, scope);
     let claude_md_target = claude_desktop_claude_md_target(roots, scope);
@@ -2643,50 +2803,23 @@ fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str)
 }
 
 fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
-    let mut use_cargo = false;
-    let command = if let Some(exe) = cargo_router_rs_executable(&roots.framework_root) {
-        if exe.exists() && !exe.to_string_lossy().contains("/tmp/") {
-            exe.to_string_lossy().to_string()
-        } else {
-            use_cargo = true;
-            "cargo".to_string()
-        }
-    } else if let Some(exe) = which::which("router-rs").ok() {
-        exe.to_string_lossy().to_string()
-    } else {
-        use_cargo = true;
-        "cargo".to_string()
-    };
-
-    if use_cargo {
-        let manifest_path = roots.project_root.join("scripts/router-rs/Cargo.toml");
-        let mut args = vec![
-            "run".to_string(),
-            "--quiet".to_string(),
-            "--manifest-path".to_string(),
-            manifest_path.to_string_lossy().into_owned(),
-            "--".to_string(),
-        ];
-        for arg in host_args {
-            args.push(arg.to_string());
-        }
-        json!({
+    let mut args = Vec::new();
+    for arg in host_args {
+        args.push(arg.to_string());
+    }
+    match resolve_mcp_router_rs_command(&roots.framework_root) {
+        McpRouterRsCommand::CargoBootstrap => json!({
             "command": "cargo",
-            "args": args,
+            "args": router_rs_cargo_bootstrap_args(&roots.framework_root, host_args),
             "type": "stdio",
             "description": format!("{} (via Cargo bootstrap)", description),
-        })
-    } else {
-        let mut args = Vec::new();
-        for arg in host_args {
-            args.push(arg.to_string());
-        }
-        json!({
-            "command": command,
+        }),
+        command => json!({
+            "command": mcp_router_rs_command_value(&command),
             "args": args,
             "type": "stdio",
             "description": description.to_string(),
-        })
+        }),
     }
 }
 
@@ -2787,6 +2920,7 @@ fn install_antigravity_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
+    ensure_router_rs_installed_for_mcp_with_roots(roots)?;
     let mcp_target = antigravity_mcp_target(roots, scope);
     let settings_target = antigravity_settings_target(roots, scope);
     let framework_md_target = antigravity_framework_md_target(roots, scope);
@@ -2835,44 +2969,34 @@ fn antigravity_projection_status(roots: &ResolvedProjectionRoots) -> Result<Valu
     let mcp_exists = project_mcp_path.exists() || user_mcp_path.exists();
     let md_exists = project_framework_md_path.exists() || user_framework_md_path.exists();
 
-    let mut binary_valid = true;
+    let mut binary_valid = false;
     let mut status_error = None;
 
     if mcp_exists {
-        let mcp_to_check = if project_mcp_path.exists() { &project_mcp_path } else { &user_mcp_path };
+        let mcp_to_check = if project_mcp_path.exists() {
+            &project_mcp_path
+        } else {
+            &user_mcp_path
+        };
         if let Ok(Some(mcp_json)) = read_json_if_exists(mcp_to_check) {
-            if let Some(cmd) = mcp_json.get("mcpServers")
+            if let Some(cmd) = mcp_json
+                .get("mcpServers")
                 .and_then(|v| v.get("router-rs-framework"))
                 .and_then(|v| v.get("command"))
-                .and_then(|v| v.as_str()) {
-                
-                if cmd == "cargo" {
-                    if which::which("cargo").is_err() {
-                        binary_valid = false;
-                        status_error = Some("Cargo is not found on system PATH".to_string());
-                    }
-                } else if cmd == "router-rs" {
-                    if which::which("router-rs").is_err() {
-                        binary_valid = false;
-                        status_error = Some("router-rs is not found on system PATH".to_string());
-                    }
-                } else {
-                    let p = Path::new(cmd);
-                    if !p.is_file() {
-                        binary_valid = false;
-                        status_error = Some(format!("MCP executable binary '{}' is missing on disk", cmd));
-                    }
+                .and_then(|v| v.as_str())
+            {
+                match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
+                    Ok(()) => binary_valid = true,
+                    Err(err) => status_error = Some(err),
                 }
             } else {
-                binary_valid = false;
-                status_error = Some("Invalid or incomplete mcpServers payload structure".to_string());
+                status_error =
+                    Some("Invalid or incomplete mcpServers payload structure".to_string());
             }
         } else {
-            binary_valid = false;
             status_error = Some("Failed to read or parse mcp.json config".to_string());
         }
     } else {
-        binary_valid = false;
         status_error = Some("mcp.json does not exist in project or user scope".to_string());
     }
 
@@ -3375,15 +3499,7 @@ fn install_cursor_mcp_server(
         .as_object_mut()
         .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
     let server = cursor_mcp_server_payload(roots);
-    if matches!(servers.get("browser-mcp"), Some(existing) if existing != &server) {
-        return Ok(CursorMcpInstallOutcome {
-            managed: false,
-            changed: false,
-            reason: "skipped_user_owned",
-            skipped_user_owned: true,
-        });
-    }
-    let changed = servers.get("browser-mcp").is_none();
+    let changed = servers.get("browser-mcp") != Some(&server);
     if changed {
         servers.insert("browser-mcp".to_string(), server);
     }
@@ -3433,15 +3549,18 @@ fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String>
 
 fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let args = cursor_mcp_browser_stdio_args(roots);
-    let exe = cargo_router_rs_executable(&roots.framework_root)
-        .or_else(|| which::which("router-rs").ok());
-    match exe {
-        Some(path) => json!({
-            "command": path.to_string_lossy().to_string(),
-            "args": args,
+    match resolve_mcp_router_rs_command(&roots.framework_root) {
+        McpRouterRsCommand::CargoBootstrap => json!({
+            "command": "cargo",
+            "args": router_rs_cargo_bootstrap_args(&roots.framework_root, &[
+                "browser",
+                "mcp-stdio",
+                "--repo-root",
+                &roots.framework_root.to_string_lossy(),
+            ]),
         }),
-        None => json!({
-            "command": "router-rs",
+        command => json!({
+            "command": mcp_router_rs_command_value(&command),
             "args": args,
         }),
     }
@@ -3476,28 +3595,7 @@ fn cursor_mcp_server_matches_framework(
     let Some(server) = actual else {
         return Ok(None);
     };
-    let expected_args = cursor_mcp_browser_stdio_args(roots);
-    let actual_args = server
-        .get("args")
-        .and_then(Value::as_array)
-        .map(|args| {
-            args.iter()
-                .filter_map(|value| value.as_str().map(str::to_owned))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let command_ok = server
-        .get("command")
-        .and_then(Value::as_str)
-        .map(|cmd| {
-            if cmd == "router-rs" {
-                return true;
-            }
-            Path::new(cmd).file_name().and_then(|name| name.to_str()) == Some("router-rs")
-        })
-        .unwrap_or(false);
-    let is_framework_server = command_ok && actual_args == expected_args;
-    Ok(Some(is_framework_server))
+    Ok(Some(server == &cursor_mcp_server_payload(roots)))
 }
 
 fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
@@ -4959,6 +5057,125 @@ mod tests {
         );
 
         std::env::remove_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn is_ephemeral_executable_path_flags_sandbox_and_tmp_builds() {
+        assert!(is_ephemeral_executable_path(
+            "/var/folders/xx/T/cursor-sandbox-cache/abc/cargo-target/debug/router-rs"
+        ));
+        assert!(is_ephemeral_executable_path(
+            "/tmp/skill-cargo-target/debug/router-rs"
+        ));
+        assert!(!is_ephemeral_executable_path(
+            "/Users/joe/.local/bin/router-rs"
+        ));
+    }
+
+    #[test]
+    fn validate_mcp_command_binary_rejects_repo_target_artifacts() {
+        let root = unique_test_root("mcp-validate-repo-target");
+        let framework_root = root.join("framework");
+        let artifact = framework_root
+            .join("scripts/router-rs/target/release/router-rs");
+        fs::create_dir_all(artifact.parent().unwrap()).unwrap();
+        write_test_file(&artifact, "#!/bin/sh\n");
+
+        let err = validate_mcp_command_binary(
+            &artifact.to_string_lossy(),
+            Some(&framework_root),
+        )
+        .expect_err("repo target artifact must be rejected");
+        assert!(
+            err.contains("repo build artifact"),
+            "unexpected error: {err}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn install_cursor_mcp_server_rewrites_stale_browser_mcp_command() {
+        let root = unique_test_root("cursor-mcp-install");
+        let home = root.join("home");
+        let framework_root = root.join("framework");
+        let cursor_home = root.join("cursor-home");
+        fs::create_dir_all(home.join(".local/bin")).unwrap();
+        fs::create_dir_all(&cursor_home).unwrap();
+        write_test_file(
+            &home.join(".local/bin/router-rs"),
+            "#!/bin/sh\n",
+        );
+        write_test_file(
+            &framework_root.join("scripts/router-rs/Cargo.toml"),
+            "[package]\nname = \"router-rs\"\n",
+        );
+        write_test_file(
+            &cursor_home.join("mcp.json"),
+            r#"{
+  "mcp_servers": {
+    "browser-mcp": {
+      "command": "/tmp/skill-cargo-target/debug/router-rs",
+      "args": ["browser", "mcp-stdio", "--repo-root", "/stale"]
+    }
+  }
+}"#,
+        );
+
+        let roots = ResolvedProjectionRoots {
+            framework_root: framework_root.clone(),
+            project_root: framework_root.clone(),
+            artifact_root: framework_root.join("artifacts"),
+            codex_home_root: root.join("codex"),
+            cursor_home_root: cursor_home.clone(),
+            claude_home_root: root.join("claude"),
+            antigravity_home_root: root.join("gemini"),
+        };
+        std::env::set_var("HOME", &home);
+        let outcome =
+            install_cursor_mcp_server(&roots, &cursor_home.join("mcp.json")).expect("install");
+        assert!(outcome.changed, "expected stale browser-mcp entry to be rewritten");
+        assert!(!outcome.skipped_user_owned);
+
+        let payload = read_json_if_exists(&cursor_home.join("mcp.json"))
+            .expect("read mcp")
+            .expect("mcp exists");
+        let command = payload["mcp_servers"]["browser-mcp"]["command"]
+            .as_str()
+            .expect("command");
+        assert!(
+            command == "router-rs" || command.ends_with("/.local/bin/router-rs"),
+            "expected stable PATH or install-path command, got {command}"
+        );
+
+        std::env::remove_var("HOME");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn resolve_mcp_router_rs_command_prefers_path_over_repo_target() {
+        let root = unique_test_root("mcp-resolve");
+        let home = root.join("home");
+        let framework_root = root.join("framework");
+        fs::create_dir_all(home.join(".local/bin")).unwrap();
+        fs::create_dir_all(framework_root.join("scripts/router-rs/target/release")).unwrap();
+        write_test_file(&home.join(".local/bin/router-rs"), "#!/bin/sh\n");
+        write_test_file(
+            &framework_root.join("scripts/router-rs/target/release/router-rs"),
+            "#!/bin/sh\n",
+        );
+        std::env::set_var("HOME", &home);
+        std::env::remove_var("ROUTER_RS_BIN");
+
+        let command = resolve_mcp_router_rs_command(&framework_root);
+        assert_ne!(command, McpRouterRsCommand::CargoBootstrap);
+        match command {
+            McpRouterRsCommand::OnPath | McpRouterRsCommand::Absolute(_) => {}
+            McpRouterRsCommand::CargoBootstrap => unreachable!(),
+        }
+
+        std::env::remove_var("HOME");
         let _ = fs::remove_dir_all(root);
     }
 }

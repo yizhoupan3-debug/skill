@@ -291,6 +291,8 @@ fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
         ("SubagentStop", "continue:false"),
         ("Stop", "continue:false"),
     ];
+    let empty_home = empty_ws.join("home");
+    fs::create_dir_all(&empty_home).map_err(|e| e.to_string())?;
     for (event, contract) in CRITICAL_EVENTS {
         let output = Command::new("/bin/bash")
             .arg(&launcher)
@@ -298,6 +300,7 @@ fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
             .env_remove("ROUTER_RS_BIN")
             .env("CARGO_TARGET_DIR", &empty_target)
             .env("PATH", "/usr/bin:/bin")
+            .env("HOME", &empty_home)
             .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
             .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
             .output()

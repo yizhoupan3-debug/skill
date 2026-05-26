@@ -45,6 +45,12 @@ emit_fail_closed_json() {
 }
 
 ROUTER_RS_BIN="${ROUTER_RS_BIN:-}"
+if [ -z "$ROUTER_RS_BIN" ] && [ -x "${HOME:-}/.local/bin/router-rs" ]; then
+  ROUTER_RS_BIN="${HOME}/.local/bin/router-rs"
+fi
+if [ -z "$ROUTER_RS_BIN" ]; then
+  ROUTER_RS_BIN="$(command -v router-rs 2>/dev/null || true)"
+fi
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}"
 for candidate in \
   "$ROOT/scripts/router-rs/target/release/router-rs" \

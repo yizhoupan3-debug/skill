@@ -7,7 +7,7 @@
         "--repo-root",
         "${workspaceRoot}"
       ],
-      "command": "/var/folders/7z/d6kw_htj5z913075pbl9yvdr0000gn/T/cursor-sandbox-cache/12fd5aed5775ab3800fb2c1fca640f11/cargo-target/debug/router-rs",
+      "command": "router-rs",
       "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory",
       "type": "stdio"
     }
