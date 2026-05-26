@@ -47,7 +47,6 @@ mod path_guard;
 #[path = "utils/read_bounded.rs"]
 mod read_bounded;
 mod runtime_registry;
-mod registry_loader;
 mod review_gate;
 mod review_gate_engine;
 mod review_output_lint;

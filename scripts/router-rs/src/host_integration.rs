@@ -1,7 +1,7 @@
 use crate::framework_runtime::{framework_root_from_executable_path, is_framework_root};
 use crate::runtime_registry::{
-    load_runtime_registry, load_runtime_registry_json, load_runtime_registry_payload,
-    load_runtime_registry_payload_if_repo_local, RUNTIME_REGISTRY_SCHEMA_VERSION,
+    load_runtime_registry, load_runtime_registry_payload,
+    load_runtime_registry_payload_if_repo_local,
 };
 use chrono::Local;
 use clap::{Parser, Subcommand};
@@ -4829,6 +4829,7 @@ mod tests {
 
     #[test]
     fn runtime_registry_repo_root_registry_is_used() {
+        use crate::runtime_registry::RUNTIME_REGISTRY_SCHEMA_VERSION;
         let root = unique_test_root("runtime-registry-repo-local");
         let repo_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
         write_test_file(

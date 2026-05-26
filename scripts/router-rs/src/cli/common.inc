@@ -164,6 +164,9 @@ pub(crate) fn append_text_with_process_lock(path: &Path, payload: &str, context:
         .append(true)
         .open(path)
         .map_err(|err| format!("open {context} append failed for {}: {err}", path.display()))?;
+    use fs2::FileExt;
+    file.lock_exclusive()
+        .map_err(|err| format!("lock {context} append failed for {}: {err}", path.display()))?;
     file.write_all(payload.as_bytes()).map_err(|err| {
         format!(
             "write {context} append failed for {}: {err}",

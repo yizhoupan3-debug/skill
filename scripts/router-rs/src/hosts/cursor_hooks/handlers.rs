@@ -1106,10 +1106,16 @@ fn hook_state_lock_fail_closed_for_review_json() -> Value {
 
 /// Best-effort read without holding the session lock (TOCTOU-safe only for fail-closed branches).
 fn peek_review_hard_armed(repo_root: &Path, event: &Value) -> bool {
-    match load_state(repo_root, event) {
-        Ok(Some(ref state)) => review_hard_armed(state),
-        _ => false,
+    for _ in 0..3 {
+        match load_state(repo_root, event) {
+            Ok(Some(ref state)) => return review_hard_armed(state),
+            Ok(None) => return false,
+            Err(_) => {
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
     }
+    false
 }
 
 fn hook_state_lock_failure_output(repo_root: &Path, event: &Value) -> Value {
@@ -1385,11 +1391,77 @@ fn merge_additional_context(output: &mut Value, extra: &str) {
     }
 }
 
-struct LockGuard {
+#[cfg(unix)]
+struct UnixLockState {
     path: PathBuf,
-    /// 保持 POSIX `flock(LOCK_EX)` 风格独占锁存活；销毁句柄才释放。同路径仍写入 `pid=`/`ts=`
-    /// 供日志与在无独立锁 API 环境下的 stale 判断（fallback）。
     _file: std::fs::File,
+}
+
+#[cfg(windows)]
+struct WindowsStateMutex {
+    handle: *mut std::ffi::c_void,
+}
+
+#[cfg(windows)]
+impl WindowsStateMutex {
+    fn acquire(session_key: &str, timeout_ms: u32) -> Result<Self, String> {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr::null_mut;
+
+        type LPCWSTR = *const u16;
+        type HANDLE = *mut std::ffi::c_void;
+        type DWORD = u32;
+        type BOOL = i32;
+
+        const WAIT_OBJECT_0: DWORD = 0x00000000;
+        const WAIT_ABANDONED: DWORD = 0x00000080;
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn CreateMutexW(lpMutexAttributes: *mut std::ffi::c_void, bInitialOwner: BOOL, lpName: LPCWSTR) -> HANDLE;
+            fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
+            fn CloseHandle(hObject: HANDLE) -> BOOL;
+            fn GetLastError() -> DWORD;
+        }
+
+        let mutex_name = format!("Local\\review-subagent-lock-{}", session_key);
+        let mut name_w: Vec<u16> = OsStr::new(&mutex_name).encode_wide().collect();
+        name_w.push(0);
+
+        unsafe {
+            let handle = CreateMutexW(null_mut(), 0, name_w.as_ptr());
+            if handle.is_null() {
+                return Err(format!("CreateMutexW failed with GetLastError={}", GetLastError()));
+            }
+            let wait_res = WaitForSingleObject(handle, timeout_ms);
+            if wait_res == WAIT_OBJECT_0 || wait_res == WAIT_ABANDONED {
+                Ok(Self { handle })
+            } else {
+                CloseHandle(handle);
+                Err(format!("WaitForSingleObject lock timeout/failed (res={})", wait_res))
+            }
+        }
+    }
+
+    fn release(self) {
+        unsafe {
+            #[link(name = "kernel32")]
+            extern "system" {
+                fn ReleaseMutex(hMutex: *mut std::ffi::c_void) -> i32;
+                fn CloseHandle(hObject: *mut std::ffi::c_void) -> i32;
+            }
+            ReleaseMutex(self.handle);
+            CloseHandle(self.handle);
+        }
+    }
+}
+
+pub(crate) struct LockGuard {
+    #[cfg(unix)]
+    unix: UnixLockState,
+    #[cfg(windows)]
+    windows: WindowsStateMutex,
 }
 
 fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
@@ -1402,56 +1474,109 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
     if fs::create_dir_all(&dir).is_err() {
         return None;
     }
+    let session = session_key(event);
     let lock_path = state_lock_path(repo_root, event);
-    let retries = crate::router_env_flags::router_rs_cursor_hook_state_lock_retries();
-    for _ in 0..retries {
-        let file = match OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)
-        {
-            Ok(file) => file,
-            Err(_) => {
-                thread::sleep(Duration::from_millis(50));
-                continue;
-            }
-        };
-        match file.try_lock_exclusive() {
-            Ok(()) => {
-                let lock_text = format!("pid={} ts={}\n", std::process::id(), now_millis());
-                let mut owned = file;
-                let _ = owned.set_len(0);
-                let _ = owned.seek(std::io::SeekFrom::Start(0));
-                let _ = owned.write_all(lock_text.as_bytes());
-                let _ = owned.sync_all();
-                crate::hook_timing::add_lock_wait_ms(wait_start.elapsed().as_millis() as u64);
-                return Some(LockGuard {
-                    path: lock_path,
-                    _file: owned,
-                });
-            }
-            Err(_) => {
-                drop(file);
-                const HOOK_STATE_LOCK_STALE_MS: u64 = 30_000;
-                if let Ok(existing) = fs::read_to_string(&lock_path) {
-                    if let Some((pid, ts_ms)) = parse_lock_metadata(&existing) {
-                        let age_ms = now_millis().saturating_sub(ts_ms);
-                        if !is_process_alive(pid) {
-                            let _ = fs::remove_file(&lock_path);
-                        } else if age_ms > HOOK_STATE_LOCK_STALE_MS {
-                            eprintln!(
-                                "[router-rs] hook-state lock held (pid={pid} age_ms={age_ms}); waiting (no remove_file)"
-                            );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        use fs2::FileExt;
+
+        let retries = crate::router_env_flags::router_rs_cursor_hook_state_lock_retries();
+        for _ in 0..retries {
+            let file = match OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(&lock_path)
+            {
+                Ok(file) => file,
+                Err(_) => {
+                    thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
+            };
+
+            match file.try_lock_exclusive() {
+                Ok(()) => {
+                    let fd_metadata = match file.metadata() {
+                        Ok(meta) => meta,
+                        Err(_) => {
+                            thread::sleep(Duration::from_millis(50));
+                            continue;
+                        }
+                    };
+                    let fd_inode = fd_metadata.ino();
+
+                    let path_inode = match fs::metadata(&lock_path) {
+                        Ok(meta) => Some(meta.ino()),
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+                        Err(_) => {
+                            thread::sleep(Duration::from_millis(50));
+                            continue;
+                        }
+                    };
+
+                    if Some(fd_inode) != path_inode {
+                        drop(file);
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+
+                    let lock_text = format!("pid={} ts={}\n", std::process::id(), now_millis());
+                    let mut owned = file;
+                    let _ = owned.set_len(0);
+                    use std::io::Seek;
+                    let _ = owned.seek(std::io::SeekFrom::Start(0));
+                    let _ = owned.write_all(lock_text.as_bytes());
+                    let _ = owned.sync_all();
+
+                    crate::hook_timing::add_lock_wait_ms(wait_start.elapsed().as_millis() as u64);
+                    return Some(LockGuard {
+                        unix: UnixLockState {
+                            path: lock_path,
+                            _file: owned,
+                        }
+                    });
+                }
+                Err(_) => {
+                    drop(file);
+                    const HOOK_STATE_LOCK_STALE_MS: u64 = 30_000;
+                    if let Ok(existing) = fs::read_to_string(&lock_path) {
+                        if let Some((pid, ts_ms)) = parse_lock_metadata(&existing) {
+                            let age_ms = now_millis().saturating_sub(ts_ms);
+                            if !is_process_alive(pid) {
+                                // Do not delete to preserve POSIX flock inode guarantee.
+                            } else if age_ms > HOOK_STATE_LOCK_STALE_MS {
+                                eprintln!(
+                                    "[router-rs] hook-state lock held (pid={pid} age_ms={age_ms}); waiting (no remove_file)"
+                                );
+                            }
                         }
                     }
+                    thread::sleep(Duration::from_millis(50));
                 }
-                thread::sleep(Duration::from_millis(50));
+            }
+        }
+        None
+    }
+
+    #[cfg(windows)]
+    {
+        match WindowsStateMutex::acquire(&session, 3500) {
+            Ok(win_lock) => {
+                crate::hook_timing::add_lock_wait_ms(wait_start.elapsed().as_millis() as u64);
+                Some(LockGuard {
+                    windows: win_lock
+                })
+            }
+            Err(e) => {
+                eprintln!("[router-rs] Windows NamedMutex acquisition failed: {}", e);
+                None
             }
         }
     }
-    None
 }
 
 fn now_millis() -> u64 {
@@ -1493,15 +1618,58 @@ fn is_process_alive(pid: u32) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_process_alive(_pid: u32) -> bool {
-    true
+fn is_process_alive(pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::raw::HANDLE;
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> HANDLE;
+            fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: *mut u32) -> i32;
+            fn CloseHandle(hObject: HANDLE) -> i32;
+        }
+
+        if pid == 0 {
+            return false;
+        }
+
+        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        const STILL_ACTIVE: u32 = 259;
+
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if handle.is_null() {
+                return std::io::Error::last_os_error().raw_os_error() != Some(87);
+            }
+
+            let mut exit_code = 0u32;
+            let ok = GetExitCodeProcess(handle, &mut exit_code);
+            CloseHandle(handle);
+
+            if ok != 0 {
+                exit_code == STILL_ACTIVE
+            } else {
+                true
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        true
+    }
 }
 
 fn release_state_lock(lock: &mut Option<LockGuard>) {
     if let Some(guard) = lock.take() {
-        let path = guard.path.clone();
-        drop(guard);
-        let _ = fs::remove_file(path);
+        #[cfg(unix)]
+        {
+            drop(guard.unix);
+        }
+        #[cfg(windows)]
+        {
+            guard.windows.release();
+        }
     }
 }
 

@@ -70,18 +70,46 @@ pub(crate) fn write_atomic_text_to_temp(
 /// `tmp_path` (pid + nanos + nonce) and call [`write_atomic_text_to_temp`] directly. The codex
 /// hook installer takes that route in [`crate::codex_hooks::write_atomic_text`].
 pub(crate) fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NONCE: AtomicU64 = AtomicU64::new(0);
+
+    let pid = std::process::id();
+    let micros = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0);
+    let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
+
     let tmp_path = path.with_extension(format!(
-        "{}.tmp",
+        "{}.tmp-{}-{}-{}",
         path.extension()
             .and_then(|value| value.to_str())
-            .unwrap_or("txt")
+            .unwrap_or("txt"),
+        pid,
+        micros,
+        nonce
     ));
     write_atomic_text_to_temp(path, content, &tmp_path)
 }
 
 pub(crate) fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NONCE: AtomicU64 = AtomicU64::new(0);
+
+    let pid = std::process::id();
+    let micros = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0);
+    let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
+
     let text = serde_json::to_string_pretty(value)
         .map_err(|err| format!("serialize JSON failed: {err}"))?;
-    let tmp_path = path.with_extension("json.tmp");
+    let tmp_path = path.with_extension(format!(
+        "json.tmp-{}-{}-{}",
+        pid,
+        micros,
+        nonce
+    ));
     write_atomic_text_to_temp(path, &text, &tmp_path)
 }

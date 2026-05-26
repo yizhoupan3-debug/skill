@@ -226,6 +226,8 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
         eprintln!("[router-rs] session_end_state_delete_skipped=lock_unavailable");
     }
     release_state_lock(&mut lock);
+    let lock_path = state_lock_path(repo_root, event);
+    let _ = fs::remove_file(&lock_path);
     remove_adversarial_loop(repo_root, event);
     let _ = fs::remove_file(session_terminal_ledger_path(repo_root, event));
     // 原子写入孤儿：始终全局清扫（与 session_key 无关）。
@@ -279,12 +281,25 @@ fn hook_state_lock_removable_for_sweep(lock_path: &Path) -> bool {
     if !lock_path.is_file() {
         return true;
     }
+    let days = crate::router_env_flags::router_rs_cursor_hook_state_stale_sweep_days();
+    if days > 0 {
+        let cutoff_system = SystemTime::now() - std::time::Duration::from_secs(days.saturating_mul(86_400));
+        if hook_state_file_mtime_stale(lock_path, cutoff_system) {
+            return true;
+        }
+    }
     let Ok(existing) = fs::read_to_string(lock_path) else {
         return true;
     };
-    let Some((pid, _ts_ms)) = parse_lock_metadata(&existing) else {
+    let Some((pid, ts_ms)) = parse_lock_metadata(&existing) else {
         return true;
     };
+    if days > 0 {
+        let cutoff_ms = now_millis().saturating_sub((days as u64).saturating_mul(86_400 * 1000));
+        if ts_ms < cutoff_ms {
+            return true;
+        }
+    }
     !is_process_alive(pid)
 }
 

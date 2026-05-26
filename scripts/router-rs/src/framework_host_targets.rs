@@ -4,7 +4,6 @@
 use crate::hosts::codex_hooks::CODEX_AGENT_POLICY_PATH;
 use crate::runtime_registry::{
     load_runtime_registry_json, HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH,
-    RUNTIME_REGISTRY_SCHEMA_VERSION,
 };
 use serde_json::{json, Map, Value};
 use std::path::Path;
@@ -194,6 +193,7 @@ pub(crate) fn host_entrypoints_value_for_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime_registry::RUNTIME_REGISTRY_SCHEMA_VERSION;
     use std::path::PathBuf;
 
     fn repo_root() -> PathBuf {

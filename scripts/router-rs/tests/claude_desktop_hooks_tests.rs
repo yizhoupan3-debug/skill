@@ -6,7 +6,7 @@
 mod desktop_mcp_tests {
     use crate::claude_desktop_test_support;
     use serde_json::json;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     fn test_repo_dir() -> PathBuf {
         let path = claude_desktop_test_support::unique_temp_repo("mcp");

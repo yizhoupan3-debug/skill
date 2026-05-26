@@ -3227,6 +3227,7 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
 
 #[test]
 fn session_end_skips_state_delete_when_lock_unavailable() {
+    let _env = crate::test_env_sync::process_env_lock();
     let _guard = ForceHookStateLockFailureGuard::new();
     let repo = fresh_repo();
     let payload = event("s-end-no-lock", "全面review这个仓库");
@@ -5243,6 +5244,10 @@ fn session_end_stale_sweep_removes_old_orphan_preserves_recent() {
     let old_state = state_path(&repo, &old_payload);
     assert!(old_state.exists());
     set_path_mtime_days_ago(&old_state, 10);
+    let old_lock = state_lock_path(&repo, &old_payload);
+    let old_ts = now_millis().saturating_sub(10 * 86_400 * 1000);
+    fs::write(&old_lock, format!("pid=1 ts={old_ts}\n")).expect("seed old ts lock");
+    set_path_mtime_days_ago(&old_lock, 10);
 
     let recent_payload = json!({ "session_id": "fresh-parallel-session" });
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &recent_payload);
@@ -6952,4 +6957,98 @@ fn stop_and_post_tool_concurrent_hooks_complete_under_one_second() {
         start.elapsed().as_millis() < 1000,
         "concurrent postToolUse+stop should not wedge on lock order"
     );
+}
+
+#[test]
+fn verify_state_flock_concurrency() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let repo = Arc::new(fresh_repo());
+    let sid = "s-concurrency-state-flock";
+    let payload = event(sid, "全面review这个仓库");
+
+    // 初始化状态，存入 followup_count = 0
+    {
+        let mut lock = acquire_state_lock(&repo, &payload);
+        assert!(lock.is_some());
+        let mut state = empty_state();
+        state.followup_count = 0;
+        let _ = save_state(&repo, &payload, &mut state);
+        release_state_lock(&mut lock);
+    }
+
+    let mut threads = vec![];
+    let num_threads = 20;
+    
+    for _ in 0..num_threads {
+        let repo_clone = Arc::clone(&repo);
+        let payload_clone = payload.clone();
+        threads.push(std::thread::spawn(move || {
+            // 每个线程竞争锁，然后读取 count，加 1，写回，释放锁
+            for _ in 0..5 {
+                let mut lock = acquire_state_lock(&repo_clone, &payload_clone);
+                while lock.is_none() {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                    lock = acquire_state_lock(&repo_clone, &payload_clone);
+                }
+                let mut state = load_state(&repo_clone, &payload_clone)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(empty_state);
+                state.followup_count += 1;
+                // 用非原子操作模拟一点延时，扩大竞争竞态窗口
+                std::thread::sleep(std::time::Duration::from_millis(2));
+                let _ = save_state(&repo_clone, &payload_clone, &mut state);
+                release_state_lock(&mut lock);
+            }
+        }));
+    }
+
+    for t in threads {
+        let _ = t.join();
+    }
+
+    // 校验最终结果是否等于线程数 * 5
+    let mut lock = acquire_state_lock(&repo, &payload);
+    assert!(lock.is_some());
+    let state = load_state(&repo, &payload).ok().flatten().unwrap();
+    assert_eq!(state.followup_count, num_threads * 5);
+    release_state_lock(&mut lock);
+}
+
+#[test]
+fn verify_atomic_write_concurrency() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let repo = fresh_repo();
+    let final_path = repo.join("concurrent_atomic_write_test.json");
+    
+    let mut threads = vec![];
+    let num_threads = 20;
+    
+    for i in 0..num_threads {
+        let path_clone = final_path.clone();
+        threads.push(std::thread::spawn(move || {
+            // 多个线程并发写入到同一个 final_path，使用 write_atomic_json 写入不同的内容
+            for j in 0..10 {
+                let val = json!({
+                    "thread_index": i,
+                    "write_index": j,
+                    "random_payload": "some data to simulate typical json state content"
+                });
+                let _ = crate::atomic_write::write_atomic_json(&path_clone, &val);
+                // 模拟一点延迟以增加重合度
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }));
+    }
+
+    for t in threads {
+        let _ = t.join();
+    }
+
+    // 最终文件应当是有效的 JSON 文件，并且能被成功解析，不应该出现截断、损坏或半截字符
+    assert!(final_path.exists());
+    let content = fs::read_to_string(&final_path).expect("read final json");
+    let parsed: Value = serde_json::from_str(&content).expect("parse final json");
+    assert!(parsed.get("thread_index").is_some());
+    assert!(parsed.get("write_index").is_some());
 }

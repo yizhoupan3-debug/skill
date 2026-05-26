@@ -3,7 +3,7 @@ fn default_true() -> bool {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub enum RouterCommand {
+pub(crate) enum RouterCommand {
     Route(RouteCommand),
     Search(SearchCommand),
     Framework {

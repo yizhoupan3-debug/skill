@@ -1019,7 +1019,6 @@ pub(crate) fn shell_command_looks_like_verification(command: &str) -> bool {
 }
 
 pub(crate) fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool {
-    use std::time::SystemTime;
     let c = command.to_ascii_lowercase();
     let max_delta = 15; // 15s safe time window for mtime verification to accommodate slow disks
 
