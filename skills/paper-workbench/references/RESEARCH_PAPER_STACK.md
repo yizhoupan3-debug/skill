@@ -28,6 +28,7 @@
 | **L1** | 证据与主张不匹配 | [`claim-evidence-ladder.md`](claim-evidence-ladder.md)（先补证据再缩口径） |
 | **L1** | 落笔 / 语言问题 | [`research-language-norms.md`](research-language-norms.md) |
 | **L2** | 顶刊/顶会栏 | [`top-tier-paper-standard.md`](top-tier-paper-standard.md) |
+| **L2** | 整篇严审 / exhaustive 深链 | [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md) |
 | **L2** | Claim card + 章节 handoff | [`../../paper-writing/references/claim-spine-and-section-contract.md`](../../paper-writing/references/claim-spine-and-section-contract.md) |
 | **L2** | 先学 ref 再写 | [`ref-first-writing-workflow.md`](ref-first-writing-workflow.md) |
 | **L2** | Lane 语义速查 | [`paper-lanes.md`](paper-lanes.md) |
@@ -41,6 +42,8 @@
 - **编辑范围**：只信 [`edit-scope-gate.md`](edit-scope-gate.md)。
 - **主张 vs 证据**：只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
 - **用语 / 内部口径 / 防御式堆叠**：只信 [`research-language-norms.md`](research-language-norms.md)。
+- **严重度 / Warning**：只信 [`../../paper-reviewer/references/severity-spec.md`](../../paper-reviewer/references/severity-spec.md)（含 exhaustive 模式 `Warning` 层）。
+- **Exhaustive 查稿步骤与输出信封**：只信 [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md)。
 - **RFV（代码）vs PAPER_GATE（手稿）**：协议首段 —— 勿混 PASS 语义。
 
 ## 已收敛的断裂

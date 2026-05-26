@@ -374,7 +374,7 @@
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/paper-reviewer/SKILL.md"
+      "skill_path": "skills/paper-reviewer/SKILL.md"
     },
     "paper-reviser": {
       "host_support": {

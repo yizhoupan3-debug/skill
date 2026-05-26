@@ -67,6 +67,9 @@ The execution model is:
 - local specialist checks and cleanup = bounded parallel sidecars
 - merge-back and final accept/reject of edits = local
 
+Classify intake findings with shared severity labels (including **`Warning`**) per
+[`../paper-reviewer/references/severity-spec.md`](../paper-reviewer/references/severity-spec.md).
+
 ## Edit scope gate
 
 Honor **`edit_scope`** from

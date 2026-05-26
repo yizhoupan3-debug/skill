@@ -132,6 +132,9 @@ Default on every manuscript pass unless the user explicitly waives it:
   tone (no internal / defensive stacking of `but` / `not` / `rather than`; no
   code names or raw `.csv`/path citations as stand-ins for results), and
   stable wording under **`surgical`**.
+- When tagging multiple text issues, use severity from
+  [`../paper-reviewer/references/severity-spec.md`](../paper-reviewer/references/severity-spec.md)
+  (including **`Warning`** in exhaustive contexts).
 - If multi-round work already has `paper_story/TERMINOLOGY_GLOSSARY.md`, treat it
   as authoritative for preferred terms and forbidden aliases.
 

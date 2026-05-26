@@ -75,8 +75,12 @@
 - 高频词是否**语境漂移**（同一英文词前后指代不同对象）？
 - 是否出现**防御式堆叠**：密集 `but` / `not` / `rather than`、整段以否定对照撑结构、或内部站会式表述？
 - 正文是否出现**未消化的代码标识符**或**裸数据文件名/路径**（如直接「见某 `.csv`」）替代应有叙述与表格？
+- **同一处 ≥3 篇连续引用**（citation cluster dump）是否支撑具体 claim？
 
-发现问题时，按严重程度归入现有 A/B/C 类，但结论须**可操作**：删重复、换标准术语、合并定义、或升格为方法段一次定义。
+Exhaustive 查稿时的逐句/结构 checklist 见
+[`paper-exhaustive-audit.md`](paper-exhaustive-audit.md) §Language（本节仍为长期写作规范真源）。
+
+发现问题时，按严重程度归入现有 A/B/C/**Warning** 类（见 [`../../paper-reviewer/references/severity-spec.md`](../../paper-reviewer/references/severity-spec.md)），但结论须**可操作**：删重复、换标准术语、合并定义、或升格为方法段一次定义。
 
 ## 7. 与用户豁免
 

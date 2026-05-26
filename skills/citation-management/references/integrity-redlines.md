@@ -1,6 +1,6 @@
 # 引用与学术诚信红线（Integrity redlines）
 
-与 [`../SKILL.md`](../SKILL.md) 的 Truth Rules 叠加；涉及 **数据造假、剽窃、不可核验主张** 时，审稿侧按 `$paper-reviewer` **P0 一票否决**处理（见 [`../../.archive-cold/paper-reviewer/references/severity-spec.md`](../../.archive-cold/paper-reviewer/references/severity-spec.md)）。
+与 [`../SKILL.md`](../SKILL.md) 的 Truth Rules 叠加；涉及 **数据造假、剽窃、不可核验主张** 时，审稿侧按 `$paper-reviewer` **P0 一票否决**处理（见 [`../../paper-reviewer/references/severity-spec.md`](../../paper-reviewer/references/severity-spec.md)）。
 
 ## 不可核验的主张
 

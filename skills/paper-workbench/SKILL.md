@@ -27,6 +27,11 @@ trigger_hints:
   - 能不能投
   - 投稿前把关
   - 整篇严审
+  - 全文审核
+  - 穷举审
+  - 逐句审
+  - 逐公式审
+  - "audit_depth: exhaustive"
   - 整篇 review
   - 科研优化
   - 收窄修改范围
@@ -100,7 +105,7 @@ trigger_hints:
   - 不要生造概念
   - 论文用语长期规范
 metadata:
-  version: "1.12.0"
+  version: "1.13.0"
   platforms: [supported]
   tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
@@ -193,11 +198,31 @@ Optional machine token on its own line: `edit_scope: surgical` or
 **精准修改硬约束**：`surgical` 下必须遵循
 [`references/edit-scope-gate.md`](references/edit-scope-gate.md) 中的 **硬等级**、**防扩写**、**整篇回贴禁令**、**静默全局替换禁令**、**锚定三选一**、**改动上限**、**默认交付形态（hunk/逐条）**、**改前自检**。**凡**对 `scope_items` 外字句的改动即 **越权**，须撤回或升格 `refactor` / 补列条目；**不得**用「通读」「统一文风」「对齐 mirror」当借口。
 
+## Audit depth routing (`audit_depth`)
+
+Resolve **`audit_depth`** before inline `$paper-reviewer` (machine token on its own line
+overrides heuristics: `audit_depth: exhaustive` | `audit_depth: compact`).
+
+| `audit_depth` | Default when | Inline reviewer behavior | User-visible output |
+|---------------|--------------|--------------------------|---------------------|
+| **exhaustive** | 整篇严审 / 能不能投 / 投稿前把关 / 全文审核 / 帮我审这篇 / strict reviewer / 顶刊审稿 / 穷举 / 逐句 / 逐公式 | Load [`paper-exhaustive-audit.md`](references/paper-exhaustive-audit.md); **pass through** depth — reviewer must not override | Verdict first, then **full** `findings_by_dimension` + `warning_items`; output **must** include `audit_depth: exhaustive` |
+| **compact** | 快速看一下 / 只审 claim / 只审图表 / 只审语言 / 单维度 + narrow scope | Compressed 8-step reviewer workflow | Verdict + top blockers summary |
+
+**Pass-through rule**: when workbench invokes `$paper-reviewer`, the resolved
+`audit_depth` is authoritative for that turn; reviewer must not re-default to compact.
+
+Optional sidecars during exhaustive review:
+
+- PDF / rendered figures → `$visual-review`
+- Formal theorem blocks → read-only `$math-derivation` witness
+- Rubric / Bonus text present → [`rubric-audit-bridge.md`](references/rubric-audit-bridge.md)
+
 ## Default front-door behavior
 
 Default behavior is rule-based, not a user-facing mode menu:
 
-- If the user asks a vague whole-paper question (能不能投/投稿前把关/整体推进): start with a strict verdict and top blockers, then route internally.
+- If the user asks a vague whole-paper question (能不能投/投稿前把关/整体推进): resolve **`audit_depth: exhaustive`**, strict verdict, then **full dimension findings** (not top-N truncation), then route internally.
+- If the user asks a **quick** or **single-dimension** review: resolve **`audit_depth: compact`**, verdict + top blockers.
 - If the user provides reviewer comments or accepted findings and asks to change the paper now: revise, honoring `edit_scope`.
 - If the user explicitly names one dimension (claim/evidence, refs, figures, notation, language): run that slice only.
 - If the user explicitly asks to learn target-journal refs first: run the ref-first workflow under this front door.
@@ -213,7 +238,8 @@ separate "known blocker" from "uncertainty that needs lookup".
 ## Anti-bad-output rules
 
 - Do not start with language polish when claim/evidence, novelty, baseline, or target-venue fit is unresolved.
-- Do not give a long review taxonomy before the verdict; lead with verdict, blockers, evidence, and next edit target.
+- Do not give a long review taxonomy before the verdict; lead with verdict, then findings appropriate to **`audit_depth`** (full dimension list for exhaustive; top blockers for compact).
+- When **`audit_depth: exhaustive`**, do **not** truncate to "top 3" or "top blockers" — use the envelope in [`references/paper-exhaustive-audit.md`](references/paper-exhaustive-audit.md).
 - Do not say "needs more experiments" without naming the missing comparison, measurement, or failure case.
 - Do not let external research become a separate literature-review task unless the paper cannot be judged without a corpus.
 - When **edit_scope=refactor** (or whole-paper judgment explicitly accepts structural cuts), do not preserve weak sections by default; cut, narrow, move to appendix, or stop defending weak claims when that is the honest route.

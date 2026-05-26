@@ -57,7 +57,7 @@ trigger_hints:
   - 最严厉审稿
   - strict reviewer
 metadata:
-  version: "4.5.1"
+  version: "4.6.0"
   platforms: [supported]
   tags: [paper, manuscript, review, reviewer, submission, gate-chain, top-journal]
 framework_roles:
@@ -134,9 +134,20 @@ Do not expose internal gate jargon unless the user explicitly asks for it.
 For single-dimension checks, use
 [`references/review-dimensions.md`](references/review-dimensions.md).
 
-For the **interactive 7-step compressed workflow**, follow the `Review workflow`
-section below. For the **full G0–G14 gate chain** used in protocol-backed
-multi-turn review, use
+## Audit depth (`audit_depth`)
+
+When invoked from `$paper-workbench`, **use the depth workbench resolved** — do not
+re-default whole-paper asks to compact. Optional machine token: `audit_depth: exhaustive`
+| `audit_depth: compact`.
+
+| Depth | Workflow | Output |
+|-------|----------|--------|
+| **exhaustive** | **Inherit** [`../paper-workbench/references/paper-exhaustive-audit.md`](../paper-workbench/references/paper-exhaustive-audit.md) — steps, checklists, envelope | Verdict + full `findings_by_dimension` + `warning_items`; must echo `audit_depth: exhaustive` |
+| **compact** | Compressed 8-step `Review workflow` below | Verdict + top blockers |
+
+Do **not** duplicate exhaustive steps or output shapes in this SKILL body.
+
+For the **full G0–G14 gate chain** used in protocol-backed multi-turn review, use
 [`references/review-rubric-playbook.md`](references/review-rubric-playbook.md).
 For machine-readable severity classification (used by reviser intake and
 cross-skill consistency), use
@@ -144,7 +155,11 @@ cross-skill consistency), use
 
 ## What this skill should deliver
 
-Default output should be decision-first and short enough to act on:
+When **`audit_depth: exhaustive`**, inherit the output envelope from
+[`../paper-workbench/references/paper-exhaustive-audit.md`](../paper-workbench/references/paper-exhaustive-audit.md)
+— list **all** material findings by dimension; do not truncate to top 3.
+
+When **`audit_depth: compact`**, default output should be decision-first:
 
 1. verdict: `可投 / 大修后再投 / 不建议投 / 需要补关键证据`
 2. top blockers: the few issues most likely to block readiness
@@ -195,6 +210,7 @@ in [`references/severity-spec.md`](references/severity-spec.md):
   issue is removed
 - `A 关键`: unlikely to clear review without repair or narrowing
 - `B 需补`: fixable but needs data, analysis, baseline, citation, or proof
+- `Warning 隐晦警告`: subtle omission or boundary risk — list in exhaustive mode
 - `C 表达/呈现`: wording, organization, figure/table, or layout issue after the
   claim boundary is safe
 
@@ -249,7 +265,10 @@ Narrative lit review alone is insufficient if the task was framed as adversarial
 
 ## Review workflow
 
-For normal interactive review, use this compressed order:
+Applies to **`audit_depth: compact`** only. For **exhaustive**, follow
+[`../paper-workbench/references/paper-exhaustive-audit.md`](../paper-workbench/references/paper-exhaustive-audit.md).
+
+For compact interactive review, use this compressed order:
 
 1. Lock the bar: target venue, article type, audience, and constraints. If
    absent, infer a provisional bar and say so.
@@ -308,6 +327,9 @@ assume a scaffold script exists.
 
 ## Hard rules
 
+- **No identity preamble** at the start of the reply (do not restate reviewer role).
+- **No fabricated issues** — every finding needs manuscript location + evidence; do not invent problems to fill the report.
+- When workbench passed **`audit_depth`**, do **not** override it for that turn.
 - Review before rewriting
 - Use the hardest honest standard, not a comforting one
 - Do not parallelize multiple decision gates at once

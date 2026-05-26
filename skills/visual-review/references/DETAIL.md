@@ -63,6 +63,9 @@ Examples:
 - `layout defect`: spacing, alignment, placement, or scaling visibly harms readability or composition
 - `tiny text`: key content is technically present but too small to read at normal review scale
 - `page professionalism`: the rendered page looks crowded, unbalanced, or below camera-ready quality
+
+**Paper submission sub-check** (when `$paper-reviewer` / `$paper-workbench` exhaustive visual pass calls this skill): confirm caption self-containment and extreme brevity; flag figure-note clutter; table cells should be digit-heavy not prose-heavy; check single vs double column legibility and figure width at final PDF scale; align with [`../../paper-workbench/references/paper-exhaustive-audit.md`](../../paper-workbench/references/paper-exhaustive-audit.md) §Visual.
+
 - `export/render bug`: clipped content, shifted elements, broken pagination, missing assets
 - `accessibility violation`: contrast too low, interactive elements too small, color-only encoding
 

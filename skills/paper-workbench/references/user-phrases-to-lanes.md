@@ -12,29 +12,28 @@
 - **`$paper-reviser`**：按审稿意见改、rebuttal 驱动改稿、已知 blocker 要“现在就动稿”，允许删/缩/挪附录/降主张（受 `edit_scope` 约束）。
 - **`$paper-writing`**：只改表达/写某一节（abstract/introduction/related work/caption 等），且 claim 边界已冻结或用户明确“不改 claim”。
 
-## 3) 建议 sidecar lanes（挂到 `PAPER_GATE_PROTOCOL` 的 `lane_kind`）
+## 3) Exhaustive 路径 sidecar lanes（findings + sidecar，非 G 进度模板）
 
-这些 lane **只在主链 gate 已选定**时并行启用，产出供主线程 merge-back；不独立推进 gate。
+整篇严审（`audit_depth: exhaustive`）默认走
+[`paper-exhaustive-audit.md`](../paper-exhaustive-audit.md) 四维度 findings；
+**不要**默认向用户汇报 G0–G14 gate 进度。下列 sidecar 仅在对应维度需要时并行启用，产出 merge 进 `findings_by_dimension`：
 
 - **`citation_verify` → `citation-management`**
   - 话术：`.bib` 清理、DOI/PMID 核查、引用缺失/重复、文中引用与参考文献表一致性。
-  - 常见 gate：`G5`（reference support）。
 
-- **`figure_audit` / `table_audit` → `figure-table mode` / plotting owners**
-  - 话术：只看图表、caption 不自洽、轴/单位/legend、图表密度与可读性、期刊风格出图。
-  - 常见 gate：`G11`/`G12`/`G14`。
+- **`figure_audit` / `table_audit` → `figure-table mode` / `$visual-review`**
+  - 话术：只看图表、caption 不自洽、轴/单位/legend、成稿 PDF/导出图、双栏与版式。
 
-- **`notation_audit` → `notation sweep`（paper lanes 内部模式）**
+- **`notation_audit` → `notation sweep`**
   - 话术：符号不统一、缩写首次出现、单位/公式引用、符号表。
-  - 常见 gate：`G10`。
 
 - **`statistical_rigor` → `statistical-analysis`**
-  - 话术：用什么检验/显著性/效应量/多重比较/统计功效/不确定性报告、A/B 差异是否显著。
-  - 常见 gate：`G2`/`G3`/`G5`（证据与主张匹配、比较公平、统计口径）。
+  - 话术：检验/显著性/效应量/多重比较/比较公平性。
 
 - **`reproducibility_check` → `experiment-reproducibility`**
-  - 话术：怎么保证可复现、环境/依赖/随机种子、数据版本、实验配置记录、结果复核流程。
-  - 常见 gate：`G2`/`G5`/`G14`（证据闭合与报告/披露规范）。
+  - 话术：环境/依赖/随机种子、数据版本、复现披露。
+
+**L3 磁盘门控**：用户显式要 `PAPER_GATE_PROTOCOL` 多轮 artifact 时，才启用 G 编号链；与 exhaustive 默认 UI 分离。
 
 ## 4) 反例（避免误路由）
 
