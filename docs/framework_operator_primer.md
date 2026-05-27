@@ -62,7 +62,7 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework do
 | **宿主投影 My/review 文案** | `configs/framework/host_projection_narrative.json`；`host-integration install` 渲染 Codex/Cursor/Claude 入口时读取。勿在 `host_integration.rs` 硬编码段落。 |
 | **`generated-artifacts-status`** | **`framework doctor`** 与 `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍跑全量 **drift-gate**（含慢 generator）。 |
 | **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** `.cursor/hook-state` 内 review 字段；`postToolUse`/`subagent*` 不再推进 review phase。 |
-| **active 无 GOAL、focus 有 GOAL** | SessionStart 有中文提示；运行 `framework task-state-resolve` 或修正 `active_task.json`。 |
+| **active 无 GOAL、focus 有 GOAL** | 运行 `router-rs framework task-state-resolve` 或修正 `active_task.json`（**无** SessionStart 中文 hint 注入）。 |
 | **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
 | **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset 即 strict）：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；宽松 legacy 设 `=0|false|off|no`。 |
 | **Stop 自动 checkpoint** | **已拔除（2026-05）**：Cursor/Codex hook Stop **不写** checkpoint；显式刷新用 Desktop MCP `session_checkpoint` 或 `framework_session_artifact_write` stdio。 |

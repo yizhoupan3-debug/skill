@@ -49,5 +49,5 @@
     "deep_gate_lanes",
     "claude_reviewer_lanes"
   ],
-  "registry_review_gate_notes": "RUNTIME_REGISTRY.json must include review_gate.deep_gate_lanes (non-empty string array) for Cursor/Codex REVIEW_GATE countable lanes (general-purpose / best-of-n-runner only), and review_gate.claude_reviewer_lanes (non-empty string array) for Claude Code reviewer lane admission (superset of deep_gate_lanes)."
+  "registry_review_gate_notes": "RUNTIME_REGISTRY.json must include review_gate.deep_gate_lanes (non-empty string array) for Cursor/Codex REVIEW_GATE countable lanes (general-purpose / best-of-n-runner / deep-reviewer and normalized equivalents), and review_gate.claude_reviewer_lanes (non-empty string array) for Claude Code reviewer lane admission (superset of deep_gate_lanes)."
 }

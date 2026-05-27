@@ -1104,6 +1104,15 @@ fn hook_state_lock_fail_closed_for_review_json() -> Value {
     })
 }
 
+fn post_tool_armed_hook_state_lock_fail_closed_json() -> Value {
+    let msg = "router-rs：`.cursor/hook-state` 锁不可用，review 证据路径已 fail-closed。请检查目录权限或争用后重试。";
+    json!({
+        "continue": false,
+        "user_message": msg,
+        "followup_message": msg
+    })
+}
+
 /// Best-effort read without holding the session lock (TOCTOU-safe only for fail-closed branches).
 fn peek_review_hard_armed(repo_root: &Path, event: &Value) -> bool {
     for _ in 0..3 {

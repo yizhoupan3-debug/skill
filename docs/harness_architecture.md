@@ -29,7 +29,7 @@ L1  Executable verification and exit codes
 ### 2.1 SessionStart（2026-05 连续性拔除后）
 
 - Codex / Cursor SessionStart **不**注入连续性 digest、`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 `depth_compliance_refresh_hint`（模块已删除，2026-05）。
-- **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：`Repo:`、Codex `SessionStart source:`、可选 `ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE=summary` 时的根级 `SESSION_SUMMARY.md` 前缀、以及 pointer 观测短提示（`CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH` 等，**非** digest 正文）。
+- **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：Cursor **`Repo:`** 单行（[`handle_session_start`](../scripts/router-rs/src/hosts/cursor_hooks/handlers_parts/handlers_session.inc.rs)）；Codex `SessionStart source:`。**无** digest、**无** SessionStart 指针 hint（分裂观测用 `framework task-state-resolve` / `framework doctor`）。
 - **禁止**：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 等静态说明；禁止恢复 hook 驱动的 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。
 - 出站仍按 UTF-8 **字节**预算截断（Cursor `...[~trunc]`；Codex `...`）。
 - 宏目标 / RFV 多轮：仅 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 `artifacts/current/<task_id>/` 手动画板；见 [`AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)。
@@ -60,6 +60,19 @@ L1  Executable verification and exit codes
 | **drift-gate（全量）** | `framework maint update-one-shot`；显式全量探针 | 在隔离 temp root 执行声明 generator（含 `host-integration install` 等慢步骤，默认单 generator **300s** 超时，可用 `ROUTER_RS_GENERATOR_TIMEOUT_SECONDS` 覆盖），再 byte/normalized 对比 checked-in 与再生副本。 |
 
 集成测试与日常 `doctor` 应使用 **metadata-only**；提交前维护流仍须至少一次 **drift-gate** 绿（见 [`skills/update/SKILL.md`](../skills/update/SKILL.md)）。
+
+**Cursor project L4 手维护面**（相对 Codex/Claude 的 `GENERATED_ARTIFACTS` drift-gate **不对称**；`framework host-integration install --to cursor` **不**托管 project hooks）：
+
+| 路径 | 说明 |
+|------|------|
+| `.cursor/hooks.json` | 7 事件闭集；parity 见 `scripts/ci/check-cursor-hooks-parity.sh` |
+| `.cursor/router-rs-hook.env` | hook 子进程 env |
+| `.cursor/rules/*.mdc` | gate/plan alwaysApply rules |
+| `.cursor/commands/*.md` | My lifecycle slash stubs（4 文件） |
+| `.cursor/agents/deep-reviewer.md` | 深度 review lane 定义 |
+| `configs/framework/cursor-router-rs-hook.sh` | launcher（repo 根相对路径经 hooks.json command 引用） |
+
+User-scope install 产出：`~/.cursor/rules/framework.mdc`（叙事真源 `host_projection_narrative.json`）。详见 [`docs/hosts/cursor.md`](hosts/cursor.md)。
 
 **Companion 生成物**（`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json` 等）：`source_of_truth: false` stub；默认 `cargo test --test policy_contracts` 只断言闭集与形态，**不**恢复历史 `capability_classes` 富契约（见 `plugin_catalog_routing_metadata_legacy_capabilities_contract`，`#[ignore]`）。
 
@@ -169,10 +182,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` | **关** | **仅** `1`：PostTool → `EVIDENCE_INDEX` 自动追加（opt-in） |
 | `ROUTER_RS_CONTINUITY_WRITE_JOURNAL` | **关** | **仅** `1`：`CONTINUITY_JOURNAL.json`（opt-in） |
 | `ROUTER_RS_TASK_STATE_AGGREGATE_AUTO` | **关** | **仅** `1`：自动刷新 `TASK_STATE.json`；否则 `framework task-state-aggregate-sync` |
-| `ROUTER_RS_CURSOR_SESSIONSTART_SUMMARY_MODE` | `goal_only` | `summary`：读根 `SESSION_SUMMARY.md` 前缀；`goal_only`：仅 Repo + 指针观测短提示（**无** digest） |
-| `ROUTER_RS_CURSOR_HOOK_SILENT` | 关 | **仅** `1`/`true`/`yes`/`on`：剥 `additional_context`（含 soft-nag 的 `REVIEW_GATE detail` 段落）；保留 `followup_message` 中以 `router-rs ` 开头的硬短码（[`apply_cursor_hook_silent_policy`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs)，[`review_gate.rs`](../scripts/router-rs/src/review_gate.rs)） |
-| `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` | 8192，clamp 1024–65536 | Cursor hook stdout：`additional_context` /（极端长度）`followup_message` 经 [`apply_cursor_hook_output_policy`](../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs) UTF-8 **字节**裁剪（变量名为 `_CHARS`，语义为字节上限）；详见 §4.2 |
-| `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` | 1200，clamp 256–8192 | Cursor SessionStart `additional_context` 合成字节上限 |
+| `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` | 1200，clamp 256–8192 | Cursor SessionStart `additional_context` 合成字节上限（实现为 **`Repo:`** 单行 + 截断） |
 | `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 Stop 软 `SESSION_CLOSE_STYLE` 单行收口提示 |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` | 关 | Cursor beforeSubmit 中显式开启论文/手稿强对抗审稿短段 |
 | `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` | 开 | Cursor beforeSubmit：子代理/Task **继承主会话模型** 单行 nudge（registry `subagent_model_inherit_nudge`）；**仅** `0`/`false`/`off`/`no` 关闭；与 my-light / REVIEW_GATE 无关 |

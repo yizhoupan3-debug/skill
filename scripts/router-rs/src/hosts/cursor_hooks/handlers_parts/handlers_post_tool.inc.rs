@@ -11,7 +11,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
         }
         let mut lock = acquire_state_lock(repo_root, event);
         if lock.is_none() {
-            return hook_state_lock_fail_closed_for_review_json();
+            return post_tool_armed_hook_state_lock_fail_closed_json();
         }
         let state = load_state(repo_root, event)
             .ok()

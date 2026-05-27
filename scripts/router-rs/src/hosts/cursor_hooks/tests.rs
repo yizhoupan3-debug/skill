@@ -3641,6 +3641,47 @@ fn post_tool_use_fast_path_skips_tracker_for_read() {
 }
 
 #[test]
+fn post_tool_armed_lock_failure_fails_closed_with_continue_false() {
+    let _gate = ReviewGateActiveGuard::new();
+    let _guard = ForceHookStateLockFailureGuard::new();
+    let repo = fresh_repo();
+    let sid = "s-posttool-armed-lock";
+    let submit = event(sid, "全面review这个仓库");
+    let mut armed = empty_state();
+    armed.review_required = true;
+    armed.phase = 1;
+    if let Some(parent) = state_path(&repo, &submit).parent() {
+        fs::create_dir_all(parent).expect("mkdir hook-state");
+    }
+    fs::write(
+        state_path(&repo, &submit),
+        serde_json::to_string(&armed).expect("serialize"),
+    )
+    .expect("seed review-armed state");
+    let lock_path = state_lock_path(&repo, &submit);
+    fs::create_dir_all(lock_path.parent().expect("parent")).expect("mkdir");
+    fs::write(&lock_path, b"locked").expect("seed lock");
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "Task",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "fork_context": false,
+                "subagent_id": "pt-lock"
+            }
+        }),
+    );
+    assert_eq!(out.get("continue"), Some(&json!(false)));
+    assert!(
+        hook_user_visible_blob(&out).contains("锁不可用"),
+        "out={out:?}"
+    );
+}
+
+#[test]
 fn post_tool_use_still_records_subagent_on_task_tool() {
     let _guard = ReviewGateActiveGuard::new();
     let repo = fresh_repo();

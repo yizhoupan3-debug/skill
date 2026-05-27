@@ -26,7 +26,7 @@ fn routing_eval_case_path() -> PathBuf {
 
 fn assert_routing_eval_cases_match<F>(label: &str, mut route_case: F)
 where
-    F: FnMut(&str, &str, bool) -> Result<RouteDecision, String>,
+    F: FnMut(&str, &str, bool, Option<&str>) -> Result<RouteDecision, String>,
 {
     let payload = read_json(&routing_eval_case_path()).expect("read routing eval fixture");
     let cases = payload
@@ -49,8 +49,18 @@ where
             .get("first_turn")
             .and_then(Value::as_bool)
             .unwrap_or(true);
-        let decision = route_case(task, &format!("routing-eval::{label}::{id}"), first_turn)
-            .unwrap_or_else(|err| panic!("route eval {label}/{id} failed: {err}"));
+        let host_id = case
+            .get("host_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let decision = route_case(
+            task,
+            &format!("routing-eval::{label}::{id}"),
+            first_turn,
+            host_id,
+        )
+        .unwrap_or_else(|err| panic!("route eval {label}/{id} failed: {err}"));
 
         if let Some(expected_owner) = case.get("expected_owner").and_then(Value::as_str) {
             if decision.selected_skill != expected_owner {
@@ -2692,12 +2702,12 @@ fn routing_eval_report_matches_expected_baseline() {
         .len();
     assert_eq!(report.metrics.case_count, expected_case_count);
     assert_eq!(report.metrics.overtrigger, 0);
-    assert_routing_eval_cases_match("runtime+manifest", |task, session_id, first_turn| {
+    assert_routing_eval_cases_match("runtime+manifest", |task, session_id, first_turn, host_id| {
         route_task_with_manifest_fallback(
             &records,
             Some(&runtime_path),
             Some(&manifest_path),
-            None,
+            host_id,
             task,
             session_id,
             true,
@@ -2760,12 +2770,12 @@ fn routing_eval_runtime_fallback_matches_expected_baseline() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
 
-    assert_routing_eval_cases_match("runtime-fallback", |task, session_id, first_turn| {
+    assert_routing_eval_cases_match("runtime-fallback", |task, session_id, first_turn, host_id| {
         route_task_with_manifest_fallback(
             &records,
             Some(&runtime_path),
             None,
-            None,
+            host_id,
             task,
             session_id,
             true,

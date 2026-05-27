@@ -10,7 +10,7 @@ use std::path::Path;
 #[cfg(test)]
 use super::constants::PARALLEL_EVAL_CASE_MIN;
 #[cfg(test)]
-use super::routing::route_task;
+use super::routing::{filter_records_for_host, route_task};
 #[cfg(test)]
 use super::text::{normalize_optional_text, read_json, value_to_string};
 #[cfg(test)]
@@ -52,8 +52,14 @@ pub(crate) fn evaluate_routing_cases(
             .map(value_to_string)
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| (input_index + 1).to_string());
+        let host_id = case
+            .host_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let scoped_records = filter_records_for_host(records, host_id)?;
         let decision = route_task(
-            records,
+            &scoped_records,
             &task,
             &format!("routing-eval::{session_suffix}"),
             true,

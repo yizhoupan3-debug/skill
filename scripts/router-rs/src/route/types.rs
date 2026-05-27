@@ -245,6 +245,9 @@ pub(crate) struct RoutingEvalCasePayload {
     /// Human-only fixture commentary; ignored by eval harness.
     #[serde(default)]
     pub(crate) notes: Option<String>,
+    /// When set, filter hot records before `route_task` (aligns with `eval_route` / stdio route).
+    #[serde(default)]
+    pub(crate) host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

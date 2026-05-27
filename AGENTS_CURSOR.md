@@ -21,7 +21,7 @@
 
 ## Host Boundaries (Cursor 专属硬约束与门控)
 
-- **机读短码**：宿主注入单行 `REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP` 等（须 `router-rs ` 前缀）；**默认 my-light** 下 Stop **不**发射 `REVIEW_GATE` / `AG_FOLLOWUP`。续跑须 `/implementx` + `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。
+- **机读短码**：宿主注入单行 `REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP` 等（须 `router-rs ` 前缀）；**my-light**（My 入口 `/discussx|planx|implementx|verifyx` 或磁盘 `GOAL_STATE.lifecycle_profile: my-light`）下 Stop **不**发射 `REVIEW_GATE` / `AG_FOLLOWUP`。续跑须 `/implementx` + `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。
 - **`updateCurrentStep`**：**严禁空载荷**；须含可机读的状态、步骤索引或执行描述。
 - **子代理模型继承**：并行 `Task` **默认继承主会话模型**（省略 `model`）；禁止默认 claude/sonnet，除非主会话已用 Anthropic。见 [`.cursor/rules/subagent-model-inherit.mdc`](.cursor/rules/subagent-model-inherit.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)。
 - 路由问题 → runtime；hook 问题 → `.cursor/hooks.json`。

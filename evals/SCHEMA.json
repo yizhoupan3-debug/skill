@@ -68,6 +68,11 @@
         "type": "string",
         "required": false,
         "description": "人类注释；eval route 反序列化保留但不参与评分；routing eval 忽略。"
+      },
+      "host_id": {
+        "type": "string",
+        "required": false,
+        "description": "宿主 id（如 cursor、codex-cli）；eval route 在 route_task 前对 hot records 做 filter_records_for_host，并传给 manifest fallback。"
       }
     },
     "consumers": {
@@ -75,7 +80,7 @@
         "binary": "router-rs",
         "subcommand": "eval route",
         "rust_type": "scripts/router-rs/src/eval_route.rs::EvalCasePayload",
-        "behavior": "route_task_with_manifest_fallback；first_turn 固定为 true；校验 expected_owner、expected_overlay、expected_layer、forbidden_owners。"
+        "behavior": "route_task_with_manifest_fallback；先 filter_records_for_host（当 host_id 非空）；first_turn 固定为 true；校验 expected_owner、expected_overlay、expected_layer、forbidden_owners。"
       },
       "router_rs_routing_eval_tests": {
         "rust_type": "scripts/router-rs/src/route.rs::RoutingEvalCasePayload（cfg(test)）",

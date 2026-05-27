@@ -611,6 +611,30 @@
       "expected_layer": "runtime",
       "first_turn": true,
       "notes": "冷表 skill；manifest/runtime 路由；AGENTS 要求显式 $python-env-management"
+    },
+    {
+      "id": "openai-docs-cursor-negative",
+      "category": "should-not-trigger",
+      "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
+      "host_id": "cursor",
+      "forbidden_owners": ["openai-docs"],
+      "notes": "Codex-only openai-docs must not route on cursor after host_platforms fix"
+    },
+    {
+      "id": "discussx-slash-cursor",
+      "category": "explicit-framework-command",
+      "task": "/discussx",
+      "host_id": "cursor",
+      "expected_owner": "discussx",
+      "notes": "My lifecycle discuss entry on cursor"
+    },
+    {
+      "id": "planx-slash-cursor",
+      "category": "explicit-framework-command",
+      "task": "/planx",
+      "host_id": "cursor",
+      "expected_owner": "planx",
+      "notes": "My lifecycle plan entry on cursor"
     }
   ]
 }

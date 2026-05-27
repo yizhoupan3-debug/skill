@@ -59,7 +59,7 @@ metadata:
 | **execution plan** | 需要落盘、跨文件或需对照实现的任务 | `plan_profile: execution`（或缺省）；todos 写四元组；末条做计划 vs 实际 + Git 状态证据收口。 |
 | **audit plan** | 跨模块、高风险、安全/供应链、用户明确要求审计划/深度 review | execution plan + 可选 review-only findings + 更严格证据门槛；是否启用 subagent 仍受 `AGENTS.md` 执行梯子约束。 |
 
-**与继承面 / CreatePlan**：**轻量**指不强制完整 audit 叙事与继承面占位；若本文件为 **`plan_profile: execution`（或缺省）** 且满足下方 **CreatePlan 输出契约** 硬条款 **第 2 条** 触发条件，仍**须**含 **`## 执行计划继承面`**。AlwaysApply 自检见 `.cursor/rules/cursor-plan-output.mdc` 第 **5** 条。
+**与继承面 / CreatePlan**：**轻量**指不强制完整 audit 叙事与继承面占位；若本文件为 **`plan_profile: execution`（或缺省）** 且满足下方 **CreatePlan 输出契约** 硬条款 **第 2 条** 触发条件，仍**须**含 **`## 执行计划继承面`**。AlwaysApply 自检见 [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) 汇总句 + 本节 CreatePlan 契约第 2 条。
 
 与 `name` / `overview` / `todos` **同级**的 frontmatter 字段 **`plan_profile`** 区分计划类型：
 
@@ -123,7 +123,7 @@ metadata:
 
 **与四元组**：`scope` 路径应能从继承指针或矩阵映射追溯到仓库内证据；`Verify` 不得无故弱于 research 已给出的验证类型。
 
-**与 `.cursor/rules/cursor-plan-output.mdc`**：alwaysApply 仍以四元组、末条计划/Git 证据收口，以及 **有前置 research/等价结论文档/外部合成材料时 execution 须有 `## 执行计划继承面`** 的指针级硬自检为准（插入位置：第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**正文内、先于**任意**正文 Markdown checkbox / 其它分节任务，与 `.mdc` 第 **5** 条一致）；继承面字段与行数上限仍以本节为真源；**不**在该 `.mdc` 内重复展开继承面全文（减法：`cursor-plan-output` 不镜像表格以免双真源膨胀）。
+**与 `.cursor/rules/cursor-plan-output.mdc`**：alwaysApply 仍以四元组、末条计划/Git 证据收口，以及 **有前置 research/等价结论文档/外部合成材料时 execution 须有 `## 执行计划继承面`** 的指针级硬自检为准（插入位置：第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**正文内、先于**任意**正文 Markdown checkbox / 其它分节任务，与 CreatePlan 契约第 **2** 条一致）；继承面字段与行数上限仍以本节为真源；**不**在该 `.mdc` 内重复展开继承面全文（减法：`cursor-plan-output` 不镜像表格以免双真源膨胀）。
 
 ### `research`：正文建议结构
 

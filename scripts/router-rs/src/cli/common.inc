@@ -100,11 +100,12 @@ pub(crate) fn route_task_with_manifest_fallback(
     allow_overlay: bool,
     first_turn: bool,
 ) -> Result<RouteDecision, String> {
-    if let Some(decision) = literal_framework_alias_decision(runtime_records, query, session_id) {
+    let scoped_runtime = crate::route::filter_records_for_host(runtime_records, host_id)?;
+    if let Some(decision) = literal_framework_alias_decision(&scoped_runtime, query, session_id) {
         return Ok(decision);
     }
     let hot_decision = route_task(
-        runtime_records,
+        &scoped_runtime,
         query,
         session_id,
         allow_overlay,
@@ -134,7 +135,7 @@ pub(crate) fn route_task_with_manifest_fallback(
     if should_accept_manifest_fallback(
         &hot_decision,
         &full_decision,
-        runtime_records,
+        &scoped_runtime,
         should_retry,
         manifest_path.is_some(),
     ) {

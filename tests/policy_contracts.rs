@@ -1080,6 +1080,55 @@ fn hot_runtime_skill_records_cover_all_supported_hosts() {
 }
 
 #[test]
+fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
+    let root = project_root();
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let allowed: HashSet<String> = registry["host_targets"]["supported"]
+        .as_array()
+        .expect("host_targets.supported")
+        .iter()
+        .map(|v| v.as_str().expect("host id").to_string())
+        .collect();
+    let mut supported_ids: Vec<String> = allowed.iter().cloned().collect();
+    supported_ids.sort();
+
+    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let skills = runtime["skills"].as_array().expect("runtime skills");
+    for row in skills.iter().filter_map(Value::as_array) {
+        let slug = row.first().and_then(|v| v.as_str()).expect("slug");
+        if !HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS.contains(&slug) {
+            continue;
+        }
+        let skill_path = row
+            .get(8)
+            .and_then(|v| v.as_str())
+            .map(|rel| root.join(rel))
+            .expect("skill_path");
+        let meta = parse_skill_md_frontmatter_map(&skill_path);
+        let raw = raw_platforms_from_skill_frontmatter(&meta);
+        let allowed_platforms = host_platforms::normalize_skill_host_platforms(
+            &raw,
+            &supported_ids,
+            false,
+        )
+        .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
+        let allowed_set: HashSet<String> = allowed_platforms.into_iter().collect();
+
+        let runtime_platforms = row
+            .get(9)
+            .and_then(|v| v.as_array())
+            .expect("host_platforms");
+        for platform in runtime_platforms {
+            let id = platform.as_str().expect("host platform");
+            assert!(
+                allowed_set.contains(id),
+                "codex-only hot runtime skill `{slug}` must not list extra host `{id}` in runtime host_platforms; allowed={allowed_set:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
     let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));

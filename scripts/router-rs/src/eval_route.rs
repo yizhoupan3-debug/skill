@@ -1,4 +1,4 @@
-use crate::route::{load_records, ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION};
+use crate::route::{filter_records_for_host, load_records, ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION};
 use crate::route_task_with_manifest_fallback;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -26,6 +26,8 @@ pub struct EvalCasePayload {
     #[serde(default)]
     #[allow(dead_code)] // Optional human notes in eval JSON fixtures.
     pub notes: Option<String>,
+    #[serde(default)]
+    pub host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -87,11 +89,30 @@ pub fn evaluate_route_cases(
         }
 
         let session_id = format!("eval-route::{}", case.id);
+        let host_id = case
+            .host_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let scoped_records = match filter_records_for_host(records, host_id) {
+            Ok(filtered) => filtered,
+            Err(err) => {
+                failures.push(EvalCaseFailure {
+                    case_id: case.id.clone(),
+                    field: "host_filter".to_string(),
+                    expected: json!("host-scoped records"),
+                    got: json!(err),
+                    task: case.task.clone(),
+                });
+                failed += 1;
+                continue;
+            }
+        };
         let decision = match route_task_with_manifest_fallback(
-            records,
+            &scoped_records,
             runtime_path,
             manifest_path,
-            None,
+            host_id,
             &case.task,
             &session_id,
             true,
