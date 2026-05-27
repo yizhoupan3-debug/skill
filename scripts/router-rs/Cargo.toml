@@ -13,6 +13,8 @@ name = "router-rs"
 path = "src/main.rs"
 
 [dependencies]
+antigravity-core = { path = "../../core/antigravity" }
+nix = { version = "0.28.0", features = ["signal", "process"] }
 libc = "0.2"
 chrono = { version = "0.4.40", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.5.38", features = ["derive"] }

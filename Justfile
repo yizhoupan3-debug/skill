@@ -10,6 +10,8 @@ test:
 
 test-all:
     cargo test --manifest-path scripts/router-rs/Cargo.toml
+    cargo test --manifest-path core/antigravity/Cargo.toml
+    cargo test --manifest-path cli/antigravity-cli/Cargo.toml
     cargo test --test policy_contracts
     cargo test --test host_integration
 

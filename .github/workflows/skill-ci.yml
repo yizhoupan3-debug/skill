@@ -61,6 +61,11 @@ jobs:
       - name: Build router-rs
         run: cargo build --release --manifest-path scripts/router-rs/Cargo.toml
 
+      - name: Build antigravity crates
+        run: |
+          cargo build --release --manifest-path core/antigravity/Cargo.toml
+          cargo build --release --manifest-path cli/antigravity-cli/Cargo.toml
+
       - name: Schema drift contract smoke
         run: cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- schema-drift contract
 
