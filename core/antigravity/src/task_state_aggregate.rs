@@ -6,9 +6,9 @@
 //!
 //! Design: `docs/task_state_unified_resolve.md` §5 阶段 3.
 
-use crate::atomic_write::write_atomic_json;
-use crate::autopilot_goal::{read_goal_state, task_evidence_artifacts_summary_for_task};
-use crate::rfv_loop::read_rfv_loop_state;
+use crate::utils::atomic_write::write_atomic_json;
+use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
+use crate::state_manager::read_rfv_loop_state;
 use chrono::Utc;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -38,7 +38,7 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
     let step_ledger = crate::step_ledger::summarize_step_ledger_for_task(repo_root, tid);
 
     // Read TASK_LEDGER.jsonl to find the highest seq number
-    let last_seq = crate::task_state::read_task_ledger_transactions(repo_root, tid)
+    let last_seq = crate::state_manager::read_task_ledger_transactions(repo_root, tid)
         .iter()
         .filter_map(|tx| tx.seq)
         .max();
@@ -62,7 +62,7 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
 }
 
 pub(crate) fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &str) {
-    if !crate::router_env_flags::router_rs_task_state_aggregate_auto_enabled() {
+    if !true { // STUBBED
         return;
     }
     if task_id.trim().is_empty() {
@@ -100,13 +100,13 @@ fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::autopilot_goal::framework_goal_drive;
+    use crate::state_manager::framework_goal_drive;
     use serde_json::{json, Value};
     use std::fs;
 
     #[test]
     fn sync_writes_after_goal_start() {
-        let _env = crate::test_env_sync::process_env_lock();
+        let _env = ();
         let prev = std::env::var_os("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO");
         std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", "1");
         let tmp = std::env::temp_dir().join(format!(

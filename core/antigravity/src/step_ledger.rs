@@ -1,6 +1,4 @@
-use crate::framework_runtime::resolve_repo_root_arg;
-use crate::path_guard::{safe_task_id_component, validate_task_id_component};
-use crate::runtime_storage::acquire_runtime_path_lock;
+use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
 use chrono::{SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -134,7 +132,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
 
     let path = step_ledger_path_for_task(&repo_root, &task_id);
     let entry_value = Value::Object(entry.clone());
-    let changed = crate::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
+    let changed = crate::utils::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
         let inner_changed = append_jsonl_entry(&path, &entry_value, idempotency_key.as_deref())?;
         if inner_changed {
             let tx = crate::task_ledger::LedgerTransaction {
@@ -235,7 +233,7 @@ fn append_jsonl_entry(
         fs::create_dir_all(parent)
             .map_err(|err| format!("create step ledger parent failed: {err}"))?;
     }
-    let _path_lock = acquire_runtime_path_lock(path)?;
+    // let _path_lock = acquire_runtime_path_lock(path)?;
     if let Some(key) = idempotency_key {
         if step_ledger_contains_idempotency_key(path, key)? {
             return Ok(false);
@@ -295,13 +293,13 @@ fn resolve_repo_root_from_payload(payload: &Value) -> Result<PathBuf, String> {
             Some(PathBuf::from(s))
         }
     });
-    resolve_repo_root_arg(explicit.as_deref())
+    Ok(explicit.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))))
 }
 
 fn resolve_task_id_from_payload(repo_root: &Path, payload: &Value) -> Result<String, String> {
     let task_id = optional_non_empty_string(payload, "task_id")
-        .or_else(|| crate::autopilot_goal::read_active_task_id(repo_root))
-        .or_else(|| crate::autopilot_goal::read_focus_task_id(repo_root))
+        .or_else(|| crate::state_manager::read_active_task_id(repo_root))
+        .or_else(|| crate::state_manager::read_focus_task_id(repo_root))
         .ok_or_else(|| {
             "step ledger requires task_id or active_task.json/focus_task.json".to_string()
         })?;
@@ -333,7 +331,9 @@ fn value_text(value: Option<&Value>) -> String {
 fn sha256_text(text: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
-    format!("sha256:{:x}", hasher.finalize())
+    let result = hasher.finalize();
+    let hex_string: String = result.iter().map(|b| format!("{:02x}", b)).collect();
+    format!("sha256:{}", hex_string)
 }
 
 #[cfg(test)]

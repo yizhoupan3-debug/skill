@@ -1,8 +1,6 @@
 #![recursion_limit = "256"]
 #![allow(dead_code, unused_variables, unused_mut)]
 
-#[path = "utils/atomic_write.rs"]
-mod atomic_write;
 mod autopilot_goal;
 pub mod goal_drive {
     pub use crate::autopilot_goal::*;
@@ -42,10 +40,6 @@ pub mod framework_host_integration {
 #[path = "utils/lane_normalize.rs"]
 mod lane_normalize;
 mod paper_adversarial_hook;
-#[path = "utils/path_guard.rs"]
-mod path_guard;
-#[path = "utils/read_bounded.rs"]
-mod read_bounded;
 mod runtime_registry;
 mod review_gate;
 mod review_gate_engine;
@@ -64,13 +58,8 @@ mod session_call_tracker;
 mod session_supervisor;
 mod skill_repo;
 mod stdio_transport;
-mod step_ledger;
 mod task_command;
-pub(crate) mod task_ledger;
 pub(crate) mod task_state;
-pub(crate) mod task_state_aggregate;
-#[path = "utils/task_write_lock.rs"]
-mod task_write_lock;
 mod trace_runtime;
 
 #[cfg(test)]
