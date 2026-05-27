@@ -134,6 +134,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "antigravity-cli"
+version = "0.1.0"
+dependencies = [
+ "antigravity-core",
+ "router-rs",
+]
+
+[[package]]
+name = "antigravity-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -588,6 +604,12 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+
+[[package]]
+name = "cfg_aliases"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
 name = "cfg_aliases"
@@ -2064,7 +2086,7 @@ dependencies = [
  "cookie-factory",
  "libc",
  "libspa-sys",
- "nix",
+ "nix 0.30.1",
  "nom 8.0.0",
  "system-deps",
 ]
@@ -2291,13 +2313,25 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nix"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab2156c4fce2f8df6c499cc1c763e4394b7482525bf2a9701c9d79d215f519e4"
+dependencies = [
+ "bitflags 2.11.1",
+ "cfg-if",
+ "cfg_aliases 0.1.1",
+ "libc",
+]
+
+[[package]]
+name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
 dependencies = [
  "bitflags 2.11.1",
  "cfg-if",
- "cfg_aliases",
+ "cfg_aliases 0.2.1",
  "libc",
 ]
 
@@ -2817,7 +2851,7 @@ dependencies = [
  "libc",
  "libspa",
  "libspa-sys",
- "nix",
+ "nix 0.30.1",
  "once_cell",
  "pipewire-sys",
  "thiserror 2.0.18",
@@ -3034,7 +3068,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e20a958963c291dc322d98411f541009df2ced7b5a4f2bd52337638cfccf20"
 dependencies = [
  "bytes",
- "cfg_aliases",
+ "cfg_aliases 0.2.1",
  "pin-project-lite",
  "quinn-proto",
  "quinn-udp",
@@ -3074,7 +3108,7 @@ version = "0.5.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "addec6a0dcad8a8d96a771f815f0eaf55f9d1805756410b39f5fa81332574cbd"
 dependencies = [
- "cfg_aliases",
+ "cfg_aliases 0.2.1",
  "libc",
  "once_cell",
  "socket2",
@@ -3381,10 +3415,12 @@ dependencies = [
 name = "router-rs"
 version = "0.1.0"
 dependencies = [
+ "antigravity-core",
  "chrono",
  "clap",
  "fs2",
  "libc",
+ "nix 0.28.0",
  "rayon",
  "regex",
  "reqwest",

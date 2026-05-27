@@ -199,19 +199,6 @@ pub(crate) fn completion_claim_keywords_export() -> Vec<&'static str> {
         .collect()
 }
 
-/// 单一来源：`EVIDENCE_INDEX.json` 单条 artifact 是否计作「成功验证」。
-/// 规则：`success == true` **或** `exit_code` 取 0（i64 或 u64 皆可）。
-/// `rfv_loop` 与 `autopilot_goal` 都走这里，防止两路证据口径分叉。
-pub(crate) fn evidence_index_entry_implies_success(entry: &Value) -> bool {
-    if entry.get("success").and_then(Value::as_bool) == Some(true) {
-        return true;
-    }
-    match entry.get("exit_code") {
-        Some(v) => v.as_i64() == Some(0) || v.as_u64() == Some(0),
-        None => false,
-    }
-}
-
 fn review_keyword_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"(?i)\breview\b").expect("invalid regex"))

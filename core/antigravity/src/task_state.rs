@@ -3,15 +3,9 @@
 //! Design: `docs/task_state_unified_resolve.md`. **Writes** serialize via `task_write_lock`
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `CursorContinuityFrame`).
 
-use crate::autopilot_goal::{
-    goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task,
-};
-use crate::rfv_loop::{
-    read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
-};
-use crate::router_env_flags::{
-    router_rs_depth_compliance_hint_enabled, router_rs_depth_score_mode_strict,
-};
+use crate::state_manager::{goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task, read_goal_state_pair_if_valid, read_goal_state_for_hydration, read_goal_state_for_hydration_from_pointer_ids, read_goal_state_for_diagnostics_scan, read_task_pointer_pair, goal_state_path_for_task};
+use crate::state_manager::{read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured};
+
 use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
@@ -20,7 +14,7 @@ pub const RESOLVED_TASK_VIEW_SCHEMA_VERSION: &str = "router-rs-resolved-task-vie
 
 /// When present in [`ResolvedTaskView::resolution_notes`], `active_task.json` resolves to a task
 /// with no readable `GOAL_STATE.json`, while `focus_task.json` names another task that **does**
-/// have a valid goal file. [`crate::autopilot_goal::read_goal_state_for_hydration`] still does not
+/// have a valid goal file. [`crate::state_manager::read_goal_state_for_hydration`] still does not
 /// fall back to focus; callers may surface this for diagnostics only.
 pub const RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL: &str =
     "continuity:active_goal_missing_focus_has_goal";
@@ -104,14 +98,14 @@ fn maybe_note_active_goal_not_driving_focus_drives(
     let Some(active_goal) = goal_state else {
         return;
     };
-    if crate::autopilot_goal::goal_state_requests_continuation(active_goal) {
+    if crate::state_manager::goal_state_requests_continuation(active_goal) {
         return;
     }
-    let Ok(Some(focus_goal)) = crate::autopilot_goal::read_goal_state(repo_root, Some(focus_id))
+    let Ok(Some(focus_goal)) = crate::state_manager::read_goal_state(repo_root, Some(focus_id))
     else {
         return;
     };
-    if !crate::autopilot_goal::goal_state_requests_continuation(&focus_goal) {
+    if !crate::state_manager::goal_state_requests_continuation(&focus_goal) {
         return;
     }
     notes.push(format!(
@@ -202,7 +196,7 @@ pub struct CursorContinuityFrame {
 pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFrame {
     let pointers = read_task_pointers(repo_root);
     let pointer_view = resolve_task_view_with_pointers(repo_root, None, pointers.clone());
-    let hydration_goal = crate::autopilot_goal::read_goal_state_for_hydration_from_pointer_ids(
+    let hydration_goal = crate::state_manager::read_goal_state_for_hydration_from_pointer_ids(
         repo_root,
         &pointers.active_task_id,
         &pointers.focus_task_id,
@@ -223,7 +217,7 @@ pub struct TaskPointers {
 
 /// `active_task.json` / `focus_task.json` 一次成对读取（比两次独立 open 的半态窗口更小）。
 pub fn read_task_pointers(repo_root: &Path) -> TaskPointers {
-    let (active_task_id, focus_task_id) = crate::autopilot_goal::read_task_pointer_pair(repo_root);
+    let (active_task_id, focus_task_id) = crate::state_manager::read_task_pointer_pair(repo_root);
     TaskPointers {
         active_task_id,
         focus_task_id,
@@ -361,7 +355,7 @@ pub fn depth_compliance_aggregate(
     let third_legacy = c.goal_checkpoint_count > 0
         || c.rfv_adversarial_round_count > 0
         || (strict_task && c.rfv_external_strict_ok_round_count > 0);
-    let third = if router_rs_depth_score_mode_strict() {
+    let third = if std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").map(|v| v.trim() == "strict").unwrap_or(false) {
         third_legacy || c.rfv_falsification_test_count > 0
     } else {
         third_legacy
@@ -573,7 +567,7 @@ pub fn hydrate_task_state_hybrid(
             }
             "evidence" => {
                 evidence_rows_non_empty = true;
-                if crate::hook_common::evidence_index_entry_implies_success(&tx.payload) {
+                if crate::state_manager::evidence_index_entry_implies_success(&tx.payload) {
                     has_successful_verification = true;
                 }
             }
@@ -672,7 +666,7 @@ pub fn resolve_task_view_with_pointers(
 /// One-line hint for continuity digest / Codex SessionStart (`Continuity digest` prompt).
 /// Omitted when no resolved `task_id` (idle). Keeps copy short for ~640-char caps.
 pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> {
-    if !router_rs_depth_compliance_hint_enabled() {
+    if !std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").map(|v| v.trim() == "1").unwrap_or(false) {
         return None;
     }
     let tid = view.task_id.as_deref()?.trim();
@@ -699,7 +693,7 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
             dc.rfv_external_strict_ok_round_count
         ));
     }
-    if dc.rfv_external_deep_structured_round_count > 0 && !router_rs_depth_score_mode_strict() {
+    if dc.rfv_external_deep_structured_round_count > 0 && !std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").map(|v| v.trim() == "strict").unwrap_or(false) {
         out.push_str(DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH);
     }
     Some(out)
