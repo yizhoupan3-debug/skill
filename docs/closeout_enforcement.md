@@ -21,7 +21,7 @@ a completion claim without a passing record depends on the enforcement tier
 - **Schema**: `configs/framework/CLOSEOUT_RECORD_SCHEMA.json`
   (`schema_version: closeout-record-v1`)
 - **Evaluator**: `router-rs` Rust binary (module
-  `scripts/router-rs/src/closeout_enforcement.rs`)
+  `core/router-rs/src/closeout_enforcement.rs`)
 - **Owner authority**: `rust-closeout-enforcement`
 
 ## Personal / local opt-out
@@ -191,7 +191,7 @@ CLI / stdio `closeout evaluate` 仍为裁判真源；hook 为投影，见 [`harn
 
 ## Tests
 
-- Module unit tests (13 cases): `scripts/router-rs/src/closeout_enforcement.rs`
+- Module unit tests (13 cases): `core/router-rs/src/closeout_enforcement.rs`
   `mod tests`.
 - Contract + CLI integration tests (4 cases): `tests/policy_contracts.rs`
   `closeout_*`.
@@ -202,7 +202,7 @@ Run:
 
 ```bash
 CARGO_TARGET_DIR=/tmp/skill-cargo-target \
-  cargo test --manifest-path scripts/router-rs/Cargo.toml --bin router-rs closeout_enforcement::
+  cargo test --manifest-path core/router-rs/Cargo.toml --bin router-rs closeout_enforcement::
 
 CARGO_TARGET_DIR=/tmp/skill-cargo-target \
   cargo test --test policy_contracts closeout

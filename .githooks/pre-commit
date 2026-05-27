@@ -22,10 +22,10 @@ fi
 LOG_FILE=$(mktemp "${TMPDIR:-/tmp}/skill-pre-commit.XXXXXX")
 trap 'rm -f "$LOG_FILE"' EXIT
 
-if ! cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- \
+if ! cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- \
   framework skills refresh --framework-root "$PWD" --write >"$LOG_FILE" 2>&1; then
     echo "[pre-commit] framework skills refresh failed; rerun:"
-    echo "  cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"\$PWD\" --write"
+    echo "  cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"\$PWD\" --write"
     tail -n 40 "$LOG_FILE"
     exit 1
 fi

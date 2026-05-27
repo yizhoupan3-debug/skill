@@ -1,7 +1,7 @@
 # RFV  harness 参考（`framework_rfv_loop` / `RFV_LOOP_STATE.json`）
 
 > **范围**：RFV 多轮账本与 lane 契约说明；**不进入** `skills/SKILL_ROUTING_RUNTIME.json` 热路由。  
-> Rust 行为真源：`scripts/router-rs/src/rfv_loop.rs` 及相关 hook 合并逻辑。
+> Rust 行为真源：`core/router-rs/src/rfv_loop.rs` 及相关 hook 合并逻辑。
 
 **不进入热 skill 路由**（`skills/SKILL_ROUTING_RUNTIME.json` 不含本主题的独立 slug）。此处保留 **`framework_rfv_loop` 字段契约、lane 模板与推理深度说明**，供 Autopilot / Team / [`loop`](../skills/loop/SKILL.md) 与工具链引用。
 
@@ -24,8 +24,8 @@
 **GOAL（`GOAL_STATE.json` / `framework_goal_drive`）与 RFV 账本的关系**：
 
 - 同一目录 `artifacts/current/<task_id>/` **可以**先后或交替出现 `GOAL_STATE.json` 与 `RFV_LOOP_STATE.json` 文件。
-- **不能**在同一任务上「双 macro **同时要求续跑**」：`GOAL` 处于需要续跑的 running/drive、且 **`RFV_LOOP_STATE.loop_status=active`** 时，`resolve_task_view` 会得到 **Conflict**（`autopilot_goal_and_rfv_loop_both_active`），真源：[`scripts/router-rs/src/task_state.rs`](../scripts/router-rs/src/task_state.rs) 的 `classify_control_mode`。
-- **`framework_rfv_loop` `operation: start`** 会摘掉同任务的 `GOAL_STATE.json`，真源：`deactivate_goal_for_conflict_with_rfv`（[`scripts/router-rs/src/autopilot_goal.rs`](../scripts/router-rs/src/autopilot_goal.rs)）。
+- **不能**在同一任务上「双 macro **同时要求续跑**」：`GOAL` 处于需要续跑的 running/drive、且 **`RFV_LOOP_STATE.loop_status=active`** 时，`resolve_task_view` 会得到 **Conflict**（`autopilot_goal_and_rfv_loop_both_active`），真源：[`core/router-rs/src/task_state.rs`](../core/router-rs/src/task_state.rs) 的 `classify_control_mode`。
+- **`framework_rfv_loop` `operation: start`** 会摘掉同任务的 `GOAL_STATE.json`，真源：`deactivate_goal_for_conflict_with_rfv`（[`core/router-rs/src/autopilot_goal.rs`](../core/router-rs/src/autopilot_goal.rs)）。
 - 编排上：**二选一作为主控制面**，或先做 RFV 多轮账本、或先做 Autopilot GOAL；需要切换时重建/显式收口另一套账本，避免误认为「可与 RFV active 并行续跑 GOAL macro」。
 
 ### 迁移说明（`prefer_structured_external_research` 默认）

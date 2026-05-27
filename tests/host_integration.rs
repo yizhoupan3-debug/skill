@@ -1839,7 +1839,7 @@ fn project_discovery_ignores_host_private_projection_directories() {
         "--quiet",
         "--manifest-path",
         framework_root
-            .join("scripts/router-rs/Cargo.toml")
+            .join("core/router-rs/Cargo.toml")
             .to_str()
             .unwrap(),
         "--",
@@ -1872,7 +1872,7 @@ fn project_discovery_rejects_ambiguous_framework_like_candidate() {
         "--quiet",
         "--manifest-path",
         framework_root
-            .join("scripts/router-rs/Cargo.toml")
+            .join("core/router-rs/Cargo.toml")
             .to_str()
             .unwrap(),
         "--",

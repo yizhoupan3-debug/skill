@@ -24,7 +24,7 @@ fn pick_router_rs_under_target_dir(base: &Path) -> Option<PathBuf> {
 /// Same shape as `host_integration::cursor_mcp_server_payload` for pre-seeding `mcp.json` in
 /// tests (matches `cargo_router_rs_executable` + `which::which(\"router-rs\")` fallback).
 pub fn browser_mcp_server_payload_like_host(framework_root: &Path) -> Value {
-    let manifest = framework_root.join("scripts/router-rs/Cargo.toml");
+    let manifest = framework_root.join("core/router-rs/Cargo.toml");
     let from_metadata = if manifest.is_file() {
         let output = Command::new("cargo")
             .current_dir(framework_root)
@@ -70,7 +70,7 @@ pub fn browser_mcp_server_payload_like_host(framework_root: &Path) -> Value {
 }
 
 fn router_rs_binary_via_cargo_metadata(repo_root: &Path) -> Option<PathBuf> {
-    let manifest = repo_root.join("scripts/router-rs/Cargo.toml");
+    let manifest = repo_root.join("core/router-rs/Cargo.toml");
     if !manifest.is_file() {
         return None;
     }
@@ -118,7 +118,7 @@ pub fn seed_framework_markers(root: &Path) {
         r#"{"schema_version":"framework-host-projection-narrative-v2","gsd_default_lifecycle_paragraph":"My lifecycle (test seed).","gsd_lifecycle_by_host":{"cursor":"My cursor (test).","codex-cli":"My codex (test)."},"review_findings_only_paragraph":"Review findings-only (test seed)."}"#,
     );
     write_text(
-        &root.join("scripts/router-rs/Cargo.toml"),
+        &root.join("core/router-rs/Cargo.toml"),
         "[package]\nname = \"router-rs-marker\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
     );
     // `ensure_codex_skill_surface` may `read_dir` the skills source root when pinned/runtime
@@ -217,7 +217,7 @@ where
     let router_bin = router_rs_binary().unwrap_or_else(|| {
         panic!(
             "router-rs binary not found; run `cargo build --release --manifest-path {}`",
-            root.join("scripts/router-rs/Cargo.toml").display()
+            root.join("core/router-rs/Cargo.toml").display()
         )
     });
     let mut command = Command::new(router_bin);
@@ -236,7 +236,7 @@ pub fn router_rs_binary() -> Option<PathBuf> {
 }
 
 /// 与仓库根 `.cargo/config.toml` 的 `[build] target-dir` 对齐，避免误用陈旧的
-/// `scripts/router-rs/target/**/router-rs`（未继承 workspace target-dir 时的产物）。
+/// `core/router-rs/target/**/router-rs`（未继承 workspace target-dir 时的产物）。
 fn cargo_target_dir_from_config(root: &Path) -> Option<PathBuf> {
     let path = root.join(".cargo/config.toml");
     let content = fs::read_to_string(path).ok()?;
@@ -281,8 +281,8 @@ fn resolve_router_rs_binary() -> Option<PathBuf> {
         }
     }
     [
-        root.join("scripts/router-rs/target/debug/router-rs"),
-        root.join("scripts/router-rs/target/release/router-rs"),
+        root.join("core/router-rs/target/debug/router-rs"),
+        root.join("core/router-rs/target/release/router-rs"),
         root.join("target/debug/router-rs"),
         root.join("target/release/router-rs"),
     ]

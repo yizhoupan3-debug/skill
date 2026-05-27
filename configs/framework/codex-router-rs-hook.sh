@@ -10,10 +10,10 @@ FAIL_JSON='{"decision":"block","message":"router-rs binary unavailable for Codex
 
 ROUTER_RS_BIN="${ROUTER_RS_BIN:-}"
 for candidate in \
-  "$ROOT/scripts/router-rs/target/release/router-rs" \
-  "$ROOT/scripts/router-rs/target/debug/router-rs" \
-  "$FW/scripts/router-rs/target/release/router-rs" \
-  "$FW/scripts/router-rs/target/debug/router-rs" \
+  "$ROOT/core/router-rs/target/release/router-rs" \
+  "$ROOT/core/router-rs/target/debug/router-rs" \
+  "$FW/core/router-rs/target/release/router-rs" \
+  "$FW/core/router-rs/target/debug/router-rs" \
   "$ROOT/target/release/router-rs" \
   "$ROOT/target/debug/router-rs" \
   "$FW/target/release/router-rs" \

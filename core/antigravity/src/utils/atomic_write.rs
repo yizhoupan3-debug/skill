@@ -32,7 +32,7 @@ fn fsync_parent_dir(_path: &Path) -> Result<(), String> {
 }
 
 /// Write `content` to `tmp_path`, fsync, then rename to `final_path` and fsync parent dir.
-pub(crate) fn write_atomic_text_to_temp(
+pub fn write_atomic_text_to_temp(
     final_path: &Path,
     content: &str,
     tmp_path: &Path,
@@ -69,7 +69,7 @@ pub(crate) fn write_atomic_text_to_temp(
 /// may race to write the same `path` concurrently, **do not** use this helper — derive a unique
 /// `tmp_path` (pid + nanos + nonce) and call [`write_atomic_text_to_temp`] directly. The codex
 /// hook installer takes that route in [`crate::codex_hooks::write_atomic_text`].
-pub(crate) fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
+pub fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NONCE: AtomicU64 = AtomicU64::new(0);
 
@@ -92,7 +92,7 @@ pub(crate) fn write_atomic_text(path: &Path, content: &str) -> Result<(), String
     write_atomic_text_to_temp(path, content, &tmp_path)
 }
 
-pub(crate) fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
+pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NONCE: AtomicU64 = AtomicU64::new(0);
 

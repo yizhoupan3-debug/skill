@@ -86,7 +86,7 @@ network_access: local
 `update-audit` 是 dry-run 清单入口，只读审计，不删除、不改文件。**在框架仓内优先使用源码入口**；只有当 `router-rs framework --help` 已显示 `maint` 时，才直接用已安装二进制：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-audit
+cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-audit
 ```
 
 它输出 JSON，至少包含：
@@ -101,7 +101,7 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update
 仓库外 cwd 时建议显式传目标仓库根；该仓库只需是 git repo，不要求是 skill framework checkout：
 
 ```bash
-cargo run --manifest-path /abs/path/to/framework-repo/scripts/router-rs/Cargo.toml -- framework maint update-audit --repo-root /abs/path/to/repo
+cargo run --manifest-path /abs/path/to/framework-repo/core/router-rs/Cargo.toml -- framework maint update-audit --repo-root /abs/path/to/repo
 ```
 
 `--framework-root` 仍作为旧脚本兼容别名保留，但不再代表 audit 只能跑在 framework 仓库。
@@ -113,7 +113,7 @@ cargo run --manifest-path /abs/path/to/framework-repo/scripts/router-rs/Cargo.to
 完整框架一条龙仍可运行：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
 等价于：`refresh-host-projections` → `framework skills refresh --write` → 默认离线契约测试 → **全量** `generated-artifacts-status`（drift-gate，`ok: true`）→ 可选 host skill publish。
@@ -121,9 +121,9 @@ cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update
 日常快检（**不**替代提交前 drift-gate）：
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
+cargo run --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
 # 或显式：
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration generated-artifacts-status --framework-root "$PWD" --skip-generator-run
+cargo run --manifest-path core/router-rs/Cargo.toml -- framework host-integration generated-artifacts-status --framework-root "$PWD" --skip-generator-run
 ```
 
 默认离线套件包括：
@@ -141,13 +141,13 @@ cargo test --test codex_aggregator_rustification
 可选外网套件：
 
 ```bash
-ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1 cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
 可选全局宿主投影：
 
 ```bash
-ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot
+ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot
 ```
 
 ## 删除策略

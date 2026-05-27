@@ -12,7 +12,7 @@
 
 - **先读**：[`harness_architecture.md`](harness_architecture.md) **§5–§6**，再读本文件 **§0** 与 **[§3.1](#31-可复制执行清单工程顺序)**。
 - **再改**：`RUNTIME_REGISTRY` → hooks 模块 → `dispatch` → `host_integration` → L4 → 测试（详见 §3.1）。
-- **跑测**：`cargo test --manifest-path scripts/router-rs/Cargo.toml`；改动根 [`tests/`](../tests/) 时再 `cargo test`。
+- **跑测**：`cargo test --manifest-path core/router-rs/Cargo.toml`；改动根 [`tests/`](../tests/) 时再 `cargo test`。
 - **入口同步**：`router-rs framework sync-entrypoints --repo-root "$PWD"`（或兼容别名 `router-rs codex sync`）。
 
 ---
@@ -25,7 +25,7 @@
 
 ## 0.1 Countable REVIEW_GATE deep review lanes
 
-**权威真源**（[`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，[`runtime_registry/mod.rs`](../scripts/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export），ADR-005）：
+**权威真源**（[`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，[`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export），ADR-005）：
 
 | 字段 | 消费宿主 | 含义 |
 |------|----------|------|
@@ -79,15 +79,15 @@
 
 | 职责 | 仓库路径 |
 |------|----------|
-| Cursor hook | [`cursor_hooks/mod.rs`](../scripts/router-rs/src/hosts/cursor_hooks/mod.rs) |
-| Codex hook | [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs) |
-| Claude Code hook | [`claude_hooks.rs`](../scripts/router-rs/src/hosts/claude_hooks.rs) |
+| Cursor hook | [`cursor_hooks/mod.rs`](../core/router-rs/src/hosts/cursor_hooks/mod.rs) |
+| Codex hook | [`codex_hooks/mod.rs`](../core/router-rs/src/hosts/codex_hooks/mod.rs) |
+| Claude Code hook | [`claude_hooks.rs`](../core/router-rs/src/hosts/claude_hooks.rs) |
 | Claude Desktop MCP | `claude_desktop_hooks.rs` / `router-rs claude-desktop agent` |
-| entrypoint sync | [`host_entrypoint_sync.rs`](../scripts/router-rs/src/host_entrypoint_sync.rs) |
-| install / 投影 | [`host_integration.rs`](../scripts/router-rs/src/host_integration.rs) |
-| CLI 分发 | [`dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs) |
+| entrypoint sync | [`host_entrypoint_sync.rs`](../core/router-rs/src/host_entrypoint_sync.rs) |
+| install / 投影 | [`host_integration.rs`](../core/router-rs/src/host_integration.rs) |
+| CLI 分发 | [`dispatch.rs`](../core/router-rs/src/cli/dispatch.rs) |
 | 闭集 id / install_tool | `configs/framework/RUNTIME_REGISTRY.json` |
-| review_gate loader | [`runtime_registry/mod.rs`](../scripts/router-rs/src/runtime_registry/mod.rs) |
+| review_gate loader | [`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) |
 | lifecycle 文案 | [`host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) |
 | 生成物 manifest | [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
 
@@ -105,10 +105,10 @@
 
 | 阶段 | 主要落点 |
 |------|----------|
-| 注册表 | `RUNTIME_REGISTRY.json`，[`tests/common/mod.rs`](../tests/common/mod.rs)，[`framework_host_targets.rs`](../scripts/router-rs/src/framework_host_targets.rs) |
-| L3 入口 | `hosts/<host>_hooks/`（如 [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs)）或 `<host>_hooks.rs`，[`main.rs`](../scripts/router-rs/src/main.rs) |
-| CLI 分发 | [`dispatch_body.txt`](../scripts/router-rs/src/cli/dispatch_body.txt)，[`dispatch.rs`](../scripts/router-rs/src/cli/dispatch.rs) |
-| 安装 / 投影 | [`host_integration.rs`](../scripts/router-rs/src/host_integration.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
+| 注册表 | `RUNTIME_REGISTRY.json`，[`tests/common/mod.rs`](../tests/common/mod.rs)，[`framework_host_targets.rs`](../core/router-rs/src/framework_host_targets.rs) |
+| L3 入口 | `hosts/<host>_hooks/`（如 [`codex_hooks/mod.rs`](../core/router-rs/src/hosts/codex_hooks/mod.rs)）或 `<host>_hooks.rs`，[`main.rs`](../core/router-rs/src/main.rs) |
+| CLI 分发 | [`dispatch_body.txt`](../core/router-rs/src/cli/dispatch_body.txt)，[`dispatch.rs`](../core/router-rs/src/cli/dispatch.rs) |
+| 安装 / 投影 | [`host_integration.rs`](../core/router-rs/src/host_integration.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
 | L4 + 验证 | 宿主 `hooks.json`，[`tests/host_integration.rs`](../tests/host_integration.rs)，[`tests/policy_contracts.rs`](../tests/policy_contracts.rs) |
 
 - [ ] **`RUNTIME_REGISTRY.json`**：`host_targets.supported`、`install_tool`、`host_entrypoints` 与现网对称。
@@ -118,25 +118,25 @@
 - [ ] **`dispatch_body.txt`** / **`dispatch.rs`**：`router-rs <host> hook <event> …`。
 - [ ] **`host_integration.rs`**：install + 投影 + `GENERATED_ARTIFACTS.json`。
 - [ ] **L4 样例**：argv + 超时 + stdin 透传，shell 不复制 L3。
-- [ ] **测试**：`cargo test --manifest-path scripts/router-rs/Cargo.toml`；根 `cargo test`。
+- [ ] **测试**：`cargo test --manifest-path core/router-rs/Cargo.toml`；根 `cargo test`。
 - [ ] **`AGENTS.md`**：Codex 投影链变更时补一句权威分层说明。
 
 ### 3.2 Maint / supervisor / profile 硬编码宿主耦合盘点
 
 | 位置 | 硬编码内容 | 建议 |
 |------|------------|------|
-| [`framework_maint.rs`](../scripts/router-rs/src/framework_maint.rs) | `refresh_host_projections` 遍历 installable 宿主 | 新宿主提供 maint verifier 或 `installable=false` |
-| [`session_supervisor.rs`](../scripts/router-rs/src/session_supervisor.rs) | **Codex driver only** | 新 CLI 宿主补 driver 前 registry 标记 `session_supervisor_driver=unsupported` |
-| [`framework_profile.rs`](../scripts/router-rs/src/framework_profile.rs) | `host_payloads` 从 `host_projections` 派生 | 新宿主补 `host_projections` + contract tests |
-| [`hook_posttool_normalize.rs`](../scripts/router-rs/src/utils/hook_posttool_normalize.rs) | Cursor `postToolUse` → 共享 append 形状 | Codex 直连 append；Cursor 专有分支在 `cursor_hooks` |
+| [`framework_maint.rs`](../core/router-rs/src/framework_maint.rs) | `refresh_host_projections` 遍历 installable 宿主 | 新宿主提供 maint verifier 或 `installable=false` |
+| [`session_supervisor.rs`](../core/router-rs/src/session_supervisor.rs) | **Codex driver only** | 新 CLI 宿主补 driver 前 registry 标记 `session_supervisor_driver=unsupported` |
+| [`framework_profile.rs`](../core/router-rs/src/framework_profile.rs) | `host_payloads` 从 `host_projections` 派生 | 新宿主补 `host_projections` + contract tests |
+| [`hook_posttool_normalize.rs`](../core/router-rs/src/utils/hook_posttool_normalize.rs) | Cursor `postToolUse` → 共享 append 形状 | Codex 直连 append；Cursor 专有分支在 `cursor_hooks` |
 
 ### 3.3 Host entrypoint sync engine / provider 边界
 
-[`host_entrypoint_sync.rs`](../scripts/router-rs/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md`）在 [`codex_hooks/mod.rs`](../scripts/router-rs/src/hosts/codex_hooks/mod.rs)。hook 编译期 embed **`AGENTS.md` + `AGENTS_CODEX.md`**（见 `policy_embed.rs`）；**不** materialize 或 overwrite 仓库根 [`AGENTS.md`](../AGENTS.md)。`router-rs codex sync` 为兼容 CLI 名。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
+[`host_entrypoint_sync.rs`](../core/router-rs/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md`）在 [`codex_hooks/mod.rs`](../core/router-rs/src/hosts/codex_hooks/mod.rs)。hook 编译期 embed **`AGENTS.md` + `AGENTS_CODEX.md`**（见 `policy_embed.rs`）；**不** materialize 或 overwrite 仓库根 [`AGENTS.md`](../AGENTS.md)。`router-rs codex sync` 为兼容 CLI 名。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
 
 ### 3.4 PostTool / 终端证据归一化
 
-Codex `PostToolUse` 直连 [`try_append_post_tool_shell_evidence`](../scripts/router-rs/src/framework_runtime/mod.rs)；Cursor 经 [`hook_posttool_normalize.rs`](../scripts/router-rs/src/utils/hook_posttool_normalize.rs) `synthetic_post_tool_evidence_shape` 合成同一形状再 append。**`hook_common::tool_input_value_from_map`** 单层 JSON 键优先级：`tool_input` → `input` → `arguments` → `parameters`。
+Codex `PostToolUse` 直连 [`try_append_post_tool_shell_evidence`](../core/router-rs/src/framework_runtime/mod.rs)；Cursor 经 [`hook_posttool_normalize.rs`](../core/router-rs/src/utils/hook_posttool_normalize.rs) `synthetic_post_tool_evidence_shape` 合成同一形状再 append。**`hook_common::tool_input_value_from_map`** 单层 JSON 键优先级：`tool_input` → `input` → `arguments` → `parameters`。
 
 ---
 

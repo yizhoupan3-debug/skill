@@ -29,7 +29,7 @@ Antigravity 作为交互式智能体，其 Harness 和任务管理的核心入�
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| 规划流与项目投影 | 宿主交互中遵循 Planning Mode / `/implementx` 等技能 | [`host_integration.rs`](../../scripts/router-rs/src/host_integration.rs) / [`framework_maint.rs`](../../scripts/router-rs/src/framework_maint.rs) | `artifacts/current/` 与其它宿主共用；`goal_state_manage` / `closeout_gate` / `framework_digest` |
+| 规划流与项目投影 | 宿主交互中遵循 Planning Mode / `/implementx` 等技能 | [`host_integration.rs`](../../core/router-rs/src/host_integration.rs) / [`framework_maint.rs`](../../core/router-rs/src/framework_maint.rs) | `artifacts/current/` 与其它宿主共用；`goal_state_manage` / `closeout_gate` / `framework_digest` |
 | 投影安装 | 一次性接入 | `router-rs framework host-integration install --to antigravity` | 项目 `.gemini/antigravity/rules/framework.md`（短指针）、`.gemini/settings.json` 与 `.gemini/mcp.json` |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
@@ -67,11 +67,11 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 - **环境注入与安装**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
     framework host-integration install --to antigravity --repo-root "$PWD"
   ```
 - **宿主状态自检**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
     framework host-integration status
   ```

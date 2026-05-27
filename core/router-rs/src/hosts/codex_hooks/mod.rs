@@ -44,7 +44,7 @@ const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 pub(crate) const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str =
     ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
-    "cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"";
+    "cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"";
 pub(crate) const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
 pub(crate) const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub(crate) const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
@@ -59,7 +59,7 @@ const PROTECTED_GENERATED_PATHS: [&str; 5] = [
 const PROTECTED_GENERATED_PREFIXES: [&str; 3] = [
     "skills/SKILL_",
     "configs/framework/RUNTIME_REGISTRY.json",
-    "scripts/router-rs/",
+    "core/router-rs/",
 ];
 const CODEX_REVIEW_SUBAGENT_TOOL_NAMES: [&str; 6] = [
     "task",
@@ -1260,7 +1260,7 @@ pub fn build_codex_hook_manifest() -> Value {
     }
     json!({
         "version": 1,
-        "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
+        "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
         "hooks": hooks,
     })
 }
@@ -1299,15 +1299,15 @@ Feature enablement uses `[features] hooks = true`; older public examples may sti
 Hook state is transient and lives under `.codex/hook-state/` in the current repository while the session is active. Stable keys require `session_id` / `conversation_id` / `thread_id` in hook payloads (snake_case **or** camelCase, e.g. `sessionId`) or `CODEX_SESSION_ID` / `CODEX_CONVERSATION_ID` in the environment; otherwise hook-state may not persist across invocations (router-rs logs a one-time stderr warning per process).\n\n\
 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`** defaults **on** (`unset` = require stable keys). Set `0`/`false`/`off`/`no` for legacy payloads without `session_id` / env fallbacks (`SessionStart` is unaffected). Without a stable id and with strict mode off, hook-state uses a deterministic fallback keyed by **repo + cwd** (optional `ROUTER_RS_CODEX_HOOK_STATE_SALT`), not a single global file per machine.\n\n\
 **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** (default on): deep lane + omitted `fork_context` counts as independent reviewer evidence on PostTool. Set `0`/`false`/`off`/`no` to require explicit JSON `fork_context: false`.\n\n\
-Generated hook commands resolve `router-rs` in order: **`ROUTER_RS_BIN`** when set to an executable path, then `scripts/router-rs/target/{release,debug}/router-rs`, then repo `target/{release,debug}/router-rs`, finally `command -v router-rs` (last resort — prefer pinning `ROUTER_RS_BIN` or building into the repo). If the binary is missing, **all** lifecycle hooks fail closed with a JSON `decision:block` line.\n\n\
+Generated hook commands resolve `router-rs` in order: **`ROUTER_RS_BIN`** when set to an executable path, then `core/router-rs/target/{release,debug}/router-rs`, then repo `target/{release,debug}/router-rs`, finally `command -v router-rs` (last resort — prefer pinning `ROUTER_RS_BIN` or building into the repo). If the binary is missing, **all** lifecycle hooks fail closed with a JSON `decision:block` line.\n\n\
 Merged `additionalContext` for SessionStart/UserPromptSubmit is capped by UTF-8 **byte** length (not Unicode character count). Tune with `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` or legacy `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` (same semantics; clamped 256–8192; default 640 bytes).\n\n\
 Successful Codex hook processes always print one JSON object line on stdout (including `{}` when there is no hook-specific output).\n\n\
 Stop hook blocks when `.codex/hook-state` cannot be read or parsed (non-recoverable JSON/IO): fix permissions or delete corrupted state files before continuing.\n\n\
-Use `cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
+Use `cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint install-codex-user-hooks` when you want to install the same Codex hook projection into a user-level `~/.codex/hooks.json`. The installer keeps existing hooks and idempotently appends the managed command hook without replacing unrelated handlers.\n\n\
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"\n\
+cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"\n\
 ```\n\n\
 Steady-state documentation map: `docs/README.md`.\n"
         .to_string()
@@ -1373,8 +1373,8 @@ fn build_hook_binary_preamble(
     command.push_str(&format!(
         "RS_BIN=\"\"; \
 if [ -n \"${{ROUTER_RS_BIN:-}}\" ] && [ -x \"${{ROUTER_RS_BIN}}\" ]; then RS_BIN=\"${{ROUTER_RS_BIN}}\"; \
-elif [ -x \"${project_var}/scripts/router-rs/target/release/router-rs\" ]; then RS_BIN=\"${project_var}/scripts/router-rs/target/release/router-rs\"; \
-elif [ -x \"${project_var}/scripts/router-rs/target/debug/router-rs\" ]; then RS_BIN=\"${project_var}/scripts/router-rs/target/debug/router-rs\"; \
+elif [ -x \"${project_var}/core/router-rs/target/release/router-rs\" ]; then RS_BIN=\"${project_var}/core/router-rs/target/release/router-rs\"; \
+elif [ -x \"${project_var}/core/router-rs/target/debug/router-rs\" ]; then RS_BIN=\"${project_var}/core/router-rs/target/debug/router-rs\"; \
 elif [ -x \"${project_var}/target/release/router-rs\" ]; then RS_BIN=\"${project_var}/target/release/router-rs\"; \
 elif [ -x \"${project_var}/target/debug/router-rs\" ]; then RS_BIN=\"${project_var}/target/debug/router-rs\"; \
 else RS_BIN=\"$(command -v router-rs 2>/dev/null || true)\"; fi; "
@@ -3050,7 +3050,7 @@ mod tests {
             run_codex_review_subagent_gate(repo, payload)
         }
 
-        const TEST_COMPACT_FINDING: &str = "[P1] scripts/router-rs/src/hosts/codex_hooks/mod.rs:1 — wave-2 compact gate clear evidence line";
+        const TEST_COMPACT_FINDING: &str = "[P1] core/router-rs/src/hosts/codex_hooks/mod.rs:1 — wave-2 compact gate clear evidence line";
 
         #[test]
         fn operator_inject_off_skips_session_start_additional_context() {

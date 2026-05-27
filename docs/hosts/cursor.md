@@ -25,12 +25,12 @@
 
 ## Hook 事件矩阵
 
-**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../../MIGRATION.md)）。项目 env：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env)；`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../../scripts/router-rs/src/hosts/cursor_hooks/handlers.rs)）。
+**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../../MIGRATION.md)）。项目 env：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env)；`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../../core/router-rs/src/hosts/cursor_hooks/handlers.rs)）。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；Stop 上 `REVIEW_GATE` 重复硬提示上限见 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
-| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../scripts/router-rs/src/hosts/cursor_hooks/mod.rs) | **my-light Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 my-light 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
+| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../core/router-rs/src/hosts/cursor_hooks/mod.rs) | **my-light Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 my-light 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
 | **SessionStart** | SessionStart | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` 单行（`ROUTER_RS_OPERATOR_INJECT=0` 时为空）；**无** digest / 无 pointer hint |
 | **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | **metadata-only** `generated-artifacts-status`；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时打印 WARN |
 
@@ -59,7 +59,7 @@
 
 **PostToolUse timeout**：门控事件默认 **20s**（`hooks.json`）；`postToolUse` 超时会导致 review multiset 不完整 → Stop 循环。慢盘先查 hook-state 体积与锁 stderr（`hook-state lock held`）。
 
-**router-rs 缺失**：critical 事件 **fail-closed**（`continue:false` / 工具拒绝）；确保 `scripts/router-rs/target/release/router-rs` 存在或 `ROUTER_RS_BIN` 指向二进制。
+**router-rs 缺失**：critical 事件 **fail-closed**（`continue:false` / 工具拒绝）；确保 `core/router-rs/target/release/router-rs` 存在或 `ROUTER_RS_BIN` 指向二进制。
 
 **SESSION_CLOSE_STYLE**：每轮 Stop 可能注入软提示；不需要时设 `ROUTER_RS_OPERATOR_INJECT=0`。
 
@@ -78,7 +78,7 @@
   - **说明**：上述 project L4 面 **不在** `GENERATED_ARTIFACTS` drift-gate 内（手维护）；`framework host-integration install --to cursor` **不**托管 hooks。完整清单见 [`harness_architecture.md`](../harness_architecture.md) §2.3。
 - **环境安装命令**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
     framework host-integration install --to cursor --scope user
   ```
 
@@ -114,11 +114,11 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 1. **构建 Release 二进制**（优化文件体积与加载速度）：
    ```bash
-   CARGO_TARGET_DIR="$PWD/scripts/router-rs/target" \
-     cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+   CARGO_TARGET_DIR="$PWD/core/router-rs/target" \
+     cargo build --release --manifest-path core/router-rs/Cargo.toml
    ```
 2. **Launcher 探测顺序**：
-   仓库 `scripts/router-rs/target/release` $\rightarrow$ `/tmp/skill-cargo-target/release` $\rightarrow$ debug $\rightarrow$ `PATH`。
+   仓库 `core/router-rs/target/release` $\rightarrow$ `/tmp/skill-cargo-target/release` $\rightarrow$ debug $\rightarrow$ `PATH`。
 3. **项目环境变量**：
    `beforeSubmitPrompt` 支持通过 `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 自动注入子代理继承主会话模型的单行 nudge 机制。
 
@@ -126,13 +126,13 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 - **校验 Cursor Hooks**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
   ```
 - **校验集成状态**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration status
   ```
 - **运行集成测试**：
   ```bash
-  cargo test --manifest-path scripts/router-rs/Cargo.toml host_integration
+  cargo test --manifest-path core/router-rs/Cargo.toml host_integration
   ```

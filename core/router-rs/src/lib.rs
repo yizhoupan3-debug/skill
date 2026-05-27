@@ -3,7 +3,10 @@
 
 mod autopilot_goal;
 pub mod goal_drive {
-    pub use crate::autopilot_goal::*;
+    pub use antigravity_core::state_manager::{
+        framework_autopilot_goal, framework_goal_drive, GOAL_STATE_FILENAME,
+        read_active_task_id, read_focus_task_id, read_primary_task_id,
+    };
 }
 mod background_state;
 mod browser_mcp;
@@ -59,7 +62,21 @@ mod session_supervisor;
 mod skill_repo;
 mod stdio_transport;
 mod task_command;
-pub(crate) mod task_state;
+pub(crate) use antigravity_core::task_state;
+pub(crate) use antigravity_core::task_state_aggregate;
+pub(crate) use antigravity_core::task_ledger;
+pub(crate) use antigravity_core::step_ledger;
+
+mod path_guard {
+    pub use antigravity_core::utils::path_guard::*;
+}
+mod atomic_write {
+    pub use antigravity_core::utils::atomic_write::*;
+}
+mod task_write_lock {
+    pub use antigravity_core::utils::task_write_lock::*;
+}
+
 mod trace_runtime;
 
 #[cfg(test)]

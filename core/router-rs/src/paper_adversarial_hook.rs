@@ -275,7 +275,7 @@ mod tests {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
-            .expect("repo root above scripts/router-rs/")
+            .expect("repo root above core/router-rs/")
             .to_path_buf();
         let on_disk = std::fs::read_to_string(repo_root.join(REL_PATH))
             .expect("PAPER_ADVERSARIAL_HOOK.txt readable");

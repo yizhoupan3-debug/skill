@@ -4409,7 +4409,7 @@ fn main_thread_compact_review_does_not_clear_gate_without_subagent() {
         "session_id": sid,
         "cwd": FRAMEWORK_HARNESS_TEST_CWD,
         "payload": {
-            "response": "[P1] scripts/router-rs/src/cursor_hooks/handlers.rs:3000 — Stop 双信号 — 续跑与 REVIEW_GATE 并存"
+            "response": "[P1] core/router-rs/src/cursor_hooks/handlers.rs:3000 — Stop 双信号 — 续跑与 REVIEW_GATE 并存"
         }
     });
     let _ = dispatch_cursor_hook_event(&repo, "afterAgentResponse", &payload);
@@ -4443,7 +4443,7 @@ fn main_thread_compact_stop_only_does_not_clear_gate_without_subagent() {
         "session_id": sid,
         "cwd": FRAMEWORK_HARNESS_TEST_CWD,
         "payload": {
-            "response": "[P1] scripts/router-rs/src/cursor_hooks/handlers.rs:3000 — Stop-only compact path — substantive finding line for gate clear"
+            "response": "[P1] core/router-rs/src/cursor_hooks/handlers.rs:3000 — Stop-only compact path — substantive finding line for gate clear"
         }
     });
     let out = dispatch_cursor_hook_event(&repo, "stop", &stop_payload);
@@ -5993,7 +5993,7 @@ fn english_concurrent_alone_no_arm() {
 #[test]
 fn resolve_cursor_hook_repo_root_finds_hooks_from_payload_cwd() {
     let root = fresh_repo();
-    let nested = root.join("scripts/router-rs");
+    let nested = root.join("core/router-rs");
     fs::create_dir_all(&nested).expect("mkdir nested");
     let payload = json!({
         "session_id": "rk",

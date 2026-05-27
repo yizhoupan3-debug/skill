@@ -3,7 +3,7 @@
 //! Design: `docs/task_state_unified_resolve.md`. **Writes** serialize via `task_write_lock`
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `CursorContinuityFrame`).
 
-use crate::state_manager::{goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task, read_goal_state_pair_if_valid, read_goal_state_for_hydration, read_goal_state_for_hydration_from_pointer_ids, read_goal_state_for_diagnostics_scan, read_task_pointer_pair, goal_state_path_for_task};
+use crate::state_manager::{goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::state_manager::{read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured};
 
 use serde::Serialize;
@@ -1212,7 +1212,9 @@ mod tests {
             .lock()
             .expect("depth score mode env mutex poisoned");
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
+        let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
         std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict");
+        std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1");
         let tmp = unique_repo("ext-deep-strict-note");
         let tid = "t-ext-note";
         write_active(&tmp, tid);
@@ -1242,6 +1244,10 @@ mod tests {
         match prior {
             Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
             None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+        }
+        match prior_hint {
+            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p),
+            None => std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT"),
         }
         let _ = fs::remove_dir_all(&tmp);
     }

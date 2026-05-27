@@ -85,7 +85,7 @@ pub fn acquire_task_ledger_lock_with_timeout(
 }
 
 /// Append one ledger row while the caller already holds L1 (`apply_task_ledger_mutation`).
-pub(crate) fn append_transaction_assuming_l1_held(
+pub fn append_transaction_assuming_l1_held(
     repo_root: &Path,
     task_id: &str,
     tx: LedgerTransaction,

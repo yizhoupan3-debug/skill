@@ -1288,7 +1288,7 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, hos
                  1) Start from AGENTS.md.\n\
                  2) Route via {source_rel}.\n\
                  3) Read only the matched skill_path.\n\n\
-                 Framework root: scripts/router-rs/"
+                 Framework root: core/router-rs/"
             )
         }
         "review_gate" => {

@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 antigravity-core = { path = "../../core/antigravity" }
-router-rs = { path = "../../scripts/router-rs" }
+router-rs = { path = "../../core/router-rs" }

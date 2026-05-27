@@ -459,7 +459,7 @@ async function resolveRouterRsCommand(): Promise<RouterRsCommand> {
   }
 
   throw new Error(
-    'browser-mcp requires a prebuilt router-rs binary; build scripts/router-rs before using attached runtime replay.',
+    'browser-mcp requires a prebuilt router-rs binary; build core/router-rs before using attached runtime replay.',
   );
 }
 

@@ -53,6 +53,6 @@ Do not share one lock file between Cursor and Codex. See `task_write_lock.rs` an
 
 ## Related
 
-- `scripts/router-rs/src/task_write_lock.rs` (L1 contract)
+- `core/router-rs/src/task_write_lock.rs` (L1 contract)
 - `artifacts/current/hook-perf-deadlock/ARCHITECTURE.md`
 - ADR: `docs/adr/hook-daemon.md` (warm process — not implemented by default)

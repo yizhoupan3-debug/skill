@@ -21,7 +21,7 @@ const STAGE_FINALIZE: &str = "finalize";
 const STALE_STATE_DAYS: i64 = 10;
 const RECENT_ACTIVITY_DAYS: i64 = 14;
 const FALLBACK_ACTIVITY_LIMIT: usize = 3;
-const TEMPLATES_DIR: &str = "scripts/autoresearch-rs/templates";
+const TEMPLATES_RELATIVE: &str = "core/autoresearch-rs/templates";
 const DEFAULT_RESEARCH_RESULT_LIMIT: usize = 5;
 const DEFAULT_EXTERNAL_TIMEOUT_SECS: u64 = 20;
 const SEMANTIC_SCHOLAR_BASE_URL: &str = "https://api.semanticscholar.org/graph/v1/paper/search";
@@ -1127,8 +1127,15 @@ fn repo_root() -> Result<PathBuf> {
     Ok(current)
 }
 
+fn templates_dir() -> Result<PathBuf> {
+    if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
+        return Ok(PathBuf::from(manifest).join("templates"));
+    }
+    Ok(repo_root()?.join(TEMPLATES_RELATIVE))
+}
+
 fn template_path(name: &str) -> Result<PathBuf> {
-    Ok(repo_root()?.join(TEMPLATES_DIR).join(name))
+    Ok(templates_dir()?.join(name))
 }
 
 fn load_template(name: &str) -> Result<String> {

@@ -16,18 +16,18 @@
   适合：需要 **Cursor/Codex/Claude hooks**、`.cursor/hook-state` 门控、连续性 `artifacts/current/`、证据索引等。必须先 **构建并安装 `router-rs`**，再按宿主配置 hooks；关键事件在二进制缺失时常 **fail-closed**（见下文 Codex hooks 解析顺序）。  
   **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 `AGENTS.md` → **Codex：`AGENTS.md` 构建快照（策略 A）**。  
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
-  `cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
+  `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
 
 ## 这套系统包含什么
 
 - `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
-  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
+  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
 - `docs/README.md`：契约与分层文档索引（阅读顺序、主题表、`target-dir`/hook 清理边界）。
 - `docs/harness_architecture.md`：连续性控制面 **L1–L5** 上层设计（证据流、续跑流、扩展规则）。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。
 - `skills/SKILL_ROUTING_RUNTIME.json`：运行时路由入口。Codex 应先查这个文件，再按命中结果读取对应 skill。
 - `skills/SKILL_MANIFEST.json`、`skills/SKILL_ROUTING_INDEX.md`、`skills/SKILL_ROUTING_REGISTRY.md` 等：由编译器生成的路由/索引产物。
-- `scripts/router-rs/`：`framework skills validate|refresh` 刷新 skill 路由产物。
+- `core/router-rs/`：`framework skills validate|refresh` 刷新 skill 路由产物。
 - `tests/`：skill 策略和路由约束测试。
 - `.github/workflows/`：GitHub 上的自动校验。
 
@@ -114,7 +114,7 @@ cd codex-skill-system
 进入仓库后运行：
 
 ```powershell
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- `
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- `
   framework skills refresh --framework-root . --write
 ```
 
@@ -123,7 +123,7 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- `
 再运行测试：
 
 ```powershell
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate --framework-root .
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework skills validate --framework-root .
 cargo test --test policy_contracts
 ```
 
@@ -159,8 +159,8 @@ codex
 - Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
 - 本仓库在 `.cursor/hooks.json` 注册 **7 个** hook 事件（减法闭集，见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)），经 [`configs/framework/cursor-router-rs-hook.sh`](configs/framework/cursor-router-rs-hook.sh) 调用 `router-rs cursor hook`；launcher **优先仓库 release**（~8MB），并 `source` [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。关键门控 fail-closed；`postToolUse` 对 `Read` 等走 Rust fast-path。`.cursor/hook-state/` 存门控状态。
 - 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
-- Codex `.codex/hooks.json` 包装脚本解析 `router-rs` 的顺序为：环境变量 **`ROUTER_RS_BIN`**（可执行绝对路径）→ 仓库 `scripts/router-rs/target/{release,debug}` → 仓库根 `target/{release,debug}` → **`command -v router-rs`**（最后手段；生产环境建议固定前两档之一）。缺少二进制时各生命周期事件一律 fail-closed（单行 JSON `decision:block`）。`.codex/hook-state/` 跨事件串联依赖 stdin 常见字段（`session_id` 等，含 camelCase）或 **`CODEX_SESSION_ID`** / **`CODEX_CONVERSATION_ID`**；需要硬前置时可设 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=1`**，在无稳定键时阻断 `UserPromptSubmit`/`PostToolUse`/`Stop`（详见 `docs/harness_architecture.md` 环境变量表）。
-- 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `scripts/router-rs/src/hosts/cursor_hooks/` 内 handlers），与 Codex 不完全相同。
+- Codex `.codex/hooks.json` 包装脚本解析 `router-rs` 的顺序为：环境变量 **`ROUTER_RS_BIN`**（可执行绝对路径）→ 仓库 `core/router-rs/target/{release,debug}` → 仓库根 `target/{release,debug}` → **`command -v router-rs`**（最后手段；生产环境建议固定前两档之一）。缺少二进制时各生命周期事件一律 fail-closed（单行 JSON `decision:block`）。`.codex/hook-state/` 跨事件串联依赖 stdin 常见字段（`session_id` 等，含 camelCase）或 **`CODEX_SESSION_ID`** / **`CODEX_CONVERSATION_ID`**；需要硬前置时可设 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=1`**，在无稳定键时阻断 `UserPromptSubmit`/`PostToolUse`/`Stop`（详见 `docs/harness_architecture.md` 环境变量表）。
+- 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `core/router-rs/src/hosts/cursor_hooks/` 内 handlers），与 Codex 不完全相同。
 - Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
 **其它仓库一键接入（跨工作区）**
@@ -168,7 +168,7 @@ codex
 - 在目标项目根运行：`/path/to/skill/scripts/cursor-bootstrap-framework.sh --framework-root /path/to/skill`（或先 `export SKILL_FRAMEWORK_ROOT=/path/to/skill`）。若脚本不可执行，先：`chmod +x /path/to/skill/scripts/cursor-bootstrap-framework.sh`。
 - 脚本写入 `.cursor/hooks.json`，模板真源为 `configs/framework/cursor-hooks.workspace-template.json`（通过 `configs/framework/cursor-router-rs-hook.sh` 探测 `router-rs`，`--repo-root` 用当前 Cursor 工作区）。
 - 将 `skills/` 与 `AGENTS.md` 符号链接到框架仓库；需要与框架根目录等价的托管规则时加 `--with-cursor-rules`；需要与框架根目录共享 `configs/framework/*`（如 `HARNESS_OPERATOR_NUDGES.json`、`PAPER_ADVERSARIAL_HOOK.txt` 等磁盘真源）时加 **`--with-configs`**（否则相关 hooks 仍可用，但会回落到编译期内置默认，不等价于「改 JSON/txt 即生效」）。
-- 安装二进制：`cargo install --path /path/to/skill/scripts/router-rs`；若可执行文件名不是默认，在环境里设 `ROUTER_RS_BIN`（hooks 内展开）。
+- 安装二进制：`cargo install --path /path/to/skill/core/router-rs`；若可执行文件名不是默认，在环境里设 `ROUTER_RS_BIN`（hooks 内展开）。
 - 与「本仓库 embedded」模式对照：本仓库 `.cursor/hooks.json` 与跨仓模板都走同一个 launcher；跨仓通常依赖 PATH / `ROUTER_RS_BIN` 或 `SKILL_FRAMEWORK_ROOT`。
 - **`router-rs framework …` 维护命令**：在目标仓库目录执行时，若当前目录不是框架检出根，需设置 **`SKILL_FRAMEWORK_ROOT`**（或传 `--framework-root`），否则会报无法解析 `framework_root`（实现会尝试从已安装二进制路径、`CURSOR_WORKSPACE_ROOT` 等推断，不可靠时以环境变量为准）。
 - Hook 减法与内存：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)「Hook 减法闭集」；恢复已删 Cursor 事件见 [`MIGRATION.md`](MIGRATION.md)。
@@ -176,7 +176,7 @@ codex
 ### Claude Code 侧（项目级）
 
 - Hooks：`.claude/settings.json` 合并 **4 事件**（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）→ [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](configs/framework/claude-router-rs-hook.env)）。
-- 安装：`cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --to claude --scope project`（详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)）。
+- 安装：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude --scope project`（详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)）。
 
 **别的目录验收清单（Cursor 工作区 = 目标项目根）**
 
@@ -185,7 +185,7 @@ codex
 3. **可选符号链接**：按需存在 `.cursor/rules`、`configs` 分别指向框架（`--with-cursor-rules`、`--with-configs`）。
 4. **打开方式**：在 Cursor 中「打开文件夹」选**目标项目根**（含 `.cursor/hooks.json` 的那一层），不要只打开子目录，否则可能找不到 hooks 或 `repo-root` 解析偏离预期。
 5. **常见失败**：hooks 未触发（工作区根不对、或 `.cursor/hooks.json` 缺失）；`router-rs` 未安装或不在 PATH（关键门控事件 fail-closed，telemetry 事件 fail-open）；与 embedded 模式混用（目标仓仍手写 `.../target/release/router-rs` 但从未在该路径构建）。
-6. **（可选）强制技能策略根**：仅在从子目录启动、且父级探测不符合预期时，设置 `CURSOR_PROJECT_ROOT` 或 `SKILL_REPO_ROOT` 指向含 `skills/SKILL_ROUTING_RUNTIME.json` 与 `AGENTS.md` 的目录（实现见 `scripts/router-rs/src/skill_repo.rs`）。
+6. **（可选）强制技能策略根**：仅在从子目录启动、且父级探测不符合预期时，设置 `CURSOR_PROJECT_ROOT` 或 `SKILL_REPO_ROOT` 指向含 `skills/SKILL_ROUTING_RUNTIME.json` 与 `AGENTS.md` 的目录（实现见 `core/router-rs/src/skill_repo.rs`）。
 
 **建议自检命令序列（可复制）**
 
@@ -195,7 +195,7 @@ export FW=/abs/path/to/skill   # 改成你的框架仓库根
 
 # 1) 安装/确认 router-rs
 command -v router-rs && router-rs --help | head -n 1
-# 若未安装：cargo install --path "$FW/scripts/router-rs"
+# 若未安装：cargo install --path "$FW/core/router-rs"
 # 若 `router-rs framework --help` 看不到 `maint`，说明本机安装的二进制偏旧；
 # 维护类命令请改用下文的 `cargo run --release --manifest-path ... -- framework maint ...`
 # 或先重新安装/重建 router-rs。
@@ -213,7 +213,7 @@ cd /abs/path/to/your-other-repo
 printf '{}' | router-rs cursor hook --event=SessionStart --repo-root "$(pwd)"
 
 # 5) 在「非框架 cwd」下跑维护类命令须显式走框架源码入口（示例）
-cargo run --release --manifest-path "$FW/scripts/router-rs/Cargo.toml" -- framework maint verify-cursor-hooks
+cargo run --release --manifest-path "$FW/core/router-rs/Cargo.toml" -- framework maint verify-cursor-hooks
 # 注意：上条校验的是框架仓 $FW 内的 .cursor/hooks.json（本仓库多为 embedded 路径）。
 # 若要确认「目标仓」hooks 与跨仓模板一致：
 cmp .cursor/hooks.json "$FW/configs/framework/cursor-hooks.workspace-template.json" && echo "hooks match workspace template"
@@ -225,7 +225,7 @@ cmp .cursor/hooks.json "$FW/configs/framework/cursor-hooks.workspace-template.js
 
 ```bash
 export SKILL_FRAMEWORK_ROOT=/abs/path/to/framework-repo   # 或与 Cursor 单根一致的 CURSOR_WORKSPACE_ROOT
-cargo run --release --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/scripts/router-rs/Cargo.toml" -- framework maint update-one-shot
+cargo run --release --manifest-path "${SKILL_FRAMEWORK_ROOT:-$CURSOR_WORKSPACE_ROOT}/core/router-rs/Cargo.toml" -- framework maint update-one-shot
 ```
 
 ```bash
@@ -235,8 +235,8 @@ router-rs framework maint update-one-shot
 你更新 skill 后若只需最小验证，可拆步：
 
 ```bash
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
 cargo test --test policy_contracts
 git status --short
 git add skills scripts tests AGENTS.md README.md
@@ -249,7 +249,7 @@ git push
 ```powershell
 cd $HOME\Documents\codex-skill-system
 git pull
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- `
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- `
   framework skills refresh --framework-root . --write
 ```
 
@@ -310,14 +310,14 @@ PowerShell 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` 续行。READ
 
 ## Hook integration quickstart
 
-此仓库使用 Rust `router-rs`（`scripts/router-rs`）承接 Codex/Cursor/Claude hooks、连续性扩展与 **`router-rs browser mcp-stdio`**。宿主编排以 **Rust 入口为真源**：`.cursor/hooks.json` 只经 `configs/framework/cursor-router-rs-hook.sh` 做二进制发现与 fail-open/fail-closed 分层，业务分支不得写进 shell。
+此仓库使用 Rust `router-rs`（`core/router-rs`）承接 Codex/Cursor/Claude hooks、连续性扩展与 **`router-rs browser mcp-stdio`**。宿主编排以 **Rust 入口为真源**：`.cursor/hooks.json` 只经 `configs/framework/cursor-router-rs-hook.sh` 做二进制发现与 fail-open/fail-closed 分层，业务分支不得写进 shell。
 
 ### Cursor
 
 `.cursor/hooks.json` 由 Cursor 自动读取；自检可用：
 
 ```bash
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
 ```
 
 ### Codex CLI
@@ -325,20 +325,20 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework ma
 写入 `~/.codex/{config.toml,hooks.json}` 的用户级安装（替代已移除的 bash 包装脚本）：
 
 ```bash
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint install-codex-user-hooks
 ```
 
 快速检查：
 
 ```bash
-cargo build --release --manifest-path scripts/router-rs/Cargo.toml
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- codex install-hooks --check --codex-home "$HOME/.codex"
+cargo build --release --manifest-path core/router-rs/Cargo.toml
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex install-hooks --check --codex-home "$HOME/.codex"
 ```
 
 Global install (recommended once per machine):
 
 ```bash
-cargo install --path scripts/router-rs --locked --force
+cargo install --path core/router-rs --locked --force
 # Or `router-rs self install` from any freshly built workspace binary（需已在 PATH）。
 ```
 

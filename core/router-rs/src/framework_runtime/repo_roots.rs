@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub fn is_framework_root(path: &Path) -> bool {
     path.join("configs/framework/RUNTIME_REGISTRY.json")
         .is_file()
-        && path.join("scripts/router-rs/Cargo.toml").is_file()
+        && path.join("core/router-rs/Cargo.toml").is_file()
 }
 
 /// 从 `router-rs`（或其它位于框架仓库树下）的可执行路径向上探测 skill 框架仓库根，判定同 [`is_framework_root`]。
@@ -25,7 +25,7 @@ pub fn framework_root_from_executable_path(exe: &Path) -> Option<PathBuf> {
     None
 }
 
-/// CLI / 若干调用方常在 `scripts/router-rs/` 等子目录执行；continuity、`RUNTIME_REGISTRY`
+/// CLI / 若干调用方常在 `core/router-rs/` 等子目录执行；continuity、`RUNTIME_REGISTRY`
 /// 与 `artifacts/current` 均以仓库根为真源，因此从 cwd 或传入路径向上探测 framework root。
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
     let base = if let Some(path) = repo_root {
@@ -57,9 +57,9 @@ mod framework_root_from_exe_tests {
             r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{}}"#,
         )
         .unwrap();
-        fs::create_dir_all(root.join("scripts/router-rs")).unwrap();
+        fs::create_dir_all(root.join("core/router-rs")).unwrap();
         fs::write(
-            root.join("scripts/router-rs/Cargo.toml"),
+            root.join("core/router-rs/Cargo.toml"),
             "[package]\nname = \"router-rs\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
         )
         .unwrap();
@@ -75,7 +75,7 @@ mod framework_root_from_exe_tests {
                 .as_nanos()
         ));
         touch_framework_root_skeleton(&tmp);
-        let fake_exe = tmp.join("scripts/router-rs/target/release/router-rs");
+        let fake_exe = tmp.join("core/router-rs/target/release/router-rs");
         fs::create_dir_all(fake_exe.parent().unwrap()).unwrap();
         fs::write(&fake_exe, b"").unwrap();
 
@@ -112,8 +112,8 @@ mod framework_root_from_exe_tests {
                 .as_nanos()
         ));
         touch_framework_root_skeleton(&tmp);
-        // Simulate a copied binary sitting directly under scripts/router-rs/ (still below root).
-        let fake_exe = tmp.join("scripts/router-rs/router-rs");
+        // Simulate a copied binary sitting directly under core/router-rs/ (still below root).
+        let fake_exe = tmp.join("core/router-rs/router-rs");
         fs::write(&fake_exe, b"").unwrap();
 
         let got = framework_root_from_executable_path(&fake_exe).expect("ancestor walk");

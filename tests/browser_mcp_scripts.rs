@@ -580,7 +580,7 @@ fn sqlite_payload_locator(search_root: &std::path::Path, payload_key: &str) -> S
 
 fn prepare_repo(tmp_path: &std::path::Path) -> std::path::PathBuf {
     let repo_root = tmp_path.join("repo");
-    fs::create_dir_all(repo_root.join("scripts/router-rs/target/release")).unwrap();
+    fs::create_dir_all(repo_root.join("core/router-rs/target/release")).unwrap();
     install_fake_router(&repo_root);
     for name in SOURCE_FILES {
         write_text(
@@ -626,7 +626,7 @@ fn run_launcher(
         args.push((*arg).into());
     }
     let output_path = repo_root.join("fake-router-output.json");
-    let mut command = Command::new(repo_root.join("scripts/router-rs/target/release/router-rs"));
+    let mut command = Command::new(repo_root.join("core/router-rs/target/release/router-rs"));
     command
         .args(&args)
         .current_dir(repo_root)
@@ -636,7 +636,7 @@ fn run_launcher(
 }
 
 fn install_fake_router(repo_root: &Path) {
-    let router_path = repo_root.join("scripts/router-rs/target/release/router-rs");
+    let router_path = repo_root.join("core/router-rs/target/release/router-rs");
     write_text(
         &router_path,
         &format!(

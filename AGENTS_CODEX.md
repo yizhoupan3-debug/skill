@@ -20,9 +20,9 @@
 `router-rs` 编译期嵌入 **`AGENTS.md` + 本文件**（见 `build_codex_agent_policy`）。改跨宿主策略 → 改 [`AGENTS.md`](AGENTS.md)；改 Codex 差异 → 改本文件；二者均需 rebuild + sync。
 
 ```bash
-cargo build --release --manifest-path scripts/router-rs/Cargo.toml
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint install-codex-user-hooks --framework-root "$PWD"
+cargo build --release --manifest-path core/router-rs/Cargo.toml
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint install-codex-user-hooks --framework-root "$PWD"
 ```
 
 ### 核心物化与同步机制

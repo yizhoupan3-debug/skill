@@ -103,7 +103,7 @@ fn router_rs_main_binary_compiles() {
         .args([
             "check",
             "--manifest-path",
-            "scripts/router-rs/Cargo.toml",
+            "core/router-rs/Cargo.toml",
             "--bin",
             "router-rs",
         ])
@@ -225,9 +225,9 @@ fn update_skill_exposes_explicit_entrypoint_like_gitx() {
         "git 跟踪面",
         "死代码",
         "旧文档",
-        "cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-audit",
+        "cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-audit",
         "policy_contracts",
-        "cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot",
+        "cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot",
         "documentation_contracts",
         "tracked_markdown_utf8_contract",
         "generated-artifacts-status",
@@ -644,7 +644,7 @@ fn ooxml_cli_help_lists_docx_and_xlsx_render_commands() {
 #[test]
 fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
     let output = common::run_ok(cargo_manifest_command(
-        &project_root().join("scripts/router-rs/Cargo.toml"),
+        &project_root().join("core/router-rs/Cargo.toml"),
         &["--help"],
     ));
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1225,7 +1225,7 @@ fn gsd_slash_commands_removed_from_runtime_and_hooks() {
         !registry_text.contains("/gsd-"),
         "RUNTIME_REGISTRY must not reference /gsd- commands"
     );
-    let hook_common = read_text(&root.join("scripts/router-rs/src/hook_common.rs"));
+    let hook_common = read_text(&root.join("core/router-rs/src/hook_common.rs"));
     assert!(
         !hook_common.contains("/gsd-"),
         "hook_common must not recognize /gsd- entrypoints"
@@ -1369,7 +1369,7 @@ fn nl_route_registry_signal_names() -> &'static HashSet<String> {
     static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
     NAMES.get_or_init(|| {
         let repo = project_root();
-        let manifest = repo.join("scripts/router-rs/Cargo.toml");
+        let manifest = repo.join("core/router-rs/Cargo.toml");
         let output = Command::new("cargo")
             .current_dir(&repo)
             .args([
@@ -1945,7 +1945,7 @@ fn framework_runtime_python_package_stays_removed() {
 #[test]
 fn autoresearch_runtime_controller_stays_without_legacy_skill_entrypoint() {
     assert!(project_root()
-        .join("scripts/autoresearch-rs/src/main.rs")
+        .join("core/autoresearch-rs/src/main.rs")
         .exists());
     assert!(!project_root().join("skills/autoresearch").exists());
 }
@@ -2059,7 +2059,7 @@ fn repo_local_codex_omits_framework_mcp_entrypoint() {
 fn browser_mcp_live_config_never_points_to_node_runtime() {
     let surfaces = [
         ".codex/config.toml",
-        "scripts/router-rs/src/host_integration.rs",
+        "core/router-rs/src/host_integration.rs",
         "tools/browser-mcp/README.md",
     ];
     let joined = surfaces
@@ -2076,7 +2076,7 @@ fn browser_mcp_live_config_never_points_to_node_runtime() {
 }
 
 fn browser_mcp_rust_sources_concat() -> String {
-    let root = project_root().join("scripts/router-rs/src/browser_mcp");
+    let root = project_root().join("core/router-rs/src/browser_mcp");
     let mut paths = collect_files_with_extension(&root, "rs");
     assert!(
         !paths.is_empty(),
@@ -2109,7 +2109,7 @@ fn browser_mcp_exposes_repo_skill_router_tools() {
 #[test]
 fn install_skills_uses_rust_only_entrypoints() {
     assert!(!project_root().join("scripts/install_skills.sh").exists());
-    let source = read_text(&project_root().join("scripts/router-rs/src/host_integration.rs"));
+    let source = read_text(&project_root().join("core/router-rs/src/host_integration.rs"));
     for marker in [
         "InstallSkills",
         "InstallNativeIntegration",
@@ -2123,7 +2123,7 @@ fn install_skills_uses_rust_only_entrypoints() {
 fn sync_skills_uses_router_rs_directly() {
     assert!(!project_root().join("scripts/sync_skills.py").exists());
     let sync_source =
-        read_text(&project_root().join("scripts/router-rs/src/host_entrypoint_sync.rs"));
+        read_text(&project_root().join("core/router-rs/src/host_entrypoint_sync.rs"));
     assert!(sync_source.contains("sync_host_entrypoints"));
     assert!(sync_source.contains("HostEntrypointPayloadProvider"));
     for forbidden in [
@@ -2137,7 +2137,7 @@ fn sync_skills_uses_router_rs_directly() {
         );
     }
     let codex_source = read_text(
-        &project_root().join("scripts/router-rs/src/hosts/codex_hooks/mod.rs"),
+        &project_root().join("core/router-rs/src/hosts/codex_hooks/mod.rs"),
     );
     assert!(codex_source.contains("codex_host_entrypoint_provider"));
     assert!(codex_source.contains("HostEntrypointPayloadProvider"));
@@ -2146,9 +2146,9 @@ fn sync_skills_uses_router_rs_directly() {
 #[test]
 fn prompt_policy_is_rust_owned() {
     let root = project_root();
-    let mod_rs = read_text(&root.join("scripts/router-rs/src/framework_runtime/mod.rs"));
+    let mod_rs = read_text(&root.join("core/router-rs/src/framework_runtime/mod.rs"));
     let compression =
-        read_text(&root.join("scripts/router-rs/src/framework_runtime/prompt_compression.rs"));
+        read_text(&root.join("core/router-rs/src/framework_runtime/prompt_compression.rs"));
     assert!(mod_rs.contains("build_framework_prompt_compression_envelope"));
     assert!(compression.contains("prompt_policy_owner"));
 }

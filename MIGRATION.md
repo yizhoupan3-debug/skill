@@ -17,7 +17,7 @@ just doctor
 
 ## 投影同步清单（改 AGENTS / 叙事 / My lifecycle 文案后）
 
-1. 仓库根改 `AGENTS.md` 且依赖 Codex：`cargo build --manifest-path scripts/router-rs/Cargo.toml` + `router-rs framework sync-entrypoints --repo-root "$SKILL_FRAMEWORK_ROOT"`（或 `codex sync --repo-root "$SKILL_FRAMEWORK_ROOT"`）。
+1. 仓库根改 `AGENTS.md` 且依赖 Codex：`cargo build --manifest-path core/router-rs/Cargo.toml` + `router-rs framework sync-entrypoints --repo-root "$SKILL_FRAMEWORK_ROOT"`（或 `codex sync --repo-root "$SKILL_FRAMEWORK_ROOT"`）。
 2. Cursor 用户级 framework：`router-rs framework host-integration install --to cursor --scope user --framework-root "$SKILL_FRAMEWORK_ROOT" --project-root "$SKILL_FRAMEWORK_ROOT"`.
 3. 业务仓 harness gate 规则（含 `subagent-model-inherit.mdc`）：`cursor-bootstrap-framework.sh --with-cursor-rules` 或手动 symlink `.cursor/rules/*.mdc`。
 4. 改 `configs/framework/host_projection_narrative.json` 或 `RUNTIME_REGISTRY.json` **review_gate**：**无需** rebuild；重启 hook 子进程。
@@ -50,7 +50,7 @@ just doctor
 
 ```bash
 cd "$SKILL_FRAMEWORK_ROOT"
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   framework host-integration install --framework-root "$PWD" --project-root "$PWD" \
   --artifact-root "$PWD/artifacts" --scope user --to cursor
 ```
@@ -118,7 +118,7 @@ cd /path/to/project
 
 **门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「对话中断排障」。
 
-**模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`；事件列表真源：`router-rs schema-drift contract` ↔ [`subtraction.rs`](scripts/router-rs/src/hosts/cursor_hooks/subtraction.rs)）。
+**模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`；事件列表真源：`router-rs schema-drift contract` ↔ [`subtraction.rs`](core/router-rs/src/hosts/cursor_hooks/subtraction.rs)）。
 
 **内存相关**：见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「内存 / release」；项目 env [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。
 
@@ -149,7 +149,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 
 | 变更 | 说明 |
 |------|------|
-| `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`runtime_registry/mod.rs`](scripts/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export shim；**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
+| `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`runtime_registry/mod.rs`](core/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export shim；**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
 | 宿主投影 My/review 文案 | [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)；`host-integration install` 读取；勿在 `host_integration.rs` 硬编码 |
 | `generated-artifacts-status` | **`framework doctor`** / `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍要求全量 **drift-gate** `ok: true` |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |

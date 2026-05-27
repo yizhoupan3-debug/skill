@@ -29,9 +29,9 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../scripts/router-rs/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../core/router-rs/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
-| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration.rs`](../../scripts/router-rs/src/host_integration.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
+| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration.rs`](../../core/router-rs/src/host_integration.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
 
@@ -44,7 +44,7 @@
   - **项目叙事文件**：路径为 `.claude/CLAUDE.md`。
 - **环境安装命令**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- \
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
     framework host-integration install --to claude --scope project
   ```
 
@@ -80,19 +80,19 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 1. **构建 Release 二进制**（优化体积与响应速度）：
    ```bash
-   CARGO_TARGET_DIR="$PWD/scripts/router-rs/target" \
-     cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+   CARGO_TARGET_DIR="$PWD/core/router-rs/target" \
+     cargo build --release --manifest-path core/router-rs/Cargo.toml
    ```
 2. **Launcher 探测顺序**：
-   仓库 `scripts/router-rs/target/release` $\rightarrow$ `/tmp/skill-cargo-target/release` $\rightarrow$ debug $\rightarrow$ `PATH`。
+   仓库 `core/router-rs/target/release` $\rightarrow$ `/tmp/skill-cargo-target/release` $\rightarrow$ debug $\rightarrow$ `PATH`。
 
 ## 自检诊断与验证 (Self-Test)
 
 - **运行 Claude Hook 集成测试**：
   ```bash
-  cargo test --manifest-path scripts/router-rs/Cargo.toml claude
+  cargo test --manifest-path core/router-rs/Cargo.toml claude
   ```
 - **自检主机投影状态**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration status
   ```

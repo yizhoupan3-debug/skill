@@ -21,11 +21,11 @@ critical_event() {
 ROUTER_RS_BIN="${ROUTER_RS_BIN:-}"
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}"
 for candidate in \
-  "$ROOT/scripts/router-rs/target/release/router-rs" \
-  "$FW/scripts/router-rs/target/release/router-rs" \
+  "$ROOT/core/router-rs/target/release/router-rs" \
+  "$FW/core/router-rs/target/release/router-rs" \
+  "$ROOT/core/router-rs/target/debug/router-rs" \
+  "$FW/core/router-rs/target/debug/router-rs" \
   "$CARGO_TARGET_DIR/release/router-rs" \
-  "$ROOT/scripts/router-rs/target/debug/router-rs" \
-  "$FW/scripts/router-rs/target/debug/router-rs" \
   "$CARGO_TARGET_DIR/debug/router-rs" \
   "$ROOT/target/release/router-rs" \
   "$ROOT/target/debug/router-rs" \

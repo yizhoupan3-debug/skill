@@ -1,8 +1,137 @@
-use serde_json::Value;
-use std::path::{Path, PathBuf};
+use crate::utils::atomic_write::write_atomic_json;
+use serde_json::{json, Map, Value};
 use std::fs;
-use std::io::Read;
+use std::path::{Path, PathBuf};
 
+pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
+pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-autopilot-goal-v1";
+pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
+pub const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
+pub const LEGACY_AUTOPILOT_DRIVE_PARAGRAPH_PREFIX: &str = "AUTOPILOT_DRIVE";
+pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
+pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
+
+fn parse_task_id_from_pointer_json(raw: &str) -> Option<String> {
+    let data: Value = serde_json::from_str(raw).ok()?;
+    let t = data
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+    crate::utils::path_guard::safe_task_id_component(&t)?;
+    Some(t)
+}
+
+pub fn read_primary_task_id(repo_root: &Path) -> Option<String> {
+    let (active, focus) = read_task_pointer_pair(repo_root);
+    active.or(focus)
+}
+
+pub fn read_active_task_id(repo_root: &Path) -> Option<String> {
+    let path = repo_root.join("artifacts/current/active_task.json");
+    let raw = fs::read_to_string(&path).ok()?;
+    parse_task_id_from_pointer_json(&raw)
+}
+
+pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
+    let path = repo_root.join("artifacts/current/focus_task.json");
+    let raw = fs::read_to_string(&path).ok()?;
+    parse_task_id_from_pointer_json(&raw)
+}
+
+fn invalidate_route_records_cache_on_write() {
+    // antigravity-core has no route records cache; no-op for goal drive writes.
+}
+
+pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+    let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
+    Ok(repo_root
+        .join("artifacts/current")
+        .join(tid)
+        .join("RFV_LOOP_STATE.json"))
+}
+
+pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<bool, String> {
+    if task_id.trim().is_empty() {
+        return Ok(false);
+    }
+    if crate::utils::path_guard::safe_task_id_component(task_id).is_none() {
+        return Ok(false);
+    }
+    let path = rfv_loop_state_path(repo_root, task_id)?;
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let mut state = read_rfv_loop_state(repo_root, Some(task_id))?
+        .ok_or_else(|| format!("RFV_LOOP_STATE missing at {}", path.display()))?;
+    let obj = state
+        .as_object_mut()
+        .ok_or_else(|| "RFV_LOOP_STATE root must be object".to_string())?;
+    let active = obj
+        .get("loop_status")
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.eq_ignore_ascii_case("active"));
+    if !active {
+        return Ok(false);
+    }
+    obj.insert("loop_status".to_string(), json!("superseded"));
+    obj.insert("superseded_by".to_string(), json!("autopilot_goal"));
+    obj.insert(
+        "updated_at".to_string(),
+        json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+    );
+    write_atomic_json(&path, &state)?;
+    Ok(true)
+}
+
+fn goal_state_path_for_nested_under_current(repo_root: &Path, rel: &str) -> Option<PathBuf> {
+    let rel = rel.trim().trim_matches('/');
+    if rel.is_empty() {
+        return None;
+    }
+    let mut dir = repo_root.join("artifacts/current");
+    for seg in rel.split(['/', '\\']) {
+        let seg = seg.trim();
+        if seg.is_empty() || crate::utils::path_guard::safe_task_id_component(seg).is_none() {
+            return None;
+        }
+        dir = dir.join(seg);
+    }
+    Some(dir.join(GOAL_STATE_FILENAME))
+}
+
+pub fn ensure_task_directory(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+    let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
+    let task_dir = repo_root.join("artifacts/current").join(tid);
+    if !task_dir.is_dir() {
+        fs::create_dir_all(&task_dir)
+            .map_err(|e| format!("failed to create task directory '{}': {e}", tid))?;
+    }
+    Ok(task_dir)
+}
+
+/// RFV 在同 task 上 `start`/`upsert` 时移除 GOAL（与 RFV 互斥）。
+pub fn deactivate_goal_for_conflict_with_rfv(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<bool, String> {
+    if task_id.trim().is_empty() {
+        return Ok(false);
+    }
+    if crate::utils::path_guard::safe_task_id_component(task_id).is_none() {
+        return Ok(false);
+    }
+    let path = goal_state_path_for_task(repo_root, task_id)?;
+    if !path.is_file() {
+        return Ok(false);
+    }
+    fs::remove_file(&path).map_err(|e| format!("remove GOAL_STATE for RFV mutex: {e}"))?;
+    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, task_id);
+    Ok(true)
+}
 
 /// Read `active_task.json` and `focus_task.json` task ids in one back-to-back pair (smaller
 /// TOCTOU window than two independent helper calls). Used by [`crate::task_state::read_task_pointers`]
@@ -23,7 +152,7 @@ pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Strin
 
 
 pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
-    let tid = crate::path_guard::validate_task_id_component(task_id)?;
+    let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     Ok(repo_root
         .join("artifacts/current")
         .join(tid)
@@ -32,7 +161,7 @@ pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathB
 
 
 /// 能解析为 JSON 的 `GOAL_STATE` 才返回；读失败或非法 JSON 返回 `None`（便于换指针/扫描回退）。
-fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<(Value, String)> {
+pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<(Value, String)> {
     if task_id.trim().is_empty() {
         return None;
     }
@@ -114,9 +243,7 @@ pub fn resolve_checkpoint_task_id_from_pointer_ids(
         .clone()
         .or_else(|| focus_task_id.clone())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            crate::framework_runtime::CONTINUITY_SESSION_CHECKPOINT_TASK_ID.to_string()
-        })
+        .unwrap_or_else(|| CONTINUITY_SESSION_CHECKPOINT_TASK_ID.to_string())
 }
 
 /// 诊断 / 测试专用 mtime 扫描：picks the **newest** `GOAL_STATE.json` under `artifacts/current/**`.
@@ -125,13 +252,13 @@ pub fn resolve_checkpoint_task_id_from_pointer_ids(
 /// `hydration_ignores_orphan_goal_when_active_task_missing` 等单测里复活 orphan goal 用于负面断言。
 /// **绝不能**从 Cursor / Codex / Claude hook 的续跑路径调用：continuity 真源是
 /// [`read_goal_state_for_hydration`]（active → focus，不做 orphan mtime sweep）。
-#[cfg(test)]
+
 use std::time::SystemTime;
 
-#[cfg(test)]
+
 const GOAL_DISCOVER_MAX_DEPTH: usize = 8;
 
-#[cfg(test)]
+
 fn discover_goal_state_task_ids_under_current(
     repo_root: &Path,
 ) -> Result<Vec<(String, SystemTime)>, String> {
@@ -144,7 +271,7 @@ fn discover_goal_state_task_ids_under_current(
     Ok(out)
 }
 
-#[cfg(test)]
+
 fn visit_goal_state_dirs(
     dir: &Path,
     current_root: &Path,
@@ -189,7 +316,7 @@ pub fn task_evidence_success_only_self_attested(repo_root: &Path, task_id: &str)
     let mut saw_success = false;
     let mut saw_non_self_attested_success = false;
     for entry in artifacts {
-        if !crate::hook_common::evidence_index_entry_implies_success(&entry) {
+        if !evidence_index_entry_implies_success(&entry) {
             continue;
         }
         saw_success = true;
@@ -204,7 +331,7 @@ fn task_evidence_artifacts_for_task(repo_root: &Path, task_id: &str) -> Vec<Valu
     if task_id.trim().is_empty() {
         return Vec::new();
     }
-    if crate::path_guard::safe_task_id_component(task_id).is_none() {
+    if crate::utils::path_guard::safe_task_id_component(task_id).is_none() {
         return Vec::new();
     }
     let Ok(goal_path) = goal_state_path_for_task(repo_root, task_id) else {
@@ -239,7 +366,7 @@ fn evidence_row_is_self_attested(entry: &Value) -> bool {
 }
 
 fn now_iso() -> String {
-    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 fn base_goal_object(
@@ -345,7 +472,7 @@ fn resolve_framework_goal_drive_repo(payload: &Value) -> Result<PathBuf, String>
             repo_root.display()
         ));
     }
-    resolve_repo_root_arg(Some(repo_root.as_path()))
+    Ok(repo_root.to_path_buf())
 }
 
 /// stdio / CLI：`framework_goal_drive`
@@ -360,7 +487,7 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
         framework_goal_drive_impl(payload)
     } else {
         let repo_root = resolve_framework_goal_drive_repo(&payload)?;
-        crate::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
+        crate::utils::task_write_lock::apply_task_ledger_mutation(&repo_root, || {
             framework_goal_drive_impl(payload)
         })
     }
@@ -383,7 +510,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             repo_root.display()
         ));
     }
-    let repo_root = resolve_repo_root_arg(Some(repo_root.as_path()))?;
+    let repo_root = repo_root.canonicalize().unwrap_or(repo_root);
     let operation = payload
         .get("operation")
         .and_then(Value::as_str)
@@ -432,7 +559,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                     "framework_goal_drive start requires task_id in payload or active_task.json / focus_task.json"
                         .to_string()
                 })?;
-            crate::path_guard::validate_task_id_component(&task_id)?;
+            crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let goal = payload
                 .get("goal")
                 .and_then(Value::as_str)
@@ -517,7 +644,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
             invalidate_route_records_cache_on_write();
             let rfv_loop_superseded =
-                crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(&repo_root, &task_id)?;
+                deactivate_rfv_for_conflict_with_autopilot(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
@@ -538,7 +665,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                     "framework_goal_drive checkpoint requires task_id or active_task.json"
                         .to_string()
                 })?;
-            crate::path_guard::validate_task_id_component(&task_id)?;
+            crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let note = payload
                 .get("note")
                 .and_then(Value::as_str)
@@ -780,7 +907,7 @@ fn resume_goal_running(
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
     invalidate_route_records_cache_on_write();
     let rfv_loop_superseded =
-        crate::rfv_loop::deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
+        deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     Ok(json!({
         "ok": true,
@@ -880,6 +1007,7 @@ pub fn merge_hook_nudge_paragraph(
     }
 }
 
+
 #[cfg(test)]
 fn scrub_concat_evils() -> (String, String) {
     // Fragment so the imitation template never appears verbatim in workspace source.
@@ -894,6 +1022,7 @@ fn scrub_concat_evils() -> (String, String) {
     let block = format!("lead\n\n{spoof_line}\ntrailer");
     (spoof_line, block)
 }
+
 
 #[cfg(test)]
 mod spoof_scrub_tests {
@@ -944,15 +1073,15 @@ mod spoof_scrub_tests {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn goal_start_writes_and_status_reads() {
-        let _nudge_env = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1598,7 +1727,7 @@ mod tests {
         .expect("goal start");
         assert_eq!(ag["rfv_loop_superseded"], json!(true));
 
-        let rfv_path = crate::rfv_loop::rfv_loop_state_path(&repo, "mx-task").expect("rfv path");
+        let rfv_path = rfv_loop_state_path(&repo, "mx-task").expect("rfv path");
         let raw = fs::read_to_string(&rfv_path).expect("read rfv");
         let v: Value = serde_json::from_str(&raw).expect("parse rfv");
         assert_eq!(v["loop_status"], json!("superseded"));
@@ -1690,6 +1819,12 @@ mod tests {
             r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"t","exit_code":0}]}"#,
         )
         .expect("evidence");
+        fs::write(
+            repo.join("artifacts/current/gok/RFV_LOOP_STATE.json"),
+            r#"{"schema_version":"router-rs-rfv-loop-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
+        )
+        .expect("rfv");
+        crate::task_state_aggregate::sync_task_state_aggregate(&repo, "gok").expect("sync agg");
         framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
@@ -1723,8 +1858,8 @@ pub fn read_goal_state_for_hydration_from_pointer_ids(
 }
 
 
-#[cfg(test)]
-fn read_goal_state_for_diagnostics_scan(
+
+pub fn read_goal_state_for_diagnostics_scan(
     repo_root: &Path,
 ) -> Result<Option<(Value, String)>, String> {
     let mut candidates = discover_goal_state_task_ids_under_current(repo_root)?;
@@ -1742,13 +1877,13 @@ fn read_goal_state_for_diagnostics_scan(
 
 
 /// 指定 `task_id` 任务目录下 `EVIDENCE_INDEX.json`：是否存在非空 `artifacts`、是否至少有一条成功验证记录。
-/// 单条 artifact 的「成功」判定下沉到 [`crate::hook_common::evidence_index_entry_implies_success`]，
+/// 单条 artifact 的「成功」判定下沉到 [`evidence_index_entry_implies_success`]，
 /// 与 `rfv_loop` 共用一份口径。
 pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str) -> (bool, bool) {
     if task_id.trim().is_empty() {
         return (false, false);
     }
-    if crate::path_guard::safe_task_id_component(task_id).is_none() {
+    if crate::utils::path_guard::safe_task_id_component(task_id).is_none() {
         return (false, false);
     }
     let Ok(goal_path) = goal_state_path_for_task(repo_root, task_id) else {
@@ -1775,7 +1910,7 @@ pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str)
     }
     let any_ok = arr
         .iter()
-        .any(crate::hook_common::evidence_index_entry_implies_success);
+        .any(evidence_index_entry_implies_success);
     (true, any_ok)
 }
 
@@ -1796,7 +1931,7 @@ pub fn read_goal_state(
         };
         t
     };
-    crate::path_guard::validate_task_id_component(&task_id).map_err(|e| {
+    crate::utils::path_guard::validate_task_id_component(&task_id).map_err(|e| {
         format!("framework_goal_drive: invalid task_id for GOAL_STATE path: {e}")
     })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
@@ -1820,6 +1955,87 @@ pub fn goal_state_requests_continuation(state: &Value) -> bool {
     drive && status == "running"
 }
 
+fn nonempty_trimmed_string_at(value: &Value, ctx: &str, key: &str) -> Result<(), String> {
+    let Some(t) = value.as_str() else {
+        return Err(format!("{ctx}: `{key}` must be string"));
+    };
+    if t.trim().is_empty() {
+        return Err(format!("{ctx}: `{key}` must be non-empty"));
+    }
+    Ok(())
+}
+
+fn validate_nonempty_string_items(arr: &[Value], ctx: &str, arr_name: &str) -> Result<(), String> {
+    if arr.is_empty() {
+        return Err(format!("{ctx}: `{arr_name}` must be non-empty"));
+    }
+    for (idx, elem) in arr.iter().enumerate() {
+        let label = format!("{ctx}.{arr_name}[{idx}]");
+        nonempty_trimmed_string_at(elem, &label, "item")?;
+    }
+    Ok(())
+}
+
+pub fn source_traceable_heuristic(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let lower = t.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return true;
+    }
+    if lower.starts_with("doi:10.") {
+        return true;
+    }
+    if lower.starts_with("10.") && lower.contains('/') {
+        return true;
+    }
+    for prefix in [
+        "arxiv:",
+        "pmid:",
+        "isbn:",
+        "dataset:",
+        "official_doc:",
+        "huggingface:",
+        "hf:",
+        "github:",
+        "kaggle:",
+        "geojson:",
+    ] {
+        if lower.starts_with(prefix) {
+            return true;
+        }
+    }
+    false
+}
+
+fn validate_source_list_traceable(
+    sources: &[Value],
+    ctx: &str,
+    min_len: usize,
+    err_label: &str,
+) -> Result<(), String> {
+    if sources.len() < min_len {
+        return Err(format!(
+            "external_research strict: {ctx} `{err_label}` must have at least {min_len} entries, got {}",
+            sources.len()
+        ));
+    }
+    for (j, sv) in sources.iter().enumerate() {
+        let Some(s) = sv.as_str() else {
+            return Err(format!(
+                "external_research strict: {ctx} `{err_label}[{j}]` must be string"
+            ));
+        };
+        if !source_traceable_heuristic(s) {
+            return Err(format!(
+                "external_research strict: {ctx} `{err_label}[{j}]` not traceable: {s:?}"
+            ));
+        }
+    }
+    Ok(())
+}
 
 /// Stricter checks when `RFV_LOOP_STATE.external_research_strict` is true; run only after
 /// [`validate_external_research_structured`] succeeds.
@@ -2072,7 +2288,7 @@ pub fn read_rfv_loop_state(
         };
         t
     };
-    crate::path_guard::validate_task_id_component(&task_id)
+    crate::utils::path_guard::validate_task_id_component(&task_id)
         .map_err(|e| format!("framework_rfv_loop: invalid task_id for RFV_LOOP_STATE path: {e}"))?;
     let path = rfv_loop_state_path(repo_root, &task_id)?;
     if !path.is_file() {
@@ -2097,4 +2313,3 @@ pub fn evidence_index_entry_implies_success(entry: &Value) -> bool {
         None => false,
     }
 }
-

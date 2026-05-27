@@ -14,7 +14,15 @@
 //! The in-memory `runtime_storage` regression backend uses a process-local mutex for `append_text`
 //! only; it does **not** participate in the repo-wide task-ledger flock.
 
-pub fn router_rs_task_ledger_flock_enabled() -> bool { std::env::var("ROUTER_RS_TASK_LEDGER_FLOCK").unwrap_or_else(|_| "1".to_string()) != "0" }
+pub fn router_rs_task_ledger_flock_enabled() -> bool {
+    match std::env::var("ROUTER_RS_TASK_LEDGER_FLOCK") {
+        Ok(v) => {
+            let t = v.trim().to_ascii_lowercase();
+            !(t == "0" || t == "false" || t == "off" || t == "no")
+        }
+        Err(_) => true,
+    }
+}
 use fs2::FileExt;
 use std::fs::{self, OpenOptions};
 use std::path::Path;
@@ -93,7 +101,7 @@ pub(crate) fn acquire_task_ledger_repo_lock(
 }
 
 /// Run `f` while holding the repo task-ledger flock (when enabled via env).
-pub(crate) fn apply_task_ledger_mutation<T>(
+pub fn apply_task_ledger_mutation<T>(
     repo_root: &Path,
     f: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
@@ -106,7 +114,10 @@ mod tests {
     use super::*;
     // use crate::test_env_sync::process_env_lock;
     use std::fs;
+    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TASK_LEDGER_FLOCK_ENV_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     fn unique_tmp() -> std::path::PathBuf {
         let nanos = SystemTime::now()
@@ -122,6 +133,9 @@ mod tests {
 
     #[test]
     fn apply_runs_closure_under_lock() {
+        let _env_guard = TASK_LEDGER_FLOCK_ENV_TEST_MUTEX
+            .lock()
+            .expect("task ledger flock env mutex poisoned");
         // let _g = process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
         std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK");
@@ -142,6 +156,9 @@ mod tests {
 
     #[test]
     fn flock_disabled_skips_flock_but_runs_closure() {
+        let _env_guard = TASK_LEDGER_FLOCK_ENV_TEST_MUTEX
+            .lock()
+            .expect("task ledger flock env mutex poisoned");
         // let _g = process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
         std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", "0");
@@ -159,8 +176,7 @@ mod tests {
     #[test]
     fn apply_task_ledger_mutation_callers_use_assume_l1_held() {
         for (label, src) in [
-            ("autopilot_goal", include_str!("../autopilot_goal.rs")),
-            ("rfv_loop", include_str!("../rfv_loop.rs")),
+            ("state_manager", include_str!("../state_manager.rs")),
             ("step_ledger", include_str!("../step_ledger.rs")),
         ] {
             assert!(
@@ -172,5 +188,10 @@ mod tests {
                 "{label} must not re-acquire L1 via append_transaction inside mutation paths"
             );
         }
+        let rfv_loop = include_str!("../rfv_loop.rs");
+        assert!(
+            rfv_loop.contains("apply_task_ledger_mutation"),
+            "rfv_loop must serialize mutations via apply_task_ledger_mutation"
+        );
     }
 }

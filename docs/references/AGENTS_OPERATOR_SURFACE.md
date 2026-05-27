@@ -57,9 +57,9 @@
 ## Schema drift（verify / CI）
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift contract
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift baseline --repo-root "$PWD"
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- schema-drift check --repo-root "$PWD"
+cargo run --manifest-path core/router-rs/Cargo.toml -- schema-drift contract
+cargo run --manifest-path core/router-rs/Cargo.toml -- schema-drift baseline --repo-root "$PWD"
+cargo run --manifest-path core/router-rs/Cargo.toml -- schema-drift check --repo-root "$PWD"
 ```
 
 任务 id 省略时读 `artifacts/current/active_task.json`，否则 `focus_task.json`。基线写入 `artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json`。详见 [`skills/verifyx/SKILL.md`](../../skills/verifyx/SKILL.md) 与 [`configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md`](../../configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md)。

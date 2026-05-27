@@ -55,7 +55,7 @@ Target: coordinator visible content ≤35% of turn.
 ```json
 {
   "lane_id": "w3-lane-cursor",
-  "scope_paths": ["scripts/router-rs/src/hosts/cursor_hooks/"],
+  "scope_paths": ["core/router-rs/src/hosts/cursor_hooks/"],
   "output_path": "artifacts/current/<task_id>/lane-notes/w3-lane-cursor.md",
   "max_lines": 15,
   "forbidden": ["paste full transcript to main chat"]

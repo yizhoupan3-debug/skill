@@ -847,7 +847,7 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
 
     let event = json!({
         "tool_name": "Bash",
-        "tool_input": { "command": "cd scripts/router-rs && cargo test -q" },
+        "tool_input": { "command": "cd core/router-rs && cargo test -q" },
         "session_id": "sess-post-tool-1",
         "tool_output": { "exit_code": 0 },
     });
@@ -904,7 +904,7 @@ fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
 
     let event = json!({
         "tool_name": "run_terminal_cmd",
-        "tool_input": { "command": "cd scripts/router-rs && cargo test -q" },
+        "tool_input": { "command": "cd core/router-rs && cargo test -q" },
         "session_id": "sess-cursor-post-tool-1",
         "tool_output": { "exit_code": 0 },
     });
@@ -957,7 +957,7 @@ fn hook_evidence_append_cli_writes_cursor_cargo_check() {
 
     let payload = json!({
         "repo_root": repo_root,
-        "command_preview": "(cd scripts/router-rs && cargo check --message-format=short)",
+        "command_preview": "(cd core/router-rs && cargo check --message-format=short)",
         "exit_code": 1,
         "source": "cursor_rust_lint",
     });
@@ -1282,7 +1282,7 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
             "verification_status": "passed",
             "summary": "Validated write.",
             "commands_run": [
-                {"command": "cargo test --manifest-path scripts/router-rs/Cargo.toml", "exit_code": 0}
+                {"command": "cargo test --manifest-path core/router-rs/Cargo.toml", "exit_code": 0}
             ],
             "artifacts_checked": [
                 {"path": "README.md", "exists": true}

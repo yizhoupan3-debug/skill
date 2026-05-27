@@ -38,7 +38,7 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
     let step_ledger = crate::step_ledger::summarize_step_ledger_for_task(repo_root, tid);
 
     // Read TASK_LEDGER.jsonl to find the highest seq number
-    let last_seq = crate::state_manager::read_task_ledger_transactions(repo_root, tid)
+    let last_seq = crate::task_state::read_task_ledger_transactions(repo_root, tid)
         .iter()
         .filter_map(|tx| tx.seq)
         .max();
@@ -61,8 +61,9 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
     write_atomic_json(&path, &payload)
 }
 
-pub(crate) fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &str) {
-    if !true { // STUBBED
+pub fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &str) {
+    if !true {
+        // STUBBED
         return;
     }
     if task_id.trim().is_empty() {

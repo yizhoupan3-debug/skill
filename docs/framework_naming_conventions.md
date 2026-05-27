@@ -83,7 +83,7 @@ skills/
 See [`harness_architecture.md`](harness_architecture.md) §2.3.
 
 **Generator sources:**
-- `scripts/router-rs/Cargo.toml` — Rust router runtime (`framework skills validate|refresh`, `host-integration install`, `sync-entrypoints`)
+- `core/router-rs/Cargo.toml` — Rust router runtime (`framework skills validate|refresh`, `host-integration install`, `sync-entrypoints`)
 
 ---
 

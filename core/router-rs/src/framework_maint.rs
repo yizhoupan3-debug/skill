@@ -107,7 +107,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     eprintln!("repo_root: {}", fw.display());
     eprintln!("artifact_root: {}", art.display());
 
-    let manifest = fw.join("scripts/router-rs/Cargo.toml");
+    let manifest = fw.join("core/router-rs/Cargo.toml");
     run_cargo(
         &fw,
         &[
@@ -660,7 +660,7 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         &exe,
         &repo_root,
         "Stop",
-        r#"{"hook_event_name":"Stop","session_id":"verify-compact-only","prompt":"继续","response":"[P1] scripts/router-rs/src/hosts/codex_hooks/mod.rs:1 — verify-codex-hooks wave-2 compact must not clear without PostTool evidence"}"#,
+        r#"{"hook_event_name":"Stop","session_id":"verify-compact-only","prompt":"继续","response":"[P1] core/router-rs/src/hosts/codex_hooks/mod.rs:1 — verify-codex-hooks wave-2 compact must not clear without PostTool evidence"}"#,
         |stdout| {
             if !stdout.contains("CODEX_REVIEW_GATE incomplete") {
                 return Err(format!(
@@ -873,7 +873,7 @@ fn resolve_router_rs_binary(repo_root: &Path) -> Result<PathBuf, String> {
     cargo_router_rs_executable(repo_root)
         .or_else(|| which::which("router-rs").ok())
         .ok_or_else(|| {
-            "router-rs binary not found; build with: cargo build --manifest-path scripts/router-rs/Cargo.toml"
+            "router-rs binary not found; build with: cargo build --manifest-path core/router-rs/Cargo.toml"
                 .to_string()
         })
 }
@@ -890,7 +890,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         artifact_root: Some(art.clone()),
     })?;
 
-    let router_manifest = fw.join("scripts/router-rs/Cargo.toml");
+    let router_manifest = fw.join("core/router-rs/Cargo.toml");
     run_cargo(
         &fw,
         &[
@@ -1330,7 +1330,7 @@ fn print_local_homes(fw: PathBuf) -> Result<(), String> {
 
 fn install_codex_user_hooks(args: InstallCodexUserHooksArgs) -> Result<(), String> {
     let fw = resolve_maint_roots(args.framework_root.as_deref(), None)?.0;
-    let manifest = fw.join("scripts/router-rs/Cargo.toml");
+    let manifest = fw.join("core/router-rs/Cargo.toml");
 
     // Prefer existing dev binary (typically already built before `maint install-*` nested under
     // `cargo test`). Avoid unconditional `--release`; it contends forever on Cargo package locks.

@@ -1,5 +1,5 @@
 //! Claude Code（Anthropic CLI）hooks：`router-rs claude hook --event=… --repo-root …`。
-//! 历史版本接口快照：`git show 89ece4c^:scripts/router-rs/src/claude_hooks.rs`（事件：`pre-tool-use`、`user-prompt-submit`、`post-tool-use`、`stop`；CLI 亦接受 `PreToolUse` 等 PascalCase 别名，与 Codex hook 拼写对齐）。
+//! 历史版本接口快照：`git show 89ece4c^:core/router-rs/src/claude_hooks.rs`（事件：`pre-tool-use`、`user-prompt-submit`、`post-tool-use`、`stop`；CLI 亦接受 `PreToolUse` 等 PascalCase 别名，与 Codex hook 拼写对齐）。
 //!
 //! **误接 Cursor hook stdin**：仅在 stdin JSON 呈现结构化 Cursor envelope（顶层非空 `cursor_version` 字符串 + `workspace_roots` 数组 + 非空 `hook_event_name` 或 `hookEventName`）时整条静默；
 //! 不用路径子串扫描，以免合法 Claude 载荷（例如编辑 `.cursor/` 下文件）被误判为 Cursor 而旁路门禁。
@@ -305,7 +305,7 @@ fn apply_claude_review_gate_user_prompt(
 }
 
 const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
-    "scripts/router-rs/",
+    "core/router-rs/",
     "configs/framework/",
     "skills/SKILL_",
     "skills/SKILL_ROUTING_RUNTIME.json",
@@ -1324,8 +1324,8 @@ fn payload_runs_framework_tests(payload: &Value) -> bool {
         return false;
     }
     [
-        "--manifest-path scripts/router-rs/cargo.toml",
-        "scripts/router-rs/cargo.toml",
+        "--manifest-path core/router-rs/cargo.toml",
+        "core/router-rs/cargo.toml",
         "router-rs",
         "--test policy_contracts",
         "--test documentation_contracts",
@@ -1405,7 +1405,7 @@ mod tests {
             "session_id": "s-framework-ok",
             "tool_name": "Bash",
             "tool_input": {
-                "command": "cargo test --manifest-path scripts/router-rs/Cargo.toml claude_hooks"
+                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_hooks"
             },
             "exit_code": 0
         });
@@ -1425,7 +1425,7 @@ mod tests {
             "session_id": "s-framework-fail",
             "tool_name": "Bash",
             "tool_input": {
-                "command": "cargo test --manifest-path scripts/router-rs/Cargo.toml claude_hooks"
+                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_hooks"
             },
             "exit_code": 101
         });
@@ -2001,9 +2001,9 @@ mod tests {
             "transcript_path": "/Users/joe/.cursor/projects/example/session.json",
             "tool_name": "Bash",
             "tool_input": {
-                "command": "apply_patch scripts/router-rs/src/claude_hooks.rs"
+                "command": "apply_patch core/router-rs/src/claude_hooks.rs"
             },
-            "file_path": "scripts/router-rs/src/claude_hooks.rs",
+            "file_path": "core/router-rs/src/claude_hooks.rs",
             "exit_code": 0
         });
 

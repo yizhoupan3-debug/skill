@@ -79,11 +79,11 @@
       "router_rs_eval_route": {
         "binary": "router-rs",
         "subcommand": "eval route",
-        "rust_type": "scripts/router-rs/src/eval_route.rs::EvalCasePayload",
+        "rust_type": "core/router-rs/src/eval_route.rs::EvalCasePayload",
         "behavior": "route_task_with_manifest_fallback；先 filter_records_for_host（当 host_id 非空）；first_turn 固定为 true；校验 expected_owner、expected_overlay、expected_layer、forbidden_owners。"
       },
       "router_rs_routing_eval_tests": {
-        "rust_type": "scripts/router-rs/src/route.rs::RoutingEvalCasePayload（cfg(test)）",
+        "rust_type": "core/router-rs/src/route.rs::RoutingEvalCasePayload（cfg(test)）",
         "behavior": "route_task；读取 first_turn；按 category 计算 trigger_hit/overtrigger；不校验 expected_layer。"
       }
     },
@@ -92,7 +92,7 @@
   "routing_eval_report_v1": {
     "schema_version": "routing-eval-report-v1",
     "authority": "rust-eval-route",
-    "rust_const": "scripts/router-rs/src/eval_route.rs::EVAL_ROUTE_REPORT_SCHEMA_VERSION",
+    "rust_const": "core/router-rs/src/eval_route.rs::EVAL_ROUTE_REPORT_SCHEMA_VERSION",
     "fields": {
       "schema_version": "routing-eval-report-v1",
       "authority": "rust-eval-route",

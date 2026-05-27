@@ -44,13 +44,13 @@
 ## 4. CLI / 调试
 
 ```bash
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD"
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD" --task-id "<uuid>"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework task-state-resolve --repo-root "$PWD" --task-id "<uuid>"
 # 阶段 3：刷新单文件投影（缺省从 active_task.json 取 task_id）
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD"
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD" --task-id "<uuid>"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework task-state-aggregate-sync --repo-root "$PWD" --task-id "<uuid>"
 # 阶段 2.5：`kind` 为 autopilot_goal | rfv_loop | session_artifacts | hook_evidence_append；`payload` 与对应直连 API 相同。
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework task-ledger-dispatch --input-json '{"schema_version":"router-rs-task-ledger-command-envelope-v1","kind":"autopilot_goal","payload":{"repo_root":"'"$PWD"'","operation":"status"}}'
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework task-ledger-dispatch --input-json '{"schema_version":"router-rs-task-ledger-command-envelope-v1","kind":"autopilot_goal","payload":{"repo_root":"'"$PWD"'","operation":"status"}}'
 ```
 
 输出 JSON，便于与 `framework snapshot` / hook 日志对照。
@@ -71,12 +71,12 @@ cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework ta
 
 ## 6. 代码真源
 
-- 读模型 / frame：`scripts/router-rs/src/task_state.rs`（含 `hydrate_task_state_hybrid`：先读 `TASK_STATE.json` 投影，再 replay `TASK_LEDGER.jsonl` 中 `seq > last_seq` 的 tail）
-- 阶段 3 投影刷新：`scripts/router-rs/src/task_state_aggregate.rs`
-- Ledger append-only 审计：`scripts/router-rs/src/task_ledger.rs`（`TASK_LEDGER.jsonl`；replay 支持的 `tx_type`：`goal_state`、`rfv_loop_state`、`evidence`；`step` 等其它类型当前不 replay 进读模型）
-- 命名写分发（2.5）：`scripts/router-rs/src/task_command.rs`
-- 写串行：`scripts/router-rs/src/task_write_lock.rs`
+- 读模型 / frame：`core/router-rs/src/task_state.rs`（含 `hydrate_task_state_hybrid`：先读 `TASK_STATE.json` 投影，再 replay `TASK_LEDGER.jsonl` 中 `seq > last_seq` 的 tail）
+- 阶段 3 投影刷新：`core/router-rs/src/task_state_aggregate.rs`
+- Ledger append-only 审计：`core/router-rs/src/task_ledger.rs`（`TASK_LEDGER.jsonl`；replay 支持的 `tx_type`：`goal_state`、`rfv_loop_state`、`evidence`；`step` 等其它类型当前不 replay 进读模型）
+- 命名写分发（2.5）：`core/router-rs/src/task_command.rs`
+- 写串行：`core/router-rs/src/task_write_lock.rs`
 - GOAL 续跑判定复用：`autopilot_goal::goal_state_requests_continuation`
 - RFV 活跃判定：`rfv_loop_state.loop_status == active`（大小写不敏感）
 
-维护：若修改 `task_id` 解析或 `control_mode` 分类规则，**同时**更新本文 §2–§3、`task_state.rs` 与 [`runtime_view.rs`](../scripts/router-rs/src/framework_runtime/runtime_view.rs) 中单测。`framework snapshot` 使用的 `active_task_id` 与 `resolve_task_view` 已对齐（`override > active > focus`）。
+维护：若修改 `task_id` 解析或 `control_mode` 分类规则，**同时**更新本文 §2–§3、`task_state.rs` 与 [`runtime_view.rs`](../core/router-rs/src/framework_runtime/runtime_view.rs) 中单测。`framework snapshot` 使用的 `active_task_id` 与 `resolve_task_view` 已对齐（`override > active > focus`）。

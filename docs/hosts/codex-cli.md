@@ -29,7 +29,7 @@
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../scripts/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../core/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
 | 宿主入口对齐 | `router-rs codex sync` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；跨宿主内核 **[`AGENTS.md`](../../AGENTS.md)** 人工维护、不由 sync 覆盖 |
@@ -45,7 +45,7 @@
 - **同步与安装命令**：
   当修改了 `router-rs` 嵌入的 AGENTS 文本、Codex hook 模板或需重新材料化时，运行以下同步命令：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
   ```
 
 ## Skill 存放与路由 (Skills & Routing)
@@ -84,11 +84,11 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 - **自检 Codex Hooks**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-codex-hooks
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-codex-hooks
   ```
 - **验证 Skill 路由及状态**：
   ```bash
-  cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework skills validate
   ```
 
 ## 独有环境变量与参数 (Environment Variables & Parameters)

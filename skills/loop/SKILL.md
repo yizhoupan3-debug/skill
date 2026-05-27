@@ -66,5 +66,5 @@ LOOP_ROUND_COMPLETE
 
 ## 验证
 
-- 轮次账本与 stdio：`framework_rfv_loop`（`cd scripts/router-rs && cargo test` 覆盖 RFV）
-- Cursor hook 回归：`cd scripts/router-rs && cargo test cursor_hooks`
+- 轮次账本与 stdio：`framework_rfv_loop`（`cd core/router-rs && cargo test` 覆盖 RFV）
+- Cursor hook 回归：`cd core/router-rs && cargo test cursor_hooks`

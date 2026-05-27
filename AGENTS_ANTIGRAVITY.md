@@ -14,8 +14,8 @@
 ## 宿主集成与诊断
 
 ```bash
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --to antigravity --repo-root "$PWD"
-cargo run --release --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration status
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to antigravity --repo-root "$PWD"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration status
 ```
 
 ## 并行子代理调度（Antigravity 差异）

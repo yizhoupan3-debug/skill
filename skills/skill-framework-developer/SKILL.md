@@ -189,7 +189,7 @@ Default to **incumbent-first** repair:
 
 ```bash
 cd "<repo-root>"
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
+cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
 ```
 
 For local high-output runs, follow [`RTK.md`](../../RTK.md) and prefer the corresponding `rtk ...` wrapper when raw output is not required.

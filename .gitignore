@@ -55,8 +55,8 @@ artifacts/current/
 artifacts/bootstrap/
 artifacts/runtime/
 artifacts/session_supervisor/
-scripts/router-rs/artifacts/session_supervisor/
-scripts/router-rs/probe.err
+core/router-rs/artifacts/session_supervisor/
+core/router-rs/probe.err
 **/.router-rs.*.lock
 artifacts/codex-skill-surface/
 artifacts/ops/

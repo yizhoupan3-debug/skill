@@ -1545,14 +1545,14 @@ mod resolve_repo_root_tests {
             r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{}}"#,
         )
         .unwrap();
-        fs::create_dir_all(tmp.join("scripts/router-rs/src")).unwrap();
+        fs::create_dir_all(tmp.join("core/router-rs/src")).unwrap();
         fs::write(
-            tmp.join("scripts/router-rs/Cargo.toml"),
+            tmp.join("core/router-rs/Cargo.toml"),
             "[package]\nname = \"router-rs\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
         )
         .unwrap();
 
-        let subdir = tmp.join("scripts/router-rs/src");
+        let subdir = tmp.join("core/router-rs/src");
         let resolved = resolve_repo_root_arg(Some(subdir.as_path())).unwrap();
         let expect = tmp.canonicalize().unwrap_or_else(|_| tmp.clone());
         assert_eq!(resolved, expect);

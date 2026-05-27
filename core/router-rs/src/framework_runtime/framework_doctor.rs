@@ -163,7 +163,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
                 }
             }
             if !ok {
-                println!("  fix: cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint update-one-shot");
+                println!("  fix: cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot");
             }
         }
         Err(e) => println!("generated-artifacts-status: error ({e})"),

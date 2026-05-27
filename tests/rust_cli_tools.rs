@@ -50,8 +50,8 @@ fn image_generated_skill_docs_point_to_rust_cli_only() {
 
 #[test]
 fn update_audit_cli_contract_is_registered() {
-    let args = read_text(&project_root().join("scripts/router-rs/src/cli/args.inc"));
-    let maint = read_text(&project_root().join("scripts/router-rs/src/framework_maint.rs"));
+    let args = read_text(&project_root().join("core/router-rs/src/cli/args.inc"));
+    let maint = read_text(&project_root().join("core/router-rs/src/framework_maint.rs"));
     assert!(args.contains("UpdateAudit(UpdateAuditArgs)"));
     assert!(args.contains("repo_root: Option<PathBuf>"));
     assert!(args.contains("Dry-run `/update` repository knowledge/hygiene audit"));
@@ -75,8 +75,8 @@ fn update_audit_cli_contract_is_registered() {
 
 #[test]
 fn refresh_host_projections_keeps_claude_projection_explicit() {
-    let args = read_text(&project_root().join("scripts/router-rs/src/cli/args.inc"));
-    let maint = read_text(&project_root().join("scripts/router-rs/src/framework_maint.rs"));
+    let args = read_text(&project_root().join("core/router-rs/src/cli/args.inc"));
+    let maint = read_text(&project_root().join("core/router-rs/src/framework_maint.rs"));
     assert!(args.contains("non-Codex framework installs"));
     assert!(maint.contains("let installable_tools = installable_projection_tools(&fw)?"));
     assert!(maint.contains("verify_installable_projections(&fw, &installable_tools)?"));
@@ -120,7 +120,7 @@ fn update_audit_runs_on_plain_git_repo_and_preserves_status_columns() {
     .unwrap();
 
     let output = run(cargo_manifest_command(
-        &project_root().join("scripts/router-rs/Cargo.toml"),
+        &project_root().join("core/router-rs/Cargo.toml"),
         &[
             "framework",
             "maint",

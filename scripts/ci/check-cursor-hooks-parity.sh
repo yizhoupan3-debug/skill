@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 root = Path(".").resolve()
-manifest = root / "scripts/router-rs/Cargo.toml"
+manifest = root / "core/router-rs/Cargo.toml"
 
 def load_contract() -> dict:
     out = subprocess.check_output(

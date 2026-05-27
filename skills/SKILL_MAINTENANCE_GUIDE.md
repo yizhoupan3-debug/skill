@@ -14,13 +14,13 @@
 2. Body 必含：`## When to use` + `## Do not use`
 3. 运行生成同步：
    ```bash
-   cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+   cargo run --manifest-path core/router-rs/Cargo.toml -- \
      framework skills refresh --framework-root "$PWD" --write
    ```
    这一步会统一刷新 `SKILL_ROUTING_RUNTIME.json`、`SKILL_ROUTING_INDEX.md` 等生成路由产物；不要手改这些生成文件。
 4. 运行验证：
    ```bash
-   cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate --framework-root "$PWD"
+   cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills validate --framework-root "$PWD"
    cargo test --test policy_contracts
    ```
    本地人工执行这些高输出命令时，可按 [`RTK.md`](../RTK.md) 改用 `rtk ...` 包装形式。
@@ -31,7 +31,7 @@
 - 触发词是否变化 → 更新 description
 - 边界是否变化 → 重新运行 `router-rs framework skills refresh --write`
 - 是否引入第二份 live source → 删除多余副本
-- 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex host-integration install-skills --repo-root \"$PWD\" install`（或使用已安装的 `router-rs` 等价命令），不要手动改 `~/.codex/skills`
+- 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `cargo run --manifest-path core/router-rs/Cargo.toml -- codex host-integration install-skills --repo-root \"$PWD\" install`（或使用已安装的 `router-rs` 等价命令），不要手动改 `~/.codex/skills`
 
 ## 边界重叠处理
 
@@ -71,7 +71,7 @@ git worktree list --porcelain
 ## 技能演化与凝结 (Evolution & Condensation)
 
 ### 1. 自动演化审计
-每周 Cron 任务通过 `scripts/evolution-rs` 自动执行：
+每周 Cron 任务通过 `core/evolution-rs` 自动执行：
 - **动态健康分**：结合静态评分与路由记录。低于 60 分即标记为 `Critical Outlier`。
 - **冲突审计**：识别高频错配对（Reroute Pairs），强制建议收紧 `init` 技能边界。
 

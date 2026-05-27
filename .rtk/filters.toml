@@ -15,9 +15,9 @@ on_empty = "framework skills: ok"
 [[tests.framework-skills]]
 name = "strips cargo wrapper noise"
 input = """
-   Compiling router-rs v0.1.0 (/repo/scripts/router-rs)
+   Compiling router-rs v0.1.0 (/repo/core/router-rs)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
-     Running `scripts/router-rs/target/debug/router-rs framework skills validate`
+     Running `core/router-rs/target/debug/router-rs framework skills validate`
 framework skills validate: ok
 """
 expected = "framework skills validate: ok"

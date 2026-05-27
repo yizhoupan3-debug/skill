@@ -19,15 +19,15 @@ jobs:
 
       - name: Run evolution audit
         run: |
-          cargo run --manifest-path scripts/evolution-rs/Cargo.toml -- manifest \
+          cargo run --manifest-path core/evolution-rs/Cargo.toml -- manifest \
             --journal skills/.evolution_journal.jsonl \
             --manifest skills/SKILL_MANIFEST.json \
             > skills/SKILL_HEALTH_MANIFEST.json
-          cargo run --manifest-path scripts/evolution-rs/Cargo.toml -- audit \
+          cargo run --manifest-path core/evolution-rs/Cargo.toml -- audit \
             --journal skills/.evolution_journal.jsonl \
             --manifest skills/SKILL_MANIFEST.json \
             --json > /tmp/audit.json
-          cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+          cargo run --manifest-path core/router-rs/Cargo.toml -- \
             framework skills refresh --framework-root "$PWD" --write
 
       - name: Commit manifest changes

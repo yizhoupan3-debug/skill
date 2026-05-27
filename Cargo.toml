@@ -16,11 +16,11 @@ tempfile = "3.15"
 [workspace]
 members = [
     ".",
-    "core/antigravity",
     "cli/antigravity-cli",
-    "scripts/router-rs",
-    "scripts/autoresearch-rs",
-    "scripts/evolution-rs",
+    "core/antigravity",
+    "core/router-rs",
+    "core/autoresearch-rs",
+    "core/evolution-rs",
     "rust_tools/citation_tool_rs",
     "rust_tools/financial_data_rs",
     "rust_tools/gh_source_gate_rs",

@@ -1,5 +1,5 @@
 //! Compile-time embedded `ROUTER_RS_HOOK_OBSERVATION_RULES.json` from the repo
-//! `configs/framework/` tree (`include_str!` path is relative to `scripts/router-rs`).
+//! `configs/framework/` tree (`include_str!` path is relative to `core/router-rs`).
 
 use serde_json::Value;
 use std::collections::HashMap;

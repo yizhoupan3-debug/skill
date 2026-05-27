@@ -3,57 +3,57 @@
   "generated_artifacts": [
     {
       "path": ".codex/prompts/framework.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to codex-cli",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to codex-cli",
       "compare": "normalized-text"
     },
     {
       "path": "AGENTS_CODEX.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
       "compare": "byte-for-byte"
     },
     {
       "path": ".codex/README.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
       "compare": "normalized-text"
     },
     {
       "path": ".codex/host_entrypoints_sync_manifest.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
       "compare": "byte-for-byte"
     },
     {
       "path": ".claude/rules/framework.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
       "compare": "normalized-text"
     },
     {
       "path": ".claude/settings.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
       "compare": "normalized-text"
     },
     {
       "path": ".claude/CLAUDE.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
       "compare": "normalized-text"
     },
     {
       "path": ".claude/mcp.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
       "compare": "normalized-text"
     },
     {
       "path": ".gemini/antigravity/rules/framework.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
       "compare": "normalized-text"
     },
     {
       "path": ".gemini/settings.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
       "compare": "normalized-text"
     },
     {
       "path": ".gemini/mcp.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
       "compare": "normalized-text"
     },
     {
@@ -63,17 +63,17 @@
     },
     {
       "path": "skills/SKILL_TIERS.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write",
       "compare": "byte-for-byte"
     },
     {
       "path": "skills/SKILL_ROUTING_REGISTRY.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "normalized-text"
     },
     {
       "path": "skills/SKILL_ROUTING_INDEX.md",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "normalized-text"
     },
     {
@@ -88,22 +88,22 @@
     },
     {
       "path": "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {
       "path": "skills/SKILL_PLUGIN_CATALOG.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {
       "path": "skills/SKILL_ROUTING_METADATA.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {
       "path": "skills/SKILL_HEALTH_MANIFEST.json",
-      "generator": "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "byte-for-byte"
     },
     {

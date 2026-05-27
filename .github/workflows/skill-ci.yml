@@ -6,6 +6,7 @@ on:
     paths:
       - 'skills/**'
       - 'scripts/**'
+      - 'core/**'
       - 'rust_tools/**'
       - 'tests/**'
       - '.cursor/**'
@@ -21,6 +22,7 @@ on:
     paths:
       - 'skills/**'
       - 'scripts/**'
+      - 'core/**'
       - 'rust_tools/**'
       - 'tests/**'
       - '.cursor/**'
@@ -59,22 +61,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build router-rs
-        run: cargo build --release --manifest-path scripts/router-rs/Cargo.toml
+        run: cargo build --release --manifest-path core/router-rs/Cargo.toml
 
       - name: Build antigravity crates
         run: |
           cargo build --release --manifest-path core/antigravity/Cargo.toml
-          cargo build --release --manifest-path cli/antigravity-cli/Cargo.toml
 
       - name: Schema drift contract smoke
-        run: cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- schema-drift contract
+        run: cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- schema-drift contract
 
       - name: Cursor hooks 7-event parity (hooks.json vs workspace template)
         run: bash scripts/ci/check-cursor-hooks-parity.sh
 
       - name: Validate skill registry
         run: |
-          cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills validate --framework-root "$PWD"
+          cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills validate --framework-root "$PWD"
 
       - name: Run Rust policy tests
         run: cargo test --test policy_contracts
@@ -94,18 +95,18 @@ jobs:
         run: cargo test --test rust_cli_tools
 
       - name: Run router-rs crate tests
-        run: cargo test --manifest-path scripts/router-rs/Cargo.toml
+        run: cargo test --manifest-path core/router-rs/Cargo.toml
 
       - name: Verify Cursor hooks wiring
-        run: cargo run --manifest-path scripts/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
+        run: cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
 
       - name: Run Codex hook installer tests
         run: uv run python .cursor/hook-tests/test_install_codex_cli_hooks.py
 
       - name: Check generated artifact drift
         run: |
-          cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
-          cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- \
+          cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root "$PWD" --write
+          cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- \
             framework host-integration generated-artifacts-status \
             --framework-root "$PWD" > generated-artifacts-status.json
           uv run python - <<'PY'

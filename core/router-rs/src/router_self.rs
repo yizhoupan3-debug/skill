@@ -25,7 +25,7 @@ pub struct RouterSelfCleanArgs {
     /// Remove `ROUTER_RS_SHARED_TARGET` if set, otherwise `/tmp/skill-cargo-target`.
     #[arg(long, default_value_t = false)]
     pub shared_target: bool,
-    /// Remove repo-local `scripts/router-rs/target` and framework-root `target/` (after `cargo clean`).
+    /// Remove repo-local `core/router-rs/target` and framework-root `target/` (after `cargo clean`).
     #[arg(long, default_value_t = false)]
     pub repo_targets: bool,
 }
@@ -105,7 +105,7 @@ pub fn is_repo_build_router_rs_path(path: &str, framework_root: &Path) -> bool {
     }
     if let Ok(root) = framework_root.canonicalize() {
         if let Ok(path_buf) = Path::new(path).canonicalize() {
-            for suffix in ["scripts/router-rs/target", "target"] {
+            for suffix in ["core/router-rs/target", "target"] {
                 if path_buf.starts_with(root.join(suffix)) {
                     return true;
                 }

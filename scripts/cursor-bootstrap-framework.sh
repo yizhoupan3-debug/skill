@@ -189,4 +189,4 @@ if [[ "$WITH_CONFIGS" -eq 1 ]]; then
   safe_symlink "${FRAMEWORK_ROOT}/configs" "${PROJECT_ROOT}/configs"
 fi
 
-echo "done. Ensure router-rs is on PATH (e.g. cargo install --path \"${FRAMEWORK_ROOT}/scripts/router-rs\")."
+echo "done. Ensure router-rs is on PATH (e.g. cargo install --path \"${FRAMEWORK_ROOT}/core/router-rs\")."

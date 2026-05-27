@@ -26,7 +26,7 @@ def run_installer(codex_home: Path) -> subprocess.CompletedProcess[str]:
             "run",
             "-q",
             "--manifest-path",
-            str(ROOT / "scripts/router-rs/Cargo.toml"),
+            str(ROOT / "core/router-rs/Cargo.toml"),
             "--",
             "framework",
             "maint",
@@ -99,7 +99,7 @@ def test_preserves_existing_event_hooks() -> None:
         )
         if "codex hook --event=Stop" in gate_cmd:
             assert_true(
-                'ROUTER_RS_BIN=""; if [ -x "$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs"'
+                'ROUTER_RS_BIN=""; if [ -x "$CODEX_PROJECT_ROOT/core/router-rs/target/release/router-rs"'
                 in gate_cmd,
                 "legacy inline hook should prefer in-repo router-rs before PATH",
             )

@@ -1,5 +1,5 @@
 {
-  "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path scripts/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
+  "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
   "hooks": {
     "PostToolUse": [
       {

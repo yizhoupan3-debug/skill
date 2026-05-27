@@ -1,7 +1,12 @@
 //! Review-Fix-Verify 多轮闭环：Rust 真源 `RFV_LOOP_STATE.json` + stdio，支撑长任务轮次账本与宿主并行 lane 之后的 supervisor 合并落盘。
 
+pub use antigravity_core::state_manager::read_rfv_loop_state;
+
 use crate::atomic_write::write_atomic_json;
-use crate::autopilot_goal::read_active_task_id;
+use crate::autopilot_goal::{
+    read_active_task_id, validate_external_research_strict,
+    validate_external_research_structured,
+};
 use crate::framework_runtime::resolve_repo_root_arg;
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -231,7 +236,7 @@ fn enforce_rfv_close_gates(
 /// 实际规则下沉到 [`crate::hook_common::evidence_index_entry_implies_success`]，与 `autopilot_goal`
 /// 共用一份口径（避免历史上的两套独立判定函数）。
 fn evidence_row_is_success(row: &Value) -> bool {
-    crate::hook_common::evidence_index_entry_implies_success(row)
+    crate::autopilot_goal::evidence_index_entry_implies_success(row)
 }
 
 /// 读取同任务目录下的 `EVIDENCE_INDEX.json`。
