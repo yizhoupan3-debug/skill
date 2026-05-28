@@ -79,9 +79,24 @@ const TRACE_RESUME_MANIFEST_SCHEMA_VERSION = 'runtime-resume-manifest-v1';
 const ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION = 'router-rs-trace-stream-replay-v1';
 const ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION = 'router-rs-trace-stream-inspect-v1';
 const ROUTER_RS_TRACE_IO_AUTHORITY = 'rust-runtime-trace-io';
-const ROUTER_RS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'scripts', 'router-rs');
-const ROUTER_RS_RELEASE_BIN = path.join(ROUTER_RS_DIR, 'target', 'release', 'router-rs');
-const ROUTER_RS_DEBUG_BIN = path.join(ROUTER_RS_DIR, 'target', 'debug', 'router-rs');
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const ROUTER_RS_CRATE_DIR = path.join(REPO_ROOT, 'core', 'router-rs');
+
+function routerRsBinaryCandidates(): string[] {
+  const envBin = process.env.ROUTER_RS_BIN?.trim();
+  const candidates: string[] = [];
+  if (envBin) {
+    candidates.push(envBin);
+  }
+  const roots = [REPO_ROOT, ROUTER_RS_CRATE_DIR];
+  for (const root of roots) {
+    for (const profile of ['release', 'debug'] as const) {
+      candidates.push(path.join(root, 'target', profile, 'router-rs'));
+      candidates.push(path.join(ROUTER_RS_CRATE_DIR, 'target', profile, 'router-rs'));
+    }
+  }
+  return candidates;
+}
 const DEFAULT_ROUTER_RS_STDIO_POOL_SIZE = 4;
 const MAX_ROUTER_RS_STDIO_POOL_SIZE = 16;
 
@@ -446,7 +461,7 @@ async function resolveRouterRsCommand(): Promise<RouterRsCommand> {
     };
     return resolvedRouterRsCommand;
   }
-  for (const candidatePath of [ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN]) {
+  for (const candidatePath of routerRsBinaryCandidates()) {
     try {
       const candidateStat = await stat(candidatePath);
       if (candidateStat.isFile()) {

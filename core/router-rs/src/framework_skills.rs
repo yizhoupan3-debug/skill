@@ -133,7 +133,7 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
             }
         }
     }
-    let stubs: [(&str, Value); 8] = [
+    let stubs: [(&str, Value); 6] = [
         (
             "skills/SKILL_PLUGIN_CATALOG.json",
             json!({
@@ -176,16 +176,6 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
                 "policies": {}
             }),
         ),
-        (
-            "skills/SKILL_LOADOUTS.json",
-            json!({
-                "schema_version": "skill-loadouts-v1",
-                "source_of_truth": false,
-                "report_status": "folded",
-                "loadouts": {}
-            }),
-        ),
-        ("skills/SKILL_ROUTING_REGISTRY.md", json!(null)),
         ("skills/SKILL_ROUTING_INDEX.md", json!(null)),
     ];
     for (rel, value) in stubs {

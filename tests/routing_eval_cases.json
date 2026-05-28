@@ -438,11 +438,11 @@
       "first_turn": true
     },
     {
-      "id": "loop-explicit-skill",
-      "category": "explicit-loop-command",
-      "task": "按 /loop 跑多轮对抗审查修复验证",
-      "focus_skill": "loop",
-      "expected_owner": "loop",
+      "id": "adversarial-loop-explicit-skill",
+      "category": "explicit-adversarial-loop-command",
+      "task": "按 $adversarial-loop 跑多轮对抗审查修复验证",
+      "focus_skill": "adversarial-loop",
+      "expected_owner": "adversarial-loop",
       "expected_overlay": null,
       "forbidden_owners": [
         "agent-swarm-orchestration",

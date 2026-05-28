@@ -322,9 +322,7 @@
         "interview me",
         "don't assume",
         "深度采访",
-        "深度核查",
-        "全面review",
-        "review到收敛"
+        "深度核查"
       ],
       "project",
       3,
@@ -593,8 +591,7 @@
         "changed-file digest",
         "changed files summary",
         "review comments",
-        "gh cli",
-        "code review"
+        "gh cli"
       ],
       "project",
       3,
@@ -846,16 +843,15 @@
       "cold"
     ],
     [
-      "loop",
+      "adversarial-loop",
       "L1",
       "owner",
       "none",
       "P1",
-      "Adversarial multi-pass review-fix-verify with progressive rubric disclosure (supervisor-led). Use when the user says `$loop` / `/loop`, wants multi-pass adversarial criticism and fixes without reveali",
+      "Adversarial multi-pass review-fix-verify with progressive rubric disclosure (supervisor-led). Use when the user says `$adversarial-loop`, wants multi-pass adversarial criticism and fixes without reveali",
       "preferred",
       [
-        "$loop",
-        "/loop",
+        "$adversarial-loop",
         "adversarial loop",
         "progressive disclosure review",
         "LOOP_ROUND_COMPLETE",
@@ -864,7 +860,7 @@
       ],
       "project",
       3,
-      "skills/loop/SKILL.md",
+      "skills/adversarial-loop/SKILL.md",
       [
         "antigravity",
         "claude-code",

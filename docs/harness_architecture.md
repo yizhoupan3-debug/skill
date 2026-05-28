@@ -28,7 +28,7 @@ L1  Executable verification and exit codes
 
 ### 2.1 SessionStart（2026-05 连续性拔除后）
 
-- Codex / Cursor SessionStart **不**注入连续性 digest、`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 `depth_compliance_refresh_hint`（模块已删除，2026-05）。
+- Codex / Cursor SessionStart **不**注入连续性 digest、`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 `depth_compliance_refresh_hint`（2026-05 hook 路径已拔除；`depth_compliance_refresh_hint` 函数仍保留供遗留 env/单测，**不**注入 SessionStart）。
 - **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：Cursor **`Repo:`** 单行（[`handle_session_start`](../core/router-rs/src/hosts/cursor_hooks/handlers_parts/handlers_session.inc.rs)）；Codex `SessionStart source:`。**无** digest、**无** SessionStart 指针 hint（分裂观测用 `framework task-state-resolve` / `framework doctor`）。
 - **禁止**：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 等静态说明；禁止恢复 hook 驱动的 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。
 - 出站仍按 UTF-8 **字节**预算截断（Cursor `...[~trunc]`；Codex `...`）。
@@ -74,7 +74,7 @@ L1  Executable verification and exit codes
 
 User-scope install 产出：`~/.cursor/rules/framework.mdc`（叙事真源 `host_projection_narrative.json`）。详见 [`docs/hosts/cursor.md`](hosts/cursor.md)。
 
-**Companion 生成物**（`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json` 等）：`source_of_truth: false` stub；默认 `cargo test --test policy_contracts` 只断言闭集与形态，**不**恢复历史 `capability_classes` 富契约（见 `plugin_catalog_routing_metadata_legacy_capabilities_contract`，`#[ignore]`）。
+**Companion 生成物**（`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json` 等）：`source_of_truth: false` stub；默认 `cargo test --test policy_contracts` 只断言闭集与形态，**不**恢复历史 `capability_classes` 富契约（见 `plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop`，`tests/policy_contracts.rs`）。
 
 ## 3. 主数据流
 
@@ -122,11 +122,11 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 **2026-05**：hook **不**再投影 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`；续跑仅 stdio + 手动画板（见 §2.1）。
 
-**可读模型**：当 `active_task.json` 指向的任务缺少可读 `GOAL_STATE.json`，但 `focus_task.json` 指向另一任务且该任务盘上存在合法 GOAL 时，[`resolve_task_view`](../core/router-rs/src/task_state.rs) 会在 `resolution_notes` 写入短码 `continuity:active_goal_missing_focus_has_goal`（仅观测；[`read_goal_state_for_hydration`](../core/router-rs/src/autopilot_goal.rs) 仍不回退 focus）。`framework task-state-resolve` 可透出该行提示。
+**可读模型**：当 `active_task.json` 指向的任务缺少可读 `GOAL_STATE.json`，但 `focus_task.json` 指向另一任务且该任务盘上存在合法 GOAL 时，[`resolve_task_view`](../core/antigravity/src/task_state.rs) 会在 `resolution_notes` 写入短码 `continuity:active_goal_missing_focus_has_goal`（仅观测；[`read_goal_state_for_hydration`](../core/router-rs/src/autopilot_goal.rs) 仍不回退 focus）。`framework task-state-resolve` 可透出该行提示。
 
 **Stop 自动 checkpoint（已删除，2026-05）**：Cursor/Codex hook **不再**在 Stop 写盘。显式 checkpoint 仅用 Desktop MCP `session_checkpoint` 或 `framework_session_artifact_write` stdio。
 
-**L1 运行时视图与读模型**：[`load_framework_runtime_view`](../core/router-rs/src/framework_runtime/runtime_view.rs) 的 `active_task_id` 选择与 [`resolve_task_view`](../core/router-rs/src/task_state.rs) 一致（`override > active > focus > supervisor`），见 [`task_state_unified_resolve.md`](task_state_unified_resolve.md)。
+**L1 运行时视图与读模型**：[`load_framework_runtime_view`](../core/router-rs/src/framework_runtime/runtime_view.rs) 的 `active_task_id` 选择与 [`resolve_task_view`](../core/antigravity/src/task_state.rs) 一致（`override > active > focus > supervisor`），见 [`task_state_unified_resolve.md`](task_state_unified_resolve.md)。
 
 ## 4. Hook 文案策略
 

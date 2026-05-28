@@ -19,8 +19,6 @@ trigger_hints:
   - don't assume
   - 深度采访
   - 深度核查
-  - 全面review
-  - review到收敛
 framework_roles:
   - detector
   - alias

@@ -5,14 +5,10 @@ alwaysApply: true
 
 # Review Subagent Gate（仅 Cursor）
 
-跨宿主 review 叙事与 findings-only 默认见 [AGENTS.md](../../AGENTS.md)、[harness_architecture.md](../../docs/harness_architecture.md)、[harness_policy_map.md](../../docs/harness_policy_map.md) 与 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)（compact 信封、透镜、输出 profile）。本文件**仅** Cursor hook / lane 硬约束：
+跨宿主 review 叙事见 [AGENTS.md](../../AGENTS.md)、[harness_architecture.md](../../docs/harness_architecture.md)、[harness_policy_map.md](../../docs/harness_policy_map.md)、[`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。操作细节见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。本文件**仅** hook 硬约束：
 
-- **`lifecycle_profile: my-light`**（`/discussx|planx|implementx|verifyx` 或 `GOAL_STATE`）：**不**硬拦 `REVIEW_GATE`（profile 级，非全局 env）；hooks **不**注入 spawn-first nudge；**仍**可注入 **model-inherit** 单行（见 [subagent-model-inherit.mdc](subagent-model-inherit.mdc)）。
-- 深度 review：**spawn-first 配对审稿**（首轮工具前先 spawn 可数 reviewer；主线程调研须另开独立 reviewer，`explore` 不计入）。`beforeSubmit` 只注入**一行** registry `spawn_first_nudge`（`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` 或 registry `spawn_first_enabled=false` 时**零注入**，不收紧清门）。`/implementx|/verifyx`、delegation 或 review 路径可**另注入一行** model-inherit（registry dedup：spawn-first 已含 model 半句时跳过；见 [subagent-model-inherit.mdc](subagent-model-inherit.mdc)）。
-- **窄范围**（`review ./file`、`small_task`、不用子代理）：**不武装** `review_required`，Stop **不得** 因缺子代理硬拦。
-- **可数 `REVIEW_GATE` lane**（registry `review_gate.deep_gate_lanes`）：`general-purpose`、`best-of-n-runner`、`deep-reviewer`（及归一化等价名）；`explore`/CI/`review` 等**不计入**。`fork_context: true` 不计入。`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` **默认开启**（unset 时缺字段可推断 `fork_context=false`）；关闭设 `=0|false|off|no`。见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。
-- **主线程 compact 清门**：**不得**在无 `deep_gate_lanes` + `fork_context=false` 可数子代理证据时仅凭 compact findings 清门（2026-05 wave-2）。
-- **Stop**：硬 `REVIEW_GATE` / `AG_FOLLOWUP` 时不合并 review-output-lint 软提示；**不**注入 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05 已删除）。
-- 真源：`.cursor/hook-state`、Stop 上 `router-rs REVIEW_GATE` / `router-rs AG_FOLLOWUP` 单行短码；**禁止**自拟无 `router-rs ` 前缀的 `*_FOLLOWUP` 仿造行。
-- review lane **只读**；纯 review 禁止默认改代码/提交/推进 execute，除非用户显式要求。
-- 用户明确要求避免 subagent 时，本 gate 不适用。
+- **`lifecycle_profile: my-light`**：**不**硬拦 `REVIEW_GATE`；**不**注入 spawn-first nudge（model-inherit 仍见 [subagent-model-inherit.mdc](subagent-model-inherit.mdc)）。
+- 深度 review：**spawn-first** 可数 reviewer（`general-purpose` / `best-of-n-runner` / `deep-reviewer`，registry `deep_gate_lanes` + **`fork_context=false` 须 JSON 显式**）；`explore` 不计入。
+- **窄范围** / 用户禁 subagent：**不**武装 `review_required`。
+- **Stop**：硬门控仅认 `.cursor/hook-state` 与 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` 单行短码。
+- review lane **只读**；纯 review 禁止默认改代码/提交，除非用户显式要求。

@@ -1,7 +1,7 @@
 //! Minimal RFV loop surface for antigravity-core tests and goal/RFV mutex.
 
 use crate::state_manager::{
-    deactivate_rfv_for_conflict_with_autopilot, read_active_task_id, read_rfv_loop_state,
+    deactivate_goal_for_conflict_with_rfv, read_active_task_id, read_rfv_loop_state,
     rfv_loop_state_path,
 };
 use crate::utils::atomic_write::write_atomic_json;
@@ -103,19 +103,20 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 "updated_at".to_string(),
                 json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
             );
-            let _dead = deactivate_rfv_for_conflict_with_autopilot;
             let path = rfv_loop_state_path(&repo_root, &task_id)?;
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("mkdir RFV task dir: {e}"))?;
             }
             write_atomic_json(&path, &Value::Object(obj.clone()))?;
+            let goal_state_cleared = deactivate_goal_for_conflict_with_rfv(&repo_root, &task_id)?;
             Ok(json!({
                 "ok": true,
                 "operation": operation,
                 "task_id": task_id,
                 "rfv_loop_state_path": path.display().to_string(),
                 "rfv_loop_state": Value::Object(obj),
+                "goal_state_cleared": goal_state_cleared,
             }))
         }
         other => Err(format!("framework_rfv_loop: unsupported operation `{other}`")),

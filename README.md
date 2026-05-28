@@ -14,19 +14,19 @@
 
 - **路径 B — 全量 harness（router-rs + hooks）**  
   适合：需要 **Cursor/Codex/Claude hooks**、`.cursor/hook-state` 门控、连续性 `artifacts/current/`、证据索引等。必须先 **构建并安装 `router-rs`**，再按宿主配置 hooks；关键事件在二进制缺失时常 **fail-closed**（见下文 Codex hooks 解析顺序）。  
-  **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 `AGENTS.md` → **Codex：`AGENTS.md` 构建快照（策略 A）**。  
+  **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**。  
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
   `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
 
 ## 这套系统包含什么
 
 - `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
-  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 `AGENTS.md` → **权威分层** → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
+  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
 - `docs/README.md`：契约与分层文档索引（阅读顺序、主题表、`target-dir`/hook 清理边界）。
 - `docs/harness_architecture.md`：连续性控制面 **L1–L5** 上层设计（证据流、续跑流、扩展规则）。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。
 - `skills/SKILL_ROUTING_RUNTIME.json`：运行时路由入口。Codex 应先查这个文件，再按命中结果读取对应 skill。
-- `skills/SKILL_MANIFEST.json`、`skills/SKILL_ROUTING_INDEX.md`、`skills/SKILL_ROUTING_REGISTRY.md` 等：由编译器生成的路由/索引产物。
+- `skills/SKILL_MANIFEST.json`、`skills/SKILL_ROUTING_INDEX.md` 等：路由索引与 manifest（**热表** `SKILL_ROUTING_RUNTIME.json` 与 manifest 为手维护真源；`refresh --write-companions` 只再生 tiers/companion stubs）。
 - `core/router-rs/`：`framework skills validate|refresh` 刷新 skill 路由产物。
 - `tests/`：skill 策略和路由约束测试。
 - `.github/workflows/`：GitHub 上的自动校验。
@@ -57,7 +57,7 @@ git grep -n -I -E "OPENAI_API_KEY|api_key|secret|token|password|smtp|cookie|auth
 
 ```bash
 git init
-git add AGENTS.md README.md skills scripts tests Cargo.toml Cargo.lock .github .githooks docs RTK.md
+git add AGENTS.md README.md skills core scripts tests Cargo.toml Cargo.lock .github .githooks docs RTK.md
 git commit -m "Share Codex skill system"
 git branch -M main
 git remote add origin https://github.com/<your-name>/<repo-name>.git
@@ -239,7 +239,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework skill
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
 cargo test --test policy_contracts
 git status --short
-git add skills scripts tests AGENTS.md README.md
+git add skills core scripts tests AGENTS.md README.md
 git commit -m "Update skill system"
 git push
 ```
@@ -269,7 +269,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- `
 - `skills/SKILL_ROUTING_RUNTIME.json`
 - `skills/SKILL_MANIFEST.json`
 - `skills/SKILL_ROUTING_INDEX.md`
-- `skills/SKILL_ROUTING_REGISTRY.md`
+- `skills/SKILL_ROUTING_INDEX.md`
 - `skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`
 - `skills/SKILL_ROUTING_METADATA.json`
 - `skills/SKILL_PLUGIN_CATALOG.json`

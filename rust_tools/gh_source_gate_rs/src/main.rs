@@ -353,7 +353,7 @@ fn check_routing_surfaces_are_rust_only(repo_root: &Path) -> DoctorCheck {
     let surfaces = [
         "skills/SKILL_MANIFEST.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
-        "skills/SKILL_ROUTING_REGISTRY.md",
+        "skills/SKILL_ROUTING_INDEX.md",
         "skills/SKILL_ROUTING_INDEX.md",
         "skills/SKILL_ROUTING_METADATA.json",
     ];
@@ -1547,7 +1547,7 @@ const SUMMARY_MARKER: &str = "summary";
         for path in [
             "skills/SKILL_MANIFEST.json",
             "skills/SKILL_ROUTING_RUNTIME.json",
-            "skills/SKILL_ROUTING_REGISTRY.md",
+            "skills/SKILL_ROUTING_INDEX.md",
             "skills/SKILL_ROUTING_INDEX.md",
             "skills/SKILL_ROUTING_METADATA.json",
         ] {

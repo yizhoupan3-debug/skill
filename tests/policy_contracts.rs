@@ -712,7 +712,6 @@ fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
         "skills/SKILL_PLUGIN_CATALOG.json",
         "skills/SKILL_ROUTING_METADATA.json",
         "skills/SKILL_HEALTH_MANIFEST.json",
-        "skills/SKILL_ROUTING_REGISTRY.md",
         "skills/SKILL_ROUTING_INDEX.md",
     ]
     .iter()
@@ -783,7 +782,7 @@ fn framework_surface_policy_is_the_activation_source_of_truth() {
     );
     assert_eq!(
         surface["deprecated_or_foldable_reports"],
-        serde_json::json!(["skills/SKILL_LOADOUTS.json"])
+        serde_json::json!([])
     );
     assert_eq!(
         surface["kernel"]["canonical_axes"],

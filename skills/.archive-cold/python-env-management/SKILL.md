@@ -114,8 +114,8 @@ This skill is on the **cold** manifest surface. For machine governance, prefer e
 When changing normative behavior, edit **`SPEC.md` first**, then align references and run:
 
 ```bash
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+cargo run --manifest-path core/router-rs/Cargo.toml -- \
   framework skills refresh --framework-root "$PWD" --write --write-companions
-cargo run --manifest-path scripts/router-rs/Cargo.toml -- \
+cargo run --manifest-path core/router-rs/Cargo.toml -- \
   framework skills validate --framework-root "$PWD"
 ```

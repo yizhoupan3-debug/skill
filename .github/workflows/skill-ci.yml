@@ -94,6 +94,9 @@ jobs:
       - name: Run Rust CLI tools integration tests
         run: cargo test --test rust_cli_tools
 
+      - name: Run antigravity crate tests
+        run: cargo test --manifest-path core/antigravity/Cargo.toml
+
       - name: Run router-rs crate tests
         run: cargo test --manifest-path core/router-rs/Cargo.toml
 

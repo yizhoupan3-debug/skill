@@ -20,7 +20,7 @@
 
 - **权威磁盘**：`artifacts/current/<task_id>/GOAL_STATE.json`、`RFV_LOOP_STATE.json`。
 - **显式控制面**：`framework_goal_drive`、`framework_rfv_loop`（stdio-json）；My 执行区用 `/implementx`、`/verifyx` 驱动，**非**宿主 Stop 自动续跑。
-- SessionStart：**仅** `Repo:` / 可选 `SESSION_SUMMARY` 前缀（Cursor `summary` 模式）；预算见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` / `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS`。
+- SessionStart：**仅** `Repo:` 单行（Cursor）；预算见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` / `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS`。
 
 ## Codex CLI 专项
 

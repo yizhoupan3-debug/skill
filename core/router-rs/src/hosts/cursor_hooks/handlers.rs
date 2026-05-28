@@ -2556,6 +2556,45 @@ enum PendingCyclePush {
     AtCap,
 }
 
+/// Qualifying **`subagentStop`** or successful **`PostToolUse`** on a subagent lane: pop one matching
+/// pending key; when the multiset empties, bump to phase 3 (parity with `handle_subagent_stop`).
+/// PostTool settlement covers hosts that return Task results without a matching `subagentStop`.
+fn try_settle_review_subagent_cycle(
+    state: &mut ReviewGateState,
+    cycle_key: &Option<String>,
+    review_kind: bool,
+) -> bool {
+    if !review_hard_armed(state) || !review_kind || state.phase < 2 {
+        return false;
+    }
+    let Some(k) = cycle_key.as_ref() else {
+        return false;
+    };
+    if !state
+        .review_subagent_pending_cycle_keys
+        .iter()
+        .any(|p| p == k)
+    {
+        return false;
+    }
+    if let Some(pos) = state
+        .review_subagent_pending_cycle_keys
+        .iter()
+        .position(|p| p == k)
+    {
+        state.review_subagent_pending_cycle_keys.remove(pos);
+    }
+    sync_review_cycle_legacy_fields(state);
+    if state.review_subagent_pending_cycle_keys.is_empty() {
+        state.review_pending_cap_refused = false;
+        bump_phase(state, 3);
+        state.subagent_stop_count = state.subagent_stop_count.saturating_add(1);
+        state.lane_intent_matches = Some(true);
+        clear_review_gate_escalation_counters(state);
+    }
+    true
+}
+
 fn push_review_pending_cycle_key(
     state: &mut ReviewGateState,
     cycle_key: Option<String>,
@@ -2645,6 +2684,10 @@ fn apply_subagent_stale_hygiene(state: &mut ReviewGateState) -> bool {
         state.review_subagent_pending_cycle_keys.clear();
         state.subagent_start_count = 0;
         state.subagent_stop_count = 0;
+        if state.phase >= 2 {
+            state.phase = 0;
+            clear_review_gate_escalation_counters(state);
+        }
         sync_review_cycle_legacy_fields(state);
     } else {
         prune_stale_review_pending_cycle_keys(state);

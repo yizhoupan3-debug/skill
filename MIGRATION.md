@@ -1,5 +1,15 @@
 # Skill 真源迁移（2026-05-19）
 
+## Rust crate 路径（2026-05-28）
+
+| 旧路径 | 新路径 |
+|--------|--------|
+| `scripts/router-rs/` | `core/router-rs/` |
+| `scripts/evolution-rs/` | `core/evolution-rs/` |
+| `scripts/autoresearch-rs/` | `core/autoresearch-rs/` |
+
+Hook launchers、CI、`Cargo.toml` workspace 已对齐 `core/*`；勿再引用 `scripts/*-rs`。
+
 - **唯一可写 skill 源**：`$SKILL_FRAMEWORK_ROOT/skills/`（示例：`$SKILL_FRAMEWORK_ROOT/skills/`）
 - **Codex 全局**：`~/.codex/skills` → `artifacts/codex-skill-surface/skills`
 - **Agents 全局**：`~/.agents/skills` → 同上 surface

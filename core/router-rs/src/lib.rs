@@ -1,5 +1,5 @@
 #![recursion_limit = "256"]
-#![allow(dead_code, unused_variables, unused_mut)]
+#![allow(unused_variables, unused_mut)]
 
 mod autopilot_goal;
 pub mod goal_drive {

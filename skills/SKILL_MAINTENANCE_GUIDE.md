@@ -12,12 +12,14 @@
 
 1. 创建 `skills/<skill-name>/SKILL.md`，frontmatter 必填：`name`, `description`, `routing_layer`, `routing_owner`, `routing_gate`, `session_start`
 2. Body 必含：`## When to use` + `## Do not use`
-3. 运行生成同步：
+3. 更新手维护路由真源（**必须**）：
+   - 编辑 `skills/SKILL_ROUTING_RUNTIME.json` 与 `skills/SKILL_MANIFEST.json`（slug、trigger、path 与 frontmatter 对齐）。
+   - 运行 companion 再生（**不**改 runtime/manifest）：
    ```bash
    cargo run --manifest-path core/router-rs/Cargo.toml -- \
-     framework skills refresh --framework-root "$PWD" --write
+     framework skills refresh --framework-root "$PWD" --write --write-companions
    ```
-   这一步会统一刷新 `SKILL_ROUTING_RUNTIME.json`、`SKILL_ROUTING_INDEX.md` 等生成路由产物；不要手改这些生成文件。
+   这一步刷新 `skills/SKILL_TIERS.json` 与 routing companion stubs（`SKILL_PLUGIN_CATALOG.json` 等）；**不要**指望 `refresh` 代替手改热表。
 4. 运行验证：
    ```bash
    cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills validate --framework-root "$PWD"
@@ -29,7 +31,7 @@
 ## 改 Skill 必查
 
 - 触发词是否变化 → 更新 description
-- 边界是否变化 → 重新运行 `router-rs framework skills refresh --write`
+- 边界是否变化 → 同步改 `SKILL_ROUTING_RUNTIME.json` / `SKILL_MANIFEST.json`，再 `framework skills refresh --write --write-companions`
 - 是否引入第二份 live source → 删除多余副本
 - 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `cargo run --manifest-path core/router-rs/Cargo.toml -- codex host-integration install-skills --repo-root \"$PWD\" install`（或使用已安装的 `router-rs` 等价命令），不要手动改 `~/.codex/skills`
 
@@ -67,17 +69,3 @@ git worktree list --porcelain
 ```
 
 如需 checkpoint，直接用 `git diff`、`git diff --staged` 和必要的手动备份写入 `artifacts/ops/`；不要依赖已移除的 Python git helper。
-
-## 技能演化与凝结 (Evolution & Condensation)
-
-### 1. 自动演化审计
-每周 Cron 任务通过 `core/evolution-rs` 自动执行：
-- **动态健康分**：结合静态评分与路由记录。低于 60 分即标记为 `Critical Outlier`。
-- **冲突审计**：识别高频错配对（Reroute Pairs），强制建议收紧 `init` 技能边界。
-
-### 2. 工作流凝结协议 (Workflow-to-Skill)
-当审计报告识别出“待批阅工作流”时，需严格执行以下流程：
-1. **模式确认**：人工批阅审计 Issue，确认该任务流具备独立凝结价值。
-2. **标准化生成**：必须基于 `$skill-creator` 协议，显式处理与 `runtime verification gate` iteration loop 等通用验收模式的 `Do not use` 边界。
-3. **回归校验**：新技能就绪后，需运行 Rust skill compiler `--apply` 更新注册表。
-4. **闭环验证**：初始设为 `P2` 优先级，在接下来的会话中观察是否成功拦截原有的“通用型”路由。

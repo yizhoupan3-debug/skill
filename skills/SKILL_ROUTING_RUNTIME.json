@@ -70,8 +70,7 @@
         "changed-file digest",
         "changed files summary",
         "review comments",
-        "gh cli",
-        "code review"
+        "gh cli"
       ],
       "P2",
       "skills/gh-address-comments/SKILL.md",
@@ -410,15 +409,14 @@
       "skill"
     ],
     [
-      "loop",
+      "adversarial-loop",
       "L1",
       "owner",
       "none",
       "preferred",
       "Adversarial multi-pass review-fix-verify with progressive rubric disclosure (supervisor-led). Us",
       [
-        "$loop",
-        "/loop",
+        "$adversarial-loop",
         "adversarial loop",
         "progressive disclosure review",
         "LOOP_ROUND_COMPLETE",
@@ -426,7 +424,7 @@
         "渐进披露审查"
       ],
       "P1",
-      "skills/loop/SKILL.md",
+      "skills/adversarial-loop/SKILL.md",
       [
         "antigravity",
         "claude-code",

@@ -3592,6 +3592,56 @@ fn armed_review_explore_posttool_then_general_purpose_cycle_clears_phase() {
     assert_eq!(state.subagent_stop_count, 1);
 }
 
+/// PostTool 返回后应核销 pending（无需 subagentStop），避免长期卡在 phase=2。
+#[test]
+fn post_tool_settles_review_cycle_without_subagent_stop() {
+    let repo = fresh_repo();
+    let sid = "s-posttool-settle";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "deep-reviewer",
+            "fork_context": false,
+            "subagent_id": "settle-only",
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "Task",
+            "tool_input": {
+                "subagent_type": "deep-reviewer",
+                "fork_context": false,
+                "subagent_id": "settle-only",
+            }
+        }),
+    );
+    let state = load_state_for(&repo, sid);
+    assert_eq!(state.phase, 3, "PostTool must settle pending to phase 3");
+    assert!(
+        state.review_subagent_pending_cycle_keys.is_empty(),
+        "pending must drain after PostTool settle"
+    );
+    let stop = dispatch_cursor_hook_event(&repo, "stop", &event(sid, "收尾"));
+    let fm = stop
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !fm.contains("REVIEW_GATE incomplete"),
+        "gate must clear after PostTool settle; fm={fm}"
+    );
+}
+
 #[test]
 fn subagent_start_then_stop_promotes_to_phase3() {
     let repo = fresh_repo();
@@ -3705,11 +3755,13 @@ fn post_tool_use_still_records_subagent_on_task_tool() {
         }),
     );
     let state = load_state_for(&repo, sid);
+    assert_eq!(
+        state.phase, 3,
+        "Task postToolUse must enqueue then settle review cycle when gate armed"
+    );
     assert!(
-        state
-            .review_subagent_pending_cycle_keys
-            .contains(&"id:pt-only".to_string()),
-        "Task postToolUse must enqueue review multiset when gate armed"
+        state.review_subagent_pending_cycle_keys.is_empty(),
+        "PostTool settle must drain pending"
     );
 }
 
@@ -3751,9 +3803,10 @@ fn review_gate_posttool_skips_duplicate_id_after_subagent_start() {
         mid.subagent_start_count, 1,
         "PostTool must not bump subagent_start_count"
     );
-    assert_eq!(
-        mid.review_subagent_pending_cycle_keys,
-        vec!["id:same-id".to_string()]
+    assert_eq!(mid.phase, 3, "PostTool must settle same-id cycle after subagentStart");
+    assert!(
+        mid.review_subagent_pending_cycle_keys.is_empty(),
+        "PostTool must not leave duplicate pending for same id"
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -3766,7 +3819,6 @@ fn review_gate_posttool_skips_duplicate_id_after_subagent_start() {
     );
     let end = load_state_for(&repo, sid);
     assert_eq!(end.phase, 3);
-    assert_eq!(end.subagent_stop_count, 1);
     assert!(end.review_subagent_pending_cycle_keys.is_empty());
 }
 
@@ -3799,9 +3851,10 @@ fn review_gate_dual_event_lane_dedup_single_stop_clears() {
         }),
     );
     let mid = load_state_for(&repo, sid);
-    assert_eq!(
-        mid.review_subagent_pending_cycle_keys,
-        vec!["lane:general-purpose".to_string()]
+    assert_eq!(mid.phase, 3, "PostTool must settle lane-key cycle");
+    assert!(
+        mid.review_subagent_pending_cycle_keys.is_empty(),
+        "dual-event lane must not double pending"
     );
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -4381,10 +4434,12 @@ fn posttool_at_pending_cap_does_not_bump_phase() {
         }),
     );
     let mid = load_state_for(&repo, sid);
-    assert_eq!(mid.phase, 2);
     assert_eq!(
-        mid.review_subagent_pending_cycle_keys.len(),
-        1,
+        mid.phase, 3,
+        "postTool on existing pending must settle, not leave stuck phase=2"
+    );
+    assert!(
+        mid.review_subagent_pending_cycle_keys.is_empty(),
         "cap full: postTool must not add phantom pending: {:?}",
         mid.review_subagent_pending_cycle_keys
     );

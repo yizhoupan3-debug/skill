@@ -67,11 +67,6 @@
       "compare": "byte-for-byte"
     },
     {
-      "path": "skills/SKILL_ROUTING_REGISTRY.md",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
-      "compare": "normalized-text"
-    },
-    {
       "path": "skills/SKILL_ROUTING_INDEX.md",
       "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --framework-root \"$PWD\" --write --write-companions",
       "compare": "normalized-text"

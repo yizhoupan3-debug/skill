@@ -391,52 +391,6 @@ pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, S
         .join(RFV_LOOP_STATE_FILENAME))
 }
 
-/// Autopilot 在同 task 上 `start`/`upsert`/`resume` 时结束 RFV 的 `loop_status=active`（与 GOAL 互斥；保留文件并标记 `superseded`）。
-pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
-    repo_root: &Path,
-    task_id: &str,
-) -> Result<bool, String> {
-    if task_id.trim().is_empty() {
-        return Ok(false);
-    }
-    if crate::path_guard::safe_task_id_component(task_id).is_none() {
-        return Ok(false);
-    }
-    let path = rfv_loop_state_path(repo_root, task_id)?;
-    if !path.is_file() {
-        return Ok(false);
-    }
-    let mut state = read_rfv_loop_state(repo_root, Some(task_id))?
-        .ok_or_else(|| format!("RFV_LOOP_STATE missing at {}", path.display()))?;
-    let obj = state
-        .as_object_mut()
-        .ok_or_else(|| "RFV_LOOP_STATE root must be object".to_string())?;
-    let active = obj
-        .get("loop_status")
-        .and_then(Value::as_str)
-        .is_some_and(|s| s.eq_ignore_ascii_case("active"));
-    if !active {
-        return Ok(false);
-    }
-    obj.insert("loop_status".to_string(), json!("superseded"));
-    obj.insert("superseded_by".to_string(), json!("autopilot_goal"));
-    obj.insert("updated_at".to_string(), json!(now_iso()));
-    write_atomic_json(&path, &state)?;
-    let tx = crate::task_ledger::LedgerTransaction {
-        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-        tx_type: "rfv_loop_state".to_string(),
-        payload: state.clone(),
-        idempotency_key: None,
-        seq: None,
-        schema_version: Some(1),
-    };
-    if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(repo_root, task_id, tx) {
-        eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
-    }
-    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, task_id);
-    Ok(true)
-}
-
 fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
     payload
         .get(key)

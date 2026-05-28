@@ -80,7 +80,8 @@ fn handle_post_tool_use_with_lock(
             }
         }
         let start_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
-        if push_review_pending_cycle_key(&mut state, start_key, true) != PendingCyclePush::AtCap {
+        let push = push_review_pending_cycle_key(&mut state, start_key.clone(), true);
+        if push != PendingCyclePush::AtCap {
             let was_below_2 = state.phase < 2;
             bump_phase(&mut state, 2);
             if state.active_subagent_last_started_at.is_none() {
@@ -100,6 +101,16 @@ fn handle_post_tool_use_with_lock(
             }
             mutated = true;
         } else if state.review_pending_cap_refused {
+            mutated = true;
+        }
+        // Task/subagent PostTool 返回即一轮 lane 结束；弥补宿主漏发或 id 漂移的 subagentStop。
+        if try_settle_review_subagent_cycle(&mut state, &start_key, review_kind) {
+            if state.active_subagent_count > 0 {
+                state.active_subagent_count -= 1;
+                if state.active_subagent_count == 0 {
+                    state.active_subagent_last_started_at = None;
+                }
+            }
             mutated = true;
         }
     }

@@ -3,7 +3,7 @@
 > **范围**：RFV 多轮账本与 lane 契约说明；**不进入** `skills/SKILL_ROUTING_RUNTIME.json` 热路由。  
 > Rust 行为真源：`core/router-rs/src/rfv_loop.rs` 及相关 hook 合并逻辑。
 
-**不进入热 skill 路由**（`skills/SKILL_ROUTING_RUNTIME.json` 不含本主题的独立 slug）。此处保留 **`framework_rfv_loop` 字段契约、lane 模板与推理深度说明**，供 Autopilot / Team / [`loop`](../skills/loop/SKILL.md) 与工具链引用。
+**不进入热 skill 路由**（`skills/SKILL_ROUTING_RUNTIME.json` 不含本主题的独立 slug）。此处保留 **`framework_rfv_loop` 字段契约、lane 模板与推理深度说明**，供 GOAL drive / Team / [`adversarial-loop`](../skills/adversarial-loop/SKILL.md) 与工具链引用。
 
 编排前先过 [`agent-swarm-orchestration`](../skills/agent-swarm-orchestration/SKILL.md)：确认各 lane 可独立、`fix_scope` disjoint、且 `verify_commands` 已定义；若启用外部调研并行，还须明确 **external 与 review 的只读边界** 及汇总责任在 supervisor。不满足则拒绝 spawning 并给出 reject reason。
 

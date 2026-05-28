@@ -1,6 +1,9 @@
 {
   "schema_version": "skill-routing-metadata-v1",
   "skills": {
+    "adversarial-loop": {
+      "selection_reason": "allowlisted first-turn owner"
+    },
     "agent-swarm-orchestration": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -67,9 +70,6 @@
     "latex-compile-acceleration": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
-    "loop": {
-      "selection_reason": "allowlisted first-turn owner"
-    },
     "mac-memory-management": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -95,16 +95,7 @@
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "plan-mode": {
-      "selection_reason": "allowlisted first-turn owner",
-      "negative_triggers": [
-        "/planx",
-        "/discussx",
-        "/implementx",
-        "/verifyx",
-        "WAVE_STATE.json",
-        "ROADMAP.md under artifacts/current",
-        "My lifecycle"
-      ]
+      "selection_reason": "allowlisted first-turn owner"
     },
     "plugin-creator": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"

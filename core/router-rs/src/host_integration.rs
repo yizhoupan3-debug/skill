@@ -54,7 +54,7 @@ const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
     "code-review-deep",
     "deepinterview",
     "gitx",
-    "loop",
+    "adversarial-loop",
     "plan-mode",
     "update",
 ];

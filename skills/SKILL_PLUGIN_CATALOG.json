@@ -2,6 +2,20 @@
   "derived_from": "skills/SKILL_MANIFEST.json",
   "schema_version": "skill-plugin-catalog-v1",
   "skills": {
+    "adversarial-loop": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "claude-code",
+          "claude-desktop",
+          "codex-app",
+          "codex-cli",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/adversarial-loop/SKILL.md"
+    },
     "agent-swarm-orchestration": {
       "host_support": {
         "platforms": [
@@ -309,20 +323,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/.archive-cold/latex-compile-acceleration/SKILL.md"
-    },
-    "loop": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-code",
-          "claude-desktop",
-          "codex-app",
-          "codex-cli",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/loop/SKILL.md"
     },
     "mac-memory-management": {
       "host_support": {

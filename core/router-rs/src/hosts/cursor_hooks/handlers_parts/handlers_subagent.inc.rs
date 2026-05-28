@@ -116,32 +116,15 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
         mutated = true;
     }
     if review_hard_armed(&state) {
-        // Stop：命中 pending  multiset 中**一条**同 key 的 start 记录则移除该条；**仅当** pending 排空时升 phase 3
-        // 并记 `subagent_stop_count`（并行多路需各路各一次 qualifying stop，同 lane 无 id 时依赖重复 `lane:` key）。
-        if state.phase < 2 || !review_kind || !cycle_matches {
+        if try_settle_review_subagent_cycle(&mut state, &cycle_key, review_kind) {
+            mutated = true;
+        } else if state.phase < 2 || !review_kind || !cycle_matches {
             if mutated {
                 let _ = save_state(repo_root, event, &mut state);
             }
             release_state_lock(&mut lock);
             return json!({});
         }
-        if let Some(ref k) = cycle_key {
-            if let Some(pos) = state
-                .review_subagent_pending_cycle_keys
-                .iter()
-                .position(|p| p == k)
-            {
-                state.review_subagent_pending_cycle_keys.remove(pos);
-            }
-        }
-        sync_review_cycle_legacy_fields(&mut state);
-        if state.review_subagent_pending_cycle_keys.is_empty() {
-            state.review_pending_cap_refused = false;
-            bump_phase(&mut state, 3);
-            state.subagent_stop_count += 1;
-            state.lane_intent_matches = Some(true);
-        }
-        mutated = true;
     }
     if mutated {
         let _ = save_state(repo_root, event, &mut state);
