@@ -9,7 +9,7 @@ use std::{env, fs};
 const LEGACY_REVIEW_FOLLOWUP_TOKEN: &str = concat!("RG", "_FOLLOWUP");
 
 /// Framework 仓 canonical 路径：终端元数据 / cwd 对齐 fixture（与 `fresh_repo()` 临时目录区分）。
-const FRAMEWORK_HARNESS_TEST_CWD: &str = "/Users/joe/Developer/skill";
+const FRAMEWORK_HARNESS_TEST_CWD: &str = env!("CARGO_MANIFEST_DIR");
 
 /// Drop 时清除 thread_local 覆盖，避免遗留应急门控语义并污染同 OS 线程上的其它用例。
 struct ReviewGateDisableTestGuard;

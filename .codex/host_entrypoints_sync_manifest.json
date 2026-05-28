@@ -24,6 +24,11 @@
         "AGENTS_ANTIGRAVITY.md",
         ".gemini/antigravity/rules/framework.md"
       ],
+      "antigravity-app": [
+        "AGENTS_ANTIGRAVITY.md",
+        ".gemini/antigravity/rules/framework.md"
+      ],
+      "antigravity-cli": "AGENTS_ANTIGRAVITY.md",
       "claude-code": [
         "AGENTS_CLAUDE.md",
         ".claude/rules/framework.md",
@@ -48,6 +53,8 @@
       "cursor",
       "claude-code",
       "claude-desktop",
+      "antigravity-cli",
+      "antigravity-app",
       "antigravity"
     ]
   }

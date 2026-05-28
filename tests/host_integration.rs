@@ -2137,6 +2137,8 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
             "cursor",
             "claude-code",
             "claude-desktop",
+            "antigravity-cli",
+            "antigravity-app",
             "antigravity"
         ])
     );
