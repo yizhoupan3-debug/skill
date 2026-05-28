@@ -150,6 +150,95 @@ pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Strin
     (active_task_id, focus_task_id)
 }
 
+fn pointer_file_matches_task_id(path: &Path, task_id: &str) -> bool {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| parse_task_id_from_pointer_json(&raw))
+        .is_some_and(|id| id == task_id)
+}
+
+/// Write `artifacts/current/active_task.json` (`{"task_id":…}` only).
+pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), String> {
+    crate::utils::path_guard::validate_task_id_component(task_id)?;
+    let mirror = repo_root.join("artifacts/current");
+    fs::create_dir_all(&mirror).map_err(|e| format!("mkdir {}: {e}", mirror.display()))?;
+    write_atomic_json(
+        &mirror.join("active_task.json"),
+        &json!({ "task_id": task_id }),
+    )
+}
+
+fn write_focus_task_pointer_minimal(
+    repo_root: &Path,
+    task_id: &str,
+    task_label: &str,
+) -> Result<(), String> {
+    crate::utils::path_guard::validate_task_id_component(task_id)?;
+    let mirror = repo_root.join("artifacts/current");
+    fs::create_dir_all(&mirror).map_err(|e| format!("mkdir {}: {e}", mirror.display()))?;
+    let updated_at = now_iso();
+    write_atomic_json(
+        &mirror.join("focus_task.json"),
+        &json!({
+            "task_id": task_id,
+            "task": task_label,
+            "updated_at": updated_at,
+        }),
+    )
+}
+
+fn goal_drive_set_focus_from_payload(payload: &Value) -> bool {
+    payload
+        .get("set_focus")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+}
+
+/// After `start`/`resume`, keep continuity pointers aligned with the task that owns GOAL_STATE.
+pub fn sync_task_pointers_after_goal_drive(
+    repo_root: &Path,
+    task_id: &str,
+    goal_label: &str,
+    payload: &Value,
+) -> Result<(), String> {
+    write_active_task_pointer(repo_root, task_id)?;
+    if goal_drive_set_focus_from_payload(payload) {
+        write_focus_task_pointer_minimal(repo_root, task_id, goal_label)?;
+    }
+    Ok(())
+}
+
+/// Remove active/focus pointers when they reference `task_id` (verifyx / complete / clear).
+pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Result<(), String> {
+    let active_path = repo_root.join("artifacts/current/active_task.json");
+    let focus_path = repo_root.join("artifacts/current/focus_task.json");
+    if pointer_file_matches_task_id(&active_path, task_id) {
+        let _ = fs::remove_file(&active_path);
+    }
+    if pointer_file_matches_task_id(&focus_path, task_id) {
+        let _ = fs::remove_file(&focus_path);
+    }
+    Ok(())
+}
+
+fn apply_optional_goal_fields_from_payload(obj: &mut Map<String, Value>, payload: &Value) {
+    if let Some(lp) = payload
+        .get("lifecycle_profile")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        obj.insert("lifecycle_profile".to_string(), json!(lp));
+    }
+    if let Some(st) = payload
+        .get("status")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        obj.insert("status".to_string(), json!(st));
+    }
+}
 
 pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
@@ -627,6 +716,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                     obj.insert("completion_gates".to_string(), cg.clone());
                 }
             }
+            apply_optional_goal_fields_from_payload(&mut obj, &payload);
             // Ensure task directory exists before writing GOAL_STATE
             ensure_task_directory(&repo_root, &task_id)?;
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
@@ -648,6 +738,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
+            sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal, &payload)?;
             Ok(json!({
                 "ok": true,
                 "operation": "start",
@@ -715,7 +806,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
-            resume_goal_running(&repo_root, task_id_override, drive_until_done)
+            resume_goal_running(&repo_root, task_id_override, drive_until_done, &payload)
         }
         "complete" => {
             let task_id = task_id_override
@@ -741,13 +832,15 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 let view = crate::task_state::resolve_task_view(&repo_root, Some(task_id.as_str()));
                 crate::task_state::validate_goal_completion_gates(&view, &gates)?;
             }
-            set_terminal_flags(
+            let out = set_terminal_flags(
                 &repo_root,
                 Some(task_id.as_str()),
                 "completed",
                 Some(false),
                 None,
-            )
+            )?;
+            neutralize_task_pointers_for_task(&repo_root, &task_id)?;
+            Ok(out)
         }
         "block" => {
             let blocker = payload
@@ -865,6 +958,7 @@ fn clear_goal_state(repo_root: &Path, task_id_override: Option<&str>) -> Result<
     }
     invalidate_route_records_cache_on_write();
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
+    neutralize_task_pointers_for_task(repo_root, &task_id)?;
     Ok(json!({
         "ok": true,
         "operation": "clear",
@@ -878,6 +972,7 @@ fn resume_goal_running(
     repo_root: &Path,
     task_id_override: Option<&str>,
     drive_until_done: bool,
+    payload: &Value,
 ) -> Result<Value, String> {
     let task_id = task_id_override
         .map(|s| s.to_string())
@@ -909,6 +1004,11 @@ fn resume_goal_running(
     let rfv_loop_superseded =
         deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
+    let goal_label = state
+        .get("goal")
+        .and_then(Value::as_str)
+        .unwrap_or(task_id.as_str());
+    sync_task_pointers_after_goal_drive(repo_root, &task_id, goal_label, payload)?;
     Ok(json!({
         "ok": true,
         "operation": "resume",
@@ -1088,12 +1188,7 @@ mod tests {
             .as_nanos();
         let repo = std::env::temp_dir().join(format!("router-rs-autopilot-goal-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(repo.join("artifacts/current/my-task")).expect("mkdir");
-        fs::write(
-            repo.join("artifacts/current/active_task.json"),
-            r#"{"task_id":"my-task"}"#,
-        )
-        .expect("write pointer");
+        fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
 
         let rr = repo.display().to_string();
         let out = framework_goal_drive(json!({
@@ -1112,6 +1207,8 @@ mod tests {
             out["goal_state"][REQUIRES_COMPLETION_EVIDENCE_KEY],
             json!(true)
         );
+        assert_eq!(read_active_task_id(&repo).as_deref(), Some("my-task"));
+        assert_eq!(read_focus_task_id(&repo).as_deref(), Some("my-task"));
 
         let st = framework_goal_drive(json!({
             "repo_root": rr,
@@ -1131,6 +1228,36 @@ mod tests {
             "operation": "complete",
         }))
         .expect("complete");
+        assert!(!repo.join("artifacts/current/active_task.json").is_file());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_start_persists_lifecycle_profile() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-lifecycle-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+        let rr = repo.display().to_string();
+        let out = framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "t-lite",
+            "goal": "g",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test -q"],
+            "drive_until_done": false,
+            "lifecycle_profile": "my-light",
+        }))
+        .expect("start");
+        assert_eq!(
+            out["goal_state"]["lifecycle_profile"],
+            json!("my-light")
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1142,12 +1269,7 @@ mod tests {
             .as_nanos();
         let repo = std::env::temp_dir().join(format!("router-rs-autopilot-start-bad-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(repo.join("artifacts/current/bad-start")).expect("mkdir");
-        fs::write(
-            repo.join("artifacts/current/active_task.json"),
-            r#"{"task_id":"bad-start"}"#,
-        )
-        .expect("write pointer");
+        fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
         let rr = repo.display().to_string();
 
         let missing_non_goals = framework_goal_drive(json!({

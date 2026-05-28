@@ -18,6 +18,8 @@ Hook launchers、CI、`Cargo.toml` workspace 已对齐 `core/*`；勿再引用 `
 
 ## 日常维护
 
+**Steady-state 操作面**（宿主差异、`REVIEW_GATE` / review-lite、fork_context、自检）：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)。实现 crate 路径见上表 **`core/router-rs`**（勿再引用 `scripts/router-rs`）。
+
 ```bash
 export SKILL_FRAMEWORK_ROOT="${SKILL_FRAMEWORK_ROOT:-/path/to/Developer/skill}"
 cd "$SKILL_FRAMEWORK_ROOT"

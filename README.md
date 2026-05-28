@@ -255,25 +255,24 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- `
 
 ## 修改或新增 skill
 
-新增 skill 的最小流程：
+与 [`skills/SKILL_MAINTENANCE_GUIDE.md`](skills/SKILL_MAINTENANCE_GUIDE.md) 一致；摘要如下：
 
-1. 创建 `skills/<skill-name>/SKILL.md`。
-2. frontmatter 至少包含 `name`、`description`、`routing_layer`、`routing_owner`、`routing_gate`、`session_start`。
-3. 正文至少包含 `## When to use` 和 `## Do not use`。
-4. 运行 skill compiler 的 `--apply` 命令刷新路由产物。
-5. 运行测试。
-6. 提交并推送。
+1. 创建 `skills/<skill-name>/SKILL.md`（frontmatter + `## When to use` / `## Do not use`）。
+2. **手改**热路由真源：`skills/SKILL_ROUTING_RUNTIME.json`、`skills/SKILL_MANIFEST.json`（slug、trigger、path 与 frontmatter 对齐）。
+3. 再生 companion（**不**代替手改热表）：
 
-不要手动改这些生成文件，除非你明确知道自己在修编译器输出：
+```bash
+cargo run --manifest-path core/router-rs/Cargo.toml -- \
+  framework skills refresh --framework-root "$PWD" --write --write-companions
+```
 
-- `skills/SKILL_ROUTING_RUNTIME.json`
-- `skills/SKILL_MANIFEST.json`
-- `skills/SKILL_ROUTING_INDEX.md`
-- `skills/SKILL_ROUTING_INDEX.md`
-- `skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`
-- `skills/SKILL_ROUTING_METADATA.json`
-- `skills/SKILL_PLUGIN_CATALOG.json`
-- `skills/SKILL_HEALTH_MANIFEST.json`
+4. 验证：`framework skills validate`；`cargo test --test policy_contracts`。
+5. 提交并推送。
+
+**勿指望 `refresh` 写入 runtime/manifest**。下列多为 companion / 生成物，仅在校验失败或明确修生成器输出时手改：
+
+- `skills/SKILL_ROUTING_INDEX.md`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`、`skills/SKILL_ROUTING_METADATA.json`
+- `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_HEALTH_MANIFEST.json`（健康分已退役，见 MAINTENANCE）
 - `configs/framework/FRAMEWORK_SURFACE_POLICY.json`
 
 ## 可选：启用 Git Hooks

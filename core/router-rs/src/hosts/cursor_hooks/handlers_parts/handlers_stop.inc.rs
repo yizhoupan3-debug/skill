@@ -12,13 +12,13 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         if let Some(msg) = closeout_msg {
             out["followup_message"] = Value::String(msg);
         }
-        let skip_continuity_merge = out.get("followup_message").is_some();
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame, skip_continuity_merge);
+        let skip_review_output_lint = out.get("followup_message").is_some();
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame);
         return out;
     }
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
-        let skip_continuity_merge = true;
+        let skip_review_output_lint = true;
         let mut out = if stop_lock_failure_is_fail_closed(repo_root, event) {
             json!({
                 "followup_message": review_gate_stop_lock_unavailable_line()
@@ -28,7 +28,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 "followup_message": lock_failure_followup_for_stop(repo_root, event)
             })
         };
-        finalize_stop_hook_outputs(repo_root, &mut out, &frame, skip_continuity_merge);
+        finalize_stop_hook_outputs(repo_root, &mut out, &frame);
         return out;
     }
     let loaded = load_state(repo_root, event);
@@ -45,10 +45,10 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     if let Some(msg) = stop_hard_closeout_followup_for_assistant_response(repo_root, &response_full)
     {
         let mut out = json!({ "followup_message": msg });
-        release_lock_then_finalize_stop(repo_root, &mut out, &frame, true, &mut lock);
+        release_lock_then_finalize_stop(repo_root, &mut out, &frame, &mut lock);
         return out;
     }
-    let (mut output, skip_continuity_merge) = match loaded {
+    let (mut output, skip_review_output_lint) = match loaded {
         Ok(None) => (json!({}), false),
         Err(io_error) => {
             let msg = format!(
@@ -100,7 +100,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             ) {
                 let _ = save_state(repo_root, event, &mut state);
             }
-            let gate_blocks_continuity = stop_hard_gate_blocks_continuity_merge(&state);
+            let gate_suppresses_review_lint = stop_review_output_lint_suppressed(&state);
             if review_stop_followup_needed(&state) {
                 state.followup_count += 1;
                 state.review_followup_count += 1;
@@ -111,8 +111,8 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                     Some(n) => state.review_followup_count <= n,
                 };
                 // soft_nag 超 cap：仍注入 REVIEW 提示，但不阻断 My/RFV 续跑（ADR / P1-4）。
-                let skip_continuity_merge = if use_full {
-                    gate_blocks_continuity
+                let skip_review_output_lint = if use_full {
+                    gate_suppresses_review_lint
                 } else {
                     tracks_goal_or_drive_entry(&state) && !goal_is_satisfied(&state)
                 };
@@ -133,7 +133,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                     soft_out
                 };
                 let _ = save_state(repo_root, event, &mut state);
-                (out, skip_continuity_merge)
+                (out, skip_review_output_lint)
             } else if tracks_goal_or_drive_entry(&state) && !goal_is_satisfied(&state) {
                 state.followup_count += 1;
                 state.goal_followup_count += 1;
@@ -142,7 +142,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 let message = goal_stop_followup_line(&state);
                 (
                     json!({ "followup_message": message }),
-                    gate_blocks_continuity,
+                    gate_suppresses_review_lint,
                 )
             } else {
                 // Do not clear gate state on Stop for sessions that still track goal/review:
@@ -161,13 +161,13 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         }
     };
     // Advisory: lint review output format (compact envelope checks).
-    // Skip when Stop already carries a hard followup or continuity merge is suppressed (same as My/RFV).
+    // Skip when Stop already carries a hard followup or review-output-lint is suppressed.
     let hard_stop_followup = output
         .get("followup_message")
         .and_then(Value::as_str)
         .is_some_and(|s| !s.trim().is_empty());
     if !hard_stop_followup
-        && !skip_continuity_merge
+        && !skip_review_output_lint
         && !response_for_lint.trim().is_empty()
         && response_for_lint.contains("[P")
     {
@@ -191,13 +191,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             }
         }
     }
-    release_lock_then_finalize_stop(
-        repo_root,
-        &mut output,
-        &frame,
-        skip_continuity_merge,
-        &mut lock,
-    );
+    release_lock_then_finalize_stop(repo_root, &mut output, &frame, &mut lock);
     output
 }
 

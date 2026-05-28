@@ -3,12 +3,14 @@ description: Cursor-only hard review gate delta
 alwaysApply: true
 ---
 
-# Review Subagent Gate（仅 Cursor）
+# Review Subagent Gate（Cursor）
 
-跨宿主 review 叙事见 [AGENTS.md](../../AGENTS.md)、[harness_architecture.md](../../docs/harness_architecture.md)、[harness_policy_map.md](../../docs/harness_policy_map.md)、[`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。操作细节见 [`docs/framework_operator_primer.md`](../../docs/framework_operator_primer.md)。本文件**仅** hook 硬约束：
+叙事：[AGENTS.md](../../AGENTS.md) · [harness_architecture.md](../../docs/harness_architecture.md) · [code-review-deep/SKILL.md](../../skills/code-review-deep/SKILL.md) · [framework_operator_primer.md](../../docs/framework_operator_primer.md)
 
-- **`lifecycle_profile: my-light`**：**不**硬拦 `REVIEW_GATE`；**不**注入 spawn-first nudge（model-inherit 仍见 [subagent-model-inherit.mdc](subagent-model-inherit.mdc)）。
-- 深度 review：**spawn-first** 可数 reviewer（`general-purpose` / `best-of-n-runner` / `deep-reviewer`，registry `deep_gate_lanes` + **`fork_context=false` 须 JSON 显式**）；`explore` 不计入。
-- **窄范围** / 用户禁 subagent：**不**武装 `review_required`。
-- **Stop**：硬门控仅认 `.cursor/hook-state` 与 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` 单行短码。
-- review lane **只读**；纯 review 禁止默认改代码/提交，除非用户显式要求。
+**Hook 硬约束**
+
+- **my-light**：不硬拦 `REVIEW_GATE`；不注入 spawn-first（model inherit → [subagent-model-inherit.mdc](subagent-model-inherit.mdc)）
+- **深度 review**：spawn-first 可数 lane（`general-purpose` / `best-of-n-runner` / `deep-reviewer`，registry `deep_gate_lanes`）；`fork_context=false` 须 JSON 显式；`explore` 不计入
+- **窄范围** / 用户禁 subagent：不武装 `review_required`
+- **Stop**：`.cursor/hook-state` + `router-rs REVIEW_GATE` / `AG_FOLLOWUP` 单行短码
+- review lane **只读**；纯 review 禁止默认改代码/提交（除非用户显式要求）

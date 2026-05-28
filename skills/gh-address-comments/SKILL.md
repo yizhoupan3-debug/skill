@@ -33,7 +33,6 @@ trigger_hints:
   - changed files summary
   - review comments
   - gh cli
-  - code review
 allowed_tools:
   - shell
   - git

@@ -133,7 +133,6 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// Read the current tracker state as JSON (for MCP resource).
-#[allow(dead_code)]
 pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
     let path = tracker_path(repo_root);
     load_or_init_tracker(&path)

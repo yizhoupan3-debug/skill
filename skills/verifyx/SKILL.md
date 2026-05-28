@@ -52,7 +52,7 @@ Removes all My lifecycle task-dir artifacts under `artifacts/current/<task_id>/`
 
 **Only ship artifact**: `artifacts/closeout/<task_id>.json`.
 
-Neutralize pointers if they reference this task: `active_task.json`, `focus_task.json`, `task_registry.json`, `.supervisor_state.json`.
+Pointer cleanup: **`framework_goal_drive complete`**（或 `clear`）已自动删除指向该 `task_id` 的 `active_task.json` / `focus_task.json`。purge 后勿将指针写成 `{}`；其余 `task_registry.json`、`.supervisor_state.json` 按宿主文档手工中性化。
 
 ### 4. Chat
 

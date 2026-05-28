@@ -27,7 +27,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     }
     let mut state = state_load.ok().flatten().unwrap_or_else(empty_state);
     let _stale_reset = apply_subagent_stale_hygiene(&mut state);
-    // delegation 启发式不再持久化进 hook-state，避免与 review 相位门控长期粘连。
+    // `delegation_required` is legacy serde only; always cleared (see ReviewGateState rustdoc).
     state.delegation_required = false;
     let review = is_review_prompt(&text);
     let goal_drive_entrypoint = is_framework_goal_drive_entry_prompt(&text, &signal_text);

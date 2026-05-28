@@ -1,4 +1,5 @@
-//! Thin wrapper: forwards to `router-rs host antigravity-cli …` (or `router-rs antigravity-cli …`).
+//! Thin wrapper: forwards argv to `router-rs host antigravity-cli …`.
+//! Top-level `router-rs antigravity-cli …` (without `host`) is handled by the `router-rs` binary itself.
 
 use std::env;
 use std::path::{Path, PathBuf};

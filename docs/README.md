@@ -16,7 +16,10 @@
 | 主题 | 文档 |
 |------|------|
 | 使用者视角：宿主差异、门控快查、阅读顺序 | [framework_operator_primer.md](framework_operator_primer.md) |
-| Env 命名与默认值表 | [framework_naming_conventions.md](framework_naming_conventions.md) |
+| 可选 env / closeout 详表 | [references/AGENTS_OPERATOR_SURFACE.md](references/AGENTS_OPERATOR_SURFACE.md) |
+| Cursor 子代理 hook 契约（fork_context、review-lite） | [references/cursor-subagent-hook-contract.md](references/cursor-subagent-hook-contract.md) · [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json) |
+| REVIEW_GATE strict vs review-lite ADR | [adr/ADR-review-gate-lite.md](adr/ADR-review-gate-lite.md) |
+| Env 命名模式（非第二份默认值表） | [framework_naming_conventions.md](framework_naming_conventions.md) |
 | 政策分层地图（operator profiles 依赖） | [harness_policy_map.md](harness_policy_map.md) |
 | RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
 | 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | 任务 ROADMAP：`artifacts/current/<task_id>/ROADMAP.md`；见 [plans/README.md](plans/README.md) |

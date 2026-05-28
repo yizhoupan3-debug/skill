@@ -20,7 +20,9 @@
 
 ## 可程序化硬门禁（`completion_gates` / `close_gates`）
 
-与 **advisory rollup**（`DepthCompliance` / `resolve_task_view` 的 `depth_score`；**非** hook digest 注入）分工如下：
+与 **advisory rollup**（`DepthCompliance` / `resolve_task_view` 的 `depth_score`；**非** hook 注入）分工如下：
+
+> **`depth_compliance`**：`depth_compliance_aggregate` 供 stdio、`framework task-state-resolve` 与遗留 env（`ROUTER_RS_DEPTH_COMPLIANCE_HINT`）/ 单测；**2026-05 起** Stop / SessionStart **不**注入 depth 刷新段落。
 
 | 维度 | advisory rollup | 硬门禁（opt-in） |
 |------|-----------------|------------------|
@@ -60,7 +62,7 @@
 
 ### Depth score formula（参考）
 
-`depth_score` 是 `0..=3` 的整数值，由 `task_state.rs` → `depth_compliance_aggregate` 计算：
+`depth_score` 是 `0..=3` 的整数值，由 `core/antigravity/src/task_state.rs` → `depth_compliance_aggregate` 计算：
 
 - **第 1 分**：≥1 轮 RFV `verify_result == "PASS"`
 - **第 2 分**：`EVIDENCE_INDEX` 至少一条成功行（`success==true` 或 `exit_code==0`）

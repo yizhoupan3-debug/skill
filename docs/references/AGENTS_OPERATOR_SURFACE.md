@@ -4,13 +4,13 @@
 
 ## 连续性退出（2026-05：仅 stdio + 手动画板）
 
-**续跑与 digest 不再经 hook 注入。** Stop / SessionStart **不**产出 `GOAL_CONTINUE`、`RFV_LOOP_CONTINUE` 或 `framework_runtime::continuity_digest` 段落；操作员用 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 **`artifacts/current/<task_id>/`** 手动画板（`GOAL_STATE.json`、`RFV_LOOP_STATE.json`、`EVIDENCE_INDEX` 等）。
+**续跑与 digest 不再经 hook 注入。** Stop / SessionStart **不**产出 `GOAL_CONTINUE`、`RFV_LOOP_CONTINUE`、`framework_runtime::continuity_digest` 或 `SESSION_SUMMARY` / `NEXT_ACTIONS` 续跑指针；操作员用 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 **`artifacts/current/<task_id>/`** 手动画板（`GOAL_STATE.json`、`RFV_LOOP_STATE.json`、`EVIDENCE_INDEX` 等）。
 
 | 变量 | 作用 |
 |------|------|
 | `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` | **opt-in** PostTool → `EVIDENCE_INDEX`（unset 默认关） |
 | `ROUTER_RS_CONTINUITY_STOP_CHECKPOINT=1` | **已无操作**（保留 env 名兼容） |
-| `ROUTER_RS_DEPTH_COMPLIANCE_HINT=1` | 遗留测试/stdio；**不**驱动 SessionStart digest |
+| `ROUTER_RS_DEPTH_COMPLIANCE_HINT=1` | 遗留测试/stdio；**无 hook 注入**（含 SessionStart） |
 | `ROUTER_RS_GOAL_CONTINUE_HOOK` | **已无操作**（历史名；hook 路径已删） |
 | `ROUTER_RS_RFV_LOOP_HOOK` | **已无操作**（历史名；hook 路径已删） |
 | `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 SessionStart advisory 等（**不含**已移除的 goal/RFV 续跑行） |
@@ -43,6 +43,9 @@
 | `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE=0` | 关闭 Cursor beforeSubmit **model inherit** 单行（默认开；与 REVIEW_GATE / my-light 无关） |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | Stop REVIEW_GATE 硬行次数上限（默认 8；超 cap 降为 soft_nag） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review `pending_cycle_keys` 上限（默认 32） |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` | **review-lite**：仅稳定 `id:` 用 `review_lite_pending_cycle_keys`；非 `id:` 回退 strict；Stop 仍须 **phase≥3** 且两 pending 结构皆空（见 [`cursor-subagent-hook-contract.md`](cursor-subagent-hook-contract.md)、[`ADR-review-gate-lite.md`](../adr/ADR-review-gate-lite.md)） |
+| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 关闭 Cursor 深度 lane 在 `fork_context` **缺失**时的 `false` 推断（unset=on）；显式 `true` 永不算 |
+| `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | subagent stale 阈值（秒）；`0`/`false`/`off`/`no` 关闭无 open 时的 pending 自动 prune |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `SESSION_CALL_TRACKER` `per_tool` 键上限（默认 128） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0` | 关闭 SessionEnd 终端回收 |
 | `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy` | 旧「全仓库 active terminal」清扫 |

@@ -3,9 +3,7 @@
   "framework_core": {
     "authority": "rust",
     "source": "framework-root-native",
-    "host_policy": "closed-set-explicit-projections",
-    "authority_priority": "rust-primary",
-    "acceleration_policy": "prefer-rust-when-implemented"
+    "host_policy": "closed-set-explicit-projections"
   },
   "host_targets": {
     "policy": "shared-rust-core-explicit-host-projections",
@@ -146,13 +144,7 @@
   "lifecycle_profiles": {
     "my-light": {
       "disable_review_gate_hard_block": true,
-      "disable_spawn_first_nudge": true,
-      "commands": [
-        "discussx",
-        "planx",
-        "implementx",
-        "verifyx"
-      ]
+      "disable_spawn_first_nudge": true
     }
   },
   "framework_commands": {
@@ -209,7 +201,7 @@
           "/implementx",
           "/verifyx"
         ],
-        "continuation_hook_leader": "framework_goal_drive stdio + manual boards",
+        "continuation_hook_leader": "stdio: framework_goal_drive + artifacts/current/<task_id>/ manual boards (no hook-injected continuation)",
         "rationale": "Personal lifecycle: implementx runs all WAVE_STATE waves in one breath; verifyx closes with evidence+ship. Continuity exit: no hook GOAL_CONTINUE/RFV/digest; stdio goal drive and artifacts/current/<task_id>/ boards only."
       }
     },

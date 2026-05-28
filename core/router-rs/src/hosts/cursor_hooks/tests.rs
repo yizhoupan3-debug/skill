@@ -1875,6 +1875,75 @@ fn stop_goal_gate_hydrates_running_goal_without_checkpoints_or_keywords() {
 }
 
 #[test]
+fn stop_disarms_goal_drive_when_active_task_pointer_missing() {
+    let repo = fresh_repo();
+    fs::create_dir_all(repo.join("artifacts/current/t-noptr")).expect("mkdir");
+    fs::write(
+        repo.join("artifacts/current/t-noptr/GOAL_STATE.json"),
+        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"orphan goal on disk","status":"running","non_goals":["n"],"checkpoints":[{"at":"t","note":"c"}],"done_when":["d1","d2"],"validation_commands":["cargo test -q"],"drive_until_done":true}"#,
+    )
+    .expect("goal");
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("noptr", "/implementx continue"),
+    );
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": "noptr",
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "prompt": "ok",
+            "response": "ok"
+        }),
+    );
+    let msg = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(
+        !msg.contains("AG_FOLLOWUP"),
+        "broken/missing active_task pointer must not hard-block Stop; msg={msg:?}"
+    );
+}
+
+#[test]
+fn stop_my_light_on_disk_suppresses_ag_followup_without_slash_in_prompt() {
+    let repo = fresh_repo();
+    crate::autopilot_goal::framework_goal_drive(json!({
+        "repo_root": repo.display().to_string(),
+        "operation": "start",
+        "task_id": "t-my-disk",
+        "goal": "my-light goal",
+        "non_goals": ["n"],
+        "done_when": ["d1", "d2"],
+        "validation_commands": ["cargo test -q"],
+        "drive_until_done": false,
+        "lifecycle_profile": "my-light",
+    }))
+    .expect("start");
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "stop",
+        &json!({
+            "session_id": "my-disk",
+            "cwd": FRAMEWORK_HARNESS_TEST_CWD,
+            "prompt": "wrap up",
+            "response": "done"
+        }),
+    );
+    let msg = out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(
+        !msg.contains("AG_FOLLOWUP"),
+        "lifecycle_profile on disk should enable my-light suppress; msg={msg:?}"
+    );
+}
+
+#[test]
 fn stop_goal_gate_hydrates_when_goal_state_omits_status_field() {
     let repo = fresh_repo();
     fs::create_dir_all(repo.join("artifacts/current/t-nost")).expect("mkdir");

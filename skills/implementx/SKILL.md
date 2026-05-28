@@ -73,12 +73,14 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 
 ## GOAL_STATE on start
 
-显式 stdio 启动（**无** Stop `GOAL_CONTINUE` hook 注入，2026-05 连续性拔除）：
+显式 stdio 启动（**无** Stop `GOAL_CONTINUE` hook 注入，2026-05 连续性拔除）。**`start` / `resume` 同时写入** `artifacts/current/active_task.json`（及默认 `focus_task.json`，`set_focus: false` 可跳过 focus）；**禁止**手改 `{}` 作指针占位。
 
 ```bash
 # status=running, drive_until_done=true, lifecycle_profile=my-light
 printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"my-light"}}' | router-rs --stdio-json
 ```
+
+`complete` / `clear` 会中性化指向该 `task_id` 的 active/focus 指针（删除文件，不留空对象）。
 
 ## Next
 

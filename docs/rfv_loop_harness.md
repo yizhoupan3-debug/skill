@@ -24,7 +24,7 @@
 **GOAL（`GOAL_STATE.json` / `framework_goal_drive`）与 RFV 账本的关系**：
 
 - 同一目录 `artifacts/current/<task_id>/` **可以**先后或交替出现 `GOAL_STATE.json` 与 `RFV_LOOP_STATE.json` 文件。
-- **不能**在同一任务上「双 macro **同时要求续跑**」：`GOAL` 处于需要续跑的 running/drive、且 **`RFV_LOOP_STATE.loop_status=active`** 时，`resolve_task_view` 会得到 **Conflict**（`autopilot_goal_and_rfv_loop_both_active`），真源：[`core/router-rs/src/task_state.rs`](../core/router-rs/src/task_state.rs) 的 `classify_control_mode`。
+- **不能**在同一任务上「双 macro **同时要求续跑**」：`GOAL` 处于需要续跑的 running/drive、且 **`RFV_LOOP_STATE.loop_status=active`** 时，`resolve_task_view` 会得到 **Conflict**（`autopilot_goal_and_rfv_loop_both_active`），真源：[`core/antigravity/src/task_state.rs`](../core/antigravity/src/task_state.rs) 的 `classify_control_mode`。
 - **`framework_rfv_loop` `operation: start`** 会摘掉同任务的 `GOAL_STATE.json`，真源：`deactivate_goal_for_conflict_with_rfv`（[`core/router-rs/src/autopilot_goal.rs`](../core/router-rs/src/autopilot_goal.rs)）。
 - 编排上：**二选一作为主控制面**，或先做 RFV 多轮账本、或先做 Autopilot GOAL；需要切换时重建/显式收口另一套账本，避免误认为「可与 RFV active 并行续跑 GOAL macro」。
 

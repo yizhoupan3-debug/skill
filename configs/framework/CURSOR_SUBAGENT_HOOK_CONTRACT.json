@@ -26,8 +26,13 @@
     },
     "fork_context": {
       "aliases": ["forkContext"],
-      "independent_when": "json_boolean_false_or_integer_0_or_string_false",
-      "notes": "Explicit true blocks independent reviewer evidence."
+      "independent_when": "json_boolean_false_or_integer_0_or_string_false_0_no_n",
+      "accepted_false_values": {
+        "boolean": [false],
+        "integer": [0],
+        "string": ["false", "0", "no", "n"]
+      },
+      "notes": "Explicit true (boolean true, integer 1, strings true/1/yes/y) blocks independent reviewer evidence. Missing field: see ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE."
     },
     "subagent_type": {
       "aliases": ["subagentType", "agent_type", "agentType"],
@@ -36,7 +41,8 @@
   },
   "completion_signals": {
     "subagent_stop": "qualifying subagentStop with matching cycle key",
-    "post_tool_settle": "qualifying postToolUse return settles one pending cycle key"
+    "post_tool_settle": "qualifying postToolUse return settles one pending cycle key",
+    "stop_satisfaction": "phase_gte_3_and_both_pending_vecs_empty; see review_subagent_evidence_satisfied"
   },
   "limits": {
     "pending_cycle_max_env": "ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX",
@@ -45,10 +51,12 @@
   "modes": {
     "strict": {
       "pending_structure": "multiset review_subagent_pending_cycle_keys",
-      "default": true
+      "default": true,
+      "doc_alias": "strict"
     },
     "review_lite": {
       "env": "ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite",
+      "doc_alias": "review-lite",
       "pending_structure": "review_lite_pending_cycle_keys vec (id: from stable_id_fields only)",
       "lane_keys_forbidden": true,
       "fallback": "strict when cycle key is not id: or qualifying fork/lane fails"
@@ -56,9 +64,11 @@
   },
   "stale_recovery": {
     "env": "ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS",
-    "prune_pending_when_no_open": true
+    "prune_pending_when_no_open": true,
+    "disable_values": ["0", "false", "off", "no"],
+    "details": "docs/harness_architecture.md §5 env table; framework_operator_primer.md REVIEW_GATE"
   },
   "wave2_requires_live_evidence": {
-    "excludes": "phase>=2 alone; compact bump requires live subagent evidence"
+    "excludes": "phase>=2 alone; compact bump requires live subagent evidence; Stop needs phase>=3 and empty pending vecs"
   }
 }

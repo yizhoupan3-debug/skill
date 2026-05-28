@@ -8,7 +8,7 @@ High-performance Rust core for the Codex Evolution Engine.
 Analyzes the evolution journal and suggests repairs or new skills based on pattern matching and Jaccard similarity.
 
 ### `manifest`
-Generates a blended health manifest combining static scores and dynamic usage data (reroute rate, frequency).
+Emits registry / usage snapshots for evolution tooling (journal-driven; **not** a live skill health score for routing).
 
 ### `sync`
 Synchronizes journal entries to a Markdown feedback table with intelligent deduplication.

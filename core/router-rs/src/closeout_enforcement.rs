@@ -10,31 +10,34 @@ const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", 
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct CloseoutCommandRecord {
     #[serde(default)]
     pub command: String,
     #[serde(default)]
     pub exit_code: i64,
     #[serde(default)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema; not used by enforcement rules yet.
     pub duration_ms: Option<i64>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub stdout_summary: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub stderr_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct CloseoutArtifactRecord {
     #[serde(default)]
     pub path: String,
     #[serde(default)]
     pub exists: bool,
     #[serde(default)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema; not used by enforcement rules yet.
     pub size_bytes: Option<i64>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub checks: Vec<String>,
 }
 
@@ -45,15 +48,16 @@ pub struct CloseoutArtifactRecord {
 /// be added in lockstep with `configs/framework/CLOSEOUT_RECORD_SCHEMA.json`.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct CloseoutRecord {
     #[serde(default)]
     pub schema_version: String,
     #[serde(default)]
     pub task_id: String,
     #[serde(default)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema; not used by enforcement rules yet.
     pub started_at: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub ended_at: Option<String>,
     #[serde(default)]
     pub changed_files: Vec<String>,
@@ -70,6 +74,7 @@ pub struct CloseoutRecord {
     #[serde(default)]
     pub summary: String,
     #[serde(default)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema; not used by enforcement rules yet.
     pub notes: Option<String>,
 }
 
@@ -341,12 +346,12 @@ pub fn closeout_enforcement_contract() -> Value {
 /// with empty `commands_run` AND zero successful EVIDENCE_INDEX rows is blocked even when
 /// `artifacts_checked` is non-empty (artifact existence ≠ executable verification).
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 pub struct CloseoutEvidenceContext {
     /// Expected task id for task-scoped evaluation.
     pub task_id: Option<String>,
     /// Whether the task's `EVIDENCE_INDEX.json` `artifacts` array is non-empty.
     /// (Reserved: future R-rules may want to flag "rows present but none successful".)
+    #[allow(dead_code)]
     pub evidence_rows_non_empty: bool,
     /// Whether the task's `EVIDENCE_INDEX.json` has at least one row with
     /// `success==true` or `exit_code==0`.

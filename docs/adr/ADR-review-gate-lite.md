@@ -8,9 +8,11 @@ Accepted (2026-05-28).
 
 Cursor `REVIEW_GATE` uses a multiset (`review_subagent_pending_cycle_keys`) to survive dual events (`subagentStart` + `PostToolUse`), missing `subagentStop`, and parallel reviewers. That is correct but heavy. Host payloads with stable `subagent_id` allow a lighter counter path.
 
+**Naming**: operator docs say **review-lite**; JSON/Rust use **`review_lite`** (`modes.review_lite`, `review_lite_pending_cycle_keys`). Machine contract: [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json).
+
 ## Decision
 
-1. **`ROUTER_RS_CURSOR_REVIEW_GATE_MODE`**: `strict` (default) | `lite`. **Process-global env** — do not flip mid-session when multiple Cursor sessions share one `router-rs` process; satisfaction always requires both pending vecs empty.
+1. **`ROUTER_RS_CURSOR_REVIEW_GATE_MODE`**: `strict` (default) | `lite` (**review-lite**). **Process-global env** — do not flip mid-session when multiple Cursor sessions share one `router-rs` process; satisfaction always requires both pending vecs empty.
 2. **strict**: multiset semantics for new non-lite keys; **Stop** still requires `review_lite_pending_cycle_keys` empty (orphan lite pending blocks after env switch).
 3. **lite**:
    - Only **stable** subagent id fields (`subagent_id` family) use `review_lite_pending_cycle_keys`; bare JSON `"id"` → strict multiset (`review_lite_reject_generic_id`).

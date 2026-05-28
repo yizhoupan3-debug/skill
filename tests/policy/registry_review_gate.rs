@@ -76,11 +76,10 @@ fn runtime_registry_my_light_lifecycle_profile_review_fields() {
     let my_light = &registry["lifecycle_profiles"]["my-light"];
     assert_eq!(my_light["disable_review_gate_hard_block"], true);
     assert_eq!(my_light["disable_spawn_first_nudge"], true);
-    let commands = my_light["commands"].as_array().expect("commands array");
-    assert!(commands
-        .iter()
-        .any(|c| c.as_str() == Some("implementx")));
-    assert!(commands.iter().any(|c| c.as_str() == Some("discussx")));
+    assert!(
+        my_light.get("commands").is_none(),
+        "my-light commands list is doc-only; Rust uses prompt/GOAL_STATE profile detection"
+    );
 }
 
 #[test]

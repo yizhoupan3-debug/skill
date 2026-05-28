@@ -38,7 +38,9 @@
         "review_gate_lite_lane_fallback_strict",
         "review_gate_fork_true_blocks",
         "review_gate_pending_cap_refused",
-        "review_gate_compact_without_subagent_blocked"
+        "review_gate_compact_without_subagent_blocked",
+        "review_gate_env_matrix",
+        "review_gate_lite_mixed_id_lane"
       ]
     }
   ],

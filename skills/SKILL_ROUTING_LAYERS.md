@@ -47,27 +47,27 @@
 ## 分层概览
 
 ```text
-L0  runtime execution controller, skill-framework-developer,
-    gh-address-comments, gh-fix-ci, sentry, agent-swarm-orchestration,
-    runtime delegation gate, systematic-debugging
-L1  citation-management, deepinterview, documentation-engineering,
-    image-generated, openai-docs
-L2  gitx, paper-reviewer, paper-reviser, paper-workbench,
-    paper-writing
-L3  design-md, diagramming, doc, experiment-reproducibility,
-    infographic, jupyter-notebook, pdf, screenshot,
-    slides, spreadsheets, tao-ci, visual-review
-L4  algo-trading, assignment-compliance,
-    copywriting, email-template, financial-data-fetching,
-    latex-compile-acceleration,
-    mac-memory-management, math-derivation,
-    ppt-beamer, source-slide-formats,
-    scientific-figure-plotting,
-    statistical-analysis, youtube-summarizer
+L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
+    skill-framework-developer, systematic-debugging, update
+    (+ hot framework commands: deepinterview, discussx, planx, implementx, verifyx, gitx)
+L1  adversarial-loop, citation-management, deepinterview, openai-docs, plan-mode
+    (.archive-cold: documentation-engineering, image-generated)
+L2  code-review-deep, gitx, paper-reviewer, paper-reviser, paper-workbench,
+    paper-writing, research-workbench
+L3  design-md, diagramming, doc, experiment-reproducibility, infographic,
+    jupyter-notebook, pdf, screenshot, slides, spreadsheets, tao-ci,
+    tikz-paper-figure, visual-review
+    (.archive-cold: hatch-pet)
+L4  math-derivation, scientific-figure-plotting, statistical-analysis (hot)
+    algo-trading, assignment-compliance, copywriting, email-template,
+    financial-data-fetching, latex-compile-acceleration, mac-memory-management,
+    ppt-beamer, python-env-management, source-slide-formats, youtube-summarizer
+    (.archive-cold: all L4 slugs except the three hot rows above)
 Runtime lanes  planning, execution/code, language/framework, platform/integration,
                verification/review, memory and prompt policy, research workflow
 ```
 
+> 冷表分层对齐 `skills/SKILL_MANIFEST.json`；热表 owner 以 `skills/SKILL_ROUTING_RUNTIME.json` 为准。
 > System skills（`.system/`）: `plugin-creator`, `skill-creator`, `skill-installer`
 
 ## 各层何时做主 owner

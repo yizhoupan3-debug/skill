@@ -13,7 +13,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Component | Description | Examples |
 |-----------|-------------|----------|
 | `HOST` | Target host identifier | `CLAUDE`, `CURSOR`, `CODEX` |
-| `FEATURE` | Feature or subsystem name | `REVIEW_GATE`, `CONTINUITY`, `AUTOPILOT`, `RFV_LOOP` |
+| `FEATURE` | Feature or subsystem name | `REVIEW_GATE`, `CONTINUITY`, `PRE_GOAL`, `RFV_LOOP` |
 | `ACTION` | Action modifier (optional) | `DISABLE`, `ENABLE`, `MAX`, `MODE` |
 
 ### Host Identifiers
@@ -61,7 +61,6 @@ skills/
 ├── SKILL_ROUTING_RUNTIME.json        # Hot routing entry point
 ├── SKILL_ROUTING_RUNTIME_EXPLAIN.json
 ├── SKILL_ROUTING_METADATA.json
-├── SKILL_ROUTING_INDEX.md
 ├── SKILL_ROUTING_INDEX.md
 ├── SKILL_MANIFEST.json
 ├── SKILL_PLUGIN_CATALOG.json
@@ -119,9 +118,10 @@ fn check_legacy_env_vars() {
 
 **Status**: RESOLVED - `GENERATED_ARTIFACTS.json` updated to remove 10 entries referencing deleted `scripts/skill-compiler-rs/Cargo.toml`. Deprecated entries moved to `_deprecated_entries` array for audit trail.
 
-`skill-compiler-rs` 删除后，下列路径仍由 [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) **登记为 active 生成物**（`framework skills refresh` / `host-integration install` / `sync-entrypoints`）；**勿 hand-edit**，须用 generator 刷新：
+`skill-compiler-rs` 删除后，**手维护热路由**为 `skills/SKILL_ROUTING_RUNTIME.json` 与 `skills/SKILL_MANIFEST.json`（见 [`SKILL_MAINTENANCE_GUIDE.md`](../skills/SKILL_MAINTENANCE_GUIDE.md)）。下列 companion / 生成物由 [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) 登记，通常用 `framework skills refresh --write-companions` 再生，**勿**与热表混淆：
 
-- `skills/SKILL_ROUTING_*`、`SKILL_MANIFEST.json`、`SKILL_PLUGIN_CATALOG.json` 等（见 manifest 全文）
+- `skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`、`SKILL_ROUTING_METADATA.json`、`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json` 等（见 manifest 全文）
+- `skills/SKILL_ROUTING_INDEX.md`（索引；与 REGISTRY 合并后单文件维护）
 - `configs/framework/FRAMEWORK_SURFACE_POLICY.json`
 
 `SKILL_ROUTING_METADATA.json` 在路由加载时由 `merge_sidecar_route_metadata_from_runtime` 合并进记录（非每 prompt 全量扫描，但影响 route 记录）。

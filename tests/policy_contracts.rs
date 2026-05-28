@@ -2956,9 +2956,33 @@ fn cursor_subagent_hook_contract_consumer_subset() {
     let modes = v["modes"].as_object().expect("modes object");
     assert!(modes.contains_key("strict"));
     assert!(modes.contains_key("review_lite"));
+    assert_eq!(
+        modes["review_lite"]["doc_alias"].as_str(),
+        Some("review-lite")
+    );
     let fields = v["fields"].as_object().expect("fields object");
     assert!(fields.contains_key("subagent_id"));
-    assert!(fields.contains_key("fork_context"));
+    let fork = fields
+        .get("fork_context")
+        .and_then(|f| f.as_object())
+        .expect("fork_context object");
+    let accepted = fork
+        .get("accepted_false_values")
+        .and_then(|a| a.as_object())
+        .expect("fork_context.accepted_false_values");
+    let strings = accepted["string"]
+        .as_array()
+        .expect("fork_context accepted string spellings");
+    for spelling in ["false", "0", "no", "n"] {
+        assert!(
+            strings.iter().any(|v| v.as_str() == Some(spelling)),
+            "fork_context contract must document string spelling {spelling:?}"
+        );
+    }
+    assert_eq!(
+        fork["independent_when"].as_str().unwrap_or_default(),
+        "json_boolean_false_or_integer_0_or_string_false_0_no_n"
+    );
 }
 
 #[test]

@@ -28,7 +28,7 @@ L1  Executable verification and exit codes
 
 ### 2.1 SessionStart（2026-05 连续性拔除后）
 
-- Codex / Cursor SessionStart **不**注入连续性 digest、`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 `depth_compliance_refresh_hint`（2026-05 hook 路径已拔除；`depth_compliance_refresh_hint` 函数仍保留供遗留 env/单测，**不**注入 SessionStart）。
+- Codex / Cursor SessionStart **不**注入连续性 digest、`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 `depth_compliance` / `depth_compliance_refresh_hint` 段落（2026-05 hook 路径已拔除；`depth_compliance_aggregate` 与 `depth_compliance_refresh_hint` 仍供 **stdio / `task-state-resolve` / 遗留 env 单测**，**不**注入 SessionStart）。
 - **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：Cursor **`Repo:`** 单行（[`handle_session_start`](../core/router-rs/src/hosts/cursor_hooks/handlers_parts/handlers_session.inc.rs)）；Codex `SessionStart source:`。**无** digest、**无** SessionStart 指针 hint（分裂观测用 `framework task-state-resolve` / `framework doctor`）。
 - **禁止**：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 等静态说明；禁止恢复 hook 驱动的 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。
 - 出站仍按 UTF-8 **字节**预算截断（Cursor `...[~trunc]`；Codex `...`）。
@@ -226,6 +226,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 - closeout 真相来自证据、diff、产物和明确 blocker，而不是“我完成了”的叙述。
 - `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 未设置且非 CI 时，允许本地软门禁；CI 或显式开启时走硬门禁。
 - `DepthCompliance`、`GOAL_STATE`、`RFV_LOOP_STATE` 的更细语义由 `router-rs` 和对应 schema 负责；本文件只定义它们属于 L2/L3 正式控制面，而不是聊天补丁。
+- **`depth_compliance` advisory rollup**：真源 `core/antigravity/src/task_state.rs` 的 `depth_compliance_aggregate`；`ROUTER_RS_DEPTH_COMPLIANCE_HINT` 为 **遗留 env / 单测**，**无** SessionStart 或其它 hook 注入。
 
 ### 深度调研：三轨对齐（无自动合并）
 

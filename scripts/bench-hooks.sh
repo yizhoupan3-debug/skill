@@ -26,7 +26,9 @@ Usage: scripts/bench-hooks.sh [options]
   --full-suite         beforeSubmitPrompt,postToolUse,stop,sessionStart,sessionEnd
   -h, --help
 
-Env: ROUTER_RS_BIN, ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1 (set by script for stable bench)
+Env: ROUTER_RS_BIN, ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1 (set by script for stable bench).
+  No-op if set during bench: ROUTER_RS_GOAL_CONTINUE_HOOK, ROUTER_RS_RFV_LOOP_HOOK,
+  ROUTER_RS_CONTINUITY_STOP_CHECKPOINT, ROUTER_RS_DEPTH_COMPLIANCE_HINT (2026-05 retired hook paths).
 EOF
 }
 

@@ -61,7 +61,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 | **Registry `review_gate` lane** | 真源 `configs/framework/RUNTIME_REGISTRY.json`；[`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) **磁盘读取**（`registry_loader.rs` shim；无 compile-time embed）。改 lane 后**无需** `cargo build`；重启 hook 子进程即可。 |
 | **宿主投影 My/review 文案** | `configs/framework/host_projection_narrative.json`；`host-integration install` 渲染 Codex/Cursor/Claude 入口时读取。勿在 `host_integration.rs` 硬编码段落。 |
 | **`generated-artifacts-status`** | **`framework doctor`** 与 `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍跑全量 **drift-gate**（含慢 generator）。 |
-| **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** `.cursor/hook-state` 内 review 字段；`postToolUse`/`subagent*` 不再推进 review phase。 |
+| **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** hook-state review 字段（细节见下节 **REVIEW_GATE** 链接）。 |
 | **active 无 GOAL、focus 有 GOAL** | 运行 `router-rs framework task-state-resolve` 或修正 `active_task.json`（**无** SessionStart 中文 hint 注入）。 |
 | **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
 | **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset 即 strict）：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；宽松 legacy 设 `=0|false|off|no`。 |
@@ -71,7 +71,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | Claude 专用；默认 **关闭**（不读 Cursor 同名 env）。 |
 | **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |
-| **D9 / fork 推断** | Cursor 默认 **开启** missing-`fork_context`→`false` 推断（`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，unset=on）。Claude **默认关闭**（`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，**不**读 Cursor/Codex 同名 env）。Codex 用 **`codex_review_independent_fork`** + **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（默认 on；**不**读 Cursor env）。 |
+| **D9 / fork 推断** | 见 [`AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md) Cursor 表 + 下节 **REVIEW_GATE**。 |
 | **Codex stable session** | 默认 **要求** 稳定 session 键（`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` unset=on）；生产勿关。legacy `=0`/`false` 时 fallback 按 **repo + cwd + payload session**（可选 `ROUTER_RS_CODEX_HOOK_STATE_SALT` 加盐）；`cwd` 空会 stderr 警告。Stop 上仅 review 措辞、无 UPS 落盘证据时仍 `CODEX_REVIEW_GATE` block。 |
 | **Codex `stop_hook_active`** | Codex 内部 Stop 重放默认**仍**执行 review/closeout 门控；**仅** `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 时跳过门控。 |
 | **Codex UPS re-arm** | 新一轮深度 review（`全面review` 等）会重置 `independent_review_subagent_seen` / `phase` / `subagent_start_count`（与 Claude 对称）；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 或 my-light 的 UPS/PostTool 会 **清空** hook-state。 |
@@ -82,21 +82,20 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 ## 混用时的实际武装顺序（Cursor Stop）
 
 - **Stop 优先级**（实现 [`handlers.rs`](../core/router-rs/src/hosts/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
-- **主线程深度 review（wave-2）**：**不得**在未 spawn 可数子代理（`general-purpose` / `best-of-n-runner` / `deep-reviewer` + `fork_context=false`）时仅凭 compact findings 清 `REVIEW_GATE`；须先有可数子代理证据（`subagent_start_count` / pending multiset / qualifying stop），再与 **`Stop` tail** 含 substantive `[P0]`–`[P2]` / `Caveat:` 行配合升 phase（**裸** legacy `phase≥2` alone 不足；stale hygiene 作废 orphan start；本仓默认**无** `afterAgentResponse` hook）。
+- **主线程深度 review（wave-2）**：清门须 live subagent 证据 + **`Stop` tail**；**裸** `phase≥2` 不足。细则见下节链接与本节「Hook 减法闭集」。
 - **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。**My 默认（`my-light`）**：同轮 review + `/implementx|/verifyx` **不**注入拆分提示（静默 disarm，见 [`docs/hosts/cursor.md`](hosts/cursor.md) beforeSubmit 表）。**非 my-light**（例如磁盘 `GOAL_STATE.lifecycle_profile` 非 `my-light` 且本轮无 My 斜杠、但 hook-state 已 `goal_required`）：会注入一行 **`router-rs：本轮提交同时包含…`** 拆分提示，避免误以为 review 门控失效。若你本意是「先深度审稿再开连续执行」，请拆成两轮。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 My implement / goal drive 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
 
-## 深度审稿 `REVIEW_GATE`（Cursor / Codex 可数 lane）
+## 深度审稿 `REVIEW_GATE`（Cursor / Codex）
 
-清门依赖宿主载荷，常见卡点：
+**真源（勿在本页复述长表）**：
 
-- **`fork_context` / `forkContext`**：须能解析为逻辑 **`false`**（典型为 JSON **布尔** `false`、可走布尔字符串表中的 `"false"` / `"0"` 等，或 JSON **整数** **`0`**）。**整数 `1`** 解析为 **`true`**（非独立 fork）；其它 **Number** 与**字段缺失**均不为 `false`。仍推荐宿主使用 **JSON 布尔**。
-- **Lane**：Cursor/Codex 仅 `review_gate.deep_gate_lanes`（`general-purpose`、`best-of-n-runner` 及归一化等价名；**`explore` / `review` / `reviewer` 等不计入**）。Claude Code 用 `claude_reviewer_lanes`。在 Cursor 上误用 `subagent_type: "review"` 不会清 `REVIEW_GATE`。见 `docs/host_adapter_contract.md` §0.1 差异表。  
-- **Mode**：`ROUTER_RS_CURSOR_REVIEW_GATE_MODE` — unset/`strict`（默认）= multiset `review_subagent_pending_cycle_keys`；`lite` = 仅稳定 **`id:`** 键写入 `review_lite_pending_cycle_keys`（无 `lane:`；否则 **fallback strict** 并日志 `review_lite_fallback_strict`）。`framework doctor` 打印当前 mode。
-- **Multiset 与双事件**（strict）：`review_subagent_pending_cycle_keys` 由 qualifying **`subagentStart`** / **`PostToolUse`** 入队；**核销**由匹配的 **`subagentStop`** 或同 id/lane 的 **`PostToolUse` 返回**完成。同一 **`id:`** 若 `subagentStart` 已入队，随后同 id 的 `PostToolUse` **不重复入队**。并行仅 `lane:` 且无稳定 id 时仍依赖 multiset 中多条相同 key。契约见 [`docs/references/cursor-subagent-hook-contract.md`](references/cursor-subagent-hook-contract.md)。  
-- **Stop 单行提示**：若见 `router-rs REVIEW_GATE incomplete` 与 `need=deep_reviewer_cycle general-purpose|best-of-n fork_context=false`，按该 `need=` 检查子代理载荷；尾缀 `hint=` 为可读排障补充，不改变 `need=` 语义。若同一门控多轮 `Stop` 仍卡，完整 `need=`/`hint=` 可能在 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`**（默认 8）之后被降级到 `additional_context`，`followup_message` 仅保留短 `mode=soft_nag` 行（见 [harness_architecture.md](harness_architecture.md) 环境变量表）。
+- Cursor 子代理契约（`fork_context` 拼写、**review-lite** vs `review_lite`、`phase≥3`、stale）：[`references/cursor-subagent-hook-contract.md`](references/cursor-subagent-hook-contract.md) · [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json)
+- Env 表：[`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md) · [`harness_architecture.md`](harness_architecture.md) §5
+- **review-lite** ADR：[`adr/ADR-review-gate-lite.md`](adr/ADR-review-gate-lite.md)
+- 宿主差异 / `need=` 排障：[host_adapter_contract.md](host_adapter_contract.md) · [hosts/cursor.md](hosts/cursor.md)
 
-完整排障叙述见 [host_adapter_contract.md](host_adapter_contract.md) 中 Cursor 小节与 [harness_architecture.md](harness_architecture.md) 中 Review gate 相关段落。
+**快查**：独立 fork 须 `fork_context` 解析为 **`false`**（布尔、`0`、字符串 `"false"`/`"0"`/`"no"`/`"n"`）；Stop 硬行 `router-rs REVIEW_GATE incomplete` → 先 spawn `fork_context=false` 的 **deep_gate_lanes** lane。
 
 ## Hook 减法闭集与内存（2026-05-20）
 

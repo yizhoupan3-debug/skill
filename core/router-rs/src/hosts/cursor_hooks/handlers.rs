@@ -40,18 +40,16 @@ fn release_lock_then_finalize_stop(
     repo_root: &Path,
     output: &mut Value,
     frame: &crate::task_state::CursorContinuityFrame,
-    skip_continuity_merge: bool,
     lock: &mut Option<LockGuard>,
 ) {
     release_state_lock(lock);
-    finalize_stop_hook_outputs(repo_root, output, frame, skip_continuity_merge);
+    finalize_stop_hook_outputs(repo_root, output, frame);
 }
 
 fn finalize_stop_hook_outputs(
     _repo_root: &Path,
     output: &mut Value,
     _frame: &crate::task_state::CursorContinuityFrame,
-    _skip_continuity_merge: bool,
 ) {
     merge_session_close_style_nudge_when_soft_terminal(output);
 }
@@ -462,6 +460,7 @@ pub struct ReviewGateState {
     pub version: u32,
     pub phase: u32,
     pub review_required: bool,
+    /// Legacy serde field; beforeSubmit/Stop always clear to `false` (no active delegation gate).
     pub delegation_required: bool,
     pub review_override: bool,
     pub delegation_override: bool,
@@ -2009,8 +2008,8 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
     true
 }
 
-/// Stop 硬门控（REVIEW_GATE / AG_FOLLOWUP）与 My/RFV 续跑注入互斥。
-fn stop_hard_gate_blocks_continuity_merge(state: &ReviewGateState) -> bool {
+/// When true, Stop skips advisory `review-output-lint` on assistant tail (REVIEW_GATE / AG_FOLLOWUP active).
+fn stop_review_output_lint_suppressed(state: &ReviewGateState) -> bool {
     review_stop_followup_needed(state)
         || (tracks_goal_or_drive_entry(state) && !goal_is_satisfied(state))
 }
@@ -2320,18 +2319,21 @@ fn cursor_hook_outbound_line_is_protected(line: &str) -> bool {
         || t.contains("continuity_suppressed=")
 }
 
-/// Outbound truncation: keep REVIEW_GATE / continuity_suppressed lines; truncate filler.
-pub(crate) fn truncate_cursor_hook_outbound_context_preserving_gate(
+fn truncate_cursor_hook_lines_preserving<F>(
     combined: &str,
     max_bytes: usize,
-) -> String {
+    is_protected: F,
+) -> String
+where
+    F: Fn(&str) -> bool,
+{
     if combined.len() <= max_bytes {
         return combined.to_string();
     }
     let mut protected: Vec<&str> = Vec::new();
     let mut rest: Vec<&str> = Vec::new();
     for line in combined.lines() {
-        if cursor_hook_outbound_line_is_protected(line) {
+        if is_protected(line) {
             protected.push(line);
         } else {
             rest.push(line);
@@ -2364,47 +2366,21 @@ pub(crate) fn truncate_cursor_hook_outbound_context_preserving_gate(
     }
 }
 
+/// Outbound truncation: keep REVIEW_GATE / continuity_suppressed lines; truncate filler.
+pub(crate) fn truncate_cursor_hook_outbound_context_preserving_gate(
+    combined: &str,
+    max_bytes: usize,
+) -> String {
+    truncate_cursor_hook_lines_preserving(combined, max_bytes, cursor_hook_outbound_line_is_protected)
+}
+
 fn truncate_cursor_hook_followup_preserving_review_gate(
     combined: &str,
     max_bytes: usize,
 ) -> String {
-    if combined.len() <= max_bytes {
-        return combined.to_string();
-    }
-    let mut gate: Vec<&str> = Vec::new();
-    let mut rest: Vec<&str> = Vec::new();
-    for line in combined.lines() {
-        if line.trim_start().starts_with("router-rs REVIEW_GATE") {
-            gate.push(line);
-        } else {
-            rest.push(line);
-        }
-    }
-    let gate_body = gate.join("\n");
-    if gate_body.len() >= max_bytes {
-        return truncate_cursor_hook_outbound_context(&gate_body, max_bytes);
-    }
-    let rest_body = rest.join("\n");
-    if rest_body.is_empty() {
-        return gate_body;
-    }
-    let sep_len = if gate_body.is_empty() { 0 } else { 1 };
-    let rest_budget = max_bytes.saturating_sub(gate_body.len() + sep_len);
-    let truncated_rest = truncate_cursor_hook_outbound_context(&rest_body, rest_budget);
-    if gate_body.is_empty() {
-        truncated_rest
-    } else if truncated_rest.is_empty() {
-        gate_body
-    } else {
-        let mut out = gate_body;
-        out.push('\n');
-        out.push_str(&truncated_rest);
-        if out.len() > max_bytes {
-            truncate_cursor_hook_outbound_context(&out, max_bytes)
-        } else {
-            out
-        }
-    }
+    truncate_cursor_hook_lines_preserving(combined, max_bytes, |line| {
+        line.trim_start().starts_with("router-rs REVIEW_GATE")
+    })
 }
 
 /// 应急关闭门控时仍执行 PostToolUse/Subagent 状态更新，但不对模型注入门控类提示（与 SILENT 剥离字段一致）。
@@ -2473,9 +2449,9 @@ fn hydrate_goal_gate_from_disk(
         return;
     }
     let Some((goal, task_id)) = frame.hydration_goal.as_ref() else {
-        // Stop-only: verifyx purge removes GOAL_STATE while hook-state may still carry
-        // `goal_required` from an earlier /implementx|/verifyx arm.
-        if arm_if_goal_file && state.goal_required {
+        // Stop-only: missing/unparseable pointers or verifyx purge removed GOAL_STATE while
+        // hook-state may still carry goal drive arms from /implementx|/verifyx.
+        if arm_if_goal_file {
             state.goal_required = false;
             state.goal_drive_entry_active = false;
         }
