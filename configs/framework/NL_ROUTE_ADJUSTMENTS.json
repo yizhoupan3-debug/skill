@@ -507,10 +507,10 @@
       },
       "action": {
         "type": "suppress",
-        "reason": "Suppressed: pure math proof/derivation review should route to math-derivation, not paper-reviewer."
+        "reason": "Suppressed: pure math proof/derivation review should route to math-derivation, not paper-workbench."
       },
       "record": {
-        "slug": "paper-reviewer"
+        "slug": "paper-workbench"
       }
     },
     {
@@ -520,10 +520,10 @@
       "action": {
         "type": "boost",
         "delta": 38.0,
-        "reason": "Paper-reviewer boost applied: figure/layout-only paper review slice detected."
+        "reason": "Paper-workbench boost applied: figure/layout-only paper review slice (inline paper-reviewer)."
       },
       "record": {
-        "slug": "paper-reviewer"
+        "slug": "paper-workbench"
       }
     },
     {
@@ -533,10 +533,10 @@
       "action": {
         "type": "boost",
         "delta": 72.0,
-        "reason": "Paper-reviewer boost applied: claim/evidence alignment review requested."
+        "reason": "Paper-workbench boost applied: claim/evidence alignment review (inline paper-reviewer)."
       },
       "record": {
-        "slug": "paper-reviewer"
+        "slug": "paper-workbench"
       }
     },
     {
@@ -546,22 +546,22 @@
             "signal": "has_paper_review_judgment_context"
           },
           {
-            "query_contains": "别润色"
+            "signal": "has_paper_prose_negation_context"
           }
         ]
       },
       "action": {
         "type": "boost",
         "delta": 74.0,
-        "reason": "Paper-reviewer boost applied: claim/evidence review-only paper judgment requested."
+        "reason": "Paper-workbench boost applied: review-only paper judgment (prose negation)."
       },
       "record": {
-        "slug": "paper-reviewer"
+        "slug": "paper-workbench"
       }
     },
     {
       "record": {
-        "slug": "paper-reviser"
+        "slug": "paper-workbench"
       },
       "when": {
         "signal": "has_paper_direct_revision_context"
@@ -569,7 +569,20 @@
       "action": {
         "type": "boost",
         "delta": 82.0,
-        "reason": "Paper-reviser boost applied: direct reviewer-comment manuscript revision requested."
+        "reason": "Paper-workbench boost applied: direct reviewer-comment manuscript revision (inline paper-reviser)."
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_writing_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 45.0,
+        "reason": "Paper-workbench boost applied: manuscript writing section without explicit prose-edit slice."
+      },
+      "record": {
+        "slug": "paper-workbench"
       }
     },
     {
@@ -583,18 +596,6 @@
       },
       "record": {
         "slug": "paper-workbench"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_paper_prose_edit_context"
-      },
-      "action": {
-        "type": "suppress",
-        "reason": "Suppressed: prose edit routes to paper-workbench, not paper-reviewer."
-      },
-      "record": {
-        "slug": "paper-reviewer"
       }
     },
     {

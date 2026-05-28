@@ -52,8 +52,8 @@ L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
     (+ hot framework commands: deepinterview, discussx, planx, implementx, verifyx, gitx)
 L1  adversarial-loop, citation-management, deepinterview, openai-docs, plan-mode
     (.archive-cold: documentation-engineering, image-generated)
-L2  code-review-deep, gitx, paper-reviewer, paper-reviser, paper-workbench,
-    paper-writing, research-workbench
+L2  code-review-deep, gitx, paper-workbench, paper-writing, research-workbench
+    (hot runtime owners; paper-reviewer inline-only; paper-reviser archive inline)
 L3  design-md, diagramming, doc, experiment-reproducibility, infographic,
     jupyter-notebook, pdf, screenshot, slides, spreadsheets, tao-ci,
     tikz-paper-figure, visual-review

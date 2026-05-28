@@ -8,8 +8,8 @@
 
 ## 2) 审稿 vs 改稿 vs 局部写作
 
-- **`$paper-reviewer`**：审稿/严审/能不能投/投稿前把关/只做判断不改稿/单维度审（claim、图表、引用、语言、数学等）。
-- **`$paper-reviser`**：按审稿意见改、rebuttal 驱动改稿、已知 blocker 要“现在就动稿”，允许删/缩/挪附录/降主张（受 `edit_scope` 约束）。
+- **`$paper-reviewer`**（workbench **内联**，非热路由并列入口）：审稿/严审/能不能投/投稿前把关/只做判断不改稿/单维度审（claim、图表、引用、语言、数学等）。
+- **`$paper-reviser`**（workbench **内联**；skill 文件在 `.archive-cold/`，非用户第二入口）：按审稿意见改、rebuttal 驱动改稿、已知 blocker 要“现在就动稿”，允许删/缩/挪附录/降主张（受 `edit_scope` 约束）。
 - **`$paper-writing`**：只改表达/写某一节（abstract/introduction/related work/caption 等），且 claim 边界已冻结或用户明确“不改 claim”。
 
 ## 3) Exhaustive 路径 sidecar lanes（findings + sidecar，非 G 进度模板）

@@ -7,9 +7,12 @@ This file defines the shared gate-chain contract used by `$paper-workbench`,
 [`paper-workbench/references/RESEARCH_PAPER_STACK.md`](paper-workbench/references/RESEARCH_PAPER_STACK.md)
 (L3 only — multi-turn disk state).
 
-`$paper-workbench` is the default front door. The protocol still keeps the
-internal main chain and sidecar lanes explicit so no capability is lost when the
-front door is unified.
+`$paper-workbench` is the default front door (the only hot-route user entry in
+`SKILL_ROUTING_RUNTIME.json`). `$paper-reviewer` and `$paper-reviser` are
+**inline specialist lanes** loaded from the front door—not parallel hot-route
+owners (`paper-reviser` skill file lives under `.archive-cold/`). The protocol
+still keeps the internal main chain and sidecar lanes explicit so no capability
+is lost when the front door is unified.
 
 ## Relationship to RFV reasoning-depth contract (orientation only)
 

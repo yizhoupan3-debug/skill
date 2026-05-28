@@ -138,9 +138,9 @@ mod tests {
     }
 
     #[test]
-    fn signal_pasted_latex_without_keywords() {
+    fn signal_pasted_latex_with_paper_context() {
         assert!(prompt_signals_paper_prose_work(
-            "改一下下面这段 \\begin{abstract} We propose a method \\cite{foo}"
+            "论文 改一下下面这段 \\begin{abstract} We propose a method \\cite{foo}"
         ));
     }
 

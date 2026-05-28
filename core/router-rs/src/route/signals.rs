@@ -684,6 +684,49 @@ pub(crate) fn paper_skill_requires_context(slug: &str) -> bool {
     )
 }
 
+/// Substring-prone single-token markers must use whole-token match only (e.g. `review` vs `preview`).
+fn paper_route_marker_matches(
+    query_text: &str,
+    query_token_list: &[String],
+    marker: &str,
+) -> bool {
+    let norm = normalize_text(marker);
+    let token_only = matches!(norm.as_str(), "review" | "审" | "看" | "检查" | "评估");
+    if token_only {
+        return text_matches_phrase(query_token_list, marker);
+    }
+    if norm.split_whitespace().count() > 1 {
+        return query_text.contains(&norm) || text_matches_phrase(query_token_list, marker);
+    }
+    query_text.contains(&norm) || text_matches_phrase(query_token_list, marker)
+}
+
+pub(crate) fn has_paper_prose_negation_context(
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
+    if query_text.contains("别润色") || query_text.contains("不润色") {
+        return true;
+    }
+    [
+        "no polish",
+        "do not polish",
+        "don't polish",
+        "dont polish",
+        "不要润色",
+        "只审不改",
+        "critique only",
+        "critique-only",
+        "review only",
+        "review-only",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 pub(crate) fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
     [
         "paper",
@@ -978,7 +1021,7 @@ pub(crate) fn has_standalone_academic_polish_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    if query_text.contains("别润色") || query_text.contains("不润色") {
+    if has_paper_prose_negation_context(query_text, query_token_list) {
         return false;
     }
     let lower = query_text.to_ascii_lowercase();
@@ -1010,7 +1053,7 @@ pub(crate) fn has_paper_writing_context(query_text: &str, query_token_list: &[St
     if !has_paper_context(query_text, query_token_list) {
         return false;
     }
-    if query_text.contains("别润色") || query_text.contains("不润色") {
+    if has_paper_prose_negation_context(query_text, query_token_list) {
         return false;
     }
     if has_paper_ref_first_workflow_context(query_text, query_token_list) {
@@ -1117,7 +1160,7 @@ pub(crate) fn looks_like_pasted_manuscript_prose(text: &str) -> bool {
 }
 
 pub(crate) fn has_paper_prose_edit_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if query_text.contains("别润色") || query_text.contains("不润色") {
+    if has_paper_prose_negation_context(query_text, query_token_list) {
         return false;
     }
     if has_standalone_academic_polish_context(query_text, query_token_list) {
@@ -1126,11 +1169,11 @@ pub(crate) fn has_paper_prose_edit_context(query_text: &str, query_token_list: &
     if has_paper_writing_context(query_text, query_token_list) {
         return true;
     }
-    if looks_like_pasted_manuscript_prose(query_text) {
-        return true;
-    }
     if !has_paper_context(query_text, query_token_list) {
         return false;
+    }
+    if looks_like_pasted_manuscript_prose(query_text) {
+        return true;
     }
     if has_paper_ref_first_workflow_context(query_text, query_token_list) {
         return false;
@@ -1224,13 +1267,10 @@ pub(crate) fn has_paper_figure_layout_review_context(
         "图表", "排版", "figure", "figures", "table", "tables", "layout",
     ];
     let review_markers = ["只看", "审", "review", "检查", "别检查别的维度"];
-    visual_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    }) && review_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    visual_markers.iter().any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
+        && review_markers
+            .iter()
+            .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
 }
 
 pub(crate) fn has_paper_logic_evidence_review_context(
@@ -1251,13 +1291,12 @@ pub(crate) fn has_paper_logic_evidence_review_context(
         "够不够",
     ];
     let review_markers = ["看", "检查", "评估", "review", "审", "别润色"];
-    logic_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    }) && review_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    logic_markers
+        .iter()
+        .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
+        && review_markers
+            .iter()
+            .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
 }
 
 pub(crate) fn has_paper_ref_first_workflow_context(
@@ -1704,9 +1743,16 @@ mod paper_prose_edit_context_tests {
     }
 
     #[test]
-    fn pasted_latex_block() {
+    fn pasted_latex_block_with_paper_context() {
         assert!(prose(
-            "改一下下面这段 \\begin{abstract} We propose a method \\cite{foo}"
+            "论文 改一下下面这段 \\begin{abstract} We propose a method \\cite{foo}"
+        ));
+    }
+
+    #[test]
+    fn pasted_latex_without_paper_context_is_false() {
+        assert!(!prose(
+            "fix \\begin{abstract} in CI workflow for the template"
         ));
     }
 
@@ -1723,6 +1769,26 @@ mod paper_prose_edit_context_tests {
     #[test]
     fn review_plus_polish_not_blocked() {
         assert!(prose("审稿并润色这篇论文的 abstract"));
+    }
+}
+
+#[cfg(test)]
+mod paper_review_slice_context_tests {
+    use super::*;
+    use crate::route::tokenize_route_text;
+
+    #[test]
+    fn preview_does_not_trigger_figure_layout_review() {
+        let q = "论文 preview 图表";
+        let tokens = tokenize_route_text(q);
+        assert!(!has_paper_figure_layout_review_context(q, &tokens));
+    }
+
+    #[test]
+    fn figure_layout_review_matches_review_token() {
+        let q = "论文 figure layout 只 review 排版";
+        let tokens = tokenize_route_text(q);
+        assert!(has_paper_figure_layout_review_context(q, &tokens));
     }
 }
 

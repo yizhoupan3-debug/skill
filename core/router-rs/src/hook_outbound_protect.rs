@@ -2,16 +2,21 @@
 
 const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str = "router-rs REVIEW_GATE detail";
 
+fn hook_outbound_line_starts_paper_hook_block(line: &str) -> bool {
+    let t = line.trim_start();
+    t.contains("**PAPER_PROSE_QUALITY_HOOK**")
+        || t.contains("PAPER_PROSE_QUALITY_HOOK")
+        || t.contains("**PAPER_ADVERSARIAL_HOOK**")
+        || t.contains("PAPER_ADVERSARIAL_HOOK")
+}
+
 /// Lines that must survive UTF-8 byte budget clipping on hook outbound context.
 pub(crate) fn hook_outbound_line_is_framework_protected(line: &str) -> bool {
     let t = line.trim_start();
     t.contains("router-rs REVIEW_GATE")
         || t.starts_with(REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX)
         || t.contains("continuity_suppressed=")
-        || t.contains("**PAPER_PROSE_QUALITY_HOOK**")
-        || t.contains("PAPER_PROSE_QUALITY_HOOK")
-        || t.contains("**PAPER_ADVERSARIAL_HOOK**")
-        || t.contains("PAPER_ADVERSARIAL_HOOK")
+        || hook_outbound_line_starts_paper_hook_block(line)
 }
 
 fn truncate_hook_outbound_bytes(combined: &str, max_bytes: usize, suffix: &str) -> String {
@@ -42,6 +47,27 @@ fn truncate_hook_outbound_bytes(combined: &str, max_bytes: usize, suffix: &str) 
     format!("{}{}", &combined[..cut], suffix)
 }
 
+fn partition_outbound_lines(combined: &str) -> (Vec<&str>, Vec<&str>) {
+    let mut protected: Vec<&str> = Vec::new();
+    let mut rest: Vec<&str> = Vec::new();
+    let mut in_paper_hook_block = false;
+    for line in combined.lines() {
+        if hook_outbound_line_starts_paper_hook_block(line) {
+            in_paper_hook_block = true;
+        } else if in_paper_hook_block
+            && line.trim_start().starts_with("router-rs REVIEW_GATE")
+        {
+            in_paper_hook_block = false;
+        }
+        if in_paper_hook_block || hook_outbound_line_is_framework_protected(line) {
+            protected.push(line);
+        } else {
+            rest.push(line);
+        }
+    }
+    (protected, rest)
+}
+
 /// Preserve protected lines first, then truncate the remainder to fit `max_bytes`.
 pub(crate) fn truncate_hook_outbound_lines_preserving(
     combined: &str,
@@ -51,15 +77,7 @@ pub(crate) fn truncate_hook_outbound_lines_preserving(
     if combined.len() <= max_bytes {
         return combined.to_string();
     }
-    let mut protected: Vec<&str> = Vec::new();
-    let mut rest: Vec<&str> = Vec::new();
-    for line in combined.lines() {
-        if hook_outbound_line_is_framework_protected(line) {
-            protected.push(line);
-        } else {
-            rest.push(line);
-        }
-    }
+    let (protected, rest) = partition_outbound_lines(combined);
     let protected_body = protected.join("\n");
     if protected_body.len() >= max_bytes {
         return truncate_hook_outbound_bytes(&protected_body, max_bytes, suffix);
@@ -92,6 +110,17 @@ mod tests {
         );
         let out = truncate_hook_outbound_lines_preserving(&combined, 640, "...");
         assert!(out.contains("PAPER_PROSE_QUALITY_HOOK"));
+        assert!(out.contains("prose chain body must remain"));
+    }
+
+    #[test]
+    fn full_paper_prose_hook_body_survives_byte_cap() {
+        let hook_body = include_str!("../../../configs/framework/PAPER_PROSE_QUALITY_HOOK.txt");
+        let filler = "y".repeat(900);
+        let combined = format!("{filler}\n{hook_body}");
+        let out = truncate_hook_outbound_lines_preserving(&combined, 1024, "...");
+        assert!(out.contains("language_register"));
+        assert!(out.contains("prose-chain-contract"));
     }
 
     #[test]

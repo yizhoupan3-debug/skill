@@ -7660,11 +7660,12 @@ fn before_submit_injects_paper_prose_hook_by_default() {
     let prior = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
     env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
     let repo = fresh_repo();
-    let out = dispatch_cursor_hook_event(
+    let mut out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
         &event("prose-default", "SCI润色 abstract"),
     );
+    super::apply_cursor_hook_output_policy(&mut out);
     let ctx = out
         .get("additional_context")
         .and_then(Value::as_str)
@@ -7672,6 +7673,10 @@ fn before_submit_injects_paper_prose_hook_by_default() {
     assert!(
         ctx.contains("PAPER_PROSE_QUALITY_HOOK"),
         "expected prose hook in beforeSubmit context: {ctx}"
+    );
+    assert!(
+        ctx.contains("language_register"),
+        "prose hook body must survive outbound policy: {ctx}"
     );
     match prior {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", v),
@@ -7686,11 +7691,12 @@ fn before_submit_skips_paper_prose_when_hook_explicitly_off() {
     let prior = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
     env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", "0");
     let repo = fresh_repo();
-    let out = dispatch_cursor_hook_event(
+    let mut out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
         &event("prose-off", "SCI润色 abstract"),
     );
+    super::apply_cursor_hook_output_policy(&mut out);
     let ctx = out
         .get("additional_context")
         .and_then(Value::as_str)
@@ -7712,7 +7718,7 @@ fn before_submit_skips_paper_prose_on_java_abstract_false_positive() {
     let prior = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
     env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
     let repo = fresh_repo();
-    let out = dispatch_cursor_hook_event(
+    let mut out = dispatch_cursor_hook_event(
         &repo,
         "beforeSubmitPrompt",
         &event(
@@ -7720,6 +7726,7 @@ fn before_submit_skips_paper_prose_on_java_abstract_false_positive() {
             "edit the abstract base class in this Java module",
         ),
     );
+    super::apply_cursor_hook_output_policy(&mut out);
     let ctx = out
         .get("additional_context")
         .and_then(Value::as_str)
@@ -7731,5 +7738,46 @@ fn before_submit_skips_paper_prose_on_java_abstract_false_positive() {
     match prior {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", v),
         None => env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK"),
+    }
+}
+
+#[test]
+fn before_submit_paper_prose_survives_outbound_truncation() {
+    let _review_clear = ReviewGateDisableEnvClearGuard::new();
+    let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+    let _cap_lock = cursor_hook_outbound_context_max_chars_env_lock();
+    let prior_cap = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
+    env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "1024");
+    let prior_hook = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+    env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+
+    let repo = fresh_repo();
+    let filler = "z".repeat(900);
+    let mut out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(
+            "prose-trunc",
+            &format!("{filler}\nSCI润色 abstract"),
+        ),
+    );
+    super::apply_cursor_hook_output_policy(&mut out);
+    let ctx = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ctx.contains("PAPER_PROSE_QUALITY_HOOK") && ctx.contains("prose-chain-contract"),
+        "paper hook block must survive outbound cap: {}",
+        &ctx[..ctx.len().min(200)]
+    );
+
+    match prior_hook {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK"),
+    }
+    match prior_cap {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS"),
     }
 }

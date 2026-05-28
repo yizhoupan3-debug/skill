@@ -174,7 +174,7 @@ dimension mode.
 
 - The user wants to advance a non-manuscript research project, topic, or experiment plan -> use `$research-workbench`; this front door is manuscript-only
 - The user explicitly wants only one narrow lane and names it clearly:
-  - local text polish only -> use `$paper-writing`
+  - local text polish only -> stay on **`$paper-workbench`** prose intake (inline `$paper-writing` after Claim card / `edit_scope`; do not treat `$paper-writing` as a parallel user entry)
   - literature corpus / related work only -> keep the work here as source-backed paper context until it narrows to writing or citation hygiene
   - notation consistency only -> use `notation sweep` under `$paper-reviewer`
 

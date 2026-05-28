@@ -13,7 +13,7 @@ flowchart TB
   end
 
   subgraph route [L3 路由]
-    R[NL: has_paper_writing_context]
+    R[NL: has_paper_prose_edit_context]
     WB["$paper-workbench 前门"]
     PW["$paper-writing 内联 overlay"]
   end
@@ -131,7 +131,7 @@ note: claim/evidence 来自 research 工件，勿在 writing 轮发明新结果
 
 ## 维护检查清单
 
-- [ ] NL：`has_paper_writing_context` → boost `paper-workbench`，不 boost 直跳 `paper-writing`
+- [ ] NL：`has_paper_prose_edit_context` → boost `paper-workbench`；`has_paper_writing_context` 仅作辅助 boost（不直跳 `paper-writing` 热入口）
 - [ ] `user-phrases-to-lanes`：「润色」→ workbench intake
 - [ ] reviewer language findings 含 `prose_repair_class`
 - [ ] writing 交付含 `prose_qc`

@@ -3111,6 +3111,39 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
         has_prose_boost,
         "NL_ROUTE_ADJUSTMENTS must boost paper-workbench on has_paper_prose_edit_context"
     );
+    let has_writing_boost = post_rules.iter().any(|rule| {
+        rule.get("when")
+            .and_then(|w| w.get("signal"))
+            .and_then(Value::as_str)
+            == Some("has_paper_writing_context")
+            && rule
+                .get("record")
+                .and_then(|r| r.get("slug"))
+                .and_then(Value::as_str)
+                == Some("paper-workbench")
+            && rule.get("action").and_then(|a| a.get("type")).and_then(Value::as_str) == Some("boost")
+    });
+    assert!(
+        has_writing_boost,
+        "NL_ROUTE_ADJUSTMENTS must boost paper-workbench on has_paper_writing_context"
+    );
+    for rule in post_rules {
+        let slug = rule
+            .get("record")
+            .and_then(|r| r.get("slug"))
+            .and_then(Value::as_str);
+        if let Some(s) = slug {
+            assert!(
+                s != "paper-reviewer" && s != "paper-reviser",
+                "post_framework_alias_rules must not target dead hot-route slugs: {s}"
+            );
+        }
+    }
+    let signals_rs = read_text(&root.join("core/router-rs/src/route/nl_route_adjustments.rs"));
+    assert!(
+        signals_rs.contains("has_paper_prose_negation_context"),
+        "nl_route_adjustments must register has_paper_prose_negation_context"
+    );
     let paper_prose_hook_rs = read_text(&root.join("core/router-rs/src/paper_prose_hook.rs"));
     for env in [
         "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",

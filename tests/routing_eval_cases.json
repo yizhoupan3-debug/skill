@@ -561,6 +561,47 @@
       "notes": "Manuscript section writing enters paper-workbench front door; inline paper-writing with prose-quality-gate"
     },
     {
+      "id": "route-009d-paper-review-only-negation",
+      "category": "should-trigger",
+      "task": "只审不改，别润色，看 claim 和证据",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Review-only with prose negation boosts paper-workbench (inline paper-reviewer)"
+    },
+    {
+      "id": "route-009e-latex-ci-not-manuscript",
+      "category": "should-not-trigger",
+      "task": "修复 CI 里 \\begin{document} 模板编译失败",
+      "expected_owner": "gh-fix-ci",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-workbench"],
+      "notes": "CI LaTeX fix routes gh-fix-ci; must not false-positive paper-workbench prose chain"
+    },
+    {
+      "id": "route-009f-direct-reviewer-revision",
+      "category": "should-trigger",
+      "task": "根据 reviewer comments 直接改稿，别先给方案",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Direct revision context boosts paper-workbench front door"
+    },
+    {
+      "id": "route-009g-figure-layout-review",
+      "category": "should-trigger",
+      "task": "论文 figure layout 只 review 排版",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Figure/layout review slice; review token is whole-word only"
+    },
+    {
+      "id": "route-009h-prose-negation-science-critique",
+      "category": "should-trigger",
+      "task": "不润色，只批评这篇论文的科学性",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Prose negation + paper review judgment"
+    },
+    {
       "id": "route-010-visual-review",
       "category": "should-trigger",
       "task": "基于这组截图做 UI 审查，告诉我哪里有视觉问题",
