@@ -7652,3 +7652,84 @@ fn review_gate_env_matrix_fixtures_apply_env() {
         None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
     }
 }
+
+#[test]
+fn before_submit_injects_paper_prose_hook_by_default() {
+    let _review_clear = ReviewGateDisableEnvClearGuard::new();
+    let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+    let prior = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+    env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+    let repo = fresh_repo();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("prose-default", "SCI润色 abstract"),
+    );
+    let ctx = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        ctx.contains("PAPER_PROSE_QUALITY_HOOK"),
+        "expected prose hook in beforeSubmit context: {ctx}"
+    );
+    match prior {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK"),
+    }
+}
+
+#[test]
+fn before_submit_skips_paper_prose_when_hook_explicitly_off() {
+    let _review_clear = ReviewGateDisableEnvClearGuard::new();
+    let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+    let prior = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+    env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", "0");
+    let repo = fresh_repo();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event("prose-off", "SCI润色 abstract"),
+    );
+    let ctx = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !ctx.contains("PAPER_PROSE_QUALITY_HOOK"),
+        "hook=0 must not inject prose: {ctx}"
+    );
+    match prior {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK"),
+    }
+}
+
+#[test]
+fn before_submit_skips_paper_prose_on_java_abstract_false_positive() {
+    let _review_clear = ReviewGateDisableEnvClearGuard::new();
+    let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+    let prior = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+    env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+    let repo = fresh_repo();
+    let out = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(
+            "prose-fp",
+            "edit the abstract base class in this Java module",
+        ),
+    );
+    let ctx = out
+        .get("additional_context")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        !ctx.contains("PAPER_PROSE_QUALITY_HOOK"),
+        "must not false-positive on abstract+edit: {ctx}"
+    );
+    match prior {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK"),
+    }
+}

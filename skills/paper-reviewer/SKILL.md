@@ -288,11 +288,14 @@ For compact interactive review, use this compressed order:
    anchors changed.
 7. Apply the language checks in
    [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+   and map actionable prose issues to **`prose_repair_class`** per
+   [`../paper-workbench/references/prose-chain-contract.md`](../paper-workbench/references/prose-chain-contract.md)
    (undefined coinages, terminology density, repetition without new evidence,
    defensive / internal tone, stacked `but` / `not` / `rather than`,
-   code identifiers or raw `.csv`/path pointers in place of prose tables/figures)
+   code identifiers or raw `.csv`/path pointers in place of prose tables/figures,
+   EN slop / ZH 套话 per [`../paper-writing/references/prose-quality-gate.md`](../paper-writing/references/prose-quality-gate.md))
    when reviewing language/readability or whole-paper readiness; surface as
-   actionable fixes, not generic "polish more".
+   **handoff-ready fixes** (`suggested_fix` + `writing_handoff`), not generic "polish more".
 8. Report only the actionable conclusion unless the user asks for the full
    protocol trace.
 

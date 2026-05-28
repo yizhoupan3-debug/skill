@@ -531,17 +531,34 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
             crate::hook_common::my_goal_drive_hook_nudge_for_prompt(&prompt),
         );
     }
+    let mut contexts: Vec<String> = Vec::new();
     if let Some(Ok(state)) = review_sync {
         if state.review_required
             && !state.review_override
             && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
         {
-            let nudge =
-                crate::runtime_registry::review_spawn_first_nudge_line(Some(repo_root), "claude-code");
-            return add_context("UserPromptSubmit", &nudge);
+            contexts.push(crate::runtime_registry::review_spawn_first_nudge_line(
+                Some(repo_root),
+                "claude-code",
+            ));
         }
     }
-    None
+    crate::paper_adversarial_hook::maybe_append_paper_adversarial_context(
+        repo_root,
+        &prompt,
+        &mut contexts,
+        crate::paper_prose_hook::PaperProseHookHost::Claude,
+    );
+    crate::paper_prose_hook::maybe_append_paper_prose_context(
+        repo_root,
+        &prompt,
+        &mut contexts,
+        crate::paper_prose_hook::PaperProseHookHost::Claude,
+    );
+    if contexts.is_empty() {
+        return None;
+    }
+    add_context("UserPromptSubmit", &contexts.join("\n"))
 }
 
 fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
@@ -2254,6 +2271,32 @@ mod tests {
             None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
         }
         let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_injects_paper_prose_by_default() {
+        let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let prior = std::env::var_os("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
+        std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
+        let repo = unique_test_repo("prose-ups");
+        let payload = json!({
+            "prompt": "polish this abstract for clarity",
+            "session_id": "claude-prose-1"
+        });
+        let out = run_user_prompt_submit(&repo, &payload);
+        let ctx = out
+            .as_ref()
+            .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
+            .unwrap_or_default();
+        assert!(
+            ctx.contains("PAPER_PROSE_QUALITY_HOOK"),
+            "expected prose hook: {ctx}"
+        );
+        let _ = fs::remove_dir_all(&repo);
+        match prior {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK"),
+        }
     }
 
     fn unique_test_repo(name: &str) -> PathBuf {

@@ -171,6 +171,12 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         &text,
         false,
     );
+    crate::paper_prose_hook::maybe_merge_paper_prose_before_submit(
+        repo_root,
+        &mut output,
+        &text,
+        false,
+    );
     let persisted_after_followup = if needs_autopilot_pre_goal {
         save_state(repo_root, event, &mut state)
     } else {

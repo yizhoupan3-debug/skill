@@ -82,7 +82,7 @@ Cross-venue reporting norms to enforce when applicable:
   narrower claims, appendix demotion, venue retargeting, or dropping a claim.
   **Do not treat claim-downgrade as the lazy default** when B-tier gaps are
   closable with plausible extra work.
-- Only after the scientific bar is safe should `paper-writing` optimize story, tone, and sentence-level polish.
+- Only after the scientific bar is safe should `paper-writing` optimize story, tone, and sentence-level polish — via **`prose-quality-gate`** + **`prose_qc`** on the chain in [`prose-chain-contract.md`](prose-chain-contract.md).
 
 ## Expression Strength Rule
 

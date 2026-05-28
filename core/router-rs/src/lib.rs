@@ -30,6 +30,7 @@ mod harness_context_signals;
 mod harness_contract;
 mod harness_operator_nudges;
 mod hook_common;
+mod hook_outbound_protect;
 mod hook_observation_rules;
 mod hook_policy;
 #[path = "utils/hook_posttool_normalize.rs"]
@@ -44,6 +45,7 @@ pub mod framework_host_integration {
 #[path = "utils/lane_normalize.rs"]
 mod lane_normalize;
 mod paper_adversarial_hook;
+mod paper_prose_hook;
 mod runtime_registry;
 mod review_gate;
 mod review_gate_engine;

@@ -16,6 +16,8 @@ Move down this ladder only as far as the text needs:
 
 Do not spend the whole pass at level 6 if the problem is level 1-3.
 
+**Hard gate (2026-05)**：触达正文时以 [`prose-quality-gate.md`](prose-quality-gate.md) 为准——未过 L1–L4 不得交付长段终稿；`language_register` 分 `en_submission` / `zh_manuscript` / `mixed`。
+
 For whole-manuscript tightening, run one coherence pass before sentence polish:
 
 1. lock the canonical throughline from `../SKILL.md`

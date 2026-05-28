@@ -38,5 +38,5 @@
 ## 4) 反例（避免误路由）
 
 - 用户说“运行/跑一下/execute”但上下文是代码或 CLI：不要因为词面包含“running”而误路由到统计 lane。
-- 用户贴一段文字说“润色一下”：默认 `paper-writing`（除非用户明确要整篇判断/整篇改稿）。
+- 用户贴一段文字说「润色一下」：**默认 `$paper-workbench` prose intake**（`language_register` + Claim card + 内联 `$paper-writing` + `prose_qc`），不是直跳专科 overlay（见 [`prose-chain-contract.md`](prose-chain-contract.md)）。
 

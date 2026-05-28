@@ -124,7 +124,7 @@ fn wordlike_token_regex() -> &'static Regex {
         .get_or_init(|| Regex::new(r"^[a-z0-9.+#/_-]+$").expect("wordlike token regex"))
 }
 
-pub(super) fn tokenize_route_text(text: &str) -> Vec<String> {
+pub(crate) fn tokenize_route_text(text: &str) -> Vec<String> {
     token_regex()
         .find_iter(&normalize_text(text))
         .map(|capture| capture.as_str().to_string())

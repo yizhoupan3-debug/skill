@@ -371,12 +371,16 @@ What must be true:
 
 - prose is natural, smooth, and restrained
 - tone is not defensive and not promotional
+- **`language_register`**-appropriate slop/套话 cleared; **`prose_qc`**-class checks would pass on rewritten spans
+
+Normative: [`../../paper-workbench/references/prose-chain-contract.md`](../../paper-workbench/references/prose-chain-contract.md), [`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md).
 
 Failure signals:
 
-- AI-sounding transition clusters
+- AI-sounding transition clusters (`Furthermore` chains, `In recent years`, `plays a crucial role`, 具有重要意义套话)
 - rebuttal-style defensiveness inside the paper
 - stiff or over-signposted sentence rhythm
+- missing paragraph topic sentences / ladder_blocked structure
 
 ### G14 Rendered Layout & Page Economy
 

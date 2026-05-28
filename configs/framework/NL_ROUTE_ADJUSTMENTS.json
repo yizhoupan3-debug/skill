@@ -231,6 +231,11 @@
             "not": {
               "signal": "has_paper_context"
             }
+          },
+          {
+            "not": {
+              "signal": "has_paper_prose_edit_context"
+            }
           }
         ]
       },
@@ -306,6 +311,11 @@
           {
             "not": {
               "signal": "has_paper_context"
+            }
+          },
+          {
+            "not": {
+              "signal": "has_paper_prose_edit_context"
             }
           }
         ]
@@ -564,11 +574,24 @@
     },
     {
       "when": {
-        "signal": "has_paper_writing_context"
+        "signal": "has_paper_prose_edit_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 82.0,
+        "reason": "Paper-workbench boost: prose edit / pasted manuscript / colloquial rewrite — auto prose-quality-gate (no user tokens required)."
+      },
+      "record": {
+        "slug": "paper-workbench"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_paper_prose_edit_context"
       },
       "action": {
         "type": "suppress",
-        "reason": "Suppressed: bounded manuscript prose polish should route to paper-writing, not paper-reviewer."
+        "reason": "Suppressed: prose edit routes to paper-workbench, not paper-reviewer."
       },
       "record": {
         "slug": "paper-reviewer"
@@ -576,15 +599,34 @@
     },
     {
       "when": {
-        "signal": "has_paper_writing_context"
+        "signal": "has_paper_prose_edit_context"
       },
       "action": {
-        "type": "boost",
-        "delta": 40.0,
-        "reason": "Paper-writing boost applied: bounded manuscript prose polish or storyline wording detected."
+        "type": "suppress",
+        "reason": "Suppressed: paper-writing is inline overlay after workbench prose intake."
       },
       "record": {
         "slug": "paper-writing"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_prose_naturalization_context"
+          },
+          {
+            "signal": "has_paper_context"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 70.0,
+        "reason": "Paper-workbench boost: manuscript prose naturalization (not documentation-engineering)."
+      },
+      "record": {
+        "slug": "paper-workbench"
       }
     },
     {

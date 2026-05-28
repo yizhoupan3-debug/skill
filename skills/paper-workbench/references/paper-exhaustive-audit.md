@@ -126,8 +126,10 @@ Do not modify toolchain; witness only.
 
 ## Language (structure / prose / citations)
 
-Normative detail: [`research-language-norms.md`](research-language-norms.md). This section
-is the **audit checklist** only.
+Normative detail: [`research-language-norms.md`](research-language-norms.md) + **prose chain**
+[`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md).
+Handoff shape: [`prose-chain-contract.md`](prose-chain-contract.md) §审稿→写作.
+This section is the **audit checklist** only.
 
 ### Pass1 — structure (Section / Subsection / Paragraph)
 
@@ -136,7 +138,9 @@ is the **audit checklist** only.
 
 ### Pass2 — sentence sweep
 
-- Direct, field-standard wording; **no defensive / AI-slop / invented jargon** (see norms §1–3).
+- Infer or record **`language_register`** per main-text block (`en_submission` / `zh_manuscript` / `mixed`).
+- Direct, field-standard wording; **no defensive / AI-slop / invented jargon** (norms §1–3 + prose-quality-gate slop lists).
+- Each **language** finding **must** include `prose_repair_class` + `register` (see prose-chain-contract).
 - Abbreviations expanded on first use.
 - **Zero tolerance** for low-level grammar/spelling in submission-facing text.
 - **Citation precision** — claims tied to correct sources.

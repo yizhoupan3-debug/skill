@@ -202,6 +202,15 @@ fn nl_sig_has_paper_writing_context(
     has_paper_writing_context(query_text, query_token_list)
 }
 
+fn nl_sig_has_paper_prose_edit_context(
+    _record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    _query_tokens: &HashSet<String>,
+) -> bool {
+    has_paper_prose_edit_context(query_text, query_token_list)
+}
+
 fn nl_sig_has_parallel_execution_context(
     _record: &SkillRecord,
     query_text: &str,
@@ -438,6 +447,10 @@ const NL_SIGNAL_REGISTRY: &[NlSignalEntry] = &[
     NlSignalEntry {
         name: "has_paper_logic_evidence_review_context",
         eval: nl_sig_has_paper_logic_evidence_review_context,
+    },
+    NlSignalEntry {
+        name: "has_paper_prose_edit_context",
+        eval: nl_sig_has_paper_prose_edit_context,
     },
     NlSignalEntry {
         name: "has_paper_ref_first_workflow_context",

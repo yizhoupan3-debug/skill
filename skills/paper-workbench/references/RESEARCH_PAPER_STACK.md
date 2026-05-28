@@ -26,7 +26,9 @@
 | **L0** | 每一轮手稿任务 | [`../SKILL.md`](../SKILL.md) 正文 + **Progressive disclosure** |
 | **L1** | 即将改稿 | [`edit-scope-gate.md`](edit-scope-gate.md)（`surgical` 默认） |
 | **L1** | 证据与主张不匹配 | [`claim-evidence-ladder.md`](claim-evidence-ladder.md)（先补证据再缩口径） |
-| **L1** | 落笔 / 语言问题 | [`research-language-norms.md`](research-language-norms.md) |
+| **L1** | 落笔 / 语言问题 | [`research-language-norms.md`](research-language-norms.md) + [`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md)（`language_register` / ladder / `prose_qc`） |
+| **L1** | 全链路写作（路由→审→改→写→验收） | [`prose-chain-contract.md`](prose-chain-contract.md) |
+| **L1** | 坏→好结构对照 | [`../../paper-writing/references/prose-exemplars.md`](../../paper-writing/references/prose-exemplars.md) |
 | **L2** | 顶刊/顶会栏 | [`top-tier-paper-standard.md`](top-tier-paper-standard.md) |
 | **L2** | 整篇严审 / exhaustive 深链 | [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md) |
 | **L2** | Claim card + 章节 handoff | [`../../paper-writing/references/claim-spine-and-section-contract.md`](../../paper-writing/references/claim-spine-and-section-contract.md) |
@@ -57,6 +59,7 @@
 
 - **框架连续性目录**：[`artifacts/current/`](../../../artifacts/current/) 下的 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`（及同层相关指针）是跨会话接力的机器可读真源；分层与开关以 [`docs/harness_architecture.md`](../../../docs/harness_architecture.md) 为准。
 - **手稿主张帐本**：`paper_story/CLAIM_LEDGER.md`（与 `EVIDENCE_ANCHOR_MAP` 等）冻结 claim 天花板与证据锚；主张—证据纪律只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
+- **手稿 prose 轮次账（可选）**：`paper_story/PROSE_QC_LOG.md`（模板 [`references/templates/PROSE_QC_LOG.template.md`](references/templates/PROSE_QC_LOG.template.md)）；全链路见 [`prose-chain-contract.md`](prose-chain-contract.md)。
 - **阴性结果**：与阳性结果同等记录（失败条件、为何仍信息量足够、是否影响 claim 收窄）；避免「只写成功路径」造成不可复核的故事线。
 - **计划 vs 实际**：预注册/分析计划与事后偏离须在方法或补充材料中可追踪；执行面契约与验收形状见 [`skills/SKILL_FRAMEWORK_PROTOCOLS.md`](../../SKILL_FRAMEWORK_PROTOCOLS.md)（与 harness 文档互补，不重复第二真源）。
 - **可复现实验最低纪录**：环境、数据标识、软件 pin、主分析 vs 探索性分析的边界，见 [`../../experiment-reproducibility/references/research-record-minimum.md`](../../experiment-reproducibility/references/research-record-minimum.md)。

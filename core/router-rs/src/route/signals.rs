@@ -698,6 +698,9 @@ pub(crate) fn has_paper_context(query_text: &str, query_token_list: &[String]) -
         "rebuttal",
         "appendix",
         "claim",
+        "投稿",
+        "期刊",
+        "科研",
     ]
     .iter()
     .any(|marker| {
@@ -923,14 +926,98 @@ pub(crate) fn has_paper_workbench_frontdoor_context(
     })
 }
 
+fn text_has_manuscript_section(lower: &str, query_text: &str) -> bool {
+    [
+        "abstract",
+        "introduction",
+        "related work",
+        "methods",
+        "results",
+        "discussion",
+        "conclusion",
+    ]
+    .iter()
+    .any(|h| lower.contains(h))
+        || [
+            "摘要", "引言", "相关工作", "方法", "结果", "讨论", "结论",
+        ]
+        .iter()
+        .any(|h| query_text.contains(h))
+}
+
+/// 显式润色/写作 marker（用于审稿+润色并存时不阻断 prose 路径）。
+pub(crate) fn has_explicit_prose_polish_marker(
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
+    [
+        "润色",
+        "文字精修",
+        "SCI润色",
+        "SCI 润色",
+        "英文论文润色",
+        "学术润色",
+        "只改表达",
+        "polish",
+        "proofread",
+        "copyedit",
+        "rewrite introduction",
+        "rewrite abstract",
+        "manuscript editing",
+        "academic writing",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+/// 不要求 `has_paper_context` 的显式学术润色（如「SCI润色 abstract」「polish this abstract」）。
+pub(crate) fn has_standalone_academic_polish_context(
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
+    if query_text.contains("别润色") || query_text.contains("不润色") {
+        return false;
+    }
+    let lower = query_text.to_ascii_lowercase();
+    let normalized_query = normalize_text(query_text);
+    if [
+        "SCI润色",
+        "SCI 润色",
+        "sci润色",
+        "sci 润色",
+        "学术润色",
+        "英文论文润色",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(marker)
+            || normalized_query.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    }) {
+        return true;
+    }
+    let has_polish = has_explicit_prose_polish_marker(query_text, query_token_list)
+        || lower.contains("polish")
+        || lower.contains("proofread")
+        || lower.contains("copyedit");
+    has_polish && text_has_manuscript_section(&lower, query_text)
+}
+
 pub(crate) fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
     }
-    if has_paper_ref_first_workflow_context(query_text, query_token_list)
-        || has_paper_review_judgment_context(query_text, query_token_list)
-        || query_text.contains("别润色")
-        || query_text.contains("不润色")
+    if query_text.contains("别润色") || query_text.contains("不润色") {
+        return false;
+    }
+    if has_paper_ref_first_workflow_context(query_text, query_token_list) {
+        return false;
+    }
+    if has_paper_review_judgment_context(query_text, query_token_list)
+        && !has_explicit_prose_polish_marker(query_text, query_token_list)
     {
         return false;
     }
@@ -941,10 +1028,144 @@ pub(crate) fn has_paper_writing_context(query_text: &str, query_token_list: &[St
         "故事线",
         "重写摘要",
         "重写引言",
+        "写摘要",
+        "写引言",
+        "写论文",
+        "论文写作",
+        "写 related work",
+        "related work 部分",
+        "SCI润色",
+        "英文论文润色",
+        "学术润色",
         "只改表达",
+        "降AI味",
+        "去AI味",
         "polish",
         "rewrite introduction",
         "rewrite abstract",
+        "manuscript editing",
+        "academic writing",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+/// 比 `has_paper_writing_context` 更宽：口语改稿、粘贴段落、LaTeX 块——**无需**用户说「润色/language_register」。
+pub(crate) fn looks_like_pasted_manuscript_prose(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    if text.contains("\\begin{")
+        || text.contains("\\section")
+        || text.contains("\\cite{")
+        || text.contains("\\ref{")
+    {
+        return true;
+    }
+    if [
+        "abstract",
+        "introduction",
+        "related work",
+        "methods",
+        "results",
+        "discussion",
+        "conclusion",
+    ]
+    .iter()
+    .any(|h| lower.contains(h))
+        && text.len() > 100
+    {
+        return true;
+    }
+    if [
+        "摘要",
+        "引言",
+        "相关工作",
+        "方法",
+        "结果",
+        "讨论",
+        "结论",
+    ]
+    .iter()
+    .any(|h| text.contains(h))
+        && text.len() > 80
+    {
+        return true;
+    }
+    if text.len() > 320 {
+        let en_hits = [
+            "we propose",
+            "we present",
+            "however,",
+            "experiments show",
+            "our method",
+            "in this paper",
+        ]
+        .iter()
+        .filter(|m| lower.contains(*m))
+        .count();
+        let zh_hits = ["本文", "我们提出", "实验表明", "然而，", "综上所述", "本研究"]
+            .iter()
+            .filter(|m| text.contains(*m))
+            .count();
+        if en_hits >= 2 || zh_hits >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+pub(crate) fn has_paper_prose_edit_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if query_text.contains("别润色") || query_text.contains("不润色") {
+        return false;
+    }
+    if has_standalone_academic_polish_context(query_text, query_token_list) {
+        return true;
+    }
+    if has_paper_writing_context(query_text, query_token_list) {
+        return true;
+    }
+    if looks_like_pasted_manuscript_prose(query_text) {
+        return true;
+    }
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    if has_paper_ref_first_workflow_context(query_text, query_token_list) {
+        return false;
+    }
+    if has_paper_review_judgment_context(query_text, query_token_list)
+        && !has_explicit_prose_polish_marker(query_text, query_token_list)
+    {
+        return false;
+    }
+    [
+        "改这段",
+        "这段文字",
+        "这一段",
+        "这段话",
+        "不通顺",
+        "读起来",
+        "拗口",
+        "不好读",
+        "太难读",
+        "表达不好",
+        "写得太",
+        "改改",
+        "帮我改",
+        "顺一下",
+        "改一下",
+        "科研文本",
+        "正文",
+        "caption",
+        "图注",
+        "表注",
+        "polish this",
+        "proofread",
+        "copyedit",
+        "readability",
+        "wording",
     ]
     .iter()
     .any(|marker| {
@@ -1454,6 +1675,54 @@ pub(crate) fn build_route_context(
         delegation_candidate,
         continue_safe_local_steps: completion_requested,
         route_reason: route_reason.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod paper_prose_edit_context_tests {
+    use super::*;
+    use crate::route::tokenize_route_text;
+
+    fn prose(text: &str) -> bool {
+        let tokens = tokenize_route_text(text);
+        has_paper_prose_edit_context(text, &tokens)
+    }
+
+    #[test]
+    fn standalone_sci_polish_abstract() {
+        assert!(prose("SCI润色 abstract"));
+    }
+
+    #[test]
+    fn polish_this_abstract_without_paper_word() {
+        assert!(prose("polish this abstract for clarity"));
+    }
+
+    #[test]
+    fn colloquial_edit_with_paper_context() {
+        assert!(prose("论文讨论节这段读起来不通顺，帮我改改"));
+    }
+
+    #[test]
+    fn pasted_latex_block() {
+        assert!(prose(
+            "改一下下面这段 \\begin{abstract} We propose a method \\cite{foo}"
+        ));
+    }
+
+    #[test]
+    fn negative_edit_abstract_base_class() {
+        assert!(!prose("edit the abstract base class in this Java module"));
+    }
+
+    #[test]
+    fn negative_cargo_test_only() {
+        assert!(!prose("fix cargo test in pull request workflow"));
+    }
+
+    #[test]
+    fn review_plus_polish_not_blocked() {
+        assert!(prose("审稿并润色这篇论文的 abstract"));
     }
 }
 

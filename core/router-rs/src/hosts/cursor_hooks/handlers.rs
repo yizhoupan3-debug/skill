@@ -2313,10 +2313,7 @@ fn truncate_cursor_hook_outbound_context(combined: &str, max_bytes: usize) -> St
 }
 
 fn cursor_hook_outbound_line_is_protected(line: &str) -> bool {
-    let t = line.trim_start();
-    t.contains("router-rs REVIEW_GATE")
-        || t.starts_with(REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX)
-        || t.contains("continuity_suppressed=")
+    crate::hook_outbound_protect::hook_outbound_line_is_framework_protected(line)
 }
 
 fn truncate_cursor_hook_lines_preserving<F>(

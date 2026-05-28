@@ -537,12 +537,28 @@
       "notes": "LaTeX compile speed should route to latex-compile-acceleration (L4)"
     },
     {
+      "id": "route-009b-sci-polish-abstract",
+      "category": "should-trigger",
+      "task": "SCI润色 abstract",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "Standalone academic polish without 论文 token routes to paper-workbench via has_paper_prose_edit_context"
+    },
+    {
+      "id": "route-009c-polish-abstract-en",
+      "category": "should-trigger",
+      "task": "polish this abstract for clarity",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "notes": "English polish+section without manuscript context word"
+    },
+    {
       "id": "route-009-paper-writing",
       "category": "should-trigger",
       "task": "帮我写论文的 related work 部分",
-      "expected_owner": "paper-writing",
+      "expected_owner": "paper-workbench",
       "expected_overlay": null,
-      "notes": "Paper writing should route to paper-writing (L2)"
+      "notes": "Manuscript section writing enters paper-workbench front door; inline paper-writing with prose-quality-gate"
     },
     {
       "id": "route-010-visual-review",

@@ -91,7 +91,7 @@ Start by classifying the task into one or more lanes:
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
 - `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
-- `paper_handoff`: only when the task becomes manuscript-level; then hand off to `$paper-workbench`.
+- `paper_handoff`: only when the task becomes manuscript-level; then hand off to `$paper-workbench` with **`language_register`** + link to [`../paper-workbench/references/prose-chain-contract.md`](../paper-workbench/references/prose-chain-contract.md) when prose is in scope.
 
 Prefer the smallest lane set that can answer the user's real question. Do not
 invent a manuscript workflow just because literature or citations are involved.

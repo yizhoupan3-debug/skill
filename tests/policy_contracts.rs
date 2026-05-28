@@ -3077,6 +3077,54 @@ fn framework_step_ledger_append_projects_summary_into_task_state() {
     );
 }
 
+#[test]
+fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
+    let root = project_root();
+    let prose_txt = root.join("configs/framework/PAPER_PROSE_QUALITY_HOOK.txt");
+    assert!(
+        prose_txt.is_file(),
+        "missing PAPER_PROSE_QUALITY_HOOK.txt at {}",
+        prose_txt.display()
+    );
+    let body = read_text(&prose_txt);
+    assert!(
+        body.contains("PAPER_PROSE_QUALITY_HOOK") || body.contains("language_register"),
+        "prose hook txt must contain actionable prose gate hints"
+    );
+    let nl = read_json(&root.join("configs/framework/NL_ROUTE_ADJUSTMENTS.json"));
+    let post_rules = nl["post_framework_alias_rules"]
+        .as_array()
+        .expect("nl post_framework_alias_rules array");
+    let has_prose_boost = post_rules.iter().any(|rule| {
+        rule.get("when")
+            .and_then(|w| w.get("signal"))
+            .and_then(Value::as_str)
+            == Some("has_paper_prose_edit_context")
+            && rule
+                .get("record")
+                .and_then(|r| r.get("slug"))
+                .and_then(Value::as_str)
+                == Some("paper-workbench")
+            && rule.get("action").and_then(|a| a.get("type")).and_then(Value::as_str) == Some("boost")
+    });
+    assert!(
+        has_prose_boost,
+        "NL_ROUTE_ADJUSTMENTS must boost paper-workbench on has_paper_prose_edit_context"
+    );
+    let paper_prose_hook_rs = read_text(&root.join("core/router-rs/src/paper_prose_hook.rs"));
+    for env in [
+        "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
+        "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
+        "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
+        "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
+    ] {
+        assert!(
+            paper_prose_hook_rs.contains(env),
+            "paper_prose_hook.rs must declare {env}"
+        );
+    }
+}
+
 fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
     let Ok(entries) = fs::read_dir(root) else {
         return;

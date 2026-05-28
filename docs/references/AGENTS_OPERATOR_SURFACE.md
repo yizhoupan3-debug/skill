@@ -55,7 +55,14 @@
 | `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` | 5 个已从默认 `hooks.json` 移除的事件在未注册时仍 dispatch 完整 handler |
 | `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` | hook-state 写失败时 beforeSubmit 仍 `continue:true`（应急） |
 | `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` | 论文强对抗审稿注入（文案 `PAPER_ADVERSARIAL_HOOK.txt`） |
-| `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 operator 注入总闸（含 paper adversarial） |
+| `ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` | 手稿写作/润色全链路（**默认开**；`0` 关；文案 `PAPER_PROSE_QUALITY_HOOK.txt`） |
+| `ROUTER_RS_CODEX_PAPER_PROSE_HOOK` | Codex CLI UPS prose hook（**默认开**；`0` 关） |
+| `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` | Claude Code UPS prose hook（**默认开**；`0` 关） |
+| `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK` | Antigravity CLI UPS prose hook（**默认开**；`0` 关） |
+| `ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` | Codex CLI 对抗审稿短码（opt-in） |
+| `ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` | Claude Code 对抗审稿短码（opt-in） |
+| `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK=1` | Antigravity CLI 对抗审稿短码（opt-in） |
+| `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 operator 注入总闸（含 paper adversarial / prose） |
 
 ## Schema drift（verify / CI）
 

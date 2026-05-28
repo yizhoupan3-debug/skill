@@ -162,6 +162,27 @@ impl CodexLifecycleHostKind {
             _ => "codex-cli",
         }
     }
+
+    fn paper_prose_hook_env(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
+            _ => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
+        }
+    }
+
+    #[allow(dead_code)]
+    fn paper_adversarial_hook_env(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK",
+            _ => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
+        }
+    }
+
+    fn paper_prose_hook_host(self) -> crate::paper_prose_hook::PaperProseHookHost {
+        crate::paper_prose_hook::PaperProseHookHost::from_codex_lifecycle_state_dir(
+            self.state_dir_leaf,
+        )
+    }
 }
 
 thread_local! {
@@ -216,23 +237,11 @@ fn codex_additional_context_max_bytes() -> usize {
 }
 
 fn truncate_codex_additional_context_bytes(combined: &str, max_bytes: usize) -> String {
-    if combined.len() <= max_bytes {
-        return combined.to_string();
-    }
-    let budget = max_bytes.saturating_sub(3);
-    let mut cut = budget.min(combined.len());
-    while cut > 0 && !combined.is_char_boundary(cut) {
-        cut -= 1;
-    }
-    if let Some(pos) = combined[..cut].rfind('\n') {
-        if pos > 0 {
-            cut = pos;
-        }
-    }
-    while cut > 0 && !combined.is_char_boundary(cut) {
-        cut -= 1;
-    }
-    format!("{}{}", &combined[..cut], "...")
+    crate::hook_outbound_protect::truncate_hook_outbound_lines_preserving(
+        combined,
+        max_bytes,
+        "...",
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1062,6 +1071,19 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
             lifecycle_host().spawn_first_host_id(),
         ));
     }
+    let paper_host = lifecycle_host().paper_prose_hook_host();
+    crate::paper_adversarial_hook::maybe_append_paper_adversarial_context(
+        repo_root,
+        &prompt,
+        &mut contexts,
+        paper_host,
+    );
+    crate::paper_prose_hook::maybe_append_paper_prose_context(
+        repo_root,
+        &prompt,
+        &mut contexts,
+        paper_host,
+    );
     let additional_context = codex_compact_contexts(contexts);
     if additional_context.is_none() {
         None
@@ -3283,6 +3305,33 @@ mod tests {
             match prior {
                 Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
                 None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+            }
+        }
+
+        #[test]
+        fn user_prompt_submit_injects_paper_prose_hook_by_default() {
+            let _g = env_lock();
+            let prior_hook = std::env::var_os("ROUTER_RS_CODEX_PAPER_PROSE_HOOK");
+            std::env::remove_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK");
+            let repo = fresh_repo();
+            let evt = json!({
+                "hook_event_name":"UserPromptSubmit",
+                "session_id":"prose-ups-default",
+                "cwd": repo.to_string_lossy().to_string(),
+                "prompt":"SCI润色 abstract"
+            });
+            let out = super::super::handle_codex_userpromptsubmit(&repo, &evt);
+            let ctx = out
+                .as_ref()
+                .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
+                .unwrap_or_default();
+            assert!(
+                ctx.contains("PAPER_PROSE_QUALITY_HOOK"),
+                "expected prose hook in UPS context: {ctx}"
+            );
+            match prior_hook {
+                Some(v) => std::env::set_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK", v),
+                None => std::env::remove_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK"),
             }
         }
 

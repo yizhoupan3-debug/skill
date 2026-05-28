@@ -105,7 +105,7 @@ trigger_hints:
   - 不要生造概念
   - 论文用语长期规范
 metadata:
-  version: "1.13.0"
+  version: "1.16.0"
   platforms: [supported]
   tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
 framework_roles:
@@ -136,7 +136,7 @@ This skill is the one front door for paper work.
 
 启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`$paper-reviewer`** 的 External lane shape 约定。
 
-**宿主 hook（默认短提醒）**：`router-rs` 在 Cursor `beforeSubmit` 与 Codex `UserPromptSubmit` 命中论文 / 手稿语境时合并短段 **`PAPER_ADVERSARIAL_HOOK`**（真源 `configs/framework/PAPER_ADVERSARIAL_HOOK.txt`），与本 skill 同向加压；受 `ROUTER_RS_OPERATOR_INJECT` 与 `ROUTER_RS_PAPER_ADVERSARIAL_HOOK` 总闸约束，宿主级 `ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK` / `ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK` 可单独关闭。见根 `AGENTS.md` 与 `docs/harness_architecture.md`。
+**宿主 hook（L4 短码）**：`router-rs` 在 **Cursor `beforeSubmit`** 与 **Codex / Claude Code / Antigravity CLI `UserPromptSubmit`** 命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` / `ROUTER_RS_CODEX_PAPER_PROSE_HOOK` / `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` / `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
 
 It exists so the user does not need to decide first whether the job is
 `$paper-reviewer`, `$paper-reviser`, `$paper-writing`, or a review/revision
@@ -235,9 +235,41 @@ For review-like asks, do not block on missing target venue or reference corpus:
 start with a provisional bar, run external calibration when useful, and clearly
 separate "known blocker" from "uncertainty that needs lookup".
 
+## Prose quality intake（自动触发，勿等用户声明）
+
+**硬规则**：只要将触达手稿正文句子（含用户只贴一段、说「改这段/不通顺/帮我看看文字」、或粘贴 LaTeX/摘要/引言），**立即**走 prose chain——**不得**等用户写 `language_register` / `writing_mode` / `prose_qc`。
+
+自动执行：
+
+1. **推断** `language_register`（见 [`../paper-writing/SKILL.md`](../paper-writing/SKILL.md) §Language register）
+2. **默认** `edit_scope: surgical` + 从用户粘贴/点名推断 `scope_items`（模糊时**一问** surgical vs refactor，**不问** register）
+3. **默认** `writing_mode: ladder-full` + 极简 Claim card（四槽可短，不可省略）
+4. 若 claim/evidence 明显未冻结且用户要「能不能投」→ 先 reviewer；**纯改文字**则 Claim card 后直写
+
+转发 `$paper-writing` 时**自带**上述默认值，用户无 token 也须完整交付 `tone_audit` + `prose_qc` + Stage B（或 Stage A-only 若 ladder_blocked）。
+
+**全链路真源**：[`references/prose-chain-contract.md`](references/prose-chain-contract.md)（路由 → intake → reviewer language findings → reviser → inline writing → 可选 `PROSE_QC_LOG`）。多轮改稿建议维护 [`references/templates/PROSE_QC_LOG.template.md`](references/templates/PROSE_QC_LOG.template.md)。
+
+## Prose quality chain（默认开启）
+
+凡触达正文句子的路径（含 inline `$paper-writing` / `$paper-reviser`）默认走 prose chain，**不得**跳过 `language_register` 或 `prose_qc`：
+
+| 步骤 | 动作 |
+| --- | --- |
+| 1 | NL/用户入口 → **本前门**（不直跳 `paper-writing`） |
+| 2 | Intake：`language_register` + `edit_scope` + Claim card |
+| 3 | 若 claim 未冻结或用户要「能不能投」→ inline `$paper-reviewer`（language findings 含 `prose_repair_class`） |
+| 4 | 若有 R&R / 结构改动 → inline `$paper-reviser` |
+| 5 | Inline `$paper-writing`：`ladder-full` → `tone_audit` + `prose_qc` → Stage B |
+| 6 | 收口：可选 append `paper_story/PROSE_QC_LOG.md` |
+
+宿主短码：**`PAPER_PROSE_QUALITY_HOOK` 默认开**（`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK=0` 关闭），见 prose-chain-contract §L4。
+
 ## Anti-bad-output rules
 
 - Do not start with language polish when claim/evidence, novelty, baseline, or target-venue fit is unresolved.
+- Do not run English slop rules on Chinese paragraphs (or vice versa) without `language_register: mixed` and per-anchor labeling.
+- Do not deliver long polished paragraphs without **`prose_qc`** and ladder L1–L4 pass (or explicit `ladder_blocked` with outline-only).
 - Do not give a long review taxonomy before the verdict; lead with verdict, then findings appropriate to **`audit_depth`** (full dimension list for exhaustive; top blockers for compact).
 - When **`audit_depth: exhaustive`**, do **not** truncate to "top 3" or "top blockers" — use the envelope in [`references/paper-exhaustive-audit.md`](references/paper-exhaustive-audit.md).
 - Do not say "needs more experiments" without naming the missing comparison, measurement, or failure case.
@@ -290,7 +322,7 @@ that failure behind better English.
 - external calibration during review -> keep the main owner here or in
   `$paper-reviewer`; keep full corpus / novelty sweeps inside this paper front door
 - findings-driven manuscript changes -> `$paper-reviser` (respect **`edit_scope`**)
-- local prose rewrite after scope is frozen -> `$paper-writing` (default **`surgical`** unless user escalates to **`refactor`**)
+- local prose rewrite after scope is frozen -> `$paper-writing` (default **`surgical`** unless user escalates to **`refactor`**); **须**先设 **`language_register`** 并走 [`../paper-writing/references/prose-quality-gate.md`](../paper-writing/references/prose-quality-gate.md)（见下 §Prose quality intake）
 - figures / tables / captions / rendered presentation -> `figure-table mode`
 - notation / abbreviations / formula references -> `notation sweep`
 - page/word budget -> `length budget mode`
@@ -315,7 +347,7 @@ For the full manuscript stack map and progressive reading order, use
 
 ## What this skill should deliver
 
-本前门转发或收口 **`$paper-writing` / `$paper-reviser`** 的改稿时，**统一输出顺序**须先回声门控与叙事契约，再贴正文块：**`edit_scope` → `scope_items`/`non_goals` 或 `refactor_intent`/`risk_note` → Claim card（四槽）→ `tone_audit` 或「未触达用语层」→ prose/hunks → `change_id` 账本（`surgical`）或 `sections_touched` + `claim_ledger_touch_statement`/`claim_ledger_delta`（`refactor`）**；细则见 [`../paper-writing/SKILL.md`](../paper-writing/SKILL.md) **Output Defaults** 与 [`references/edit-scope-gate.md`](references/edit-scope-gate.md)。
+本前门转发或收口 **`$paper-writing` / `$paper-reviser`** 的改稿时，**统一输出顺序**须先回声门控与叙事契约，再贴正文块：**`edit_scope` → `scope_items`/`non_goals` 或 `refactor_intent`/`risk_note` → Claim card（四槽）→ `language_register` →（可选 Stage A 提纲）→ `tone_audit` → `prose_qc` → prose/hunks → `change_id` 账本（`surgical`）或 `sections_touched` + `claim_ledger_touch_statement`/`claim_ledger_delta`（`refactor`）**；细则见 [`../paper-writing/SKILL.md`](../paper-writing/SKILL.md) **Output Defaults**、[`../paper-writing/references/prose-quality-gate.md`](../paper-writing/references/prose-quality-gate.md) 与 [`references/edit-scope-gate.md`](references/edit-scope-gate.md)。
 
 Keep the user-facing output simple:
 

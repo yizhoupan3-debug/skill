@@ -47,7 +47,9 @@ Default external response should stay compact:
 
 Manuscript edits from `$paper-workbench`, `$paper-writing`, and `$paper-reviser`
 must respect **`edit_scope`** so localized polish is not collapsed into
-whole-paper refactoring. Canonical contract:
+whole-paper refactoring. Prose touches must follow
+[`paper-workbench/references/prose-chain-contract.md`](paper-workbench/references/prose-chain-contract.md)
+(`language_register`, ladder, `prose_qc`). Canonical edit contract:
 [`paper-workbench/references/edit-scope-gate.md`](paper-workbench/references/edit-scope-gate.md).
 
 - **`surgical`**: bounded slices only; `lane_scope` is the disk-backed form of

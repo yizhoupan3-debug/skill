@@ -38,8 +38,11 @@ pub(crate) use routing::{
 };
 #[cfg(test)]
 pub(crate) use signals::has_parallel_review_candidate_context;
-pub(crate) use signals::{has_github_pr_context, has_paper_context};
-pub(crate) use text::{read_json, tokenize_query, value_to_string};
+pub(crate) use signals::{
+    has_github_pr_context, has_paper_context, has_paper_prose_edit_context, has_paper_writing_context,
+    looks_like_pasted_manuscript_prose,
+};
+pub(crate) use text::{read_json, tokenize_query, tokenize_route_text, value_to_string};
 pub(crate) use types::{
     MatchRow, RouteContextPayload, RouteDecision, RouteDecisionSnapshotPayload,
     RouteDiffReportPayload, RouteExecutionPolicyPayload, RouteResolutionPayload,

@@ -46,7 +46,7 @@ trigger_hints:
   - "edit_scope: surgical"
   - "edit_scope: refactor"
 metadata:
-  version: "2.14.0"
+  version: "2.17.0"
   platforms: [supported]
   tags: [paper, writing, rewrite, abstract, introduction, caption, rebuttal]
 framework_roles:
@@ -122,6 +122,34 @@ when those surfaces are not in **`scope_items`**.
 - Literature search/synthesis before writing -> keep the task in `$paper-workbench` until the source-backed story context is fixed.
 - Citation formatting or verification -> use `$citation-management`.
 - Generic non-academic prose -> use the owning domain skill, or `$documentation-engineering` for project docs.
+
+## Language register（中英分场景，自动推断）
+
+每轮触达正文前**自动设定** **`language_register`**（见
+[`references/prose-quality-gate.md`](references/prose-quality-gate.md) §1）——**禁止**等用户声明 token：
+
+| 推断规则 | register |
+| --- | --- |
+| 用户消息/改稿块主要为英文句子，或目标为英文投稿/rebuttal/caption | `en_submission` |
+| 主要为中文论文/学位论文体例 | `zh_manuscript` |
+| 同一轮同时改中文段与英文段 | `mixed`（`scope_items` 分 surface） |
+| 无法判断 | 默认跟**首轮改稿块**主语言；交付中写一行 `register_inferred: …` |
+
+**仅当**中英混排且无法从粘贴内容分段时，才允许问**一个**澄清问题。
+
+**默认** `writing_mode: ladder-full`（先提纲后正文）。**仅**词/单句级 `scope_items` 时用 `sentence-only`。
+
+## Prose quality gate（硬，优先于「润色」）
+
+触达句子时**必须**执行
+[`references/prose-quality-gate.md`](references/prose-quality-gate.md)：
+
+- **Rewrite ladder**：未过 L1–L4 不得交付长段终稿（先 Stage A 提纲）
+- **两阶段**：`story_spine` + 段首句提纲 → 完整段落（终稿禁止 bullet）
+- **`prose_qc`**：在 `tone_audit` 之后、prose 之前；对照
+  [`references/prose-exemplars.md`](references/prose-exemplars.md) 的 weak/stronger **结构**，不抄措辞
+
+用户 token：`writing_mode: ladder-full` | `writing_mode: sentence-only`（仅词/单句级 scope）。
 
 ## Research language norms (long-running)
 
@@ -239,18 +267,21 @@ Canonical slot checks:
 1. Fix **`edit_scope`** and `scope_items` / `non_goals` or **`refactor_intent`**
    (see edit-scope gate). For **`refactor`**, draft the **section-level outline**
    next.
-2. Emit **Claim card** (Step 0 reference).
-3. Identify section type, target audience, journal/register, and allowed claims.
-4. Extract supplied facts, evidence, and constraints before rewriting.
-5. For multi-round work, refresh `claim_ledger` and check proposed edits against it.
-6. Choose the section move: motivate, gap, method, result, implication, or response.
-7. Rewrite for flow and precision while keeping claim ceiling intact.
-8. Mirror check (abstract / introduction / conclusion / captions)：仅当 **`edit_scope:
+2. Set **`language_register`**（§ Language register）；`mixed` 时在 `scope_items` 标明各锚点语言。
+3. Emit **Claim card** (Step 0 reference).
+4. Identify section type, target audience, journal/register, and allowed claims.
+5. Extract supplied facts, evidence, and constraints before rewriting.
+6. For multi-round work, refresh `claim_ledger` and check proposed edits against it.
+7. Run **Rewrite ladder** L1–L4（[`prose-quality-gate.md`](references/prose-quality-gate.md)）；必要时先交付 **Stage A** 提纲，不得跳过直接长段「润色」。
+8. Choose the section move: motivate, gap, method, result, implication, or response.
+9. **Stage B** rewrite for flow and precision while keeping claim ceiling intact.
+10. Mirror check (abstract / introduction / conclusion / captions)：仅当 **`edit_scope:
    refactor`**，或这些表面**全部**已列入 **`scope_items`** 时执行，确认没有表面在
    静默超过允许 claim level。若在 **`surgical`** 且未覆盖上述全部表面，则只对
    **已改写过的表面**做局部一致性检查，或提示升格 / 补全 scope 后再做全 mirror。
-9. 根据**最终**文稿填写 **`tone_audit`**（Output Defaults；仅结构/图表未触句则 `n/a`）。
-10. 按 **mandatory output order** 排版输出：**即使** tone 检视针对定稿生成，用户可见块顺序仍为 *tone_audit → prose*（检视先于正文块出现）。
+11. 根据**最终**文稿填写 **`tone_audit`**（Output Defaults；仅结构/图表未触句则 `n/a`）。
+12. 填写 **`prose_qc`**（register、ladder、slop、段首句、cadence；见 prose-quality-gate）。
+13. 按 **mandatory output order** 排版输出（检视块先于正文块）。
 
 ## Output Defaults
 
@@ -260,20 +291,23 @@ Canonical slot checks:
 2. **`scope_items` + `non_goals`**（`surgical`）或 **`refactor_intent` + `risk_note`**
   （`refactor`；可与门控模板一致）。
 3. **Claim card**（四个槽位；见 Step 0 参考）。
-4. **`tone_audit`**：四句检视，逐条映射
+4. **`language_register`**：`en_submission` | `zh_manuscript` | `mixed`（`mixed` 时附分 surface 说明一行）。
+5. **Stage A（若适用）**：`story_spine` + 段首句提纲；无则写 **`stage_a: skipped (sentence-only)`** 及原因。
+6. **`tone_audit`**：四句检视，逐条映射
    [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
    **§3**——**(a)** 内部口径（代码名 / 路径 / `.csv` 式工程产物是否冒充结论）、**(b)**
    防御口径（是否层层免责堆砌）、**(c)** 负面口径 / 对比成瘾（是否以否定骨架撑贡献）、**(d)**
    `but` / `not` / `rather than` 否定链与转折堆叠是否超限。若本轮**完全未改英文/中文句子**
    （例如仅接收上游提纲），写一行 **`tone_audit: n/a (no prose touches)`** 并说明原因。
-5. **Prose**：patch、hunk、或逐条「摘录 → 改后」；`refactor` 在大块 prose 前已给出 section outline。
-6. **追溯**：`surgical` 用 **`change_id` ledger**（与门控一致）；`refactor` 用
+7. **`prose_qc`**：见 [`references/prose-quality-gate.md`](references/prose-quality-gate.md) §4.4；与 `tone_audit` 分工，不合并省略。
+8. **Prose（Stage B）**：patch、hunk、或逐条「摘录 → 改后」；终稿段落**禁止 bullet**（venue 结构化摘要除外）。
+9. **追溯**：`surgical` 用 **`change_id` ledger**（与门控一致）；`refactor` 用
    **`sections_touched` 列表**（主节 / 小节 id）并指明本章是否触及 **`claim_ledger`**
    （例如 `claim_ledger_delta: none | <摘要>`）。
 
 Then adapt density to task shape:
 
-- For short passages: keep items 1–6 compact; prose may be the only long block.
+- For short passages: keep items 1–9 compact; prose may be the only long block.
 - For section rewrites: revised section plus concise rationale if useful.
 - For rebuttals: point-by-point response with polite stance and no overpromise;
   each point should **point to a concrete manuscript/supplement change** or an
@@ -289,3 +323,5 @@ Then adapt density to task shape:
 - [references/storytelling-patterns.md](./references/storytelling-patterns.md)
 - [references/rebuttal-patterns.md](./references/rebuttal-patterns.md)
 - [references/revision-playbook.md](./references/revision-playbook.md)
+- [references/prose-quality-gate.md](./references/prose-quality-gate.md)
+- [references/prose-exemplars.md](./references/prose-exemplars.md)

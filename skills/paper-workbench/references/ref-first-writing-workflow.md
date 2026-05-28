@@ -24,7 +24,7 @@ This is not a citation-hunting workflow. The corpus teaches story architecture, 
 
 1. `$paper-workbench` (ref-corpus phase): build the target-journal reference corpus and `ref_learning_brief.md` — no separate literature skill; stay on the front door until the brief exists.
 2. `$paper-reviewer` logic mode: only if the corpus reveals novelty, baseline, or claim/evidence risk.
-3. `$paper-writing`: build the story card, section rewrite plan, and revised prose.
+3. `$paper-writing`: build the story card, section rewrite plan, and revised prose — **after** `language_register` is set and via **`writing_mode: ladder-full`** + **`prose_qc`** (see [`prose-chain-contract.md`](prose-chain-contract.md)).
 4. `$citation-management`: final citation truth, `.bib`, and claim-to-citation cleanup.
 
 Do not start with `$citation-management` unless the active problem is bibliography hygiene. Do not start with `$paper-writing` if the venue story norm is unknown and the user explicitly asked to learn refs first.

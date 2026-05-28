@@ -1,0 +1,11 @@
+**PAPER_PROSE_QUALITY_HOOK**
+
+router-rs：**用户无需声明** `language_register` / `writing_mode` / `prose_qc` — 检测到手稿改稿、粘贴段落、LaTeX、或口语「改这段/不通顺」即自动走全链路。
+
+1. **前门**：`$paper-workbench` → **自动推断** `language_register`（中文段/英文段/混排）+ 默认 `writing_mode: ladder-full` + Claim card（极简亦可）。
+2. **分场景**：英文 EN slop/Gopen；中文套话/段首句；混排按段落语言分别 QC。
+3. **两阶段**：先 `story_spine` + 段首句提纲，再完整段落（终稿禁止 bullet）。
+4. **交付**：须有 `tone_audit` + `prose_qc`；未过 ladder L1–L4 不得长段终稿。
+5. **真源**：`skills/paper-workbench/references/prose-chain-contract.md`。
+
+默认开；`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK=0` 关闭。总闸 `ROUTER_RS_OPERATOR_INJECT`。

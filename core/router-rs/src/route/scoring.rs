@@ -632,6 +632,47 @@ pub(crate) fn layer_threshold(layer: &str) -> f64 {
 }
 
 #[cfg(test)]
+mod paper_prose_routing_score_tests {
+    use super::*;
+    use crate::route::load_records;
+    use std::collections::HashSet;
+    use std::path::PathBuf;
+
+    #[test]
+    fn sci_polish_scores_paper_workbench_above_doc_eng() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let workbench = records
+            .iter()
+            .find(|r| r.slug == "paper-workbench")
+            .expect("paper-workbench in runtime");
+        let doc_eng = records
+            .iter()
+            .find(|r| r.slug == "documentation-engineering");
+        let q = "SCI润色 abstract";
+        let tokens = tokenize_route_text(q);
+        let set: HashSet<String> = tokens.iter().cloned().collect();
+        let wb = score_route_candidate(workbench, q, &tokens, &set, true);
+        assert!(
+            wb.score >= 82.0,
+            "paper-workbench score {} reasons {:?}",
+            wb.score,
+            wb.reasons
+        );
+        if let Some(doc) = doc_eng {
+            let de = score_route_candidate(doc, q, &tokens, &set, true);
+            assert!(
+                wb.score > de.score,
+                "workbench {} must beat doc-eng {}",
+                wb.score,
+                de.score
+            );
+        }
+    }
+}
+
+#[cfg(test)]
 mod framework_review_overlay_typo_tests {
     use super::has_framework_review_overlay_context;
     use super::tokenize_route_text;

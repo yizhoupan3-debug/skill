@@ -1,6 +1,6 @@
 # 科研写作用语长期规范（跨 lane 真源）
 
-本文档是 **`$paper-workbench` / `$paper-writing` / `$paper-reviser` / `$paper-reviewer`** 共用的**长期运行**约束：降低「术语堆砌、自造概念、同义反复」导致的拗口稿与不稳定「精准修改」。多轮会话中默认遵守，除非用户显式豁免。
+本文档是 **`$paper-workbench` / `$paper-writing` / `$paper-reviser` / `$paper-reviewer`** 共用的**长期运行**约束：降低「术语堆砌、自造概念、同义反复」导致的拗口稿与不稳定「精准修改」。**写作质量传感器与全链路**见 [`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md) 与 [`prose-chain-contract.md`](prose-chain-contract.md)。多轮会话中默认遵守，除非用户显式豁免。
 
 ## 目标
 
