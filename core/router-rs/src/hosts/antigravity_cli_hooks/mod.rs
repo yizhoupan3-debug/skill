@@ -258,9 +258,142 @@ fn lifecycle_input_error(message: &str) -> Value {
 
 fn attach_antigravity_hook_observation(mut value: Option<Value>) -> Option<Value> {
     if let Some(ref mut v) = value {
-        attach_router_rs_observation(v, HookObservationHost::Codex);
+        attach_router_rs_observation(v, HookObservationHost::AntigravityCli);
     }
     value
+}
+
+pub fn expected_antigravity_cli_install_command_digest() -> String {
+    let lifecycle_command = build_antigravity_lifecycle_hook_command();
+    let hook_commands = INSTALL_EVENTS
+        .iter()
+        .map(|event| ((*event).to_string(), lifecycle_command.clone()))
+        .collect::<BTreeMap<_, _>>();
+    hooks_install_sha256_hex(
+        &hooks_install_serialize_pretty(&json!(hook_commands)).expect("hook_commands json"),
+    )
+}
+
+pub fn antigravity_cli_hooks_install_status(cli_home: &Path) -> Value {
+    let hooks_path = cli_home.join("hooks.json");
+    let manifest_path = cli_home.join(".router-rs-install.manifest.json");
+    let hooks_exists = hooks_path.is_file();
+    let manifest_exists = manifest_path.is_file();
+    let digest_ok = if manifest_exists {
+        fs::read_to_string(&manifest_path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .and_then(|manifest| manifest.get("command_digest").and_then(Value::as_str).map(String::from))
+            .is_some_and(|digest| digest == expected_antigravity_cli_install_command_digest())
+    } else {
+        false
+    };
+    json!({
+        "path": hooks_path.to_string_lossy(),
+        "exists": hooks_exists,
+        "managed": hooks_exists && manifest_exists && digest_ok,
+        "install_manifest": {
+            "path": manifest_path.to_string_lossy(),
+            "exists": manifest_exists,
+            "digest_matches": digest_ok,
+        },
+    })
+}
+
+fn remove_router_rs_hook_entries_from_hooks_json(mut data: Value, lifecycle_command: &str) -> (Value, usize) {
+    let mut removed = 0usize;
+    let Some(hooks_root) = data
+        .as_object_mut()
+        .and_then(|root| root.get_mut("hooks"))
+        .and_then(Value::as_object_mut)
+    else {
+        return (data, removed);
+    };
+    for event in INSTALL_EVENTS {
+        let Some(entries) = hooks_root
+            .get_mut(event)
+            .and_then(Value::as_array_mut)
+        else {
+            continue;
+        };
+        let before = entries.len();
+        entries.retain(|entry| {
+            !entry
+                .as_object()
+                .and_then(|obj| obj.get("hooks"))
+                .and_then(Value::as_array)
+                .is_some_and(|hooks| {
+                    hooks.iter().any(|hook| {
+                        hook.as_object().is_some_and(|hook_obj| {
+                            hook_obj.get("type").and_then(Value::as_str) == Some("command")
+                                && hook_obj.get("command").and_then(Value::as_str)
+                                    == Some(lifecycle_command)
+                        })
+                    })
+                })
+        });
+        removed += before.saturating_sub(entries.len());
+    }
+    (data, removed)
+}
+
+pub fn remove_antigravity_cli_router_hooks(
+    antigravity_cli_home: &Path,
+    dry_run: bool,
+) -> Result<Value, String> {
+    let hooks_path = antigravity_cli_home.join("hooks.json");
+    let manifest_path = antigravity_cli_home.join(".router-rs-install.manifest.json");
+    if !hooks_path.is_file() && !manifest_path.is_file() {
+        return Ok(json!({
+            "status": "not-installed",
+            "changed": false,
+            "dry_run": dry_run,
+            "removed_entries": 0,
+        }));
+    }
+    let lifecycle_command = build_antigravity_lifecycle_hook_command();
+    let mut changed = false;
+    let mut removed_entries = 0usize;
+    if hooks_path.is_file() {
+        let text = fs::read_to_string(&hooks_path)
+            .map_err(|err| format!("Failed to read {}: {err}", hooks_path.display()))?;
+        let existing: Value = if text.trim().is_empty() {
+            json!({})
+        } else {
+            serde_json::from_str(&text)
+                .map_err(|err| format!("Failed to parse {}: {err}", hooks_path.display()))?
+        };
+        let (merged, removed) =
+            remove_router_rs_hook_entries_from_hooks_json(existing, &lifecycle_command);
+        removed_entries = removed;
+        if removed > 0 && !dry_run {
+            let serialized = hooks_install_serialize_pretty(&merged)?;
+            hooks_install_write_atomic(&hooks_path, &serialized)?;
+            changed = true;
+        }
+    }
+    if manifest_path.is_file() && !dry_run {
+        fs::remove_file(&manifest_path).map_err(|err| {
+            format!(
+                "Failed to remove install manifest {}: {err}",
+                manifest_path.display()
+            )
+        })?;
+        changed = true;
+    }
+    Ok(json!({
+        "status": if dry_run && (removed_entries > 0 || manifest_path.is_file()) {
+            "would-remove"
+        } else if changed {
+            "removed"
+        } else {
+            "not-installed-or-user-owned"
+        },
+        "changed": changed,
+        "dry_run": dry_run,
+        "removed_entries": removed_entries,
+        "hooks_path": hooks_path.to_string_lossy(),
+    }))
 }
 
 #[cfg(test)]
@@ -307,5 +440,47 @@ mod tests {
     fn lifecycle_command_uses_host_antigravity_cli() {
         let cmd = build_antigravity_lifecycle_hook_command();
         assert!(cmd.contains("host antigravity-cli hook lifecycle-context"));
+    }
+
+    #[test]
+    fn lifecycle_context_routes_state_to_antigravitycli_dir() {
+        let repo = fresh_home("lifecycle-state");
+        fs::create_dir_all(repo.join(".antigravitycli")).unwrap();
+        let payload = json!({
+            "hook_event_name": "Stop",
+            "session_id": "ag-cli-1",
+            "cwd": repo.to_string_lossy(),
+            "prompt": "全面 review 这个仓库"
+        });
+        let out = attach_antigravity_hook_observation(
+            run_codex_lifecycle_context_hook_for_state_dir(
+                &repo,
+                &payload,
+                LIFECYCLE_STATE_DIR_LEAF,
+            )
+            .expect("lifecycle hook"),
+        );
+        assert!(out.is_some());
+        let obs = out
+            .as_ref()
+            .and_then(|v| v.get("router_rs_observation"))
+            .expect("observation attached");
+        assert_eq!(obs.get("host").and_then(Value::as_str), Some("antigravity-cli"));
+    }
+
+    #[test]
+    fn install_remove_roundtrip_clears_router_hooks() {
+        let home = fresh_home("remove-roundtrip");
+        let repo = home.parent().unwrap().join("repo");
+        fs::create_dir_all(&repo).unwrap();
+        install_antigravity_cli_hooks(&home, &repo, InstallMode::Apply).unwrap();
+        assert!(home.join("hooks.json").is_file());
+        assert!(home.join(".router-rs-install.manifest.json").is_file());
+        let status = antigravity_cli_hooks_install_status(&home);
+        assert_eq!(status["managed"].as_bool(), Some(true));
+        remove_antigravity_cli_router_hooks(&home, false).unwrap();
+        let status_after = antigravity_cli_hooks_install_status(&home);
+        assert_eq!(status_after["managed"].as_bool(), Some(false));
+        let _ = fs::remove_dir_all(home.parent().unwrap());
     }
 }

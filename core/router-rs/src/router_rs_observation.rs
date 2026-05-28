@@ -11,6 +11,8 @@ pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-obse
 pub enum HookObservationHost {
     Cursor,
     Codex,
+    /// Antigravity CLI lifecycle hooks (Codex-shaped JSON).
+    AntigravityCli,
     /// Claude Code hook JSON (`router-rs claude hook`).
     ClaudeCode,
 }
@@ -37,7 +39,7 @@ fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String
                 .and_then(Value::as_str)
                 .map(|s| s.to_string()),
         ),
-        HookObservationHost::Codex => {
+        HookObservationHost::Codex | HookObservationHost::AntigravityCli => {
             let followup = output
                 .get("followup_message")
                 .and_then(Value::as_str)
@@ -184,6 +186,7 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
     let host_str = match host {
         HookObservationHost::Cursor => "cursor",
         HookObservationHost::Codex => "codex",
+        HookObservationHost::AntigravityCli => "antigravity-cli",
         HookObservationHost::ClaudeCode => "claude-code",
     };
 
@@ -202,13 +205,18 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
         );
     }
 
-    if matches!(host, HookObservationHost::Codex)
-        && output
+    let lifecycle_input_block = match host {
+        HookObservationHost::Codex => output
             .pointer("/hookSpecificOutput/hookEventName")
             .and_then(Value::as_str)
-            == Some("CodexLifecycleContext")
-        && output.get("decision").and_then(Value::as_str) == Some("block")
-    {
+            == Some("CodexLifecycleContext"),
+        HookObservationHost::AntigravityCli => output
+            .pointer("/hookSpecificOutput/hookEventName")
+            .and_then(Value::as_str)
+            == Some("AntigravityCliLifecycleContext"),
+        _ => false,
+    };
+    if lifecycle_input_block && output.get("decision").and_then(Value::as_str) == Some("block") {
         let msg = output
             .get("message")
             .or_else(|| output.get("reason"))

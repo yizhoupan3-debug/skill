@@ -879,12 +879,16 @@ fn clear_review_gate_hook_state(repo_root: &Path, event: &Value) {
         .ok()
         .flatten()
         .unwrap_or_else(empty_state);
-    if !state.review_required && state.review_subagent_pending_cycle_keys.is_empty() {
+    if !state.review_required
+        && state.review_subagent_pending_cycle_keys.is_empty()
+        && state.review_lite_pending_cycle_keys.is_empty()
+    {
         release_state_lock(&mut lock);
         return;
     }
     state.review_required = false;
     state.review_subagent_pending_cycle_keys.clear();
+    state.review_lite_pending_cycle_keys.clear();
     sync_review_cycle_legacy_fields(&mut state);
     clear_review_gate_escalation_counters(&mut state);
     let _ = save_state(repo_root, event, &mut state);

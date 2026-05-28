@@ -95,7 +95,7 @@
       "id": "review_gate_strict_dual_event_dedup",
       "failure_class": "subagent_misuse",
       "fixture": "tests/fixtures/review_gate/dual_event_same_id.json",
-      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_gate_posttool_skips_duplicate_id -- --exact"
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_gate_posttool_skips_duplicate_id_after_subagent_start -- --exact"
     },
     {
       "id": "review_gate_lite_id_cycle_settle",
@@ -108,6 +108,18 @@
       "failure_class": "subagent_misuse",
       "fixture": "tests/fixtures/review_gate/lite_lane_fallback.json",
       "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_lane_fallback_strict -- --exact"
+    },
+    {
+      "id": "review_gate_env_matrix",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/env_matrix/README.md",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_gate_env_matrix_fixtures_apply_env -- --exact"
+    },
+    {
+      "id": "review_gate_lite_mixed_id_lane",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/env_matrix/em-05-lite-cap-2.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_mixed_id_and_lane_blocks_stop_until_both_settled -- --exact"
     },
     {
       "id": "review_gate_fork_true_blocks",

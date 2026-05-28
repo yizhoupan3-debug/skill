@@ -14,7 +14,7 @@ Cursor `REVIEW_GATE` uses a multiset (`review_subagent_pending_cycle_keys`) to s
 2. **strict**: unchanged multiset semantics.
 3. **lite**:
    - Only cycles with `id:` keys and qualifying `review_kind` + `cursor_review_independent_fork`.
-   - Track open cycles with `review_lite_open_cycles: u32` (+1 start, -1 settle); **never** push multiset.
+   - Track open `id:` cycles in `review_lite_pending_cycle_keys` (Vec); **never** push multiset for `id:` keys.
    - Non-`id:` keys → fallback strict (`review_lite_fallback_strict`).
 4. **Satisfaction**:
 
@@ -22,7 +22,10 @@ Cursor `REVIEW_GATE` uses a multiset (`review_subagent_pending_cycle_keys`) to s
 fn review_subagent_evidence_satisfied(state: &ReviewGateState) -> bool {
     if state.phase < 3 { return false; }
     match cursor_review_gate_mode() {
-        CursorReviewGateMode::Lite => state.review_lite_open_cycles == 0,
+        CursorReviewGateMode::Lite => {
+            state.review_lite_pending_cycle_keys.is_empty()
+                && state.review_subagent_pending_cycle_keys.is_empty()
+        }
         CursorReviewGateMode::Strict => state.review_subagent_pending_cycle_keys.is_empty(),
     }
 }

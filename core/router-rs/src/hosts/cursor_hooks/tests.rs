@@ -7232,3 +7232,158 @@ fn review_gate_mode_strict_regression_unset_env() {
         crate::review_gate_engine::CursorReviewGateMode::Strict
     );
 }
+
+#[test]
+fn review_lite_mixed_id_and_lane_blocks_stop_until_both_settled() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_mode = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+    let repo = fresh_repo();
+    let sid = "s-lite-mixed";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "mix-id"
+        }),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(mid.review_lite_pending_cycle_keys, vec!["id:mix-id"]);
+    assert_eq!(
+        mid.review_subagent_pending_cycle_keys,
+        vec!["lane:general-purpose"]
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "mix-id"
+        }),
+    );
+    let after_id_stop = load_state_for(&repo, sid);
+    assert!(
+        after_id_stop.phase >= 3,
+        "id stop should bump phase: {:?}",
+        after_id_stop
+    );
+    assert!(after_id_stop.review_lite_pending_cycle_keys.is_empty());
+    assert_eq!(
+        after_id_stop.review_subagent_pending_cycle_keys,
+        vec!["lane:general-purpose"]
+    );
+    let stop_out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, ""));
+    let fm = stop_out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "Stop must follow up while strict fallback pending remains: {stop_out}"
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose"
+        }),
+    );
+    let end = load_state_for(&repo, sid);
+    assert!(end.review_subagent_pending_cycle_keys.is_empty());
+    match prev_mode {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+}
+
+#[test]
+fn review_gate_env_matrix_fixtures_apply_env() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_mode = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    let prev_fork = env::var_os("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+    let prev_cap = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..");
+    let matrix_dir = repo_root.join("tests/fixtures/review_gate/env_matrix");
+    let mut entries: Vec<_> = fs::read_dir(&matrix_dir)
+        .expect("env_matrix dir")
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .and_then(|s| s.to_str())
+                .is_some_and(|ext| ext == "json")
+        })
+        .collect();
+    entries.sort();
+    assert!(
+        entries.len() >= 6,
+        "expected env_matrix JSON fixtures, got {}",
+        entries.len()
+    );
+    for path in entries {
+        let text = fs::read_to_string(&path).expect("read fixture");
+        let spec: Value = serde_json::from_str(&text).expect("parse fixture");
+        let mode = spec["mode"].as_str().unwrap_or("strict");
+        let fork_infer = spec["fork_infer"].as_bool().unwrap_or(true);
+        let pending_cap = spec["pending_cap"].as_u64().unwrap_or(32);
+        if mode.eq_ignore_ascii_case("lite") {
+            env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+            assert_eq!(
+                crate::review_gate_engine::cursor_review_gate_mode(),
+                crate::review_gate_engine::CursorReviewGateMode::Lite
+            );
+        } else {
+            env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+            assert_eq!(
+                crate::review_gate_engine::cursor_review_gate_mode(),
+                crate::review_gate_engine::CursorReviewGateMode::Strict
+            );
+        }
+        if fork_infer {
+            env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+        } else {
+            env::set_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "0");
+        }
+        env::set_var(
+            "ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX",
+            pending_cap.to_string(),
+        );
+        assert_eq!(
+            crate::router_env_flags::router_rs_cursor_review_pending_cycle_max(),
+            pending_cap as usize
+        );
+    }
+    match prev_mode {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+    match prev_fork {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+    }
+    match prev_cap {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
+}

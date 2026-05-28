@@ -136,10 +136,6 @@ dependencies = [
 [[package]]
 name = "antigravity-cli"
 version = "0.1.0"
-dependencies = [
- "antigravity-core",
- "router-rs",
-]
 
 [[package]]
 name = "antigravity-core"

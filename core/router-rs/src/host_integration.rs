@@ -2951,44 +2951,135 @@ fn install_antigravity_cli_projection(
 ) -> Result<Value, String> {
     use crate::codex_hooks::InstallMode;
     use crate::hosts::antigravity_cli_hooks::install_antigravity_cli_hooks;
-    let cli_home = if scope == "user" {
-        roots.antigravity_cli_home_root.clone()
-    } else {
-        roots.project_root.join(".antigravitycli")
-    };
-    let payload = install_antigravity_cli_hooks(&cli_home, &roots.project_root, InstallMode::Apply)?;
+    let cli_home = antigravity_cli_projection_home(roots, scope);
+    let hooks_path = cli_home.join("hooks.json");
+    let payload =
+        install_antigravity_cli_hooks(&cli_home, &roots.project_root, InstallMode::Apply)?;
+    let manifest_changed =
+        write_antigravity_cli_projection_manifest(roots, scope, &hooks_path)?;
+    let hooks_changed = payload["hooks_json"]["status"]
+        .as_str()
+        .is_some_and(|s| s != "unchanged");
     Ok(json!({
         "status": "installed",
+        "changed": hooks_changed || manifest_changed,
         "scope": scope,
         "host_id": "antigravity-cli",
         "hooks": payload,
     }))
 }
 
+fn antigravity_cli_projection_home(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.antigravity_cli_home_root.clone()
+    } else {
+        roots.project_root.join(".antigravitycli")
+    }
+}
+
+fn write_antigravity_cli_projection_manifest(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    hooks_path: &Path,
+) -> Result<bool, String> {
+    write_json_if_changed(
+        &projection_manifest_path(roots, "antigravity-cli", scope),
+        &json!({
+            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
+            "managed_by": "skill-framework",
+            "host_projection": "antigravity-cli",
+            "scope": scope,
+            "files": [hooks_path.to_string_lossy()],
+        }),
+    )
+}
+
 fn antigravity_cli_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_hooks = roots.project_root.join(".antigravitycli/hooks.json");
-    let user_hooks = roots.antigravity_cli_home_root.join("hooks.json");
+    use crate::hosts::antigravity_cli_hooks::antigravity_cli_hooks_install_status;
+    let project_home = antigravity_cli_projection_home(roots, "project");
+    let user_home = antigravity_cli_projection_home(roots, "user");
+    let project_hooks = project_home.join("hooks.json");
+    let user_hooks = user_home.join("hooks.json");
+    let project_ready =
+        antigravity_cli_hooks_install_status(&project_home)["managed"].as_bool() == Some(true);
+    let user_ready =
+        antigravity_cli_hooks_install_status(&user_home)["managed"].as_bool() == Some(true);
     Ok(json!({
-        "status": "stub",
-        "managed": false,
+        "ready": project_ready || user_ready,
+        "status": "projection-status",
         "hooks": {
-            "project": project_hooks.to_string_lossy(),
-            "user": user_hooks.to_string_lossy(),
-            "installed": project_hooks.exists() || user_hooks.exists(),
+            "managed": true,
+            "project": antigravity_cli_hooks_install_status(&project_home),
+            "user": antigravity_cli_hooks_install_status(&user_home),
+        },
+        "manifest": {
+            "project": projection_manifest_status(&projection_manifest_path(
+                roots,
+                "antigravity-cli",
+                "project",
+            ))?,
+            "user": projection_manifest_status(&projection_manifest_path(
+                roots,
+                "antigravity-cli",
+                "user",
+            ))?,
+        },
+        "paths": {
+            "project_hooks": project_hooks.to_string_lossy(),
+            "user_hooks": user_hooks.to_string_lossy(),
         },
     }))
 }
 
 fn remove_antigravity_cli_projection(
-    _roots: &ResolvedProjectionRoots,
+    roots: &ResolvedProjectionRoots,
     scope: &str,
-    _dry_run: bool,
+    dry_run: bool,
 ) -> Result<Value, String> {
+    use crate::hosts::antigravity_cli_hooks::remove_antigravity_cli_router_hooks;
+    let cli_home = antigravity_cli_projection_home(roots, scope);
+    let manifest_path = projection_manifest_path(roots, "antigravity-cli", scope);
+    let hooks_path = cli_home.join("hooks.json");
+    let manifest_ownership =
+        projection_manifest_ownership(&manifest_path, "antigravity-cli", scope, &hooks_path)?;
+    let hooks_removal = remove_antigravity_cli_router_hooks(&cli_home, dry_run)?;
+    let would_remove_manifest = manifest_ownership.managed;
+    let manifest_removed = if !dry_run && would_remove_manifest {
+        if manifest_path.is_file() {
+            fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    let hooks_changed = hooks_removal
+        .get("changed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let any_changed = hooks_changed || manifest_removed;
     Ok(json!({
-        "status": "stub",
-        "managed": false,
+        "status": if dry_run
+            && (hooks_removal.get("status").and_then(Value::as_str) == Some("would-remove")
+                || would_remove_manifest)
+        {
+            "would-remove"
+        } else if any_changed {
+            "removed"
+        } else {
+            "not-installed-or-user-owned"
+        },
+        "changed": any_changed,
+        "dry_run": dry_run,
         "scope": scope,
-        "reason": "antigravity-cli hook remove lands in w3",
+        "hooks": hooks_removal,
+        "removed_paths": removed_projection_paths(
+            hooks_changed,
+            &hooks_path,
+            manifest_removed,
+            &manifest_path,
+        ),
     }))
 }
 

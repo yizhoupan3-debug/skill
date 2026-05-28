@@ -24,13 +24,13 @@ Independent reviewer evidence when parsed as logical **`false`** (JSON boolean `
 | Mode | Env | Pending |
 |------|-----|---------|
 | **strict** (default) | unset or `strict` | `review_subagent_pending_cycle_keys` multiset |
-| **review-lite** | `ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` | `review_lite_open_cycles` counter; no multiset writes |
+| **review-lite** | `ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` | `review_lite_pending_cycle_keys` for `id:`; no multiset for `id:` |
 
 Fallback: lite + non-`id:` key → strict path (`review_lite_fallback_strict` log).
 
 ## Satisfaction (Stop)
 
 - **strict**: `phase >= 3` and pending multiset empty.
-- **lite**: `phase >= 3` and `review_lite_open_cycles == 0`.
+- **lite**: `phase >= 3`, `review_lite_pending_cycle_keys` empty, and strict multiset empty (lane fallback).
 
 Implementation: `review_subagent_evidence_satisfied` in `cursor_hooks/handlers.rs`.

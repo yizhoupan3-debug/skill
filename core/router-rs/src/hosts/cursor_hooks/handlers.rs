@@ -1869,6 +1869,16 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
                 .map(|s| s.to_string())
                 .collect();
         }
+        if let Some(arr) = obj
+            .get("review_lite_pending_cycle_keys")
+            .and_then(Value::as_array)
+        {
+            base.review_lite_pending_cycle_keys = arr
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|s| s.to_string())
+                .collect();
+        }
         if let Some(v) = obj
             .get("review_subagent_cycle_open")
             .and_then(Value::as_bool)
@@ -1952,8 +1962,10 @@ fn review_subagent_evidence_satisfied(state: &ReviewGateState) -> bool {
         return false;
     }
     match crate::review_gate_engine::cursor_review_gate_mode() {
+        // Lite tracks id: keys separately; lane:/fallback paths still use strict multiset.
         crate::review_gate_engine::CursorReviewGateMode::Lite => {
             state.review_lite_pending_cycle_keys.is_empty()
+                && state.review_subagent_pending_cycle_keys.is_empty()
         }
         crate::review_gate_engine::CursorReviewGateMode::Strict => {
             state.review_subagent_pending_cycle_keys.is_empty()
@@ -2689,7 +2701,9 @@ fn push_review_pending_cycle_key(
 
 /// Clear pending review cycle keys when subagent activity is stale (avoids permanent REVIEW_GATE).
 fn prune_stale_review_pending_cycle_keys(state: &mut ReviewGateState) {
-    if state.review_subagent_pending_cycle_keys.is_empty() {
+    if state.review_subagent_pending_cycle_keys.is_empty()
+        && state.review_lite_pending_cycle_keys.is_empty()
+    {
         return;
     }
     let Some(stale_after_secs) = cursor_open_subagent_stale_after_secs() else {

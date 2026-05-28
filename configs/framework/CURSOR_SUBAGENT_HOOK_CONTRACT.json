@@ -48,7 +48,7 @@
     },
     "review_lite": {
       "env": "ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite",
-      "pending_structure": "review_lite_open_cycles counter",
+      "pending_structure": "review_lite_pending_cycle_keys vec (id: only)",
       "lane_keys_forbidden": true,
       "fallback": "strict when cycle key is not id: or qualifying fork/lane fails"
     }

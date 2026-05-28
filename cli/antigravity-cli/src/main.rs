@@ -1,7 +1,25 @@
 //! Thin wrapper: forwards to `router-rs host antigravity-cli …` (or `router-rs antigravity-cli …`).
 
 use std::env;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+
+fn find_router_rs_in_tree(start: &Path) -> Option<PathBuf> {
+    let mut dir = Some(start);
+    while let Some(d) = dir {
+        for rel in [
+            "core/router-rs/target/release/router-rs",
+            "core/router-rs/target/debug/router-rs",
+        ] {
+            let candidate = d.join(rel);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        dir = d.parent();
+    }
+    None
+}
 
 fn resolve_router_rs_bin() -> String {
     if let Ok(bin) = env::var("ROUTER_RS_BIN") {
@@ -9,11 +27,19 @@ fn resolve_router_rs_bin() -> String {
             return bin;
         }
     }
-    for candidate in [
-        "router-rs",
-        "core/router-rs/target/release/router-rs",
-        "core/router-rs/target/debug/router-rs",
-    ] {
+    if let Ok(cwd) = env::current_dir() {
+        if let Some(bin) = find_router_rs_in_tree(&cwd) {
+            return bin.to_string_lossy().into_owned();
+        }
+    }
+    if let Ok(exe) = env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            if let Some(bin) = find_router_rs_in_tree(parent) {
+                return bin.to_string_lossy().into_owned();
+            }
+        }
+    }
+    for candidate in ["router-rs"] {
         if Command::new(candidate)
             .arg("--version")
             .stdout(Stdio::null())

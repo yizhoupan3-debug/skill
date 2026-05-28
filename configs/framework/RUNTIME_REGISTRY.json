@@ -115,9 +115,9 @@
       "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据；Task 省略 model、继承主会话，禁止默认 claude/sonnet。细则 skills/code-review-deep/SKILL.md",
       "codex-cli": "配对审稿（Codex）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
       "claude-code": "配对审稿（Claude Code）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "antigravity-cli": "配对审稿（Antigravity CLI）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "antigravity-app": "配对审稿（Antigravity App）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md"
+      "antigravity-cli": "配对审稿（Antigravity CLI）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "antigravity-app": "配对审稿（Antigravity App）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md"
     },
     "spawn_first_includes_model_inherit_by_host": {
       "cursor": true
