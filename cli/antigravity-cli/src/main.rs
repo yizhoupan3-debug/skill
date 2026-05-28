@@ -21,10 +21,28 @@ fn find_router_rs_in_tree(start: &Path) -> Option<PathBuf> {
     None
 }
 
+fn router_rs_bin_usable(path: &str) -> bool {
+    let path = path.trim();
+    if path.is_empty() {
+        return false;
+    }
+    let candidate = Path::new(path);
+    if !candidate.is_file() {
+        return false;
+    }
+    Command::new(candidate)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 fn resolve_router_rs_bin() -> String {
     if let Ok(bin) = env::var("ROUTER_RS_BIN") {
-        if !bin.trim().is_empty() {
-            return bin;
+        if router_rs_bin_usable(&bin) {
+            return bin.trim().to_string();
         }
     }
     if let Ok(cwd) = env::current_dir() {

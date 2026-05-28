@@ -7280,9 +7280,9 @@ fn review_lite_mixed_id_and_lane_blocks_stop_until_both_settled() {
         }),
     );
     let after_id_stop = load_state_for(&repo, sid);
-    assert!(
-        after_id_stop.phase >= 3,
-        "id stop should bump phase: {:?}",
+    assert_eq!(
+        after_id_stop.phase, 2,
+        "id stop must not bump phase=3 while lane fallback pending remains: {:?}",
         after_id_stop
     );
     assert!(after_id_stop.review_lite_pending_cycle_keys.is_empty());
@@ -7309,6 +7309,202 @@ fn review_lite_mixed_id_and_lane_blocks_stop_until_both_settled() {
     );
     let end = load_state_for(&repo, sid);
     assert!(end.review_subagent_pending_cycle_keys.is_empty());
+    match prev_mode {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+}
+
+#[test]
+fn review_lite_orphan_pending_blocks_stop_under_strict_mode() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_mode = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+    let repo = fresh_repo();
+    let sid = "s-lite-orphan-strict";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "orphan-1"
+        }),
+    );
+    assert_eq!(
+        load_state_for(&repo, sid).review_lite_pending_cycle_keys,
+        vec!["id:orphan-1"]
+    );
+    env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    let stop_out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, ""));
+    let fm = stop_out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "strict mode must still honor orphan lite pending: {stop_out}"
+    );
+    match prev_mode {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+}
+
+#[test]
+fn review_lite_read_posttool_does_not_skip_when_id_pending() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_mode = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+    let repo = fresh_repo();
+    let sid = "s-lite-read-pending";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "read-pending-1"
+        }),
+    );
+    let before = load_state_for(&repo, sid);
+    assert_eq!(before.review_lite_pending_cycle_keys.len(), 1);
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "postToolUse",
+        &json!({
+            "session_id": sid,
+            "tool_name": "Read",
+            "tool_input": {},
+            "subagent_type": "general-purpose",
+            "fork_context": false
+        }),
+    );
+    let after = load_state_for(&repo, sid);
+    assert_eq!(
+        after.review_lite_pending_cycle_keys,
+        before.review_lite_pending_cycle_keys,
+        "Read fast path must not clear lite pending"
+    );
+    assert_eq!(after.phase, before.phase);
+    match prev_mode {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+}
+
+#[test]
+fn review_lite_cap_refused_at_pending_max() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_mode = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    let prev_cap = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "2");
+    let repo = fresh_repo();
+    let sid = "s-lite-cap";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    for id in ["cap-a", "cap-b"] {
+        let _ = dispatch_cursor_hook_event(
+            &repo,
+            "subagentStart",
+            &json!({
+                "session_id": sid,
+                "subagent_type": "general-purpose",
+                "fork_context": false,
+                "subagent_id": id
+            }),
+        );
+    }
+    let deny = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "cap-c"
+        }),
+    );
+    assert_eq!(deny.get("permission"), Some(&json!("deny")));
+    assert!(
+        load_state_for(&repo, sid).review_pending_cap_refused,
+        "third lite id start must latch cap refused"
+    );
+    let stop_out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, ""));
+    let fm = stop_out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "cap refused must keep Stop blocked: {stop_out}"
+    );
+    match prev_cap {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"),
+    }
+    match prev_mode {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+}
+
+#[test]
+fn review_lite_generic_id_falls_back_to_strict_multiset() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev_mode = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+    let repo = fresh_repo();
+    let sid = "s-lite-generic-id";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "id": "fake-tool-id"
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert!(
+        mid.review_lite_pending_cycle_keys.is_empty(),
+        "bare id must not use lite vec"
+    );
+    assert_eq!(
+        mid.review_subagent_pending_cycle_keys,
+        vec!["id:fake-tool-id"]
+    );
+    let stop_out = dispatch_cursor_hook_event(&repo, "stop", &event(sid, ""));
+    let fm = stop_out
+        .get("followup_message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert!(
+        fm.contains("REVIEW_GATE incomplete"),
+        "generic id strict pending must block Stop: {stop_out}"
+    );
     match prev_mode {
         Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
         None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),

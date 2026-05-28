@@ -3008,7 +3008,7 @@ fn antigravity_cli_projection_status(roots: &ResolvedProjectionRoots) -> Result<
         "ready": project_ready || user_ready,
         "status": "projection-status",
         "hooks": {
-            "managed": true,
+            "managed": project_ready || user_ready,
             "project": antigravity_cli_hooks_install_status(&project_home),
             "user": antigravity_cli_hooks_install_status(&user_home),
         },

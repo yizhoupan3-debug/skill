@@ -24,6 +24,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     let independent_fork_review =
         crate::review_gate_engine::cursor_review_independent_fork(fork, review_kind);
     let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
+    let lite_stable_id = !stable_subagent_id(event, &tool_input).is_empty();
     let armed = review_hard_armed(&state);
     let mut track_open_subagent = true;
     let mut mutated = false;
@@ -41,7 +42,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
                 crate::router_env_flags::router_rs_cursor_review_pending_cycle_max() as usize,
             );
         }
-        match push_review_pending_cycle_key(&mut state, cycle_key, false) {
+        match push_review_pending_cycle_key(&mut state, cycle_key, false, lite_stable_id) {
             PendingCyclePush::NewlyInserted => {
             let was_below_2 = state.phase < 2;
             bump_phase(&mut state, 2);
@@ -166,10 +167,12 @@ fn post_tool_use_needs_work(
     false
 }
 
-/// Armed review: `Read` skips L3 when multiset/open count show no in-flight subagent work (D6/D12).
+/// Armed review: `Read` skips L3 only when no lite/strict pending and no open subagents (D6/D12).
 fn review_armed_posttool_requires_l3(state: &ReviewGateState, name: &str) -> bool {
     if name.eq_ignore_ascii_case("read") {
-        return !state.review_subagent_pending_cycle_keys.is_empty() || state.active_subagent_count > 0;
+        return !state.review_lite_pending_cycle_keys.is_empty()
+            || !state.review_subagent_pending_cycle_keys.is_empty()
+            || state.active_subagent_count > 0;
     }
     true
 }

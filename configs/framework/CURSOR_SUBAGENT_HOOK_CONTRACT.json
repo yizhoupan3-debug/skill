@@ -20,8 +20,9 @@
   "fields": {
     "subagent_id": {
       "aliases": ["subagentId", "agent_id", "agentId", "task_id", "taskId", "run_id", "runId", "id"],
+      "stable_id_fields": ["subagent_id", "subagentId", "agent_id", "agentId", "task_id", "taskId", "run_id", "runId"],
       "cycle_key_prefix": "id:",
-      "required_for_review_lite": true
+      "required_for_review_lite": "stable_id_fields only; bare top-level id uses strict multiset"
     },
     "fork_context": {
       "aliases": ["forkContext"],
@@ -48,7 +49,7 @@
     },
     "review_lite": {
       "env": "ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite",
-      "pending_structure": "review_lite_pending_cycle_keys vec (id: only)",
+      "pending_structure": "review_lite_pending_cycle_keys vec (id: from stable_id_fields only)",
       "lane_keys_forbidden": true,
       "fallback": "strict when cycle key is not id: or qualifying fork/lane fails"
     }

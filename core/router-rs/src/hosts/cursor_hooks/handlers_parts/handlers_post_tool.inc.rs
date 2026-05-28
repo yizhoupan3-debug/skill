@@ -83,7 +83,8 @@ fn handle_post_tool_use_with_lock(
             }
         }
         let start_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
-        let push = push_review_pending_cycle_key(&mut state, start_key.clone(), true);
+        let lite_stable_id = !stable_subagent_id(event, &tool_input).is_empty();
+        let push = push_review_pending_cycle_key(&mut state, start_key.clone(), true, lite_stable_id);
         if push != PendingCyclePush::AtCap {
             let was_below_2 = state.phase < 2;
             bump_phase(&mut state, 2);

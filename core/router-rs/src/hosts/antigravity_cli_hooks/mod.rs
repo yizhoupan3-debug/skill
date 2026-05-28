@@ -19,6 +19,13 @@ const ANTIGRAVITY_CLI_HOOK_AUTHORITY: &str = "rust-antigravity-cli-hooks";
 const LIFECYCLE_STATE_DIR_LEAF: &str = ".antigravitycli";
 
 pub fn resolve_antigravity_cli_home(arg: Option<&Path>) -> Result<PathBuf, String> {
+    resolve_antigravity_cli_home_with_options(arg, true)
+}
+
+fn resolve_antigravity_cli_home_with_options(
+    arg: Option<&Path>,
+    create_if_missing: bool,
+) -> Result<PathBuf, String> {
     if let Some(candidate) = arg {
         let absolute = if candidate.is_absolute() {
             candidate.to_path_buf()
@@ -27,12 +34,19 @@ pub fn resolve_antigravity_cli_home(arg: Option<&Path>) -> Result<PathBuf, Strin
                 .map_err(|err| format!("Could not resolve current directory: {err}"))?
                 .join(candidate)
         };
-        fs::create_dir_all(&absolute).map_err(|err| {
-            format!(
-                "Failed to create antigravity cli home {}: {err}",
+        if create_if_missing {
+            fs::create_dir_all(&absolute).map_err(|err| {
+                format!(
+                    "Failed to create antigravity cli home {}: {err}",
+                    absolute.display()
+                )
+            })?;
+        } else if !absolute.exists() {
+            return Err(format!(
+                "Antigravity CLI home does not exist (check mode will not create it): {}",
                 absolute.display()
-            )
-        })?;
+            ));
+        }
         return absolute.canonicalize().map_err(|err| {
             format!(
                 "Failed to canonicalize antigravity cli home {}: {err}",
@@ -42,13 +56,16 @@ pub fn resolve_antigravity_cli_home(arg: Option<&Path>) -> Result<PathBuf, Strin
     }
     if let Ok(from_env) = env::var("ANTIGRAVITY_CLI_HOME") {
         if !from_env.trim().is_empty() {
-            return resolve_antigravity_cli_home(Some(Path::new(from_env.trim())));
+            return resolve_antigravity_cli_home_with_options(
+                Some(Path::new(from_env.trim())),
+                create_if_missing,
+            );
         }
     }
     let home = env::var("HOME")
         .map_err(|_| "ANTIGRAVITY_CLI_HOME unset and HOME unavailable".to_string())?;
     let default_home = Path::new(&home).join(".antigravitycli");
-    resolve_antigravity_cli_home(Some(default_home.as_path()))
+    resolve_antigravity_cli_home_with_options(Some(default_home.as_path()), create_if_missing)
 }
 
 pub fn install_antigravity_cli_hooks(
@@ -57,7 +74,8 @@ pub fn install_antigravity_cli_hooks(
     mode: InstallMode,
 ) -> Result<Value, String> {
     let apply = matches!(mode, InstallMode::Apply);
-    let resolved_home = resolve_antigravity_cli_home(Some(antigravity_cli_home))?;
+    let resolved_home =
+        resolve_antigravity_cli_home_with_options(Some(antigravity_cli_home), apply)?;
     let resolved_repo_root = if repo_root.is_absolute() {
         repo_root.to_path_buf()
     } else {
@@ -215,12 +233,12 @@ pub fn run_antigravity_cli_hook(command: &str, repo_root: &Path) -> Result<Optio
     let canonical = canonical_antigravity_cli_hook_command(command)?;
     let payload = match read_hook_stdin_payload() {
         Ok(payload) => payload,
-        Err(err) if canonical == "lifecycle-context" => {
+        Err(err) => {
+            let message = format!("Antigravity CLI hook input JSON invalid: {err}");
             return Ok(attach_antigravity_hook_observation(Some(lifecycle_input_error(
-                &format!("Antigravity CLI lifecycle hook input JSON invalid: {err}"),
+                &message,
             ))));
         }
-        Err(err) => return Err(err),
     };
     let out = match canonical {
         "lifecycle-context" => run_codex_lifecycle_context_hook_for_state_dir(
@@ -300,6 +318,12 @@ pub fn antigravity_cli_hooks_install_status(cli_home: &Path) -> Value {
     })
 }
 
+const ANTIGRAVITY_CLI_HOOK_COMMAND_MARKER: &str = "host antigravity-cli hook";
+
+fn is_managed_antigravity_cli_hook_command(command: &str, lifecycle_command: &str) -> bool {
+    command == lifecycle_command || command.contains(ANTIGRAVITY_CLI_HOOK_COMMAND_MARKER)
+}
+
 fn remove_router_rs_hook_entries_from_hooks_json(mut data: Value, lifecycle_command: &str) -> (Value, usize) {
     let mut removed = 0usize;
     let Some(hooks_root) = data
@@ -326,8 +350,14 @@ fn remove_router_rs_hook_entries_from_hooks_json(mut data: Value, lifecycle_comm
                     hooks.iter().any(|hook| {
                         hook.as_object().is_some_and(|hook_obj| {
                             hook_obj.get("type").and_then(Value::as_str) == Some("command")
-                                && hook_obj.get("command").and_then(Value::as_str)
-                                    == Some(lifecycle_command)
+                                && hook_obj
+                                    .get("command")
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|cmd| {
+                                        is_managed_antigravity_cli_hook_command(
+                                            cmd, lifecycle_command,
+                                        )
+                                    })
                         })
                     })
                 })
@@ -367,12 +397,21 @@ pub fn remove_antigravity_cli_router_hooks(
             remove_router_rs_hook_entries_from_hooks_json(existing, &lifecycle_command);
         removed_entries = removed;
         if removed > 0 && !dry_run {
+            if fs::symlink_metadata(&hooks_path)
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false)
+            {
+                return Err(format!(
+                    "Refusing to update symlinked hooks.json: {}",
+                    hooks_path.display()
+                ));
+            }
             let serialized = hooks_install_serialize_pretty(&merged)?;
             hooks_install_write_atomic(&hooks_path, &serialized)?;
             changed = true;
         }
     }
-    if manifest_path.is_file() && !dry_run {
+    if manifest_path.is_file() && !dry_run && removed_entries > 0 {
         fs::remove_file(&manifest_path).map_err(|err| {
             format!(
                 "Failed to remove install manifest {}: {err}",
@@ -382,10 +421,12 @@ pub fn remove_antigravity_cli_router_hooks(
         changed = true;
     }
     Ok(json!({
-        "status": if dry_run && (removed_entries > 0 || manifest_path.is_file()) {
+        "status": if dry_run && removed_entries > 0 {
             "would-remove"
         } else if changed {
             "removed"
+        } else if manifest_path.is_file() && removed_entries == 0 {
+            "unchanged"
         } else {
             "not-installed-or-user-owned"
         },
@@ -478,9 +519,63 @@ mod tests {
         assert!(home.join(".router-rs-install.manifest.json").is_file());
         let status = antigravity_cli_hooks_install_status(&home);
         assert_eq!(status["managed"].as_bool(), Some(true));
-        remove_antigravity_cli_router_hooks(&home, false).unwrap();
+        let removal = remove_antigravity_cli_router_hooks(&home, false).unwrap();
+        assert!(removal["removed_entries"].as_u64().unwrap_or(0) > 0);
         let status_after = antigravity_cli_hooks_install_status(&home);
         assert_eq!(status_after["managed"].as_bool(), Some(false));
+        assert!(!home.join(".router-rs-install.manifest.json").exists());
+        let _ = fs::remove_dir_all(home.parent().unwrap());
+    }
+
+    #[test]
+    fn install_check_does_not_create_home_directory() {
+        let base = std::env::temp_dir().join(format!(
+            "antigravity-cli-check-{}-{}",
+            std::process::id(),
+            INSTALL_SEQ.fetch_add(1, Ordering::SeqCst)
+        ));
+        let missing_home = base.join("missing-cli-home");
+        assert!(!missing_home.exists());
+        let err = install_antigravity_cli_hooks(&missing_home, Path::new("."), InstallMode::Check)
+            .expect_err("check must not mkdir");
+        assert!(
+            err.contains("does not exist") || err.contains("check mode"),
+            "unexpected err: {err}"
+        );
+        assert!(!missing_home.exists());
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn remove_does_not_drop_manifest_when_no_entries_removed() {
+        let home = fresh_home("manifest-kept");
+        let repo = home.parent().unwrap().join("repo-manifest");
+        fs::create_dir_all(&repo).unwrap();
+        install_antigravity_cli_hooks(&home, &repo, InstallMode::Apply).unwrap();
+        let hooks_path = home.join("hooks.json");
+        fs::write(&hooks_path, r#"{"hooks":{"Stop":[]}}"#).unwrap();
+        let removal = remove_antigravity_cli_router_hooks(&home, false).unwrap();
+        assert_eq!(removal["removed_entries"].as_u64(), Some(0));
+        assert_eq!(removal["status"].as_str(), Some("unchanged"));
+        assert!(home.join(".router-rs-install.manifest.json").is_file());
+        let _ = fs::remove_dir_all(home.parent().unwrap());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn remove_refuses_symlink_hooks_json() {
+        use std::os::unix::fs::symlink;
+        let home = fresh_home("symlink-remove");
+        let repo = home.parent().unwrap().join("repo-symlink");
+        fs::create_dir_all(&repo).unwrap();
+        install_antigravity_cli_hooks(&home, &repo, InstallMode::Apply).unwrap();
+        let hooks_path = home.join("hooks.json");
+        let real = home.join("hooks.real.json");
+        fs::rename(&hooks_path, &real).unwrap();
+        symlink(&real, &hooks_path).unwrap();
+        let err = remove_antigravity_cli_router_hooks(&home, false).expect_err("symlink");
+        assert!(err.contains("symlink"), "err={err}");
+        assert!(home.join(".router-rs-install.manifest.json").is_file());
         let _ = fs::remove_dir_all(home.parent().unwrap());
     }
 }

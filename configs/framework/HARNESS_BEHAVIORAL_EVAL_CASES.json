@@ -138,6 +138,30 @@
       "failure_class": "verification_missing",
       "fixture": "tests/fixtures/review_gate/compact_no_subagent.json",
       "verify": "cargo test --manifest-path core/router-rs/Cargo.toml main_thread_compact_review_does_not_clear_gate_without_subagent -- --exact"
+    },
+    {
+      "id": "review_lite_strict_orphan_pending",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/lite_id_cycle.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_orphan_pending_blocks_stop_under_strict_mode"
+    },
+    {
+      "id": "review_lite_cap_refused",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/env_matrix/em-05-lite-cap-2.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_cap_refused_at_pending_max"
+    },
+    {
+      "id": "antigravity_cli_install_remove_roundtrip",
+      "failure_class": "verification_missing",
+      "fixture": "docs/hosts/antigravity-cli.md",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml install_remove_roundtrip_clears_router_hooks"
+    },
+    {
+      "id": "antigravity_cli_remove_manifest_consistency",
+      "failure_class": "verification_missing",
+      "fixture": "docs/hosts/antigravity-cli.md",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml remove_does_not_drop_manifest_when_no_entries_removed"
     }
   ]
 }

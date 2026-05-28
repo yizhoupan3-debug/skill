@@ -12,7 +12,8 @@ Machine-readable source: [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`
 
 ## Cycle keys
 
-- **`id:<stable_id>`** — preferred; required for `review-lite` mode.
+- **`id:<stable_id>`** — from `subagent_id` / `subagentId` / `agent_id` / `task_id` / `run_id` family; required for `review-lite` vec.
+- **`id:<legacy>`** — bare JSON field `"id"` only → **strict** multiset (not lite).
 - **`lane:<type>`** — strict multiset only; **never** `review-lite`.
 
 ## `fork_context`
@@ -30,7 +31,6 @@ Fallback: lite + non-`id:` key → strict path (`review_lite_fallback_strict` lo
 
 ## Satisfaction (Stop)
 
-- **strict**: `phase >= 3` and pending multiset empty.
-- **lite**: `phase >= 3`, `review_lite_pending_cycle_keys` empty, and strict multiset empty (lane fallback).
+- **strict** and **lite**: `phase >= 3` and **both** `review_lite_pending_cycle_keys` and `review_subagent_pending_cycle_keys` empty (orphan lite pending blocks Stop even under strict env).
 
 Implementation: `review_subagent_evidence_satisfied` in `cursor_hooks/handlers.rs`.

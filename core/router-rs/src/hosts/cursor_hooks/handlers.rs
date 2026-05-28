@@ -417,29 +417,34 @@ fn first_nonempty_tool_or_event_str(event: &Value, tool_input: &Value, keys: &[&
     String::new()
 }
 
+const STABLE_SUBAGENT_ID_FIELDS: &[&str] = &[
+    "subagent_id",
+    "subagentId",
+    "agent_id",
+    "agentId",
+    "task_id",
+    "taskId",
+    "run_id",
+    "runId",
+];
+
+fn stable_subagent_id(event: &Value, tool_input: &Value) -> String {
+    first_nonempty_tool_or_event_str(event, tool_input, STABLE_SUBAGENT_ID_FIELDS)
+}
+
 fn review_subagent_cycle_key(
     event: &Value,
     tool_input: &Value,
     sub_type: &str,
     agent_type: &str,
 ) -> Option<String> {
-    let id = first_nonempty_tool_or_event_str(
-        event,
-        tool_input,
-        &[
-            "subagent_id",
-            "subagentId",
-            "agent_id",
-            "agentId",
-            "task_id",
-            "taskId",
-            "run_id",
-            "runId",
-            "id",
-        ],
-    );
-    if !id.is_empty() {
-        return Some(format!("id:{id}"));
+    let stable = stable_subagent_id(event, tool_input);
+    if !stable.is_empty() {
+        return Some(format!("id:{stable}"));
+    }
+    let legacy_id = first_nonempty_tool_or_event_str(event, tool_input, &["id"]);
+    if !legacy_id.is_empty() {
+        return Some(format!("id:{legacy_id}"));
     }
     let lane = if !sub_type.is_empty() {
         sub_type
@@ -1956,21 +1961,14 @@ fn review_hard_armed(state: &ReviewGateState) -> bool {
     review_gate_armed(state.review_required, state.review_override)
 }
 
-/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3 且 pending 已排空；strict/lite 分轨）。
+fn review_pending_both_empty(state: &ReviewGateState) -> bool {
+    state.review_lite_pending_cycle_keys.is_empty()
+        && state.review_subagent_pending_cycle_keys.is_empty()
+}
+
+/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3 且 lite/strict 双 pending 皆空）。
 fn review_subagent_evidence_satisfied(state: &ReviewGateState) -> bool {
-    if state.phase < 3 {
-        return false;
-    }
-    match crate::review_gate_engine::cursor_review_gate_mode() {
-        // Lite tracks id: keys separately; lane:/fallback paths still use strict multiset.
-        crate::review_gate_engine::CursorReviewGateMode::Lite => {
-            state.review_lite_pending_cycle_keys.is_empty()
-                && state.review_subagent_pending_cycle_keys.is_empty()
-        }
-        crate::review_gate_engine::CursorReviewGateMode::Strict => {
-            state.review_subagent_pending_cycle_keys.is_empty()
-        }
-    }
+    state.phase >= 3 && review_pending_both_empty(state)
 }
 
 fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
@@ -2622,12 +2620,7 @@ fn try_settle_review_subagent_cycle(
         pending.remove(pos);
     }
     sync_review_cycle_legacy_fields(state);
-    let pending_empty = if lite {
-        state.review_lite_pending_cycle_keys.is_empty()
-    } else {
-        state.review_subagent_pending_cycle_keys.is_empty()
-    };
-    if pending_empty {
+    if review_pending_both_empty(state) {
         state.review_pending_cap_refused = false;
         bump_phase(state, 3);
         state.subagent_stop_count = state.subagent_stop_count.saturating_add(1);
@@ -2666,6 +2659,7 @@ fn push_review_pending_cycle_key(
     state: &mut ReviewGateState,
     cycle_key: Option<String>,
     from_posttool: bool,
+    lite_stable_id: bool,
 ) -> PendingCyclePush {
     let Some(k) = cycle_key else {
         return PendingCyclePush::AtCap;
@@ -2674,9 +2668,13 @@ fn push_review_pending_cycle_key(
         == crate::review_gate_engine::CursorReviewGateMode::Lite
     {
         if crate::review_gate_engine::cycle_key_eligible_for_lite(&k) {
-            return push_review_lite_pending_cycle_key(state, k, from_posttool);
+            if lite_stable_id {
+                return push_review_lite_pending_cycle_key(state, k, from_posttool);
+            }
+            eprintln!("[router-rs] review_lite_reject_generic_id key={k}");
+        } else {
+            eprintln!("[router-rs] review_lite_fallback_strict reason=no_stable_id key={k}");
         }
-        eprintln!("[router-rs] review_lite_fallback_strict reason=no_stable_id key={k}");
     }
     if from_posttool && state.review_subagent_pending_cycle_keys.contains(&k) {
         return PendingCyclePush::AlreadyPresent;
