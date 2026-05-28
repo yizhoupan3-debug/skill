@@ -350,6 +350,8 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
             "cursor",
             "claude-code",
             "claude-desktop",
+            "antigravity-cli",
+            "antigravity-app",
             "antigravity"
         ])
     );
@@ -376,6 +378,17 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["claude-desktop"],
         serde_json::json!(["AGENTS_CLAUDE.md", ".claude/CLAUDE.md"])
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["antigravity-cli"],
+        "AGENTS_ANTIGRAVITY.md"
+    );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["antigravity-app"],
+        serde_json::json!([
+            "AGENTS_ANTIGRAVITY.md",
+            ".gemini/antigravity/rules/framework.md"
+        ])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["antigravity"],
@@ -1025,6 +1038,8 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
             "cursor".to_string(),
             "claude".to_string(),
             "claude-desktop".to_string(),
+            "antigravity-cli".to_string(),
+            "antigravity-app".to_string(),
             "antigravity".to_string(),
         ],
         &supported,
@@ -2886,6 +2901,7 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
         "closeout_integrity",
         "skill_contract_quality",
         "subagent_lane_integrity",
+        "review_gate_integrity",
     ] {
         assert!(tracks.contains(expected), "missing track {expected}");
     }
@@ -2919,6 +2935,30 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
             case["id"].as_str().unwrap_or("<unknown>")
         );
     }
+}
+
+#[test]
+fn cursor_subagent_hook_contract_consumer_subset() {
+    let path = project_root().join("configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json");
+    assert!(
+        path.is_file(),
+        "missing {}",
+        path.display()
+    );
+    let v = read_json(&path);
+    assert_eq!(
+        v["schema_version"].as_str().unwrap_or_default(),
+        "cursor-subagent-hook-contract-v1"
+    );
+    let events = v["events"].as_object().expect("events object");
+    assert!(events.contains_key("subagentStart"));
+    assert!(events.contains_key("subagentStop"));
+    let modes = v["modes"].as_object().expect("modes object");
+    assert!(modes.contains_key("strict"));
+    assert!(modes.contains_key("review_lite"));
+    let fields = v["fields"].as_object().expect("fields object");
+    assert!(fields.contains_key("subagent_id"));
+    assert!(fields.contains_key("fork_context"));
 }
 
 #[test]

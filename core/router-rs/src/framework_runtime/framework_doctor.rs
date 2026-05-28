@@ -47,6 +47,13 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
         Ok(()) => println!("RUNTIME_REGISTRY review_gate snapshot: ok"),
         Err(e) => println!("WARN: RUNTIME_REGISTRY review_gate snapshot failed: {e}"),
     }
+    let review_mode = match crate::review_gate_engine::cursor_review_gate_mode() {
+        crate::review_gate_engine::CursorReviewGateMode::Lite => "lite",
+        crate::review_gate_engine::CursorReviewGateMode::Strict => "strict",
+    };
+    println!(
+        "ROUTER_RS_CURSOR_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_CURSOR_REVIEW_GATE_MODE)"
+    );
     for (label, path) in &checks {
         let status = if path.is_file() {
             "ok (file)"

@@ -13,6 +13,7 @@ mod browser_mcp;
 pub mod hosts;
 pub(crate) use hosts::claude_desktop_hooks;
 pub(crate) use hosts::claude_hooks;
+pub(crate) use hosts::antigravity_cli_hooks;
 pub(crate) use hosts::codex_hooks;
 pub(crate) use hosts::cursor_hooks;
 pub mod cli;

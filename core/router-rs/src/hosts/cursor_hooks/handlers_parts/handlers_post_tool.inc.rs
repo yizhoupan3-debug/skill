@@ -70,7 +70,10 @@ fn handle_post_tool_use_with_lock(
     }
     if tool_name_matches_subagent_lane(&name) && review_kind && armed && independent_fork_review {
         if let Some(limit) = cursor_max_open_subagents() {
-            let pending_open = state.review_subagent_pending_cycle_keys.len() as u32;
+            let pending_open = state
+                .review_subagent_pending_cycle_keys
+                .len()
+                .saturating_add(state.review_lite_pending_cycle_keys.len()) as u32;
             if pending_open.saturating_add(state.active_subagent_count) >= limit {
                 release_state_lock(lock);
                 return subagent_limit_denial(

@@ -20,6 +20,9 @@ use crate::closeout_enforcement::{
     closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
 };
+use crate::antigravity_cli_hooks::{
+    install_antigravity_cli_hooks, resolve_antigravity_cli_home, run_antigravity_cli_hook,
+};
 use crate::codex_hooks::{
     build_codex_hook_projection, codex_host_entrypoint_provider, install_codex_cli_hooks,
     resolve_codex_home, run_codex_audit_hook, InstallMode,

@@ -261,6 +261,7 @@ pub(crate) struct ResolvedProjectionRoots {
     pub(crate) cursor_home_root: PathBuf,
     pub(crate) claude_home_root: PathBuf,
     pub(crate) antigravity_home_root: PathBuf,
+    pub(crate) antigravity_cli_home_root: PathBuf,
 }
 
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
@@ -715,6 +716,7 @@ pub(crate) fn resolve_projection_roots(
     cursor_home: Option<&Path>,
     claude_home: Option<&Path>,
     antigravity_home: Option<&Path>,
+    antigravity_cli_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
@@ -724,6 +726,8 @@ pub(crate) fn resolve_projection_roots(
     let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
     let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
     let antigravity_home_root = resolve_host_home(antigravity_home, shared_home, "ANTIGRAVITY_HOME", ".gemini")?;
+    let antigravity_cli_home_root =
+        resolve_host_home(antigravity_cli_home, shared_home, "ANTIGRAVITY_CLI_HOME", ".antigravitycli")?;
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
@@ -732,6 +736,7 @@ pub(crate) fn resolve_projection_roots(
         cursor_home_root,
         claude_home_root,
         antigravity_home_root,
+        antigravity_cli_home_root,
     })
 }
 
@@ -1549,6 +1554,7 @@ fn projection_install_command(
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
         command.antigravity_home.as_deref(),
+        None,
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1573,6 +1579,7 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
         command.antigravity_home.as_deref(),
+        None,
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
@@ -1607,6 +1614,7 @@ fn projection_remove_or_cleanup_command(
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
         command.antigravity_home.as_deref(),
+        None,
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1816,9 +1824,19 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
         explicit_home: claude_home_explicit,
     },
     HostProjectionAdapter {
-        tool: "antigravity",
-        host_id: "antigravity",
+        tool: "antigravity-cli",
+        host_id: "antigravity-cli",
         aliases: &[],
+        install: install_antigravity_cli_projection,
+        status: antigravity_cli_projection_status,
+        remove: remove_antigravity_cli_projection,
+        home_root: antigravity_cli_home_root_string,
+        explicit_home: antigravity_cli_home_explicit,
+    },
+    HostProjectionAdapter {
+        tool: "antigravity",
+        host_id: "antigravity-app",
+        aliases: &["antigravity-app", "antigravity"],
         install: install_antigravity_projection,
         status: antigravity_projection_status,
         remove: remove_antigravity_projection,
@@ -1983,6 +2001,17 @@ fn antigravity_home_root_string(roots: &ResolvedProjectionRoots) -> String {
 
 fn antigravity_home_explicit(command: &ProjectionCommand) -> bool {
     command.antigravity_home.is_some() || std::env::var_os("ANTIGRAVITY_HOME").is_some()
+}
+
+fn antigravity_cli_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+    roots
+        .antigravity_cli_home_root
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn antigravity_cli_home_explicit(command: &ProjectionCommand) -> bool {
+    std::env::var_os("ANTIGRAVITY_CLI_HOME").is_some()
 }
 
 fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
@@ -2916,6 +2945,53 @@ fn write_claude_desktop_projection_manifest(
     )
 }
 
+fn install_antigravity_cli_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
+    use crate::codex_hooks::InstallMode;
+    use crate::hosts::antigravity_cli_hooks::install_antigravity_cli_hooks;
+    let cli_home = if scope == "user" {
+        roots.antigravity_cli_home_root.clone()
+    } else {
+        roots.project_root.join(".antigravitycli")
+    };
+    let payload = install_antigravity_cli_hooks(&cli_home, &roots.project_root, InstallMode::Apply)?;
+    Ok(json!({
+        "status": "installed",
+        "scope": scope,
+        "host_id": "antigravity-cli",
+        "hooks": payload,
+    }))
+}
+
+fn antigravity_cli_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    let project_hooks = roots.project_root.join(".antigravitycli/hooks.json");
+    let user_hooks = roots.antigravity_cli_home_root.join("hooks.json");
+    Ok(json!({
+        "status": "stub",
+        "managed": false,
+        "hooks": {
+            "project": project_hooks.to_string_lossy(),
+            "user": user_hooks.to_string_lossy(),
+            "installed": project_hooks.exists() || user_hooks.exists(),
+        },
+    }))
+}
+
+fn remove_antigravity_cli_projection(
+    _roots: &ResolvedProjectionRoots,
+    scope: &str,
+    _dry_run: bool,
+) -> Result<Value, String> {
+    Ok(json!({
+        "status": "stub",
+        "managed": false,
+        "scope": scope,
+        "reason": "antigravity-cli hook remove lands in w3",
+    }))
+}
+
 fn install_antigravity_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -3030,7 +3106,7 @@ fn remove_antigravity_projection(
     let mcp_target = antigravity_mcp_target(roots, scope);
     let settings_target = antigravity_settings_target(roots, scope);
     let framework_md_target = antigravity_framework_md_target(roots, scope);
-    let manifest_path = projection_manifest_path(roots, "antigravity", scope);
+    let manifest_path = antigravity_projection_manifest_path(roots, scope);
 
     let mut changed = false;
     let mut would_change = false;
@@ -3043,7 +3119,7 @@ fn remove_antigravity_projection(
         (&framework_md_target, "framework_md"),
     ] {
         let managed =
-            projection_manifest_ownership(&manifest_path, "antigravity", scope, target)
+            projection_manifest_ownership(&manifest_path, "antigravity-app", scope, target)
                 .map(|o| o.owns_projection_file)
                 .unwrap_or(false);
         if target.exists() && managed {
@@ -3060,7 +3136,7 @@ fn remove_antigravity_projection(
     }
 
     let manifest_managed = manifest_path.exists() &&
-        projection_manifest_ownership(&manifest_path, "antigravity", scope, &framework_md_target)
+        projection_manifest_ownership(&manifest_path, "antigravity-app", scope, &framework_md_target)
             .map(|o| o.managed)
             .unwrap_or(false);
     if manifest_managed {
@@ -3111,7 +3187,7 @@ fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &str)
 fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     make_mcp_server_payload(
         roots,
-        &["antigravity", "agent", "--repo-root", "${workspaceRoot}"],
+        &["antigravity-app", "agent", "--repo-root", "${workspaceRoot}"],
         "Framework runtime snapshot, continuity, skill routing, closeout gating",
     )
 }
@@ -3166,22 +3242,30 @@ fn write_antigravity_framework_md(
     let content = format!(
         "<!-- managed_by: skill-framework · antigravity · keep ≤40 lines -->\n\
          <!-- projection_id: antigravity-self-discipline -->\n\
-         <!-- host_projection: antigravity -->\n\
+         <!-- host_projection: antigravity-app -->\n\
          <!-- install_scope: {scope} -->\n\n\
          # Antigravity Framework\n\n\
-         Antigravity **`router-rs-framework`**。协议与限制：**`docs/hosts/antigravity.md`**；跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_ANTIGRAVITY.md`**。\n\n\
+         Antigravity **App**（Desktop / Planning Mode）**`router-rs-framework`** MCP。协议：**`docs/hosts/antigravity-app.md`**；CLI hooks：**`docs/hosts/antigravity-cli.md`**；跨宿主 **`AGENTS.md`**；**`AGENTS_ANTIGRAVITY.md`**。\n\n\
          ## 会话操作（按序）\n\n\
          1. `framework_digest` — 开头一次\n\
          2. `skill_route` → 只读 `skill_path`\n\
          3. `goal_state_manage operation=start`（宏任务）\n\
          4. 验证后 `record_evidence`\n\
          5. `closeout_gate` → `goal_state_manage operation=complete`\n\n\
-         ## 门控说明\n\n\
-         - 无 CLI 级 PreToolUse 等硬阻断，但 `goal_state_manage complete` 与 `closeout_gate` 在 MCP 工具层实施硬拦截（[Antigravity Hard Block]）；其余流程防线依赖 Planning Mode。\n\n\
+         ## 门控说明（App / MCP）\n\n\
+         - **App 无 shell hook 表**；`goal_state_manage complete` 与 `closeout_gate` 在 MCP 工具层可硬拦截（[Antigravity Hard Block]）。终端 **Antigravity CLI** 使用 `.antigravitycli/hooks.json`（见 CLI 手册）。\n\n\
          ## 共享资源\n\n\
          与其它宿主共用 `artifacts/current/` 工作区。路由：`{runtime_rel}`。\n"
     );
     write_text_if_changed(path, &content)
+}
+
+fn antigravity_projection_manifest_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    let app = projection_manifest_path(roots, "antigravity-app", scope);
+    if app.exists() {
+        return app;
+    }
+    projection_manifest_path(roots, "antigravity", scope)
 }
 
 fn write_antigravity_projection_manifest(
@@ -3192,11 +3276,11 @@ fn write_antigravity_projection_manifest(
     framework_md_path: &Path,
 ) -> Result<bool, String> {
     write_json_if_changed(
-        &projection_manifest_path(roots, "antigravity", scope),
+        &antigravity_projection_manifest_path(roots, scope),
         &json!({
             "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
             "managed_by": "skill-framework",
-            "host_projection": "antigravity",
+            "host_projection": "antigravity-app",
             "scope": scope,
             "files": [
                 mcp_path.to_string_lossy(),
@@ -3397,10 +3481,17 @@ fn projection_manifest_path(
             .project_root
             .join(".claude")
             .join(FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME),
-        ("antigravity", "user") => roots
+        ("antigravity-cli", "user") => roots
+            .antigravity_cli_home_root
+            .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
+        ("antigravity-cli", _) => roots
+            .project_root
+            .join(".antigravitycli")
+            .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
+        ("antigravity-app" | "antigravity", "user") => roots
             .antigravity_home_root
             .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
-        ("antigravity", _) => roots
+        ("antigravity-app" | "antigravity", _) => roots
             .project_root
             .join(".gemini")
             .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
@@ -5023,7 +5114,7 @@ mod tests {
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         assert!(
-            err.contains("Supported tools: codex, cursor, claude, claude-desktop, antigravity, codex-app"),
+            err.contains("Supported tools: codex, cursor, claude, claude-desktop, antigravity-cli, antigravity, codex-app"),
             "{err}"
         );
         assert!(err.contains("codex-cli"), "{err}");
@@ -5042,6 +5133,7 @@ mod tests {
                 "cursor".to_string(),
                 "claude".to_string(),
                 "claude-desktop".to_string(),
+                "antigravity-cli".to_string(),
                 "antigravity".to_string(),
             ]
         );
@@ -5277,6 +5369,7 @@ mod tests {
             cursor_home_root: cursor_home.clone(),
             claude_home_root: root.join("claude"),
             antigravity_home_root: root.join("gemini"),
+            antigravity_cli_home_root: root.join("antigravitycli"),
         };
         std::env::set_var("HOME", &home);
         let outcome =

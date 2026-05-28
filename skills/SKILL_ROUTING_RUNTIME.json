@@ -45,6 +45,8 @@
       "skills/agent-swarm-orchestration/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -76,6 +78,8 @@
       "skills/gh-address-comments/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -102,6 +106,8 @@
       "skills/gh-fix-ci/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -129,6 +135,8 @@
       "skills/sentry/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -186,6 +194,8 @@
       "skills/design-md/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -215,6 +225,8 @@
       "skills/doc/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -241,6 +253,8 @@
       "skills/pdf/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -271,6 +285,8 @@
       "skills/slides/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -299,6 +315,8 @@
       "skills/primary-runtime/spreadsheets/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -331,6 +349,8 @@
       "skills/visual-review/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -368,6 +388,8 @@
       "skills/skill-framework-developer/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -400,6 +422,8 @@
       "skills/citation-management/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -427,6 +451,8 @@
       "skills/adversarial-loop/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -458,6 +484,8 @@
       "skills/plan-mode/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -495,6 +523,8 @@
       "skills/code-review-deep/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -532,6 +562,8 @@
       "skills/paper-workbench/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -569,6 +601,8 @@
       "skills/paper-writing/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -604,6 +638,8 @@
       "skills/research-workbench/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -639,6 +675,8 @@
       "skills/experiment-reproducibility/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -670,6 +708,8 @@
       "skills/math-derivation/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -701,6 +741,8 @@
       "skills/scientific-figure-plotting/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -737,6 +779,8 @@
       "skills/statistical-analysis/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -759,6 +803,8 @@
       "skills/deepinterview/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -782,6 +828,8 @@
       "skills/gitx/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -804,6 +852,8 @@
       "skills/update/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -827,6 +877,8 @@
       "skills/discussx/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -850,6 +902,8 @@
       "skills/planx/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -873,6 +927,8 @@
       "skills/implementx/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",
@@ -896,6 +952,8 @@
       "skills/verifyx/SKILL.md",
       [
         "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
         "claude-code",
         "claude-desktop",
         "codex-app",

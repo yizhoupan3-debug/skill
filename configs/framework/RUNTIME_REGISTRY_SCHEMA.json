@@ -7,6 +7,8 @@
     "cursor",
     "claude-code",
     "claude-desktop",
+    "antigravity-cli",
+    "antigravity-app",
     "antigravity"
   ],
   "projection_status_values": [
@@ -26,7 +28,8 @@
     "cursor",
     "claude",
     "claude-desktop",
-    "antigravity"
+    "antigravity",
+    "antigravity-cli"
   ],
   "framework_command_required_fields": [
     "canonical_owner",

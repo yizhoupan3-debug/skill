@@ -188,6 +188,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` | 开 | Cursor beforeSubmit：子代理/Task **继承主会话模型** 单行 nudge（registry `subagent_model_inherit_nudge`）；**仅** `0`/`false`/`off`/`no` 关闭；与 my-light / REVIEW_GATE 无关 |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` | 关 | 显式开启 Cursor `/implementx` pre-goal beforeSubmit 提示（env 名保留） |
 | `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | 开 | **默认开启**（unset 即 strict，[`router_rs_cursor_pre_goal_strict_disk_enabled`](../core/router-rs/src/router_env_flags.rs) 为 default-true）：**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真（beforeSubmit 与 Stop 均适用）；**仅** `0`/`false`/`off`/`no` 恢复历史宽松语义；pre-goal 仍可由 subagent / `reject_reason` / nag cap 等满足 |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_MODE` | strict（unset） | **仅** `lite`：启用 `review_lite_pending_cycle_keys`（`id:` only）；非 `id:` 回退 strict。`strict` 显式值与 unset 等价 |
 | `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | 开 | **仅** `0`/`false`/`off`/`no`：关闭 Cursor 可数深度 lane 在 `fork_context` **缺失**时的 `false` 推断；显式 `fork_context: true` 永不算独立证据 |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | 32，clamp 1–256 | `review_subagent_pending_cycle_keys` multiset 上限；满则拒绝新 key 且 subagentStart 不增加 open 计数 |
 | `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP` | 关 | **仅** `1`/`true`/`yes`/`on` 时：Cursor `SessionEnd` 在清当前 `session_key` 与全局 tmp 孤儿之外，对 `.cursor/hook-state/` 再做**全目录前缀清扫**（历史行为），用于单人单会话下清 session_id/cwd 漂移遗留；**默认关**以免同仓库并行 Cursor 会话的门控状态被其它会话的 SessionEnd 误删 |

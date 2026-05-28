@@ -43,17 +43,17 @@
     },
     {
       "path": ".gemini/antigravity/rules/framework.md",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity-app",
       "compare": "normalized-text"
     },
     {
       "path": ".gemini/settings.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity-app",
       "compare": "normalized-text"
     },
     {
       "path": ".gemini/mcp.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity-app",
       "compare": "normalized-text"
     },
     {

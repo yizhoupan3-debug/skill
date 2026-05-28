@@ -29,6 +29,17 @@
     {
       "id": "subagent_lane_integrity",
       "case_ids": ["lane_contract_requires_digest_and_verification"]
+    },
+    {
+      "id": "review_gate_integrity",
+      "case_ids": [
+        "review_gate_strict_dual_event_dedup",
+        "review_gate_lite_id_cycle_settle",
+        "review_gate_lite_lane_fallback_strict",
+        "review_gate_fork_true_blocks",
+        "review_gate_pending_cap_refused",
+        "review_gate_compact_without_subagent_blocked"
+      ]
     }
   ],
   "cases": [
@@ -79,6 +90,42 @@
       "failure_class": "subagent_misuse",
       "fixture": "session_supervisor lane_contract default",
       "verify": "cargo test --manifest-path core/router-rs/Cargo.toml session_supervisor"
+    },
+    {
+      "id": "review_gate_strict_dual_event_dedup",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/dual_event_same_id.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_gate_posttool_skips_duplicate_id -- --exact"
+    },
+    {
+      "id": "review_gate_lite_id_cycle_settle",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/lite_id_cycle.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_id_cycle_settle -- --exact"
+    },
+    {
+      "id": "review_gate_lite_lane_fallback_strict",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/lite_lane_fallback.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_lane_fallback_strict -- --exact"
+    },
+    {
+      "id": "review_gate_fork_true_blocks",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/fork_true_blocks.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_subagent_start_explicit_fork_true_still_blocks_gate -- --exact"
+    },
+    {
+      "id": "review_gate_pending_cap_refused",
+      "failure_class": "subagent_misuse",
+      "fixture": "tests/fixtures/review_gate/pending_cap.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_pending_cycle_keys_respects_env_cap -- --exact"
+    },
+    {
+      "id": "review_gate_compact_without_subagent_blocked",
+      "failure_class": "verification_missing",
+      "fixture": "tests/fixtures/review_gate/compact_no_subagent.json",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml main_thread_compact_review_does_not_clear_gate_without_subagent -- --exact"
     }
   ]
 }

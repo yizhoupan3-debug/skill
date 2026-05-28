@@ -499,6 +499,9 @@ pub struct ReviewGateState {
     /// 武装 review gate 后，每次 qualifying subagent **start**（PostToolUse / subagentStart）压入一条 cycle key（multiset）；qualifying **stop** 命中时**移除一条**同 key 记录，**仅当**本队列为空时升相位 3 并记 `subagent_stop_count`。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_subagent_pending_cycle_keys: Vec<String>,
+    /// **review-lite** only (`id:` keys); strict path must not write here. Satisfaction: empty + phase≥3.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub review_lite_pending_cycle_keys: Vec<String>,
     /// Set when multiset push refused at cap (operator-visible on Stop).
     #[serde(default)]
     pub review_pending_cap_refused: bool,
@@ -1140,6 +1143,7 @@ fn review_subagent_live_evidence_seen(state: &ReviewGateState) -> bool {
     state.subagent_start_count > 0
         || state.subagent_stop_count > 0
         || !state.review_subagent_pending_cycle_keys.is_empty()
+        || !state.review_lite_pending_cycle_keys.is_empty()
 }
 
 /// My execution-zone commands arm goal continuity gates (`/implementx`, `/verifyx`).
@@ -1712,6 +1716,7 @@ fn empty_state() -> ReviewGateState {
         review_subagent_cycle_open: false,
         review_subagent_cycle_key: None,
         review_subagent_pending_cycle_keys: Vec::new(),
+        review_lite_pending_cycle_keys: Vec::new(),
         review_pending_cap_refused: false,
         review_pending_last_pushed_at: None,
         updated_at: None,
@@ -1719,8 +1724,13 @@ fn empty_state() -> ReviewGateState {
 }
 
 fn sync_review_cycle_legacy_fields(state: &mut ReviewGateState) {
-    state.review_subagent_cycle_open = !state.review_subagent_pending_cycle_keys.is_empty();
-    state.review_subagent_cycle_key = state.review_subagent_pending_cycle_keys.last().cloned();
+    state.review_subagent_cycle_open = !state.review_subagent_pending_cycle_keys.is_empty()
+        || !state.review_lite_pending_cycle_keys.is_empty();
+    state.review_subagent_cycle_key = state
+        .review_subagent_pending_cycle_keys
+        .last()
+        .or_else(|| state.review_lite_pending_cycle_keys.last())
+        .cloned();
 }
 
 fn hydrate_legacy_review_cycles_into_pending(state: &mut ReviewGateState) {
@@ -1936,9 +1946,19 @@ fn review_hard_armed(state: &ReviewGateState) -> bool {
     review_gate_armed(state.review_required, state.review_override)
 }
 
-/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3 且 pending multiset 已排空）。
+/// Stop：`review` 场景下独立 subagent 证据是否满足（phase≥3 且 pending 已排空；strict/lite 分轨）。
 fn review_subagent_evidence_satisfied(state: &ReviewGateState) -> bool {
-    state.phase >= 3 && state.review_subagent_pending_cycle_keys.is_empty()
+    if state.phase < 3 {
+        return false;
+    }
+    match crate::review_gate_engine::cursor_review_gate_mode() {
+        crate::review_gate_engine::CursorReviewGateMode::Lite => {
+            state.review_lite_pending_cycle_keys.is_empty()
+        }
+        crate::review_gate_engine::CursorReviewGateMode::Strict => {
+            state.review_subagent_pending_cycle_keys.is_empty()
+        }
+    }
 }
 
 fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
@@ -1948,7 +1968,9 @@ fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
 /// Compact bump requires live cycle progress beyond orphan `subagent_start_count` (stale hygiene may clear pending).
 fn compact_bump_review_evidence_seen(state: &ReviewGateState) -> bool {
     review_subagent_live_evidence_seen(state)
-        && (state.subagent_stop_count > 0 || !state.review_subagent_pending_cycle_keys.is_empty())
+        && (state.subagent_stop_count > 0
+            || !state.review_subagent_pending_cycle_keys.is_empty()
+            || !state.review_lite_pending_cycle_keys.is_empty())
 }
 
 /// 主线程 compact findings **不得**在无可数深度子代理证据时单独升 phase 3 清 REVIEW_GATE（P0-4 / wave-2）。
@@ -1962,7 +1984,9 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
     if !compact_bump_review_evidence_seen(state) {
         return false;
     }
-    if !state.review_subagent_pending_cycle_keys.is_empty() {
+    if !state.review_subagent_pending_cycle_keys.is_empty()
+        || !state.review_lite_pending_cycle_keys.is_empty()
+    {
         return false;
     }
     if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
@@ -2405,6 +2429,7 @@ fn reset_review_cycle_progress(state: &mut ReviewGateState, preserve_session_gua
         state.review_pending_cap_refused = false;
     }
     state.review_subagent_pending_cycle_keys.clear();
+    state.review_lite_pending_cycle_keys.clear();
     state.review_pending_last_pushed_at = None;
     state.review_followup_count = 0;
     sync_review_cycle_legacy_fields(state);
@@ -2570,22 +2595,27 @@ fn try_settle_review_subagent_cycle(
     let Some(k) = cycle_key.as_ref() else {
         return false;
     };
-    if !state
-        .review_subagent_pending_cycle_keys
-        .iter()
-        .any(|p| p == k)
-    {
+    let lite = crate::review_gate_engine::cursor_review_gate_mode()
+        == crate::review_gate_engine::CursorReviewGateMode::Lite
+        && crate::review_gate_engine::cycle_key_eligible_for_lite(k);
+    let pending = if lite {
+        &mut state.review_lite_pending_cycle_keys
+    } else {
+        &mut state.review_subagent_pending_cycle_keys
+    };
+    if !pending.iter().any(|p| p == k) {
         return false;
     }
-    if let Some(pos) = state
-        .review_subagent_pending_cycle_keys
-        .iter()
-        .position(|p| p == k)
-    {
-        state.review_subagent_pending_cycle_keys.remove(pos);
+    if let Some(pos) = pending.iter().position(|p| p == k) {
+        pending.remove(pos);
     }
     sync_review_cycle_legacy_fields(state);
-    if state.review_subagent_pending_cycle_keys.is_empty() {
+    let pending_empty = if lite {
+        state.review_lite_pending_cycle_keys.is_empty()
+    } else {
+        state.review_subagent_pending_cycle_keys.is_empty()
+    };
+    if pending_empty {
         state.review_pending_cap_refused = false;
         bump_phase(state, 3);
         state.subagent_stop_count = state.subagent_stop_count.saturating_add(1);
@@ -2593,6 +2623,31 @@ fn try_settle_review_subagent_cycle(
         clear_review_gate_escalation_counters(state);
     }
     true
+}
+
+fn push_review_lite_pending_cycle_key(
+    state: &mut ReviewGateState,
+    k: String,
+    from_posttool: bool,
+) -> PendingCyclePush {
+    if from_posttool && state.review_lite_pending_cycle_keys.contains(&k) {
+        return PendingCyclePush::AlreadyPresent;
+    }
+    if !from_posttool
+        && k.starts_with("id:")
+        && state.review_lite_pending_cycle_keys.contains(&k)
+    {
+        return PendingCyclePush::AlreadyPresent;
+    }
+    let max = crate::router_env_flags::router_rs_cursor_review_pending_cycle_max();
+    if state.review_lite_pending_cycle_keys.len() >= max {
+        eprintln!("[router-rs] review_lite_pending_at_cap_refused cap={max} key={k}");
+        state.review_pending_cap_refused = true;
+        return PendingCyclePush::AtCap;
+    }
+    state.review_lite_pending_cycle_keys.push(k);
+    state.review_pending_last_pushed_at = Some(Utc::now().to_rfc3339());
+    PendingCyclePush::NewlyInserted
 }
 
 fn push_review_pending_cycle_key(
@@ -2603,6 +2658,14 @@ fn push_review_pending_cycle_key(
     let Some(k) = cycle_key else {
         return PendingCyclePush::AtCap;
     };
+    if crate::review_gate_engine::cursor_review_gate_mode()
+        == crate::review_gate_engine::CursorReviewGateMode::Lite
+    {
+        if crate::review_gate_engine::cycle_key_eligible_for_lite(&k) {
+            return push_review_lite_pending_cycle_key(state, k, from_posttool);
+        }
+        eprintln!("[router-rs] review_lite_fallback_strict reason=no_stable_id key={k}");
+    }
     if from_posttool && state.review_subagent_pending_cycle_keys.contains(&k) {
         return PendingCyclePush::AlreadyPresent;
     }
@@ -2660,6 +2723,7 @@ fn prune_stale_review_pending_cycle_keys(state: &mut ReviewGateState) {
                 "[router-rs] cleared review_subagent_pending_cycle_keys (no open subagents, stale pending)"
             );
             state.review_subagent_pending_cycle_keys.clear();
+            state.review_lite_pending_cycle_keys.clear();
             sync_review_cycle_legacy_fields(state);
         }
         return;
@@ -2675,6 +2739,7 @@ fn prune_stale_review_pending_cycle_keys(state: &mut ReviewGateState) {
         return;
     }
     state.review_subagent_pending_cycle_keys.clear();
+    state.review_lite_pending_cycle_keys.clear();
     sync_review_cycle_legacy_fields(state);
 }
 
@@ -2682,6 +2747,7 @@ fn apply_subagent_stale_hygiene(state: &mut ReviewGateState) -> bool {
     let stale_reset = reset_stale_active_subagents(state);
     if stale_reset {
         state.review_subagent_pending_cycle_keys.clear();
+        state.review_lite_pending_cycle_keys.clear();
         state.subagent_start_count = 0;
         state.subagent_stop_count = 0;
         if state.phase >= 2 {

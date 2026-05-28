@@ -44,15 +44,15 @@
 
 ### 跨宿主 REVIEW_GATE 差异（operator）
 
-| 能力 | Cursor | Codex CLI | Claude Code | Claude Desktop / codex-app | Antigravity |
-|------|--------|-----------|-------------|----------------------------|-------------|
-| 可数深度 lane 真源 | `deep_gate_lanes` | `deep_gate_lanes` | `claude_reviewer_lanes` | 无 hook 面 | 物理 `review-lanes/` 目录 |
-| subagentStart/Stop multiset | ✓ | ✗ | ✗ | ✗ | ✗ |
-| wave-2 compact 清门（Stop tail + 可数 subagent；非 `afterAgentResponse`） | ✓ | ✓（部分） | ✗ | ✗ | ✗（需物理文件） |
-| `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✓ | ✗ | ✗ | ✗ |
-| Stop 硬短码 | `router-rs REVIEW_GATE incomplete` | `CODEX_REVIEW_GATE` | `CLAUDE_REVIEW_GATE` | — | `[Antigravity Hard Block]` |
-| Review gate disable env | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` | `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | — | 无（`my-light` 控制） |
-| Goal/RFV hook 续跑 | ✗ | ✗ | ✗ | ✗ | ✗ |
+| 能力 | Cursor | Codex CLI | Claude Code | Claude Desktop / codex-app | Antigravity CLI | Antigravity App |
+|------|--------|-----------|-------------|----------------------------|-----------------|-----------------|
+| 可数深度 lane 真源 | `deep_gate_lanes` | `deep_gate_lanes` | `claude_reviewer_lanes` | 无 hook 面 | `deep_gate_lanes`（PostTool+Stop） | 物理 `review-lanes/` |
+| subagentStart/Stop multiset | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| wave-2 compact 清门 | ✓ | ✓（部分） | ✗ | ✗ | ✓（Codex 式） | ✗（需物理文件） |
+| `reject_reason` / `rg_clear` Stop 清门 | ✓ | ✓ | ✗ | ✗ | ✓（CLI env） | ✗ |
+| Stop 硬短码 | `router-rs REVIEW_GATE incomplete` | `CODEX_REVIEW_GATE` | `CLAUDE_REVIEW_GATE` | — | `ANTIGRAVITY_CLI_REVIEW_GATE` | `[Antigravity Hard Block]` |
+| Review gate disable env | `ROUTER_RS_CURSOR_*` | `ROUTER_RS_CODEX_*` | `ROUTER_RS_CLAUDE_*` | — | `ROUTER_RS_ANTIGRAVITY_CLI_*` | `my-light` / MCP |
+| Goal/RFV hook 续跑 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
 细节见 [`harness_architecture.md`](harness_architecture.md) §5.0 与各 [`docs/hosts/*.md`](hosts/)。
 
@@ -69,7 +69,7 @@
 | 宿主安装/入口 | 闭集 id 来自 `host_targets.supported` | `install_tool`、`host_entrypoints` |
 | L4 / L5 边界 | L4 只做 argv/stdin/超时/路径转发 | `.mdc`、`AGENTS.md` 投影形状不同 |
 
-**闭集宿主**：`claude-code`（`router-rs claude hook`）、`claude-desktop`（MCP，`router-rs claude-desktop agent`）、`antigravity`（Planning Mode + `.gemini/` 投影）。操作手册：[`cursor.md`](hosts/cursor.md)、[`codex-cli.md`](hosts/codex-cli.md)、[`claude.md`](hosts/claude.md)、[`claude-desktop.md`](hosts/claude-desktop.md)、[`antigravity.md`](hosts/antigravity.md)。
+**闭集宿主**：`claude-code`、`claude-desktop`（MCP）、`antigravity-cli`（hooks）、`antigravity-app`（MCP；`antigravity` = app 别名）。手册：[`cursor.md`](hosts/cursor.md)、[`codex-cli.md`](hosts/codex-cli.md)、[`claude.md`](hosts/claude.md)、[`claude-desktop.md`](hosts/claude-desktop.md)、[`antigravity-cli.md`](hosts/antigravity-cli.md)、[`antigravity-app.md`](hosts/antigravity-app.md)、索引 [`antigravity.md`](hosts/antigravity.md)。
 
 **Cursor 投影 scope**：`framework.mdc` 仅 **user** scope（`~/.cursor/rules/`）；项目保留 `.cursor/hooks.json`。
 

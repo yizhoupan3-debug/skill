@@ -187,7 +187,7 @@ pub fn run_antigravity_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), Stri
     let repo_root = resolve_repo_root_arg(repo_root_arg)?;
     let stdin = io::stdin();
     let stdout = io::stdout();
-    run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, "antigravity")
+    run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, "antigravity-app")
 }
 
 fn run_mcp_stdio<R: BufRead, W: Write>(
@@ -629,7 +629,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
     }
 
     // Antigravity Host hard interception rules
-    if host_id == "antigravity" {
+    if host_id == "antigravity-app" || host_id == "antigravity" {
         let task_id_override = arguments
             .get("task_id")
             .and_then(Value::as_str)
@@ -695,7 +695,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
 
-    if host_id == "antigravity" && tool_name == "closeout_gate" {
+    if (host_id == "antigravity-app" || host_id == "antigravity") && tool_name == "closeout_gate" {
         if let Ok(ref content) = result {
             if content.contains("[Closeout Gate] ADVISORY:") {
                 let task_id_override = arguments
@@ -1038,8 +1038,8 @@ pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &
     let task_view = resolve_task_view(repo_root, task_id_override);
     let mut findings: Vec<String> = Vec::new();
 
-    let host_name = if host_id == "antigravity" {
-        "Antigravity"
+    let host_name = if host_id == "antigravity-app" || host_id == "antigravity" {
+        "Antigravity App"
     } else {
         "Claude Desktop"
     };
@@ -1292,8 +1292,12 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, hos
             )
         }
         "review_gate" => {
-            let host_name = if host_id == "antigravity" { "Antigravity" } else { "Claude Desktop" };
-            let gate_mode = if host_id == "antigravity" {
+            let host_name = if host_id == "antigravity-app" || host_id == "antigravity" {
+                "Antigravity App"
+            } else {
+                "Claude Desktop"
+            };
+            let gate_mode = if host_id == "antigravity-app" || host_id == "antigravity" {
                 "Antigravity review gate is physically hard-blocked — unsatisfied closeout will block goal mark complete."
             } else {
                 "Desktop review gate is advisory only — MCP cannot hard-block Stop."

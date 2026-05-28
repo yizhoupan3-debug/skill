@@ -15,6 +15,8 @@
       "cursor",
       "claude-code",
       "claude-desktop",
+      "antigravity-cli",
+      "antigravity-app",
       "antigravity"
     ],
     "shared_system_source": "skills",
@@ -64,11 +66,29 @@
           ".claude/CLAUDE.md"
         ]
       },
+      "antigravity-cli": {
+        "install_tool": "antigravity-cli",
+        "projection_status": "implemented",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": "AGENTS_ANTIGRAVITY.md"
+      },
+      "antigravity-app": {
+        "install_tool": "antigravity",
+        "projection_status": "implemented",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": [
+          "AGENTS_ANTIGRAVITY.md",
+          ".gemini/antigravity/rules/framework.md"
+        ]
+      },
       "antigravity": {
         "install_tool": "antigravity",
         "projection_status": "implemented",
         "installable": true,
         "default_framework_command": "implementx",
+        "deprecated_alias_of": "antigravity-app",
         "host_entrypoints": [
           "AGENTS_ANTIGRAVITY.md",
           ".gemini/antigravity/rules/framework.md"
@@ -95,6 +115,8 @@
       "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据；Task 省略 model、继承主会话，禁止默认 claude/sonnet。细则 skills/code-review-deep/SKILL.md",
       "codex-cli": "配对审稿（Codex）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
       "claude-code": "配对审稿（Claude Code）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "antigravity-cli": "配对审稿（Antigravity CLI）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "antigravity-app": "配对审稿（Antigravity App）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
       "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md"
     },
     "spawn_first_includes_model_inherit_by_host": {
@@ -142,6 +164,8 @@
         "cursor": "/discussx",
         "claude-code": "/discussx",
         "claude-desktop": "/discussx",
+        "antigravity-cli": "/discussx",
+        "antigravity-app": "/discussx",
         "antigravity": "/discussx"
       },
       "lineage": {
@@ -157,6 +181,8 @@
         "cursor": "/planx",
         "claude-code": "/planx",
         "claude-desktop": "/planx",
+        "antigravity-cli": "/planx",
+        "antigravity-app": "/planx",
         "antigravity": "/planx"
       }
     },
@@ -168,6 +194,8 @@
         "cursor": "/implementx",
         "claude-code": "/implementx",
         "claude-desktop": "/implementx",
+        "antigravity-cli": "/implementx",
+        "antigravity-app": "/implementx",
         "antigravity": "/implementx"
       },
       "implementation_bar": [
@@ -193,6 +221,8 @@
         "cursor": "/verifyx",
         "claude-code": "/verifyx",
         "claude-desktop": "/verifyx",
+        "antigravity-cli": "/verifyx",
+        "antigravity-app": "/verifyx",
         "antigravity": "/verifyx"
       }
     },
@@ -204,6 +234,8 @@
         "cursor": "/team",
         "claude-code": "/team",
         "claude-desktop": "/team",
+        "antigravity-cli": "/team",
+        "antigravity-app": "/team",
         "antigravity": "/team"
       },
       "interaction_invariants": {
@@ -253,6 +285,8 @@
         "cursor": "/deepinterview",
         "claude-code": "/deepinterview",
         "claude-desktop": "/deepinterview",
+        "antigravity-cli": "/deepinterview",
+        "antigravity-app": "/deepinterview",
         "antigravity": "/deepinterview"
       },
       "interaction_invariants": {
@@ -275,6 +309,8 @@
         "cursor": "/gitx",
         "claude-code": "/gitx",
         "claude-desktop": "/gitx",
+        "antigravity-cli": "/gitx",
+        "antigravity-app": "/gitx",
         "antigravity": "/gitx"
       },
       "interaction_invariants": {
@@ -298,6 +334,8 @@
         "cursor": "/update",
         "claude-code": "/update",
         "claude-desktop": "/update",
+        "antigravity-cli": "/update",
+        "antigravity-app": "/update",
         "antigravity": "/update"
       },
       "interaction_invariants": {
@@ -547,6 +585,99 @@
         }
       ]
     },
+    "antigravity-cli": {
+      "profile_id": "antigravity_cli_profile",
+      "host_id": "antigravity-cli",
+      "transport": "antigravity-cli",
+      "context_files": [
+        "AGENTS_ANTIGRAVITY.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "project",
+          "relative": ".antigravitycli/hooks.json"
+        },
+        {
+          "scope": "user",
+          "host_root": "antigravity-cli",
+          "relative": "hooks.json"
+        }
+      ],
+      "session_supervisor_driver": "unsupported",
+      "resume_command_examples": [
+        "Continue in the same Antigravity CLI session"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
+        "framework_alias_entrypoints",
+        "hard_gate_hooks"
+      ]
+    },
+    "antigravity-app": {
+      "profile_id": "antigravity_app_profile",
+      "host_id": "antigravity-app",
+      "transport": "mcp-stdio",
+      "context_files": [
+        "AGENTS_ANTIGRAVITY.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "project",
+          "relative": ".gemini/settings.json"
+        },
+        {
+          "scope": "user",
+          "host_root": "antigravity-app",
+          "relative": "settings.json"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "project",
+          "relative": ".gemini/mcp.json"
+        },
+        {
+          "scope": "user",
+          "host_root": "antigravity-app",
+          "relative": "mcp.json"
+        }
+      ],
+      "session_supervisor_driver": "unsupported",
+      "resume_command_examples": [
+        "Continue in the same Antigravity app thread"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
+        "framework_alias_entrypoints"
+      ],
+      "harness_capability_exceptions": [
+        {
+          "cap": "closeout_evidence_hooks",
+          "status": "unsupported",
+          "rationale": "Antigravity app MCP transport cannot install CLI-level PreToolUse hard gates; closeout verification is hard-blocked at the MCP tool execution level (goal_state_manage complete & closeout_gate)."
+        },
+        {
+          "cap": "review_gate_router_observation",
+          "status": "unsupported",
+          "rationale": "Antigravity app has no subagent Start/Stop hook surface equivalent to Claude Code; use antigravity-cli for hook-level REVIEW_GATE semantics."
+        }
+      ]
+    },
     "antigravity": {
       "profile_id": "antigravity_profile",
       "host_id": "antigravity",
@@ -595,12 +726,12 @@
         {
           "cap": "closeout_evidence_hooks",
           "status": "unsupported",
-          "rationale": "Antigravity MCP transport cannot install CLI-level PreToolUse hard gates; however, closeout verification is hard-blocked at the MCP tool execution level (goal_state_manage complete & closeout_gate)."
+          "rationale": "Deprecated alias host (antigravity-app): MCP transport cannot install CLI-level PreToolUse hard gates; closeout is hard-blocked at MCP tool execution level."
         },
         {
           "cap": "review_gate_router_observation",
           "status": "unsupported",
-          "rationale": "Antigravity has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
+          "rationale": "Deprecated alias host (antigravity-app): no subagent Start/Stop hook surface; use antigravity-cli for hook-level REVIEW_GATE semantics."
         }
       ]
     }

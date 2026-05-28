@@ -1,0 +1,311 @@
+use crate::codex_hooks::{
+    build_hook_binary_preamble, hooks_install_acquire_lock, hooks_install_serialize_pretty,
+    hooks_install_sha256_hex, hooks_install_write_atomic, merge_lifecycle_install_hooks_json,
+    read_hook_stdin_payload, run_codex_lifecycle_context_hook_for_state_dir,
+    run_codex_pre_tool_use_hook, InstallMode, INSTALL_LIFECYCLE_EVENTS,
+    ROUTER_RS_HOOK_PROJECTION_VERSION,
+};
+use crate::router_rs_observation::{attach_router_rs_observation, HookObservationHost};
+use chrono::Utc;
+use serde_json::{json, Value};
+use std::collections::BTreeMap;
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+pub const ANTIGRAVITY_CLI_HOOKS_PATH: &str = ".antigravitycli/hooks.json";
+pub const INSTALL_EVENTS: [&str; 5] = INSTALL_LIFECYCLE_EVENTS;
+const ANTIGRAVITY_CLI_HOOK_AUTHORITY: &str = "rust-antigravity-cli-hooks";
+const LIFECYCLE_STATE_DIR_LEAF: &str = ".antigravitycli";
+
+pub fn resolve_antigravity_cli_home(arg: Option<&Path>) -> Result<PathBuf, String> {
+    if let Some(candidate) = arg {
+        let absolute = if candidate.is_absolute() {
+            candidate.to_path_buf()
+        } else {
+            env::current_dir()
+                .map_err(|err| format!("Could not resolve current directory: {err}"))?
+                .join(candidate)
+        };
+        fs::create_dir_all(&absolute).map_err(|err| {
+            format!(
+                "Failed to create antigravity cli home {}: {err}",
+                absolute.display()
+            )
+        })?;
+        return absolute.canonicalize().map_err(|err| {
+            format!(
+                "Failed to canonicalize antigravity cli home {}: {err}",
+                absolute.display()
+            )
+        });
+    }
+    if let Ok(from_env) = env::var("ANTIGRAVITY_CLI_HOME") {
+        if !from_env.trim().is_empty() {
+            return resolve_antigravity_cli_home(Some(Path::new(from_env.trim())));
+        }
+    }
+    let home = env::var("HOME")
+        .map_err(|_| "ANTIGRAVITY_CLI_HOME unset and HOME unavailable".to_string())?;
+    let default_home = Path::new(&home).join(".antigravitycli");
+    resolve_antigravity_cli_home(Some(default_home.as_path()))
+}
+
+pub fn install_antigravity_cli_hooks(
+    antigravity_cli_home: &Path,
+    repo_root: &Path,
+    mode: InstallMode,
+) -> Result<Value, String> {
+    let apply = matches!(mode, InstallMode::Apply);
+    let resolved_home = resolve_antigravity_cli_home(Some(antigravity_cli_home))?;
+    let resolved_repo_root = if repo_root.is_absolute() {
+        repo_root.to_path_buf()
+    } else {
+        env::current_dir()
+            .map_err(|err| format!("Could not resolve current directory: {err}"))?
+            .join(repo_root)
+    };
+    let resolved_repo_root = resolved_repo_root.canonicalize().map_err(|err| {
+        format!(
+            "Failed to canonicalize repo root {}: {err}",
+            resolved_repo_root.display()
+        )
+    })?;
+    if !resolved_repo_root.exists() {
+        return Err(format!(
+            "Repo root does not exist: {}",
+            resolved_repo_root.display()
+        ));
+    }
+
+    let hooks_path = resolved_home.join("hooks.json");
+    let lifecycle_command = build_antigravity_lifecycle_hook_command();
+    let hook_commands = INSTALL_EVENTS
+        .iter()
+        .map(|event| ((*event).to_string(), lifecycle_command.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let command_digest =
+        hooks_install_sha256_hex(&hooks_install_serialize_pretty(&json!(hook_commands))?);
+    let _install_guard = if apply {
+        Some(hooks_install_acquire_lock(&resolved_home)?)
+    } else {
+        None
+    };
+
+    let hooks_existed = hooks_path.exists();
+    if apply
+        && hooks_existed
+        && fs::symlink_metadata(&hooks_path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+    {
+        return Err(format!(
+            "Refusing to update symlinked hooks.json: {}",
+            hooks_path.display()
+        ));
+    }
+    let hooks_text = fs::read_to_string(&hooks_path).ok();
+    let hooks_value = if let Some(text) = hooks_text.as_deref() {
+        Some(
+            serde_json::from_str::<Value>(text)
+                .map_err(|err| format!("Failed to parse {}: {err}", hooks_path.display()))?,
+        )
+    } else {
+        None
+    };
+    let (merged_hooks, hooks_stat) =
+        merge_lifecycle_install_hooks_json(hooks_value, &hook_commands, &INSTALL_EVENTS)?;
+    let hooks_serialized = hooks_install_serialize_pretty(&merged_hooks)?;
+    let hooks_changed = hooks_text.as_deref() != Some(hooks_serialized.as_str());
+    let mut backup_path: Option<PathBuf> = None;
+
+    if apply && hooks_changed {
+        if let Some(parent) = hooks_path.parent() {
+            fs::create_dir_all(parent).map_err(|err| {
+                format!(
+                    "Failed to create hooks parent directory {}: {err}",
+                    parent.display()
+                )
+            })?;
+        }
+        if hooks_existed {
+            let backup = PathBuf::from(format!(
+                "{}.bak.{}",
+                hooks_path.display(),
+                Utc::now().format("%Y%m%d%H%M%S")
+            ));
+            fs::copy(&hooks_path, &backup).map_err(|err| {
+                format!(
+                    "Failed to backup hooks {} -> {}: {err}",
+                    hooks_path.display(),
+                    backup.display()
+                )
+            })?;
+            backup_path = Some(backup);
+        }
+        let write_result = hooks_install_write_atomic(&hooks_path, &hooks_serialized);
+        if let Err(err) = write_result {
+            if let Some(backup) = backup_path.as_ref() {
+                let _ = fs::copy(backup, &hooks_path);
+            }
+            return Err(err);
+        }
+    }
+
+    if apply {
+        let manifest = json!({
+            "projection_version": ROUTER_RS_HOOK_PROJECTION_VERSION,
+            "command_digest": command_digest,
+        });
+        let manifest_text = hooks_install_serialize_pretty(&manifest)?;
+        hooks_install_write_atomic(
+            &resolved_home.join(".router-rs-install.manifest.json"),
+            &manifest_text,
+        )?;
+    }
+
+    Ok(json!({
+        "schema_version": "router-rs-antigravity-cli-install-hooks-v1",
+        "projection_version": ROUTER_RS_HOOK_PROJECTION_VERSION,
+        "command_digest": command_digest,
+        "authority": ANTIGRAVITY_CLI_HOOK_AUTHORITY,
+        "antigravity_cli_home": resolved_home.to_string_lossy().into_owned(),
+        "repo_root": resolved_repo_root.to_string_lossy().into_owned(),
+        "project_hooks_path": ANTIGRAVITY_CLI_HOOKS_PATH,
+        "applied": apply,
+        "hooks_json": {
+            "path": hooks_path.to_string_lossy().into_owned(),
+            "status": install_mode_status(hooks_stat.status, mode),
+            "events": INSTALL_EVENTS,
+            "preserved_existing_entries": hooks_stat.preserved_existing_entries,
+            "added_entries": hooks_stat.added_entries,
+            "removed_legacy_entries": hooks_stat.removed_legacy_entries,
+            "backup_path": backup_path.map(|v| v.to_string_lossy().into_owned()),
+        },
+        "hook_commands": hook_commands,
+    }))
+}
+
+fn install_mode_status(status: &'static str, mode: InstallMode) -> &'static str {
+    match mode {
+        InstallMode::Apply => status,
+        InstallMode::Check => match status {
+            "created" => "would-create",
+            "updated" => "would-update",
+            "unchanged" => "would-leave-unchanged",
+            _ => "would-update",
+        },
+    }
+}
+
+pub fn build_antigravity_lifecycle_hook_command() -> String {
+    let mut command = build_hook_binary_preamble(
+        "ANTIGRAVITY_CLI_PROJECT_ROOT",
+        "ANTIGRAVITY_CLI_PROJECT_ROOT",
+        "printf '%s\\n' '{\"decision\":\"block\",\"message\":\"router-rs binary unavailable for Antigravity CLI hook\",\"reason\":\"router-rs binary unavailable; fail-closed instead of silently bypassing critical hook enforcement\"}'; exit 1",
+    );
+    command.push_str(
+        "\"$RS_BIN\" host antigravity-cli hook lifecycle-context --repo-root \"$ANTIGRAVITY_CLI_PROJECT_ROOT\"",
+    );
+    command
+}
+
+pub fn run_antigravity_cli_hook(command: &str, repo_root: &Path) -> Result<Option<Value>, String> {
+    let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(repo_root);
+    let canonical = canonical_antigravity_cli_hook_command(command)?;
+    let payload = match read_hook_stdin_payload() {
+        Ok(payload) => payload,
+        Err(err) if canonical == "lifecycle-context" => {
+            return Ok(attach_antigravity_hook_observation(Some(lifecycle_input_error(
+                &format!("Antigravity CLI lifecycle hook input JSON invalid: {err}"),
+            ))));
+        }
+        Err(err) => return Err(err),
+    };
+    let out = match canonical {
+        "lifecycle-context" => run_codex_lifecycle_context_hook_for_state_dir(
+            repo_root,
+            &payload,
+            LIFECYCLE_STATE_DIR_LEAF,
+        )?,
+        "pre-tool-use" => run_codex_pre_tool_use_hook(repo_root, &payload)?,
+        _ => return Err(format!("Unsupported Antigravity CLI hook command: {command}")),
+    };
+    Ok(attach_antigravity_hook_observation(out))
+}
+
+fn canonical_antigravity_cli_hook_command(command: &str) -> Result<&'static str, String> {
+    match command.trim().to_ascii_lowercase().as_str() {
+        "lifecycle-context" | "review-subagent-gate" => Ok("lifecycle-context"),
+        "pre-tool-use" | "pretooluse" => Ok("pre-tool-use"),
+        "sessionstart" | "userpromptsubmit" | "posttooluse" | "stop" => Ok("lifecycle-context"),
+        other => Err(format!("Unsupported Antigravity CLI hook command: {other}")),
+    }
+}
+
+fn lifecycle_input_error(message: &str) -> Value {
+    json!({
+        "decision": "block",
+        "message": message,
+        "reason": message,
+        "hookSpecificOutput": {
+            "hookEventName": "AntigravityCliLifecycleContext",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": message,
+        },
+    })
+}
+
+fn attach_antigravity_hook_observation(mut value: Option<Value>) -> Option<Value> {
+    if let Some(ref mut v) = value {
+        attach_router_rs_observation(v, HookObservationHost::Codex);
+    }
+    value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static INSTALL_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn fresh_home(label: &str) -> PathBuf {
+        let base = std::env::temp_dir().join(format!(
+            "antigravity-cli-hooks-{}-{}-{}",
+            label,
+            std::process::id(),
+            INSTALL_SEQ.fetch_add(1, Ordering::SeqCst)
+        ));
+        fs::create_dir_all(&base).unwrap();
+        base
+    }
+
+    #[test]
+    fn install_merge_is_idempotent() {
+        let home = fresh_home("idempotent");
+        let payload1 =
+            install_antigravity_cli_hooks(&home, Path::new("."), InstallMode::Apply).unwrap();
+        let text1 = fs::read_to_string(home.join("hooks.json")).unwrap();
+        let payload2 =
+            install_antigravity_cli_hooks(&home, Path::new("."), InstallMode::Apply).unwrap();
+        let text2 = fs::read_to_string(home.join("hooks.json")).unwrap();
+        assert_eq!(text1, text2);
+        assert_eq!(payload1["hooks_json"]["status"].as_str(), Some("created"));
+        assert_eq!(
+            payload2["hooks_json"]["status"].as_str(),
+            Some("unchanged")
+        );
+        assert_eq!(
+            payload2["hooks_json"]["added_entries"].as_u64(),
+            Some(0)
+        );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn lifecycle_command_uses_host_antigravity_cli() {
+        let cmd = build_antigravity_lifecycle_hook_command();
+        assert!(cmd.contains("host antigravity-cli hook lifecycle-context"));
+    }
+}

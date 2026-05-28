@@ -7,7 +7,9 @@
     "codex-app": "**Default lifecycle: My** (same chain). Goal/RFV via MCP stdio tools + manual boards; no CLI Stop hook bundle on this transport.",
     "claude-code": "**Default lifecycle: My** (same chain). Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest (review/closeout advisories only).",
     "claude-desktop": "**Default lifecycle: My** (same chain). Goal drive via MCP stdio; MCP advisory only — no PreToolUse/Stop hard gate.",
-    "antigravity": "**Default lifecycle: My** (same chain). Goal drive via MCP stdio; hard closeout gate is enforced at MCP tool level (no CLI-level PreToolUse/Stop hooks)."
+    "antigravity-cli": "**Default lifecycle: My** (same chain). Goal/RFV via stdio + manual boards; CLI hooks under `.antigravitycli/` (`router-rs host antigravity-cli hook …`). REVIEW_GATE uses PostToolUse + Stop (Codex-style), not Cursor multiset.",
+    "antigravity-app": "**Default lifecycle: My** (same chain). Goal drive via MCP stdio; hard closeout gate at MCP tool level (`goal_state_manage` / `closeout_gate`). No shell hook bundle on this transport.",
+    "antigravity": "**Deprecated alias of antigravity-app.** Same MCP lifecycle as `antigravity-app`; prefer `install --to antigravity-app`."
   },
   "review_findings_only_paragraph": "**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply at skill layer; under `my-light`, Cursor/Codex hooks do not hard-block Stop on REVIEW_GATE or inject spawn-first nudge. See `skills/code-review-deep/SKILL.md`."
 }

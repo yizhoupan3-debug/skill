@@ -1,6 +1,25 @@
 use crate::hook_common::{has_override, is_framework_goal_entry_prompt, is_review_prompt};
 use serde_json::Value;
 
+/// Cursor `REVIEW_GATE` evidence path: multiset (strict) vs id-only pending vec (lite).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorReviewGateMode {
+    Strict,
+    Lite,
+}
+
+/// `ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` enables lite; unset or `strict` → strict.
+pub fn cursor_review_gate_mode() -> CursorReviewGateMode {
+    match std::env::var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") {
+        Ok(v) if v.trim().eq_ignore_ascii_case("lite") => CursorReviewGateMode::Lite,
+        _ => CursorReviewGateMode::Strict,
+    }
+}
+
+pub fn cycle_key_eligible_for_lite(key: &str) -> bool {
+    key.starts_with("id:")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ReviewGateFacts {
     pub review_required: bool,

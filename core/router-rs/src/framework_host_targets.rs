@@ -212,7 +212,7 @@ mod tests {
             assert!(
                 matches!(
                     tool.as_str(),
-                    "codex" | "cursor" | "claude" | "claude-desktop" | "antigravity"
+                    "codex" | "cursor" | "claude" | "claude-desktop" | "antigravity" | "antigravity-cli"
                 ),
                 "unexpected mapping {host_id} -> {tool}"
             );

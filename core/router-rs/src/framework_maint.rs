@@ -428,6 +428,7 @@ fn verify_antigravity_projection(repo_root: &Path) -> Result<(), String> {
         None,
         None,
         None,
+        None,
     )?;
 
     let mut last_error = None;
@@ -483,9 +484,13 @@ fn verify_antigravity_projection_scope(
 
     let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
     let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("antigravity") {
+    let host_projection = manifest_json
+        .get("host_projection")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if host_projection != "antigravity-app" && host_projection != "antigravity" {
         return Err(format!(
-            "verify_antigravity_projection: manifest must declare antigravity in scope {}",
+            "verify_antigravity_projection: manifest must declare antigravity-app (or legacy antigravity) in scope {}",
             scope
         ));
     }

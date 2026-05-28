@@ -39,7 +39,7 @@
 
 以下条目属于 **下一阶段 execution** 或独立 RFC；默认不改动 steady-state 行为。
 
-1. **`REVIEW_GATE` 默认路径简化**：将 multiset / `cycle_key` 核销收敛为更弱的默认证据规则，可显著减代码与测试面；**风险**：并行同 lane、残缺宿主 payload 时误放行或误拦；**前置**：宿主 stdin 契约稳定版本化 + 迁移期双轨测试。
+1. **`REVIEW_GATE` 默认路径简化** — **已交付（2026-05-28）**：`ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` + [`docs/adr/ADR-review-gate-lite.md`](adr/ADR-review-gate-lite.md) + [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json)；strict 仍为默认。后续候选：stdin 版本化后 lite 升为默认（见 task `review-gate-optimize-20260528` O1 抽样门禁）。
 2. **账本合并（`EVIDENCE_INDEX` / `TRACE_EVENTS` / `STEP_LEDGER`）**：单一 append 流可降低锁与排障成本；**风险**：破坏现有工具与 `framework snapshot` 消费方；**前置**：读模型迁移、`TASK_STATE` 聚合语义冻结；需独立 RFC（2026-05 已删旧草案）。
 3. **多宿主 hook 生成式减少分叉**：把 lane/`fork_context` 归一等逻辑更多 codegen 到单源；**风险**：生成器 bug 影响三宿主；**前置**：`host_integration` 契约测试覆盖阈值明确。
 4. **`framework_profile` 大表与日常 solo 解耦**：发布面字段与自用 hook 最小面拆分；**风险**：profile 校验与安装路径分裂；**前置**：明确「发行 profile」与「repo dev profile」两个 ID。

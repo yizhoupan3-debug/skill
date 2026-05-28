@@ -35,7 +35,11 @@ just doctor
 
 ### Claude Code / Antigravity（framework 源码仓）
 
-- **`.claude/settings.json`**、**`.gemini/*`** 由 `framework host-integration install --to claude-code|claude-desktop|antigravity` 材料化；源码仓可缺省，但 `framework doctor` 会列出 missing 并提示 install。
+- **`.claude/settings.json`** 由 `install --to claude-code|claude-desktop` 材料化。
+- **Antigravity 已拆分**（2026-05-28）：
+  - **`antigravity-cli`** → `.antigravitycli/hooks.json`（`install --to antigravity-cli`）
+  - **`antigravity-app`** → `.gemini/*` MCP（`install --to antigravity-app`）
+  - **`antigravity`** / `router-rs antigravity agent` = **app 别名**（deprecated；stderr 提示）
 - 勿再依赖 **`.claude/hooks/router-rs-hook.sh`**（deprecated shim）；真源为 `configs/framework/claude-router-rs-hook.sh` + settings hooks。
 
 ## 默认工作流（全宿主）

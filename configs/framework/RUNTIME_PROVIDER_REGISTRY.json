@@ -247,6 +247,26 @@
       ],
       "notes": "MCP-based host; uses advisory-only gating (no hard gate hooks). Projection shares mcp_capability_profile."
     },
+    "antigravity-cli": {
+      "status": "implemented",
+      "projection": "antigravity_cli_profile",
+      "capabilities": [
+        "context_files",
+        "settings_paths",
+        "hook_settings_paths",
+        "hard_gate_hooks"
+      ],
+      "notes": "Antigravity CLI shell hooks under .antigravitycli/; hook install lands in w3."
+    },
+    "antigravity-app": {
+      "status": "implemented",
+      "projection": "mcp_capability_profile",
+      "capabilities": [
+        "context_files",
+        "mcp_config_paths"
+      ],
+      "notes": "Antigravity app MCP host; hard closeout gate on goal_state_manage and closeout_gate tool execution."
+    },
     "antigravity": {
       "status": "implemented",
       "projection": "mcp_capability_profile",
@@ -254,7 +274,7 @@
         "context_files",
         "mcp_config_paths"
       ],
-      "notes": "MCP-based host; no CLI hook hooks, but hard closeout gate is enforced on goal_state_manage and closeout_gate tool execution."
+      "notes": "Deprecated alias of antigravity-app; same MCP profile."
     },
     "mcp": {
       "status": "declared",

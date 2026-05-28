@@ -18,7 +18,6 @@ use chrono::Utc;
 use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-#[cfg(test)]
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 use std::env;
@@ -86,13 +85,93 @@ const CODEX_REVIEW_SUBAGENT_TYPES: &[&str] = &[
     "cursor-guide",
     "cursorguide",
 ];
-const INSTALL_EVENTS: [&str; 5] = [
+pub(crate) const INSTALL_LIFECYCLE_EVENTS: [&str; 5] = [
     "SessionStart",
     "PreToolUse",
     "UserPromptSubmit",
     "PostToolUse",
     "Stop",
 ];
+const INSTALL_EVENTS: [&str; 5] = INSTALL_LIFECYCLE_EVENTS;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CodexLifecycleHostKind {
+    state_dir_leaf: &'static str,
+}
+
+impl CodexLifecycleHostKind {
+    pub(crate) const CODEX: Self = Self {
+        state_dir_leaf: ".codex",
+    };
+    pub(crate) const ANTIGRAVITY_CLI: Self = Self {
+        state_dir_leaf: ".antigravitycli",
+    };
+
+    fn review_gate_tag(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ANTIGRAVITY_CLI_REVIEW_GATE",
+            _ => "CODEX_REVIEW_GATE",
+        }
+    }
+
+    fn review_gate_disable_env(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_REVIEW_GATE_DISABLE",
+            _ => "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
+        }
+    }
+
+    fn stop_hook_active_bypass_env(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_STOP_HOOK_ACTIVE_BYPASS",
+            _ => "ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS",
+        }
+    }
+
+    fn require_stable_session_key_env(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_REQUIRE_STABLE_SESSION_KEY",
+            _ => "ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY",
+        }
+    }
+
+    fn hook_state_salt_env(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_HOOK_STATE_SALT",
+            _ => "ROUTER_RS_CODEX_HOOK_STATE_SALT",
+        }
+    }
+
+    fn hook_state_unreadable_tag(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "ANTIGRAVITY_CLI_HOOK_STATE_UNREADABLE",
+            _ => "CODEX_HOOK_STATE_UNREADABLE",
+        }
+    }
+
+    fn lifecycle_label(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "Antigravity CLI",
+            _ => "Codex",
+        }
+    }
+
+    fn spawn_first_host_id(self) -> &'static str {
+        match self.state_dir_leaf {
+            ".antigravitycli" => "antigravity-cli",
+            _ => "codex-cli",
+        }
+    }
+}
+
+thread_local! {
+    static LIFECYCLE_HOST: Cell<CodexLifecycleHostKind> =
+        const { Cell::new(CodexLifecycleHostKind::CODEX) };
+}
+
+fn lifecycle_host() -> CodexLifecycleHostKind {
+    LIFECYCLE_HOST.with(|cell| cell.get())
+}
 pub const ROUTER_RS_HOOK_PROJECTION_VERSION: &str = "v1.0.0";
 const INSTALL_STATUS_USER_PROMPT: &str = "Loading Codex turn context";
 const INSTALL_STATUS_SESSION_START: &str = "Loading Codex live state";
@@ -163,11 +242,11 @@ pub enum InstallMode {
 }
 
 #[derive(Debug, Clone)]
-struct HooksMergeStat {
-    status: &'static str,
-    preserved_existing_entries: usize,
-    added_entries: usize,
-    removed_legacy_entries: usize,
+pub(crate) struct HooksMergeStat {
+    pub(crate) status: &'static str,
+    pub(crate) preserved_existing_entries: usize,
+    pub(crate) added_entries: usize,
+    pub(crate) removed_legacy_entries: usize,
 }
 
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -211,7 +290,9 @@ fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexLifecycleContextSt
 }
 
 fn codex_state_dir(repo_root: &Path) -> PathBuf {
-    repo_root.join(".codex").join("hook-state")
+    repo_root
+        .join(lifecycle_host().state_dir_leaf)
+        .join("hook-state")
 }
 
 /// Unix: `flock(2)` on `<state>.lock` so same-process threads serialize correctly.
@@ -269,7 +350,16 @@ fn codex_stable_session_raw(event: &Value) -> Option<String> {
             return Some(s);
         }
     }
-    for env_key in ["CODEX_SESSION_ID", "CODEX_CONVERSATION_ID"] {
+    let env_keys: &[&str] = match lifecycle_host() {
+        CodexLifecycleHostKind::ANTIGRAVITY_CLI => &[
+            "ANTIGRAVITY_CLI_SESSION_ID",
+            "ANTIGRAVITY_CLI_CONVERSATION_ID",
+            "CODEX_SESSION_ID",
+            "CODEX_CONVERSATION_ID",
+        ],
+        _ => &["CODEX_SESSION_ID", "CODEX_CONVERSATION_ID"],
+    };
+    for env_key in env_keys {
         if let Ok(v) = env::var(env_key) {
             if let Some(s) = trimmed_nonempty(&v) {
                 return Some(s);
@@ -280,7 +370,7 @@ fn codex_stable_session_raw(event: &Value) -> Option<String> {
 }
 
 fn codex_require_stable_session_key_enabled() -> bool {
-    router_rs_env_enabled_default_true("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY")
+    router_rs_env_enabled_default_true(lifecycle_host().require_stable_session_key_env())
 }
 
 /// Fallback hook-state key material when no stable session id (repo-scoped, not one global file).
@@ -298,7 +388,7 @@ fn codex_unstable_session_key_raw(repo_root: &Path, event: &Value) -> String {
         );
     }
     let payload_session = codex_stable_session_raw(event).unwrap_or_default();
-    let salt = env::var("ROUTER_RS_CODEX_HOOK_STATE_SALT")
+    let salt = env::var(lifecycle_host().hook_state_salt_env())
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
@@ -761,9 +851,14 @@ fn codex_deep_independent_reviewer_evidence(
 }
 
 fn codex_hook_state_persist_block_payload() -> Value {
+    let host = lifecycle_host();
     json!({
         "decision": "block",
-        "reason": "Codex hook state could not be persisted under .codex/hook-state.",
+        "reason": format!(
+            "{} hook state could not be persisted under {}/hook-state.",
+            host.lifecycle_label(),
+            host.state_dir_leaf
+        ),
     })
 }
 
@@ -777,12 +872,12 @@ fn codex_stop_hook_active_replay(event: &Value) -> bool {
 
 /// Codex-internal Stop replays (`stop_hook_active`): skip gate enforcement only when explicitly opted in.
 fn codex_stop_hook_active_bypass_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS")
+    router_rs_env_enabled_default_false(lifecycle_host().stop_hook_active_bypass_env())
 }
 
-/// **仅当** `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1|true|yes|on` 时关闭 Codex review gate（unset 保持启用）。
+/// **仅当** host-specific `*_REVIEW_GATE_DISABLE=1|true|yes|on` 时关闭 review gate（unset 保持启用）。
 fn codex_review_gate_disabled_by_env() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE")
+    router_rs_env_enabled_default_false(lifecycle_host().review_gate_disable_env())
 }
 
 /// Env disable, my-light profile, or registry `lifecycle_profiles.my-light.disable_review_gate_hard_block`.
@@ -847,8 +942,12 @@ fn codex_closeout_completion_text(event: &Value) -> String {
 }
 
 fn codex_review_stop_followup_line(phase: u32) -> String {
+    let host = lifecycle_host();
     format!(
-        "router-rs CODEX_REVIEW_GATE incomplete phase={phase} need=deep_reviewer_posttool_and_compact_findings_or_rg_clear hint=fork_context_json_false_or_codex_fork_infer_off; Stop response needs [P0]/[P1]/[P2]/Caveat: substantive line see=skills/code-review-deep/SKILL.md see=ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1|ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1"
+        "router-rs {} incomplete phase={phase} need=deep_reviewer_posttool_and_compact_findings_or_rg_clear hint=fork_context_json_false_or_codex_fork_infer_off; Stop response needs [P0]/[P1]/[P2]/Caveat: substantive line see=skills/code-review-deep/SKILL.md see={}=1|{}=1",
+        host.review_gate_tag(),
+        host.review_gate_disable_env(),
+        host.stop_hook_active_bypass_env()
     )
 }
 
@@ -960,7 +1059,7 @@ fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Valu
     {
         contexts.push(crate::runtime_registry::review_spawn_first_nudge_line(
             Some(repo_root),
-            "codex-cli",
+            lifecycle_host().spawn_first_host_id(),
         ));
     }
     let additional_context = codex_compact_contexts(contexts);
@@ -1085,7 +1184,10 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
             eprintln!("[router-rs] codex hook-state unreadable: {reason}");
             return Some(json!({
                 "decision": "block",
-                "followup_message": "router-rs CODEX_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions"
+                "followup_message": format!(
+                    "router-rs {} need=repair_hook_state_json_or_permissions",
+                    lifecycle_host().hook_state_unreadable_tag()
+                )
             }));
         }
         Ok(Some(mut state)) => {
@@ -1196,10 +1298,42 @@ fn run_codex_lifecycle_context_hook(
     repo_root: &Path,
     payload: &Value,
 ) -> Result<Option<Value>, String> {
+    run_codex_lifecycle_context_hook_for_state_dir(repo_root, payload, ".codex")
+}
+
+pub(crate) fn run_codex_lifecycle_context_hook_for_state_dir(
+    repo_root: &Path,
+    payload: &Value,
+    state_dir_leaf: &str,
+) -> Result<Option<Value>, String> {
+    let host = match state_dir_leaf {
+        ".codex" => CodexLifecycleHostKind::CODEX,
+        ".antigravitycli" => CodexLifecycleHostKind::ANTIGRAVITY_CLI,
+        other => {
+            return Err(format!(
+                "unsupported lifecycle state_dir_leaf `{other}` (expected `.codex` or `.antigravitycli`)"
+            ));
+        }
+    };
+    LIFECYCLE_HOST.with(|cell| {
+        let prev = cell.get();
+        cell.set(host);
+        let out = run_codex_lifecycle_context_hook_inner(repo_root, payload, host);
+        cell.set(prev);
+        out
+    })
+}
+
+fn run_codex_lifecycle_context_hook_inner(
+    repo_root: &Path,
+    payload: &Value,
+    host: CodexLifecycleHostKind,
+) -> Result<Option<Value>, String> {
     if !payload.is_object() {
-        return Ok(Some(codex_lifecycle_input_error(
-            "Codex lifecycle hook input schema invalid: expected a JSON object payload.",
-        )));
+        return Ok(Some(codex_lifecycle_input_error(&format!(
+            "{} lifecycle hook input schema invalid: expected a JSON object payload.",
+            host.lifecycle_label()
+        ))));
     }
     let event_name = payload
         .get("hook_event_name")
@@ -1211,26 +1345,77 @@ fn run_codex_lifecycle_context_hook(
         match event_name.as_str() {
             "userpromptsubmit" | "posttooluse" | "stop" => {
                 if codex_stable_session_raw(payload).is_none() {
-                    return Ok(Some(codex_lifecycle_input_error(
-                        "Codex lifecycle hook blocked: stable session key required (ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY defaults on). Add session_id / conversation_id / thread_id (snake_case or camelCase) to hook JSON, or set CODEX_SESSION_ID / CODEX_CONVERSATION_ID in the environment. Review gate (CODEX_REVIEW_GATE) cannot run without per-session hook-state.",
-                    )));
+                    return Ok(Some(codex_lifecycle_input_error(&format!(
+                        "{} lifecycle hook blocked: stable session key required ({} defaults on). Add session_id / conversation_id / thread_id (snake_case or camelCase) to hook JSON, or set session env fallbacks. Review gate ({}) cannot run without per-session hook-state.",
+                        host.lifecycle_label(),
+                        host.require_stable_session_key_env(),
+                        host.review_gate_tag()
+                    ))));
                 }
             }
             _ => {}
         }
+    }
+    if event_name == "pretooluse" && host == CodexLifecycleHostKind::ANTIGRAVITY_CLI {
+        return run_pre_tool_use(repo_root, payload);
     }
     Ok(match event_name.as_str() {
         "sessionstart" => handle_codex_session_start(repo_root, payload),
         "userpromptsubmit" => handle_codex_userpromptsubmit(repo_root, payload),
         "posttooluse" => handle_codex_posttooluse(repo_root, payload),
         "stop" => handle_codex_stop(repo_root, payload),
-        "" => Some(codex_lifecycle_input_error(
-            "Codex lifecycle hook input schema invalid: missing hook_event_name/event.",
-        )),
+        "" => Some(codex_lifecycle_input_error(&format!(
+            "{} lifecycle hook input schema invalid: missing hook_event_name/event.",
+            host.lifecycle_label()
+        ))),
         other => Some(codex_lifecycle_input_error(&format!(
-            "Codex lifecycle hook input schema invalid: unsupported hook_event_name/event `{other}`.",
+            "{} lifecycle hook input schema invalid: unsupported hook_event_name/event `{other}`.",
+            host.lifecycle_label()
         ))),
     })
+}
+
+pub(crate) fn read_hook_stdin_payload() -> Result<Value, String> {
+    read_stdin_payload()
+}
+
+pub(crate) fn merge_lifecycle_install_hooks_json(
+    existing: Option<Value>,
+    hook_commands: &BTreeMap<String, String>,
+    events: &[&str],
+) -> Result<(Value, HooksMergeStat), String> {
+    merge_hooks_json_for_events(existing, hook_commands, events)
+}
+
+pub(crate) fn hooks_install_serialize_pretty(value: &Value) -> Result<String, String> {
+    serialize_ascii_json_pretty(value)
+}
+
+pub(crate) fn hooks_install_write_atomic(path: &Path, text: &str) -> Result<(), String> {
+    write_atomic_text(path, text)
+}
+
+pub(crate) fn hooks_install_sha256_hex(text: &str) -> String {
+    sha256_hex(text)
+}
+
+pub(crate) fn hooks_install_acquire_lock(home: &Path) -> Result<HooksInstallLock, String> {
+    acquire_install_lock(home)
+}
+
+pub(crate) fn lifecycle_hook_command_timeout_secs(event: &str) -> u64 {
+    codex_hook_command_timeout_secs(event)
+}
+
+pub(crate) fn lifecycle_hook_event_status_message(event_name: &str) -> &'static str {
+    hook_event_status_message(event_name)
+}
+
+pub(crate) fn run_codex_pre_tool_use_hook(
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<Option<Value>, String> {
+    run_pre_tool_use(repo_root, payload)
 }
 
 #[cfg(test)]
@@ -1361,7 +1546,7 @@ fn serialize_pretty_json_bytes(payload: &Value) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn build_hook_binary_preamble(
+pub(crate) fn build_hook_binary_preamble(
     project_var: &str,
     env_var: &str,
     missing_binary_fallback: &str,
@@ -1398,17 +1583,17 @@ fn build_project_hook_command(event: &str) -> String {
     build_install_hook_command(Path::new("."), event)
 }
 
-struct InstallLock {
+pub(crate) struct HooksInstallLock {
     path: PathBuf,
 }
 
-impl Drop for InstallLock {
+impl Drop for HooksInstallLock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
     }
 }
 
-fn acquire_install_lock(codex_home: &Path) -> Result<InstallLock, String> {
+fn acquire_install_lock(codex_home: &Path) -> Result<HooksInstallLock, String> {
     let lock_path = codex_home.join(".install.lock");
     for _ in 0..30 {
         match OpenOptions::new()
@@ -1427,7 +1612,7 @@ fn acquire_install_lock(codex_home: &Path) -> Result<InstallLock, String> {
                     .map_err(|err| format!("install_lock_write_failed: {err}"))?;
                 file.sync_all()
                     .map_err(|err| format!("install_lock_sync_failed: {err}"))?;
-                return Ok(InstallLock { path: lock_path });
+                return Ok(HooksInstallLock { path: lock_path });
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if lock_is_stale(&lock_path) {
@@ -1555,7 +1740,7 @@ pub fn install_codex_cli_hooks(
         })
         .collect::<BTreeMap<_, _>>();
     let command_digest = sha256_hex(&serialize_ascii_json_pretty(&json!(hook_commands))?);
-    let _install_guard = if apply {
+    let _install_guard: Option<HooksInstallLock> = if apply {
         Some(acquire_install_lock(&resolved_codex_home)?)
     } else {
         None
@@ -1821,6 +2006,14 @@ fn merge_hooks_json(
     existing: Option<Value>,
     hook_commands: &BTreeMap<String, String>,
 ) -> Result<(Value, HooksMergeStat), String> {
+    merge_hooks_json_for_events(existing, hook_commands, &INSTALL_EVENTS)
+}
+
+fn merge_hooks_json_for_events(
+    existing: Option<Value>,
+    hook_commands: &BTreeMap<String, String>,
+    events: &[&str],
+) -> Result<(Value, HooksMergeStat), String> {
     let created = existing.is_none();
     let mut data = match existing {
         None => json!({}),
@@ -1846,15 +2039,15 @@ fn merge_hooks_json(
     let mut added_entries = 0usize;
     let mut removed_legacy_entries = 0usize;
 
-    for event in INSTALL_EVENTS {
+    for event in events {
         let hook_command = hook_commands
-            .get(event)
+            .get(*event)
             .ok_or_else(|| format!("Missing install hook command for event {event}"))?;
-        if !hooks_root.contains_key(event) {
+        if !hooks_root.contains_key(*event) {
             hooks_root.insert(event.to_string(), Value::Array(Vec::new()));
         }
         let entries = hooks_root
-            .get_mut(event)
+            .get_mut(*event)
             .and_then(Value::as_array_mut)
             .ok_or_else(|| format!("Invalid hooks.json: hooks.{event} must be an array"))?;
         removed_legacy_entries += remove_legacy_python_codex_hooks(entries);

@@ -1,0 +1,63 @@
+{
+  "schema_version": "cursor-subagent-hook-contract-v1",
+  "authority": "rust-harness-contract",
+  "events": {
+    "subagentStart": {
+      "required_fields_any": [
+        ["subagent_id", "subagentId", "agent_id", "agentId", "task_id", "taskId", "run_id", "runId", "id"]
+      ],
+      "recommended_fields": ["fork_context", "forkContext", "subagent_type", "subagentType", "agent_type", "agentType"]
+    },
+    "subagentStop": {
+      "required_fields_any": [
+        ["subagent_id", "subagentId", "agent_id", "agentId", "task_id", "taskId", "run_id", "runId", "id"]
+      ]
+    },
+    "postToolUse": {
+      "notes": "May settle a review cycle when Task returns without subagentStop; same id dedup as subagentStart."
+    }
+  },
+  "fields": {
+    "subagent_id": {
+      "aliases": ["subagentId", "agent_id", "agentId", "task_id", "taskId", "run_id", "runId", "id"],
+      "cycle_key_prefix": "id:",
+      "required_for_review_lite": true
+    },
+    "fork_context": {
+      "aliases": ["forkContext"],
+      "independent_when": "json_boolean_false_or_integer_0_or_string_false",
+      "notes": "Explicit true blocks independent reviewer evidence."
+    },
+    "subagent_type": {
+      "aliases": ["subagentType", "agent_type", "agentType"],
+      "deep_gate_lanes_source": "configs/framework/RUNTIME_REGISTRY.json review_gate.deep_gate_lanes"
+    }
+  },
+  "completion_signals": {
+    "subagent_stop": "qualifying subagentStop with matching cycle key",
+    "post_tool_settle": "qualifying postToolUse return settles one pending cycle key"
+  },
+  "limits": {
+    "pending_cycle_max_env": "ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX",
+    "default_pending_cycle_max": 32
+  },
+  "modes": {
+    "strict": {
+      "pending_structure": "multiset review_subagent_pending_cycle_keys",
+      "default": true
+    },
+    "review_lite": {
+      "env": "ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite",
+      "pending_structure": "review_lite_open_cycles counter",
+      "lane_keys_forbidden": true,
+      "fallback": "strict when cycle key is not id: or qualifying fork/lane fails"
+    }
+  },
+  "stale_recovery": {
+    "env": "ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS",
+    "prune_pending_when_no_open": true
+  },
+  "wave2_requires_live_evidence": {
+    "excludes": "phase>=2 alone; compact bump requires live subagent evidence"
+  }
+}

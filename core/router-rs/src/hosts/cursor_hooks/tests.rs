@@ -7148,3 +7148,87 @@ fn verify_atomic_write_concurrency() {
     assert!(parsed.get("thread_index").is_some());
     assert!(parsed.get("write_index").is_some());
 }
+
+#[test]
+fn review_lite_id_cycle_settle() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+    let repo = fresh_repo();
+    let sid = "s-lite-id";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false,
+            "subagent_id": "lite-1"
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert_eq!(mid.phase, 2);
+    assert_eq!(mid.review_lite_pending_cycle_keys, vec!["id:lite-1"]);
+    assert!(mid.review_subagent_pending_cycle_keys.is_empty());
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStop",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "subagent_id": "lite-1"
+        }),
+    );
+    let end = load_state_for(&repo, sid);
+    assert_eq!(end.phase, 3);
+    assert!(end.review_lite_pending_cycle_keys.is_empty());
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+}
+
+#[test]
+fn review_lite_lane_fallback_strict() {
+    let _env = crate::test_env_sync::process_env_lock();
+    let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+    let repo = fresh_repo();
+    let sid = "s-lite-lane-fb";
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "beforeSubmitPrompt",
+        &event(sid, "全面review这个仓库"),
+    );
+    let _ = dispatch_cursor_hook_event(
+        &repo,
+        "subagentStart",
+        &json!({
+            "session_id": sid,
+            "subagent_type": "general-purpose",
+            "fork_context": false
+        }),
+    );
+    let mid = load_state_for(&repo, sid);
+    assert!(mid.review_lite_pending_cycle_keys.is_empty());
+    assert_eq!(mid.review_subagent_pending_cycle_keys, vec!["lane:general-purpose"]);
+    match prev {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+    }
+}
+
+#[test]
+fn review_gate_mode_strict_regression_unset_env() {
+    let _env = crate::test_env_sync::process_env_lock();
+    env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+    assert_eq!(
+        crate::review_gate_engine::cursor_review_gate_mode(),
+        crate::review_gate_engine::CursorReviewGateMode::Strict
+    );
+}

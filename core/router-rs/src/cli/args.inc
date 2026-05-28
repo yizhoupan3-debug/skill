@@ -19,6 +19,11 @@ pub(crate) enum RouterCommand {
         #[command(subcommand)]
         command: AntigravitySubcommand,
     },
+    #[command(name = "antigravity-app")]
+    AntigravityApp {
+        #[command(subcommand)]
+        command: AntigravitySubcommand,
+    },
     #[command(name = "claude-desktop")]
     ClaudeDesktop {
         #[command(subcommand)]
@@ -260,6 +265,16 @@ pub(crate) enum HostCommand {
         #[command(subcommand)]
         command: AntigravitySubcommand,
     },
+    #[command(name = "antigravity-cli")]
+    AntigravityCli {
+        #[command(subcommand)]
+        command: AntigravityCliSubcommand,
+    },
+    #[command(name = "antigravity-app")]
+    AntigravityAppHost {
+        #[command(subcommand)]
+        command: AntigravitySubcommand,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -294,6 +309,32 @@ pub(crate) enum AntigravitySubcommand {
     /// Run MCP stdio agent loop (skills, evidence, closeout advisory).
     #[command(name = "agent")]
     Agent(AntigravityAgentCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum AntigravityCliSubcommand {
+    Hook(AntigravityCliHookCommand),
+    InstallHooks(AntigravityCliInstallHooksCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct AntigravityCliHookCommand {
+    #[arg(value_name = "COMMAND")]
+    pub(crate) name: String,
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct AntigravityCliInstallHooksCommand {
+    #[arg(long)]
+    pub(crate) antigravity_cli_home: Option<PathBuf>,
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
+    #[arg(long)]
+    pub(crate) apply: bool,
+    #[arg(long, conflicts_with = "apply")]
+    pub(crate) check: bool,
 }
 
 #[derive(Args, Debug, Clone)]
