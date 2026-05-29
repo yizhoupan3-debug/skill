@@ -2526,8 +2526,74 @@ fn install_claude_desktop_user_scope_writes_official_config_path() {
             cmd.as_deref() == Some(desktop_bin.to_str().unwrap()),
             "expected stable desktop MCP path, got {cmd:?}"
         );
+
+        let settings_path = home.join(".claude/settings.json");
+        assert!(
+            settings_path.is_file(),
+            "missing user research settings at {}",
+            settings_path.display()
+        );
+        let settings: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
+        assert!(settings["permissions"]["allow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str() == Some("WebFetch(domain:*)")));
+        assert_eq!(
+            settings["sandbox"]["enabled"].as_bool(),
+            Some(false),
+            "user-scope claude-desktop must disable bash sandbox for research"
+        );
     }
 
+}
+
+#[test]
+fn install_claude_then_desktop_user_scope_merges_settings() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install_claude = host_integration_json_for_home(home.as_path(), None, &[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "user",
+        "--to",
+        "claude",
+    ]);
+    assert_eq!(install_claude["success"], true);
+
+    let install_desktop = host_integration_json_for_home(home.as_path(), None, &[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "user",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(install_desktop["success"], true);
+
+    let settings_path = home.join(".claude/settings.json");
+    let settings: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert!(
+        settings.get("hooks").is_some(),
+        "claude-code hooks must survive claude-desktop install merge"
+    );
+    assert_eq!(settings["sandbox"]["enabled"].as_bool(), Some(false));
 }
 
 #[test]

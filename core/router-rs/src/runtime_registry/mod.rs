@@ -324,6 +324,17 @@ pub(crate) fn is_claude_reviewer_lane_from_registry(lane: &str, repo_root: Optio
         .unwrap_or(false)
 }
 
+/// Sorted lane spellings from `review_gate.claude_reviewer_lanes` for MCP prompts/docs.
+pub(crate) fn claude_reviewer_lanes_sorted(repo_root: Option<&Path>) -> Vec<String> {
+    snapshot(repo_root)
+        .map(|s| {
+            let mut lanes: Vec<String> = s.claude_reviewer_lanes.iter().cloned().collect();
+            lanes.sort();
+            lanes
+        })
+        .unwrap_or_default()
+}
+
 /// Operator/doctor probe: returns `Err` when disk registry cannot be loaded for hook lane sets.
 pub fn check_review_gate_registry_snapshot(repo_root: &Path) -> Result<(), String> {
     let path = registry_json_path(Some(repo_root));

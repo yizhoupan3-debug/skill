@@ -48,7 +48,9 @@
 ./scripts/install-claude-desktop.sh
 ```
 
-脚本会：编译 release `router-rs`（若需要）→ 安装 **project**（`.claude/*`）+ **user**（`claude_desktop_config.json`）→ 打印 `status`。
+脚本会：编译 release `router-rs`（若需要）→ 安装 **project**（`.claude/*`）+ **user**（`claude_desktop_config.json`、`~/.claude/settings.json` 调研权限）→ 可选 3P egress patch → 打印 `status`。`install-claude-desktop.sh` 仅委托 `install-claude.sh --desktop-only`（无重复死代码路径）。
+
+**政策入口 vs 安装工件**：`RUNTIME_REGISTRY` 中 `host_entrypoints` 只列 `AGENTS_CLAUDE.md` / `.claude/CLAUDE.md`（sync manifest）；MCP `mcp.json` 与 Desktop `claude_desktop_config.json` 由 `host-integration install` 写入，不进入 entrypoint sync 表。
 
 **何时重跑**：`git pull` 后、`core/router-rs` 重新编译后、Desktop MCP 断连或路由异常时。
 

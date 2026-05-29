@@ -1058,21 +1058,16 @@ fn goal_suggests_review_work(goal_state: &Value) -> bool {
 }
 
 fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path, task_id: &str) -> bool {
-    for key in ["review_evidence_attested", "independent_reviewer_attested"] {
-        if arguments.get(key).and_then(Value::as_bool) == Some(true) {
-            return true;
-        }
-    }
-    if arguments.get("review_evidence").and_then(Value::as_bool) == Some(true) {
-        return true;
-    }
-
     // 自动扫描 artifacts/current/<task_id>/review-lanes 目录下的 Markdown 证据工件
-    let review_lanes_dir = if task_id.is_empty() {
-        repo_root.join("artifacts/current/review-lanes")
-    } else {
-        repo_root.join("artifacts/current").join(task_id).join("review-lanes")
-    };
+    let review_lanes_dir = task_artifact_dir(
+        repo_root,
+        if task_id.is_empty() {
+            None
+        } else {
+            Some(task_id)
+        },
+    )
+    .join("review-lanes");
 
     if review_lanes_dir.is_dir() {
         if let Ok(entries) = std::fs::read_dir(&review_lanes_dir) {
@@ -1177,14 +1172,8 @@ pub(crate) fn evaluate_mcp_closeout_gate(
             );
         }
     }
-    let summary_path = if task_id.is_empty() {
-        repo_root.join("artifacts/current/SESSION_SUMMARY.md")
-    } else {
-        repo_root
-            .join("artifacts/current")
-            .join(task_id)
-            .join("SESSION_SUMMARY.md")
-    };
+    let summary_path = task_artifact_dir(repo_root, if task_id.is_empty() { None } else { Some(task_id) })
+        .join("SESSION_SUMMARY.md");
     let has_summary = summary_path.is_file();
     if !has_summary {
         findings.push(format!(
@@ -1195,6 +1184,13 @@ pub(crate) fn evaluate_mcp_closeout_gate(
         findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
     }
 
+    let lifecycle_profile = task_view
+        .goal_state
+        .as_ref()
+        .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
+        .unwrap_or("");
+    let hard_block_disabled = mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile);
+
     let review_goal = task_view
         .goal_state
         .as_ref()
@@ -1203,7 +1199,7 @@ pub(crate) fn evaluate_mcp_closeout_gate(
 
     if review_goal && !has_review_evidence {
         findings.push(format!(
-            "WARN: review_gate: GOAL suggests review work but no hook-level reviewer evidence on {host_name} — spawn claude_reviewer_lanes with fork_context=false, upload review-lanes/*.md reports, or pass review_evidence_attested=true after independent review"
+            "WARN: review_gate: GOAL suggests review work but no hook-level reviewer evidence on {host_name} — spawn claude_reviewer_lanes with fork_context=false and write review-lanes/*.md, or pass reviewer_lane + fork_context=false in closeout_gate args"
         ));
     } else if review_goal {
         findings.push(
@@ -1222,10 +1218,16 @@ pub(crate) fn evaluate_mcp_closeout_gate(
 
     let verdict_label = if all_clear {
         "PASS: all closeout gates satisfied"
+    } else if hard_block_disabled {
+        if checkpoint_only {
+            "ADVISORY: checkpoint missing — call session_checkpoint before complete (my-light: MCP hard block disabled)"
+        } else {
+            "ADVISORY: closeout gates not satisfied (my-light: MCP hard block disabled)"
+        }
     } else if checkpoint_only {
-        "ADVISORY: checkpoint missing — call session_checkpoint before complete"
+        "BLOCKED: checkpoint missing — call session_checkpoint before complete (MCP hard block when not my-light)"
     } else {
-        "ADVISORY: some gates not satisfied — non-my-light: MCP hard block on closeout_gate / complete"
+        "BLOCKED: closeout gates not satisfied (MCP hard block when not my-light)"
     };
 
     let formatted = format!(
@@ -1236,7 +1238,7 @@ pub(crate) fn evaluate_mcp_closeout_gate(
     Ok(McpCloseoutGateVerdict {
         all_clear,
         checkpoint_only,
-        hard_block: !all_clear,
+        hard_block: !all_clear && !hard_block_disabled,
         formatted,
     })
 }
@@ -1373,12 +1375,7 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<Str
     Ok(serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))?)
 }
 
-fn web_fetch_url_is_allowed(url: &str) -> bool {
-    let Ok(parsed) = reqwest::Url::parse(url) else {
-        return false;
-    };
-    matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
-}
+const WEB_FETCH_MAX_REDIRECTS: usize = 5;
 
 fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
     let url = arguments
@@ -1387,9 +1384,7 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or("Missing required argument: url")?;
-    if !web_fetch_url_is_allowed(url) {
-        return Err(format!("web_fetch only supports http(s) URLs with a host: {url}"));
-    }
+    crate::web_fetch_guard::validate_web_fetch_url(url)?;
     let max_bytes = arguments
         .get("max_bytes")
         .and_then(Value::as_u64)
@@ -1398,6 +1393,7 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .clamp(1, WEB_FETCH_MAX_BYTES_DEFAULT);
     let mut client_builder = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
+        .redirect(reqwest::redirect::Policy::none())
         .user_agent("router-rs-framework-mcp/0.1");
     for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"] {
         if let Ok(proxy_url) = std::env::var(key) {
@@ -1413,10 +1409,38 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
     let client = client_builder
         .build()
         .map_err(|err| format!("web_fetch client build failed: {err}"))?;
-    let response = client
-        .get(url)
-        .send()
-        .map_err(|err| format!("web_fetch request failed: {err}"))?;
+    let mut current_url = url.to_string();
+    let mut response = None;
+    for hop in 0..=WEB_FETCH_MAX_REDIRECTS {
+        let resp = client
+            .get(&current_url)
+            .send()
+            .map_err(|err| format!("web_fetch request failed: {err}"))?;
+        if resp.status().is_redirection() {
+            if hop >= WEB_FETCH_MAX_REDIRECTS {
+                return Err(format!(
+                    "web_fetch exceeded {WEB_FETCH_MAX_REDIRECTS} redirects"
+                ));
+            }
+            let location = resp
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| {
+                    format!(
+                        "web_fetch redirect missing Location header (status {})",
+                        resp.status()
+                    )
+                })?;
+            let base = reqwest::Url::parse(&current_url)
+                .map_err(|err| format!("web_fetch redirect base URL invalid: {err}"))?;
+            current_url = crate::web_fetch_guard::resolve_web_fetch_redirect(&base, location)?;
+            continue;
+        }
+        response = Some(resp);
+        break;
+    }
+    let response = response.ok_or_else(|| "web_fetch: no response".to_string())?;
     let status = response.status().as_u16();
     let content_type = response
         .headers()
@@ -1431,7 +1455,7 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
     let slice = &body[..body.len().min(max_bytes)];
     let body_text = String::from_utf8_lossy(slice).into_owned();
     let payload = json!({
-        "url": url,
+        "url": current_url,
         "status": status,
         "content_type": content_type,
         "content_length": body.len(),
@@ -1473,7 +1497,7 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, host_id: &str) -> Value {
+fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let prompt_name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -1512,20 +1536,31 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, hos
             } else {
                 "Desktop review gate is advisory only — MCP cannot hard-block Stop.".to_string()
             };
-            format!(
-                "[Review Gate -- {host_name} gating]\n\n\
-                 This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
-                 Countable independent reviewer lanes (registry review_gate.claude_reviewer_lanes):\n\
-                 - deep_gate_lanes: general-purpose / best-of-n-runner (and normalized spellings)\n\
-                 - Claude-only: review / reviewer / critic / code-review\n\
-                 explore / explorer does NOT count toward review evidence.\n\
-                 Requires fork_context=false for independent reviewer credit (written to review-lanes/*.md for {host_name}).\n\n\
-                 When user requests review:\n\
-                 1) Spawn a read-only reviewer in a claude_reviewer_lanes lane with fork_context=false\n\
-                 2) If no subagent, decompose review dimensions locally and document findings\n\
-                 3) Call closeout_gate before claiming review complete (and ensure review-lanes/*.md exists or pass review_evidence_attested=true)\n\n\
-                 {gate_mode}"
-            )
+            {
+                let lanes = crate::runtime_registry::claude_reviewer_lanes_sorted(Some(repo_root));
+                let lane_lines = if lanes.is_empty() {
+                    "- (registry claude_reviewer_lanes unavailable)\n".to_string()
+                } else {
+                    lanes
+                        .iter()
+                        .map(|lane| format!("- {lane}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+                format!(
+                    "[Review Gate -- {host_name} gating]\n\n\
+                     This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
+                     Countable independent reviewer lanes (RUNTIME_REGISTRY review_gate.claude_reviewer_lanes):\n\
+                     {lane_lines}\n\
+                     explore / explorer does NOT count toward review evidence.\n\
+                     Requires fork_context=false for independent reviewer credit (review-lanes/*.md on disk).\n\n\
+                     When user requests review:\n\
+                     1) Spawn a read-only reviewer in a claude_reviewer_lanes lane with fork_context=false\n\
+                     2) If no subagent, decompose review dimensions locally and document findings\n\
+                     3) Call closeout_gate before claiming review complete (review-lanes/*.md or reviewer_lane in args)\n\n\
+                     {gate_mode}"
+                )
+            }
         }
         "closeout_checklist" => "[Closeout Checklist]\n\n\
              Before ending task:\n\

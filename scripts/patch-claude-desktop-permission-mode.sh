@@ -7,7 +7,11 @@
 set -euo pipefail
 
 MODE="${1:-bypassPermissions}"
-ACCOUNT_ID="${CLAUDE_DESKTOP_ACCOUNT_ID:-521ca1d3-99d2-423a-a606-cc6f42ccf7e9}"
+if [[ -z "${CLAUDE_DESKTOP_ACCOUNT_ID:-}" ]]; then
+  echo "error: set CLAUDE_DESKTOP_ACCOUNT_ID (Desktop account UUID from Claude-3p config)" >&2
+  exit 1
+fi
+ACCOUNT_ID="${CLAUDE_DESKTOP_ACCOUNT_ID}"
 CONFIG_3P="${CLAUDE_3P_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude-3p/claude_desktop_config.json}"
 LEVELDB_3P="$HOME/Library/Application Support/Claude-3p/Local Storage/leveldb"
 LEVELDB_STD="$HOME/Library/Application Support/Claude/Local Storage/leveldb"
@@ -79,14 +83,12 @@ ep["cc-landing-draft-permission-mode"] = mode
 folder_key = f"epitaxy-folder-permission-mode.{account}"
 folders = ep.setdefault(folder_key, {})
 if isinstance(folders, dict):
-    for p in (
-        "/Users/joe/Developer/skill",
-        "/Users/joe/Documents/research/data_twin",
-        "/Users/joe/Documents/research/made",
-        cowork_files,
-    ):
-        if p:
-            folders[p] = mode
+    paths = [cowork_files]
+    extra = os.environ.get("CLAUDE_DESKTOP_FOLDER_PATHS", "")
+    if extra.strip():
+        paths.extend(p.strip() for p in extra.split(":") if p.strip())
+    for p in paths:
+        folders[p] = mode
 acks = ep.setdefault(f"epitaxy-perm-mode-acks.{account}", [])
 if isinstance(acks, list):
     for p in folders:
@@ -116,7 +118,7 @@ patch_leveldb() {
   (
     cd "$tmpdir"
     npm init -y >/dev/null 2>&1
-    npm install classic-level >/dev/null 2>&1
+    npm install "classic-level@1.2.0" >/dev/null 2>&1
     local cfg_for_db="$CONFIG_3P"
     [[ -f "$cfg_for_db" ]] || cfg_for_db=""
     node - "$db_path" "$MODE" "$cfg_for_db" <<'NODE'

@@ -79,7 +79,37 @@ mod desktop_mcp_tests {
     }
 
     #[test]
+    fn web_fetch_blocks_loopback() {
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "web_fetch",
+                "arguments": { "url": "http://127.0.0.1/" }
+            }
+        });
+        let response = crate::claude_desktop_hooks::handle_mcp_request(
+            &req.to_string(),
+            &test_repo_dir(),
+            "claude-desktop",
+        )
+        .expect("web_fetch response");
+        assert_eq!(response["result"]["isError"], true);
+        let text = response_text(&response);
+        assert!(
+            text.contains("blocked"),
+            "expected blocked loopback, got: {text}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires network; run with ROUTER_RS_WEB_FETCH_NETWORK=1"]
     fn web_fetch_fetches_https_example() {
+        if std::env::var_os("ROUTER_RS_WEB_FETCH_NETWORK").is_none() {
+            eprintln!("skip: set ROUTER_RS_WEB_FETCH_NETWORK=1 to run network web_fetch test");
+            return;
+        }
         let req = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -131,7 +161,7 @@ mod desktop_mcp_tests {
         let out = crate::claude_desktop_hooks::tool_closeout_gate(&json!({}), &repo, "claude-desktop")
             .expect("closeout_gate");
         assert!(
-            out.contains("ADVISORY") || out.contains("checkpoint: missing"),
+            out.contains("BLOCKED") || out.contains("checkpoint: missing"),
             "without SESSION_SUMMARY must not PASS: {out}"
         );
         assert!(!out.starts_with("[Closeout Gate] PASS"));
@@ -236,30 +266,29 @@ mod desktop_mcp_tests {
     }
 
     #[test]
-    fn closeout_gate_accepts_review_evidence_attestation_in_arguments() {
+    fn closeout_gate_accepts_review_lanes_markdown_on_disk() {
         let repo = test_repo_dir();
         let task_id = "test-task";
         let task_dir = repo.join("artifacts/current").join(task_id);
-        std::fs::create_dir_all(&task_dir).unwrap();
+        let review_lanes = task_dir.join("review-lanes");
+        std::fs::create_dir_all(&review_lanes).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
             r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
         )
         .unwrap();
+        std::fs::write(review_lanes.join("lane-a.md"), "[P2] example — ok").unwrap();
 
-        let out = crate::claude_desktop_hooks::tool_closeout_gate(
-            &json!({"review_evidence_attested": true}),
-            &repo,
-            "claude-desktop",
-        )
-        .expect("closeout_gate");
+        let out =
+            crate::claude_desktop_hooks::tool_closeout_gate(&json!({}), &repo, "claude-desktop")
+                .expect("closeout_gate");
         assert!(
             !out.contains("WARN: review_gate: GOAL suggests review work"),
-            "attested review should not WARN: {out}"
+            "review-lanes evidence should clear review WARN: {out}"
         );
         assert!(
             out.contains("reviewer evidence attested"),
-            "expected attestation acknowledgement: {out}"
+            "expected review-lanes acknowledgement: {out}"
         );
 
         let _ = std::fs::remove_dir_all(&repo);
@@ -893,7 +922,11 @@ mod antigravity_hard_blocking_tests {
         // Should be Ok content (isError is not present or false)
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
         let content_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(content_msg.contains("[Closeout Gate] ADVISORY:"));
+        assert!(
+            content_msg.contains("[Closeout Gate] ADVISORY:")
+                || content_msg.contains("my-light: MCP hard block disabled"),
+            "my-light closeout should be advisory: {content_msg}"
+        );
 
         let _ = std::fs::remove_dir_all(&repo);
     }

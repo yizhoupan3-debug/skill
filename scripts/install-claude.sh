@@ -186,6 +186,12 @@ echo "==> status" >&2
   --project-root "$PROJECT_ROOT" \
   --artifact-root "$PROJECT_ROOT/artifacts"
 
+PATCH_EGRESS="${FRAMEWORK_ROOT}/scripts/patch-claude-desktop-3p-cowork-egress.sh"
+if [[ "$CODE_ONLY" -eq 0 && -x "$PATCH_EGRESS" ]]; then
+  echo "==> 3P Cowork egress (coworkEgressAllowedHosts)" >&2
+  "$PATCH_EGRESS" --allow-all || true
+fi
+
 echo "" >&2
 echo "Done. Claude Code: confirm ~/.claude/rules/framework.md mentions /discussx (not /gsd-*)." >&2
 echo "Claude Desktop: Cmd+Q restart, then Connectors → router-rs-framework + browser-mcp." >&2

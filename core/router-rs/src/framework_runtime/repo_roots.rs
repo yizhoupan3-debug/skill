@@ -43,6 +43,9 @@ fn repo_root_from_mcp_placeholder(raw: &str) -> Option<PathBuf> {
         if trimmed == "." || trimmed == "${CLAUDE_PROJECT_DIR:-.}" {
             return None;
         }
+        if trimmed == "${workspaceRoot}" {
+            return std::env::current_dir().ok();
+        }
     }
     None
 }
@@ -74,6 +77,28 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
         }
     }
     Ok(normalized)
+}
+
+#[cfg(test)]
+mod repo_root_placeholder_tests {
+    use super::resolve_repo_root_arg;
+    use std::env;
+
+    #[test]
+    fn workspace_root_placeholder_falls_back_to_cwd_without_claude_project_dir() {
+        let prior = env::var_os("CLAUDE_PROJECT_DIR");
+        env::remove_var("CLAUDE_PROJECT_DIR");
+        let cwd = env::current_dir().expect("cwd");
+        let resolved =
+            resolve_repo_root_arg(Some(std::path::Path::new("${workspaceRoot}"))).expect("resolve");
+        assert_eq!(
+            resolved.canonicalize().unwrap_or(resolved),
+            cwd.canonicalize().unwrap_or(cwd)
+        );
+        if let Some(value) = prior {
+            env::set_var("CLAUDE_PROJECT_DIR", value);
+        }
+    }
 }
 
 #[cfg(test)]

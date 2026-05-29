@@ -599,8 +599,13 @@ enum McpRouterRsCommand {
 
 fn resolve_mcp_router_rs_command(framework_root: &Path) -> McpRouterRsCommand {
     if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
-        if Path::new(&raw).is_file() && !is_ephemeral_executable_path(&raw) {
-            return McpRouterRsCommand::Absolute(PathBuf::from(raw));
+        let trimmed = raw.trim();
+        if !trimmed.is_empty()
+            && Path::new(trimmed).is_file()
+            && !is_ephemeral_executable_path(trimmed)
+            && validate_mcp_command_binary(trimmed, Some(framework_root)).is_ok()
+        {
+            return McpRouterRsCommand::Absolute(PathBuf::from(trimmed));
         }
     }
     if let Ok(exe) = which::which("router-rs") {
@@ -714,11 +719,11 @@ fn resolve_host_home(
     if let Some(path) = explicit {
         return normalize_path(path);
     }
-    if let Some(path) = std::env::var_os(env_var) {
-        return normalize_path(&PathBuf::from(path));
-    }
     if let Some(home) = shared_home {
         return Ok(normalize_path(home)?.join(default_leaf));
+    }
+    if let Some(path) = std::env::var_os(env_var) {
+        return normalize_path(&PathBuf::from(path));
     }
     Ok(default_home_dir().join(default_leaf))
 }
@@ -2345,6 +2350,7 @@ fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
     match value {
         Value::String(s) => {
             s.contains("claude-router-rs-hook.sh")
+                || s.contains("router-rs-hook.sh")
                 || (s.contains("router-rs") && s.contains("claude hook"))
         }
         Value::Array(items) => items.iter().any(value_contains_router_rs_claude_hook),
@@ -3212,7 +3218,15 @@ fn claude_desktop_mcp_router_command(roots: &ResolvedProjectionRoots) -> Value {
             && Path::new(trimmed).is_file()
             && !is_ephemeral_executable_path(trimmed)
         {
-            return json!(trimmed);
+            if let Err(err) =
+                validate_mcp_command_binary(trimmed, Some(&roots.framework_root))
+            {
+                eprintln!(
+                    "warning: ROUTER_RS_BIN ignored for Claude Desktop MCP ({err}); using stable install path"
+                );
+            } else {
+                return json!(trimmed);
+            }
         }
     }
     let desktop =
@@ -5784,7 +5798,7 @@ fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    fs::write(path, content).map_err(|err| err.to_string())?;
+    crate::atomic_write::write_atomic_text(path, content)?;
     Ok(true)
 }
 

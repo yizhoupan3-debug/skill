@@ -472,20 +472,30 @@ fn verify_claude_desktop_projection(repo_root: &Path) -> Result<(), String> {
         None,
     )?;
 
-    let mut last_error = None;
-    for scope in ["project", "user"] {
-        match verify_claude_desktop_projection_scope(&roots, scope) {
-            Ok(()) => {
-                eprintln!("verify_claude_desktop_projection: ok (scope={scope})");
-                return Ok(());
+    verify_claude_desktop_projection_scope(&roots, "project").map_err(|e| {
+        format!("verify_claude_desktop_projection: project scope failed: {e}")
+    })?;
+    eprintln!("verify_claude_desktop_projection: ok (scope=project)");
+
+    match verify_claude_desktop_projection_scope(&roots, "user") {
+        Ok(()) => eprintln!("verify_claude_desktop_projection: ok (scope=user)"),
+        Err(e) => {
+            let user_installed = roots
+                .claude_home_root
+                .join(".framework-projection-desktop.json")
+                .is_file()
+                || crate::host_integration::claude_desktop_user_mcp_config_paths(&roots)
+                    .iter()
+                    .any(|path| path.is_file());
+            if user_installed {
+                return Err(format!("verify_claude_desktop_projection: user scope failed: {e}"));
             }
-            Err(e) => last_error = Some(e),
+            eprintln!(
+                "verify_claude_desktop_projection: user scope skipped (not installed): {e}"
+            );
         }
     }
-
-    Err(last_error.unwrap_or_else(|| {
-        "verify_claude_desktop_projection: failed to verify project or user scope".to_string()
-    }))
+    Ok(())
 }
 
 fn verify_claude_desktop_projection_scope(
@@ -1177,32 +1187,29 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
                 "install",
             ],
         )?;
-        for (tool, scope) in [
-            ("claude", "project"),
-            ("claude", "user"),
-            ("claude-desktop", "project"),
-            ("claude-desktop", "user"),
-        ] {
-            run_router(
-                &fw,
-                &[
-                    "framework",
-                    "host-integration",
-                    "install",
-                    "--framework-root",
-                    fw.to_string_lossy().as_ref(),
-                    "--project-root",
-                    fw.to_string_lossy().as_ref(),
-                    "--artifact-root",
-                    art.to_string_lossy().as_ref(),
-                    "--claude-home",
-                    claude_home.to_string_lossy().as_ref(),
-                    "--scope",
-                    scope,
-                    "--to",
-                    tool,
-                ],
-            )?;
+        for tool in ["claude", "claude-desktop"] {
+            for scope in projection_install_scopes_for_tool(tool) {
+                run_router(
+                    &fw,
+                    &[
+                        "framework",
+                        "host-integration",
+                        "install",
+                        "--framework-root",
+                        fw.to_string_lossy().as_ref(),
+                        "--project-root",
+                        fw.to_string_lossy().as_ref(),
+                        "--artifact-root",
+                        art.to_string_lossy().as_ref(),
+                        "--claude-home",
+                        claude_home.to_string_lossy().as_ref(),
+                        "--scope",
+                        scope,
+                        "--to",
+                        tool,
+                    ],
+                )?;
+            }
         }
     }
 
