@@ -617,7 +617,7 @@ fn parse_terminal_header(text: &str) -> Option<TerminalHeader> {
                     header.cwd = Some(PathBuf::from(val));
                 }
             }
-            "running_for_ms" => header.is_active = !val.is_empty(),
+            "running_for_ms" => header.is_active = val.parse::<u64>().map_or(!val.is_empty(), |ms| ms > 0),
             "active_command" => {
                 if !val.is_empty() {
                     header.active_command = Some(val.to_string());

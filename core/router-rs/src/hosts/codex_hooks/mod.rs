@@ -18,6 +18,7 @@ use chrono::Utc;
 use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::sync::LazyLock;
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 use std::env;
@@ -668,6 +669,7 @@ fn codex_save_state_to_path(state_path: &Path, state: &CodexLifecycleContextStat
         let _ = fs::remove_file(&tmp);
         return false;
     }
+    drop(tmp_file);
     if fs::rename(&tmp, &target).is_err() {
         let _ = fs::remove_file(&tmp);
         return false;
@@ -773,6 +775,7 @@ fn codex_prompt_text(event: &Value) -> String {
     String::new()
 }
 
+#[cfg(test)]
 fn codex_first_nonempty_prompt_line(text: &str) -> String {
     text.lines()
         .map(str::trim)
@@ -2664,7 +2667,7 @@ fn split_bash_segments(command: &str) -> Vec<String> {
     }
 }
 
-fn bash_command_looks_mutating(command: &str) -> bool {
+static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     [
         r"^\s*(mv|cp|install|touch|rm|unlink|truncate)\b",
         r"^\s*ln\b[^\n]*\s-[^\n]*[fs][^\n]*\b",
@@ -2678,12 +2681,12 @@ fn bash_command_looks_mutating(command: &str) -> bool {
         r"\bdd\b",
     ]
     .iter()
-    .any(|pattern| {
-        Regex::new(pattern)
-            .ok()
-            .map(|regex| regex.is_match(command))
-            .unwrap_or(false)
-    })
+    .filter_map(|p| Regex::new(p).ok())
+    .collect()
+});
+
+fn bash_command_looks_mutating(command: &str) -> bool {
+    MUTATING_COMMAND_PATTERNS.iter().any(|re| re.is_match(command))
 }
 
 fn bash_segment_mentions_generated_path(segment: &str, hint: &str) -> bool {
