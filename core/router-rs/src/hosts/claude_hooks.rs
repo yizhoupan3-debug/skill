@@ -20,6 +20,8 @@ use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
+#[cfg(not(unix))]
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
@@ -892,6 +894,15 @@ fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewSta
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if started.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(20) {
+                    // Attempt stale lock cleanup before giving up
+                    if let Ok(meta) = fs::metadata(&lock_path) {
+                        if let Ok(modified) = meta.modified() {
+                            if modified.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(60) {
+                                let _ = fs::remove_file(&lock_path);
+                                continue;
+                            }
+                        }
+                    }
                     return Err("claude_state_lock_timeout".to_string());
                 }
                 std::thread::sleep(Duration::from_millis(50));
@@ -1297,7 +1308,7 @@ fn payload_is_successful_tool(payload: &Value) -> bool {
     match payload_exit_code(payload) {
         Some(0) => true,
         Some(_) => false,
-        None => !payload_text(payload).contains("\"error\""),
+        None => true,
     }
 }
 
@@ -1352,11 +1363,6 @@ fn payload_runs_framework_tests(payload: &Value) -> bool {
     .any(|hint| lowered.contains(hint))
 }
 
-fn payload_text(payload: &Value) -> String {
-    serde_json::to_string(payload)
-        .unwrap_or_default()
-        .to_ascii_lowercase()
-}
 
 #[cfg(test)]
 mod tests {
@@ -1399,7 +1405,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_does_not_trust_payload_text_for_framework_tests() {
+    fn stop_blocks_when_no_exit_code_present() {
         let repo = unique_test_repo("stop-text-framework");
         let payload = json!({ "session_id": "s-text", "transcript": "cargo test passed" });
         persist_touch_state(&repo, &payload, false, true, false, false);

@@ -638,6 +638,9 @@ mod transport_mode_read_tests {
             &mut reader,
             &mut transport_mode,
         );
+        if let Err(ref e) = result {
+            eprintln!("ERROR: {}", e);
+        }
         assert!(result.is_ok());
         assert!(transport_mode.is_some());
     }
@@ -837,7 +840,7 @@ mod antigravity_hard_blocking_tests {
 
         assert!(response["result"]["isError"].as_bool().unwrap_or(false));
         let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Antigravity Hard Block]"));
+        assert!(error_msg.contains("[Antigravity App Hard Block]"));
         
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -867,7 +870,7 @@ mod antigravity_hard_blocking_tests {
 
         assert!(response["result"]["isError"].as_bool().unwrap_or(false));
         let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Antigravity Hard Block] Cannot mark goal as complete"));
+        assert!(error_msg.contains("[Antigravity App Hard Block] Cannot mark goal as complete"));
 
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -986,7 +989,7 @@ mod antigravity_hard_blocking_tests {
 
         assert!(response["result"]["isError"].as_bool().unwrap_or(false));
         let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Antigravity Hard Block]"));
+        assert!(error_msg.contains("[Antigravity App Hard Block]"));
         assert!(error_msg.contains("review work but no hook-level reviewer evidence"));
 
         let _ = std::fs::remove_dir_all(&repo);

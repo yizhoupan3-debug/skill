@@ -43,7 +43,7 @@ fn mcp_host_supports_hard_closeout(host_id: &str) -> bool {
 
 fn mcp_host_hard_block_label(host_id: &str) -> &'static str {
     match host_id {
-        "antigravity-app" | "antigravity" => "Antigravity",
+        "antigravity-app" | "antigravity" => "Antigravity App",
         "claude-desktop" => "Claude Desktop",
         _ => "MCP Host",
     }
@@ -340,11 +340,11 @@ fn parse_content_length(line: &str) -> Result<usize, String> {
     // Note: line may contain trailing \r\n from read_line
     let lower = line.to_ascii_lowercase();
     let value_str = if lower.starts_with("content-length :") {
-        // Skip "content-length :" (15 chars) and the trailing \r\n
-        line[15..].trim().trim_start_matches(':').trim()
+        // Skip "content-length :" (15 chars)
+        line[15..].trim()
     } else if lower.starts_with("content-length:") {
-        // Skip "content-length:" (14 chars) and the trailing \r\n
-        line[14..].trim().trim_start_matches(':').trim()
+        // Skip "content-length:" (14 chars)
+        line[14..].trim()
     } else {
         return Err(format!("invalid Content-Length header: {}", line));
     };
@@ -766,7 +766,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         "rfv_loop_manage" => tool_rfv_loop_manage(arguments, repo_root),
         "goal_state_manage" => tool_goal_state_manage(arguments, repo_root),
         "goal_state_read" => tool_goal_state_read(arguments, repo_root),
-        "closeout_record_write" => tool_closeout_record_write(arguments, repo_root),
+        "closeout_record_write" => tool_closeout_record_write(arguments, repo_root, host_id),
         "web_fetch" => tool_web_fetch(arguments),
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
@@ -1247,7 +1247,7 @@ pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &
     Ok(evaluate_mcp_closeout_gate(arguments, repo_root, host_id)?.formatted)
 }
 
-fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -1351,7 +1351,7 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<Str
     if let Ok(mcp_verdict) = evaluate_mcp_closeout_gate(
         &json!({ "task_id": task_id }),
         repo_root,
-        "claude-desktop",
+        host_id,
     ) {
         let task_view = crate::task_state::resolve_task_view(repo_root, Some(task_id));
         let lifecycle_profile = task_view
@@ -1384,7 +1384,8 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or("Missing required argument: url")?;
-    crate::web_fetch_guard::validate_web_fetch_url(url)?;
+    // Validate + resolve DNS in one pass to pin results before building client.
+    let (parsed_url, initial_addrs) = crate::web_fetch_guard::validate_and_resolve_web_fetch_url(url)?;
     let max_bytes = arguments
         .get("max_bytes")
         .and_then(Value::as_u64)
@@ -1406,7 +1407,13 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
             }
         }
     }
-    let client = client_builder
+    // Pin DNS results from validate_and_resolve to prevent rebinding TOCTOU.
+    let pin_host = parsed_url.host_str()
+        .ok_or_else(|| format!("web_fetch URL missing host: {url}"))?;
+    for addr in &initial_addrs {
+        client_builder = client_builder.resolve(pin_host, *addr);
+    }
+    let mut client = client_builder
         .build()
         .map_err(|err| format!("web_fetch client build failed: {err}"))?;
     let mut current_url = url.to_string();
@@ -1435,6 +1442,24 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
             let base = reqwest::Url::parse(&current_url)
                 .map_err(|err| format!("web_fetch redirect base URL invalid: {err}"))?;
             current_url = crate::web_fetch_guard::resolve_web_fetch_redirect(&base, location)?;
+            // Pin DNS for redirect target to prevent DNS rebinding TOCTOU.
+            let redirect_parsed = reqwest::Url::parse(&current_url)
+                .map_err(|err| format!("web_fetch redirect URL parse failed: {err}"))?;
+            let rp_host = redirect_parsed.host_str()
+                .ok_or_else(|| format!("web_fetch redirect URL missing host: {current_url}"))?;
+            let rp_port = redirect_parsed.port()
+                .unwrap_or(if redirect_parsed.scheme() == "https" { 443 } else { 80 });
+            let rp_addrs = crate::web_fetch_guard::resolve_web_fetch_addresses(rp_host, rp_port)?;
+            // Rebuild client with pinned DNS for redirect target.
+            let mut rb = reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
+                .redirect(reqwest::redirect::Policy::none())
+                .user_agent("router-rs-framework-mcp/0.1");
+            for addr in &rp_addrs {
+                rb = rb.resolve(rp_host, *addr);
+            }
+            client = rb.build()
+                .map_err(|err| format!("web_fetch client rebuild failed: {err}"))?;
             continue;
         }
         response = Some(resp);
@@ -1913,7 +1938,7 @@ pub(crate) fn tool_closeout_record_write_for_test(
     arguments: &Value,
     repo_path: &Path,
 ) -> Result<String, String> {
-    tool_closeout_record_write(arguments, repo_path)
+    tool_closeout_record_write(arguments, repo_path, "claude-desktop")
 }
 
 #[cfg(test)]
