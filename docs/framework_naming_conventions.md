@@ -20,8 +20,8 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 
 | Host | Env Var Prefix | Notes |
 |------|---------------|-------|
-| Claude Code | `ROUTER_RS_CLAUDE_*` | Main CLI agent |
-| Claude Desktop | `ROUTER_RS_CLAUDE_*` | MCP-based desktop agent |
+| Claude Code | `ROUTER_RS_CLAUDE_*` | Shell hook integration |
+| Claude Desktop | `ROUTER_RS_DESKTOP_*` | MCP stdio agent (`claude-desktop agent`) |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
 

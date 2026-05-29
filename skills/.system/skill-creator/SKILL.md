@@ -1,7 +1,7 @@
 ---
 name: skill-creator
 description: |
-  Create or update one Codex skill package after the boundary is known. Use for
+  Create or update one skill package under `skills/` after the boundary is known (all supported hosts). Use for
   concrete skill authoring, trigger wording, frontmatter cleanup, resource
   packaging, or revising an existing `SKILL.md`. Framework policy and multi-skill
   routing decisions belong to `$skill-framework-developer`.
@@ -10,7 +10,7 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: preferred
-short_description: Design or revise one Codex skill package
+short_description: Design or revise one cross-host skill package under skills/
 trigger_hints:
   - create skill
   - update skill

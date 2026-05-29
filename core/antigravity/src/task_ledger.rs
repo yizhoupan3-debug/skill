@@ -150,7 +150,6 @@ pub fn append_transaction(
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::test_env_sync::process_env_lock;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -164,7 +163,6 @@ mod tests {
 
     #[test]
     fn append_transaction_rejects_unsafe_task_id() {
-        // let _g = process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
         std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK");
         let tmp = unique_tmp("unsafe-id");
@@ -193,7 +191,6 @@ mod tests {
 
     #[test]
     fn append_transaction_assuming_l1_held_writes_seq() {
-        // let _g = process_env_lock();
         let tmp = unique_tmp("assume-held");
         fs::create_dir_all(tmp.join("artifacts/current/t1")).expect("mkdir");
         let tx = LedgerTransaction {

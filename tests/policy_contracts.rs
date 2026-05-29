@@ -6,7 +6,7 @@ use common::{
     router_rs_json, run, seed_framework_markers,
 };
 use serde_json::{Map, Value};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -1003,7 +1003,7 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
         let mut supported_ids: Vec<String> = allowed.iter().cloned().collect();
         supported_ids.sort();
         let normalized =
-            host_platforms::normalize_skill_host_platforms(&raw, &supported_ids, false)
+            host_platforms::normalize_skill_host_platforms(&raw, &supported_ids)
                 .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
         let from_catalog: Vec<String> = platforms
             .iter()
@@ -1043,7 +1043,6 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
             "antigravity".to_string(),
         ],
         &supported,
-        false,
     )
     .expect("stock aliases should normalize");
     let normalized_set: HashSet<String> = normalized.into_iter().collect();
@@ -1123,7 +1122,6 @@ fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
         let allowed_platforms = host_platforms::normalize_skill_host_platforms(
             &raw,
             &supported_ids,
-            false,
         )
         .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
         let allowed_set: HashSet<String> = allowed_platforms.into_iter().collect();
@@ -1139,6 +1137,163 @@ fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
                 "codex-only hot runtime skill `{slug}` must not list extra host `{id}` in runtime host_platforms; allowed={allowed_set:?}"
             );
         }
+    }
+}
+
+#[test]
+fn framework_command_slugs_in_manifest() {
+    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
+    let keys = manifest["keys"].as_array().expect("manifest keys");
+    let slug_idx = key_index(keys, "slug");
+    let manifest_slugs: HashSet<String> = manifest["skills"]
+        .as_array()
+        .expect("manifest skills")
+        .iter()
+        .filter_map(|row| row.get(slug_idx).and_then(Value::as_str))
+        .map(str::to_string)
+        .collect();
+    for slug in FRAMEWORK_COMMAND_IDS {
+        assert!(
+            manifest_slugs.contains(*slug),
+            "SKILL_MANIFEST must contain framework command `{slug}` (not runtime-only)"
+        );
+    }
+}
+
+#[test]
+fn runtime_framework_command_rows_match_manifest() {
+    let root = project_root();
+    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let manifest = read_json(&root.join("skills/SKILL_MANIFEST.json"));
+    let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
+    let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
+    let r_slug = key_index(runtime_keys, "slug");
+    let r_layer = key_index(runtime_keys, "layer");
+    let r_kind = key_index(runtime_keys, "kind");
+    let r_summary = key_index(runtime_keys, "summary");
+    let r_hosts = key_index(runtime_keys, "host_platforms");
+    let r_skill_path = key_index(runtime_keys, "skill_path");
+    let r_trigger_hints = key_index(runtime_keys, "trigger_hints");
+    let m_slug = key_index(manifest_keys, "slug");
+    let m_layer = key_index(manifest_keys, "layer");
+    let m_kind = key_index(manifest_keys, "kind");
+    let m_desc = key_index(manifest_keys, "description");
+    let m_hosts = key_index(manifest_keys, "host_platforms");
+    let m_skill_path = key_index(manifest_keys, "skill_path");
+    let m_trigger_hints = key_index(manifest_keys, "trigger_hints");
+
+    let manifest_by_slug: HashMap<String, &Vec<Value>> = manifest["skills"]
+        .as_array()
+        .expect("manifest skills")
+        .iter()
+        .filter_map(|row| row.as_array())
+        .filter_map(|row| {
+            let slug = row.get(m_slug)?.as_str()?.to_string();
+            Some((slug, row))
+        })
+        .collect();
+
+    for row in runtime["skills"].as_array().expect("runtime skills") {
+        let row = row.as_array().expect("runtime row");
+        let slug = row[r_slug].as_str().expect("runtime slug");
+        if !FRAMEWORK_COMMAND_IDS.contains(&slug) {
+            continue;
+        }
+        let manifest_row = manifest_by_slug
+            .get(slug)
+            .unwrap_or_else(|| panic!("manifest missing framework command row for {slug}"));
+        assert_eq!(
+            row[r_layer].as_str(),
+            manifest_row.get(m_layer).and_then(Value::as_str),
+            "{slug}: layer mismatch runtime vs manifest"
+        );
+        assert_eq!(
+            row[r_kind].as_str(),
+            manifest_row.get(m_kind).and_then(Value::as_str),
+            "{slug}: kind mismatch runtime vs manifest"
+        );
+        assert_eq!(
+            row[r_summary].as_str(),
+            manifest_row.get(m_desc).and_then(Value::as_str),
+            "{slug}: description/summary mismatch runtime vs manifest"
+        );
+        let runtime_hosts: HashSet<String> = row[r_hosts]
+            .as_array()
+            .expect("runtime host_platforms")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        let manifest_hosts: HashSet<String> = manifest_row
+            .get(m_hosts)
+            .and_then(Value::as_array)
+            .expect("manifest host_platforms")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        assert_eq!(
+            runtime_hosts, manifest_hosts,
+            "{slug}: host_platforms mismatch runtime vs manifest"
+        );
+        assert_eq!(
+            row[r_skill_path].as_str(),
+            manifest_row.get(m_skill_path).and_then(Value::as_str),
+            "{slug}: skill_path mismatch runtime vs manifest"
+        );
+        let runtime_hints: Vec<String> = row[r_trigger_hints]
+            .as_array()
+            .expect("runtime trigger_hints")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        let manifest_hints: Vec<String> = manifest_row
+            .get(m_trigger_hints)
+            .and_then(Value::as_array)
+            .expect("manifest trigger_hints")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        assert_eq!(
+            runtime_hints, manifest_hints,
+            "{slug}: trigger_hints mismatch runtime vs manifest"
+        );
+    }
+}
+
+#[test]
+fn host_projection_narrative_covers_installable_hosts() {
+    let root = project_root();
+    let narrative = read_json(&root.join("configs/framework/host_projection_narrative.json"));
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let default = narrative["default_lifecycle_paragraph"]
+        .as_str()
+        .expect("default_lifecycle_paragraph");
+    assert!(
+        default.contains("/discussx"),
+        "default_lifecycle_paragraph must reference /discussx"
+    );
+    let by_host = narrative["lifecycle_by_host"]
+        .as_object()
+        .expect("lifecycle_by_host object");
+    let host_targets = registry["host_targets"]["metadata"]
+        .as_object()
+        .expect("host_targets.metadata");
+    for (host_id, meta) in host_targets {
+        if meta.get("installable").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        if meta.get("deprecated_alias_of").and_then(Value::as_str).is_some() {
+            continue;
+        }
+        let paragraph = by_host
+            .get(host_id)
+            .and_then(Value::as_str)
+            .unwrap_or_else(|| {
+                panic!("lifecycle_by_host missing installable host {host_id}")
+            });
+        assert!(
+            paragraph.contains("/discussx") || paragraph.contains("Default lifecycle"),
+            "{host_id}: lifecycle paragraph must reference My lifecycle (/discussx or Default lifecycle)"
+        );
     }
 }
 

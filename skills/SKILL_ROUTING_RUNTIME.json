@@ -17,7 +17,7 @@
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
     "full_skill_count": 30,
     "hot_skill_count": 30,
-    "manifest_skill_count": 52,
+    "manifest_skill_count": 56,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
   },
@@ -365,7 +365,7 @@
       "owner",
       "none",
       "preferred",
-      "Design and tune Codex skill routing/framework behavior",
+      "Design and tune cross-host skill routing and framework behavior",
       [
         "skill-framework-developer",
         "skill框架",
@@ -467,7 +467,7 @@
       "owner",
       "none",
       "preferred",
-      "Cursor Plan / 策划文档闸门 owner：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨模块/高风险/用户要求时升级为 ",
+      "Cross-host Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。",
       [
         "Cursor Plan",
         "Plan 模式",

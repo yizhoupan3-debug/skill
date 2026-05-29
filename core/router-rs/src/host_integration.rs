@@ -257,6 +257,8 @@ pub(crate) struct ResolvedProjectionRoots {
     pub(crate) framework_root: PathBuf,
     pub(crate) project_root: PathBuf,
     pub(crate) artifact_root: PathBuf,
+    /// OS account home for Desktop official config paths and stable MCP binary (not `CLAUDE_HOME` parent).
+    pub(crate) account_home_root: PathBuf,
     pub(crate) codex_home_root: PathBuf,
     pub(crate) cursor_home_root: PathBuf,
     pub(crate) claude_home_root: PathBuf,
@@ -634,6 +636,19 @@ fn ensure_router_rs_installed_for_mcp_with_roots(roots: &ResolvedProjectionRoots
     Ok(())
 }
 
+fn host_account_home_from_roots(roots: &ResolvedProjectionRoots) -> PathBuf {
+    roots.account_home_root.clone()
+}
+
+fn ensure_claude_desktop_mcp_binary(roots: &ResolvedProjectionRoots) -> Result<PathBuf, String> {
+    let path =
+        crate::router_self::install_router_rs_for_desktop_mcp_at(&host_account_home_from_roots(
+            roots,
+        ))?;
+    crate::router_self::validate_router_rs_binary_runnable(&path)?;
+    Ok(path)
+}
+
 fn resolve_stable_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     match resolve_mcp_router_rs_command(framework_root) {
         McpRouterRsCommand::OnPath => which::which("router-rs").ok(),
@@ -728,10 +743,15 @@ pub(crate) fn resolve_projection_roots(
     let antigravity_home_root = resolve_host_home(antigravity_home, shared_home, "ANTIGRAVITY_HOME", ".gemini")?;
     let antigravity_cli_home_root =
         resolve_host_home(antigravity_cli_home, shared_home, "ANTIGRAVITY_CLI_HOME", ".antigravitycli")?;
+    let account_home_root = match shared_home {
+        Some(home) => normalize_path(home)?,
+        None => default_home_dir(),
+    };
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
         artifact_root,
+        account_home_root,
         codex_home_root,
         cursor_home_root,
         claude_home_root,
@@ -1020,8 +1040,10 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
             | ".codex/prompts/framework.md"
             | ".claude/rules/framework.md"
             | ".claude/settings.json"
+            | ".claude/.framework-projection.json"
             | ".claude/CLAUDE.md"
             | ".claude/mcp.json"
+            | ".claude/.framework-projection-desktop.json"
             | ".gemini/antigravity/rules/framework.md"
             | ".gemini/settings.json"
             | ".gemini/mcp.json"
@@ -1212,7 +1234,7 @@ fn generated_artifact_forbidden_markers(path: &str, content: &str) -> Vec<&'stat
         ("expanded-codex-home", "/Users/joe/.codex"),
         (
             "expanded-consuming-project-root",
-            "/Users/joe/Documents/skill",
+            r"${HOME}/Documents/skill",
         ),
         ("copied-skill-body", "# Plan To Code"),
     ] {
@@ -2324,7 +2346,6 @@ fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
         Value::String(s) => {
             s.contains("claude-router-rs-hook.sh")
                 || (s.contains("router-rs") && s.contains("claude hook"))
-                || s.contains(".claude/hooks/router-rs-hook.sh")
         }
         Value::Array(items) => items.iter().any(value_contains_router_rs_claude_hook),
         Value::Object(map) => map.values().any(value_contains_router_rs_claude_hook),
@@ -2638,6 +2659,12 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
     )
 }
 
+fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path) -> String {
+    path.strip_prefix(&roots.project_root)
+        .map(|rel| rel.to_string_lossy().trim_start_matches('/').to_string())
+        .unwrap_or_else(|_| path.to_string_lossy().into_owned())
+}
+
 fn write_claude_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -2651,7 +2678,10 @@ fn write_claude_projection_manifest(
             "managed_by": "skill-framework",
             "host_projection": "claude-code",
             "scope": scope,
-            "files": [command_path.to_string_lossy(), settings_path.to_string_lossy()],
+            "files": [
+                projection_manifest_file_ref(roots, command_path),
+                projection_manifest_file_ref(roots, settings_path),
+            ],
             "settings": {
                 "managed_key_paths": [
                     "hooks.PreToolUse",
@@ -2712,21 +2742,60 @@ fn install_claude_desktop_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
-    ensure_router_rs_installed_for_mcp_with_roots(roots)?;
+    let stable_bin = ensure_claude_desktop_mcp_binary(roots)?;
+    validate_mcp_command_binary(
+        &stable_bin.to_string_lossy(),
+        Some(&roots.framework_root),
+    )?;
     // Claude Desktop uses MCP protocol (via mcp.json), not shell hooks.
-    let mcp_target = claude_desktop_mcp_target(roots, scope);
     let claude_md_target = claude_desktop_claude_md_target(roots, scope);
-    let mcp_changed = write_claude_desktop_mcp_json(&mcp_target, roots)?;
+    let (mcp_targets, mcp_changed) = if scope == "user" {
+        let mut changed = false;
+        let mut targets = Vec::new();
+        for path in claude_desktop_user_mcp_config_paths(roots) {
+            changed |= write_claude_desktop_mcp_json(&path, roots)?;
+            targets.push(path);
+        }
+        (targets, changed)
+    } else {
+        let mcp_target = claude_desktop_mcp_target(roots, scope);
+        let changed = write_claude_desktop_mcp_json(&mcp_target, roots)?;
+        (vec![mcp_target], changed)
+    };
     let md_changed = write_claude_desktop_claude_md(&claude_md_target, roots, scope)?;
-    let manifest_changed =
-        write_claude_desktop_projection_manifest(roots, scope, &mcp_target, &claude_md_target)?;
+    let settings_changed = install_claude_desktop_research_settings(&claude_desktop_research_settings_target(
+        roots,
+        scope,
+    ))?;
+    let primary_mcp = mcp_targets
+        .first()
+        .cloned()
+        .unwrap_or_else(|| claude_desktop_mcp_target(roots, scope));
+    let manifest_changed = write_claude_desktop_projection_manifest(
+        roots,
+        scope,
+        &mcp_targets,
+        &claude_md_target,
+        true,
+    )?;
+    let research_settings_path =
+        claude_desktop_research_settings_target(roots, scope).to_string_lossy().into_owned();
+    let mcp_paths: Vec<String> = mcp_targets
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect();
     Ok(json!({
         "status": "installed",
-        "changed": mcp_changed || md_changed || manifest_changed,
+        "changed": mcp_changed || md_changed || settings_changed || manifest_changed,
         "scope": scope,
+        "mcp_binary": {
+            "path": stable_bin.to_string_lossy(),
+            "smoke_test": "ok",
+        },
         "mcp_config": {
             "scope": scope,
-            "path": mcp_target.to_string_lossy(),
+            "path": primary_mcp.to_string_lossy(),
+            "paths": mcp_paths,
             "changed": mcp_changed,
         },
         "claude_md": {
@@ -2734,22 +2803,74 @@ fn install_claude_desktop_projection(
             "path": claude_md_target.to_string_lossy(),
             "changed": md_changed,
         },
+        "research_settings": {
+            "scope": scope,
+            "installed": settings_changed || research_settings_path.ends_with("settings.json"),
+            "path": research_settings_path,
+            "changed": settings_changed,
+        },
     }))
 }
 
+fn claude_desktop_research_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.claude_home_root.join("settings.json")
+    } else {
+        roots.project_root.join(".claude/settings.json")
+    }
+}
+
 fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    // H5 FIX: Check both project scope and user scope paths
     let project_mcp_path = roots.project_root.join(".claude/mcp.json");
     let project_claude_md_path = roots.project_root.join(".claude/CLAUDE.md");
-    let user_mcp_path = roots.claude_home_root.join("mcp.json");
+    let user_mcp_paths = claude_desktop_user_mcp_config_paths(roots);
     let user_claude_md_path = roots.claude_home_root.join("CLAUDE.md");
+    let user_mcp_exists = user_mcp_paths.iter().any(|path| path.is_file());
+    let account_home = host_account_home_from_roots(roots);
+    let user_3p_mcp_path = claude_desktop_3p_mcp_config_path_for_home(&account_home);
+    let mcp_command = read_json_if_exists(&project_mcp_path)
+        .ok()
+        .flatten()
+        .and_then(|payload| claude_desktop_router_rs_framework_payload(&payload))
+        .or_else(|| {
+            user_mcp_paths.iter().find_map(|path| {
+                read_json_if_exists(path)
+                    .ok()
+                    .flatten()
+                    .and_then(|payload| claude_desktop_router_rs_framework_payload(&payload))
+            })
+        });
+
+    let mut binary_valid = false;
+    let mut status_error = None;
+    if let Some(payload) = mcp_command.as_ref() {
+        if let Some(cmd) = payload.get("command").and_then(Value::as_str) {
+            match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
+                Ok(()) => match crate::router_self::validate_router_rs_binary_runnable(Path::new(cmd))
+                {
+                    Ok(()) => binary_valid = true,
+                    Err(err) => status_error = Some(err),
+                },
+                Err(err) => status_error = Some(err),
+            }
+        }
+    } else if project_mcp_path.exists() || user_mcp_exists {
+        status_error =
+            Some("Invalid or incomplete mcpServers.router-rs-framework payload".to_string());
+    }
 
     Ok(json!({
-        "ready": project_mcp_path.exists() || user_mcp_path.exists(),
+        "ready": (project_mcp_path.exists() || user_mcp_exists) && binary_valid,
         "status": "projection-status",
+        "error": status_error,
         "mcp_config": {
             "project_scope": project_mcp_path.exists(),
-            "user_scope": user_mcp_path.exists(),
+            "user_scope": user_mcp_exists,
+            "user_scope_path": user_mcp_paths.first().map(|path| path.to_string_lossy()),
+            "user_scope_3p_path": user_3p_mcp_path.to_string_lossy(),
+            "user_scope_3p": user_3p_mcp_path.is_file(),
+            "binary_valid": binary_valid,
+            "router_rs_framework": mcp_command,
         },
         "claude_md": {
             "project_scope": project_claude_md_path.exists(),
@@ -2758,12 +2879,22 @@ fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<V
     }))
 }
 
+fn claude_desktop_router_rs_framework_payload(root: &Value) -> Option<Value> {
+    root.get("mcpServers")
+        .and_then(|servers| servers.get("router-rs-framework"))
+        .cloned()
+}
+
 fn remove_claude_desktop_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
 ) -> Result<Value, String> {
-    let mcp_target = claude_desktop_mcp_target(roots, scope);
+    let mcp_targets: Vec<PathBuf> = if scope == "user" {
+        claude_desktop_user_mcp_config_paths(roots)
+    } else {
+        vec![claude_desktop_mcp_target(roots, scope)]
+    };
     let claude_md_target = claude_desktop_claude_md_target(roots, scope);
     let manifest_path = projection_manifest_path(roots, "claude-desktop", scope);
 
@@ -2772,30 +2903,79 @@ fn remove_claude_desktop_projection(
     let mut removed_paths = Vec::new();
     let mut would_remove_paths = Vec::new();
 
-    for (target, label) in [
-        (&mcp_target, "mcp_config"),
-        (&claude_md_target, "claude_md"),
-    ] {
-        let managed =
-            projection_manifest_ownership(&manifest_path, "claude-desktop", scope, target)
-                .map(|o| o.owns_projection_file)
-                .unwrap_or(false);
-        // H7 FIX: Only set would_change if a file would actually be removed
-        if target.exists() && managed {
+    for mcp_target in &mcp_targets {
+        let managed = projection_manifest_ownership(
+            &manifest_path,
+            "claude-desktop",
+            scope,
+            mcp_target,
+        )
+        .map(|o| o.owns_projection_file)
+        .unwrap_or(false);
+        if !mcp_target.exists() || !managed {
+            continue;
+        }
+        if claude_desktop_config_preserves_non_mcp_keys(mcp_target) {
             if !dry_run {
-                let _ = std::fs::remove_file(target);
-                removed_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
+                let stripped = strip_claude_desktop_framework_mcp_servers(mcp_target)?;
+                if stripped {
+                    removed_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config", "mode": "strip-servers"}));
+                }
+            } else {
+                would_remove_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config", "mode": "strip-servers"}));
             }
             changed = true;
             would_change = true;
-            if dry_run {
-                would_remove_paths.push(json!({"path": target.to_string_lossy(), "type": label}));
+            continue;
+        }
+        if !dry_run {
+            let _ = std::fs::remove_file(mcp_target);
+            removed_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config"}));
+        } else {
+            would_remove_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config"}));
+        }
+        changed = true;
+        would_change = true;
+    }
+
+    let managed =
+        projection_manifest_ownership(&manifest_path, "claude-desktop", scope, &claude_md_target)
+            .map(|o| o.owns_projection_file)
+            .unwrap_or(false);
+    if claude_md_target.exists() && managed {
+        if !dry_run {
+            let _ = std::fs::remove_file(&claude_md_target);
+            removed_paths.push(json!({"path": claude_md_target.to_string_lossy(), "type": "claude_md"}));
+        } else {
+            would_remove_paths.push(json!({"path": claude_md_target.to_string_lossy(), "type": "claude_md"}));
+        }
+        changed = true;
+        would_change = true;
+    }
+
+    let settings_path = claude_desktop_research_settings_target(roots, scope);
+    let settings_managed = projection_manifest_ownership(
+        &manifest_path,
+        "claude-desktop",
+        scope,
+        &settings_path,
+    )
+    .map(|o| o.owns_projection_file || o.managed)
+    .unwrap_or(false);
+    if settings_path.is_file() && settings_managed {
+        if !dry_run {
+            if strip_claude_desktop_research_settings(&settings_path)? {
+                removed_paths.push(json!({"path": settings_path.to_string_lossy(), "type": "research_settings", "mode": "strip"}));
+                changed = true;
             }
+        } else {
+            would_remove_paths.push(json!({"path": settings_path.to_string_lossy(), "type": "research_settings", "mode": "strip"}));
+            would_change = true;
         }
     }
 
     let manifest_managed =
-        projection_manifest_ownership(&manifest_path, "claude-desktop", scope, &mcp_target)
+        projection_manifest_ownership(&manifest_path, "claude-desktop", scope, mcp_targets.first().unwrap_or(&claude_md_target))
             .map(|o| o.managed)
             .unwrap_or(false);
     if manifest_managed {
@@ -2815,9 +2995,84 @@ fn remove_claude_desktop_projection(
     }))
 }
 
+pub(crate) fn claude_desktop_official_mcp_config_path_for_home(home: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        return home.join("Library/Application Support/Claude/claude_desktop_config.json");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return PathBuf::from(appdata).join("Claude/claude_desktop_config.json");
+        }
+        return home.join("Claude/claude_desktop_config.json");
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        home.join(".config/Claude/claude_desktop_config.json")
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
+    home.join("Library/Application Support/Claude-3p/claude_desktop_config.json")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
+    claude_desktop_official_mcp_config_path_for_home(home)
+}
+
+pub(crate) fn claude_desktop_user_mcp_config_paths(roots: &ResolvedProjectionRoots) -> Vec<PathBuf> {
+    let home = host_account_home_from_roots(roots);
+    let mut paths = vec![claude_desktop_official_mcp_config_path_for_home(&home)];
+    #[cfg(target_os = "macos")]
+    {
+        let three_p = claude_desktop_3p_mcp_config_path_for_home(&home);
+        if !paths.iter().any(|existing| existing == &three_p) {
+            paths.push(three_p);
+        }
+    }
+    paths
+}
+
+fn claude_desktop_config_preserves_non_mcp_keys(path: &Path) -> bool {
+    read_json_if_exists(path)
+        .ok()
+        .flatten()
+        .and_then(|payload| payload.as_object().map(|obj| obj.keys().any(|key| key != "mcpServers")))
+        .unwrap_or(false)
+}
+
+fn strip_claude_desktop_framework_mcp_servers(path: &Path) -> Result<bool, String> {
+    let Some(mut payload) = read_json_if_exists(path)? else {
+        return Ok(false);
+    };
+    let Some(root) = payload.as_object_mut() else {
+        return Ok(false);
+    };
+    let Some(servers) = root.get_mut("mcpServers").and_then(Value::as_object_mut) else {
+        return Ok(false);
+    };
+    let before = servers.len();
+    servers.remove("router-rs-framework");
+    servers.remove("browser-mcp");
+    if servers.len() == before {
+        return Ok(false);
+    }
+    if servers.is_empty() {
+        root.remove("mcpServers");
+    }
+    if root.is_empty() {
+        fs::remove_file(path).map_err(|err| err.to_string())?;
+        return Ok(true);
+    }
+    write_json_if_changed(path, &payload).map(|_| true)
+}
+
 fn claude_desktop_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.claude_home_root.join("mcp.json")
+        claude_desktop_official_mcp_config_path_for_home(&host_account_home_from_roots(roots))
     } else {
         roots.project_root.join(".claude/mcp.json")
     }
@@ -2832,11 +3087,20 @@ fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str)
 }
 
 fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
+    make_mcp_server_payload_with_env(roots, host_args, description, None)
+}
+
+fn make_mcp_server_payload_with_env(
+    roots: &ResolvedProjectionRoots,
+    host_args: &[&str],
+    description: &str,
+    env: Option<Value>,
+) -> Value {
     let mut args = Vec::new();
     for arg in host_args {
         args.push(arg.to_string());
     }
-    match resolve_mcp_router_rs_command(&roots.framework_root) {
+    let mut payload = match resolve_mcp_router_rs_command(&roots.framework_root) {
         McpRouterRsCommand::CargoBootstrap => json!({
             "command": "cargo",
             "args": router_rs_cargo_bootstrap_args(&roots.framework_root, host_args),
@@ -2849,15 +3113,366 @@ fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], 
             "type": "stdio",
             "description": description.to_string(),
         }),
+    };
+    if let Some(env) = env {
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("env".to_string(), env);
+        }
+    }
+    payload
+}
+
+fn claude_desktop_mcp_env(roots: &ResolvedProjectionRoots) -> Value {
+    let mut env = Map::new();
+    env.insert(
+        "SKILL_FRAMEWORK_ROOT".to_string(),
+        json!(roots.framework_root.to_string_lossy()),
+    );
+    for key in [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+    ] {
+        if let Ok(value) = std::env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                env.insert(key.to_string(), json!(trimmed));
+            }
+        }
+    }
+    Value::Object(env)
+}
+
+fn workspace_router_rs_release_binary(framework_root: &Path) -> Option<PathBuf> {
+    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
+        let candidate = PathBuf::from(td).join("release/router-rs");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    let manifest = framework_root.join("core/router-rs/Cargo.toml");
+    if manifest.is_file() {
+        let output = std::process::Command::new("cargo")
+            .current_dir(framework_root)
+            .args([
+                "metadata",
+                "--no-deps",
+                "--format-version",
+                "1",
+                "--manifest-path",
+            ])
+            .arg(&manifest)
+            .output()
+            .ok()?;
+        if output.status.success() {
+            if let Ok(meta) = serde_json::from_slice::<Value>(&output.stdout) {
+                if let Some(td) = meta.get("target_directory").and_then(Value::as_str) {
+                    let candidate = PathBuf::from(td).join("release/router-rs");
+                    if candidate.is_file() {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+    let config = framework_root.join(".cargo/config.toml");
+    if let Ok(text) = fs::read_to_string(config) {
+        for raw in text.lines() {
+            let line = raw.split('#').next().unwrap_or("").trim();
+            if let Some(rest) = line.strip_prefix("target-dir") {
+                let mut rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == '=');
+                rest = rest.trim();
+                let val = rest
+                    .strip_prefix('"')
+                    .and_then(|s| s.strip_suffix('"'))
+                    .or_else(|| rest.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+                    .unwrap_or(rest);
+                let base = PathBuf::from(val);
+                let candidate = if base.is_absolute() {
+                    base.join("release/router-rs")
+                } else {
+                    framework_root.join(base).join("release/router-rs")
+                };
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn claude_desktop_mcp_router_command(roots: &ResolvedProjectionRoots) -> Value {
+    if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty()
+            && Path::new(trimmed).is_file()
+            && !is_ephemeral_executable_path(trimmed)
+        {
+            return json!(trimmed);
+        }
+    }
+    let desktop =
+        crate::router_self::router_rs_desktop_mcp_path_for_home(&host_account_home_from_roots(roots));
+    if desktop.is_file() {
+        return json!(desktop.to_string_lossy());
+    }
+    let local = crate::router_self::default_router_rs_install_path();
+    if local.is_file() && !is_ephemeral_executable_path(&local.to_string_lossy()) {
+        return json!(local.to_string_lossy());
+    }
+    match resolve_mcp_router_rs_command(&roots.framework_root) {
+        McpRouterRsCommand::OnPath => {
+            if let Ok(path) = which::which("router-rs") {
+                json!(path.to_string_lossy())
+            } else {
+                json!("router-rs")
+            }
+        }
+        McpRouterRsCommand::Absolute(path) => json!(path.to_string_lossy()),
+        McpRouterRsCommand::CargoBootstrap => json!("cargo"),
     }
 }
 
 fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
-    make_mcp_server_payload(
+    let mut payload = make_mcp_server_payload_with_env(
         roots,
-        &["claude-desktop", "agent", "--repo-root", "${workspaceRoot}"],
-        "Framework runtime snapshot, continuity, skill routing, closeout advisory",
-    )
+        &["claude-desktop", "agent", "--repo-root", "${CLAUDE_PROJECT_DIR:-.}"],
+        "Framework snapshot, skill routing, goal/closeout gating (MCP hard block for non-my-light)",
+        Some(claude_desktop_mcp_env(roots)),
+    );
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert(
+            "command".to_string(),
+            claude_desktop_mcp_router_command(roots),
+        );
+    }
+    payload
+}
+
+fn claude_desktop_browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+    let mut payload = make_mcp_server_payload_with_env(
+        roots,
+        &[
+            "browser",
+            "mcp-stdio",
+            "--repo-root",
+            "${CLAUDE_PROJECT_DIR:-.}",
+        ],
+        "Browser MCP for external web research (browser_open, browser_get_text, …)",
+        Some(claude_desktop_mcp_env(roots)),
+    );
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert(
+            "command".to_string(),
+            claude_desktop_mcp_router_command(roots),
+        );
+    }
+    payload
+}
+
+const CLAUDE_DESKTOP_RESEARCH_PERMISSION_ALLOW: &[&str] = &[
+    "WebFetch(domain:*)",
+    "WebSearch",
+    "Bash(curl *)",
+    "Bash(wget *)",
+    "Bash(git fetch *)",
+    "Bash(git clone *)",
+];
+
+const CLAUDE_DESKTOP_RESEARCH_SANDBOX_DOMAINS: &[&str] = &[
+    "github.com",
+    "*.githubusercontent.com",
+    "gitlab.com",
+    "*.npmjs.org",
+    "registry.yarnpkg.com",
+    "pypi.org",
+    "*.pythonhosted.org",
+    "arxiv.org",
+    "*.arxiv.org",
+    "doi.org",
+    "*.crossref.org",
+    "scholar.google.com",
+    "api.github.com",
+    "raw.githubusercontent.com",
+    "*.wikipedia.org",
+    "stackoverflow.com",
+    "*.stackoverflow.com",
+    "docs.rs",
+    "crates.io",
+    "127.0.0.1",
+    "localhost",
+];
+
+fn merge_json_string_array(existing: &mut Value, additions: &[&str]) {
+    if !existing.is_array() {
+        *existing = json!([]);
+    }
+    let Some(arr) = existing.as_array_mut() else {
+        return;
+    };
+    for item in additions {
+        let value = json!(item);
+        if !arr.iter().any(|entry| entry == &value) {
+            arr.push(value);
+        }
+    }
+}
+
+fn remove_json_string_array_values(value: &mut Value, remove: &[&str]) {
+    let Some(arr) = value.as_array_mut() else {
+        return;
+    };
+    arr.retain(|entry| entry.as_str().is_some_and(|s| !remove.contains(&s)));
+}
+
+fn strip_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
+    let Some(mut root) = read_json_if_exists(settings_path)? else {
+        return Ok(false);
+    };
+    let Some(obj) = root.as_object_mut() else {
+        return Ok(false);
+    };
+    let mut changed = false;
+
+    if let Some(perms) = obj.get_mut("permissions").and_then(Value::as_object_mut) {
+        if let Some(allow) = perms.get_mut("allow") {
+            let before = allow.as_array().map(|a| a.len()).unwrap_or(0);
+            remove_json_string_array_values(allow, CLAUDE_DESKTOP_RESEARCH_PERMISSION_ALLOW);
+            if allow.as_array().map(|a| a.len()).unwrap_or(0) != before {
+                changed = true;
+            }
+        }
+        if perms.get("allow").and_then(Value::as_array).is_some_and(|a| a.is_empty()) {
+            perms.remove("allow");
+            changed = true;
+        }
+        if perms.is_empty() {
+            obj.remove("permissions");
+            changed = true;
+        }
+    }
+
+    if let Some(sandbox) = obj.get_mut("sandbox").and_then(Value::as_object_mut) {
+        if let Some(excluded) = sandbox.get_mut("excludedCommands") {
+            remove_json_string_array_values(excluded, &["curl *", "wget *"]);
+            changed = true;
+        }
+        if let Some(network) = sandbox.get_mut("network").and_then(Value::as_object_mut) {
+            if let Some(allowed) = network.get_mut("allowedDomains") {
+                remove_json_string_array_values(allowed, CLAUDE_DESKTOP_RESEARCH_SANDBOX_DOMAINS);
+                changed = true;
+            }
+            if network.get("allowedDomains").and_then(Value::as_array).is_some_and(|a| a.is_empty()) {
+                network.remove("allowedDomains");
+                changed = true;
+            }
+            if network.len() == 1 && network.contains_key("allowLocalBinding") {
+                sandbox.remove("network");
+                changed = true;
+            }
+        }
+        if sandbox.get("excludedCommands").and_then(Value::as_array).is_some_and(|a| a.is_empty()) {
+            sandbox.remove("excludedCommands");
+            changed = true;
+        }
+        if sandbox.len() <= 2
+            && sandbox.contains_key("enabled")
+            && sandbox.contains_key("autoAllowBashIfSandboxed")
+        {
+            obj.remove("sandbox");
+            changed = true;
+        }
+    }
+
+    if !changed {
+        return Ok(false);
+    }
+    write_json_if_changed(settings_path, &root)
+}
+
+fn merge_claude_desktop_research_settings(existing: Option<Value>) -> Result<Value, String> {
+    let mut root = match existing {
+        Some(Value::Object(map)) => map,
+        Some(_) => {
+            return Err(
+                "Claude Desktop research settings root must be a JSON object".to_string(),
+            );
+        }
+        None => Map::new(),
+    };
+
+    let permissions = root
+        .entry("permissions".to_string())
+        .or_insert_with(|| json!({}));
+    if !permissions.is_object() {
+        *permissions = json!({});
+    }
+    if let Some(perms) = permissions.as_object_mut() {
+        let allow = perms
+            .entry("allow".to_string())
+            .or_insert_with(|| json!([]));
+        merge_json_string_array(allow, CLAUDE_DESKTOP_RESEARCH_PERMISSION_ALLOW);
+    }
+
+    let sandbox = root
+        .entry("sandbox".to_string())
+        .or_insert_with(|| json!({}));
+    if !sandbox.is_object() {
+        *sandbox = json!({});
+    }
+    if let Some(sandbox_obj) = sandbox.as_object_mut() {
+        // 调研面：默认关闭 Bash 沙箱（避免误开 Seatbelt 域名墙）；外网走 MCP web_fetch / browser-mcp。
+        // 若用户已在 /sandbox 显式开启，保留其 enabled 值；仅修复框架曾误写的 enabled:true。
+        match sandbox_obj.get("enabled") {
+            None => {
+                sandbox_obj.insert("enabled".to_string(), json!(false));
+            }
+            Some(Value::Bool(true)) => {
+                sandbox_obj.insert("enabled".to_string(), json!(false));
+            }
+            _ => {}
+        }
+        sandbox_obj
+            .entry("autoAllowBashIfSandboxed".to_string())
+            .or_insert(json!(true));
+        sandbox_obj
+            .entry("allowUnsandboxedCommands".to_string())
+            .or_insert(json!(true));
+        let excluded = sandbox_obj
+            .entry("excludedCommands".to_string())
+            .or_insert_with(|| json!([]));
+        merge_json_string_array(excluded, &["curl *", "wget *"]);
+        let network = sandbox_obj
+            .entry("network".to_string())
+            .or_insert_with(|| json!({}));
+        if !network.is_object() {
+            *network = json!({});
+        }
+        if let Some(network_obj) = network.as_object_mut() {
+            network_obj
+                .entry("allowLocalBinding".to_string())
+                .or_insert(json!(true));
+            let allowed = network_obj
+                .entry("allowedDomains".to_string())
+                .or_insert_with(|| json!([]));
+            merge_json_string_array(allowed, CLAUDE_DESKTOP_RESEARCH_SANDBOX_DOMAINS);
+        }
+    }
+
+    Ok(Value::Object(root))
+}
+
+fn install_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
+    let existing = read_json_if_exists(settings_path)?;
+    let merged = merge_claude_desktop_research_settings(existing)?;
+    if let Some(parent) = settings_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    write_json_if_changed(settings_path, &merged)
 }
 
 fn write_claude_desktop_mcp_json(
@@ -2880,11 +3495,14 @@ fn write_claude_desktop_mcp_json(
     let entries = mcp_servers
         .as_object_mut()
         .ok_or_else(|| "mcpServers must be an object".to_string())?;
-    entries.insert(
-        "router-rs-framework".to_string(),
-        claude_desktop_mcp_server_payload(roots),
-    );
+    let framework_payload = claude_desktop_mcp_server_payload(roots);
+    let browser_payload = claude_desktop_browser_mcp_server_payload(roots);
+    let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
+    let browser_changed = entries.get("browser-mcp") != Some(&browser_payload);
+    entries.insert("router-rs-framework".to_string(), framework_payload);
+    entries.insert("browser-mcp".to_string(), browser_payload);
     write_json_if_changed(path, &payload)
+        .map(|file_changed| file_changed || framework_changed || browser_changed)
 }
 
 fn write_claude_desktop_claude_md(
@@ -2892,36 +3510,54 @@ fn write_claude_desktop_claude_md(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<bool, String> {
+    let narrative = load_host_projection_narrative(&roots.framework_root)
+        .expect("host projection narrative must load before rendering claude-desktop CLAUDE.md");
     let runtime_rel = skills_source_rel(&roots.framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
+    let lifecycle = lifecycle_paragraph_for_host(&narrative, "claude-desktop");
     let content = format!(
-        "<!-- managed_by: skill-framework · claude-desktop · keep ≤40 lines -->
+        "<!-- managed_by: skill-framework · claude-desktop · keep ≤48 lines -->
          <!-- projection_id: claude-desktop-self-discipline -->
          <!-- host_projection: claude-desktop -->
          <!-- install_scope: {scope} -->
 
          # Claude Desktop
 
-         MCP **`router-rs-framework`**。协议与限制：**`docs/hosts/claude-desktop.md`**；政策：**`AGENTS_CLAUDE.md`**。
+         MCP **`router-rs-framework`**（框架路由/goal/closeout）；**`browser-mcp`** 外网调研。详 **`docs/hosts/claude-desktop.md`**；跨宿主 **`AGENTS.md`**。
+
+         ## 语言（硬约束）
+
+         - **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外）；自然学术中文，避免翻译腔。
+         - 仅当用户**当轮明确要求英文**时可切换。
+         - **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」；对用户可见层避免中英混排。
+
+         {lifecycle}
 
          ## 会话（按序）
 
-         1. `framework_digest` — 开头一次
-         2. `skill_route` → 只读 `skill_path`
+         1. `framework_snapshot` — 开头一次
+         2. `skill_route`（**router-rs-framework**）→ 只读 `skill_path`
          3. `goal_state_manage operation=start`（宏任务）
          4. 验证后 `record_evidence`
          5. `closeout_gate` → `goal_state_manage operation=complete`
+         - 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory；非 my-light 时 MCP **硬拦**
 
-         ## 无 hook 硬拦
+         ## 无 CLI hook 硬拦
 
-         - 无 PreToolUse；Bash 前自行评估安全
-         - Stop/UserPromptSubmit 无 CLI 硬 block — 勿声称已被 hook 拦截
+         - 无 PreToolUse/Stop shell 硬拦；Bash 前自行评估安全；勿声称已被 hook 拦截
          - 检查点：`session_checkpoint`（非自动）
 
-         ## 共享
+         ## 联网（按标签页 — 硬约束）
 
-         `artifacts/current/` 与 Claude Code CLI 共用。路由：`{runtime_rel}`。
+         | 标签 | MCP | 外网顺序 | 勿用 |
+         |------|-----|----------|------|
+         | **Chat** | `router-rs-framework` + `browser-mcp` | `web_fetch` → `browser-mcp` → 宿主 WebFetch | Bash `curl`（CCD 沙箱） |
+         | **Cowork** | **`browser-mcp`**（Connectors 注入 VM） | **`browser-mcp`**（`browser_open` / `browser_get_text`） | `mcp__workspace__web_fetch`（易 reset）、`WebSearch`（gateway 常失败）、Bash 绕过 |
+
+         Cowork 3P 另须 configLibrary 的 coworkEgressAllowedHosts（个人开发可全开）。运维：**`docs/hosts/claude-desktop-networking.md`**。
+
+         路由：`{runtime_rel}` · 产物：`artifacts/current/`（与 Claude Code 共用）。
 "
     );
     write_text_if_changed(path, &content)
@@ -2930,9 +3566,25 @@ fn write_claude_desktop_claude_md(
 fn write_claude_desktop_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-    mcp_path: &Path,
+    mcp_paths: &[PathBuf],
     claude_md_path: &Path,
+    include_research_settings: bool,
 ) -> Result<bool, String> {
+    let mut files: Vec<String> = mcp_paths
+        .iter()
+        .map(|path| projection_manifest_file_ref(roots, path))
+        .collect();
+    files.push(projection_manifest_file_ref(roots, claude_md_path));
+    let mut managed_key_paths = vec![
+        "mcpServers.router-rs-framework".to_string(),
+        "mcpServers.browser-mcp".to_string(),
+    ];
+    if include_research_settings {
+        let settings_path = claude_desktop_research_settings_target(roots, scope);
+        files.push(projection_manifest_file_ref(roots, &settings_path));
+        managed_key_paths.push("sandbox.network".to_string());
+        managed_key_paths.push("permissions.allow".to_string());
+    }
     write_json_if_changed(
         &projection_manifest_path(roots, "claude-desktop", scope),
         &json!({
@@ -2940,7 +3592,10 @@ fn write_claude_desktop_projection_manifest(
             "managed_by": "skill-framework",
             "host_projection": "claude-desktop",
             "scope": scope,
-            "files": [mcp_path.to_string_lossy(), claude_md_path.to_string_lossy()],
+            "files": files,
+            "settings": {
+                "managed_key_paths": managed_key_paths,
+            },
         }),
     )
 }
@@ -3278,7 +3933,7 @@ fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &str)
 fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     make_mcp_server_payload(
         roots,
-        &["antigravity-app", "agent", "--repo-root", "${workspaceRoot}"],
+        &["antigravity-app", "agent", "--repo-root", "${CLAUDE_PROJECT_DIR:-.}"],
         "Framework runtime snapshot, continuity, skill routing, closeout gating",
     )
 }
@@ -3338,7 +3993,7 @@ fn write_antigravity_framework_md(
          # Antigravity Framework\n\n\
          Antigravity **App**（Desktop / Planning Mode）**`router-rs-framework`** MCP。协议：**`docs/hosts/antigravity-app.md`**；CLI hooks：**`docs/hosts/antigravity-cli.md`**；跨宿主 **`AGENTS.md`**；**`AGENTS_ANTIGRAVITY.md`**。\n\n\
          ## 会话操作（按序）\n\n\
-         1. `framework_digest` — 开头一次\n\
+         1. `framework_snapshot` — 开头一次\n\
          2. `skill_route` → 只读 `skill_path`\n\
          3. `goal_state_manage operation=start`（宏任务）\n\
          4. 验证后 `record_evidence`\n\
@@ -3460,21 +4115,29 @@ fn projection_manifest_payload_is_managed(
     true
 }
 
-fn projection_manifest_files_include(path: &Path, projection_path: &Path) -> Result<bool, String> {
-    let Some(manifest) = read_json_if_exists(path)? else {
+fn projection_manifest_files_include(manifest_path: &Path, projection_path: &Path) -> Result<bool, String> {
+    let Some(manifest) = read_json_if_exists(manifest_path)? else {
         return Ok(false);
     };
     let expected = normalize_path(projection_path)?;
+    let manifest_base = manifest_path
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
     Ok(manifest
         .get("files")
         .and_then(Value::as_array)
         .map(|files| {
-            files
-                .iter()
-                .filter_map(Value::as_str)
-                .map(PathBuf::from)
-                .filter_map(|path| normalize_path(&path).ok())
-                .any(|path| path == expected)
+            files.iter().filter_map(Value::as_str).any(|raw| {
+                let candidate = PathBuf::from(raw);
+                let resolved = if candidate.is_absolute() {
+                    normalize_path(&candidate).ok()
+                } else {
+                    normalize_path(&manifest_base.join(candidate)).ok()
+                };
+                resolved == Some(expected.clone())
+            })
         })
         .unwrap_or(false))
 }
@@ -5456,6 +6119,7 @@ mod tests {
             framework_root: framework_root.clone(),
             project_root: framework_root.clone(),
             artifact_root: framework_root.join("artifacts"),
+            account_home_root: home.clone(),
             codex_home_root: root.join("codex"),
             cursor_home_root: cursor_home.clone(),
             claude_home_root: root.join("claude"),
@@ -5506,6 +6170,45 @@ mod tests {
         }
 
         std::env::remove_var("HOME");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn resolve_projection_roots_uses_os_home_not_claude_home_parent_for_account_home() {
+        let root = unique_test_root("account-home-root");
+        let os_home = root.join("os-home");
+        let custom_claude = root.join("custom-claude/.claude");
+        fs::create_dir_all(&custom_claude).unwrap();
+        let prior_home = std::env::var_os("HOME");
+        let prior_claude = std::env::var_os("CLAUDE_HOME");
+        std::env::set_var("HOME", &os_home);
+        std::env::set_var("CLAUDE_HOME", &custom_claude);
+
+        let roots = resolve_projection_roots(
+            None,
+            Some(&root.join("project")),
+            None,
+            None,
+            None,
+            Some(&custom_claude),
+            None,
+            None,
+            None,
+        )
+        .expect("resolve roots");
+        assert_eq!(roots.account_home_root, os_home);
+        assert_eq!(roots.claude_home_root, custom_claude);
+
+        if let Some(h) = prior_home {
+            std::env::set_var("HOME", h);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        if let Some(c) = prior_claude {
+            std::env::set_var("CLAUDE_HOME", c);
+        } else {
+            std::env::remove_var("CLAUDE_HOME");
+        }
         let _ = fs::remove_dir_all(root);
     }
 }

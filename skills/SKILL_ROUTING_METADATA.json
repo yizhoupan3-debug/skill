@@ -31,6 +31,9 @@
     "diagramming": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
+    "discussx": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
     "doc": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -61,6 +64,9 @@
     "image-generated": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
+    "implementx": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
     "infographic": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -89,13 +95,16 @@
       "selection_reason": "allowlisted first-turn owner"
     },
     "paper-writing": {
-      "selection_reason": "inline overlay via paper-workbench prose intake (not standalone first-turn for 润色/写作); see prose-chain-contract.md"
+      "selection_reason": "allowlisted first-turn owner"
     },
     "pdf": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "plan-mode": {
       "selection_reason": "allowlisted first-turn owner"
+    },
+    "planx": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "plugin-creator": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
@@ -149,6 +158,9 @@
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "update": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "verifyx": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "visual-review": {

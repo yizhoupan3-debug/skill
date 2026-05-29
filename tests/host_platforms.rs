@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 pub fn normalize_skill_host_platforms(
     raw: &[String],
     default_supported_hosts: &[String],
-    _strict_empty_default: bool,
+
 ) -> Result<Vec<String>, String> {
     if default_supported_hosts.is_empty() {
         return Err("default_supported_hosts must be non-empty".to_string());

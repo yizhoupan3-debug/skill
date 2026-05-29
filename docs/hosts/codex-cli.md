@@ -15,7 +15,7 @@
 
 - **Harness 核心入口**：
   - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
-  - **任务状态治理**：使用 `goal_state_manage` 进行状态的启动与收尾管理。
+  - **任务状态治理**：`framework_goal_drive` stdio + `artifacts/current/<task_id>/GOAL_STATE.json`。
 - **工作区及状态产物**：
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
@@ -79,7 +79,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 ## 独有长效会话机制 (Session Supervisor)
 
-- **`session_supervisor`**：集成 tmux 长会话管理，具体详见 `rust-session-supervisor` 专项 skill。
+- **`session_supervisor`**：集成 tmux 长会话管理。
 
 ## 自检诊断与验证 (Self-Test)
 

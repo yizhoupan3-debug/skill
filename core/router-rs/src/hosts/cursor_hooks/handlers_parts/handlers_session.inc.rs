@@ -1,6 +1,5 @@
 // Session / shell / terminal lifecycle: `terminal_observation_cache` dedupes read_dir within one hook
 // subprocess; `terminate_stale_terminal_processes_in_dir` may still walk terminals for kill (see env
-// `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE`). Physical split dispatch vs kill: follow-up (plan Q3).
 
 fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     maybe_init_session_terminal_ledger(repo_root, event);

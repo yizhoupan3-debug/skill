@@ -650,12 +650,20 @@ fn project_scope_all_does_not_install_claude_projection() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["codex"]["status"], "installed");
     assert_eq!(result["results"]["cursor"]["status"], "installed");
+    // `claude` (claude-code) is excluded from project-scope batch install; `claude-desktop` is not.
     assert!(result["results"].get("claude").is_none());
+    assert_eq!(
+        result["results"]["claude-desktop"]["status"],
+        "installed"
+    );
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
     assert!(home.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
-    assert!(!repo_root.join(".claude/settings.json").exists());
     assert!(!repo_root.join(".claude/rules/framework.md").exists());
+    assert!(
+        repo_root.join(".claude/mcp.json").exists(),
+        "claude-desktop project install writes .claude/mcp.json"
+    );
 }
 
 #[test]
@@ -1554,7 +1562,7 @@ fn generated_artifacts_status_reports_manifest_backed_drift() {
     );
     write_text(
         &framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"),
-        r#"{"status":"stale","marker":"generated-by-test","bad":"/Users/joe/.codex /Users/joe/Documents/skill"}
+        r#"{"status":"stale","marker":"generated-by-test","bad":"/Users/joe/.codex ${HOME}/Documents/skill"}
 "#,
     );
     write_text(
@@ -1611,7 +1619,11 @@ fn codex_app_is_runtime_supported_but_not_installable() {
     let framework_root = project_root();
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
+    let home = tmp.path().join("home");
     std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    let prior_home = std::env::var_os("HOME");
+    std::env::set_var("HOME", home.to_str().unwrap());
 
     let all = router_rs_json(&[
         "framework",
@@ -1623,6 +1635,8 @@ fn codex_app_is_runtime_supported_but_not_installable() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
         "--scope",
         "project",
         "--to",
@@ -1643,6 +1657,8 @@ fn codex_app_is_runtime_supported_but_not_installable() {
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
         "--scope",
         "project",
         "--to",
@@ -1651,6 +1667,7 @@ fn codex_app_is_runtime_supported_but_not_installable() {
     ]);
     assert_eq!(explicit["results"]["codex-app"]["installable"], false);
     assert_eq!(explicit["results"]["codex-app"]["status"], "unsupported");
+    restore_home_env(prior_home);
 }
 
 #[test]
@@ -1896,7 +1913,11 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
     let tmp = tempdir().unwrap();
     let framework_root = project_root();
     let project_root = tmp.path().join("consumer");
+    let home = tmp.path().join("home");
     std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    let prior_home = std::env::var_os("HOME");
+    std::env::set_var("HOME", home.to_str().unwrap());
 
     let framework_status = router_rs_json(&[
         "framework",
@@ -1906,6 +1927,8 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
         framework_root.to_str().unwrap(),
         "--project-root",
         project_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
     ]);
     let codex_status = router_rs_json(&[
         "host",
@@ -1916,12 +1939,17 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
         framework_root.to_str().unwrap(),
         "--project-root",
         project_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
     ]);
     assert_eq!(
         normalize_alias_equivalence(framework_status),
         normalize_alias_equivalence(codex_status)
     );
+    restore_home_env(prior_home);
 
+    let prior_home = std::env::var_os("HOME");
+    std::env::set_var("HOME", home.to_str().unwrap());
     let framework_status_with_repo_root = router_rs_json(&[
         "framework",
         "host-integration",
@@ -1930,6 +1958,8 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
         framework_root.to_str().unwrap(),
         "--project-root",
         project_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
     ]);
     assert_eq!(
         normalize_alias_equivalence(framework_status_with_repo_root),
@@ -1941,8 +1971,11 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
             framework_root.to_str().unwrap(),
             "--project-root",
             project_root.to_str().unwrap(),
+            "--home",
+            home.to_str().unwrap(),
         ]))
     );
+    restore_home_env(prior_home);
 }
 
 fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
@@ -1965,8 +1998,30 @@ fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
 }
 
 fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Value {
+    const MACHINE_DEPENDENT_HOSTS: &[&str] = &[
+        "cursor",
+        "claude-code",
+        "claude-desktop",
+        "codex-cli",
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude",
+        "codex",
+    ];
     if let Some(object) = payload.as_object_mut() {
         object.remove("invocation");
+        object.remove("resolved_roots");
+        if let Some(host_targets) = object.get_mut("host_targets").and_then(Value::as_object_mut) {
+            for key in MACHINE_DEPENDENT_HOSTS {
+                host_targets.remove(*key);
+            }
+        }
+        if let Some(results) = object.get_mut("results").and_then(Value::as_object_mut) {
+            for key in MACHINE_DEPENDENT_HOSTS {
+                results.remove(*key);
+            }
+        }
     }
     payload
 }
@@ -2339,9 +2394,38 @@ fn install_and_remove_claude_desktop_projection() {
     assert_eq!(install["results"]["claude-desktop"]["status"], "installed");
     assert!(repo_root.join(".claude/mcp.json").exists());
     assert!(repo_root.join(".claude/CLAUDE.md").exists());
+    let claude_md_text = std::fs::read_to_string(repo_root.join(".claude/CLAUDE.md")).unwrap();
+    assert!(
+        claude_md_text.contains("简体中文"),
+        "claude-desktop CLAUDE.md must inline simplified Chinese language policy"
+    );
+    assert!(
+        !claude_md_text.contains("Default lifecycle: My"),
+        "claude-desktop CLAUDE.md must use Chinese lifecycle narrative"
+    );
     assert!(repo_root
         .join(".claude/.framework-projection-desktop.json")
         .exists());
+    let mcp_text = std::fs::read_to_string(repo_root.join(".claude/mcp.json")).unwrap();
+    assert!(mcp_text.contains("browser-mcp"));
+    assert!(mcp_text.contains("SKILL_FRAMEWORK_ROOT"));
+    let settings_path = repo_root.join(".claude/settings.json");
+    assert!(settings_path.is_file());
+    let settings: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert!(settings["permissions"]["allow"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v.as_str() == Some("WebFetch(domain:*)")));
+    assert!(settings["sandbox"]["network"]["allowLocalBinding"]
+        .as_bool()
+        .unwrap_or(false));
+    assert_eq!(
+        settings["sandbox"]["enabled"].as_bool(),
+        Some(false),
+        "research profile must not enable bash sandbox"
+    );
 
     let removed = host_integration_json(&[
         "remove",
@@ -2363,6 +2447,228 @@ fn install_and_remove_claude_desktop_projection() {
         .exists());
     assert!(!repo_root.join(".claude/mcp.json").exists());
     assert!(!repo_root.join(".claude/CLAUDE.md").exists());
+    let settings_after: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
+    let allow_after = settings_after["permissions"]["allow"].as_array();
+    assert!(
+        allow_after.is_none()
+            || !allow_after.unwrap().iter().any(|v| v.as_str() == Some("WebFetch(domain:*)")),
+        "remove must strip framework research permissions.allow entries"
+    );
+}
+
+#[test]
+fn install_claude_desktop_user_scope_writes_official_config_path() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install = host_integration_json_for_home(home.as_path(), None, &[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "user",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(install["success"], true);
+    assert_eq!(install["results"]["claude-desktop"]["status"], "installed");
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let config = home.join(".config/Claude/claude_desktop_config.json");
+        assert!(config.is_file(), "missing {}", config.display());
+        let text = std::fs::read_to_string(&config).unwrap();
+        assert!(text.contains("router-rs-framework"));
+        let desktop_bin = home.join(".local/share/skill-framework/bin/router-rs");
+        assert!(desktop_bin.is_file(), "missing stable desktop MCP binary");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let config = home.join("Library/Application Support/Claude/claude_desktop_config.json");
+        assert!(config.is_file(), "missing {}", config.display());
+        let text = std::fs::read_to_string(&config).unwrap();
+        assert!(text.contains("router-rs-framework"));
+        assert!(text.contains("browser-mcp"));
+        assert!(text.contains("${CLAUDE_PROJECT_DIR:-.}"));
+        assert!(text.contains("SKILL_FRAMEWORK_ROOT"));
+
+        let config_3p = home.join("Library/Application Support/Claude-3p/claude_desktop_config.json");
+        assert!(config_3p.is_file(), "missing {}", config_3p.display());
+        let text_3p = std::fs::read_to_string(&config_3p).unwrap();
+        assert!(text_3p.contains("router-rs-framework"));
+        assert!(text_3p.contains("browser-mcp"));
+        let desktop_bin = home.join(".local/share/skill-framework/bin/router-rs");
+        assert!(desktop_bin.is_file(), "missing stable desktop MCP binary");
+        let cmd = install["results"]["claude-desktop"]["mcp_config"]["paths"]
+            .as_array()
+            .and_then(|paths| paths.first())
+            .and_then(|_| {
+                std::fs::read_to_string(&config_3p)
+                    .ok()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            })
+            .and_then(|payload| {
+                payload
+                    .get("mcpServers")
+                    .and_then(|servers| servers.get("router-rs-framework"))
+                    .and_then(|server| server.get("command"))
+                    .and_then(|cmd| cmd.as_str().map(str::to_string))
+            });
+        assert!(
+            cmd.as_deref() == Some(desktop_bin.to_str().unwrap()),
+            "expected stable desktop MCP path, got {cmd:?}"
+        );
+    }
+
+}
+
+#[test]
+fn install_claude_desktop_user_scope_uses_os_home_when_claude_home_customized() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let os_home = tmp.path().join("os_home");
+    let custom_claude = tmp.path().join("custom-claude-root/.claude");
+    std::fs::create_dir_all(&custom_claude).unwrap();
+    seed_framework_markers(&repo_root);
+
+    let install = host_integration_json_for_home(os_home.as_path(), Some(custom_claude.as_path()), &[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        os_home.to_str().unwrap(),
+        "--claude-home",
+        custom_claude.to_str().unwrap(),
+        "--scope",
+        "user",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(install["success"], true);
+
+    #[cfg(target_os = "macos")]
+    let official_config = os_home.join("Library/Application Support/Claude/claude_desktop_config.json");
+    #[cfg(not(target_os = "macos"))]
+    let official_config = os_home.join(".config/Claude/claude_desktop_config.json");
+    assert!(
+        official_config.is_file(),
+        "expected official config at {}",
+        official_config.display()
+    );
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let wrong_parent = custom_claude.parent().unwrap();
+        #[cfg(target_os = "macos")]
+        let wrong_config =
+            wrong_parent.join("Library/Application Support/Claude/claude_desktop_config.json");
+        #[cfg(not(target_os = "macos"))]
+        let wrong_config = wrong_parent.join(".config/Claude/claude_desktop_config.json");
+        assert!(
+            !wrong_config.is_file(),
+            "must not write Desktop config under CLAUDE_HOME parent: {}",
+            wrong_config.display()
+        );
+    }
+
+}
+
+#[test]
+fn install_claude_script_help_exits_zero() {
+    let root = project_root();
+    let script = root.join("scripts/install-claude.sh");
+    let status = Command::new("bash")
+        .arg(script)
+        .arg("--help")
+        .status()
+        .expect("install-claude.sh --help");
+    assert!(status.success());
+}
+
+fn host_integration_json_for_home(home: &Path, claude_home: Option<&Path>, args: &[&str]) -> Value {
+    let mut full_args = vec!["framework", "host-integration"];
+    full_args.extend_from_slice(args);
+    let mut cmd = router_rs_command(&full_args);
+    cmd.env("HOME", home);
+    match claude_home {
+        Some(path) => {
+            cmd.env("CLAUDE_HOME", path);
+        }
+        None => {
+            cmd.env_remove("CLAUDE_HOME");
+        }
+    }
+    json_from_output(&run(cmd))
+}
+
+fn restore_home_env(prior: Option<std::ffi::OsString>) {
+    if let Some(home) = prior {
+        std::env::set_var("HOME", home);
+    } else {
+        let _ = std::env::remove_var("HOME");
+    }
+}
+
+#[test]
+fn install_claude_desktop_user_scope_merges_existing_3p_preferences() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    #[cfg(target_os = "macos")]
+    {
+        let config_3p = home.join("Library/Application Support/Claude-3p/claude_desktop_config.json");
+        std::fs::create_dir_all(config_3p.parent().unwrap()).unwrap();
+        std::fs::write(
+            &config_3p,
+            r#"{
+  "deploymentMode": "3p",
+  "preferences": { "coworkWebSearchEnabled": true }
+}"#,
+        )
+        .unwrap();
+    }
+
+    let install = host_integration_json_for_home(home.as_path(), None, &[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "user",
+        "--to",
+        "claude-desktop",
+    ]);
+    assert_eq!(install["success"], true);
+
+    #[cfg(target_os = "macos")]
+    {
+        let payload: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(home.join(
+                "Library/Application Support/Claude-3p/claude_desktop_config.json",
+            )).unwrap()).unwrap();
+        assert_eq!(payload["deploymentMode"].as_str(), Some("3p"));
+        assert_eq!(
+            payload["preferences"]["coworkWebSearchEnabled"].as_bool(),
+            Some(true)
+        );
+        assert!(payload["mcpServers"]["router-rs-framework"].is_object());
+        assert!(payload["mcpServers"]["browser-mcp"].is_object());
+    }
 }
 
 #[test]

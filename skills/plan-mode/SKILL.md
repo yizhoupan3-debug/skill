@@ -1,7 +1,7 @@
 ---
 name: plan-mode
 description: |
-  Cursor Plan / 策划文档闸门 owner：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨模块/高风险/用户要求时升级为 audit plan。
+  跨宿主 Plan / 策划文档闸门（Cursor CreatePlan、Claude/Codex 等价流程）：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨模块/高风险/用户要求时升级为 audit plan。
   `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: research` 为纯调研计划（只读 todos，末条不含 /gitx plan）。
   `overview` 须按 profile 显式声明实现面边界：`research` 含调研期零实现面改动硬声明（可选窄例外：`overview` **单句**声明允许回写的结论文档 / plan 路径集合；`.cursor/plans/<本文件>.plan.md` 仅为常见示例而非唯一形式），`execution` 标明允许按 todos 修改并由末条完成计划/Git 证据收口。
   Use at 每轮对话开始 / first-turn / conversation start when the user wants Cursor Plan mode、Plan 模式、策划文档闸门、可验收 todo、

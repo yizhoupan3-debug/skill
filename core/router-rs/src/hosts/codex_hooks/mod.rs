@@ -333,11 +333,7 @@ impl Drop for CodexStateLock {
     }
 }
 
-/// Stable session identifier for hook-state filenames: hook JSON fields first (snake_case and
-/// camelCase per Codex *Common input fields*), then env fallbacks operators may set.
-///
-/// Does **not** include the per-invocation fallback (`codex_session_key` adds that); see
-/// See [`docs/plans/README.md`](../../../docs/plans/README.md) for plans index (historical crosscheck stubs removed).
+/// Stable session identifier for hook-state filenames.
 fn codex_stable_session_raw(event: &Value) -> Option<String> {
     fn trimmed_nonempty(value: &str) -> Option<String> {
         let t = value.trim();

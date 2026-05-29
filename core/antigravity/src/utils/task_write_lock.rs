@@ -112,7 +112,6 @@ pub fn apply_task_ledger_mutation<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::test_env_sync::process_env_lock;
     use std::fs;
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -136,7 +135,6 @@ mod tests {
         let _env_guard = TASK_LEDGER_FLOCK_ENV_TEST_MUTEX
             .lock()
             .expect("task ledger flock env mutex poisoned");
-        // let _g = process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
         std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK");
         let tmp = unique_tmp();
@@ -159,7 +157,6 @@ mod tests {
         let _env_guard = TASK_LEDGER_FLOCK_ENV_TEST_MUTEX
             .lock()
             .expect("task ledger flock env mutex poisoned");
-        // let _g = process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
         std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", "0");
         let tmp = unique_tmp();
