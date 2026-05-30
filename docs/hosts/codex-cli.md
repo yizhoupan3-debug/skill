@@ -92,6 +92,46 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
   cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework skills validate
   ```
 
+## 多代理编排 (Multi-Agent Orchestration)
+
+Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentStart`/`subagentStop` hook 做硬门控不同，Codex 端的多代理行为由文档契约与 agent 自觉驱动。
+
+### 并行执行指引
+
+- **`/implementx` 执行区**：`WAVE_STATE.json` 中 `execution_mode=parallel` 时，主线程**应主动 spawn 子代理**并行执行各 lane，主线程仅担任 scheduler（coordinator visible content ≤35% of turn）。
+- **深度 review**：非 my-light 时默认 spawn-first 配对审稿（`fork_context=false` 只读 reviewer）；my-light 下仍可按需 spawn。
+- **≥2 独立子问题时默认并行**；通常 3–5 个 `fork_context=false` lane。
+- **窄范围**（单文件、`small_task`）：可不 spawn，但不应以此为默认习惯。
+
+### 子代理契约
+
+```json
+{
+  "lane_id": "w3-lane-codex",
+  "scope_paths": ["core/router-rs/src/hosts/codex_hooks/"],
+  "output_path": "artifacts/current/<task_id>/lane-notes/w3-lane-codex.md",
+  "max_lines": 15,
+  "forbidden": ["paste full transcript to main chat"]
+}
+```
+
+| 约束 | 说明 |
+|------|------|
+| 写入 disjoint | 各 lane 仅写 `scope_paths` 内文件，不修改共享 continuity artifact |
+| `fork_context` | 深度 reviewer 必须显式 `fork_context: false`；env `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（默认开）可推断 |
+| review 只读 | 默认 review-only，禁止默认改代码（除非用户显式要求） |
+
+### 与 Cursor / Claude 的关键差异
+
+| 维度 | Cursor | Claude Code | Codex CLI |
+|------|--------|-------------|-----------|
+| 子代理生命周期 hook | `subagentStart` / `subagentStop` | 无（原生 `Task`） | **无**（agent 自觉） |
+| 专用 gate 文件 | `execution-subagent-gate.mdc` + `review-subagent-gate.mdc` | 无 | **无**（本文档为真源） |
+| 模型继承规则 | 禁默认 Sonnet/Claude | N/A | **继承主会话模型**，不显式指定 |
+| 并行 lane 数 | 3–5 | 按需 | **3–5**（同 Cursor） |
+
+agent 应**同等积极**地使用并行 lane，不因缺少 hook 门控而退缩为主线程串行。
+
 ## 独有环境变量与参数 (Environment Variables & Parameters)
 
 为确保 Codex CLI 与审稿机制的稳定执行，支持以下独有环境变量：

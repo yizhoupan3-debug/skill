@@ -14,6 +14,10 @@
 
 **文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/hosts/claude.md`](docs/hosts/claude.md) · [`docs/hosts/claude-desktop.md`](docs/hosts/claude-desktop.md)
 
+## Language
+
+- 跨宿主语言规范见 [`AGENTS.md`](AGENTS.md) § Language；Claude 宿主强制继承，不得豁免。
+
 ## Claude 宿主特异性门控
 
 ```mermaid

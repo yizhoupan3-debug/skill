@@ -66,6 +66,8 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 
 **Model (Cursor)**: omit `Task` `model` (inherit parent session); do not default `claude-*` / `sonnet*`. See `.cursor/rules/subagent-model-inherit.mdc`.
 
+**Model (Codex)**: inherit主会话模型，不显式指定。Codex 端积极鼓励并行 lane——≥2 独立子问题时**应** spawn 子代理，通常 3–5 个 `fork_context=false` lane，不因缺少 hook 级子代理事件而退缩为主线程串行。详见 [`docs/hosts/codex-cli.md` § 多代理编排](../../docs/hosts/codex-cli.md)。
+
 ## GOAL_STATE writes (HARD)
 
 - All **`GOAL_STATE.json`** mutations during execution use **`framework_goal_drive`** (`checkpoint`, `complete`, etc.) — not direct `Write` on the JSON file.
