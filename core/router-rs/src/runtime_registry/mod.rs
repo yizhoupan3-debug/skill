@@ -300,7 +300,7 @@ fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
     let key = repo_cache_key(&path);
     let mut guard = cache()
         .lock()
-        .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
+        .map_err(|e| { eprintln!("[router-rs] registry cache lock poisoned: {e}"); format!("registry cache lock poisoned: {e}") })?;
     if let Some(hit) = guard.get(&key) {
         return Ok(hit.clone());
     }

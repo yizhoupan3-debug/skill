@@ -181,7 +181,7 @@ fn write_tracker(path: &Path, payload: &Value) -> Result<(), String> {
     let lock = get_tracker_lock();
     let _guard = lock
         .lock()
-        .map_err(|e| format!("tracker lock poisoned: {e}"))?;
+        .map_err(|e| { eprintln!("[router-rs] tracker lock poisoned: {e}"); format!("tracker lock poisoned: {e}") })?;
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)

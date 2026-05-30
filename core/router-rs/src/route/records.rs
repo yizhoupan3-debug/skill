@@ -285,7 +285,7 @@ fn min_entry_mtime(entry: &RecordsCacheEntry) -> Option<u64> {
 pub(crate) fn invalidate_records_cache() -> Result<(), String> {
     let mut state = records_cache_state()
         .write()
-        .map_err(|_| "route records cache lock poisoned".to_string())?;
+        .map_err(|e| { eprintln!("[router-rs] route records cache lock poisoned: {e}"); "route records cache lock poisoned".to_string() })?;
     state.map.clear();
     state.fifo.clear();
     Ok(())
@@ -313,7 +313,7 @@ pub(crate) fn load_records_cached_for_stdio_resolved(
     {
         let state = records_cache_state()
             .read()
-            .map_err(|_| "route records cache lock poisoned".to_string())?;
+            .map_err(|e| { eprintln!("[router-rs] route records cache lock poisoned: {e}"); "route records cache lock poisoned".to_string() })?;
         if let Some(entry) = state.map.get(&key) {
             if entry.runtime_mtime == runtime_mtime
                 && entry.manifest_mtime == manifest_mtime
@@ -333,7 +333,7 @@ pub(crate) fn load_records_cached_for_stdio_resolved(
     };
     let mut state = records_cache_state()
         .write()
-        .map_err(|_| "route records cache lock poisoned".to_string())?;
+        .map_err(|e| { eprintln!("[router-rs] route records cache lock poisoned: {e}"); "route records cache lock poisoned".to_string() })?;
     let is_new_key = !state.map.contains_key(&key);
     state.map.insert(key.clone(), entry);
     if is_new_key {

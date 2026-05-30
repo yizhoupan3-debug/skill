@@ -3,6 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::collections::HashSet;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -141,7 +142,10 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
                     .iter_mut()
                     .find(|worker| worker.worker_id == worker_id)
                     .ok_or_else(|| format!("Unknown supervisor worker_id: {worker_id}"))?;
-                refresh_worker_runtime_state(worker);
+                {
+                    let active_sessions = batch_tmux_sessions();
+                    refresh_worker_runtime_state_with_sessions(worker, &active_sessions);
+                }
                 worker.clone()
             };
             save_store(&state_path, &store)?;
@@ -155,8 +159,9 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
             }))
         }
         "list" => {
+            let active_sessions = batch_tmux_sessions();
             for worker in &mut store.workers {
-                refresh_worker_runtime_state(worker);
+                refresh_worker_runtime_state_with_sessions(worker, &active_sessions);
             }
             save_store(&state_path, &store)?;
             Ok(json!({
@@ -730,9 +735,30 @@ fn tmux_session_exists(tmux_session: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn refresh_worker_runtime_state(worker: &mut WorkerSessionRecord) {
+/// Run a single  and return the set of active session names.
+/// Returns an empty set if tmux is unavailable or has no sessions.
+fn batch_tmux_sessions() -> HashSet<String> {
+    Command::new("tmux")
+        .args(["list-sessions", "-F", "#{session_name}"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(|line| line.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn refresh_worker_runtime_state_with_sessions(
+    worker: &mut WorkerSessionRecord,
+    active_sessions: &HashSet<String>,
+) {
     if let Some(session_name) = worker.tmux_session.clone() {
-        if tmux_session_exists(&session_name) {
+        if active_sessions.contains(&session_name) {
             if worker.status == "launching" || worker.status == "queued" {
                 worker.status = "running".to_string();
             }

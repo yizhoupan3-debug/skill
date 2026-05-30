@@ -127,7 +127,16 @@ pub fn router_rs_codex_review_fork_context_missing_infer_false_enabled() -> bool
 ///
 /// 默认 **启用**（unset 或非 `0`/`false`/`off`/`no`）；网络盘若不靠谱可显式设为关闭（并行写入风险自担）。
 pub fn router_rs_task_ledger_flock_enabled() -> bool {
-    router_rs_env_enabled_default_true(ROUTER_RS_TASK_LEDGER_FLOCK_ENV)
+    static FLOCK_WARN: std::sync::Once = std::sync::Once::new();
+    let enabled = router_rs_env_enabled_default_true(ROUTER_RS_TASK_LEDGER_FLOCK_ENV);
+    if !enabled {
+        FLOCK_WARN.call_once(|| {
+            eprintln!(
+                "[router-rs] WARNING: ROUTER_RS_TASK_LEDGER_FLOCK is disabled;                  parallel writes to task ledger files may interleave"
+            );
+        });
+    }
+    enabled
 }
 
 /// `ROUTER_RS_HOOK_TIMING=1`: emit `hook_timing …` lines on stderr per hook invocation.
