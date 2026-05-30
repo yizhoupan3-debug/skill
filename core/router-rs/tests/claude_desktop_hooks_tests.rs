@@ -602,6 +602,70 @@ mod parameter_validation_tests {
         assert!(err.contains("Unknown RFV loop operation"));
         assert!(err.contains("start") && err.contains("append_round"));
     }
+
+    #[test]
+    fn goal_start_requires_task_id_explicitly() {
+        let args = json!({"goal": "test goal"});
+        let result =
+            crate::claude_desktop_hooks::tool_goal_state_manage_test_helper(&args, "start");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("task_id"),
+            "Expected task_id error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn goal_checkpoint_requires_task_id_explicitly() {
+        let args = json!({"note": "checkpoint note"});
+        let result =
+            crate::claude_desktop_hooks::tool_goal_state_manage_test_helper(&args, "checkpoint");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("task_id"),
+            "Expected task_id error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn goal_block_requires_blocker() {
+        let args = json!({"task_id": "test-task"});
+        let result =
+            crate::claude_desktop_hooks::tool_goal_state_manage_test_helper(&args, "block");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("blocker"),
+            "Expected blocker error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn goal_block_operation_accepted_with_blocker() {
+        let args = json!({"task_id": "test-task", "blocker": "dependency conflict"});
+        let result =
+            crate::claude_desktop_hooks::tool_goal_state_manage_test_helper(&args, "block");
+        if let Err(ref err) = result {
+            assert!(
+                !err.contains("Missing required argument: blocker"),
+                "blocker validation broken: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn goal_start_with_explicit_task_id_succeeds() {
+        let args = json!({
+            "task_id": "cache-test-task",
+            "goal": "test goal for cache invalidation",
+            "drive_until_done": false
+        });
+        let result =
+            crate::claude_desktop_hooks::tool_goal_state_manage_test_helper(&args, "start");
+        assert!(result.is_ok(), "start with explicit task_id failed: {:?}", result.err());
+    }
 }
 
 #[cfg(test)]

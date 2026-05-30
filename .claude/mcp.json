@@ -5,7 +5,7 @@
         "browser",
         "mcp-stdio",
         "--repo-root",
-        "${CLAUDE_PROJECT_DIR:-.}"
+        "/Users/joe/Developer/skill"
       ],
       "command": "/Users/joe/.local/share/skill-framework/bin/router-rs",
       "description": "Browser MCP for external web research (browser_open, browser_get_text, …)",
@@ -19,7 +19,7 @@
         "claude-desktop",
         "agent",
         "--repo-root",
-        "${CLAUDE_PROJECT_DIR:-.}"
+        "/Users/joe/Developer/skill"
       ],
       "command": "/Users/joe/.local/share/skill-framework/bin/router-rs",
       "description": "Framework snapshot, skill routing, goal/closeout gating (MCP hard block for non-my-light)",

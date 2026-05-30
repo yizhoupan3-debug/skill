@@ -646,13 +646,13 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "goal_state_manage",
-                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear。",
+                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear / block。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
                             "operation": {
                                 "type": "string",
-                                "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear"],
+                                "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block"],
                                 "description": "操作类型",
                             },
                             "task_id": {
@@ -666,6 +666,10 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                             "note": {
                                 "type": "string",
                                 "description": "备注信息",
+                            "blocker": {
+                                "type": "string",
+                                "description": "blocker 描述（block 时需要）",
+                            },
                             },
                         },
                         "required": ["operation"],
@@ -1888,6 +1892,9 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
             {
                 payload["validation_commands"] = json!(vc);
             }
+            if let Some(dud) = arguments.get("drive_until_done").and_then(Value::as_bool) {
+                payload["drive_until_done"] = json!(dud);
+            }
         }
         "checkpoint" => {
             let note = arguments
@@ -1895,6 +1902,14 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
                 .and_then(Value::as_str)
                 .ok_or("checkpoint requires 'note' argument (string)")?;
             payload["note"] = json!(note);
+        }
+        "block" => {
+            let blocker = arguments
+                .get("blocker")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .ok_or("block requires 'blocker' argument (string)")?;
+            payload["blocker"] = json!(blocker);
         }
         "append_round" => {
             // append_round is handled in rfv_loop, not here
@@ -1906,10 +1921,16 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
         "pause" | "resume" | "complete" | "clear" => {
             // No additional required args
         }
-        _ => return Err(format!("Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear")),
+        _ => return Err(format!("Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block")),
     }
 
     let result = crate::autopilot_goal::framework_goal_drive(payload)?;
+
+    // Invalidate snapshot/task_view caches after goal state write (H3 FIX)
+    let op = arguments.get("operation").and_then(|v| v.as_str()).unwrap_or("");
+    if op != "status" {
+        invalidate_evidence_caches();
+    }
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 

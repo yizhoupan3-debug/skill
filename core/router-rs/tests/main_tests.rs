@@ -2179,6 +2179,7 @@ fn stdio_framework_goal_drive_roundtrip() {
         "payload": {
             "repo_root": rr,
             "operation": "start",
+            "task_id": "ag-stdio-task",
             "goal": "finish macro task",
             "non_goals": ["avoid scope creep"],
             "done_when": ["ci green", "review checklist cleared"],
