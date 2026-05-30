@@ -5,9 +5,15 @@
 
          # Claude Desktop
 
-         MCP **`router-rs-framework`**（框架路由/goal/closeout）；**`browser-mcp`** 仅调研。协议：**`docs/hosts/claude-desktop.md`**；政策：**`AGENTS_CLAUDE.md`**。
+         MCP **`router-rs-framework`**（框架路由/goal/closeout）；**`browser-mcp`** 外网调研。详 **`docs/hosts/claude-desktop.md`**；跨宿主 **`AGENTS.md`**。
 
-         **Default lifecycle: My** (same chain). Goal drive via MCP stdio; MCP hard closeout at tool level for non-my-light (`goal_state_manage` / `closeout_gate`); no PreToolUse/Stop shell hook.
+         ## 语言（硬约束）
+
+         - **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外）；自然学术中文，避免翻译腔。
+         - 仅当用户**当轮明确要求英文**时可切换。
+         - **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」；对用户可见层避免中英混排。
+
+         **默认生命周期：My** — `/discussx` → `/planx` → `/implementx` → `/verifyx`。Goal 经 MCP stdio（`goal_state_manage`）；非 `my-light` 时 `closeout_gate` / complete 在 MCP 工具层硬拦；无 PreToolUse/Stop shell hook。
 
          ## 会话（按序）
 
@@ -20,8 +26,7 @@
 
          ## 无 CLI hook 硬拦
 
-         - 无 PreToolUse；Bash 前自行评估安全
-         - Stop/UserPromptSubmit 无 shell 硬 block — 勿声称已被 hook 拦截
+         - 无 PreToolUse/Stop shell 硬拦；Bash 前自行评估安全；勿声称已被 hook 拦截
          - 检查点：`session_checkpoint`（非自动）
 
          ## 联网（按标签页 — 硬约束）
