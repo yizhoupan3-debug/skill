@@ -104,3 +104,22 @@ $TMPDIR/
 # IDE & Antigravity Client runtime folders
 .antigravitycli/
 .gemini/
+
+# Generated artifacts (reports, audit outputs, plans)
+artifacts/*.md
+artifacts/*.pptx
+
+# External projects (do not commit here)
+OutlookManager/
+
+# Binary templates
+templates/
+
+# Personal MCP config
+.mcp.json
+
+# Personal Claude Code config
+.claude/statusline-command.sh
+
+# Auto-generated router-rs projection files
+core/router-rs/.claude/
