@@ -31,7 +31,7 @@
 | Cursor Plan / My 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/planx/SKILL.md`](../skills/planx/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
 | Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
 | 运行期核心行为与沙箱统一规约 | [runtime_unified_spec.md](runtime_unified_spec.md) |
-| Python 环境治理（uv-only，冷表显式 `$python-env-management`） | [`skills/python-env-management/SKILL.md`](../skills/.archive-cold/python-env-management/SKILL.md) |
+| Python 环境治理（uv-only，冷表显式 `$python-env-management`） | [`skills/.archive-cold/python-env-management/SKILL.md`](../skills/.archive-cold/python-env-management/SKILL.md) |
 | 历史迁移、减法记录 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
 | Plans 索引（ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
 

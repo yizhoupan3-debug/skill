@@ -9,7 +9,7 @@
 
          ## 会话（按序）
 
-         1. `framework_digest` — 开头一次
+         1. `framework_snapshot` — 开头一次
          2. `skill_route` → 只读 `skill_path`
          3. `goal_state_manage operation=start`（宏任务）
          4. 验证后 `record_evidence`

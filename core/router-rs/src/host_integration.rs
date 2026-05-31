@@ -2907,7 +2907,7 @@ fn write_claude_desktop_claude_md(
 
          ## 会话（按序）
 
-         1. `framework_digest` — 开头一次
+         1. `framework_snapshot` — 开头一次
          2. `skill_route` → 只读 `skill_path`
          3. `goal_state_manage operation=start`（宏任务）
          4. 验证后 `record_evidence`
@@ -3338,7 +3338,7 @@ fn write_antigravity_framework_md(
          # Antigravity Framework\n\n\
          Antigravity **App**（Desktop / Planning Mode）**`router-rs-framework`** MCP。协议：**`docs/hosts/antigravity-app.md`**；CLI hooks：**`docs/hosts/antigravity-cli.md`**；跨宿主 **`AGENTS.md`**；**`AGENTS_ANTIGRAVITY.md`**。\n\n\
          ## 会话操作（按序）\n\n\
-         1. `framework_digest` — 开头一次\n\
+         1. `framework_snapshot` — 开头一次\n\
          2. `skill_route` → 只读 `skill_path`\n\
          3. `goal_state_manage operation=start`（宏任务）\n\
          4. 验证后 `record_evidence`\n\

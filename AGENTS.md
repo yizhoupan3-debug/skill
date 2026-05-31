@@ -41,7 +41,7 @@
 ## Skill Routing
 
 - **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` 一口气跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。
-- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light` 由 **My 入口斜杠**或磁盘 `GOAL_STATE.lifecycle_profile` 触发；`framework_goal_drive` stdio）。my-light 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge（亦含 pre-execution `/discussx|planx` 与磁盘 profile；hook 层全 suppress，skill 层 findings-only 仍适用）。
+- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light` 由 **My 入口斜杠**或磁盘 `GOAL_STATE.lifecycle_profile` 触发；`framework_goal_drive` stdio）。my-light 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge（亦含 pre-execution `/discussx|/planx` 与磁盘 profile；hook 层全 suppress，skill 层 findings-only 仍适用）。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
 ## Continuity artifacts（手动画板 only）

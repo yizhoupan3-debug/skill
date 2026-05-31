@@ -1552,14 +1552,14 @@ fn ppt_palette(name: &str) -> PptPalette {
             text_mute: "777777",
         },
         "academic" => PptPalette {
-            stage: "F5F3EF",
+            stage: "FFFFFF",
             panel: "FFFFFF",
-            panel_soft: "EDE9E3",
-            line: "D4CFC7",
-            glow: "2563EB",
-            text: "1F2937",
-            text_soft: "4B5563",
-            text_mute: "6B7280",
+            panel_soft: "E7E6E6",
+            line: "E7E6E6",
+            glow: "4874CB",
+            text: "000000",
+            text_soft: "44546A",
+            text_mute: "888888",
         },
         _ => PptPalette {
             stage: "000000",
@@ -3157,6 +3157,13 @@ fn sanitize_pptx_command(args: SanitizePptxArgs) -> Result<()> {
         output.clone()
     };
 
+    // Security: refuse to write to a symlink (TOCTOU mitigation)
+    if let Ok(meta) = std::fs::symlink_metadata(&temp_output) {
+        if meta.file_type().is_symlink() {
+            anyhow::bail!("refusing to write to symlink: {}", temp_output.display());
+        }
+    }
+
     let file = File::open(&input).with_context(|| format!("failed to open {}", input.display()))?;
     let mut archive = ZipArchive::new(file).context("failed to read zip archive")?;
     let writer = File::create(&temp_output)
@@ -3186,6 +3193,12 @@ fn sanitize_pptx_command(args: SanitizePptxArgs) -> Result<()> {
 
     zip.finish()?;
     if output == input {
+        // Security: refuse to replace a symlink (TOCTOU mitigation)
+        if let Ok(meta) = std::fs::symlink_metadata(&input) {
+            if meta.file_type().is_symlink() {
+                anyhow::bail!("refusing to replace symlink: {}", input.display());
+            }
+        }
         fs::rename(&temp_output, &input).with_context(|| {
             format!(
                 "failed to replace {} with sanitized output",

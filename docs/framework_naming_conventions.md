@@ -24,6 +24,8 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Claude Desktop | `ROUTER_RS_CLAUDE_*` | MCP-based desktop agent |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
+| Antigravity CLI | `ROUTER_RS_ANTIGRAVITY_CLI_*` | Gemini CLI 继任，hooks 传输 |
+| Antigravity App | - | MCP stdio，无 shell hook env |
 
 **默认值与语义**：`ROUTER_RS_*` 的完整表见 [`harness_architecture.md`](harness_architecture.md) **§5 开关面**（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
 

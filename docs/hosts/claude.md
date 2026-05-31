@@ -74,8 +74,8 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 在 macOS 开发环境下，Python 的运行环境与依赖治理需严格遵循以下准则：
 
 - **环境锁存**：使用专属的 **`$python-env-management`** 进行环境的长效治理，默认运行环境为 **Python 3.12**。
-- **工具链选择**：推行 **uv-only** 机制。每个仓库 of 依赖及环境状态必须通过 `uv.lock` 进行绝对锁定，禁止使用传统的 `pip`。
-- **Skill 支撑**：当环境异常或缺少 `uv` 时，调用 `skills/uv/SKILL.md` 自动进行安装与 PATH 补全。
+- **工具链选择**：推行 **uv-only** 机制。每个仓库的依赖及环境状态必须通过 `uv.lock` 进行绝对锁定，禁止使用传统的 `pip`。
+- **Skill 支撑**：当环境异常或缺少 `uv` 时，调用 `skills/python-env-management/SKILL.md` 自动进行安装与 PATH 补全。
 
 ## 进程管理与性能调优 (Process & Memory)
 

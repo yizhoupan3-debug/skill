@@ -90,7 +90,7 @@ User-scope install 产出：`~/.cursor/rules/framework.mdc`（叙事真源 `host
 - hook 只记录证据，不替模型“编造验证通过”。
 - 长尾命令通过显式 append 或更窄启发式补齐。
 
-**Task ledger 写入（跨进程）**：`GOAL_STATE` / `RFV_LOOP_STATE` / `STEP_LEDGER.jsonl` append（`framework step-ledger`）、session artifact 批量写 / `EVIDENCE_INDEX` 的 RMW，默认经 [`task_write_lock.rs`](../core/router-rs/src/utils/task_write_lock.rs) 在 `artifacts/current/.router-rs.task-ledger.lock` 上持 **`flock(2)`**，按**仓库根**互斥（多宿主 hook 子进程不共享 Rust 进程内互斥量）。`EVIDENCE_INDEX` 仍可再持单文件旁路锁（`runtime_storage::acquire_runtime_path_lock`）；锁序约定为 **先 repo ledger flock，再 path lock**。`runtime_storage` 的 **memory** 回归后端对 `append_text` 使用进程内 `Mutex` 串行化（不参与 repo flock）。`ROUTER_RS_TASK_LEDGER_FLOCK=0|false|off|no` 可关闭 flock（如不稳定的网络 FS），关闭后并行写为 best-effort；`router-rs framework doctor` 在 flock 关闭时会打印醒目提示。`TASK_STATE.json` 仅为投影，权威仍以分文件为准；聚合失败会以 stderr 前缀 **`TASK_STATE_AGGREGATE_SYNC_FAILED`** 记录；单独跑 `task-state-aggregate-sync` 的修复路径不替代上述写锁。
+**Task ledger 写入（跨进程）**：`GOAL_STATE` / `RFV_LOOP_STATE` / `STEP_LEDGER.jsonl` append（`framework step-ledger`）、session artifact 批量写 / `EVIDENCE_INDEX` 的 RMW，默认经 [`task_write_lock.rs`](../core/antigravity/src/utils/task_write_lock.rs) 在 `artifacts/current/.router-rs.task-ledger.lock` 上持 **`flock(2)`**，按**仓库根**互斥（多宿主 hook 子进程不共享 Rust 进程内互斥量）。`EVIDENCE_INDEX` 仍可再持单文件旁路锁（`runtime_storage::acquire_runtime_path_lock`）；锁序约定为 **先 repo ledger flock，再 path lock**。`runtime_storage` 的 **memory** 回归后端对 `append_text` 使用进程内 `Mutex` 串行化（不参与 repo flock）。`ROUTER_RS_TASK_LEDGER_FLOCK=0|false|off|no` 可关闭 flock（如不稳定的网络 FS），关闭后并行写为 best-effort；`router-rs framework doctor` 在 flock 关闭时会打印醒目提示。`TASK_STATE.json` 仅为投影，权威仍以分文件为准；聚合失败会以 stderr 前缀 **`TASK_STATE_AGGREGATE_SYNC_FAILED`** 记录；单独跑 `task-state-aggregate-sync` 的修复路径不替代上述写锁。
 
 ### 3.1.1 轨迹与 step 恢复流
 
