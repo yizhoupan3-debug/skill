@@ -42,7 +42,6 @@ When a direct RTK subcommand is not available or not needed, wrap the original c
 ```bash
 rtk cargo run --manifest-path ./core/router-rs/Cargo.toml --release -- codex sync --repo-root "$PWD"
 rtk cargo test --manifest-path ./core/router-rs/Cargo.toml
-rtk npm test --prefix tools/browser-mcp
 ```
 
 ## Do not prefer RTK for

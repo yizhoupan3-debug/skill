@@ -2229,7 +2229,6 @@ fn browser_mcp_live_config_never_points_to_node_runtime() {
     let surfaces = [
         ".codex/config.toml",
         "core/router-rs/src/host_integration.rs",
-        "tools/browser-mcp/README.md",
     ];
     let joined = surfaces
         .iter()

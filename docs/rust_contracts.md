@@ -199,7 +199,7 @@ Runtime control-plane payloads must keep these owner markers stable:
 - **Non-Unix**: Hook helpers that depend on POSIX process semantics (for example lock staleness or `kill(pid, 0)`) use conservative defaults under `cfg(not(unix))` so builds stay green; behavior may differ from Linux/macOS until those paths are specialized.
 - **`libc` and `unsafe`**: Codex/Cursor hooks use narrow `unsafe` blocks for `flock`, `kill`, and related syscalls. Call sites are responsible for invariants; errors surface as structured hook outcomes, not panics, except where tests explicitly exercise failure injection.
 - **`ROUTER_RS_*` flags**: Parsing, default-on/default-off policy, and naming for environment toggles should stay in [`core/router-rs/src/router_env_flags.rs`](../core/router-rs/src/router_env_flags.rs) so new flags do not sprawl across the crate.
-- **Browser MCP**: Steady-state control for Browser MCP stdio in this repo is the Rust implementation (`core/router-rs/src/browser_mcp/` and CLI wiring). The [`tools/browser-mcp/`](../tools/browser-mcp/) TypeScript package is auxiliary (for example dev or replay); treat Rust as the default product path unless documentation explicitly scopes a TS-only workflow.
+- **Browser MCP**: Browser MCP stdio in this repo is the Rust implementation (`core/router-rs/src/browser_mcp/` and CLI wiring). The TypeScript package `tools/browser-mcp/` has been retired; Rust is the sole product path.
 
 ## External Benchmark
 

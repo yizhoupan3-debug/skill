@@ -10,20 +10,6 @@ use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use tempfile::tempdir;
 
-const SOURCE_FILES: &[&str] = &[
-    "index.ts",
-    "runtime.ts",
-    "server.ts",
-    "types.ts",
-    "errors.ts",
-];
-const DIST_FILES: &[&str] = &[
-    "index.js",
-    "runtime.js",
-    "server.js",
-    "types.js",
-    "errors.js",
-];
 const ROUTER_EXEC_LOG_ENV: &str = "FAKE_ROUTER_OUTPUT";
 
 #[test]
@@ -582,18 +568,6 @@ fn prepare_repo(tmp_path: &std::path::Path) -> std::path::PathBuf {
     let repo_root = tmp_path.join("repo");
     fs::create_dir_all(repo_root.join("core/router-rs/target/release")).unwrap();
     install_fake_router(&repo_root);
-    for name in SOURCE_FILES {
-        write_text(
-            &repo_root.join("tools/browser-mcp/src").join(name),
-            &format!("// {name}\n"),
-        );
-    }
-    for name in DIST_FILES {
-        write_text(
-            &repo_root.join("tools/browser-mcp/dist").join(name),
-            &format!("// built {name}\n"),
-        );
-    }
     repo_root
 }
 
