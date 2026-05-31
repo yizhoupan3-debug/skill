@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -eu
 
 EVENT="${1:-}"
 ROOT="${CURSOR_WORKSPACE_ROOT:-$PWD}"

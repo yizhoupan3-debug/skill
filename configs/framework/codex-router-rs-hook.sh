@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Codex lifecycle hook launcher — resolve router-rs and fail-closed when missing.
-set -u
+set -eu
 
 EVENT="${1:-}"
 ROOT="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
