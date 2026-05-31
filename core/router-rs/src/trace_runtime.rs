@@ -812,7 +812,7 @@ fn append_text(path: &Path, payload: &str) -> Result<(), String> {
     // Within-process serialization (cheap fast path).
     let _proc_guard = trace_append_lock()
         .lock()
-        .map_err(|_| "trace append lock poisoned".to_string())?;
+        .map_err(|e| { eprintln!("[router-rs] trace append lock poisoned: {e}"); "trace append lock poisoned".to_string() })?;
     // Cross-process serialization: prevents JSONL line interleaving when
     // codex-cli, cursor and parallel test harnesses all tail the same trace.
     let _path_lock = acquire_runtime_path_lock(path)?;

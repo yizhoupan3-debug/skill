@@ -162,6 +162,22 @@
       "kind": "skill",
       "skill_path": "skills/.archive-cold/diagramming/SKILL.md"
     },
+    "discussx": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "antigravity-app",
+          "antigravity-cli",
+          "claude-code",
+          "claude-desktop",
+          "codex-app",
+          "codex-cli",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/discussx/SKILL.md"
+    },
     "doc": {
       "host_support": {
         "platforms": [
@@ -321,6 +337,22 @@
       },
       "kind": "skill",
       "skill_path": "skills/.archive-cold/image-generated/SKILL.md"
+    },
+    "implementx": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "antigravity-app",
+          "antigravity-cli",
+          "claude-code",
+          "claude-desktop",
+          "codex-app",
+          "codex-cli",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/implementx/SKILL.md"
     },
     "infographic": {
       "host_support": {
@@ -507,6 +539,22 @@
       },
       "kind": "skill",
       "skill_path": "skills/plan-mode/SKILL.md"
+    },
+    "planx": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "antigravity-app",
+          "antigravity-cli",
+          "claude-code",
+          "claude-desktop",
+          "codex-app",
+          "codex-cli",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/planx/SKILL.md"
     },
     "plugin-creator": {
       "host_support": {
@@ -777,6 +825,22 @@
       },
       "kind": "skill",
       "skill_path": "skills/update/SKILL.md"
+    },
+    "verifyx": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "antigravity-app",
+          "antigravity-cli",
+          "claude-code",
+          "claude-desktop",
+          "codex-app",
+          "codex-cli",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/verifyx/SKILL.md"
     },
     "visual-review": {
       "host_support": {

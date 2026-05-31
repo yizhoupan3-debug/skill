@@ -1,14 +1,31 @@
 {
   "mcpServers": {
+    "browser-mcp": {
+      "args": [
+        "browser",
+        "mcp-stdio",
+        "--repo-root",
+        "/Users/joe/Developer/skill"
+      ],
+      "command": "/Users/joe/.local/share/skill-framework/bin/router-rs",
+      "description": "Browser MCP for external web research (browser_open, browser_get_text, …)",
+      "env": {
+        "SKILL_FRAMEWORK_ROOT": "/Users/joe/Developer/skill"
+      },
+      "type": "stdio"
+    },
     "router-rs-framework": {
       "args": [
         "claude-desktop",
         "agent",
         "--repo-root",
-        "${workspaceRoot}"
+        "/Users/joe/Developer/skill"
       ],
-      "command": "router-rs",
-      "description": "Framework runtime snapshot, continuity, skill routing, closeout advisory",
+      "command": "/Users/joe/.local/share/skill-framework/bin/router-rs",
+      "description": "Framework snapshot, skill routing, goal/closeout gating (MCP hard block for non-my-light)",
+      "env": {
+        "SKILL_FRAMEWORK_ROOT": "/Users/joe/Developer/skill"
+      },
       "type": "stdio"
     }
   }

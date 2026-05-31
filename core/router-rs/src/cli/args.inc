@@ -163,6 +163,9 @@ pub(crate) struct MaintRootsArgs {
     pub(crate) framework_root: Option<PathBuf>,
     #[arg(long)]
     pub(crate) artifact_root: Option<PathBuf>,
+    /// Isolated OS account home for user-scope projections (Claude Desktop Application Support, etc.).
+    #[arg(long)]
+    pub(crate) home: Option<PathBuf>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -299,14 +302,14 @@ pub(crate) enum ClaudeSubcommand {
 
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum ClaudeDesktopSubcommand {
-    /// Run MCP stdio agent loop (skills, evidence, closeout advisory).
+    /// Run MCP stdio agent loop (skills, evidence, closeout gating; hard block for non-my-light).
     #[command(name = "agent")]
     Agent(ClaudeDesktopAgentCommand),
 }
 
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum AntigravitySubcommand {
-    /// Run MCP stdio agent loop (skills, evidence, closeout advisory).
+    /// Run MCP stdio agent loop (skills, evidence, closeout gating; hard block for non-my-light).
     #[command(name = "agent")]
     Agent(AntigravityAgentCommand),
 }

@@ -87,7 +87,7 @@ Start by classifying the task into one or more lanes:
 
 - `research_question`: research objective, novelty claim, and decision the work must support.
 - `experiment_design`: variables, controls, ablations, baselines, metrics, sample size, and failure criteria.
-- `external_research`: literature, standards, datasets, repositories, or prior-art lookup when allowed or necessary.
+- `external_research`: literature, standards, datasets, repositories, or prior-art lookup when allowed or necessary. Use [`references/academic-sources.md`](references/academic-sources.md) for the five verified-open retrieval sources (arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ); fan out across sources for thorough coverage.
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
 - `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
@@ -145,6 +145,7 @@ result "verified", "严审通过", or "research-grade" on prose alone.
 
 ## Cross-references
 
+- **Academic sources (verified-open retrieval scaffolding)**: [`references/academic-sources.md`](references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates and fan-out patterns for `external_research` lane.
 - RFV research harness: `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
 - External research harness: `references/rfv-loop/external-research-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
 - Math reasoning harness: `references/rfv-loop/math-reasoning-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`

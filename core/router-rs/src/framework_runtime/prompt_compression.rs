@@ -101,19 +101,23 @@ fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value 
 
 fn enforce_prompt_budget(output: String, token_budget: usize) -> String {
     let max_chars = token_budget.saturating_mul(4).max(1);
-    if output.chars().count() <= max_chars {
+    let marker = "\n[truncated tail]";
+    // Use char_indices().nth() to avoid a separate chars().count() traversal
+    // when the output already fits within budget (common case).
+    if output.char_indices().nth(max_chars).is_none() {
         return output;
     }
-    let marker = "\n[truncated tail]";
-    if max_chars <= marker.chars().count() {
+    let marker_char_count = marker.chars().count();
+    if max_chars <= marker_char_count {
         return "[truncated]".chars().take(max_chars).collect();
     }
-    let keep = max_chars - marker.chars().count();
-    format!(
-        "{}{}",
-        output.chars().take(keep).collect::<String>(),
-        marker
-    )
+    let keep = max_chars - marker_char_count;
+    let split_byte = output
+        .char_indices()
+        .nth(keep)
+        .map(|(idx, _)| idx)
+        .unwrap_or(output.len());
+    format!("{}{}", &output[..split_byte], marker)
 }
 
 fn compression_payload(

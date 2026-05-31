@@ -135,7 +135,7 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
 }
 
 /// PostToolUse fast-path: skip tracker, hook-state, evidence, and rust-lint for tools that
-/// cannot affect review multiset / shell ledger / pre-goal (see plan: Cursor memory P0).
+/// cannot affect review multiset / shell ledger / pre-goal.
 /// When `state` is `Some`, caller holds the session lock (P1-3: no TOCTOU on review armed).
 fn post_tool_use_needs_work(
     repo_root: &Path,

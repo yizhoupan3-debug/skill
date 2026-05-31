@@ -25,7 +25,7 @@
 
 ## 0.1 Countable REVIEW_GATE deep review lanes
 
-**权威真源**（[`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，[`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export），ADR-005）：
+**权威真源**（[`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json)，[`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs)（`` re-export），ADR-005）：
 
 | 字段 | 消费宿主 | 含义 |
 |------|----------|------|

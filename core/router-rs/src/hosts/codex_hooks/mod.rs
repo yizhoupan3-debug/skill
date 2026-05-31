@@ -18,6 +18,8 @@ use chrono::Utc;
 use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::sync::LazyLock;
+
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 use std::env;
@@ -333,11 +335,7 @@ impl Drop for CodexStateLock {
     }
 }
 
-/// Stable session identifier for hook-state filenames: hook JSON fields first (snake_case and
-/// camelCase per Codex *Common input fields*), then env fallbacks operators may set.
-///
-/// Does **not** include the per-invocation fallback (`codex_session_key` adds that); see
-/// See [`docs/plans/README.md`](../../../docs/plans/README.md) for plans index (historical crosscheck stubs removed).
+/// Stable session identifier for hook-state filenames.
 fn codex_stable_session_raw(event: &Value) -> Option<String> {
     fn trimmed_nonempty(value: &str) -> Option<String> {
         let t = value.trim();
@@ -672,6 +670,7 @@ fn codex_save_state_to_path(state_path: &Path, state: &CodexLifecycleContextStat
         let _ = fs::remove_file(&tmp);
         return false;
     }
+    drop(tmp_file);
     if fs::rename(&tmp, &target).is_err() {
         let _ = fs::remove_file(&tmp);
         return false;
@@ -777,6 +776,8 @@ fn codex_prompt_text(event: &Value) -> String {
     String::new()
 }
 
+#[cfg(test)]
+#[cfg(test)]
 fn codex_first_nonempty_prompt_line(text: &str) -> String {
     text.lines()
         .map(str::trim)
@@ -1213,44 +1214,47 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
             }));
         }
         Ok(Some(mut state)) => {
-            if has_override(&prompt_text) {
-                state.review_override = true;
-            }
-            if crate::hook_common::saw_reject_reason(&stop_signal, &prompt_text) {
-                state.reject_reason_seen = true;
-            }
-            let assistant_tail = crate::hook_common::hook_assistant_tail_window(
-                &response_full,
-                crate::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
-            );
-            if let Some(phase) = maybe_bump_codex_review_phase_for_compact_findings(
-                state.review_required,
-                state.review_override,
-                state.phase,
-                state.subagent_start_count,
-                state.independent_review_subagent_seen,
-                &assistant_tail,
-            ) {
-                state.phase = phase;
-            }
-            let blocks = !codex_review_gate_satisfied(
-                state.review_required,
-                state.review_override,
-                state.reject_reason_seen,
-                state.independent_review_subagent_seen,
-                state.phase,
-            );
             let persist = with_codex_state_lock(repo_root, event, |_loaded| {
-                Ok((Some(state.clone()), ()))
+                if has_override(&prompt_text) {
+                    state.review_override = true;
+                }
+                if crate::hook_common::saw_reject_reason(&stop_signal, &prompt_text) {
+                    state.reject_reason_seen = true;
+                }
+                let assistant_tail = crate::hook_common::hook_assistant_tail_window(
+                    &response_full,
+                    crate::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+                );
+                if let Some(phase) = maybe_bump_codex_review_phase_for_compact_findings(
+                    state.review_required,
+                    state.review_override,
+                    state.phase,
+                    state.subagent_start_count,
+                    state.independent_review_subagent_seen,
+                    &assistant_tail,
+                ) {
+                    state.phase = phase;
+                }
+                let phase = state.phase;
+                let blocks = !codex_review_gate_satisfied(
+                    state.review_required,
+                    state.review_override,
+                    state.reject_reason_seen,
+                    state.independent_review_subagent_seen,
+                    state.phase,
+                );
+                Ok((Some(state), (blocks, phase)))
             });
-            if persist.is_err() {
-                return Some(codex_hook_state_persist_block_payload());
-            }
-            if blocks {
-                return Some(json!({
-                    "decision": "block",
-                    "followup_message": codex_review_stop_followup_line(state.phase)
-                }));
+            match persist {
+                Err(_) => return Some(codex_hook_state_persist_block_payload()),
+                Ok((blocks, phase)) => {
+                    if blocks {
+                        return Some(json!({
+                            "decision": "block",
+                            "followup_message": codex_review_stop_followup_line(phase)
+                        }));
+                    }
+                }
             }
         }
         Ok(None) => {
@@ -1338,11 +1342,16 @@ pub(crate) fn run_codex_lifecycle_context_hook_for_state_dir(
         }
     };
     LIFECYCLE_HOST.with(|cell| {
+        struct Restore(CodexLifecycleHostKind);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                LIFECYCLE_HOST.with(|c| c.set(self.0));
+            }
+        }
         let prev = cell.get();
         cell.set(host);
-        let out = run_codex_lifecycle_context_hook_inner(repo_root, payload, host);
-        cell.set(prev);
-        out
+        let _restore = Restore(prev);
+        run_codex_lifecycle_context_hook_inner(repo_root, payload, host)
     })
 }
 
@@ -1671,9 +1680,13 @@ fn codex_projection_drift_warning(repo_root: &Path) -> Option<String> {
     let manifest_path = if local_codex_home.is_dir() {
         local_codex_home.join(".router-rs-install.manifest.json")
     } else {
-        resolve_codex_home(None)
-            .ok()?
-            .join(".router-rs-install.manifest.json")
+        let codex_home = env::var_os("CODEX_HOME")
+            .map(PathBuf::from)
+            .or_else(|| env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")))?;
+        if !codex_home.is_dir() {
+            return None;
+        }
+        codex_home.join(".router-rs-install.manifest.json")
     };
     let text = match fs::read_to_string(manifest_path) {
         Ok(v) => v,
@@ -2668,7 +2681,7 @@ fn split_bash_segments(command: &str) -> Vec<String> {
     }
 }
 
-fn bash_command_looks_mutating(command: &str) -> bool {
+static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     [
         r"^\s*(mv|cp|install|touch|rm|unlink|truncate)\b",
         r"^\s*ln\b[^\n]*\s-[^\n]*[fs][^\n]*\b",
@@ -2682,12 +2695,12 @@ fn bash_command_looks_mutating(command: &str) -> bool {
         r"\bdd\b",
     ]
     .iter()
-    .any(|pattern| {
-        Regex::new(pattern)
-            .ok()
-            .map(|regex| regex.is_match(command))
-            .unwrap_or(false)
-    })
+    .filter_map(|p| Regex::new(p).ok())
+    .collect()
+});
+
+fn bash_command_looks_mutating(command: &str) -> bool {
+    MUTATING_COMMAND_PATTERNS.iter().any(|re| re.is_match(command))
 }
 
 fn bash_segment_mentions_generated_path(segment: &str, hint: &str) -> bool {

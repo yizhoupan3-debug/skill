@@ -48,7 +48,7 @@ L1  Executable verification and exit codes
 
 | 真源 | 用途 |
 |------|------|
-| [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) | 闭集宿主、`review_gate.deep_gate_lanes`、profile 投影；**运行时**经 [`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) 从磁盘读取（`registry_loader.rs` 仅为 re-export shim；**非** `include_str!` 嵌入）。读盘失败时 lane 判定 **fail-closed**（不计入深度 lane）；`framework doctor` 探测 snapshot。改 lane 后重启 hook 子进程即可，**无需** `cargo build`。 |
+| [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) | 闭集宿主、`review_gate.deep_gate_lanes`、profile 投影；**运行时**经 [`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) 从磁盘读取（`` 仅为 re-export shim；**非** `include_str!` 嵌入）。读盘失败时 lane 判定 **fail-closed**（不计入深度 lane）；`framework doctor` 探测 snapshot。改 lane 后重启 hook 子进程即可，**无需** `cargo build`。 |
 | [`configs/framework/host_projection_narrative.json`](../configs/framework/host_projection_narrative.json) | 各宿主 framework 投影内的 **My lifecycle 默认链** 与 **review findings-only** 英文段落；`framework host-integration install` 渲染时读取。叙事政策仍以 [`AGENTS.md`](../AGENTS.md) 为跨宿主真源，本 JSON 仅为安装产物文案真源。 |
 | [`configs/framework/GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) | 声明须纳入版本库的生成物路径、generator 命令与 `compare` 模式（`byte-for-byte` / `normalized-text`）。 |
 
@@ -256,7 +256,7 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 | L2 continuity | `artifacts/current/`、`TRACE_EVENTS.jsonl`、`STEP_LEDGER.jsonl`、`configs/framework/*SCHEMA*` |
 | Skill 热路由（router-rs hot path） | `skills/SKILL_ROUTING_RUNTIME.json` |
 | Skill 伴生元数据（**非**每 prompt 热路径；`SKILL_PLUGIN_CATALOG` / `SKILL_ROUTING_RUNTIME_EXPLAIN` 由 refresh / policy / CI 消费；**`SKILL_ROUTING_METADATA.json` 在 `load_records_from_runtime` 时 merge**，见 `route/records.rs` `merge_sidecar_route_metadata_from_runtime`） | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`（EXPLAIN：CI/companion/人读，router route 模块不读） |
-| Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `core/router-rs/src/runtime_registry/mod.rs`（shim：`registry_loader.rs`） |
+| Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `core/router-rs/src/runtime_registry/mod.rs`（shim：``） |
 | 宿主投影 My/review 文案 | `configs/framework/host_projection_narrative.json` |
 | 生成物 manifest / drift | `configs/framework/GENERATED_ARTIFACTS.json` + `framework host-integration generated-artifacts-status` |
 | 任务 schema drift / Cursor hooks 减法闭集 | `core/router-rs/src/schema_drift.rs`、`hosts/cursor_hooks/subtraction.rs`；CLI `router-rs schema-drift {contract,baseline,check}` |

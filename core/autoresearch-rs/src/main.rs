@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Local, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use regex::Regex;
+use std::sync::LazyLock;
 use reqwest::blocking::Client;
 use reqwest::header::{ACCEPT, USER_AGENT};
 use serde_json::{json, Map, Value};
@@ -37,6 +38,12 @@ const EXTERNAL_RESEARCH_BLOCK_START: &str = "<!-- autoresearch:external-research
 const EXTERNAL_RESEARCH_BLOCK_END: &str = "<!-- autoresearch:external-research:end -->";
 const CLAIMS_BLOCK_START: &str = "<!-- autoresearch:claims:start -->";
 const CLAIMS_BLOCK_END: &str = "<!-- autoresearch:claims:end -->";
+
+static ARXIV_ENTRY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<entry>(.*?)</entry>").expect("arxiv entry regex"));
+static ARXIV_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<author>.*?<name>(.*?)</name>.*?</author>").expect("arxiv author regex")
+});
 const CONTEXT_BLOCK_START: &str = "<!-- autoresearch:context:start -->";
 const CONTEXT_BLOCK_END: &str = "<!-- autoresearch:context:end -->";
 const REUSE_INDEX_BLOCK_START: &str = "<!-- autoresearch:reuse-index:start -->";
@@ -2306,8 +2313,8 @@ fn fetch_arxiv(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>>
         .context("arXiv returned an error")?
         .text()
         .context("arXiv returned invalid text")?;
-    let entry_re = Regex::new(r"(?s)<entry>(.*?)</entry>").unwrap();
-    let author_re = Regex::new(r"(?s)<author>.*?<name>(.*?)</name>.*?</author>").unwrap();
+    let entry_re = &*ARXIV_ENTRY_RE;
+    let author_re = &*ARXIV_AUTHOR_RE;
     let mut results = Vec::new();
     for entry in entry_re.captures_iter(&raw) {
         let entry_raw = entry.get(1).map(|item| item.as_str()).unwrap_or("");
@@ -2400,25 +2407,36 @@ fn research_claim(
     limit: usize,
     timeout_secs: u64,
 ) -> Result<Value> {
+    let client = http_client(timeout_secs)?;
+    research_claim_with_client(state, claim_id, explicit_query, source, limit, &client)
+}
+
+fn research_claim_with_client(
+    state: &Value,
+    claim_id: Option<&str>,
+    explicit_query: Option<&str>,
+    source: &ExternalSourceArg,
+    limit: usize,
+    client: &Client,
+) -> Result<Value> {
     let source_record = claim_record_for_research(state, claim_id);
     if let (Some(claim_id), None) = (claim_id, source_record.as_ref()) {
         bail!("Unknown claim id: {claim_id}");
     }
     let query = default_research_query(source_record.as_ref(), explicit_query)?;
-    let client = http_client(timeout_secs)?;
     let mut results = Vec::new();
     let mut errors = Vec::new();
     if matches!(
         source,
         ExternalSourceArg::All | ExternalSourceArg::SemanticScholar
     ) {
-        match fetch_semantic_scholar(&client, &query, limit) {
+        match fetch_semantic_scholar(client, &query, limit) {
             Ok(items) => results.extend(items),
             Err(err) => errors.push(format!("semantic-scholar: {err}")),
         }
     }
     if matches!(source, ExternalSourceArg::All | ExternalSourceArg::Arxiv) {
-        match fetch_arxiv(&client, &query, limit) {
+        match fetch_arxiv(client, &query, limit) {
             Ok(items) => results.extend(items),
             Err(err) => errors.push(format!("arxiv: {err}")),
         }
@@ -2462,26 +2480,92 @@ fn research_all_claims(
     max_claims: usize,
     timeout_secs: u64,
 ) -> Result<Value> {
+    use std::sync::{mpsc, Arc};
     let mut next_state = ensure_state_defaults(state);
     let records = claim_records_for_batch(&next_state, max_claims);
     if records.is_empty() {
         bail!("No claims available. Run draft-claims first.");
     }
-    for record in records {
-        let claim_id = record.get("claim_id").and_then(Value::as_str);
-        let query = default_research_query(Some(&record), None)?;
-        if has_matching_external_research(&next_state, claim_id, &query, source) {
-            continue;
+    // Pre-filter: skip claims that already have matching external research
+    let to_process: Vec<Value> = records
+        .into_iter()
+        .filter(|record| {
+            let claim_id = record.get("claim_id").and_then(Value::as_str);
+            match default_research_query(Some(record), None) {
+                Ok(q) => !has_matching_external_research(&next_state, claim_id, &q, source),
+                Err(_) => true,
+            }
+        })
+        .collect();
+    if to_process.is_empty() {
+        return Ok(next_state);
+    }
+    let client = Arc::new(http_client(timeout_secs)?);
+    let state_ref = Arc::new(next_state.clone());
+    let source = source.clone();
+    let worker_count = to_process.len().min(4).max(1);
+    let (task_tx, task_rx) = mpsc::channel::<Value>();
+    let (result_tx, result_rx) = mpsc::channel();
+    let task_rx = Arc::new(std::sync::Mutex::new(task_rx));
+    // Spawn worker threads
+    let mut handles = Vec::with_capacity(worker_count);
+    for _ in 0..worker_count {
+        let task_rx = Arc::clone(&task_rx);
+        let result_tx = result_tx.clone();
+        let client = Arc::clone(&client);
+        let state_ref = Arc::clone(&state_ref);
+        let source = source.clone();
+        handles.push(std::thread::spawn(move || {
+            loop {
+                let record = {
+                    let rx = task_rx.lock().unwrap();
+                    rx.recv()
+                };
+                let record = match record {
+                    Ok(r) => r,
+                    Err(_) => break,
+                };
+                let claim_id = record.get("claim_id").and_then(Value::as_str);
+                let query = match default_research_query(Some(&record), None) {
+                    Ok(q) => q,
+                    Err(e) => {
+                        let _ = result_tx.send(Err(format!("query extraction: {e}")));
+                        continue;
+                    }
+                };
+                let result = research_claim_with_client(
+                    &state_ref,
+                    claim_id,
+                    Some(&query),
+                    &source,
+                    limit,
+                    &client,
+                )
+                .map_err(|e| e.to_string());
+                let _ = result_tx.send(result);
+            }
+        }));
+    }
+    // Dispatch tasks
+    for record in to_process {
+        let _ = task_tx.send(record);
+    }
+    drop(task_tx);
+    drop(result_tx); // drop original sender; workers hold clones
+    // Collect results: blocks until all worker clones are dropped
+    let mut errors: Vec<String> = Vec::new();
+    for result in result_rx {
+        match result {
+            Ok(research) => arr_mut(&mut next_state, "external_research").push(research),
+            Err(e) => errors.push(e.to_string()),
         }
-        let research = research_claim(
-            &next_state,
-            claim_id,
-            Some(&query),
-            source,
-            limit,
-            timeout_secs,
-        )?;
-        arr_mut(&mut next_state, "external_research").push(research);
+    }
+    // All result_tx clones dropped (workers finished), now join
+    for handle in handles {
+        handle.join().ok();
+    }
+    if !errors.is_empty() && arr(&next_state, "external_research").is_empty() {
+        bail!("External research failed: {}", errors.join("; "));
     }
     Ok(next_state)
 }

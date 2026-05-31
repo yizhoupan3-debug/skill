@@ -6,7 +6,6 @@ Cursor Plan 模式（`.cursor/plans/*.plan.md`）仅在活跃任务需要时使�
 
 ## 相关 skill
 
-- [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md) — CreatePlan 契约与 `plan_profile`
 - [`skills/planx/SKILL.md`](../../skills/planx/SKILL.md) — ROADMAP / WAVE_STATE
 
 ## 历史

@@ -81,6 +81,7 @@ mod task_write_lock {
 }
 
 mod trace_runtime;
+mod web_fetch_guard;
 
 #[cfg(test)]
 mod claude_desktop_test_support;

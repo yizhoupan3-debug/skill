@@ -1,6 +1,5 @@
 // Session / shell / terminal lifecycle: `terminal_observation_cache` dedupes read_dir within one hook
 // subprocess; `terminate_stale_terminal_processes_in_dir` may still walk terminals for kill (see env
-// `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE`). Physical split dispatch vs kill: follow-up (plan Q3).
 
 fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
     maybe_init_session_terminal_ledger(repo_root, event);
@@ -618,7 +617,7 @@ fn parse_terminal_header(text: &str) -> Option<TerminalHeader> {
                     header.cwd = Some(PathBuf::from(val));
                 }
             }
-            "running_for_ms" => header.is_active = !val.is_empty(),
+            "running_for_ms" => header.is_active = val.parse::<u64>().map_or(!val.is_empty(), |ms| ms > 0),
             "active_command" => {
                 if !val.is_empty() {
                     header.active_command = Some(val.to_string());

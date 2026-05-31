@@ -5,7 +5,7 @@
 //!
 //! 架构约束：MCP 不支持工具拦截，因此 PreToolUse guards（framework/settings path guard、
 //! dangerous bash guard）在 Desktop 上不可用，依赖 CLAUDE.md 指令自律。
-//! Stop / UserPromptSubmit hard block 降级为 advisory（MCP tool 返回提示而无法阻止代理停止）。
+//! Stop / UserPromptSubmit 无 shell 硬拦；非 my-light 时 `closeout_gate` / `goal_state_manage complete` 在 MCP 工具层硬拦。
 //!
 //! 与 CLI 共享 L2/L3 手动画板（evidence、goal state、路由、snapshot），出站为 MCP JSON-RPC。
 
@@ -16,6 +16,7 @@ use crate::framework_runtime::{
     resolve_repo_root_arg,
 };
 use crate::route::{filter_records_for_host, load_records_cached_for_stdio};
+use crate::skill_repo::skill_routing_runtime_json;
 use crate::session_call_tracker::{
     check_anomalies, init_tracker, read_tracker_state, record_tool_call,
 };
@@ -26,9 +27,55 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
+
+const WEB_FETCH_MAX_BYTES_DEFAULT: usize = 50_000;
+const WEB_FETCH_TIMEOUT_SECS: u64 = 30;
+
+fn mcp_host_supports_hard_closeout(host_id: &str) -> bool {
+    matches!(
+        host_id,
+        "antigravity-app" | "antigravity" | "claude-desktop"
+    )
+}
+
+fn mcp_host_hard_block_label(host_id: &str) -> &'static str {
+    match host_id {
+        "antigravity-app" | "antigravity" => "Antigravity App",
+        "claude-desktop" => "Claude Desktop",
+        _ => "MCP Host",
+    }
+}
+
+fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
+    let current = repo_root.join("artifacts/current");
+    let Ok(entries) = fs::read_dir(&current) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<String> = entries
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name != "review-lanes" && !name.starts_with('.'))
+        .collect();
+    ids.sort();
+    ids
+}
+
+fn task_artifact_dir(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
+    let base = repo_root.join("artifacts/current");
+    if let Some(task_id) = task_id.filter(|value| !value.is_empty()) {
+        match crate::path_guard::validate_task_id_component(task_id.trim()) {
+            Ok(safe) => base.join(safe),
+            // Poisoned or hostile task_id must not escape artifacts/current via `..`.
+            Err(_) => base,
+        }
+    } else {
+        base
+    }
+}
 
 /// Cache entry for framework_snapshot responses (30 second TTL).
 struct SnapshotCache {
@@ -293,11 +340,11 @@ fn parse_content_length(line: &str) -> Result<usize, String> {
     // Note: line may contain trailing \r\n from read_line
     let lower = line.to_ascii_lowercase();
     let value_str = if lower.starts_with("content-length :") {
-        // Skip "content-length :" (15 chars) and the trailing \r\n
-        line[15..].trim().trim_start_matches(':').trim()
+        // Skip "content-length :" (15 chars)
+        line[15..].trim()
     } else if lower.starts_with("content-length:") {
-        // Skip "content-length:" (14 chars) and the trailing \r\n
-        line[14..].trim().trim_start_matches(':').trim()
+        // Skip "content-length:" (14 chars)
+        line[14..].trim()
     } else {
         return Err(format!("invalid Content-Length header: {}", line));
     };
@@ -456,7 +503,7 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "closeout_gate",
-                    "description": "返回 closeout 状态与缺失项清单（与 CLI Stop 门控同源但为 advisory —— MCP 不可硬拦）。agent 应在收尾前调用以自检。",
+                    "description": "返回 closeout 状态与缺失项清单（与 CLI Stop 同源）。非 my-light 时未满足则后续 complete 硬拦；my-light 为 advisory 自检。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -511,6 +558,18 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                             "round": {
                                 "type": "integer",
                                 "description": "RFV round number (append_round 时需要)",
+                            },
+                            "goal": {
+                                "type": "string",
+                                "description": "RFV goal (start 时需要)",
+                            },
+                            "review_summary": {
+                                "type": "string",
+                                "description": "append_round 时需要",
+                            },
+                            "fix_summary": {
+                                "type": "string",
+                                "description": "append_round 时需要",
                             },
                         },
                         "required": ["operation"],
@@ -568,14 +627,32 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                     },
                 },
                 {
+                    "name": "web_fetch",
+                    "description": "只读 HTTP GET 抓取外部 URL（绕过 Bash 沙箱；Desktop MCP 进程内执行）。返回 status、body 摘要。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "http(s) URL",
+                            },
+                            "max_bytes": {
+                                "type": "integer",
+                                "description": "响应体最大字节数（默认 50000）",
+                            },
+                        },
+                        "required": ["url"],
+                    },
+                },
+                {
                     "name": "goal_state_manage",
-                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear。",
+                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear / block。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
                             "operation": {
                                 "type": "string",
-                                "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear"],
+                                "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block"],
                                 "description": "操作类型",
                             },
                             "task_id": {
@@ -589,6 +666,10 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                             "note": {
                                 "type": "string",
                                 "description": "备注信息",
+                            "blocker": {
+                                "type": "string",
+                                "description": "blocker 描述（block 时需要）",
+                            },
                             },
                         },
                         "required": ["operation"],
@@ -628,54 +709,52 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         eprintln!("[router-rs warning] record_tool_call failed: {e}");
     }
 
-    // Antigravity Host hard interception rules
-    if host_id == "antigravity-app" || host_id == "antigravity" {
+    // MCP hard closeout (Antigravity App + Claude Desktop; my-light skips)
+    if mcp_host_supports_hard_closeout(host_id) {
         let task_id_override = arguments
             .get("task_id")
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|s| !s.is_empty());
         let task_view = resolve_task_view(repo_root, task_id_override);
-        let lifecycle_profile = task_view.goal_state.as_ref()
+        let lifecycle_profile = task_view
+            .goal_state
+            .as_ref()
             .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
             .unwrap_or("");
-        
-        let is_my_light = lifecycle_profile == "my-light";
+        let hard_block_disabled = mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile);
+        let host_name = mcp_host_hard_block_label(host_id);
 
-        if !is_my_light {
-            if tool_name == "goal_state_manage" {
-                if let Some("complete") = arguments.get("operation").and_then(Value::as_str) {
-                    // Check closeout gate before marking complete
-                    match tool_closeout_gate(arguments, repo_root, host_id) {
-                        Ok(content) => {
-                            if content.contains("[Closeout Gate] ADVISORY:") {
-                                return json!({
-                                    "jsonrpc": "2.0",
-                                    "id": id,
-                                    "result": {
-                                        "content": [{
-                                            "type": "text",
-                                            "text": format!(
-                                                "Error: [Antigravity Hard Block] Cannot mark goal as complete because closeout gates are not satisfied. Detail:\n{}",
-                                                content
-                                            )
-                                        }],
-                                        "isError": true,
-                                    },
-                                });
-                            }
-                        }
-                        Err(e) => {
-                            return json!({
-                                "jsonrpc": "2.0",
-                                "id": id,
-                                "result": {
-                                    "content": [{ "type": "text", "text": format!("Error during pre-closeout check: {e}") }],
-                                    "isError": true,
-                                },
-                            });
-                        }
+        if !hard_block_disabled && tool_name == "goal_state_manage" {
+            if let Some("complete") = arguments.get("operation").and_then(Value::as_str) {
+                match evaluate_mcp_closeout_gate(arguments, repo_root, host_id) {
+                    Ok(verdict) if verdict.hard_block => {
+                        return json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "content": [{
+                                    "type": "text",
+                                    "text": format!(
+                                        "Error: [{host_name} Hard Block] Cannot mark goal as complete because closeout gates are not satisfied. Detail:\n{}",
+                                        verdict.formatted,
+                                    )
+                                }],
+                                "isError": true,
+                            },
+                        });
                     }
+                    Err(e) => {
+                        return json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "content": [{ "type": "text", "text": format!("Error during pre-closeout check: {e}") }],
+                                "isError": true,
+                            },
+                        });
+                    }
+                    _ => {}
                 }
             }
         }
@@ -691,29 +770,32 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         "rfv_loop_manage" => tool_rfv_loop_manage(arguments, repo_root),
         "goal_state_manage" => tool_goal_state_manage(arguments, repo_root),
         "goal_state_read" => tool_goal_state_read(arguments, repo_root),
-        "closeout_record_write" => tool_closeout_record_write(arguments, repo_root),
+        "closeout_record_write" => tool_closeout_record_write(arguments, repo_root, host_id),
+        "web_fetch" => tool_web_fetch(arguments),
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
 
-    if (host_id == "antigravity-app" || host_id == "antigravity") && tool_name == "closeout_gate" {
+    if mcp_host_supports_hard_closeout(host_id) && tool_name == "closeout_gate" {
         if let Ok(ref content) = result {
-            if content.contains("[Closeout Gate] ADVISORY:") {
-                let task_id_override = arguments
-                    .get("task_id")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty());
-                let task_view = resolve_task_view(repo_root, task_id_override);
-                let lifecycle_profile = task_view.goal_state.as_ref()
-                    .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
-                    .unwrap_or("");
-                let is_my_light = lifecycle_profile == "my-light";
-
-                if !is_my_light {
-                    result = Err(format!(
-                        "[Antigravity Hard Block] Closeout Gate not satisfied. Details:\n{}",
-                        content
-                    ));
+            let task_id_override = arguments
+                .get("task_id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            let task_view = resolve_task_view(repo_root, task_id_override);
+            let lifecycle_profile = task_view
+                .goal_state
+                .as_ref()
+                .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
+                .unwrap_or("");
+            if !mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile) {
+                if let Ok(verdict) = evaluate_mcp_closeout_gate(arguments, repo_root, host_id) {
+                    if verdict.hard_block {
+                        let host_name = mcp_host_hard_block_label(host_id);
+                        result = Err(format!(
+                            "[{host_name} Hard Block] Closeout Gate not satisfied. Details:\n{content}",
+                        ));
+                    }
                 }
             }
         }
@@ -812,7 +894,8 @@ fn tool_skill_route(arguments: &Value, repo_root: &Path, host_id: &str) -> Resul
         })
         .unwrap_or(true); // Default to first_turn=true on error
 
-    let records = load_records_cached_for_stdio(Some(repo_root), None)?;
+    let runtime_path = skill_routing_runtime_json(repo_root);
+    let records = load_records_cached_for_stdio(Some(&runtime_path), None)?;
     let records = filter_records_for_host(records.as_ref(), Some(host_id))?;
     let decision = route_task_with_manifest_fallback(
         &records,
@@ -979,21 +1062,16 @@ fn goal_suggests_review_work(goal_state: &Value) -> bool {
 }
 
 fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path, task_id: &str) -> bool {
-    for key in ["review_evidence_attested", "independent_reviewer_attested"] {
-        if arguments.get(key).and_then(Value::as_bool) == Some(true) {
-            return true;
-        }
-    }
-    if arguments.get("review_evidence").and_then(Value::as_bool) == Some(true) {
-        return true;
-    }
-
     // 自动扫描 artifacts/current/<task_id>/review-lanes 目录下的 Markdown 证据工件
-    let review_lanes_dir = if task_id.is_empty() {
-        repo_root.join("artifacts/current/review-lanes")
-    } else {
-        repo_root.join("artifacts/current").join(task_id).join("review-lanes")
-    };
+    let review_lanes_dir = task_artifact_dir(
+        repo_root,
+        if task_id.is_empty() {
+            None
+        } else {
+            Some(task_id)
+        },
+    )
+    .join("review-lanes");
 
     if review_lanes_dir.is_dir() {
         if let Ok(entries) = std::fs::read_dir(&review_lanes_dir) {
@@ -1029,7 +1107,35 @@ fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path, task_id
     claude_independent_reviewer_evidence(review_lane, fork)
 }
 
-pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+#[derive(Debug, Clone)]
+pub(crate) struct McpCloseoutGateVerdict {
+    pub all_clear: bool,
+    pub checkpoint_only: bool,
+    pub hard_block: bool,
+    pub formatted: String,
+}
+
+fn mcp_closeout_host_label(host_id: &str) -> &'static str {
+    if host_id == "antigravity-app" || host_id == "antigravity" {
+        "Antigravity App"
+    } else {
+        "Claude Desktop"
+    }
+}
+
+fn mcp_closeout_hard_block_disabled(repo_root: &Path, lifecycle_profile: &str) -> bool {
+    crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
+        Some(repo_root),
+        lifecycle_profile,
+    )
+    .unwrap_or(false)
+}
+
+pub(crate) fn evaluate_mcp_closeout_gate(
+    arguments: &Value,
+    repo_root: &Path,
+    host_id: &str,
+) -> Result<McpCloseoutGateVerdict, String> {
     let task_id_override = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -1037,16 +1143,11 @@ pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &
         .filter(|s| !s.is_empty());
     let task_view = resolve_task_view(repo_root, task_id_override);
     let mut findings: Vec<String> = Vec::new();
+    let host_name = mcp_closeout_host_label(host_id);
 
-    let host_name = if host_id == "antigravity-app" || host_id == "antigravity" {
-        "Antigravity App"
-    } else {
-        "Claude Desktop"
-    };
-
-    findings.push(
-        format!("review_gate: {host_name} has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested (prompts/review_gate)"),
-    );
+    findings.push(format!(
+        "review_gate: {host_name} has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested (prompts/review_gate)"
+    ));
 
     let goal_present = task_view.goal_state.is_some();
     if !goal_present {
@@ -1075,14 +1176,8 @@ pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &
             );
         }
     }
-    let summary_path = if task_id.is_empty() {
-        repo_root.join("artifacts/current/SESSION_SUMMARY.md")
-    } else {
-        repo_root
-            .join("artifacts/current")
-            .join(task_id)
-            .join("SESSION_SUMMARY.md")
-    };
+    let summary_path = task_artifact_dir(repo_root, if task_id.is_empty() { None } else { Some(task_id) })
+        .join("SESSION_SUMMARY.md");
     let has_summary = summary_path.is_file();
     if !has_summary {
         findings.push(format!(
@@ -1093,44 +1188,70 @@ pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &
         findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
     }
 
+    let lifecycle_profile = task_view
+        .goal_state
+        .as_ref()
+        .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
+        .unwrap_or("");
+    let hard_block_disabled = mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile);
+
     let review_goal = task_view
         .goal_state
         .as_ref()
         .is_some_and(goal_suggests_review_work);
-    
     let has_review_evidence = desktop_review_evidence_attested(arguments, repo_root, task_id);
 
     if review_goal && !has_review_evidence {
-        findings.push(
-            format!(
-                "WARN: review_gate: GOAL suggests review work but no hook-level reviewer evidence on {host_name} — spawn claude_reviewer_lanes with fork_context=false, upload review-lanes/*.md reports, or pass review_evidence_attested=true after independent review"
-            )
-        );
+        findings.push(format!(
+            "WARN: review_gate: GOAL suggests review work but no hook-level reviewer evidence on {host_name} — spawn claude_reviewer_lanes with fork_context=false and write review-lanes/*.md, or pass reviewer_lane + fork_context=false in closeout_gate args"
+        ));
     } else if review_goal {
-        findings.push("review_gate: GOAL suggests review; reviewer evidence attested in closeout_gate args or review-lanes".to_string());
+        findings.push(
+            "review_gate: GOAL suggests review; reviewer evidence attested in closeout_gate args or review-lanes"
+                .to_string(),
+        );
     }
 
-    // 强性拦截：如果属于 review_goal 任务，但完全缺失审稿证据，all_clear 判定必须失败！
     let mut all_clear = goal_present && evidence_success && has_summary;
     if review_goal && !has_review_evidence {
         all_clear = false;
     }
 
-    let verdict = if all_clear {
-        "PASS: all closeout gates satisfied (advisory)"
-    } else if goal_present && evidence_success && (!review_goal || has_review_evidence) {
-        "ADVISORY: checkpoint missing — call session_checkpoint before claiming PASS"
+    let checkpoint_only =
+        !all_clear && goal_present && evidence_success && (!review_goal || has_review_evidence);
+
+    let verdict_label = if all_clear {
+        "PASS: all closeout gates satisfied"
+    } else if hard_block_disabled {
+        if checkpoint_only {
+            "ADVISORY: checkpoint missing — call session_checkpoint before complete (my-light: MCP hard block disabled)"
+        } else {
+            "ADVISORY: closeout gates not satisfied (my-light: MCP hard block disabled)"
+        }
+    } else if checkpoint_only {
+        "BLOCKED: checkpoint missing — call session_checkpoint before complete (MCP hard block when not my-light)"
     } else {
-        "ADVISORY: some gates not satisfied (MCP cannot hard-block, self-discipline required)"
+        "BLOCKED: closeout gates not satisfied (MCP hard block when not my-light)"
     };
 
-    Ok(format!(
-        "[Closeout Gate] {verdict}\n\n{}",
+    let formatted = format!(
+        "[Closeout Gate] {verdict_label}\n\n{}",
         findings.join("\n")
-    ))
+    );
+
+    Ok(McpCloseoutGateVerdict {
+        all_clear,
+        checkpoint_only,
+        hard_block: !all_clear && !hard_block_disabled,
+        formatted,
+    })
 }
 
-fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(crate) fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+    Ok(evaluate_mcp_closeout_gate(arguments, repo_root, host_id)?.formatted)
+}
+
+fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -1225,13 +1346,152 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path) -> Result<Str
         })
         .unwrap_or_default();
 
-    let result = json!({
+    let mut result = json!({
         "closeout_allowed": closeout_allowed,
         "record_path": record_path.to_string_lossy().to_string(),
         "violations": violations,
     });
 
+    if let Ok(mcp_verdict) = evaluate_mcp_closeout_gate(
+        &json!({ "task_id": task_id }),
+        repo_root,
+        host_id,
+    ) {
+        let task_view = crate::task_state::resolve_task_view(repo_root, Some(task_id));
+        let lifecycle_profile = task_view
+            .goal_state
+            .as_ref()
+            .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
+            .unwrap_or("");
+        let hard_block_disabled = mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile);
+        if let Some(obj) = result.as_object_mut() {
+            obj.insert(
+                "mcp_closeout_gate".to_string(),
+                json!({
+                    "all_clear": mcp_verdict.all_clear,
+                    "checkpoint_only": mcp_verdict.checkpoint_only,
+                    "hard_block": mcp_verdict.hard_block && !hard_block_disabled,
+                }),
+            );
+        }
+    }
+
     Ok(serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))?)
+}
+
+const WEB_FETCH_MAX_REDIRECTS: usize = 5;
+
+fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
+    let url = arguments
+        .get("url")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or("Missing required argument: url")?;
+    // Validate + resolve DNS in one pass to pin results before building client.
+    let (parsed_url, initial_addrs) = crate::web_fetch_guard::validate_and_resolve_web_fetch_url(url)?;
+    let max_bytes = arguments
+        .get("max_bytes")
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .unwrap_or(WEB_FETCH_MAX_BYTES_DEFAULT)
+        .clamp(1, WEB_FETCH_MAX_BYTES_DEFAULT);
+    let mut client_builder = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent("router-rs-framework-mcp/0.1");
+    for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"] {
+        if let Ok(proxy_url) = std::env::var(key) {
+            let trimmed = proxy_url.trim();
+            if !trimmed.is_empty() {
+                if let Ok(proxy) = reqwest::Proxy::all(trimmed) {
+                    client_builder = client_builder.proxy(proxy);
+                    break;
+                }
+            }
+        }
+    }
+    // Pin DNS results from validate_and_resolve to prevent rebinding TOCTOU.
+    let pin_host = parsed_url.host_str()
+        .ok_or_else(|| format!("web_fetch URL missing host: {url}"))?;
+    for addr in &initial_addrs {
+        client_builder = client_builder.resolve(pin_host, *addr);
+    }
+    let mut client = client_builder
+        .build()
+        .map_err(|err| format!("web_fetch client build failed: {err}"))?;
+    let mut current_url = url.to_string();
+    let mut response = None;
+    for hop in 0..=WEB_FETCH_MAX_REDIRECTS {
+        let resp = client
+            .get(&current_url)
+            .send()
+            .map_err(|err| format!("web_fetch request failed: {err}"))?;
+        if resp.status().is_redirection() {
+            if hop >= WEB_FETCH_MAX_REDIRECTS {
+                return Err(format!(
+                    "web_fetch exceeded {WEB_FETCH_MAX_REDIRECTS} redirects"
+                ));
+            }
+            let location = resp
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| {
+                    format!(
+                        "web_fetch redirect missing Location header (status {})",
+                        resp.status()
+                    )
+                })?;
+            let base = reqwest::Url::parse(&current_url)
+                .map_err(|err| format!("web_fetch redirect base URL invalid: {err}"))?;
+            current_url = crate::web_fetch_guard::resolve_web_fetch_redirect(&base, location)?;
+            // Pin DNS for redirect target to prevent DNS rebinding TOCTOU.
+            let redirect_parsed = reqwest::Url::parse(&current_url)
+                .map_err(|err| format!("web_fetch redirect URL parse failed: {err}"))?;
+            let rp_host = redirect_parsed.host_str()
+                .ok_or_else(|| format!("web_fetch redirect URL missing host: {current_url}"))?;
+            let rp_port = redirect_parsed.port()
+                .unwrap_or(if redirect_parsed.scheme() == "https" { 443 } else { 80 });
+            let rp_addrs = crate::web_fetch_guard::resolve_web_fetch_addresses(rp_host, rp_port)?;
+            // Rebuild client with pinned DNS for redirect target.
+            let mut rb = reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
+                .redirect(reqwest::redirect::Policy::none())
+                .user_agent("router-rs-framework-mcp/0.1");
+            for addr in &rp_addrs {
+                rb = rb.resolve(rp_host, *addr);
+            }
+            client = rb.build()
+                .map_err(|err| format!("web_fetch client rebuild failed: {err}"))?;
+            continue;
+        }
+        response = Some(resp);
+        break;
+    }
+    let response = response.ok_or_else(|| "web_fetch: no response".to_string())?;
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let body = response
+        .bytes()
+        .map_err(|err| format!("web_fetch read body failed: {err}"))?;
+    let truncated = body.len() > max_bytes;
+    let slice = &body[..body.len().min(max_bytes)];
+    let body_text = String::from_utf8_lossy(slice).into_owned();
+    let payload = json!({
+        "url": current_url,
+        "status": status,
+        "content_type": content_type,
+        "content_length": body.len(),
+        "truncated": truncated,
+        "body": body_text,
+    });
+    serde_json::to_string_pretty(&payload).map_err(|err| format!("web_fetch serialize failed: {err}"))
 }
 
 fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -1266,7 +1526,7 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, host_id: &str) -> Value {
+fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let prompt_name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -1284,7 +1544,8 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, hos
         "framework_routing" => {
             let source_rel = "skills/SKILL_ROUTING_RUNTIME.json";
             format!(
-                "Use this repo shared framework runtime.\n\n\
+                "面向用户的回复必须使用简体中文（代码/路径/命令/第三方原文除外）。\n\n\
+                 Use this repo shared framework runtime.\n\n\
                  1) Start from AGENTS.md.\n\
                  2) Route via {source_rel}.\n\
                  3) Read only the matched skill_path.\n\n\
@@ -1297,25 +1558,38 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, _repo_root: &Path, hos
             } else {
                 "Claude Desktop"
             };
-            let gate_mode = if host_id == "antigravity-app" || host_id == "antigravity" {
-                "Antigravity review gate is physically hard-blocked — unsatisfied closeout will block goal mark complete."
+            let gate_mode = if mcp_host_supports_hard_closeout(host_id) {
+                format!(
+                    "{host_name} closeout is hard-blocked at MCP tool level for non-my-light profiles — unsatisfied closeout blocks goal_state_manage complete."
+                )
             } else {
-                "Desktop review gate is advisory only — MCP cannot hard-block Stop."
+                "Desktop review gate is advisory only — MCP cannot hard-block Stop.".to_string()
             };
-            format!(
-                "[Review Gate -- {host_name} gating]\n\n\
-                 This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
-                 Countable independent reviewer lanes (registry review_gate.claude_reviewer_lanes):\n\
-                 - deep_gate_lanes: general-purpose / best-of-n-runner (and normalized spellings)\n\
-                 - Claude-only: review / reviewer / critic / code-review\n\
-                 explore / explorer does NOT count toward review evidence.\n\
-                 Requires fork_context=false for independent reviewer credit (written to review-lanes/*.md for {host_name}).\n\n\
-                 When user requests review:\n\
-                 1) Spawn a read-only reviewer in a claude_reviewer_lanes lane with fork_context=false\n\
-                 2) If no subagent, decompose review dimensions locally and document findings\n\
-                 3) Call closeout_gate before claiming review complete (and ensure review-lanes/*.md exists or pass review_evidence_attested=true)\n\n\
-                 {gate_mode}"
-            )
+            {
+                let lanes = crate::runtime_registry::claude_reviewer_lanes_sorted(Some(repo_root));
+                let lane_lines = if lanes.is_empty() {
+                    "- (registry claude_reviewer_lanes unavailable)\n".to_string()
+                } else {
+                    lanes
+                        .iter()
+                        .map(|lane| format!("- {lane}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+                format!(
+                    "[Review Gate -- {host_name} gating]\n\n\
+                     This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
+                     Countable independent reviewer lanes (RUNTIME_REGISTRY review_gate.claude_reviewer_lanes):\n\
+                     {lane_lines}\n\
+                     explore / explorer does NOT count toward review evidence.\n\
+                     Requires fork_context=false for independent reviewer credit (review-lanes/*.md on disk).\n\n\
+                     When user requests review:\n\
+                     1) Spawn a read-only reviewer in a claude_reviewer_lanes lane with fork_context=false\n\
+                     2) If no subagent, decompose review dimensions locally and document findings\n\
+                     3) Call closeout_gate before claiming review complete (review-lanes/*.md or reviewer_lane in args)\n\n\
+                     {gate_mode}"
+                )
+            }
         }
         "closeout_checklist" => "[Closeout Checklist]\n\n\
              Before ending task:\n\
@@ -1386,8 +1660,12 @@ fn handle_resources_list(id: Option<Value>, repo_root: &Path) -> Value {
     }
 
     // session_summary is always listed as a resource if SESSION_SUMMARY.md exists
-    let current = repo_root.join("artifacts/current");
-    let summary_path = current.join("SESSION_SUMMARY.md");
+    let task_id = task_view
+        .pointers
+        .active_task_id
+        .as_deref()
+        .or(task_view.pointers.focus_task_id.as_deref());
+    let summary_path = task_artifact_dir(repo_root, task_id).join("SESSION_SUMMARY.md");
     if summary_path.is_file() {
         resources.push(json!({
             "uri": "framework://session_summary",
@@ -1415,7 +1693,7 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
             let content = json!({
                 "active_task_id": task_view.pointers.active_task_id,
                 "focus_task_id": task_view.pointers.focus_task_id,
-                "known_task_ids": Vec::<String>::new(),
+                "known_task_ids": list_known_task_ids(repo_root),
             });
             (
                 serde_json::to_string_pretty(&content).unwrap_or_default(),
@@ -1430,8 +1708,12 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
             )
         }
         "framework://evidence_index" => {
-            let current = repo_root.join("artifacts/current");
-            let evidence_path = current.join("EVIDENCE_INDEX.json");
+            let task_view = get_cached_task_view(repo_root);
+            let task_id = task_view
+                .task_id
+                .as_deref()
+                .or(task_view.pointers.active_task_id.as_deref());
+            let evidence_path = task_artifact_dir(repo_root, task_id).join("EVIDENCE_INDEX.json");
             let content = if evidence_path.is_file() {
                 fs::read_to_string(&evidence_path).unwrap_or_else(|e| format!("Read error: {e}"))
             } else {
@@ -1440,8 +1722,12 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
             (content, "application/json")
         }
         "framework://session_summary" => {
-            let current = repo_root.join("artifacts/current");
-            let summary_path = current.join("SESSION_SUMMARY.md");
+            let task_view = get_cached_task_view(repo_root);
+            let task_id = task_view
+                .task_id
+                .as_deref()
+                .or(task_view.pointers.active_task_id.as_deref());
+            let summary_path = task_artifact_dir(repo_root, task_id).join("SESSION_SUMMARY.md");
             let content = if summary_path.is_file() {
                 fs::read_to_string(&summary_path).unwrap_or_else(|e| format!("Read error: {e}"))
             } else {
@@ -1606,6 +1892,9 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
             {
                 payload["validation_commands"] = json!(vc);
             }
+            if let Some(dud) = arguments.get("drive_until_done").and_then(Value::as_bool) {
+                payload["drive_until_done"] = json!(dud);
+            }
         }
         "checkpoint" => {
             let note = arguments
@@ -1613,6 +1902,14 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
                 .and_then(Value::as_str)
                 .ok_or("checkpoint requires 'note' argument (string)")?;
             payload["note"] = json!(note);
+        }
+        "block" => {
+            let blocker = arguments
+                .get("blocker")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .ok_or("block requires 'blocker' argument (string)")?;
+            payload["blocker"] = json!(blocker);
         }
         "append_round" => {
             // append_round is handled in rfv_loop, not here
@@ -1624,10 +1921,16 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
         "pause" | "resume" | "complete" | "clear" => {
             // No additional required args
         }
-        _ => return Err(format!("Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear")),
+        _ => return Err(format!("Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block")),
     }
 
     let result = crate::autopilot_goal::framework_goal_drive(payload)?;
+
+    // Invalidate snapshot/task_view caches after goal state write (H3 FIX)
+    let op = arguments.get("operation").and_then(|v| v.as_str()).unwrap_or("");
+    if op != "status" {
+        invalidate_evidence_caches();
+    }
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
@@ -1656,7 +1959,7 @@ pub(crate) fn tool_closeout_record_write_for_test(
     arguments: &Value,
     repo_path: &Path,
 ) -> Result<String, String> {
-    tool_closeout_record_write(arguments, repo_path)
+    tool_closeout_record_write(arguments, repo_path, "claude-desktop")
 }
 
 #[cfg(test)]
@@ -1728,7 +2031,7 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 10, "expected 10 tools, got: {:?}", names);
+        assert_eq!(names.len(), 11, "expected 11 tools, got: {:?}", names);
         for tool in &[
             "framework_snapshot",
             "skill_route",
@@ -1736,6 +2039,7 @@ mod tests {
             "session_checkpoint",
             "closeout_gate",
             "closeout_record_write",
+            "web_fetch",
             "goal_state_read",
             "rfv_loop_status",
             "rfv_loop_manage",

@@ -543,18 +543,34 @@ fn runtime_storage_db_name_candidates() -> Vec<String> {
     ordered
 }
 
-fn sqlite_connection(path: &Path) -> Result<Connection, String> {
-    let conn = Connection::open(path).map_err(|err| {
-        format!(
-            "open sqlite runtime storage failed for {}: {err}",
-            path.display()
-        )
-    })?;
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|err| format!("enable sqlite runtime storage WAL failed: {err}"))?;
-    conn.pragma_update(None, "synchronous", "NORMAL")
-        .map_err(|err| format!("set sqlite runtime storage synchronous mode failed: {err}"))?;
-    Ok(conn)
+fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>, String> {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    thread_local! {
+        static CACHED: RefCell<Option<(PathBuf, Rc<Connection>)>> = RefCell::new(None);
+    }
+    CACHED.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if let Some((ref cached_path, ref cached_conn)) = *slot {
+            if cached_path == path {
+                return Ok(Rc::clone(cached_conn));
+            }
+        }
+        let conn = Connection::open(path).map_err(|err| {
+            format!(
+                "open sqlite runtime storage failed for {}: {err}",
+                path.display()
+            )
+        })?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(|err| format!("enable sqlite runtime storage WAL failed: {err}"))?;
+        conn.pragma_update(None, "synchronous", "NORMAL")
+            .map_err(|err| format!("set sqlite runtime storage synchronous mode failed: {err}"))?;
+        let shared = Rc::new(conn);
+        let result = Rc::clone(&shared);
+        *slot = Some((path.to_path_buf(), shared));
+        Ok(result)
+    })
 }
 
 fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), String> {

@@ -16,6 +16,11 @@ Hook launchers、CI、`Cargo.toml` workspace 已对齐 `core/*`；勿再引用 `
 - **已删除（2026-05-19 激进清理）**：`~/Documents/skill`、`~/Documents/skill.nosync` 及同批空壳/无关目录；勿再引用。`~/skills_backup` 此前已删。
 - **生成物漂移检测**：`router-rs` 仍把历史路径 `/Users/joe/Documents/skill` 当作 forbidden marker，用于拒绝陈旧 bootstrap/投影。
 
+## Codex 多账户示例（2026-05）
+
+- **`configs/codex/sub_accounts.example.json` 已移除**（2026-05）。勿再在文档或脚本中引用该路径。
+- 多账户 / 子账户配置见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md) 与 Codex 宿主文档；机读状态仍使用 `configs/codex/sub_accounts.state.json`（gitignore，本机生成）。
+
 ## 日常维护
 
 **Steady-state 操作面**（宿主差异、`REVIEW_GATE` / review-lite、fork_context、自检）：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)。实现 crate 路径见上表 **`core/router-rs`**（勿再引用 `scripts/router-rs`）。
@@ -37,7 +42,7 @@ just doctor
 
 ### Claude Code / Antigravity（framework 源码仓）
 
-- **`.claude/settings.json`** 由 `install --to claude-code|claude-desktop` 材料化。
+- **`.claude/settings.json`** 由 `install --to claude-code` 材料化（四事件 hook）；**`claude-desktop`** 另 merge project/user **research sandbox** `settings.json`（无 PreToolUse hook）。
 - **Antigravity 已拆分**（2026-05-28）：
   - **`antigravity-cli`** → `.antigravitycli/hooks.json`（`install --to antigravity-cli`）
   - **`antigravity-app`** → `.gemini/*` MCP（`install --to antigravity-app`）
@@ -47,7 +52,7 @@ just doctor
 ## 默认工作流（全宿主）
 
 - **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；`lifecycle_profile: my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge。
-- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish` + `framework host-integration install --to cursor --scope user`；**重启 Cursor**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**；无前缀残留（`/discuss-phase` 等）亦不可用。
+- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish`（已刷新 Cursor user `framework.mdc` 与 Claude user/project `.claude/*`）；**重启 Cursor**；Claude Desktop **Cmd+Q 重开**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**。
 - **legacy-gsd / `/gsd-*`**：**已删除**（非冷表、非 CI stub）；hook 与 registry **不再识别**。个人入口仅 My 四命令（下表）。
 - `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
 
@@ -70,6 +75,23 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   framework host-integration install --framework-root "$PWD" --project-root "$PWD" \
   --artifact-root "$PWD/artifacts" --scope user --to cursor
 ```
+
+## Claude Code / Desktop：与 Cursor 对齐 My 生命周期（2026-05-29）
+
+- **症状**：`~/.claude/rules/framework.md` 仍写 `/gsd-*` 或 `GOAL_CONTINUE` → 与 Cursor `framework.mdc` 的 `/discussx`→`/verifyx` 不一致；路由仍走仓库 `skills/SKILL_ROUTING_RUNTIME.json`，但**入口叙事过时**。
+- **真源**：`configs/framework/host_projection_narrative.json` + `install --to claude` / `claude-desktop`。
+- **推荐一键**（framework 仓或业务仓）：
+
+```bash
+cd "$SKILL_FRAMEWORK_ROOT"
+./scripts/install-claude.sh
+# 或仅刷新全局（对齐 ~/.cursor/rules/framework.mdc）：
+./scripts/install-claude.sh --scope user
+```
+
+- **`just publish`** / `update-one-shot` 现已对 **claude**、**claude-desktop** 执行 **project + user** 双 scope（与 Cursor user-only 不同：Claude Code 仍需项目级 `.claude/settings.json` hooks）。
+- **其它仓库接入**：`scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`（symlink `skills/`、`AGENTS.md` + project 投影）；全局规则再跑 `install-claude.sh --scope user`。
+- **业务仓注意**：在 framework 仓执行 `just publish` **不会**自动更新其它项目目录下的 `.claude/*`；每个消费仓库须在本机重跑 `install-claude.sh --project-root <业务仓根>`（或先 `claude-bootstrap-framework.sh`）。
 
 ## 其它 Cursor 项目接入
 
@@ -165,7 +187,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 
 | 变更 | 说明 |
 |------|------|
-| `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`runtime_registry/mod.rs`](core/router-rs/src/runtime_registry/mod.rs)（`registry_loader.rs` re-export shim；**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
+| `review_gate` lane 集 | 磁盘 [`configs/framework/RUNTIME_REGISTRY.json`](configs/framework/RUNTIME_REGISTRY.json) + [`runtime_registry/mod.rs`](core/router-rs/src/runtime_registry/mod.rs)（`` re-export shim；**无** compile-time embed）；改 lane **无需** `cargo build`，重启 hook 子进程即可 |
 | 宿主投影 My/review 文案 | [`configs/framework/host_projection_narrative.json`](configs/framework/host_projection_narrative.json)；`host-integration install` 读取；勿在 `host_integration.rs` 硬编码 |
 | `generated-artifacts-status` | **`framework doctor`** / `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍要求全量 **drift-gate** `ok: true` |
 | `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 全链路关闭审稿并**清除** `.cursor/hook-state` 内 review 字段；非「仅不 nag」 |

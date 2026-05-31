@@ -52,6 +52,15 @@ pub(crate) fn validate_skills(repo_root: &Path) -> Result<(), String> {
         }
     }
 
+    let manifest_slugs = skill_slugs_from_index(&manifest)?;
+    for slug in ["discussx", "planx", "implementx", "verifyx"] {
+        if !manifest_slugs.contains(slug) {
+            errors.push(format!(
+                "manifest missing My lifecycle slug {slug}; edit skills/SKILL_MANIFEST.json then framework skills refresh --write --write-companions"
+            ));
+        }
+    }
+
     if errors.is_empty() {
         eprintln!(
             "framework skills validate: ok ({} on-disk SKILL.md, {} runtime rows)",

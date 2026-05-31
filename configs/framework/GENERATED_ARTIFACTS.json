@@ -28,8 +28,13 @@
     },
     {
       "path": ".claude/settings.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code && cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
       "compare": "normalized-text"
+    },
+    {
+      "path": ".claude/.framework-projection.json",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
+      "compare": "byte-for-byte"
     },
     {
       "path": ".claude/CLAUDE.md",
@@ -40,6 +45,11 @@
       "path": ".claude/mcp.json",
       "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
       "compare": "normalized-text"
+    },
+    {
+      "path": ".claude/.framework-projection-desktop.json",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
+      "compare": "byte-for-byte"
     },
     {
       "path": ".gemini/antigravity/rules/framework.md",

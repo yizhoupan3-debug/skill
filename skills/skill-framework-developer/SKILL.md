@@ -13,7 +13,7 @@ routing_priority: P1
 session_start: preferred
 user-invocable: false
 disable-model-invocation: true
-short_description: Design and tune Codex skill routing/framework behavior
+short_description: Design and tune cross-host skill routing and framework behavior
 trigger_hints:
   - skill-framework-developer
   - skill框架

@@ -233,7 +233,6 @@ fn append_jsonl_entry(
         fs::create_dir_all(parent)
             .map_err(|err| format!("create step ledger parent failed: {err}"))?;
     }
-    // let _path_lock = acquire_runtime_path_lock(path)?;
     if let Some(key) = idempotency_key {
         if step_ledger_contains_idempotency_key(path, key)? {
             return Ok(false);

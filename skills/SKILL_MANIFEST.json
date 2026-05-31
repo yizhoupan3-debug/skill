@@ -47,7 +47,7 @@
       "owner",
       "none",
       "P1",
-      "Design or revise one Codex skill package",
+      "Design or revise one cross-host skill package under skills/",
       "preferred",
       [
         "codex skill",
@@ -320,19 +320,126 @@
       "cold"
     ],
     [
-      "deepinterview",
-      "L1",
+      "discussx",
+      "L0",
       "owner",
       "none",
-      "P2",
-      "Repo-native deepinterview workflow for evidence-first clarification and convergence review. It owns the ambiguity-gated interview loop through local continuity artifacts and Rust-backed resume.",
+      "P1",
+      "Personal lifecycle discuss — requirements, decisions-only chat, doc-only.",
       "n/a",
       [
-        "/deepinterview",
-        "deepinterview"
+        "/discussx",
+        "discussx"
       ],
-      "project",
-      3,
+      "runtime",
+      0,
+      "skills/discussx/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "planx",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "Personal lifecycle plan — ROADMAP and WAVE_STATE DAG, doc-only.",
+      "n/a",
+      [
+        "/planx",
+        "planx"
+      ],
+      "runtime",
+      0,
+      "skills/planx/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "implementx",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "Personal lifecycle implement — one-breath all waves, multi-agent, main thread scheduler only.",
+      "n/a",
+      [
+        "/implementx",
+        "implementx"
+      ],
+      "runtime",
+      0,
+      "skills/implementx/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "verifyx",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "Personal lifecycle verify+ship — evidence, closeout, goal complete in one command.",
+      "n/a",
+      [
+        "/verifyx",
+        "verifyx"
+      ],
+      "runtime",
+      0,
+      "skills/verifyx/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "framework_command"
+    ],
+    [
+      "deepinterview",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "Native repo deep-interview workflow for evidence-first clarification and convergence review.",
+      "n/a",
+      [
+        "/deepinterview"
+      ],
+      "runtime",
+      0,
       "skills/deepinterview/SKILL.md",
       [
         "antigravity",
@@ -344,7 +451,7 @@
         "codex-cli",
         "cursor"
       ],
-      "skill"
+      "framework_command"
     ],
     [
       "design-md",
@@ -663,25 +770,18 @@
     ],
     [
       "gitx",
-      "L2",
+      "L0",
       "owner",
       "none",
       "P1",
-      "Run the Git closeout workflow with deep review on the substantive diff before commit/merge/push.",
+      "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.",
       "n/a",
       [
         "/gitx",
-        "/gitx plan",
-        "gitx",
-        "规划后收口",
-        "git 一条龙",
-        "review 修复 整理 提交 推送",
-        "合并分支",
-        "merge branch",
-        "合并 worktree 并推送"
+        "gitx"
       ],
-      "project",
-      3,
+      "runtime",
+      0,
       "skills/gitx/SKILL.md",
       [
         "antigravity",
@@ -693,7 +793,7 @@
         "codex-cli",
         "cursor"
       ],
-      "skill"
+      "framework_command"
     ],
     [
       "hatch-pet",
@@ -701,7 +801,7 @@
       "owner",
       "none",
       "P1",
-      "Create, repair, validate, preview, and package Codex-compatible animated pet spritesheets from character art, screenshots, generated images, or visual references. Use when a user wants to hatch a Code",
+      "Create, repair, validate, preview, and package animated pet spritesheets from character art, screenshots, generated images, or visual references. Use when a user wants to hatch a custom pet.",
       "n/a",
       [
         "hatch-pet",
@@ -1246,7 +1346,7 @@
       "owner",
       "none",
       "P2",
-      "Cursor Plan / 策划文档闸门 owner：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨模块/高风险/用户要求时升级为 audit plan。 `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: ",
+      "Cross-host Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。 `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: ",
       "preferred",
       [
         "Cursor Plan",
@@ -1485,7 +1585,7 @@
       "owner",
       "none",
       "P1",
-      "Design and tune Codex skill routing/framework behavior",
+      "Design and tune cross-host skill routing and framework behavior",
       "preferred",
       [
         "skill-framework-developer",
@@ -1731,26 +1831,13 @@
       "owner",
       "none",
       "P1",
-      "Refresh key docs, git tracking, and stale/dead repo surfaces; framework checks when applicable.",
+      "Refresh key docs, git tracking, and stale/dead repo surfaces; includes framework generated-artifact checks when applicable.",
       "n/a",
       [
-        "/update",
-        "一口气更新",
-        "更新关键文档",
-        "科研文档更新",
-        "刷新文档",
-        "扫描文档",
-        "git 跟踪文件",
-        "git tracking",
-        "死代码清理",
-        "旧文档清理",
-        "stale files",
-        "dead code",
-        "registry 更新",
-        "同步投影"
+        "/update"
       ],
-      "project",
-      3,
+      "runtime",
+      0,
       "skills/update/SKILL.md",
       [
         "antigravity",
@@ -1762,7 +1849,7 @@
         "codex-cli",
         "cursor"
       ],
-      "skill"
+      "framework_command"
     ],
     [
       "visual-review",

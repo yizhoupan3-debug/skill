@@ -15,13 +15,13 @@
 
 - **Harness 核心入口**：
   - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
-  - **任务状态治理**：使用 `goal_state_manage` 进行状态的启动与收尾管理。
+  - **任务状态治理**：`framework_goal_drive` stdio + `artifacts/current/<task_id>/GOAL_STATE.json`（Desktop 侧可用 MCP `goal_state_manage`，见 [`claude-desktop.md`](claude-desktop.md)）。
 - **工作区及状态产物**：
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
   - 拥有 `PreToolUse`、`UserPromptSubmit`、`PostToolUse` 和 `Stop` 等 4 个核心集成钩子事件。
-  - 深度 Review 采用 **spawn-first 配对审稿** 机制，具体规范详见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
+  - 深度 Review：**默认 `lifecycle_profile: my-light` 不注入 spawn-first**；非 my-light 时 spawn-first 配对审稿，见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
 ## Hook 事件矩阵
 
@@ -43,11 +43,12 @@
   - **项目环境变量文件**：路径为 [`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)。
   - **Framework 规则文件**：路径为 `.claude/rules/framework.md`。
   - **项目叙事文件**：路径为 `.claude/CLAUDE.md`。
-- **环境安装命令**：
+- **环境安装命令**（与 Cursor 对齐 My 生命周期；**须含 user scope** 刷新 `~/.claude/rules/framework.md`）：
   ```bash
-  cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
-    framework host-integration install --to claude --scope project
+  ./scripts/install-claude.sh
+  # 或仅全局：./scripts/install-claude.sh --scope user
   ```
+  其它仓库：`./scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"` + `install-claude.sh --scope user`。
 
 ## Skill 存放与路由 (Skills & Routing)
 

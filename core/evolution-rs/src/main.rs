@@ -825,9 +825,14 @@ fn calculate_dir_hash(path: &PathBuf) -> anyhow::Result<String> {
     for entry in files {
         if entry.file_type()?.is_file() {
             let mut file = File::open(entry.path())?;
-            let mut buffer = Vec::new();
-            file.read_to_end(&mut buffer)?;
-            hasher.update(&buffer);
+            let mut buffer = [0u8; 8192];
+            loop {
+                let bytes_read = file.read(&mut buffer)?;
+                if bytes_read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..bytes_read]);
+            }
         }
     }
     Ok(hex::encode(hasher.finalize()))

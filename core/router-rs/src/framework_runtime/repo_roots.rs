@@ -27,9 +27,43 @@ pub fn framework_root_from_executable_path(exe: &Path) -> Option<PathBuf> {
 
 /// CLI / 若干调用方常在 `core/router-rs/` 等子目录执行；continuity、`RUNTIME_REGISTRY`
 /// 与 `artifacts/current` 均以仓库根为真源，因此从 cwd 或传入路径向上探测 framework root。
+fn repo_root_from_mcp_placeholder(raw: &str) -> Option<PathBuf> {
+    let trimmed = raw.trim();
+    if trimmed == "${workspaceRoot}"
+        || trimmed == "${CLAUDE_PROJECT_DIR}"
+        || trimmed == "${CLAUDE_PROJECT_DIR:-.}"
+        || trimmed == "."
+    {
+        if let Ok(value) = std::env::var("CLAUDE_PROJECT_DIR") {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(PathBuf::from(value));
+            }
+        }
+        if trimmed == "." || trimmed == "${CLAUDE_PROJECT_DIR:-.}" {
+            return None;
+        }
+        if trimmed == "${workspaceRoot}" {
+            return std::env::current_dir().ok();
+        }
+    }
+    None
+}
+
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
     let base = if let Some(path) = repo_root {
-        path.to_path_buf()
+        if let Some(resolved) = path.to_str().and_then(repo_root_from_mcp_placeholder) {
+            resolved
+        } else {
+            path.to_path_buf()
+        }
+    } else if let Ok(value) = std::env::var("CLAUDE_PROJECT_DIR") {
+        let value = value.trim();
+        if value.is_empty() {
+            std::env::current_dir().map_err(|err| format!("resolve current directory failed: {err}"))?
+        } else {
+            PathBuf::from(value)
+        }
     } else {
         std::env::current_dir().map_err(|err| format!("resolve current directory failed: {err}"))?
     };
@@ -43,6 +77,28 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
         }
     }
     Ok(normalized)
+}
+
+#[cfg(test)]
+mod repo_root_placeholder_tests {
+    use super::resolve_repo_root_arg;
+    use std::env;
+
+    #[test]
+    fn workspace_root_placeholder_falls_back_to_cwd_without_claude_project_dir() {
+        let prior = env::var_os("CLAUDE_PROJECT_DIR");
+        env::remove_var("CLAUDE_PROJECT_DIR");
+        let cwd = env::current_dir().expect("cwd");
+        let resolved =
+            resolve_repo_root_arg(Some(std::path::Path::new("${workspaceRoot}"))).expect("resolve");
+        assert_eq!(
+            resolved.canonicalize().unwrap_or(resolved),
+            cwd.canonicalize().unwrap_or(cwd)
+        );
+        if let Some(value) = prior {
+            env::set_var("CLAUDE_PROJECT_DIR", value);
+        }
+    }
 }
 
 #[cfg(test)]

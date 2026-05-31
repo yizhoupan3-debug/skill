@@ -22,6 +22,19 @@ fn parse_task_id_from_pointer_json(raw: &str) -> Option<String> {
     Some(t)
 }
 
+/// 严格解析 task_id —— 仅从 payload 提取，不读全局指针（多 agent 安全）。
+fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
+    payload
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            "goal_state_manage: task_id is required in payload (multi-agent safe mode)".to_string()
+        })
+}
+
 pub fn read_primary_task_id(repo_root: &Path) -> Option<String> {
     let (active, focus) = read_task_pointer_pair(repo_root);
     active.or(focus)
@@ -113,7 +126,7 @@ pub fn ensure_task_directory(repo_root: &Path, task_id: &str) -> Result<PathBuf,
     Ok(task_dir)
 }
 
-/// RFV 在同 task 上 `start`/`upsert` 时移除 GOAL（与 RFV 互斥）。
+/// RFV 在同 task 上 `start`/`upsert` 时标记 GOAL 为 superseded（与 goal supersede RFV 对称）。
 pub fn deactivate_goal_for_conflict_with_rfv(
     repo_root: &Path,
     task_id: &str,
@@ -128,7 +141,17 @@ pub fn deactivate_goal_for_conflict_with_rfv(
     if !path.is_file() {
         return Ok(false);
     }
-    fs::remove_file(&path).map_err(|e| format!("remove GOAL_STATE for RFV mutex: {e}"))?;
+    let mut state = read_goal_state(repo_root, Some(task_id))?
+        .ok_or_else(|| "GOAL_STATE missing for RFV conflict resolution".to_string())?;
+    if let Some(obj) = state.as_object_mut() {
+        obj.insert("status".to_string(), json!("superseded"));
+        obj.insert("updated_at".to_string(), json!(now_iso()));
+        obj.entry("metadata".to_string())
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .map(|m| m.insert("superseded_by".to_string(), json!("rfv_loop")));
+    }
+    write_atomic_json(&path, &state)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, task_id);
     Ok(true)
 }
@@ -641,13 +664,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             }))
         }
         "start" | "upsert" => {
-            let task_id = task_id_override
-                .map(|s| s.to_string())
-                .or_else(|| read_primary_task_id(&repo_root))
-                .ok_or_else(|| {
-                    "framework_goal_drive start requires task_id in payload or active_task.json / focus_task.json"
-                        .to_string()
-                })?;
+            let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let goal = payload
                 .get("goal")
@@ -749,13 +766,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             }))
         }
         "checkpoint" => {
-            let task_id = task_id_override
-                .map(|s| s.to_string())
-                .or_else(|| read_primary_task_id(&repo_root))
-                .ok_or_else(|| {
-                    "framework_goal_drive checkpoint requires task_id or active_task.json"
-                        .to_string()
-                })?;
+            let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
             let note = payload
                 .get("note")
@@ -800,22 +811,27 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "goal_state": state,
             }))
         }
-        "pause" => set_terminal_flags(&repo_root, task_id_override, "paused", Some(false), None),
+        "pause" => set_terminal_flags(
+            &repo_root,
+            Some(resolve_task_id_strict(&payload)?),
+            "paused",
+            Some(false),
+            None,
+        ),
         "resume" => {
             let drive_until_done = payload
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
-            resume_goal_running(&repo_root, task_id_override, drive_until_done, &payload)
+            resume_goal_running(
+                &repo_root,
+                Some(resolve_task_id_strict(&payload)?),
+                drive_until_done,
+                &payload,
+            )
         }
         "complete" => {
-            let task_id = task_id_override
-                .map(|s| s.to_string())
-                .or_else(|| read_primary_task_id(&repo_root))
-                .ok_or_else(|| {
-                    "framework_goal_drive complete requires task_id or active_task.json"
-                        .to_string()
-                })?;
+            let task_id = resolve_task_id_strict(&payload)?;
             let state = read_goal_state(&repo_root, Some(&task_id))?
                 .ok_or_else(|| "GOAL_STATE missing for completion gate check".to_string())?;
             if goal_requires_completion_evidence(&state) {
@@ -834,7 +850,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             }
             let out = set_terminal_flags(
                 &repo_root,
-                Some(task_id.as_str()),
+                Some(task_id.clone()),
                 "completed",
                 Some(false),
                 None,
@@ -853,13 +869,13 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 })?;
             set_terminal_flags(
                 &repo_root,
-                task_id_override,
+                Some(resolve_task_id_strict(&payload)?),
                 "blocked",
                 Some(false),
                 Some(blocker.to_string()),
             )
         }
-        "clear" => clear_goal_state(&repo_root, task_id_override),
+        "clear" => clear_goal_state(&repo_root, Some(resolve_task_id_strict(&payload)?)),
         _ => Err(format!(
             "framework_goal_drive: unknown operation '{operation}'"
         )),
@@ -944,12 +960,10 @@ pub fn strip_followup_paragraphs_with_line_prefix(
         .join("\n\n")
 }
 
-fn clear_goal_state(repo_root: &Path, task_id_override: Option<&str>) -> Result<Value, String> {
-    let task_id = task_id_override
-        .map(|s| s.to_string())
-        .or_else(|| read_primary_task_id(repo_root))
+fn clear_goal_state(repo_root: &Path, task_id_resolved: Option<String>) -> Result<Value, String> {
+    let task_id = task_id_resolved
         .ok_or_else(|| {
-            "framework_goal_drive clear requires task_id or active_task.json".to_string()
+            "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
         })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let existed = path.is_file();
@@ -970,15 +984,13 @@ fn clear_goal_state(repo_root: &Path, task_id_override: Option<&str>) -> Result<
 
 fn resume_goal_running(
     repo_root: &Path,
-    task_id_override: Option<&str>,
+    task_id_resolved: Option<String>,
     drive_until_done: bool,
     payload: &Value,
 ) -> Result<Value, String> {
-    let task_id = task_id_override
-        .map(|s| s.to_string())
-        .or_else(|| read_primary_task_id(repo_root))
+    let task_id = task_id_resolved
         .ok_or_else(|| {
-            "framework_goal_drive requires task_id or active_task.json".to_string()
+            "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
         })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?
@@ -1021,16 +1033,14 @@ fn resume_goal_running(
 
 fn set_terminal_flags(
     repo_root: &Path,
-    task_id_override: Option<&str>,
+    task_id_resolved: Option<String>,
     status: &str,
     drive_until_done: Option<bool>,
     blocker: Option<String>,
 ) -> Result<Value, String> {
-    let task_id = task_id_override
-        .map(|s| s.to_string())
-        .or_else(|| read_primary_task_id(repo_root))
+    let task_id = task_id_resolved
         .ok_or_else(|| {
-            "framework_goal_drive requires task_id or active_task.json".to_string()
+            "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
         })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?

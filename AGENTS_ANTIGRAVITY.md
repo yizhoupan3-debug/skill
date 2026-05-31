@@ -10,6 +10,10 @@
 | **`antigravity-app`** | Desktop / **MCP**（`.gemini/`） | [`docs/hosts/antigravity-app.md`](docs/hosts/antigravity-app.md) | `install --to antigravity-app` |
 | `antigravity`（别名） | 等同 **app** | 同上 | deprecated，见 [`MIGRATION.md`](MIGRATION.md) |
 
+## Language
+
+- 跨宿主语言规范见 [`AGENTS.md`](AGENTS.md) § Language；Antigravity 宿主强制继承，不得豁免。
+
 ## 宿主集成与诊断
 
 ```bash

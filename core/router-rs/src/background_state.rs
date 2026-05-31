@@ -1461,26 +1461,42 @@ fn sqlite_storage_key(storage_root: &Path, state_path: &Path) -> Result<String, 
     Ok(relative.to_string_lossy().replace('\\', "/"))
 }
 
-fn open_sqlite_connection(db_path: &Path) -> Result<Connection, String> {
-    if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+fn open_sqlite_connection(db_path: &Path) -> Result<std::rc::Rc<Connection>, String> {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    thread_local! {
+        static CACHED: RefCell<Option<(PathBuf, Rc<Connection>)>> = RefCell::new(None);
     }
-    let conn = Connection::open(db_path).map_err(|err| err.to_string())?;
-    conn.pragma_update(None, "journal_mode", "WAL")
+    CACHED.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if let Some((ref cached_path, ref cached_conn)) = *slot {
+            if cached_path == db_path {
+                return Ok(Rc::clone(cached_conn));
+            }
+        }
+        if let Some(parent) = db_path.parent() {
+            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+        let conn = Connection::open(db_path).map_err(|err| err.to_string())?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(|err| err.to_string())?;
+        conn.pragma_update(None, "synchronous", "NORMAL")
+            .map_err(|err| err.to_string())?;
+        conn.execute(
+            &format!(
+                "CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (
+                    payload_key TEXT PRIMARY KEY,
+                    payload_text TEXT NOT NULL
+                )"
+            ),
+            [],
+        )
         .map_err(|err| err.to_string())?;
-    conn.pragma_update(None, "synchronous", "NORMAL")
-        .map_err(|err| err.to_string())?;
-    conn.execute(
-        &format!(
-            "CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (
-                payload_key TEXT PRIMARY KEY,
-                payload_text TEXT NOT NULL
-            )"
-        ),
-        [],
-    )
-    .map_err(|err| err.to_string())?;
-    Ok(conn)
+        let shared = Rc::new(conn);
+        let result = Rc::clone(&shared);
+        *slot = Some((db_path.to_path_buf(), shared));
+        Ok(result)
+    })
 }
 
 /// Returns true for operations that mutate the persisted store. Used by

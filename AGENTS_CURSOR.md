@@ -19,6 +19,10 @@
 
 - Cursor：`CURSOR_HOME`；仓库内优先 `skills/` 与 `skills/SKILL_ROUTING_RUNTIME.json`。
 
+## Language
+
+- 跨宿主语言规范见 [`AGENTS.md`](AGENTS.md) § Language；Cursor 宿主强制继承，不得豁免。
+
 ## Host Boundaries (Cursor 专属硬约束与门控)
 
 - **机读短码**：宿主注入单行 `REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP` 等（须 `router-rs ` 前缀）；**my-light**（My 入口 `/discussx|planx|implementx|verifyx` 或磁盘 `GOAL_STATE.lifecycle_profile: my-light`）下 Stop **不**发射 `REVIEW_GATE` / `AG_FOLLOWUP`。续跑须 `/implementx` + `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。

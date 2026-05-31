@@ -9,9 +9,14 @@
 | 跨宿主叙述性协议 | 仓库根 [`AGENTS.md`](AGENTS.md) |
 | Claude 专属执行面 | **`AGENTS_CLAUDE.md`**（本文件） |
 | skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
-| hook 行为 | `.claude/settings.json` + `router-rs` |
+| Claude Code hook 行为 | `.claude/settings.json` + `router-rs claude hook` |
+| Claude Desktop MCP 行为 | `.claude/mcp.json` 或 `claude_desktop_config.json` + MCP tools |
 
 **文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/hosts/claude.md`](docs/hosts/claude.md) · [`docs/hosts/claude-desktop.md`](docs/hosts/claude-desktop.md)
+
+## Language
+
+- 跨宿主语言规范见 [`AGENTS.md`](AGENTS.md) § Language；Claude 宿主强制继承，不得豁免。
 
 ## Claude 宿主特异性门控
 
@@ -21,19 +26,24 @@ graph TD
     B -- claude-code --> C[PreToolUse 硬门控]
     C -->|未 /discussx 或 /planx| D[硬阻断]
     C -->|合法 GOAL_STATE| E[允许执行]
-    B -- claude-desktop --> F[Advisory 前置]
-    F --> G[MCP 服务端后置 Hard block]
+    B -- claude-desktop --> F[MCP 工作流]
+    F --> G[非 my-light：closeout_gate / complete 工具层硬拦]
 ```
 
 ### PreToolUse 硬阻断 (`claude-code`)
 
 - `.claude/settings.json` + `pre-tool-use` hook 核查生命周期；未物化 `GOAL_STATE.json` 或未授权执行区 → **硬阻断**。
 - 遭遇阻断时调用 `/discussx` 或 `/planx` 自愈，勿盲目重试。
+- `ROUTER_RS_CLAUDE_*` 环境变量仅作用于 **Claude Code hook**。
 
-### Advisory + MCP 后置拦截 (`claude-desktop`)
+### MCP 工作流 + tool-level closeout (`claude-desktop`)
 
-- 无 PreToolUse 物理拦截；MCP tool 服务端对未授权写操作 **Hard block**。
-- 代理须主动对齐 `GOAL_STATE.json` 与 plan 工件 `artifacts/current/<task_id>/ROADMAP.md`、`WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](skills/planx/SKILL.md)）。
+- **无** PreToolUse / Stop shell hook；宿主原生 Bash/Write **不受 MCP 拦截**。
+- 代理须主动调用 MCP：`framework_snapshot` → `skill_route` → `goal_state_manage` → `record_evidence` → `closeout_gate` → `complete`。
+- **非 `my-light`**：`goal_state_manage complete` 与未满足之 `closeout_gate` 在 MCP 层 **硬拦**（`[Claude Desktop Hard Block]`）；`my-light` 仍为 advisory。
+- 须对齐 `GOAL_STATE.json` 与 `artifacts/current/<task_id>/ROADMAP.md`、`WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](skills/planx/SKILL.md)）。
+- `ROUTER_RS_DESKTOP_*` 缓存 TTL 见 operator surface；**不**消费 `ROUTER_RS_CLAUDE_*`。
+- **联网（Chat vs Cowork）**：Cowork 3P 下外网以 **`browser-mcp`** 为主；Chat 用 `web_fetch` → `browser-mcp`。运维 [`docs/hosts/claude-desktop-networking.md`](docs/hosts/claude-desktop-networking.md)；代理声明 project `.claude/CLAUDE.md`。
 
 ## 标准框架命令流
 
@@ -48,7 +58,7 @@ stateDiagram-v2
     Verify --> [*]
 ```
 
-- **`my-light`**：suppress hook 层 `REVIEW_GATE` 与 spawn-first；findings-only 仍适用。
+- **`my-light`**：suppress hook 层 `REVIEW_GATE` 与 spawn-first（Code）；Desktop MCP closeout 亦为 advisory。
 - **续跑**：无 hook 注入；重启后 `framework_goal_drive status` + `artifacts/current/<task_id>/` 手动画板。
 
 ## Knowledge Hygiene

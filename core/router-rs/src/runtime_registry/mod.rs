@@ -300,7 +300,7 @@ fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
     let key = repo_cache_key(&path);
     let mut guard = cache()
         .lock()
-        .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
+        .map_err(|e| { eprintln!("[router-rs] registry cache lock poisoned: {e}"); format!("registry cache lock poisoned: {e}") })?;
     if let Some(hit) = guard.get(&key) {
         return Ok(hit.clone());
     }
@@ -322,6 +322,17 @@ pub(crate) fn is_claude_reviewer_lane_from_registry(lane: &str, repo_root: Optio
     snapshot(repo_root)
         .map(|s| s.claude_reviewer_lanes.contains(&key))
         .unwrap_or(false)
+}
+
+/// Sorted lane spellings from `review_gate.claude_reviewer_lanes` for MCP prompts/docs.
+pub(crate) fn claude_reviewer_lanes_sorted(repo_root: Option<&Path>) -> Vec<String> {
+    snapshot(repo_root)
+        .map(|s| {
+            let mut lanes: Vec<String> = s.claude_reviewer_lanes.iter().cloned().collect();
+            lanes.sort();
+            lanes
+        })
+        .unwrap_or_default()
 }
 
 /// Operator/doctor probe: returns `Err` when disk registry cannot be loaded for hook lane sets.

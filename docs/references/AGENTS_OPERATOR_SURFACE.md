@@ -49,7 +49,7 @@
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `SESSION_CALL_TRACKER` `per_tool` 键上限（默认 128） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0` | 关闭 SessionEnd 终端回收 |
 | `ROUTER_RS_CURSOR_TERMINAL_KILL_MODE=legacy` | 旧「全仓库 active terminal」清扫 |
-| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（env 名保留；**仅** `/implementx` 入口；`/autopilot` 已退役） |
+| `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED=1` | 开启 beforeSubmit pre-goal（env 名保留；**仅** `/implementx` 入口） |
 | `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES` | pre-goal 自动放行次数（默认 8；`0` 关闭） |
 | `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` | **默认 strict**（unset 禁止仅凭磁盘 GOAL 满足 pre-goal）；legacy：`0`/`false`/`off`/`no` |
 | `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` | 5 个已从默认 `hooks.json` 移除的事件在未注册时仍 dispatch 完整 handler |
@@ -63,6 +63,15 @@
 | `ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` | Claude Code 对抗审稿短码（opt-in） |
 | `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK=1` | Antigravity CLI 对抗审稿短码（opt-in） |
 | `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 operator 注入总闸（含 paper adversarial / prose） |
+
+## Claude Desktop MCP
+
+| 变量 | 作用 |
+|------|------|
+| `ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS` | `framework_snapshot` MCP 缓存 TTL（默认 30） |
+| `ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS` | task view 缓存 TTL（默认 5） |
+
+Desktop **不**消费 `ROUTER_RS_CLAUDE_*`（那些仅 Claude Code hook）。MCP `--repo-root` 支持 `${CLAUDE_PROJECT_DIR:-.}` 与 server 侧 `CLAUDE_PROJECT_DIR` env。
 
 ## Schema drift（verify / CI）
 

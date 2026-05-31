@@ -1254,7 +1254,7 @@ fn save_session_terminal_ledger(repo_root: &Path, event: &Value, ledger: &Sessio
     let mut ledger = ledger.clone();
     prune_session_terminal_ledger(&mut ledger);
     if let Ok(text) = serde_json::to_string_pretty(&ledger) {
-        let _ = fs::write(path, text);
+        let _ = crate::atomic_write::write_atomic_text(&path, &text);
     }
 }
 

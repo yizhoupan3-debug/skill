@@ -58,7 +58,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 | 主题 | 行为 |
 |------|------|
-| **Registry `review_gate` lane** | 真源 `configs/framework/RUNTIME_REGISTRY.json`；[`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) **磁盘读取**（`registry_loader.rs` shim；无 compile-time embed）。改 lane 后**无需** `cargo build`；重启 hook 子进程即可。 |
+| **Registry `review_gate` lane** | 真源 `configs/framework/RUNTIME_REGISTRY.json`；[`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) **磁盘读取**（`` shim；无 compile-time embed）。改 lane 后**无需** `cargo build`；重启 hook 子进程即可。 |
 | **宿主投影 My/review 文案** | `configs/framework/host_projection_narrative.json`；`host-integration install` 渲染 Codex/Cursor/Claude 入口时读取。勿在 `host_integration.rs` 硬编码段落。 |
 | **`generated-artifacts-status`** | **`framework doctor`** 与 `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍跑全量 **drift-gate**（含慢 generator）。 |
 | **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** hook-state review 字段（细节见下节 **REVIEW_GATE** 链接）。 |
@@ -83,7 +83,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 - **Stop 优先级**（实现 [`handlers.rs`](../core/router-rs/src/hosts/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
 - **主线程深度 review（wave-2）**：清门须 live subagent 证据 + **`Stop` tail**；**裸** `phase≥2` 不足。细则见下节链接与本节「Hook 减法闭集」。
-- **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。**My 默认（`my-light`）**：同轮 review + `/implementx|/verifyx` **不**注入拆分提示（静默 disarm，见 [`docs/hosts/cursor.md`](hosts/cursor.md) beforeSubmit 表）。**非 my-light**（例如磁盘 `GOAL_STATE.lifecycle_profile` 非 `my-light` 且本轮无 My 斜杠、但 hook-state 已 `goal_required`）：会注入一行 **`router-rs：本轮提交同时包含…`** 拆分提示，避免误以为 review 门控失效。若你本意是「先深度审稿再开连续执行」，请拆成两轮。**`/autopilot` 已退役**（`is_autopilot_entrypoint_prompt` 恒为 `false`）。
+- **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。**My 默认（`my-light`）**：同轮 review + `/implementx|/verifyx` **不**注入拆分提示（静默 disarm，见 [`docs/hosts/cursor.md`](hosts/cursor.md) beforeSubmit 表）。**非 my-light**（例如磁盘 `GOAL_STATE.lifecycle_profile` 非 `my-light` 且本轮无 My 斜杠、但 hook-state 已 `goal_required`）：会注入一行 **`router-rs：本轮提交同时包含…`** 拆分提示，避免误以为 review 门控失效。若你本意是「先深度审稿再开连续执行」，请拆成两轮。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 My implement / goal drive 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
 
 ## 深度审稿 `REVIEW_GATE`（Cursor / Codex）
@@ -137,6 +137,11 @@ Cursor 对 `additional_context` / 过长 `followup_message` 有 **UTF-8 字节�
 | Codex 策略漂移 | `cargo build` + `framework sync-entrypoints` + `framework doctor` 提示 |
 | 环境变量命名 | harness 表前脚注 |
 | 截断不可见 | 出站 `...[~trunc]` 类标记 + 文档 |
+
+## Maint / refresh 与 Claude Desktop user 投影
+
+- **`framework maint refresh-host-projections`** 默认会对 `claude-desktop` 写 **user** scope（macOS 上为 `~/Library/Application Support/Claude/…`）。CI 或不想动本机 Desktop 配置时：设 **`ROUTER_RS_MAINT_SKIP_USER_PROJECTION=1`**（仅刷 project），或传 **`--home /path/to/isolated-home`** 把 user scope 落到隔离目录。
+- 业务仓 Desktop MCP：在 framework 仓执行 `./scripts/install-claude.sh --project-root <业务仓>`；勿指望 `update-one-shot` 自动改业务仓 `.claude/*`。
 
 ## 相关仓库入口
 

@@ -173,10 +173,12 @@ codex
 - **`router-rs framework …` 维护命令**：在目标仓库目录执行时，若当前目录不是框架检出根，需设置 **`SKILL_FRAMEWORK_ROOT`**（或传 `--framework-root`），否则会报无法解析 `framework_root`（实现会尝试从已安装二进制路径、`CURSOR_WORKSPACE_ROOT` 等推断，不可靠时以环境变量为准）。
 - Hook 减法与内存：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)「Hook 减法闭集」；恢复已删 Cursor 事件见 [`MIGRATION.md`](MIGRATION.md)。
 
-### Claude Code 侧（项目级）
+### Claude Code / Desktop（项目级 + 用户级）
 
-- Hooks：`.claude/settings.json` 合并 **4 事件**（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）→ [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](configs/framework/claude-router-rs-hook.env)）。
-- 安装：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude --scope project`（详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)）。
+- **My 生命周期**（与 Cursor 一致）：`/discussx` → `/planx` → `/implementx` → `/verifyx`；全局叙事在 **`~/.claude/rules/framework.md`**（对齐 `~/.cursor/rules/framework.mdc`）。
+- Hooks：`.claude/settings.json` 合并 **4 事件** → [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)。
+- **安装（推荐）**：`./scripts/install-claude.sh`（Code + Desktop，project + user）；Desktop 亦可 `./scripts/install-claude-desktop.sh`。详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)、[`docs/hosts/claude-desktop.md`](docs/hosts/claude-desktop.md)。
+- **其它仓库**：`./scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`，再 `install-claude.sh --scope user`。
 
 **别的目录验收清单（Cursor 工作区 = 目标项目根）**
 

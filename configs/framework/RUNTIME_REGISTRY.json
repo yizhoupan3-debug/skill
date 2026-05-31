@@ -115,7 +115,8 @@
       "claude-code": "配对审稿（Claude Code）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
       "antigravity-cli": "配对审稿（Antigravity CLI）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
       "antigravity-app": "配对审稿（Antigravity App）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md"
+      "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+      "claude-desktop": "配对审稿（Claude Desktop）：无 hook 注入；须主动 spawn 只读 reviewer 并写 review-lanes/*.md。非 my-light 时 closeout/complete 在 MCP 工具层硬拦；my-light 下 review/closeout 为 advisory。细则 skills/code-review-deep/SKILL.md"
     },
     "spawn_first_includes_model_inherit_by_host": {
       "cursor": true
@@ -531,22 +532,16 @@
       "context_files": [
         "AGENTS_CLAUDE.md"
       ],
-      "settings_paths": [
+      "mcp_config_paths": [
         {
           "scope": "project",
-          "relative": ".claude/settings.json"
+          "relative": ".claude/mcp.json"
         },
         {
           "scope": "user",
           "host_root": "claude-desktop",
-          "relative": "settings.json"
-        }
-      ],
-      "mcp_config_paths": [
-        {
-          "scope": "user",
-          "host_root": "claude-desktop",
-          "relative": "mcp.json"
+          "relative": "claude_desktop_config.json",
+          "notes": "macOS: ~/Library/Application Support/Claude/claude_desktop_config.json"
         }
       ],
       "session_supervisor_driver": "unsupported",
@@ -568,7 +563,7 @@
         {
           "cap": "closeout_evidence_hooks",
           "status": "unsupported",
-          "rationale": "Claude Desktop MCP transport cannot install PreToolUse hard gates; evidence and checkpoints are advisory via MCP tools only."
+          "rationale": "Claude Desktop MCP transport cannot install PreToolUse hard gates; closeout for non-my-light is hard-blocked at MCP tool level (goal_state_manage complete / closeout_gate); my-light remains advisory."
         },
         {
           "cap": "review_gate_router_observation",

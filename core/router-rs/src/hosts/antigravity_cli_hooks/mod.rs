@@ -13,7 +13,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const ANTIGRAVITY_CLI_HOOKS_PATH: &str = ".antigravitycli/hooks.json";
+pub(crate) const ANTIGRAVITY_CLI_HOOKS_PATH: &str = ".antigravitycli/hooks.json";
 pub const INSTALL_EVENTS: [&str; 5] = INSTALL_LIFECYCLE_EVENTS;
 const ANTIGRAVITY_CLI_HOOK_AUTHORITY: &str = "rust-antigravity-cli-hooks";
 const LIFECYCLE_STATE_DIR_LEAF: &str = ".antigravitycli";
@@ -167,6 +167,11 @@ pub fn install_antigravity_cli_hooks(
                 let _ = fs::copy(backup, &hooks_path);
             }
             return Err(err);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&hooks_path, fs::Permissions::from_mode(0o644));
         }
     }
 

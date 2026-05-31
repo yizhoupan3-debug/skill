@@ -1109,7 +1109,13 @@ mod tests {
         }))
         .expect("rfv start");
         assert_eq!(out["goal_state_cleared"], json!(true));
-        assert!(!gpath.is_file());
+        // Goal state is now marked superseded rather than deleted (symmetric with goal supersede RFV)
+        assert!(gpath.is_file(), "GOAL_STATE should still exist after RFV supersede");
+        let goal_state: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&gpath).expect("read goal state"))
+                .expect("parse goal state");
+        assert_eq!(goal_state["status"], "superseded");
+        assert_eq!(goal_state["metadata"]["superseded_by"], "rfv_loop");
 
         let _ = fs::remove_dir_all(&repo);
     }

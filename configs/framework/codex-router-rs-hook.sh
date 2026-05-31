@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+ROOT="${CLAUDE_PROJECT_ROOT:-$PWD}"
+FW="${SKILL_FRAMEWORK_ROOT:-$ROOT}"
+if [[ -r "$ROOT/.codex/router-rs-hook.env" ]]; then
+    set -a
+    . "$ROOT/.codex/router-rs-hook.env"
+    set +a
+elif [[ -r "$ROOT/.claude/router-rs-hook.env" ]]; then
+    set -a
+    . "$ROOT/.claude/router-rs-hook.env"
+    set +a
+fi
 # Codex lifecycle hook launcher — resolve router-rs and fail-closed when missing.
 set -eu
 
