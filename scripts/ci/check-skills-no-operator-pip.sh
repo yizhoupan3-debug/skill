@@ -3,14 +3,39 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
-if ! command -v rg >/dev/null 2>&1; then
-  echo "FAIL: ripgrep (rg) required"
-  exit 1
+# Prefer ripgrep; fall back to grep -r if unavailable.
+if command -v rg >/dev/null 2>&1; then
+  _search() { rg "$@"; }
+else
+  _search() {
+    # Map rg flags to grep equivalents for CI environments without ripgrep.
+    local -a args=()
+    local pattern="" targets=()
+    for arg in "$@"; do
+      case "$arg" in
+        -n) args+=("-n") ;;
+        -g) ;; # skip -g; handle glob below
+        -v) args+=("-v") ;;
+        *.md) args+=("--include=$arg") ;;
+        *.yml) args+=("--include=$arg") ;;
+        -) targets+=("-") ;;
+        /*) targets+=("$arg") ;;
+        *)
+          if [[ -z "$pattern" && ${#args[@]} -ge 0 && ! "$arg" =~ ^- ]]; then
+            pattern="$arg"
+          else
+            targets+=("$arg")
+          fi
+          ;;
+      esac
+    done
+    grep -rE "${args[@]}" "$pattern" "${targets[@]}" 2>/dev/null || true
+  }
 fi
 
 # Broad patterns (normative negatives in python-env-management are allowlisted below).
 mapfile -t hits < <(
-  rg -n \
+  _search -n \
     'pip install|pip3 install|uv pip install|uv pip sync|uv pip compile|python -m pip|python3 -m pip|\bpip3?\s+install\b' \
     skills/ -g '*.md' 2>/dev/null || true
 )
@@ -54,11 +79,11 @@ if ((${#filtered[@]} > 0)); then
 fi
 
 # Workflows must not reintroduce bare pip for governed Python jobs.
-if rg -n 'pip install|setup-python' .github/workflows/ --glob '*.yml' 2>/dev/null \
-  | rg -v 'check-skills-no-operator-pip|astral-sh/setup-uv' >/dev/null 2>&1; then
+if _search -n 'pip install|setup-python' .github/workflows/ -g '*.yml' 2>/dev/null \
+  | grep -v 'check-skills-no-operator-pip|astral-sh/setup-uv' >/dev/null 2>&1; then
   echo "FAIL: .github/workflows contains pip install or setup-python (use setup-uv + uv sync)"
-  rg -n 'pip install|setup-python' .github/workflows/ --glob '*.yml' \
-    | rg -v 'check-skills-no-operator-pip|astral-sh/setup-uv' || true
+  _search -n 'pip install|setup-python' .github/workflows/ -g '*.yml' \
+    | grep -v 'check-skills-no-operator-pip|astral-sh/setup-uv' || true
   exit 1
 fi
 
