@@ -103,6 +103,11 @@ pub fn append_transaction_assuming_l1_held(
     }
 
     if path.is_file() {
+        // Repair any trailing corrupt lines before reading.
+        if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
+            eprintln!("[router-rs] truncate_corrupt_tail failed for TASK_LEDGER: {e}");
+        }
+
         let content = fs::read_to_string(&path)
             .map_err(|err| format!("failed to read task ledger: {err}"))?;
 
@@ -159,6 +164,11 @@ pub fn append_transaction_assuming_l1_held(
 
         writeln!(file, "{}", serialized)
             .map_err(|err| format!("failed to write transaction: {err}"))?;
+    }
+
+    // Auto-compact when the file grows past 100 lines.
+    if let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 100) {
+        eprintln!("[router-rs] compact_jsonl_if_needed failed for TASK_LEDGER: {e}");
     }
 
     Ok(())

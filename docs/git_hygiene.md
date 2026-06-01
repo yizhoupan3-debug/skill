@@ -1,3 +1,8 @@
+---
+last_verified: "2026-06-02"
+depends_on: []
+---
+
 # Git Hygiene
 
 这个仓库是高频变更仓库，而且经常同时存在主工作区、agent worktree、自动生成产物三条线。Git 操作以 Git 原生命令为准，先把真实状态看清楚。

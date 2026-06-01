@@ -470,6 +470,7 @@ fn verify_claude_desktop_projection(repo_root: &Path) -> Result<(), String> {
         None,
         None,
         None,
+        None,
     )?;
 
     verify_claude_desktop_projection_scope(&roots, "project").map_err(|e| {
@@ -603,6 +604,7 @@ fn verify_antigravity_projection(repo_root: &Path) -> Result<(), String> {
     let roots = crate::host_integration::resolve_projection_roots(
         None,
         Some(repo_root),
+        None,
         None,
         None,
         None,

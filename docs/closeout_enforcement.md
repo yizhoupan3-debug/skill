@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+---
+
 # Closeout Enforcement
 
 This document is the operator-facing reference for the harness-level evidence
@@ -90,15 +96,24 @@ Every closeout MUST emit JSON of this shape:
 Required fields: `schema_version`, `task_id`, `summary`, `verification_status`.
 Allowed `verification_status` values: `passed | failed | partial | not_run`.
 
+**Source of truth:** This document tracks the Rust implementation
+(`closeout_enforcement.rs`) and the contract schema. When in doubt, the
+implementation is authoritative — update this document to match the code, not the
+other way around.
+
 ## Enforcement rules
 
-The evaluator returns `closeout_allowed: false` when any rule fires:
+The evaluator returns `closeout_allowed: false` when any rule fires. Rules are
+listed below in evaluation order; rule IDs match the contract
+(`closeout_enforcement_contract().rules`).
 
 - **`schema_version_mismatch`** — record uses a schema other than
-  `closeout-record-v1`.
-- **`task_id_missing`** / **`summary_missing`** /
-  **`verification_status_missing`** / **`verification_status_invalid`** —
-  required fields missing or malformed.
+  `closeout-record-v1`, or `schema_version` is missing/empty.
+- **`task_id_missing`** — `task_id` is empty after trimming.
+- **`summary_missing`** — `summary` is empty after trimming.
+- **`verification_status_invalid`** — `verification_status` is non-empty but not
+  one of `passed | failed | partial | not_run`.
+- **`verification_status_missing`** — `verification_status` is empty.
 - **`claimed_done_without_evidence`** — `summary` contains a completion keyword
   (`done | finished | completed | passed | succeeded | 已完成 | 完成 | 通过 | 搞定`)
   but `verification_status=not_run` and no `risks`/`blockers` were declared.
@@ -106,12 +121,28 @@ The evaluator returns `closeout_allowed: false` when any rule fires:
   `commands_run` empty AND `risks` empty.
 - **`verification_passed_with_failed_command`** — `verification_status=passed`
   but at least one entry in `commands_run` has non-zero `exit_code`.
+- **`invalid_command_evidence`** — `commands_run` contains a row with an empty
+  `command` string (serde defaults must not turn `{}` into success evidence).
+  Also checked at the raw JSON level before serde parsing.
 - **`verification_passed_with_missing_artifact`** — `verification_status=passed`
   but at least one `artifacts_checked` entry has `exists=false`.
 - **`not_run_without_blockers_or_risks`** — `verification_status=not_run` with
   no `blockers` and no `risks` (closeout must declare why it didn't verify).
 - **`claimed_done_with_failed_verification`** — summary claims completion but
   `verification_status=failed` and no `risks`/`blockers`.
+- **`claimed_passed_without_evidence`** (R7) — `verification_status=passed` but
+  `commands_run`, `artifacts_checked`, `risks`, and `blockers` are all empty.
+  Pure self-attestation is insufficient; supply at least one command, artifact
+  check, risk, or blocker.
+- **`task_id_context_mismatch`** — record `task_id` does not match the expected
+  task id supplied in the evaluation context (context-aware path only; also
+  checked at the raw JSON level).
+- **`claimed_passed_without_evidence_index_rows`** (R8) — context-aware:
+  `verification_status=passed` with empty `commands_run` AND zero successful
+  rows in the task's `EVIDENCE_INDEX.json`. Artifact existence alone does not
+  constitute executable verification.
+- **`parse_error`** — serde deserialization failed (e.g. unknown fields rejected
+  by `deny_unknown_fields`). The detail message includes the serde error.
 
 ## Calling the evaluator
 
@@ -191,9 +222,9 @@ CLI / stdio `closeout evaluate` 仍为裁判真源；hook 为投影，见 [`harn
 
 ## Tests
 
-- Module unit tests (13 cases): `core/router-rs/src/closeout_enforcement.rs`
+- Module unit tests (21 cases): `core/router-rs/src/closeout_enforcement.rs`
   `mod tests`.
-- Contract + CLI integration tests (4 cases): `tests/policy_contracts.rs`
+- Contract + CLI integration tests (5 cases): `tests/policy_contracts.rs`
   `closeout_*`.
 - Schema presence test: `tests/policy_contracts.rs`
   `closeout_record_schema_is_published`.

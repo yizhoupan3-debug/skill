@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../host_adapter_contract.md
+  - ../harness_architecture.md
+---
+
 # Codex CLI 宿主操作手册
 
 **闭集 id**：`codex-cli` · **传输**：codex-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.codex-cli`

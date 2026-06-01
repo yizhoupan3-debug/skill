@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../harness_architecture.md
+---
+
 # ADR: Cursor REVIEW_GATE strict vs review-lite
 
 ## Status

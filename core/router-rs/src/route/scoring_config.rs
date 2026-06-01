@@ -1,0 +1,116 @@
+//! Externalized scoring weights loaded from `configs/scoring_weights.json`.
+//!
+//! All numeric tuning knobs for skill-route scoring live in the JSON file.
+//! If the file is missing or malformed, the compile-time-embedded defaults
+//! (matching the values originally hardcoded in `scoring.rs`) are used.
+
+use serde::Deserialize;
+use std::sync::LazyLock;
+
+/// Compile-time-embedded fallback matching the values in
+/// `configs/scoring_weights.json`.
+const DEFAULTS_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../configs/scoring_weights.json"
+));
+
+const RUNTIME_CONFIG_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../configs/scoring_weights.json"
+);
+
+/// All tuneable numeric weights for the routing scoring pipeline.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScoringWeights {
+    // -- score_route_candidate: agent-swarm --
+    pub agent_swarm_boost: f64,
+    pub parallel_execution_boost: f64,
+    pub parallel_review_boost: f64,
+    pub token_budget_boost: f64,
+
+    // -- score_route_candidate: design-md --
+    pub design_md_quick_suppression_factor: f64,
+    pub design_md_boost: f64,
+
+    // -- score_route_candidate: alias / name match --
+    pub framework_alias_explicit_boost: f64,
+    pub exact_skill_name_boost: f64,
+
+    // -- score_route_candidate: gate phrases --
+    pub gate_match_base: f64,
+    pub gate_match_max_extra: i32,
+    pub gate_match_per_additional: i32,
+
+    // -- score_route_candidate: name / trigger / keyword / alias --
+    pub name_tokens_base: f64,
+    pub name_tokens_per_token: f64,
+    pub trigger_hint_per_match: f64,
+    pub metadata_trigger_per_match: f64,
+    pub keywords_max: f64,
+    pub keywords_per_keyword: f64,
+    pub alias_hits_base: f64,
+    pub alias_hits_per_hit: f64,
+
+    // -- score_route_candidate: session-start / review / misc --
+    pub session_start_required_boost: f64,
+    pub session_start_preferred_boost: f64,
+    pub code_review_deep_boost: f64,
+    pub gate_owner_boost: f64,
+    pub visual_review_boost: f64,
+    pub visual_review_weak_factor: f64,
+    pub do_not_use_penalty_max_ratio: f64,
+    pub do_not_use_penalty_per_hit: f64,
+    pub paper_workbench_boost: f64,
+    pub overlay_suppression_factor: f64,
+
+    // -- pick_owner thresholds --
+    pub agent_swarm_candidate_threshold: f64,
+    pub top_owner_score_threshold: f64,
+    pub gate_before_owner_threshold: f64,
+
+    // -- layer thresholds (pick_owner / routing.rs) --
+    #[serde(rename = "layer_threshold_L0")]
+    #[allow(non_snake_case)]
+    pub layer_threshold_l0: f64,
+    #[serde(rename = "layer_threshold_L1")]
+    #[allow(non_snake_case)]
+    pub layer_threshold_l1: f64,
+    #[serde(rename = "layer_threshold_L2_L3")]
+    #[allow(non_snake_case)]
+    pub layer_threshold_l2_l3: f64,
+    pub layer_threshold_default: f64,
+}
+
+impl ScoringWeights {
+    /// Return the score floor for the given layer name.
+    pub fn layer_threshold(&self, layer: &str) -> f64 {
+        match layer {
+            "L0" => self.layer_threshold_l0,
+            "L1" => self.layer_threshold_l1,
+            "L2" | "L3" => self.layer_threshold_l2_l3,
+            _ => self.layer_threshold_default,
+        }
+    }
+}
+
+static WEIGHTS: LazyLock<&'static ScoringWeights> = LazyLock::new(|| {
+    // 1. Try reading from disk at runtime (allows edits without recompile).
+    if let Ok(json) = std::fs::read_to_string(RUNTIME_CONFIG_PATH) {
+        if let Ok(w) = serde_json::from_str::<ScoringWeights>(&json) {
+            return Box::leak(Box::new(w));
+        }
+        eprintln!(
+            "[scoring_config] WARN: {} exists but failed to parse; using embedded defaults.",
+            RUNTIME_CONFIG_PATH,
+        );
+    }
+    // 2. Fallback: compile-time embedded JSON.
+    let w: ScoringWeights = serde_json::from_str(DEFAULTS_JSON)
+        .expect("BUG: embedded scoring_weights.json failed to deserialize");
+    Box::leak(Box::new(w))
+});
+
+/// Get the singleton scoring weights (loaded once, then cached).
+pub fn scoring_weights() -> &'static ScoringWeights {
+    &WEIGHTS
+}

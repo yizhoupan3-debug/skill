@@ -278,6 +278,10 @@ pub(crate) enum HostCommand {
         #[command(subcommand)]
         command: AntigravitySubcommand,
     },
+    Opencode {
+        #[command(subcommand)]
+        command: OpenCodeSubcommand,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -318,6 +322,19 @@ pub(crate) enum AntigravitySubcommand {
 pub(crate) enum AntigravityCliSubcommand {
     Hook(AntigravityCliHookCommand),
     InstallHooks(AntigravityCliInstallHooksCommand),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub(crate) enum OpenCodeSubcommand {
+    /// Run MCP stdio agent loop (framework snapshot, skill routing, goal/closeout).
+    #[command(name = "agent")]
+    Agent(OpenCodeAgentCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub(crate) struct OpenCodeAgentCommand {
+    #[arg(long)]
+    pub(crate) repo_root: Option<PathBuf>,
 }
 
 #[derive(Args, Debug, Clone)]

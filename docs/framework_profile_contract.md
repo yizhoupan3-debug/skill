@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - rust_contracts.md
+  - README.md
+---
+
 # Framework Profile Contract
 
 ## Purpose

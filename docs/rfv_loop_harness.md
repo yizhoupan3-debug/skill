@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - references/rfv-loop/lane-templates.md
+  - references/rfv-loop/reasoning-depth-contract.md
+---
+
 # RFV  harness 参考（`framework_rfv_loop` / `RFV_LOOP_STATE.json`）
 
 > **范围**：RFV 多轮账本与 lane 契约说明；**不进入** `skills/SKILL_ROUTING_RUNTIME.json` 热路由。  

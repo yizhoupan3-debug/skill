@@ -1,3 +1,8 @@
+---
+last_verified: "2026-06-02"
+depends_on: []
+---
+
 # ADR: Warm hook daemon (deferred)
 
 | Status | **Rejected / not implemented** (2026-05-20) |

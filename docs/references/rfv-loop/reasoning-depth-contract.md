@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../../rfv_loop_harness.md
+  - lane-templates.md
+---
+
 # 推理深度契约（非 CoT）
 
 ## 原则

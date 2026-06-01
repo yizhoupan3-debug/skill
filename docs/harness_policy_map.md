@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+  - operator_profiles.md
+---
+
 # Harness policy map（叙事裁判地图）
 
 本文件回答：**某一类策略「以谁为真源」**、Cursor `.mdc` / skill 应扮演什么角色。目标是减法：避免在规则碎片里维护第二份总纲。

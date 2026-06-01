@@ -116,7 +116,8 @@
       "antigravity-cli": "配对审稿（Antigravity CLI）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
       "antigravity-app": "配对审稿（Antigravity App）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
       "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "claude-desktop": "配对审稿（Claude Desktop）：无 hook 注入；须主动 spawn 只读 reviewer 并写 review-lanes/*.md。非 my-light 时 closeout/complete 在 MCP 工具层硬拦；my-light 下 review/closeout 为 advisory。细则 skills/code-review-deep/SKILL.md"
+      "claude-desktop": "配对审稿（Claude Desktop）：无 hook 注入；须主动 spawn 只读 reviewer 并写 review-lanes/*.md。非 my-light 时 closeout/complete 在 MCP 工具层硬拦；my-light 下 review/closeout 为 advisory。细则 skills/code-review-deep/SKILL.md",
+      "opencode": "配对审稿（Opencode）：无 hook 注入；须主动 spawn 只读 reviewer 并写 review-lanes/*.md。closeout/complete 在 MCP 工具层行为同 Claude Desktop。细则 skills/code-review-deep/SKILL.md"
     },
     "spawn_first_includes_model_inherit_by_host": {
       "cursor": true

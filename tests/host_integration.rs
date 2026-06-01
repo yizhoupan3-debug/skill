@@ -2458,6 +2458,91 @@ fn install_and_remove_claude_desktop_projection() {
 }
 
 #[test]
+#[test]
+fn install_and_remove_opencode_projection() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "opencode",
+    ]);
+    assert_eq!(install["success"], true);
+    assert_eq!(install["results"]["opencode"]["status"], "installed");
+
+    // .opencode/opencode.json must contain mcpServers.router-rs-framework
+    let config_path = repo_root.join(".opencode/opencode.json");
+    assert!(config_path.exists(), "missing {}", config_path.display());
+    let config = read_json(&config_path);
+    assert!(
+        config["mcpServers"]["router-rs-framework"].is_object(),
+        "opencode.json must contain mcpServers.router-rs-framework"
+    );
+
+    // .opencode/.framework-projection.json must exist
+    let manifest_path = repo_root.join(".opencode/.framework-projection.json");
+    assert!(
+        manifest_path.exists(),
+        "missing opencode projection manifest"
+    );
+    let manifest = read_json(&manifest_path);
+    assert_eq!(manifest["host_projection"].as_str(), Some("opencode"));
+
+    // status subcommand must report the projection
+    let status = host_integration_json(&[
+        "status",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+    ]);
+    assert_eq!(status["success"], true);
+
+    // remove
+    let removed = host_integration_json(&[
+        "remove",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "opencode",
+    ]);
+    assert_eq!(removed["success"], true);
+    assert_eq!(removed["results"]["opencode"]["status"], "removed");
+
+    // mcpServers.router-rs-framework must be gone from config
+    let config_after = read_json(&config_path);
+    assert!(
+        config_after
+            .get("mcpServers")
+            .and_then(|s| s.get("router-rs-framework"))
+            .is_none(),
+        "router-rs-framework must be removed from opencode.json after remove"
+    );
+    assert!(
+        !manifest_path.exists(),
+        "opencode projection manifest must be deleted after remove"
+    );
+}
+
 fn install_claude_desktop_user_scope_writes_official_config_path() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");

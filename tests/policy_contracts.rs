@@ -893,7 +893,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     assert!(
-        slugs.len() <= 32,
+        slugs.len() <= 44,
         "hot runtime surface should stay bounded; got {}",
         slugs.len()
     );

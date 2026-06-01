@@ -23,6 +23,7 @@ pub(crate) enum PaperProseHookHost {
     Codex,
     Claude,
     AntigravityCli,
+    ClaudeDesktop,
 }
 
 impl PaperProseHookHost {
@@ -32,6 +33,7 @@ impl PaperProseHookHost {
             Self::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
             Self::AntigravityCli => "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
+            Self::ClaudeDesktop => "ROUTER_RS_CLAUDE_DESKTOP_PAPER_PROSE_HOOK",
         }
     }
 

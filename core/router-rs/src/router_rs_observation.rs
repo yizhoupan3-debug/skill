@@ -15,6 +15,8 @@ pub enum HookObservationHost {
     AntigravityCli,
     /// Claude Code hook JSON (`router-rs claude hook`).
     ClaudeCode,
+    /// Claude Desktop MCP transport.
+    ClaudeDesktop,
 }
 
 fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<GateClassified> {
@@ -50,7 +52,7 @@ fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String
                 .map(|s| s.to_string());
             (followup, additional)
         }
-        HookObservationHost::ClaudeCode => {
+        HookObservationHost::ClaudeCode | HookObservationHost::ClaudeDesktop => {
             let followup = output
                 .get("stopReason")
                 .or_else(|| output.get("systemMessage"))
@@ -188,6 +190,7 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
         HookObservationHost::Codex => "codex",
         HookObservationHost::AntigravityCli => "antigravity-cli",
         HookObservationHost::ClaudeCode => "claude-code",
+        HookObservationHost::ClaudeDesktop => "claude-desktop",
     };
 
     if output.get("contract_guard").is_some()

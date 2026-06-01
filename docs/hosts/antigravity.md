@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - antigravity-cli.md
+  - antigravity-app.md
+---
+
 # Antigravity 宿主（索引 — 已拆分）
 
 Antigravity 官方提供 **两条** 集成面，本框架已拆为闭集宿主 id：

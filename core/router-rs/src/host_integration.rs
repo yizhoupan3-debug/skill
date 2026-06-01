@@ -178,6 +178,10 @@ enum Commands {
         #[arg(long)]
         antigravity_home: Option<PathBuf>,
         #[arg(long)]
+        antigravity_cli_home: Option<PathBuf>,
+        #[arg(long)]
+        opencode_home: Option<PathBuf>,
+        #[arg(long)]
         to: Vec<String>,
         #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
         scope: String,
@@ -223,6 +227,10 @@ struct ProjectionCommand {
     #[arg(long)]
     antigravity_home: Option<PathBuf>,
     #[arg(long)]
+    antigravity_cli_home: Option<PathBuf>,
+    #[arg(long)]
+    opencode_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
     #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
     scope: String,
@@ -249,6 +257,10 @@ struct ProjectionStatusCommand {
     #[arg(long)]
     antigravity_home: Option<PathBuf>,
     #[arg(long)]
+    antigravity_cli_home: Option<PathBuf>,
+    #[arg(long)]
+    opencode_home: Option<PathBuf>,
+    #[arg(long)]
     home: Option<PathBuf>,
 }
 
@@ -264,6 +276,7 @@ pub(crate) struct ResolvedProjectionRoots {
     pub(crate) claude_home_root: PathBuf,
     pub(crate) antigravity_home_root: PathBuf,
     pub(crate) antigravity_cli_home_root: PathBuf,
+    pub(crate) opencode_home_root: PathBuf,
 }
 
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
@@ -353,6 +366,8 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             cursor_home,
             claude_home,
             antigravity_home,
+            antigravity_cli_home,
+            opencode_home,
             to,
             scope,
             bootstrap_output_dir,
@@ -371,6 +386,8 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 cursor_home,
                 claude_home,
                 antigravity_home: antigravity_home.clone(),
+                antigravity_cli_home,
+                opencode_home,
                 home,
                 scope,
                 to: selected,
@@ -388,6 +405,8 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         cursor_home: projection_command.cursor_home.clone(),
                         claude_home: projection_command.claude_home.clone(),
                         antigravity_home: projection_command.antigravity_home.clone(),
+                        antigravity_cli_home: projection_command.antigravity_cli_home.clone(),
+                        opencode_home: projection_command.opencode_home.clone(),
                         home: projection_command.home.clone(),
                     })?
                 }
@@ -737,6 +756,7 @@ pub(crate) fn resolve_projection_roots(
     claude_home: Option<&Path>,
     antigravity_home: Option<&Path>,
     antigravity_cli_home: Option<&Path>,
+    opencode_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
@@ -748,6 +768,12 @@ pub(crate) fn resolve_projection_roots(
     let antigravity_home_root = resolve_host_home(antigravity_home, shared_home, "ANTIGRAVITY_HOME", ".gemini")?;
     let antigravity_cli_home_root =
         resolve_host_home(antigravity_cli_home, shared_home, "ANTIGRAVITY_CLI_HOME", ".antigravitycli")?;
+    let opencode_home_root = resolve_host_home(
+        opencode_home,
+        shared_home,
+        "OPENCODE_HOME",
+        ".opencode",
+    )?;
     let account_home_root = match shared_home {
         Some(home) => normalize_path(home)?,
         None => default_home_dir(),
@@ -762,6 +788,7 @@ pub(crate) fn resolve_projection_roots(
         claude_home_root,
         antigravity_home_root,
         antigravity_cli_home_root,
+        opencode_home_root,
     })
 }
 
@@ -1052,6 +1079,8 @@ fn allowed_dot_generated_artifact(path: &str) -> bool {
             | ".gemini/antigravity/rules/framework.md"
             | ".gemini/settings.json"
             | ".gemini/mcp.json"
+            | ".opencode/opencode.json"
+            | ".opencode/.framework-projection.json"
     )
 }
 
@@ -1581,7 +1610,8 @@ fn projection_install_command(
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
         command.antigravity_home.as_deref(),
-        None,
+        command.antigravity_cli_home.as_deref(),
+        command.opencode_home.as_deref(),
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1606,7 +1636,8 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
         command.antigravity_home.as_deref(),
-        None,
+        command.antigravity_cli_home.as_deref(),
+        command.opencode_home.as_deref(),
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
@@ -1641,7 +1672,8 @@ fn projection_remove_or_cleanup_command(
         command.cursor_home.as_deref(),
         command.claude_home.as_deref(),
         command.antigravity_home.as_deref(),
-        None,
+        command.antigravity_cli_home.as_deref(),
+        command.opencode_home.as_deref(),
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -1870,7 +1902,211 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
         home_root: antigravity_home_root_string,
         explicit_home: antigravity_home_explicit,
     },
+    HostProjectionAdapter {
+        tool: "opencode",
+        host_id: "opencode",
+        aliases: &[],
+        install: install_opencode_projection,
+        status: opencode_projection_status,
+        remove: remove_opencode_projection,
+        home_root: opencode_home_root_string,
+        explicit_home: opencode_home_explicit,
+    },
 ];
+
+fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.account_home_root.join(".config/opencode/opencode.json")
+    } else {
+        roots.project_root.join(".opencode/opencode.json")
+    }
+}
+
+fn opencode_projection_config_dir(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.account_home_root.join(".config/opencode")
+    } else {
+        roots.project_root.join(".opencode")
+    }
+}
+
+fn opencode_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+    make_mcp_server_payload_with_env(
+        roots,
+        &["opencode", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
+        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for my-light)",
+        None,
+    )
+}
+
+fn install_opencode_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
+    let config_path = opencode_config_path(roots, scope);
+    let config_dir = config_path.parent().ok_or_else(|| {
+        format!("cannot determine parent directory of {}", config_path.display())
+    })?;
+    std::fs::create_dir_all(config_dir)
+        .map_err(|err| format!("failed to create {}: {err}", config_dir.display()))?;
+
+    let mut payload = read_json_if_exists(&config_path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    let servers = payload.as_object_mut()
+        .ok_or_else(|| "opencode.json root must be an object".to_string())?;
+    let mcp_servers = servers
+        .entry("mcpServers".to_string())
+        .or_insert_with(|| json!({}));
+    if !mcp_servers.is_object() {
+        *mcp_servers = json!({});
+    }
+    let entries = mcp_servers.as_object_mut()
+        .ok_or_else(|| "mcpServers must be an object".to_string())?;
+    let framework_payload = opencode_mcp_server_payload(roots);
+    let changed = entries.get("router-rs-framework") != Some(&framework_payload);
+    entries.insert("router-rs-framework".to_string(), framework_payload);
+    write_json_if_changed(&config_path, &payload)?;
+
+    let manifest_dir = opencode_projection_config_dir(roots, scope);
+    std::fs::create_dir_all(&manifest_dir)
+        .map_err(|err| format!("failed to create {}: {err}", manifest_dir.display()))?;
+    let manifest_path = manifest_dir.join(FRAMEWORK_PROJECTION_MANIFEST_NAME);
+    let manifest_changed = write_json_if_changed(
+        &manifest_path,
+        &json!({
+            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
+            "managed_by": "skill-framework",
+            "host_projection": "opencode",
+            "scope": scope,
+            "files": [projection_manifest_file_ref(roots, &config_path)],
+            "settings": {
+                "managed_key_paths": ["mcpServers.router-rs-framework"],
+            }
+        }),
+    )?;
+
+    Ok(json!({
+        "status": "installed",
+        "changed": changed || manifest_changed,
+        "scope": scope,
+        "mcp_config": {
+            "scope": scope,
+            "path": config_path.to_string_lossy(),
+            "changed": changed,
+        },
+        "projection_manifest": {
+            "path": manifest_path.to_string_lossy(),
+            "changed": manifest_changed,
+        },
+    }))
+}
+
+fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    let project_path = opencode_config_path(roots, "project");
+    let user_path = opencode_config_path(roots, "user");
+    let project_exists = project_path.is_file();
+    let user_exists = user_path.is_file();
+
+    let mcp_command = read_json_if_exists(&project_path)
+        .ok()
+        .flatten()
+        .and_then(|payload| {
+            payload.get("mcpServers")
+                .and_then(|s| s.get("router-rs-framework"))
+                .cloned()
+        })
+        .or_else(|| {
+            read_json_if_exists(&user_path)
+                .ok()
+                .flatten()
+                .and_then(|payload| {
+                    payload.get("mcpServers")
+                        .and_then(|s| s.get("router-rs-framework"))
+                        .cloned()
+                })
+        });
+
+    let mut binary_valid = false;
+    let mut status_error = None;
+    if let Some(payload) = mcp_command.as_ref() {
+        if let Some(cmd) = payload.get("command").and_then(Value::as_str) {
+            match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
+                Ok(()) => match crate::router_self::validate_router_rs_binary_runnable(Path::new(cmd)) {
+                    Ok(()) => binary_valid = true,
+                    Err(err) => status_error = Some(err),
+                },
+                Err(err) => status_error = Some(err),
+            }
+        }
+    }
+
+    Ok(json!({
+        "ready": (project_exists || user_exists) && binary_valid,
+        "status": "projection-status",
+        "error": status_error,
+        "mcp_config": {
+            "project_scope": project_exists,
+            "user_scope": user_exists,
+            "binary_valid": binary_valid,
+            "router_rs_framework": mcp_command,
+        },
+        "projection_manifest": {
+            "project_scope": opencode_projection_config_dir(roots, "project").join(FRAMEWORK_PROJECTION_MANIFEST_NAME).exists(),
+            "user_scope": opencode_projection_config_dir(roots, "user").join(FRAMEWORK_PROJECTION_MANIFEST_NAME).exists(),
+        },
+    }))
+}
+
+fn remove_opencode_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    dry_run: bool,
+) -> Result<Value, String> {
+    let config_path = opencode_config_path(roots, scope);
+    let config_dir = opencode_projection_config_dir(roots, scope);
+
+    let mut config_removed = false;
+    if config_path.is_file() && !dry_run {
+        let mut payload = read_json_if_exists(&config_path)?
+            .unwrap_or_else(|| json!({}));
+        let mut changed = false;
+        if let Some(servers) = payload.get_mut("mcpServers").and_then(Value::as_object_mut) {
+            if servers.remove("router-rs-framework").is_some() {
+                changed = true;
+            }
+        }
+        if changed {
+            write_json_if_changed(&config_path, &payload)?;
+        }
+        config_removed = changed;
+    }
+
+    let manifest_path = config_dir.join(FRAMEWORK_PROJECTION_MANIFEST_NAME);
+    let manifest_removed = if manifest_path.is_file() && !dry_run {
+        std::fs::remove_file(&manifest_path).is_ok()
+    } else {
+        false
+    };
+
+    Ok(json!({
+        "status": if config_removed || manifest_removed { "removed" } else { "not-found" },
+        "changed": config_removed || manifest_removed,
+        "scope": scope,
+        "dry_run": dry_run,
+        "mcp_framework_entry_removed": config_removed,
+        "projection_manifest_removed": manifest_removed,
+    }))
+}
+
+fn opencode_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+    roots.opencode_home_root.to_string_lossy().into_owned()
+}
+
+fn opencode_home_explicit(command: &ProjectionCommand) -> bool {
+    command.opencode_home.is_some() || std::env::var_os("OPENCODE_HOME").is_some()
+}
 
 fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
     let normalized = tool.trim().to_lowercase();
@@ -5882,7 +6118,7 @@ mod tests {
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         assert!(
-            err.contains("Supported tools: codex, cursor, claude, claude-desktop, antigravity-cli, antigravity, codex-app"),
+            err.contains("Supported tools: codex, cursor, claude, claude-desktop, antigravity-cli, antigravity, opencode, codex-app"),
             "{err}"
         );
         assert!(err.contains("codex-cli"), "{err}");
@@ -5903,6 +6139,7 @@ mod tests {
                 "claude-desktop".to_string(),
                 "antigravity-cli".to_string(),
                 "antigravity".to_string(),
+                "opencode".to_string(),
             ]
         );
     }
@@ -6139,6 +6376,7 @@ mod tests {
             claude_home_root: root.join("claude"),
             antigravity_home_root: root.join("gemini"),
             antigravity_cli_home_root: root.join("antigravitycli"),
+            opencode_home_root: root.join("opencode"),
         };
         std::env::set_var("HOME", &home);
         let outcome =
@@ -6208,10 +6446,12 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("resolve roots");
         assert_eq!(roots.account_home_root, os_home);
         assert_eq!(roots.claude_home_root, custom_claude);
+        assert_eq!(roots.opencode_home_root, os_home.join(".opencode"));
 
         if let Some(h) = prior_home {
             std::env::set_var("HOME", h);

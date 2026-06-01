@@ -98,12 +98,61 @@ pub struct CloseoutEnforcementResponse {
 }
 
 pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
+    // Check raw shape violations FIRST: critical issues like missing schema_version
+    // are more actionable than serde's deny_unknown_fields errors, which can mask
+    // the real problem when the record shape is fundamentally broken.
     let raw_shape_violations = raw_closeout_record_shape_violations(&payload, None);
-    let record: CloseoutRecord = serde_json::from_value(payload)
-        .map_err(|err| format!("parse closeout record failed: {err}"))?;
-    let mut response = evaluate_closeout_record(&record);
-    append_closeout_violations(&mut response, raw_shape_violations);
-    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+    if raw_shape_violations.iter().any(|v| v.severity == "block") {
+        let mut response = CloseoutEnforcementResponse {
+            schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
+            authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
+            task_id: payload
+                .get("task_id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            closeout_allowed: false,
+            claimed_completion: false,
+            violations: Vec::new(),
+            missing_evidence: Vec::new(),
+            verification_status: String::new(),
+        };
+        append_closeout_violations(&mut response, raw_shape_violations);
+        return serde_json::to_value(response)
+            .map_err(|err| format!("serialize closeout response: {err}"));
+    }
+    match serde_json::from_value::<CloseoutRecord>(payload.clone()) {
+        Ok(record) => {
+            let mut response = evaluate_closeout_record(&record);
+            append_closeout_violations(&mut response, raw_shape_violations);
+            serde_json::to_value(response)
+                .map_err(|err| format!("serialize closeout response: {err}"))
+        }
+        Err(err) => {
+            let mut response = CloseoutEnforcementResponse {
+                schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
+                authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
+                task_id: payload
+                    .get("task_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                closeout_allowed: false,
+                claimed_completion: false,
+                violations: Vec::new(),
+                missing_evidence: Vec::new(),
+                verification_status: String::new(),
+            };
+            append_closeout_violations(&mut response, raw_shape_violations);
+            response.violations.push(CloseoutViolation {
+                rule: "parse_error".to_string(),
+                severity: "block".to_string(),
+                detail: format!("parse closeout record failed: {err}"),
+            });
+            serde_json::to_value(response)
+                .map_err(|err| format!("serialize closeout response: {err}"))
+        }
+    }
 }
 
 pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementResponse {
@@ -335,7 +384,8 @@ pub fn closeout_enforcement_contract() -> Value {
             "not_run_without_blockers_or_risks",
             "claimed_done_with_failed_verification",
             "claimed_passed_without_evidence",
-            "claimed_passed_without_evidence_index_rows"
+            "claimed_passed_without_evidence_index_rows",
+            "parse_error"
         ]
     })
 }
@@ -411,13 +461,60 @@ pub fn evaluate_closeout_record_value_with_context(
     payload: Value,
     ctx: &CloseoutEvidenceContext,
 ) -> Result<Value, String> {
+    // Check raw shape violations FIRST (same rationale as evaluate_closeout_record_value).
     let raw_shape_violations =
         raw_closeout_record_shape_violations(&payload, ctx.task_id.as_deref());
-    let record: CloseoutRecord = serde_json::from_value(payload)
-        .map_err(|err| format!("parse closeout record failed: {err}"))?;
-    let mut response = evaluate_closeout_record_with_context(&record, ctx);
-    append_closeout_violations(&mut response, raw_shape_violations);
-    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+    if raw_shape_violations.iter().any(|v| v.severity == "block") {
+        let mut response = CloseoutEnforcementResponse {
+            schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
+            authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
+            task_id: payload
+                .get("task_id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            closeout_allowed: false,
+            claimed_completion: false,
+            violations: Vec::new(),
+            missing_evidence: Vec::new(),
+            verification_status: String::new(),
+        };
+        append_closeout_violations(&mut response, raw_shape_violations);
+        return serde_json::to_value(response)
+            .map_err(|err| format!("serialize closeout response: {err}"));
+    }
+    match serde_json::from_value::<CloseoutRecord>(payload.clone()) {
+        Ok(record) => {
+            let mut response = evaluate_closeout_record_with_context(&record, ctx);
+            append_closeout_violations(&mut response, raw_shape_violations);
+            serde_json::to_value(response)
+                .map_err(|err| format!("serialize closeout response: {err}"))
+        }
+        Err(err) => {
+            let mut response = CloseoutEnforcementResponse {
+                schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
+                authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
+                task_id: payload
+                    .get("task_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                closeout_allowed: false,
+                claimed_completion: false,
+                violations: Vec::new(),
+                missing_evidence: Vec::new(),
+                verification_status: String::new(),
+            };
+            append_closeout_violations(&mut response, raw_shape_violations);
+            response.violations.push(CloseoutViolation {
+                rule: "parse_error".to_string(),
+                severity: "block".to_string(),
+                detail: format!("parse closeout record failed: {err}"),
+            });
+            serde_json::to_value(response)
+                .map_err(|err| format!("serialize closeout response: {err}"))
+        }
+    }
 }
 
 fn raw_closeout_record_shape_violations(
@@ -809,6 +906,8 @@ mod tests {
     }
 
     /// P0-F-style invariant: typo'd field rejected by deny_unknown_fields, not silently ignored.
+    /// After fix: serde parse failure returns Ok(response) with closeout_allowed=false and
+    /// a parse_error violation (plus any raw_shape_violations), rather than Err(String).
     #[test]
     fn unknown_field_in_record_is_rejected_at_parse() {
         let bad = json!({
@@ -817,10 +916,24 @@ mod tests {
             "summary": "ok",
             "verification_state": "passed"
         });
-        let err = evaluate_closeout_record_value(bad).expect_err("typo must fail parse");
+        let response = evaluate_closeout_record_value(bad)
+            .expect("should return enforcement response, not Err");
+        assert_eq!(response["closeout_allowed"], json!(false));
+        let violations = response["violations"].as_array().expect("violations");
         assert!(
-            err.contains("parse closeout record failed"),
-            "unexpected error: {err}"
+            violations.iter().any(|v| v["rule"] == "parse_error"),
+            "should have parse_error violation: {:?}",
+            violations
+        );
+        let parse_detail = violations
+            .iter()
+            .find(|v| v["rule"] == "parse_error")
+            .and_then(|v| v["detail"].as_str())
+            .unwrap_or("");
+        assert!(
+            parse_detail.contains("unknown field"),
+            "parse_error detail should mention unknown field: {}",
+            parse_detail
         );
     }
 }

@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../host_adapter_contract.md
+---
+
 # Antigravity App 宿主操作手册
 
 **闭集 id**：`antigravity-app` · **传输**：MCP stdio · **配置根**：`.gemini/`

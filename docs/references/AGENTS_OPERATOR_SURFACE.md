@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../harness_architecture.md
+  - ../../AGENTS.md
+---
+
 # AGENTS 操作面与环境变量（详表）
 
 真源：`AGENTS.md` 只保留不变量与指针；本文件承载 **可选 env / 注入 / closeout 分层** 完整说明。

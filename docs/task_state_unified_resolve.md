@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+---
+
 # Task state — unified read model (`ResolvedTaskView`)
 
 **状态**：已落地 **只读** 聚合（`task_state`）、**阶段 1**（Cursor continuity frame）、**阶段 2**（`task_write_lock` 串行化 GOAL / RFV / session 批量写 / `EVIDENCE_INDEX` 追加）、**阶段 2.5**（`task_command`：命名 envelope 分发 + `framework task-ledger-dispatch` + stdio `task_ledger_dispatch`）与 **阶段 3**（可选投影 `TASK_STATE.json` + `framework task-state-aggregate-sync`，`ResolvedTaskView` 对外 schema 仍以分文件为准）。

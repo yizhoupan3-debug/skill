@@ -1,3 +1,11 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../AGENTS.md
+  - harness_architecture.md
+  - host_adapter_contract.md
+---
+
 # 框架操作者一页纸（使用者视角）
 
 面向：**在本仓库或接入本框架的工作区里日常干活的人**。长设计与契约仍以 [AGENTS.md](../AGENTS.md)、[harness_architecture.md](harness_architecture.md)、[host_adapter_contract.md](host_adapter_contract.md) 为准；本文只解决「先读哪、宿主差在哪、卡门了怎么办」。

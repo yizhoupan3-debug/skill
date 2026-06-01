@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+  - rust_contracts.md
+---
+
 # 宿主适配契约（Host adapter contract）
 
 本文件描述 **新宿主如何接入** 本仓库的连续性 harness 与 `router-rs` 控制面：哪些能力可移植复用、L4/L5 边界，以及工程清单。**Hook 事件 → CLI → 写盘** 矩阵已下沉至各 [`docs/hosts/`](hosts/) 手册 **Hook 事件矩阵** 节。

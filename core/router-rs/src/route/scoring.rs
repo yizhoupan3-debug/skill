@@ -1,5 +1,6 @@
 //! Candidate scoring and owner/overlay selection.
 use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framework_alias_call};
+use super::scoring_config::{scoring_weights, ScoringWeights};
 use super::signals::*;
 use super::text::{
     common_route_stop_tokens, normalize_text, text_matches_phrase, tokenize_route_text,
@@ -15,9 +16,11 @@ pub(crate) fn score_route_candidate<'a>(
     query_token_list: &'a [String],
     query_tokens: &'a HashSet<String>,
     first_turn: bool,
+    w: &ScoringWeights,
 ) -> RouteCandidate<'a> {
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
+    let mut matched_query_tokens: HashSet<String> = HashSet::new();
 
     if let Some(done) = super::nl_route_adjustments::apply_nl_pre_framework_alias_rules(
         record,
@@ -44,27 +47,27 @@ pub(crate) fn score_route_candidate<'a>(
             || has_parallel_review_candidate_context(query_text, query_token_list)
             || parallel_execution_context)
     {
-        score += 60.0;
+        score += w.agent_swarm_boost;
         reasons.push(
             "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
                 .to_string(),
         );
         if parallel_execution_context {
-            score += 12.0;
+            score += w.parallel_execution_boost;
             reasons.push(
                 "Parallel-execution boost applied: independent lanes can run as bounded sidecars."
                     .to_string(),
             );
         }
         if has_parallel_review_candidate_context(query_text, query_token_list) {
-            score += 10.0;
+            score += w.parallel_review_boost;
             reasons.push(
                 "Parallel-review boost applied: broad review scope should run subagent admission before a single-lane review."
                     .to_string(),
             );
         }
         if bounded_subagent_context && token_budget_pressure {
-            score += 8.0;
+            score += w.token_budget_boost;
             reasons.push(
                 "Token-budget boost applied: bounded sidecars fit prompt-budget pressure better than wider orchestration."
                     .to_string(),
@@ -79,6 +82,7 @@ pub(crate) fn score_route_candidate<'a>(
                 "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
                     .to_string(),
             ],
+            matched_token_count: 0,
         };
     }
     if let Some(done) = super::nl_route_adjustments::apply_nl_post_framework_alias_rules(
@@ -101,13 +105,13 @@ pub(crate) fn score_route_candidate<'a>(
         && !design_workflow_protocol_context
     {
         if has_quick_artifact_context(query_text, query_token_list) {
-            score *= 0.65;
+            score *= w.design_md_quick_suppression_factor;
             reasons.push(
                 "Design-md quick-task suppression applied: one-off artifact wording should not force a design contract."
                     .to_string(),
             );
         } else {
-            score += 42.0;
+            score += w.design_md_boost;
             reasons.push(
                 "Design-md boost applied: reusable visual contract or design-token wording detected."
                     .to_string(),
@@ -115,7 +119,7 @@ pub(crate) fn score_route_candidate<'a>(
         }
     }
     if explicit_framework_alias {
-        score += 1000.0;
+        score += w.framework_alias_explicit_boost;
         reasons.push("Framework alias entrypoint matched explicitly.".to_string());
     }
 
@@ -123,12 +127,12 @@ pub(crate) fn score_route_candidate<'a>(
         && (text_matches_phrase(query_token_list, &record.slug_lower)
             || query_text.contains(&format!("${}", record.slug_lower)))
     {
-        score += 100.0;
+        score += w.exact_skill_name_boost;
         reasons.push(format!("Exact skill name matched: {}.", record.slug));
-   
+
         for slug_tok in tokenize_route_text(&record.slug_lower) {
             if query_tokens.contains(slug_tok.as_str()) {
-                matched_query_tokens.insert(slug_tok.as_str());
+                matched_query_tokens.insert(slug_tok.clone());
             }
         }
     }
@@ -140,11 +144,25 @@ pub(crate) fn score_route_candidate<'a>(
         .cloned()
         .collect::<Vec<_>>();
     if !matched_gates.is_empty() {
-        score += 18.0 + i32::min(12, ((matched_gates.len() - 1) as i32) * 6) as f64;
+        score += w.gate_match_base
+            + i32::min(
+                w.gate_match_max_extra,
+                ((matched_gates.len() - 1) as i32) * w.gate_match_per_additional,
+            ) as f64;
         reasons.push(format!(
             "Routing gate matched: {}.",
             matched_gates.join(", ")
         ));
+        for phrase in &matched_gates {
+            let ptokens = tokenize_route_text(phrase);
+            if ptokens.len() == 1 {
+                for t in query_token_list {
+                    if text_matches_phrase(&[t.to_string()], phrase) {
+                        matched_query_tokens.insert(t.clone());
+                    }
+                }
+            }
+        }
     }
 
     let mut shared_name_tokens = record
@@ -155,11 +173,14 @@ pub(crate) fn score_route_candidate<'a>(
         .collect::<Vec<_>>();
     shared_name_tokens.sort();
     if !shared_name_tokens.is_empty() {
-        score += 14.0 + (shared_name_tokens.len() as f64) * 4.0;
+        score += w.name_tokens_base + (shared_name_tokens.len() as f64) * w.name_tokens_per_token;
         reasons.push(format!(
             "Name tokens matched: {}.",
             shared_name_tokens.join(", ")
         ));
+        for tok in &shared_name_tokens {
+            matched_query_tokens.insert(tok.clone());
+        }
     }
 
     let matched_trigger_hints = record
@@ -173,11 +194,21 @@ pub(crate) fn score_route_candidate<'a>(
         .cloned()
         .collect::<Vec<_>>();
     if !matched_trigger_hints.is_empty() {
-        score += (matched_trigger_hints.len() as f64) * 20.0;
+        score += (matched_trigger_hints.len() as f64) * w.trigger_hint_per_match;
         reasons.push(format!(
             "Trigger hint matched: {}.",
             matched_trigger_hints.join(", ")
         ));
+        for phrase in &matched_trigger_hints {
+            let ptokens = tokenize_route_text(phrase);
+            if ptokens.len() == 1 {
+                for t in query_token_list {
+                    if text_matches_phrase(&[t.to_string()], phrase) {
+                        matched_query_tokens.insert(t.clone());
+                    }
+                }
+            }
+        }
     }
 
     let matched_metadata_triggers = record
@@ -191,11 +222,21 @@ pub(crate) fn score_route_candidate<'a>(
         .cloned()
         .collect::<Vec<_>>();
     if !matched_metadata_triggers.is_empty() {
-        score += (matched_metadata_triggers.len() as f64) * 8.0;
+        score += (matched_metadata_triggers.len() as f64) * w.metadata_trigger_per_match;
         reasons.push(format!(
             "Routing metadata positive trigger matched: {}.",
             matched_metadata_triggers.join(", ")
         ));
+        for phrase in &matched_metadata_triggers {
+            let ptokens = tokenize_route_text(phrase);
+            if ptokens.len() == 1 {
+                for t in query_token_list {
+                    if text_matches_phrase(&[t.to_string()], phrase) {
+                        matched_query_tokens.insert(t.clone());
+                    }
+                }
+            }
+        }
     }
 
     let mut shared_keywords = record
@@ -206,7 +247,10 @@ pub(crate) fn score_route_candidate<'a>(
         .collect::<Vec<_>>();
     shared_keywords.sort();
     if !shared_keywords.is_empty() {
-        score += f64::min(24.0, (shared_keywords.len() as f64) * 3.0);
+        score += f64::min(
+            w.keywords_max,
+            (shared_keywords.len() as f64) * w.keywords_per_keyword,
+        );
         reasons.push(format!(
             "Description keywords matched: {}.",
             shared_keywords
@@ -216,6 +260,9 @@ pub(crate) fn score_route_candidate<'a>(
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
+        for tok in &shared_keywords {
+            matched_query_tokens.insert(tok.clone());
+        }
     }
 
     let mut alias_hits = record
@@ -226,7 +273,7 @@ pub(crate) fn score_route_candidate<'a>(
         .collect::<Vec<_>>();
     alias_hits.sort();
     if !alias_hits.is_empty() {
-        score += 12.0 + (alias_hits.len() as f64) * 4.0;
+        score += w.alias_hits_base + (alias_hits.len() as f64) * w.alias_hits_per_hit;
         reasons.push(format!(
             "Skill alias hints matched: {}.",
             alias_hits
@@ -236,15 +283,24 @@ pub(crate) fn score_route_candidate<'a>(
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
+        for tok in &alias_hits {
+            matched_query_tokens.insert(tok.clone());
+        }
     }
 
     if first_turn && score > 0.0 {
         if record.session_start_lower == "required" {
-            score += 8.0;
-            reasons.push("Session-start required boost applied (+8).".to_string());
+            score += w.session_start_required_boost;
+            reasons.push(format!(
+                "Session-start required boost applied (+{:.0}).",
+                w.session_start_required_boost
+            ));
         } else if record.session_start_lower == "preferred" {
-            score += 3.0;
-            reasons.push("Session-start preferred boost applied (+3).".to_string());
+            score += w.session_start_preferred_boost;
+            reasons.push(format!(
+                "Session-start preferred boost applied (+{:.0}).",
+                w.session_start_preferred_boost
+            ));
         }
     }
 
@@ -253,7 +309,7 @@ pub(crate) fn score_route_candidate<'a>(
         && is_review_prompt(query_text)
         && !has_paper_context(query_text, query_token_list)
     {
-        score += 22.0;
+        score += w.code_review_deep_boost;
         reasons.push(
             "Code-review-deep boost applied: review-class prompt without paper-only context."
                 .to_string(),
@@ -261,7 +317,7 @@ pub(crate) fn score_route_candidate<'a>(
     }
 
     if record.owner_lower == "gate" && score > 0.0 {
-        score += 2.0;
+        score += w.gate_owner_boost;
     }
 
     let visual_evidence_review_context =
@@ -275,7 +331,7 @@ pub(crate) fn score_route_candidate<'a>(
         && visual_evidence_review_context
         && !redesign_context
     {
-        score += 36.0;
+        score += w.visual_review_boost;
         reasons.push(
             "Visual-review boost applied: visible UI evidence and concrete visual findings requested."
                 .to_string(),
@@ -302,8 +358,7 @@ pub(crate) fn score_route_candidate<'a>(
             .iter()
             .any(|marker| query_text.contains(marker))
         {
-            // 降权而非完全压制
-            score *= 0.5;
+            score *= w.visual_review_weak_factor;
             reasons.push(
                 "Visual-review weak match: no explicit visual evidence, reduced score.".to_string(),
             );
@@ -318,7 +373,10 @@ pub(crate) fn score_route_candidate<'a>(
             .cloned()
             .collect::<Vec<_>>();
         if !negative_hits.is_empty() {
-            let penalty = f64::min(score * 0.3, (negative_hits.len() as f64) * 5.0);
+            let penalty = f64::min(
+                score * w.do_not_use_penalty_max_ratio,
+                (negative_hits.len() as f64) * w.do_not_use_penalty_per_hit,
+            );
             score = f64::max(0.0, score - penalty);
             reasons.push(format!(
                 "Do-not-use penalty applied: {}.",
@@ -334,7 +392,7 @@ pub(crate) fn score_route_candidate<'a>(
     if record.slug == "paper-workbench"
         && has_paper_review_revision_intent(query_text, query_token_list)
     {
-        score += 28.0;
+        score += w.paper_workbench_boost;
         reasons.push(
             "Paper workbench boost applied: review-driven manuscript revision intent detected."
                 .to_string(),
@@ -342,7 +400,7 @@ pub(crate) fn score_route_candidate<'a>(
     }
 
     if is_overlay_record(record) && score > 0.0 {
-        score *= 0.5; // 从 0.15 调整到 0.5，更合理的降权
+        score *= w.overlay_suppression_factor;
         reasons.push(format!(
             "Owner suppression applied: {} is overlay-only.",
             record.slug
@@ -352,6 +410,7 @@ pub(crate) fn score_route_candidate<'a>(
         record,
         score,
         reasons,
+        matched_token_count: matched_query_tokens.len(),
     }
 }
 
@@ -359,6 +418,7 @@ pub(crate) fn pick_owner<'a>(
     candidates: Vec<RouteCandidate<'a>>,
     query_text: &str,
     query_token_list: &[String],
+    w: &ScoringWeights,
 ) -> RouteCandidate<'a> {
     let mut owner_candidates = candidates
         .iter()
@@ -381,7 +441,7 @@ pub(crate) fn pick_owner<'a>(
         .as_ref()
         .filter(|candidate| {
             candidate.record.slug == "agent-swarm-orchestration"
-                && candidate.score >= 60.0
+                && candidate.score >= w.agent_swarm_candidate_threshold
                 && !has_plan_mode_owner_context(query_text, query_token_list)
         })
         .cloned()
@@ -393,12 +453,15 @@ pub(crate) fn pick_owner<'a>(
         return top_gate;
     }
     if let Some(top_owner) = owner_candidates.first() {
-        if top_owner.score >= 60.0 {
+        if top_owner.score >= w.top_owner_score_threshold {
             return top_owner.clone();
         }
     }
     if let Some(mut top_gate) =
-        top_gate.filter(|candidate| candidate.score >= 30.0 && candidate.score >= top_owner_score)
+        top_gate.filter(|candidate| {
+            candidate.score >= w.gate_before_owner_threshold
+                && candidate.score >= top_owner_score
+        })
     {
         top_gate
             .reasons
@@ -445,7 +508,7 @@ pub(crate) fn pick_owner<'a>(
             .collect::<Vec<_>>();
         layer_candidates.sort_unstable_by(route_candidate_cmp);
         if let Some(top) = layer_candidates.first().cloned() {
-            if top.score >= layer_threshold(&layer) {
+            if top.score >= w.layer_threshold(&layer) {
                 return top;
             }
         }
@@ -572,8 +635,9 @@ pub(crate) fn round2(value: f64) -> f64 {
 }
 
 pub(crate) fn score_bucket(score: f64) -> String {
-    let floor = ((score.max(0.0) / 10.0).floor() as i32) * 10;
-    format!("{floor:02}-{ceiling:02}", ceiling = floor + 9)
+    let clamped = score.max(0.0).min(100.0);
+    let floor = ((clamped / 10.0).floor() as i32) * 10;
+    format!("{:02}-{:02}", floor, (floor + 9).min(100))
 }
 
 pub(crate) fn compact_route_reasons(reasons: &[String]) -> Vec<String> {
@@ -628,15 +692,6 @@ pub(crate) fn priority_rank(priority: &str) -> i32 {
     }
 }
 
-pub(crate) fn layer_threshold(layer: &str) -> f64 {
-    match layer {
-        "L0" => 18.0,
-        "L1" => 16.0,
-        "L2" | "L3" => 14.0,
-        _ => 15.0,
-    }
-}
-
 #[cfg(test)]
 mod paper_prose_routing_score_tests {
     use super::*;
@@ -659,7 +714,8 @@ mod paper_prose_routing_score_tests {
         let q = "SCI润色 abstract";
         let tokens = tokenize_route_text(q);
         let set: HashSet<String> = tokens.iter().cloned().collect();
-        let wb = score_route_candidate(workbench, q, &tokens, &set, true);
+        let w = scoring_weights();
+        let wb = score_route_candidate(workbench, q, &tokens, &set, true, w);
         assert!(
             wb.score >= 82.0,
             "paper-workbench score {} reasons {:?}",
@@ -667,7 +723,7 @@ mod paper_prose_routing_score_tests {
             wb.reasons
         );
         if let Some(doc) = doc_eng {
-            let de = score_route_candidate(doc, q, &tokens, &set, true);
+            let de = score_route_candidate(doc, q, &tokens, &set, true, w);
             assert!(
                 wb.score > de.score,
                 "workbench {} must beat doc-eng {}",

@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../../rfv_loop_harness.md
+  - reasoning-depth-contract.md
+---
+
 # Lane prompt templates
 
 Supervisor fills placeholders, then spawns **one fresh subagent per lane** per round. Do not reuse the same subagent thread across reviewer → fixer → verifier.

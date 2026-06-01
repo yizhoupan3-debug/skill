@@ -1,3 +1,11 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../host_adapter_contract.md
+  - ../harness_architecture.md
+  - claude-desktop-networking.md
+---
+
 # Claude Desktop 宿主操作手册
 
 **闭集 id**：`claude-desktop` · **传输**：MCP stdio · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.claude-desktop`

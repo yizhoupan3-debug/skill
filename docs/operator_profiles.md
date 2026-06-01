@@ -1,6 +1,13 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+  - harness_policy_map.md
+---
+
 # Operator profiles（运维开关组合）
 
-本页只提供**可复制**的 `ROUTER_RS_*` 组合，**不**定义第二套默认值。逐变量语义、默认值与脚注以 [`harness_architecture.md` §5 开关面](harness_architecture.md#5-开关面) 为唯一裁判（含「`_CHARS` 实为 UTF-8 字节」等说明；若 `#5-开关面` 在你的 Markdown 渲染器中断链，请打开该文件页内搜索 `## 5. 开关面`）。叙事分层见 [`harness_policy_map.md`](harness_policy_map.md)。
+本页只提供**可复制**的 `ROUTER_RS_*` 组合，**不**定义第二套默认值。逐变量语义、默认值与脚注以 [`harness_architecture/03-hook-and-switches.md` §5 开关面](harness_architecture/03-hook-and-switches.md#5-开关面) 为唯一裁判（含「`_CHARS` 实为 UTF-8 字节」等说明）。叙事分层见 [`harness_policy_map.md`](harness_policy_map.md)。
 
 ## 默认（profile 之外）
 

@@ -15,8 +15,8 @@
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 44,
-    "hot_skill_count": 44,
+    "full_skill_count": 41,
+    "hot_skill_count": 41,
     "manifest_skill_count": 56,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
@@ -1370,58 +1370,6 @@
       "skill"
     ],
     [
-      "skill-creator",
-      "L0",
-      "owner",
-      "none",
-      "preferred",
-      "Design or revise one cross-host skill package under skills/",
-      [
-        "codex skill",
-        "create skill",
-        "frontmatter cleanup",
-        "skill authoring",
-        "skill debugging",
-        "skill package",
-        "trigger wording",
-        "update skill"
-      ],
-      "P1",
-      "skills/.system/skill-creator/SKILL.md",
-      [
-        "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
-        "claude-code",
-        "claude-desktop",
-        "codex-app",
-        "codex-cli",
-        "cursor"
-      ],
-      "skill"
-    ],
-    [
-      "skill-installer",
-      "L0",
-      "owner",
-      "none",
-      "preferred",
-      "Install curated or remote Codex skills",
-      [
-        "install skill",
-        "list skills",
-        "curated skills",
-        "github skill"
-      ],
-      "P1",
-      "skills/.system/skill-installer/SKILL.md",
-      [
-        "codex-app",
-        "codex-cli"
-      ],
-      "skill"
-    ],
-    [
       "source-slide-formats",
       "L4",
       "owner",
@@ -1442,34 +1390,6 @@
       ],
       "P2",
       "skills/.archive-cold/source-slide-formats/SKILL.md",
-      [
-        "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
-        "claude-code",
-        "claude-desktop",
-        "codex-app",
-        "codex-cli",
-        "cursor"
-      ],
-      "skill"
-    ],
-    [
-      "systematic-debugging",
-      "L0",
-      "gate",
-      "evidence",
-      "n/a",
-      "Investigate unknown failures before fixing",
-      [
-        "systematic-debugging",
-        "root-cause analysis",
-        "flake isolation",
-        "incident triage",
-        "diagnostic playbook"
-      ],
-      "P1",
-      "skills/.archive-cold/systematic-debugging/SKILL.md",
       [
         "antigravity",
         "antigravity-app",

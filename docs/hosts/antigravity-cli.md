@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../host_adapter_contract.md
+---
+
 # Antigravity CLI 宿主操作手册
 
 **闭集 id**：`antigravity-cli` · **传输**：JSON hooks（Gemini CLI 继任）· **配置根**：`.antigravitycli/`

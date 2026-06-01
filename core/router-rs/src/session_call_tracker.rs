@@ -50,6 +50,14 @@ pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
     write_tracker(&path, &payload)
 }
 
+/// Set the host_id field in the tracker for multi-host isolation.
+pub fn set_host_id(repo_root: &Path, host_id: &str) -> Result<(), String> {
+    let path = tracker_path(repo_root);
+    let mut payload = load_or_init_tracker(&path)?;
+    payload["host_id"] = json!(host_id);
+    write_tracker(&path, &payload)
+}
+
 /// Record a tool call in the session tracker.
 pub fn record_tool_call(repo_root: &Path, tool_name: &str) -> Result<(), String> {
     apply_task_ledger_mutation(repo_root, || {
@@ -121,14 +129,12 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
             }
         }
 
-        // Update anomaly_flags in the tracker
-        if !warnings.is_empty() {
-            let flags: Vec<Value> = warnings.iter().map(|w| json!(w)).collect();
-            payload["anomaly_flags"] = json!(flags);
-            write_tracker(&path, &payload)?;
-        }
+        // Update anomaly_flags in the tracker (always write, clearing stale flags)
+        payload["anomaly_flags"] = json!(warnings);
+        write_tracker(&path, &payload)?;
 
         Ok(warnings)
+
     })
 }
 
@@ -158,7 +164,8 @@ fn default_payload(started_at: u64) -> Value {
             "output": 0,
             "total": 0
         },
-        "anomaly_flags": []
+        "anomaly_flags": [],
+        "host_id": null
     })
 }
 

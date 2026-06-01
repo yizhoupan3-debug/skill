@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+---
+
 # Framework Naming Conventions
 
 ## Env Var Naming Convention

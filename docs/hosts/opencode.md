@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../host_adapter_contract.md
+---
+
 # Opencode 宿主操作手册
 
 **闭集 id**: `opencode` · **传输**: opencode-native · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`

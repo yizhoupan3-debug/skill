@@ -5,9 +5,10 @@ use super::constants::{
     ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
 use super::scoring::{
-    compact_route_reasons, layer_threshold, pick_overlay, pick_owner, reasons_class, round2,
+    compact_route_reasons, pick_overlay, pick_owner, reasons_class, round2,
     score_bucket, score_route_candidate,
 };
+use super::scoring_config::scoring_weights;
 use super::signals::{build_route_context, is_overlay_record};
 use super::text::{common_route_stop_tokens, normalize_text, tokenize_route_text};
 use super::types::{
@@ -60,12 +61,14 @@ pub(crate) fn search_skills(records: &[SkillRecord], query: &str, limit: usize) 
     }
 
     let score_record = |record: &SkillRecord| {
+        let w = scoring_weights();
         let candidate = score_route_candidate(
             record,
             &normalized_query,
             &query_token_list,
             &query_tokens,
             true,
+            w,
         );
         if candidate.score <= 0.0 {
             return None;
@@ -77,7 +80,7 @@ pub(crate) fn search_skills(records: &[SkillRecord], query: &str, limit: usize) 
             gate: record.gate.clone(),
             description: record.summary.clone(),
             score: round2(candidate.score),
-            matched_terms: candidate.reasons.len(),
+            matched_terms: candidate.matched_token_count,
             total_terms: query_tokens.len().max(query_token_list.len()),
         })
     };
@@ -191,9 +194,11 @@ pub(crate) fn route_task(
                 &reasons,
             ),
             reasons,
+            matched_token_count: 0,
         });
     }
 
+    let w = scoring_weights();
     let score = |record| {
         score_route_candidate(
             record,
@@ -201,6 +206,7 @@ pub(crate) fn route_task(
             &query_token_list,
             &query_tokens,
             first_turn,
+            w,
         )
     };
     let viable = if records.len() < PARALLEL_RECORD_SCAN_MIN {
@@ -239,6 +245,7 @@ pub(crate) fn route_task(
             layer: "runtime".to_string(),
             score: 0.0,
             reasons: fallback_reasons.clone(),
+            matched_token_count: 0,
             route_snapshot: build_route_snapshot(
                 "rust",
                 NO_SKILL_SELECTED,
@@ -249,17 +256,17 @@ pub(crate) fn route_task(
             ),
         });
     }
-    // 只有多个元素全部是 overlay 才返回 no-hit；单元素 overlay 应该正常路由
-    if viable.len() > 1
+    // 所有候选（含仅 1 个）全部是 overlay 且 caller 未允许 overlay 时返回 no-hit
+    if !viable.is_empty()
         && viable
             .iter()
             .all(|candidate| is_overlay_record(candidate.record))
+        && !allow_overlay
     {
         let fallback_reasons = compact_route_reasons(&[
             "Only overlay signals matched; native runtime should proceed without loading a primary skill."
                 .to_string(),
         ]);
-        let _ = allow_overlay;
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
             authority: ROUTE_AUTHORITY.to_string(),
@@ -273,6 +280,7 @@ pub(crate) fn route_task(
             layer: "runtime".to_string(),
             score: 0.0,
             reasons: fallback_reasons.clone(),
+            matched_token_count: 0,
             route_snapshot: build_route_snapshot(
                 "rust",
                 NO_SKILL_SELECTED,
@@ -284,14 +292,20 @@ pub(crate) fn route_task(
         });
     }
 
-    let selected = pick_owner(viable, &normalized_query, &query_token_list);
-    if selected.score < layer_threshold(&selected.record.layer) {
+    // Log: all-overlay candidates allowed through by caller
+    if viable.iter().all(|candidate| is_overlay_record(candidate.record)) {
+        eprintln!("[router-rs route] ALL-OVERLAY ALLOWED: query=\"{}\" session_id=\"{}\"",
+            query, session_id
+        );
+    }
+    let selected = pick_owner(viable, &normalized_query, &query_token_list, scoring_weights());
+    if selected.score < scoring_weights().layer_threshold(&selected.record.layer) {
         eprintln!(
             "[router-rs route] BELOW THRESHOLD: query=\"{}\" selected={} score={:.2} threshold={:.2}",
             query,
             selected.record.slug,
             selected.score,
-            layer_threshold(&selected.record.layer)
+            scoring_weights().layer_threshold(&selected.record.layer)
         );
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill."
@@ -310,6 +324,7 @@ pub(crate) fn route_task(
             layer: "runtime".to_string(),
             score: 0.0,
             reasons: fallback_reasons.clone(),
+            matched_token_count: 0,
             route_snapshot: build_route_snapshot(
                 "rust",
                 NO_SKILL_SELECTED,
@@ -360,6 +375,7 @@ pub(crate) fn route_task(
             &compact_reasons,
         ),
         reasons: compact_reasons,
+        matched_token_count: selected.matched_token_count,
     })
 }
 
@@ -397,6 +413,7 @@ pub(crate) fn literal_framework_alias_decision(
             &reasons,
         ),
         reasons,
+        matched_token_count: 0,
     })
 }
 
@@ -417,6 +434,7 @@ pub(crate) fn build_route_snapshot(
         score_bucket: score_bucket(score),
         reasons: reasons.to_vec(),
         reasons_class: reasons_class(reasons),
+        matched_token_count: 0,
     }
 }
 
@@ -626,6 +644,7 @@ mod should_retry_with_manifest_tests {
             layer: layer.to_string(),
             score,
             reasons: Vec::new(),
+            matched_token_count: 0,
             route_snapshot: RouteDecisionSnapshotPayload {
                 engine: "rust".to_string(),
                 selected_skill: skill.to_string(),
@@ -634,6 +653,7 @@ mod should_retry_with_manifest_tests {
                 score,
                 score_bucket: String::new(),
                 reasons: Vec::new(),
+                matched_token_count: 0,
                 reasons_class: String::new(),
             },
         }

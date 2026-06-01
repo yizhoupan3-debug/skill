@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../../rfv_loop_harness.md
+  - lane-templates.md
+---
+
 # External research harness（结构化 `external_research`）
 
 **Rust 校验真源**：`core/router-rs/src/rfv_loop.rs`。`append_round` 在传入 **`external_research`** 且为 **JSON 对象**（非 `null`）时：**先** `validate_external_research_structured`（字段存在、非空字符串等基线）；**若** 当前任务 `RFV_LOOP_STATE.external_research_strict == true`（`start` 默认写入；磁盘缺键或非布尔则视为 `false` 以兼容旧账本），**再** `validate_external_research_strict`（可追溯来源、矛盾扫描体量、检索轨迹长度、`unknowns` 键等）。任一阶段失败 → **`Err`，不写盘**。机读草稿 schema：`configs/framework/RFV_EXTERNAL_RESEARCH.schema.json`（字段说明含 strict 期望；**数值下限以 Rust 为准**，避免 schema 与执行双真源）。

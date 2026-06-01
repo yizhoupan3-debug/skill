@@ -1,3 +1,11 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - reasoning-depth-contract.md
+  - lane-templates.md
+  - ../../rfv_loop_harness.md
+---
+
 # 数理推理强度 harness（STEM）
 
 **语义层真源**：与 [推理深度契约](reasoning-depth-contract.md) 同层（L5）；**运行时**仍只认 **L1 可执行验证 + L2 证据落盘**，不把自然语言「像证明」当作通过标准。

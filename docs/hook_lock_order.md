@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+---
+
 # Hook lock order (router-rs)
 
 Cross-process hook subprocesses serialize continuity writes with **POSIX `flock`**, not `std::sync::Mutex`.

@@ -983,6 +983,7 @@ fn apply_rule_list<'a>(
                     record,
                     score: 0.0,
                     reasons: vec![reason.clone()],
+                    matched_token_count: 0,
                 });
             }
             CompiledAction::Boost { delta, reason } => {

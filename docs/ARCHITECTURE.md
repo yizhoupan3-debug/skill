@@ -1,3 +1,11 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+  - rust_contracts.md
+  - README.md
+---
+
 # Architecture
 
 本文档是仓库唯一入门级架构地图。目标读者：首次接触本仓库的开发者或 AI agent，需要在 10 分钟内理解「这个仓库是什么、各组件怎么连接、修改哪里才安全」。

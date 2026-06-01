@@ -191,6 +191,7 @@ fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
         HostCommand::Antigravity { command } => dispatch_antigravity_command(command),
         HostCommand::AntigravityCli { command } => dispatch_antigravity_cli_command(command),
         HostCommand::AntigravityAppHost { command } => dispatch_antigravity_command(command),
+        HostCommand::Opencode { command } => dispatch_opencode_command(command),
     }
 }
 
@@ -277,6 +278,15 @@ fn dispatch_antigravity_command(command: AntigravitySubcommand) -> Result<(), St
             );
             let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             run_antigravity_mcp_loop(Some(&root))
+        }
+    }
+}
+
+fn dispatch_opencode_command(command: OpenCodeSubcommand) -> Result<(), String> {
+    match command {
+        OpenCodeSubcommand::Agent(command) => {
+            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            crate::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
         }
     }
 }

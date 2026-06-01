@@ -13,6 +13,8 @@ mod policy;
 mod records;
 mod routing;
 mod scoring;
+mod scoring_config;
+pub(crate) use scoring_config::scoring_weights;
 mod signals;
 mod skill_record;
 mod text;

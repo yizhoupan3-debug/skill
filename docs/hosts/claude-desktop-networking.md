@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - claude-desktop.md
+---
+
 # Claude Desktop 联网与权限操作手册
 
 **适用**：macOS Claude Desktop（含 3P / CC Switch + MiniMax gateway）。

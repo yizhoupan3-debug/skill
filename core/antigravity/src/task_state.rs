@@ -475,6 +475,10 @@ pub fn read_task_ledger_transactions(
     if !path.is_file() {
         return Vec::new();
     }
+    // Repair any trailing corrupt lines before reading (e.g. truncated crash writes).
+    if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
+        eprintln!("[router-rs] truncate_corrupt_tail failed for TASK_LEDGER.jsonl task {task_id}: {e}");
+    }
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => {

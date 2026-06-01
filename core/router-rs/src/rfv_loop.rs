@@ -848,6 +848,12 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             };
             obj.insert("loop_status".to_string(), json!(loop_status));
 
+            let round_cap_warning = if round_n >= max_rounds && close_gates_cfg.is_none() && !supervisor_closes {
+                Some("RFV loop reached max_rounds without close_gates configuration; closing without gate verification. Consider configuring close_gates for future loops.")
+            } else {
+                None
+            };
+
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction {
                 ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -863,13 +869,17 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
-            Ok(json!({
+            let mut resp = json!({
                 "ok": true,
                 "operation": "append_round",
                 "task_id": task_id,
                 "rfv_loop_state_path": path.display().to_string(),
                 "rfv_loop_state": state,
-            }))
+            });
+            if let Some(w) = round_cap_warning {
+                resp["warning"] = json!(w);
+            }
+            Ok(resp)
         }
         _ => Err(format!(
             "framework_rfv_loop: unknown operation '{operation}'"

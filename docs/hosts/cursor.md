@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../host_adapter_contract.md
+  - ../harness_architecture.md
+---
+
 # Cursor 宿主操作手册
 
 **闭集 id**：`cursor` · **传输**：cursor-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.cursor`

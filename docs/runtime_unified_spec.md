@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - rust_contracts.md
+  - harness_architecture.md
+---
+
 # 运行期核心行为与沙箱统一规约 (Runtime Unified Specification)
 
 本规约是本代码库运行期（Runtime）控制面、沙箱边界、可观测性以及存储压缩的权威真源与行为契约。插件/ABI/路由契约见 [`rust_contracts.md`](rust_contracts.md) **Plugin and Routing Contract**。

@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../framework_operator_primer.md
+---
+
 # Plans index
 
 **planx 执行真源**：`/planx` 写入 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`（`artifacts/current/` 为本地手动画板，通常不入库）。历史 ROADMAP 在 git 历史或归档中，**不**假定本目录下仍有 stub 镜像。

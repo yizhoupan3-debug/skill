@@ -1,3 +1,10 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../host_adapter_contract.md
+  - ../harness_architecture.md
+---
+
 # Claude Code 宿主操作手册
 
 **闭集 id**：`claude-code` · **传输**：claude-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.claude-code`

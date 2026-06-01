@@ -1,14 +1,23 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - harness_architecture.md
+  - rust_contracts.md
+  - framework_operator_primer.md
+  - host_adapter_contract.md
+---
+
 # 文档索引（控制面与契约）
 
-**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`harness_architecture.md`](harness_architecture.md) = 连续性 **L1–L5 控制面**上层真源；[`rust_contracts.md`](rust_contracts.md)（英文）= `router-rs` 实现侧契约长文；历史迁移叙述见 git 历史与 [`MIGRATION.md`](../MIGRATION.md)。
+**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`harness_architecture/`](harness_architecture/index.md) = 连续性 **L1–L5 控制面**上层真源（已按主题拆分）；[`rust_contracts/`](rust_contracts/index.md)（英文）= `router-rs` 实现侧契约长文（已按主题拆分）；历史迁移叙述见 git 历史与 [`MIGRATION.md`](../MIGRATION.md)。
 
 ## 推荐阅读顺序
 
 1. [仓库根 README.md](../README.md) — 分享、安装、Cursor/Codex hook 快速入门  
 2. [framework_operator_primer.md](framework_operator_primer.md) — 使用者一页纸：宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检 `framework doctor`  
 3. [AGENTS.md](../AGENTS.md) — Skill 路由、Continuity、Closeout、Execution Ladder  
-4. [harness_architecture.md](harness_architecture.md) — 五层模型、证据流、续跑（stdio + 手动画板，非 hook `GOAL_CONTINUE`）、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
-5. [rust_contracts.md](rust_contracts.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
+4. [harness_architecture/](harness_architecture/index.md) — 五层模型、证据流、续跑（stdio + 手动画板，非 hook `GOAL_CONTINUE`）、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
+5. [rust_contracts/](rust_contracts/index.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
 6. [task_state_unified_resolve.md](task_state_unified_resolve.md) — `ResolvedTaskView` / `framework task-state-resolve`  
 
 ## 按主题
@@ -25,8 +34,8 @@
 | 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | 任务 ROADMAP：`artifacts/current/<task_id>/ROADMAP.md`；见 [plans/README.md](plans/README.md) |
 | Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
 | `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
-| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`runtime_registry`、`host_projection_narrative`、`GENERATED_ARTIFACTS` 见 [harness_architecture.md §2.3](harness_architecture.md#23-控制面配置与生成物2026-05-20-硬化)；多宿主 harness 契约见唯一真源 [host_adapter_contract.md](host_adapter_contract.md) |
-| 生成物 drift / doctor 快探针 | [harness_architecture.md §2.3](harness_architecture.md#23-控制面配置与生成物2026-05-20-硬化)；`framework host-integration generated-artifacts-status [--skip-generator-run]` |
+| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`runtime_registry`、`host_projection_narrative`、`GENERATED_ARTIFACTS` 见 [harness_architecture/02-data-flows.md §2.3](harness_architecture/02-data-flows.md#23-控制面配置与生成物2026-05-20-硬化)；多宿主 harness 契约见唯一真源 [host_adapter_contract.md](host_adapter_contract.md) |
+| 生成物 drift / doctor 快探针 | [harness_architecture/02-data-flows.md §2.3](harness_architecture/02-data-flows.md#23-控制面配置与生成物2026-05-20-硬化)；`framework host-integration generated-artifacts-status [--skip-generator-run]` |
 | 任务级 schema drift（hooks 7 事件闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题） | `router-rs schema-drift contract` / `baseline` / `check`（[`schema_drift.rs`](../core/router-rs/src/schema_drift.rs)）；验收见 [`skills/verifyx/SKILL.md`](../skills/verifyx/SKILL.md)、[`configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md`](../configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md) |
 | Cursor Plan / My 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/planx/SKILL.md`](../skills/planx/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
 | Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
@@ -37,7 +46,7 @@
 
 ## 概念与源码映射
 
-见 [harness_architecture.md §6](harness_architecture.md#6-与仓库文件的映射)。
+见 [harness_architecture/01-five-layer-model.md §8](harness_architecture/01-five-layer-model.md#8-文件映射)。
 
 ## 已淘汰叙述（清理边界）
 

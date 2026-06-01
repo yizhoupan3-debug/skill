@@ -77,6 +77,7 @@ pub(crate) struct RouteCandidate<'a> {
     pub(crate) record: &'a SkillRecord,
     pub(crate) score: f64,
     pub(crate) reasons: Vec<String>,
+    pub(crate) matched_token_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -111,6 +112,7 @@ pub(crate) struct RouteDecisionSnapshotPayload {
     pub(crate) score: f64,
     pub(crate) score_bucket: String,
     pub(crate) reasons: Vec<String>,
+    pub(crate) matched_token_count: usize,
     pub(crate) reasons_class: String,
 }
 
@@ -144,6 +146,7 @@ pub(crate) struct RouteDecision {
     pub(crate) layer: String,
     pub(crate) score: f64,
     pub(crate) reasons: Vec<String>,
+    pub(crate) matched_token_count: usize,
     pub(crate) route_snapshot: RouteDecisionSnapshotPayload,
 }
 
@@ -213,6 +216,7 @@ pub(crate) struct RouteSnapshotRequestPayload {
     pub(crate) layer: String,
     pub(crate) score: f64,
     pub(crate) reasons: Vec<String>,
+    pub(crate) matched_token_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

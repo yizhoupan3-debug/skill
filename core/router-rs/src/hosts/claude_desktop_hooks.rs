@@ -41,14 +41,20 @@ fn mcp_host_supports_hard_closeout(host_id: &str) -> bool {
     )
 }
 
-fn mcp_host_hard_block_label(host_id: &str) -> &'static str {
+/// Shared host display label for MCP-hosted sessions.
+/// Used by hard-block, closeout gate, and review gate prompts.
+fn mcp_host_display_label(host_id: &str) -> &'static str {
     match host_id {
         "antigravity-app" | "antigravity" => "Antigravity App",
         "claude-desktop" => "Claude Desktop",
+        "opencode" => "Opencode",
         _ => "MCP Host",
     }
 }
 
+fn mcp_host_hard_block_label(host_id: &str) -> &'static str {
+    mcp_host_display_label(host_id)
+}
 fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
     let current = repo_root.join("artifacts/current");
     let Ok(entries) = fs::read_dir(&current) else {
@@ -237,7 +243,7 @@ pub fn run_antigravity_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), Stri
     run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, "antigravity-app")
 }
 
-fn run_mcp_stdio<R: BufRead, W: Write>(
+pub(crate) fn run_mcp_stdio<R: BufRead, W: Write>(
     mut input: R,
     mut output: W,
     repo_root: &Path,
@@ -1116,11 +1122,7 @@ pub(crate) struct McpCloseoutGateVerdict {
 }
 
 fn mcp_closeout_host_label(host_id: &str) -> &'static str {
-    if host_id == "antigravity-app" || host_id == "antigravity" {
-        "Antigravity App"
-    } else {
-        "Claude Desktop"
-    }
+    mcp_host_display_label(host_id)
 }
 
 fn mcp_closeout_hard_block_disabled(repo_root: &Path, lifecycle_profile: &str) -> bool {
@@ -1553,11 +1555,7 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path, host
             )
         }
         "review_gate" => {
-            let host_name = if host_id == "antigravity-app" || host_id == "antigravity" {
-                "Antigravity App"
-            } else {
-                "Claude Desktop"
-            };
+            let host_name = mcp_host_display_label(host_id);
             let gate_mode = if mcp_host_supports_hard_closeout(host_id) {
                 format!(
                     "{host_name} closeout is hard-blocked at MCP tool level for non-my-light profiles — unsatisfied closeout blocks goal_state_manage complete."

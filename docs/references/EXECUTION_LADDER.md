@@ -1,3 +1,9 @@
+---
+last_verified: "2026-06-02"
+depends_on:
+  - ../../AGENTS.md
+---
+
 # Execution Ladder（完整）
 
 `AGENTS.md` → Execution Ladder 节为摘要；本文件为完整规则。

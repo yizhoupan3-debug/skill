@@ -9,6 +9,7 @@ fn main() -> Result<(), String> {
                 || cmd == "cursor"
                 || cmd == "antigravity-cli"
                 || cmd == "antigravity-app"
+                || cmd == "opencode"
             {
                 args.insert(1, std::ffi::OsString::from("host"));
             }
