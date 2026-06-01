@@ -123,3 +123,7 @@ templates/
 
 # Auto-generated router-rs projection files
 core/router-rs/.claude/
+
+# Claude framework runtime artifacts
+.claude/scheduled_tasks.lock
+.claude/worktrees/
