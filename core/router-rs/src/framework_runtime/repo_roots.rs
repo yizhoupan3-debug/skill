@@ -25,6 +25,19 @@ pub fn framework_root_from_executable_path(exe: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Returns true when the raw string is a recognized MCP placeholder that should be
+/// resolved to an actual directory path.
+fn is_mcp_placeholder(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    matches!(
+        trimmed,
+        "${workspaceRoot}"
+            | "${CLAUDE_PROJECT_DIR}"
+            | "${CLAUDE_PROJECT_DIR:-.}"
+            | "."
+    )
+}
+
 /// CLI / 若干调用方常在 `core/router-rs/` 等子目录执行；continuity、`RUNTIME_REGISTRY`
 /// 与 `artifacts/current` 均以仓库根为真源，因此从 cwd 或传入路径向上探测 framework root。
 fn repo_root_from_mcp_placeholder(raw: &str) -> Option<PathBuf> {
@@ -54,6 +67,11 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
     let base = if let Some(path) = repo_root {
         if let Some(resolved) = path.to_str().and_then(repo_root_from_mcp_placeholder) {
             resolved
+        } else if path.to_str().map(is_mcp_placeholder).unwrap_or(false) {
+            // MCP placeholder not resolved (e.g. CLAUDE_PROJECT_DIR not set in Claude Desktop).
+            // Fall back to cwd instead of using the literal placeholder string as a path.
+            std::env::current_dir()
+                .map_err(|err| format!("resolve current directory failed: {err}"))?
         } else {
             path.to_path_buf()
         }
@@ -91,9 +109,12 @@ mod repo_root_placeholder_tests {
         let cwd = env::current_dir().expect("cwd");
         let resolved =
             resolve_repo_root_arg(Some(std::path::Path::new("${workspaceRoot}"))).expect("resolve");
-        assert_eq!(
-            resolved.canonicalize().unwrap_or(resolved),
-            cwd.canonicalize().unwrap_or(cwd)
+        // resolve_repo_root_arg walks up ancestors to find framework root;
+        // the resolved path must be cwd or one of its ancestors.
+        assert!(
+            cwd.starts_with(&resolved),
+            "expected resolved={:?} to be an ancestor of cwd={:?}",
+            resolved, cwd
         );
         if let Some(value) = prior {
             env::set_var("CLAUDE_PROJECT_DIR", value);

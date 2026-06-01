@@ -3254,7 +3254,7 @@ fn claude_desktop_mcp_router_command(roots: &ResolvedProjectionRoots) -> Value {
 fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let mut payload = make_mcp_server_payload_with_env(
         roots,
-        &["claude-desktop", "agent", "--repo-root", "${CLAUDE_PROJECT_DIR:-.}"],
+        &["claude-desktop", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
         "Framework snapshot, skill routing, goal/closeout gating (MCP hard block for non-my-light)",
         Some(claude_desktop_mcp_env(roots)),
     );
@@ -3274,7 +3274,7 @@ fn claude_desktop_browser_mcp_server_payload(roots: &ResolvedProjectionRoots) ->
             "browser",
             "mcp-stdio",
             "--repo-root",
-            "${CLAUDE_PROJECT_DIR:-.}",
+            roots.project_root.to_string_lossy().as_ref(),
         ],
         "Browser MCP for external web research (browser_open, browser_get_text, …)",
         Some(claude_desktop_mcp_env(roots)),
@@ -3947,7 +3947,7 @@ fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &str)
 fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     make_mcp_server_payload(
         roots,
-        &["antigravity-app", "agent", "--repo-root", "${CLAUDE_PROJECT_DIR:-.}"],
+        &["antigravity-app", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
         "Framework runtime snapshot, continuity, skill routing, closeout gating",
     )
 }
