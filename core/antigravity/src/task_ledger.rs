@@ -56,7 +56,7 @@ pub fn acquire_task_ledger_lock_with_timeout(
         .map_err(|err| format!("task ledger lock: open {} failed: {err}", lock_path.display()))?;
 
     let mut delay = Duration::from_millis(10);
-    let max_delay = Duration::from_millis(50);
+    let max_delay = Duration::from_millis(200);
     let start = Instant::now();
 
     loop {

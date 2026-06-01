@@ -17,8 +17,9 @@ depends_on:
 2. [framework_operator_primer.md](framework_operator_primer.md) — 使用者一页纸：宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检 `framework doctor`  
 3. [AGENTS.md](../AGENTS.md) — Skill 路由、Continuity、Closeout、Execution Ladder  
 4. [harness_architecture/](harness_architecture/index.md) — 五层模型、证据流、续跑（stdio + 手动画板，非 hook `GOAL_CONTINUE`）、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
-5. [rust_contracts/](rust_contracts/index.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
-6. [task_state_unified_resolve.md](task_state_unified_resolve.md) — `ResolvedTaskView` / `framework task-state-resolve`  
+5. [architecture/](architecture/INDEX.md) — 仓库架构总览（已从 `ARCHITECTURE.md` 拆分）、组件详解、数据流、安全模型、宿主集成  
+6. [rust_contracts/](rust_contracts/index.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
+7. [task_state_unified_resolve.md](task_state_unified_resolve.md) — `ResolvedTaskView` / `framework task-state-resolve`  
 
 ## 按主题
 

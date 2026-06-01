@@ -799,43 +799,114 @@ fn sandbox_transition_allowed(current_state: &str, next_state: &str) -> bool {
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn sandbox_response(
-    request: &SandboxControlRequestPayload,
+struct SandboxResponseBuilder<'a> {
+    request: &'a SandboxControlRequestPayload,
     current_state: Option<String>,
     next_state: Option<String>,
     allowed: bool,
     resolved_state: Option<String>,
-    reason: &str,
+    reason: String,
     error: Option<String>,
     failure_reason: Option<String>,
     budget_violation: Option<String>,
     cleanup_required: Option<bool>,
     quarantined: Option<bool>,
     effective_capabilities: Option<Vec<String>>,
-    event_kind: Option<&str>,
-) -> SandboxControlResponsePayload {
-    SandboxControlResponsePayload {
-        schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
-        authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
-        operation: request.operation.clone(),
-        current_state,
-        next_state,
-        allowed,
-        resolved_state,
-        reason: reason.to_string(),
-        error,
-        failure_reason,
-        budget_violation,
-        cleanup_required,
-        quarantined,
-        effective_capabilities,
-        sandbox_id: request.sandbox_id.clone(),
-        profile_id: request.profile_id.clone(),
-        event_schema_version: Some(SANDBOX_EVENT_SCHEMA_VERSION.to_string()),
-        event_log_path: request.event_log_path.clone(),
-        event_written: false,
-        event_kind: event_kind.map(|value| value.to_string()),
+    event_kind: Option<String>,
+}
+
+impl<'a> SandboxResponseBuilder<'a> {
+    fn new(request: &'a SandboxControlRequestPayload, allowed: bool, reason: &str) -> Self {
+        Self {
+            request,
+            current_state: None,
+            next_state: None,
+            allowed,
+            resolved_state: None,
+            reason: reason.to_string(),
+            error: None,
+            failure_reason: None,
+            budget_violation: None,
+            cleanup_required: None,
+            quarantined: None,
+            effective_capabilities: None,
+            event_kind: None,
+        }
+    }
+
+    fn current_state(mut self, v: Option<String>) -> Self {
+        self.current_state = v;
+        self
+    }
+
+    fn next_state(mut self, v: Option<String>) -> Self {
+        self.next_state = v;
+        self
+    }
+
+    fn resolved_state(mut self, v: Option<String>) -> Self {
+        self.resolved_state = v;
+        self
+    }
+
+    fn error(mut self, v: Option<String>) -> Self {
+        self.error = v;
+        self
+    }
+
+    fn failure_reason(mut self, v: Option<String>) -> Self {
+        self.failure_reason = v;
+        self
+    }
+
+    fn budget_violation(mut self, v: Option<String>) -> Self {
+        self.budget_violation = v;
+        self
+    }
+
+    fn cleanup_required(mut self, v: Option<bool>) -> Self {
+        self.cleanup_required = v;
+        self
+    }
+
+    fn quarantined(mut self, v: Option<bool>) -> Self {
+        self.quarantined = v;
+        self
+    }
+
+    fn effective_capabilities(mut self, v: Option<Vec<String>>) -> Self {
+        self.effective_capabilities = v;
+        self
+    }
+
+    fn event_kind(mut self, v: Option<&str>) -> Self {
+        self.event_kind = v.map(str::to_string);
+        self
+    }
+
+    fn build(self) -> SandboxControlResponsePayload {
+        SandboxControlResponsePayload {
+            schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+            authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
+            operation: self.request.operation.clone(),
+            current_state: self.current_state,
+            next_state: self.next_state,
+            allowed: self.allowed,
+            resolved_state: self.resolved_state,
+            reason: self.reason,
+            error: self.error,
+            failure_reason: self.failure_reason,
+            budget_violation: self.budget_violation,
+            cleanup_required: self.cleanup_required,
+            quarantined: self.quarantined,
+            effective_capabilities: self.effective_capabilities,
+            sandbox_id: self.request.sandbox_id.clone(),
+            profile_id: self.request.profile_id.clone(),
+            event_schema_version: Some(SANDBOX_EVENT_SCHEMA_VERSION.to_string()),
+            event_log_path: self.request.event_log_path.clone(),
+            event_written: false,
+            event_kind: self.event_kind,
+        }
     }
 }
 
@@ -893,32 +964,24 @@ pub(crate) fn build_sandbox_control_response(
                 .clone()
                 .ok_or_else(|| "sandbox control transition requires next_state".to_string())?;
             let allowed = sandbox_transition_allowed(&current_state, &next_state);
-            sandbox_response(
-                &payload,
-                Some(current_state.clone()),
-                Some(next_state.clone()),
-                allowed,
-                Some(next_state.clone()),
-                if allowed {
-                    "transition-accepted"
-                } else {
-                    "invalid-transition"
-                },
-                if allowed {
-                    None
-                } else {
-                    Some(format!(
-                        "invalid sandbox transition: {:?} -> {:?}",
-                        current_state, next_state
-                    ))
-                },
-                None,
-                None,
-                None,
-                None,
-                payload.capability_categories.clone(),
-                None,
-            )
+            SandboxResponseBuilder::new(&payload, allowed, if allowed {
+                "transition-accepted"
+            } else {
+                "invalid-transition"
+            })
+            .current_state(Some(current_state.clone()))
+            .next_state(Some(next_state.clone()))
+            .resolved_state(Some(next_state))
+            .error(if allowed {
+                None
+            } else {
+                Some(format!(
+                    "invalid sandbox transition: {:?} -> {:?}",
+                    current_state, payload.next_state.as_deref().unwrap_or("")
+                ))
+            })
+            .effective_capabilities(payload.capability_categories.clone())
+            .build()
         }
         "cleanup" => {
             let current_state = payload
@@ -928,12 +991,9 @@ pub(crate) fn build_sandbox_control_response(
             let cleanup_failed = payload.cleanup_failed.unwrap_or(false);
             let resolved_state = if cleanup_failed { "failed" } else { "recycled" };
             let allowed = matches!(current_state.as_str(), "draining");
-            sandbox_response(
+            SandboxResponseBuilder::new(
                 &payload,
-                Some(current_state.clone()),
-                Some(resolved_state.to_string()),
                 allowed,
-                Some(resolved_state.to_string()),
                 if !allowed {
                     "cleanup-invalid-state"
                 } else if cleanup_failed {
@@ -941,28 +1001,33 @@ pub(crate) fn build_sandbox_control_response(
                 } else {
                     "cleanup-completed"
                 },
-                if allowed {
-                    None
-                } else {
-                    Some(format!(
-                        "invalid sandbox cleanup state: {:?} -> {:?}",
-                        current_state, resolved_state
-                    ))
-                },
+            )
+            .current_state(Some(current_state.clone()))
+            .next_state(Some(resolved_state.to_string()))
+            .resolved_state(Some(resolved_state.to_string()))
+            .error(if allowed {
+                None
+            } else {
+                Some(format!(
+                    "invalid sandbox cleanup state: {:?} -> {:?}",
+                    current_state, resolved_state
+                ))
+            })
+            .failure_reason(
                 payload
                     .error_kind
                     .clone()
                     .or_else(|| cleanup_failed.then(|| "cleanup_failed".to_string())),
-                None,
-                Some(false),
-                Some(cleanup_failed),
-                payload.capability_categories.clone(),
-                Some(if cleanup_failed {
-                    "sandbox.cleanup_failed"
-                } else {
-                    "sandbox.cleanup_completed"
-                }),
             )
+            .cleanup_required(Some(false))
+            .quarantined(Some(cleanup_failed))
+            .effective_capabilities(payload.capability_categories.clone())
+            .event_kind(Some(if cleanup_failed {
+                "sandbox.cleanup_failed"
+            } else {
+                "sandbox.cleanup_completed"
+            }))
+            .build()
         }
         "admit" => {
             let current_state = payload
@@ -1013,37 +1078,27 @@ pub(crate) fn build_sandbox_control_response(
                     format!("invalid sandbox admission state: {current_state:?} -> \"busy\"")
                 })
             }) {
-                sandbox_response(
-                    &payload,
-                    Some(current_state.clone()),
-                    Some("failed".to_string()),
-                    false,
-                    Some("failed".to_string()),
-                    "admission-rejected",
-                    Some(reason.clone()),
-                    Some(reason),
-                    None,
-                    Some(false),
-                    Some(true),
-                    Some(categories.clone()),
-                    Some("sandbox.failed"),
-                )
+                SandboxResponseBuilder::new(&payload, false, "admission-rejected")
+                    .current_state(Some(current_state))
+                    .next_state(Some("failed".to_string()))
+                    .resolved_state(Some("failed".to_string()))
+                    .error(Some(reason.clone()))
+                    .failure_reason(Some(reason))
+                    .cleanup_required(Some(false))
+                    .quarantined(Some(true))
+                    .effective_capabilities(Some(categories))
+                    .event_kind(Some("sandbox.failed"))
+                    .build()
             } else {
-                sandbox_response(
-                    &payload,
-                    Some(current_state.clone()),
-                    Some("busy".to_string()),
-                    true,
-                    Some("busy".to_string()),
-                    "admission-accepted",
-                    None,
-                    None,
-                    None,
-                    Some(false),
-                    Some(false),
-                    Some(categories.clone()),
-                    Some("sandbox.execution_started"),
-                )
+                SandboxResponseBuilder::new(&payload, true, "admission-accepted")
+                    .current_state(Some(current_state))
+                    .next_state(Some("busy".to_string()))
+                    .resolved_state(Some("busy".to_string()))
+                    .cleanup_required(Some(false))
+                    .quarantined(Some(false))
+                    .effective_capabilities(Some(categories))
+                    .event_kind(Some("sandbox.execution_started"))
+                    .build()
             }
         }
         "execution_result" => {
@@ -1089,61 +1144,60 @@ pub(crate) fn build_sandbox_control_response(
                 } else {
                     "failed"
                 };
-                sandbox_response(
+                SandboxResponseBuilder::new(
                     &payload,
-                    Some(current_state.clone()),
-                    Some(resolved_state.to_string()),
                     sandbox_transition_allowed(&current_state, resolved_state),
-                    Some(resolved_state.to_string()),
                     if resolved_state == "draining" {
                         "execution-timeout"
                     } else {
                         "execution-failed"
                     },
-                    Some(reason.clone()),
-                    Some(reason),
-                    None,
-                    Some(resolved_state == "draining"),
-                    Some(resolved_state == "failed"),
-                    payload.capability_categories.clone(),
-                    Some(if resolved_state == "draining" {
-                        "sandbox.timeout"
-                    } else {
-                        "sandbox.failed"
-                    }),
                 )
+                .current_state(Some(current_state))
+                .next_state(Some(resolved_state.to_string()))
+                .resolved_state(Some(resolved_state.to_string()))
+                .error(Some(reason.clone()))
+                .failure_reason(Some(reason))
+                .cleanup_required(Some(resolved_state == "draining"))
+                .quarantined(Some(resolved_state == "failed"))
+                .effective_capabilities(payload.capability_categories.clone())
+                .event_kind(Some(if resolved_state == "draining" {
+                    "sandbox.timeout"
+                } else {
+                    "sandbox.failed"
+                }))
+                .build()
             } else if let Some(violation) = budget_violation {
-                sandbox_response(
+                SandboxResponseBuilder::new(
                     &payload,
-                    Some(current_state.clone()),
-                    Some("draining".to_string()),
                     sandbox_transition_allowed(&current_state, "draining"),
-                    Some("draining".to_string()),
                     "budget-exceeded",
-                    Some(violation.clone()),
-                    Some(violation.clone()),
-                    Some(violation),
-                    Some(true),
-                    Some(false),
-                    payload.capability_categories.clone(),
-                    Some("sandbox.budget_exceeded"),
                 )
+                .current_state(Some(current_state))
+                .next_state(Some("draining".to_string()))
+                .resolved_state(Some("draining".to_string()))
+                .error(Some(violation.clone()))
+                .failure_reason(Some(violation.clone()))
+                .budget_violation(Some(violation))
+                .cleanup_required(Some(true))
+                .quarantined(Some(false))
+                .effective_capabilities(payload.capability_categories.clone())
+                .event_kind(Some("sandbox.budget_exceeded"))
+                .build()
             } else {
-                sandbox_response(
+                SandboxResponseBuilder::new(
                     &payload,
-                    Some(current_state.clone()),
-                    Some("draining".to_string()),
                     sandbox_transition_allowed(&current_state, "draining"),
-                    Some("draining".to_string()),
                     "execution-completed",
-                    None,
-                    None,
-                    None,
-                    Some(true),
-                    Some(false),
-                    payload.capability_categories.clone(),
-                    Some("sandbox.execution_completed"),
                 )
+                .current_state(Some(current_state))
+                .next_state(Some("draining".to_string()))
+                .resolved_state(Some("draining".to_string()))
+                .cleanup_required(Some(true))
+                .quarantined(Some(false))
+                .effective_capabilities(payload.capability_categories.clone())
+                .event_kind(Some("sandbox.execution_completed"))
+                .build()
             }
         }
         other => return Err(format!("unsupported sandbox control operation: {other}")),
@@ -1671,6 +1725,13 @@ pub(crate) fn perform_live_execute(
     })
 }
 
+/// Returns a shared blocking HTTP client for live execute requests.
+///
+/// NOTE: This uses `reqwest::blocking::Client` which occupies a thread during I/O.
+/// If this path is reached from a concurrent stdio loop, the blocking call will tie
+/// up a tokio worker thread for up to 30 seconds. A future improvement would be to
+/// use an async `reqwest::Client` and `tokio::task::spawn_blocking` to offload the
+/// blocking I/O, or to gate this path so it only runs outside the stdio hot path.
 pub(crate) fn live_execute_http_client() -> Result<&'static reqwest::blocking::Client, String> {
     static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
     if let Some(client) = CLIENT.get() {
@@ -2210,40 +2271,26 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         optional_non_empty_string(payload, "binding_artifact_path");
     let explicit_handoff_path = optional_non_empty_string(payload, "handoff_path");
     let explicit_resume_manifest_path = optional_non_empty_string(payload, "resume_manifest_path");
-    let Some(attach_descriptor) = payload.get("attach_descriptor") else {
-        return Ok(NormalizedAttachRequest {
-            binding_artifact_path: explicit_binding_artifact_path.clone(),
-            handoff_path: explicit_handoff_path.clone(),
-            resume_manifest_path: explicit_resume_manifest_path.clone(),
-            trace_stream_path: None,
-            binding_artifact_resolution: explicit_binding_artifact_path
-                .as_ref()
-                .map(|_| "explicit_request".to_string()),
-            handoff_resolution: explicit_handoff_path
-                .as_ref()
-                .map(|_| "explicit_request".to_string()),
-            resume_manifest_resolution: explicit_resume_manifest_path
-                .as_ref()
-                .map(|_| "explicit_request".to_string()),
-        });
+    let attach_descriptor = match payload.get("attach_descriptor") {
+        None | Some(Value::Null) => {
+            return Ok(NormalizedAttachRequest {
+                binding_artifact_path: explicit_binding_artifact_path.clone(),
+                handoff_path: explicit_handoff_path.clone(),
+                resume_manifest_path: explicit_resume_manifest_path.clone(),
+                trace_stream_path: None,
+                binding_artifact_resolution: explicit_binding_artifact_path
+                    .as_ref()
+                    .map(|_| "explicit_request".to_string()),
+                handoff_resolution: explicit_handoff_path
+                    .as_ref()
+                    .map(|_| "explicit_request".to_string()),
+                resume_manifest_resolution: explicit_resume_manifest_path
+                    .as_ref()
+                    .map(|_| "explicit_request".to_string()),
+            });
+        }
+        Some(descriptor) => descriptor,
     };
-    if attach_descriptor.is_null() {
-        return Ok(NormalizedAttachRequest {
-            binding_artifact_path: explicit_binding_artifact_path.clone(),
-            handoff_path: explicit_handoff_path.clone(),
-            resume_manifest_path: explicit_resume_manifest_path.clone(),
-            trace_stream_path: None,
-            binding_artifact_resolution: explicit_binding_artifact_path
-                .as_ref()
-                .map(|_| "explicit_request".to_string()),
-            handoff_resolution: explicit_handoff_path
-                .as_ref()
-                .map(|_| "explicit_request".to_string()),
-            resume_manifest_resolution: explicit_resume_manifest_path
-                .as_ref()
-                .map(|_| "explicit_request".to_string()),
-        });
-    }
     if !attach_descriptor.is_object() {
         return Err("External runtime event attach descriptor must be a mapping.".to_string());
     }
@@ -2439,13 +2486,16 @@ fn normalize_optional_runtime_path(value: Option<String>) -> Result<Option<PathB
         .transpose()
 }
 
+fn cached_current_dir() -> &'static PathBuf {
+    static CACHED_CWD: OnceLock<PathBuf> = OnceLock::new();
+    CACHED_CWD.get_or_init(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
 fn normalize_path_for_compare(path: &Path) -> PathBuf {
     if path.is_absolute() {
         return path.to_path_buf();
     }
-    std::env::current_dir()
-        .map(|cwd| cwd.join(path))
-        .unwrap_or_else(|_| path.to_path_buf())
+    cached_current_dir().join(path)
 }
 
 fn infer_resume_manifest_path(binding_artifact_path: &Path) -> PathBuf {
@@ -2884,6 +2934,15 @@ pub(crate) fn subscribe_attached_runtime_events(payload: Value) -> Result<Value,
         .ok_or_else(|| {
             "attached runtime transport payload missing trace_stream_path".to_string()
         })?;
+    // Enforce a hard limit cap to bound peak memory for large trace streams.
+    const SUBSCRIBE_LIMIT_CAP: usize = 10_000;
+    let requested_limit = payload
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|value| value as usize);
+    let capped_limit = requested_limit
+        .map(|value| value.min(SUBSCRIBE_LIMIT_CAP))
+        .or(Some(SUBSCRIBE_LIMIT_CAP));
     let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
         path: Some(trace_stream_path.to_string()),
         event_stream_text: None,
@@ -2896,25 +2955,26 @@ pub(crate) fn subscribe_attached_runtime_events(payload: Value) -> Result<Value,
         job_id: job_id.clone(),
         stream_scope_fields: None,
         after_event_id: optional_non_empty_string(&payload, "after_event_id"),
-        limit: payload
-            .get("limit")
-            .and_then(Value::as_u64)
-            .map(|value| value as usize),
+        limit: capped_limit,
     })?;
     let heartbeat = optional_bool(&payload, "heartbeat").unwrap_or(false);
-    let events = replay.events.clone();
     let has_more = replay.has_more;
+    let replay_events_empty = replay.events.is_empty();
     let next_cursor = serde_json::to_value(&replay.next_cursor)
         .map_err(|err| format!("serialize attached runtime cursor failed: {err}"))?;
+    // Serialize events directly instead of cloning the entire Vec.
+    let events_value = serde_json::to_value(&replay.events)
+        .map_err(|err| format!("serialize attached runtime events failed: {err}"))?;
+    let after_event_id = optional_non_empty_string(&payload, "after_event_id");
     Ok(json!({
         "schema_version": "runtime-event-stream-v1",
         "session_id": session_id,
         "job_id": job_id,
-        "events": events,
+        "events": events_value,
         "next_cursor": next_cursor,
         "has_more": has_more,
-        "after_event_id": optional_non_empty_string(&payload, "after_event_id"),
-        "heartbeat": if heartbeat && replay.events.is_empty() {
+        "after_event_id": after_event_id,
+        "heartbeat": if heartbeat && replay_events_empty {
             json!({
                 "schema_version": "runtime-event-stream-heartbeat-v1",
                 "kind": "runtime.stream.heartbeat",
@@ -3181,31 +3241,37 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
 
 pub(crate) fn build_runtime_integrator_payload() -> Value {
     let control_plane = build_runtime_control_plane_payload();
-    let runtime_host = control_plane
-        .get("runtime_host")
-        .cloned()
-        .unwrap_or(Value::Null);
-    let services = control_plane
-        .get("services")
-        .cloned()
-        .unwrap_or(Value::Null);
-    let runtime_status = control_plane
-        .get("runtime_status")
-        .cloned()
-        .unwrap_or(Value::Null);
-    let concurrency_contract = runtime_host
-        .get("concurrency_contract")
-        .cloned()
-        .unwrap_or(Value::Null);
+    // Use references to avoid cloning large sub-trees.
+    // The control_plane value lives for the entire function scope, so borrows are safe.
+    let runtime_host = control_plane.get("runtime_host").unwrap_or(&Value::Null);
+    let services = control_plane.get("services").unwrap_or(&Value::Null);
+    let runtime_status = control_plane.get("runtime_status").unwrap_or(&Value::Null);
+    let concurrency_contract = runtime_host.get("concurrency_contract").unwrap_or(&Value::Null);
     let subagent_limit_contract = services
         .get("middleware")
         .and_then(Value::as_object)
         .and_then(|middleware| middleware.get("subagent_limit_contract"))
-        .cloned()
-        .unwrap_or(Value::Null);
+        .unwrap_or(&Value::Null);
     let observability_exporter = build_runtime_observability_exporter_descriptor();
     let observability_metric_catalog = build_runtime_observability_metric_catalog_payload();
     let observability_dashboard = runtime_observability_dashboard_schema();
+    let metric_names = observability_metric_catalog["metrics"]
+        .as_array()
+        .map(|metrics| {
+            metrics
+                .iter()
+                .filter_map(|metric| metric.get("metric_name").cloned())
+                .collect::<Vec<Value>>()
+        })
+        .unwrap_or_default();
+    let dashboard_panel_count = observability_dashboard["panels"]
+        .as_array()
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let dashboard_alert_count = observability_dashboard["alerts"]
+        .as_array()
+        .map(|items| items.len())
+        .unwrap_or(0);
     json!({
         "schema_version": RUNTIME_INTEGRATOR_SCHEMA_VERSION,
         "authority": RUNTIME_INTEGRATOR_AUTHORITY,
@@ -3218,26 +3284,14 @@ pub(crate) fn build_runtime_integrator_payload() -> Value {
         "subagent_limit_contract": subagent_limit_contract,
         "observability": {
             "schema_version": RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
-            "ownership_lane": observability_exporter["ownership_lane"].clone(),
-            "metric_catalog_version": observability_exporter["metric_catalog_version"].clone(),
-            "dashboard_schema_version": observability_dashboard["schema_version"].clone(),
-            "resource_dimensions": observability_dashboard["resource_dimensions"].clone(),
-            "metric_catalog_schema_version": observability_metric_catalog["schema_version"].clone(),
-            "metric_names": observability_metric_catalog["metrics"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|metric| metric.get("metric_name").cloned())
-                .collect::<Vec<Value>>(),
-            "dashboard_panel_count": observability_dashboard["panels"]
-                .as_array()
-                .map(|items| items.len())
-                .unwrap_or(0),
-            "dashboard_alert_count": observability_dashboard["alerts"]
-                .as_array()
-                .map(|items| items.len())
-                .unwrap_or(0),
+            "ownership_lane": observability_exporter["ownership_lane"],
+            "metric_catalog_version": observability_exporter["metric_catalog_version"],
+            "dashboard_schema_version": observability_dashboard["schema_version"],
+            "resource_dimensions": observability_dashboard["resource_dimensions"],
+            "metric_catalog_schema_version": observability_metric_catalog["schema_version"],
+            "metric_names": metric_names,
+            "dashboard_panel_count": dashboard_panel_count,
+            "dashboard_alert_count": dashboard_alert_count,
             "exporter": observability_exporter,
         },
     })
@@ -3611,10 +3665,22 @@ fn is_forbidden_live_execute_ipv6(ip: Ipv6Addr) -> bool {
 
 fn truncate_for_error(raw: &str) -> String {
     let compact = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-    if compact.chars().count() <= 240 {
+    // Single-pass truncation via char_indices() to avoid two full traversals.
+    const MAX_CHARS: usize = 240;
+    const TRUNCATE_AT: usize = 237;
+    if compact.is_ascii() {
+        // Fast path for ASCII: byte length == char count.
+        if compact.len() <= MAX_CHARS {
+            compact
+        } else {
+            compact[..TRUNCATE_AT].to_string() + "..."
+        }
+    } else if compact.chars().count() <= MAX_CHARS {
         compact
+    } else if let Some((byte_idx, _)) = compact.char_indices().nth(TRUNCATE_AT) {
+        compact[..byte_idx].to_string() + "..."
     } else {
-        compact.chars().take(237).collect::<String>() + "..."
+        compact
     }
 }
 

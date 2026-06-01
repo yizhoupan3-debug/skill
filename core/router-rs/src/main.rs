@@ -1,4 +1,8 @@
 use clap::Parser;
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> Result<(), String> {
     let mut args: Vec<std::ffi::OsString> = std::env::args_os().collect();

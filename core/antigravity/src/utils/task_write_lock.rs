@@ -71,7 +71,7 @@ pub(crate) fn acquire_task_ledger_repo_lock(
             )
         })?;
     let mut delay = Duration::from_millis(10);
-    let max_delay = Duration::from_millis(50);
+    let max_delay = Duration::from_millis(200);
     let timeout = Duration::from_secs(30);
     let start = Instant::now();
 

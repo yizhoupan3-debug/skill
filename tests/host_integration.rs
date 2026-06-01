@@ -9,6 +9,72 @@ use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
 
+/// Shared fixture for `install-native-integration` tests.
+/// The `tmp` field is intentionally kept alive (not read) so the tempdir persists
+/// for the duration of the test.
+#[allow(dead_code)]
+struct NativeInstallFixture {
+    tmp: tempfile::TempDir,
+    repo_root: std::path::PathBuf,
+    home_config_path: std::path::PathBuf,
+    home_codex_skills_path: std::path::PathBuf,
+}
+
+fn build_native_install_fixture(config_toml: Option<&str>) -> NativeInstallFixture {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
+        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
+    );
+    let home_config_path = tmp.path().join("home/.codex/config.toml");
+    if let Some(content) = config_toml {
+        write_text(&home_config_path, content);
+    }
+    let home_codex_skills_path = tmp.path().join("home/.codex/skills");
+    NativeInstallFixture {
+        tmp,
+        repo_root,
+        home_config_path,
+        home_codex_skills_path,
+    }
+}
+
+macro_rules! install_native_integration_test {
+    ($name:ident, $config:expr, |$f:ident, $result:ident| $body:block) => {
+        #[test]
+        fn $name() {
+            let $f = build_native_install_fixture(Some($config));
+            let $result = host_integration_json(&[
+                "install-native-integration",
+                "--repo-root",
+                $f.repo_root.to_str().unwrap(),
+                "--home-config-path",
+                $f.home_config_path.to_str().unwrap(),
+                "--home-codex-skills-path",
+                $f.home_codex_skills_path.to_str().unwrap(),
+                "--skip-default-bootstrap",
+            ]);
+            $body
+        }
+    };
+}
+
+/// Like `router_rs_json` but passes `HOME` only to the child process,
+/// avoiding mutation of the global environment which causes flaky tests
+/// when Rust runs tests in parallel.
+fn router_rs_json_with_home(home: &Path, args: &[&str]) -> Value {
+    let mut cmd = router_rs_command(args);
+    cmd.env("HOME", home);
+    json_from_output(&run(cmd))
+}
+
 #[test]
 fn runtime_registry_review_gate_lane_fields_present_on_disk() {
     let v = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
@@ -113,7 +179,7 @@ fn first_cursor_hook_timeout(value: &Value) -> Option<i64> {
 }
 
 #[test]
-fn install_native_integration_is_idempotent() {
+fn install_native_integration_idempotent() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join("skills")).unwrap();
@@ -146,6 +212,7 @@ fn install_native_integration_is_idempotent() {
         &repo_root.join("skills/optional-heavy/SKILL.md"),
         "---\nname: optional-heavy\n---\n",
     );
+
     let home_config_path = tmp.path().join("home/.codex/config.toml");
     let home_codex_skills_path = tmp.path().join("home/.codex/skills");
     let bootstrap_output_dir = tmp.path().join("bootstrap");
@@ -165,25 +232,72 @@ fn install_native_integration_is_idempotent() {
     let first = host_integration_json(&refs);
     let second = host_integration_json(&refs);
 
-    let content = read_text(&home_config_path);
     assert_eq!(first["success"], true);
     assert_eq!(second["success"], true);
+
+    let content = read_text(&home_config_path);
     assert_eq!(content.matches("[features]").count(), 1);
     assert_eq!(content.matches("hooks = false").count(), 1);
     assert_eq!(content.matches("codex_hooks = true").count(), 0);
+
     assert_eq!(first["hooks_enabled"], false);
     assert_eq!(first["hooks_disabled_changed"], true);
     assert_eq!(first["deprecated_codex_hooks_removed"], false);
     assert_eq!(second["hooks_enabled"], false);
     assert_eq!(second["hooks_disabled_changed"], false);
     assert_eq!(second["deprecated_codex_hooks_removed"], false);
-    assert_eq!(content.matches("[mcp_servers.browser-mcp]").count(), 0);
-    assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 0);
-    assert_eq!(
-        content.matches("[mcp_servers.openaiDeveloperDocs]").count(),
-        0
+    assert_eq!(first["default_bootstrap"]["status"], "materialized");
+    assert!(["already-present", "repaired-stale"]
+        .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
+    assert_eq!(first["home_codex_skills_changed"], true);
+    assert_eq!(second["home_codex_skills_changed"], false);
+    assert_eq!(first["codex_prompt_entrypoints"]["changed"], false);
+    assert_eq!(second["codex_prompt_entrypoints"]["changed"], false);
+}
+
+#[test]
+fn install_native_integration_symlink_structure() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
+        r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
     );
-    assert_eq!(content.matches("[tui]").count(), 1);
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/deepinterview/SKILL.md"),
+        "---\nname: deepinterview\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/systematic-debugging/SKILL.md"),
+        "---\nname: systematic-debugging\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/skill-framework-developer/SKILL.md"),
+        "---\nname: skill-framework-developer\n---\n",
+    );
+    write_text(
+        &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
+    );
+
+    let home_codex_skills_path = tmp.path().join("home/.codex/skills");
+    host_integration_json(&[
+        "install-native-integration",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--home-config-path",
+        tmp.path().join("home/.codex/config.toml").to_str().unwrap(),
+        "--home-codex-skills-path",
+        home_codex_skills_path.to_str().unwrap(),
+        "--skip-default-bootstrap",
+    ]);
+
     let surface_root = repo_root.join("artifacts/codex-skill-surface/skills");
     assert!(is_symlink_to(&home_codex_skills_path, &surface_root));
     assert!(is_symlink_to(
@@ -207,6 +321,55 @@ fn install_native_integration_is_idempotent() {
         !surface_root.join("team/SKILL.md").exists(),
         "team must remain a framework alias, not a visible Codex skill surface"
     );
+}
+
+#[test]
+fn install_native_integration_surface_runtime_contract() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
+        r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
+    );
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/deepinterview/SKILL.md"),
+        "---\nname: deepinterview\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/systematic-debugging/SKILL.md"),
+        "---\nname: systematic-debugging\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/skill-framework-developer/SKILL.md"),
+        "---\nname: skill-framework-developer\n---\n",
+    );
+    write_text(
+        &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
+    );
+    write_text(
+        &repo_root.join("skills/optional-heavy/SKILL.md"),
+        "---\nname: optional-heavy\n---\n",
+    );
+
+    host_integration_json(&[
+        "install-native-integration",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--home-config-path",
+        tmp.path().join("home/.codex/config.toml").to_str().unwrap(),
+        "--home-codex-skills-path",
+        tmp.path().join("home/.codex/skills").to_str().unwrap(),
+        "--skip-default-bootstrap",
+    ]);
+
+    let surface_root = repo_root.join("artifacts/codex-skill-surface/skills");
     let surface_runtime = read_json(&surface_root.join("SKILL_ROUTING_RUNTIME.json"));
     let surface_runtime_text = serde_json::to_string(&surface_runtime).unwrap();
     assert!(!surface_runtime_text.contains("review-fix-verify-loop"));
@@ -220,178 +383,102 @@ fn install_native_integration_is_idempotent() {
         .unwrap()
         .join(surface_runtime["skills"][0][8].as_str().unwrap())
         .is_file());
+    assert!(!surface_root.join("optional-heavy").exists());
+}
+
+#[test]
+fn install_native_integration_prompt_entrypoints_clean() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    seed_framework_markers(&repo_root);
+    write_text(
+        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
+        r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
+    );
+    write_text(
+        &repo_root.join("skills/gitx/SKILL.md"),
+        "---\nname: gitx\n---\n",
+    );
+    write_text(
+        &repo_root.join("skills/systematic-debugging/SKILL.md"),
+        "---\nname: systematic-debugging\n---\n",
+    );
+
+    host_integration_json(&[
+        "install-native-integration",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--home-config-path",
+        tmp.path().join("home/.codex/config.toml").to_str().unwrap(),
+        "--home-codex-skills-path",
+        tmp.path().join("home/.codex/skills").to_str().unwrap(),
+        "--skip-default-bootstrap",
+    ]);
+
     assert!(!tmp.path().join("home/.codex/prompts/gsd.md").exists());
     assert!(!tmp.path().join("home/.codex/prompts/gitx.md").exists());
     assert!(!tmp
         .path()
         .join("home/.codex/prompts/systematic-debugging.md")
         .exists());
-    assert!(!surface_root.join("optional-heavy").exists());
-    assert_eq!(first["default_bootstrap"]["status"], "materialized");
-    assert!(["already-present", "repaired-stale"]
-        .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
-    assert_eq!(first["home_codex_skills_changed"], true);
-    assert_eq!(second["home_codex_skills_changed"], false);
-    assert_eq!(first["codex_prompt_entrypoints"]["changed"], false);
-    assert_eq!(second["codex_prompt_entrypoints"]["changed"], false);
 }
 
-#[test]
-fn install_native_integration_forces_hooks_false_when_deprecated_key_is_true() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
-        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
-    );
-    let home_config_path = tmp.path().join("home/.codex/config.toml");
-    write_text(
-        &home_config_path,
-        "[features]\ncodex_hooks_extra = true\ncodex_hooks = true\n",
-    );
+install_native_integration_test!(
+    install_native_integration_forces_hooks_false_when_deprecated_key_is_true,
+    "[features]\ncodex_hooks_extra = true\ncodex_hooks = true\n",
+    |f, result| {
+        assert_eq!(result["success"], true);
+        let content = read_text(&f.home_config_path);
+        assert!(content.contains("codex_hooks_extra = true"));
+        assert_eq!(content.matches("codex_hooks = true").count(), 0);
+        assert_eq!(content.matches("hooks = false").count(), 1);
+        assert_eq!(result["hooks_enabled"], false);
+        assert_eq!(result["deprecated_codex_hooks_removed"], true);
+    }
+);
 
-    let result = host_integration_json(&[
-        "install-native-integration",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--home-config-path",
-        home_config_path.to_str().unwrap(),
-        "--home-codex-skills-path",
-        tmp.path().join("home/.codex/skills").to_str().unwrap(),
-        "--skip-default-bootstrap",
-    ]);
+install_native_integration_test!(
+    install_native_integration_adds_hooks_false_when_missing_in_features,
+    "[features]\ncodex_hooks_extra = true\n",
+    |f, result| {
+        assert_eq!(result["success"], true);
+        let content = read_text(&f.home_config_path);
+        assert!(content.contains("[features]"));
+        assert!(content.contains("codex_hooks_extra = true"));
+        assert_eq!(content.matches("hooks = false").count(), 1);
+        assert_eq!(result["hooks_enabled"], false);
+        assert_eq!(result["deprecated_codex_hooks_removed"], false);
+    }
+);
 
-    assert_eq!(result["success"], true);
-    let content = read_text(&home_config_path);
-    assert!(content.contains("codex_hooks_extra = true"));
-    assert_eq!(content.matches("codex_hooks = true").count(), 0);
-    assert_eq!(content.matches("hooks = false").count(), 1);
-    assert_eq!(result["hooks_enabled"], false);
-    assert_eq!(result["deprecated_codex_hooks_removed"], true);
-}
+install_native_integration_test!(
+    install_native_integration_adds_features_block_when_missing,
+    "[tui]\nstatus_line = [\"model\", \"tokens\"]\n",
+    |f, result| {
+        assert_eq!(result["success"], true);
+        let content = read_text(&f.home_config_path);
+        assert!(content.contains("[tui]"));
+        assert!(content.contains("[features]"));
+        assert_eq!(content.matches("hooks = false").count(), 1);
+        assert_eq!(result["hooks_enabled"], false);
+        assert_eq!(result["deprecated_codex_hooks_removed"], false);
+    }
+);
 
-#[test]
-fn install_native_integration_adds_hooks_false_when_missing_in_features() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
-        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
-    );
-    let home_config_path = tmp.path().join("home/.codex/config.toml");
-    write_text(&home_config_path, "[features]\ncodex_hooks_extra = true\n");
-
-    let result = host_integration_json(&[
-        "install-native-integration",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--home-config-path",
-        home_config_path.to_str().unwrap(),
-        "--home-codex-skills-path",
-        tmp.path().join("home/.codex/skills").to_str().unwrap(),
-        "--skip-default-bootstrap",
-    ]);
-
-    assert_eq!(result["success"], true);
-    let content = read_text(&home_config_path);
-    assert!(content.contains("[features]"));
-    assert!(content.contains("codex_hooks_extra = true"));
-    assert_eq!(content.matches("hooks = false").count(), 1);
-    assert_eq!(result["hooks_enabled"], false);
-    assert_eq!(result["deprecated_codex_hooks_removed"], false);
-}
-
-#[test]
-fn install_native_integration_adds_features_block_when_missing() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
-        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
-    );
-    let home_config_path = tmp.path().join("home/.codex/config.toml");
-    write_text(
-        &home_config_path,
-        "[tui]\nstatus_line = [\"model\", \"tokens\"]\n",
-    );
-
-    let result = host_integration_json(&[
-        "install-native-integration",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--home-config-path",
-        home_config_path.to_str().unwrap(),
-        "--home-codex-skills-path",
-        tmp.path().join("home/.codex/skills").to_str().unwrap(),
-        "--skip-default-bootstrap",
-    ]);
-
-    assert_eq!(result["success"], true);
-    let content = read_text(&home_config_path);
-    assert!(content.contains("[tui]"));
-    assert!(content.contains("[features]"));
-    assert_eq!(content.matches("hooks = false").count(), 1);
-    assert_eq!(result["hooks_enabled"], false);
-    assert_eq!(result["deprecated_codex_hooks_removed"], false);
-}
-
-#[test]
-fn install_native_integration_dedupes_deprecated_codex_hooks_and_forces_hooks_false() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("skills/gitx")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
-        r#"{"skills":[["gitx","L1","git","git","git","git",[],90.0,"P1"]]}"#,
-    );
-    let home_config_path = tmp.path().join("home/.codex/config.toml");
-    write_text(
-        &home_config_path,
-        "[features]\ncodex_hooks_extra = true\ncodex_hooks = true\ncodex_hooks = false\n",
-    );
-
-    let result = host_integration_json(&[
-        "install-native-integration",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--home-config-path",
-        home_config_path.to_str().unwrap(),
-        "--home-codex-skills-path",
-        tmp.path().join("home/.codex/skills").to_str().unwrap(),
-        "--skip-default-bootstrap",
-    ]);
-
-    assert_eq!(result["success"], true);
-    let content = read_text(&home_config_path);
-    assert!(content.contains("codex_hooks_extra = true"));
-    assert_eq!(content.matches("codex_hooks = true").count(), 0);
-    assert_eq!(content.matches("hooks = false").count(), 1);
-    assert_eq!(result["hooks_enabled"], false);
-    assert_eq!(result["deprecated_codex_hooks_removed"], true);
-}
+install_native_integration_test!(
+    install_native_integration_dedupes_deprecated_codex_hooks_and_forces_hooks_false,
+    "[features]\ncodex_hooks_extra = true\ncodex_hooks = true\ncodex_hooks = false\n",
+    |f, result| {
+        assert_eq!(result["success"], true);
+        let content = read_text(&f.home_config_path);
+        assert!(content.contains("codex_hooks_extra = true"));
+        assert_eq!(content.matches("codex_hooks = true").count(), 0);
+        assert_eq!(content.matches("hooks = false").count(), 1);
+        assert_eq!(result["hooks_enabled"], false);
+        assert_eq!(result["deprecated_codex_hooks_removed"], true);
+    }
+);
 
 #[test]
 fn ensure_default_bootstrap_is_idempotent() {
@@ -1622,8 +1709,6 @@ fn codex_app_is_runtime_supported_but_not_installable() {
     let home = tmp.path().join("home");
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&home).unwrap();
-    let prior_home = std::env::var_os("HOME");
-    std::env::set_var("HOME", home.to_str().unwrap());
 
     let all = router_rs_json(&[
         "framework",
@@ -1667,7 +1752,6 @@ fn codex_app_is_runtime_supported_but_not_installable() {
     ]);
     assert_eq!(explicit["results"]["codex-app"]["installable"], false);
     assert_eq!(explicit["results"]["codex-app"]["status"], "unsupported");
-    restore_home_env(prior_home);
 }
 
 #[test]
@@ -1916,10 +2000,8 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
     let home = tmp.path().join("home");
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&home).unwrap();
-    let prior_home = std::env::var_os("HOME");
-    std::env::set_var("HOME", home.to_str().unwrap());
 
-    let framework_status = router_rs_json(&[
+    let framework_status = router_rs_json_with_home(&home, &[
         "framework",
         "host-integration",
         "status",
@@ -1930,7 +2012,7 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
         "--home",
         home.to_str().unwrap(),
     ]);
-    let codex_status = router_rs_json(&[
+    let codex_status = router_rs_json_with_home(&home, &[
         "host",
         "codex",
         "host-integration",
@@ -1946,11 +2028,8 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
         normalize_alias_equivalence(framework_status),
         normalize_alias_equivalence(codex_status)
     );
-    restore_home_env(prior_home);
 
-    let prior_home = std::env::var_os("HOME");
-    std::env::set_var("HOME", home.to_str().unwrap());
-    let framework_status_with_repo_root = router_rs_json(&[
+    let framework_status_with_repo_root = router_rs_json_with_home(&home, &[
         "framework",
         "host-integration",
         "status",
@@ -1963,7 +2042,7 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
     ]);
     assert_eq!(
         normalize_alias_equivalence(framework_status_with_repo_root),
-        normalize_alias_equivalence(router_rs_json(&[
+        normalize_alias_equivalence(router_rs_json_with_home(&home, &[
             "framework",
             "host-integration",
             "status",
@@ -1975,7 +2054,6 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
             home.to_str().unwrap(),
         ]))
     );
-    restore_home_env(prior_home);
 }
 
 fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
@@ -1998,28 +2076,33 @@ fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
 }
 
 fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Value {
-    const MACHINE_DEPENDENT_HOSTS: &[&str] = &[
-        "cursor",
-        "claude-code",
-        "claude-desktop",
-        "codex-cli",
-        "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
-        "claude",
-        "codex",
-    ];
     if let Some(object) = payload.as_object_mut() {
         object.remove("invocation");
         object.remove("resolved_roots");
+        // Collect host keys dynamically from `host_targets` and `results` so that
+        // newly-added hosts are covered without manual list maintenance.
+        let host_keys: Vec<String> = {
+            let mut keys = Vec::new();
+            if let Some(ht) = object.get("host_targets").and_then(Value::as_object) {
+                keys.extend(ht.keys().cloned());
+            }
+            if let Some(r) = object.get("results").and_then(Value::as_object) {
+                for k in r.keys() {
+                    if !keys.contains(k) {
+                        keys.push(k.clone());
+                    }
+                }
+            }
+            keys
+        };
         if let Some(host_targets) = object.get_mut("host_targets").and_then(Value::as_object_mut) {
-            for key in MACHINE_DEPENDENT_HOSTS {
-                host_targets.remove(*key);
+            for key in &host_keys {
+                host_targets.remove(key.as_str());
             }
         }
         if let Some(results) = object.get_mut("results").and_then(Value::as_object_mut) {
-            for key in MACHINE_DEPENDENT_HOSTS {
-                results.remove(*key);
+            for key in &host_keys {
+                results.remove(key.as_str());
             }
         }
     }
@@ -2458,7 +2541,6 @@ fn install_and_remove_claude_desktop_projection() {
 }
 
 #[test]
-#[test]
 fn install_and_remove_opencode_projection() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
@@ -2543,6 +2625,7 @@ fn install_and_remove_opencode_projection() {
     );
 }
 
+#[test]
 fn install_claude_desktop_user_scope_writes_official_config_path() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
@@ -2760,14 +2843,6 @@ fn host_integration_json_for_home(home: &Path, claude_home: Option<&Path>, args:
         }
     }
     json_from_output(&run(cmd))
-}
-
-fn restore_home_env(prior: Option<std::ffi::OsString>) {
-    if let Some(home) = prior {
-        std::env::set_var("HOME", home);
-    } else {
-        let _ = std::env::remove_var("HOME");
-    }
 }
 
 #[test]

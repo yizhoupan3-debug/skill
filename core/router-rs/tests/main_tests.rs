@@ -2703,6 +2703,19 @@ fn routing_eval_report_matches_expected_baseline() {
         .len();
     assert_eq!(report.metrics.case_count, expected_case_count);
     assert_eq!(report.metrics.overtrigger, 0);
+    // Routing regression gate: owner accuracy must be >= 0.95 across all eval cases.
+    let owner_accuracy = if report.metrics.case_count > 0 {
+        report.metrics.owner_correct as f64 / report.metrics.case_count as f64
+    } else {
+        0.0
+    };
+    assert!(
+        owner_accuracy >= 0.95,
+        "Routing regression detected: owner_accuracy {:.4} < 0.95 threshold          ({} correct, {} total).          Fix the failing cases in tests/routing_eval_cases.json before merging.",
+        owner_accuracy,
+        report.metrics.owner_correct,
+        report.metrics.case_count,
+    );
     assert_routing_eval_cases_match("runtime+manifest", |task, session_id, first_turn, host_id| {
         route_task_with_manifest_fallback(
             &records,
@@ -2770,7 +2783,22 @@ fn routing_eval_runtime_fallback_matches_expected_baseline() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
-
+    let cases =
+        load_routing_eval_cases(&routing_eval_case_path()).expect("load routing eval cases");
+    let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
+    // Routing regression gate: owner accuracy must be >= 0.95 for runtime-fallback path.
+    let owner_accuracy = if report.metrics.case_count > 0 {
+        report.metrics.owner_correct as f64 / report.metrics.case_count as f64
+    } else {
+        0.0
+    };
+    assert!(
+        owner_accuracy >= 0.95,
+        "Routing regression (runtime-fallback): owner_accuracy {:.4} < 0.95 threshold          ({} correct, {} total).          Fix the failing cases in tests/routing_eval_cases.json before merging.",
+        owner_accuracy,
+        report.metrics.owner_correct,
+        report.metrics.case_count,
+    );
     assert_routing_eval_cases_match("runtime-fallback", |task, session_id, first_turn, host_id| {
         route_task_with_manifest_fallback(
             &records,

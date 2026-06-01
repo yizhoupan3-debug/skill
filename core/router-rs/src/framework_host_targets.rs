@@ -207,12 +207,13 @@ mod tests {
         let root = repo_root();
         let pairs = host_id_and_skills_install_tool_pairs(&root).expect("pairs");
         assert!(pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "opencode"));
         let reg = load_runtime_registry_json(&root).expect("registry");
         for (host_id, tool) in pairs {
             assert!(
                 matches!(
                     tool.as_str(),
-                    "codex" | "cursor" | "claude" | "claude-desktop" | "antigravity" | "antigravity-cli"
+                    "codex" | "cursor" | "claude" | "claude-desktop" | "opencode" | "antigravity" | "antigravity-cli"
                 ),
                 "unexpected mapping {host_id} -> {tool}"
             );
@@ -232,6 +233,7 @@ mod tests {
         assert!(pairs.iter().any(|(host_id, _)| host_id == "cursor"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "claude-code"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "opencode"));
     }
 
     #[test]

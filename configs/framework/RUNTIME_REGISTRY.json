@@ -15,7 +15,8 @@
       "claude-desktop",
       "antigravity-cli",
       "antigravity-app",
-      "antigravity"
+      "antigravity",
+      "opencode"
     ],
     "shared_system_source": "skills",
     "metadata": {
@@ -91,6 +92,13 @@
           "AGENTS_ANTIGRAVITY.md",
           ".gemini/antigravity/rules/framework.md"
         ]
+      },
+      "opencode": {
+        "install_tool": "opencode",
+        "projection_status": "implemented",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": ".opencode/opencode.json"
       }
     }
   },

@@ -22,542 +22,116 @@ struct NlSignalEntry {
     eval: NlSignalEvalFn,
 }
 
-fn nl_sig_has_beamer_slide_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_beamer_slide_context(query_text, query_token_list)
+// ---------------------------------------------------------------------------
+// Macro-driven signal adapter generation.
+//
+// Four adapter patterns cover all underlying signal signatures:
+//   qt_ql     – fn(query_text, query_token_list)          (most has_* signals)
+//   qt        – fn(query_text)                            (is_meta_routing_task)
+//   slug      – fn(&str) via record.slug                  (paper_skill_requires_context)
+//   rec_qt_ql – fn(record, query_text, query_token_list)  (should_defer/…/suppress)
+// ---------------------------------------------------------------------------
+macro_rules! nl_signals {
+    // --- internal adapter rules (one per signature family) ---
+
+    (@adapter qt_ql: $wrapper:ident, $inner:ident) => {
+        fn $wrapper(
+            _record: &SkillRecord,
+            query_text: &str,
+            query_token_list: &[String],
+            _query_tokens: &HashSet<String>,
+        ) -> bool {
+            $inner(query_text, query_token_list)
+        }
+    };
+    (@adapter qt: $wrapper:ident, $inner:ident) => {
+        fn $wrapper(
+            _record: &SkillRecord,
+            query_text: &str,
+            _query_token_list: &[String],
+            _query_tokens: &HashSet<String>,
+        ) -> bool {
+            $inner(query_text)
+        }
+    };
+    (@adapter slug: $wrapper:ident, $inner:ident) => {
+        fn $wrapper(
+            record: &SkillRecord,
+            _query_text: &str,
+            _query_token_list: &[String],
+            _query_tokens: &HashSet<String>,
+        ) -> bool {
+            $inner(&record.slug)
+        }
+    };
+    (@adapter rec_qt_ql: $wrapper:ident, $inner:ident) => {
+        fn $wrapper(
+            record: &SkillRecord,
+            query_text: &str,
+            query_token_list: &[String],
+            _query_tokens: &HashSet<String>,
+        ) -> bool {
+            $inner(record, query_text, query_token_list)
+        }
+    };
+
+    // --- main entry: generate adapters + sorted registry ---
+
+    ( $( $name:expr => $kind:ident : $wrapper:ident => $inner:ident ),+ $(,)? ) => {
+        $(
+            nl_signals!(@adapter $kind: $wrapper, $inner);
+        )+
+
+        /// Sorted `when.signal` registry: single source for allowlist + evaluation.
+        const NL_SIGNAL_REGISTRY: &[NlSignalEntry] = &[
+            $( NlSignalEntry { name: $name, eval: $wrapper }, )+
+        ];
+    };
 }
 
-fn nl_sig_has_bounded_subagent_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_bounded_subagent_context(query_text, query_token_list)
+nl_signals! {
+    "has_beamer_slide_context"                     => qt_ql: nl_sig_has_beamer_slide_context                     => has_beamer_slide_context,
+    "has_bounded_subagent_context"                 => qt_ql: nl_sig_has_bounded_subagent_context                 => has_bounded_subagent_context,
+    "has_ci_failure_context"                       => qt_ql: nl_sig_has_ci_failure_context                       => has_ci_failure_context,
+    "has_copywriting_context"                      => qt_ql: nl_sig_has_copywriting_context                      => has_copywriting_context,
+    "has_design_contract_context"                  => qt_ql: nl_sig_has_design_contract_context                  => has_design_contract_context,
+    "has_design_contract_negation_context"         => qt_ql: nl_sig_has_design_contract_negation_context         => has_design_contract_negation_context,
+    "has_design_output_audit_context"              => qt_ql: nl_sig_has_design_output_audit_context              => has_design_output_audit_context,
+    "has_design_reference_context"                 => qt_ql: nl_sig_has_design_reference_context                 => has_design_reference_context,
+    "has_design_workflow_protocol_context"         => qt_ql: nl_sig_has_design_workflow_protocol_context         => has_design_workflow_protocol_context,
+    "has_diagramming_context"                      => qt_ql: nl_sig_has_diagramming_context                      => has_diagramming_context,
+    "has_github_pr_context"                        => qt_ql: nl_sig_has_github_pr_context                        => has_github_pr_context,
+    "has_math_review_context"                      => qt_ql: nl_sig_has_math_review_context                      => has_math_review_context,
+    "has_paper_context"                            => qt_ql: nl_sig_has_paper_context                            => has_paper_context,
+    "has_paper_direct_revision_context"            => qt_ql: nl_sig_has_paper_direct_revision_context            => has_paper_direct_revision_context,
+    "has_paper_figure_layout_review_context"       => qt_ql: nl_sig_has_paper_figure_layout_review_context       => has_paper_figure_layout_review_context,
+    "has_paper_logic_evidence_review_context"      => qt_ql: nl_sig_has_paper_logic_evidence_review_context      => has_paper_logic_evidence_review_context,
+    "has_paper_prose_edit_context"                 => qt_ql: nl_sig_has_paper_prose_edit_context                 => has_paper_prose_edit_context,
+    "has_paper_prose_negation_context"             => qt_ql: nl_sig_has_paper_prose_negation_context             => has_paper_prose_negation_context,
+    "has_paper_ref_first_workflow_context"         => qt_ql: nl_sig_has_paper_ref_first_workflow_context         => has_paper_ref_first_workflow_context,
+    "has_paper_review_judgment_context"            => qt_ql: nl_sig_has_paper_review_judgment_context            => has_paper_review_judgment_context,
+    "has_paper_workbench_frontdoor_context"        => qt_ql: nl_sig_has_paper_workbench_frontdoor_context        => has_paper_workbench_frontdoor_context,
+    "has_paper_writing_context"                    => qt_ql: nl_sig_has_paper_writing_context                    => has_paper_writing_context,
+    "has_parallel_execution_context"               => qt_ql: nl_sig_has_parallel_execution_context               => has_parallel_execution_context,
+    "has_pr_triage_summary_context"                => qt_ql: nl_sig_has_pr_triage_summary_context                => has_pr_triage_summary_context,
+    "has_prose_naturalization_context"             => qt_ql: nl_sig_has_prose_naturalization_context             => has_prose_naturalization_context,
+    "has_rendered_visual_evidence_context"         => qt_ql: nl_sig_has_rendered_visual_evidence_context         => has_rendered_visual_evidence_context,
+    "has_runtime_lightweighting_context"           => qt_ql: nl_sig_has_runtime_lightweighting_context           => has_runtime_lightweighting_context,
+    "has_scientific_figure_plotting_context"       => qt_ql: nl_sig_has_scientific_figure_plotting_context       => has_scientific_figure_plotting_context,
+    "has_sentry_context"                           => qt_ql: nl_sig_has_sentry_context                           => has_sentry_context,
+    "has_skill_creator_context"                    => qt_ql: nl_sig_has_skill_creator_context                    => has_skill_creator_context,
+    "has_skill_framework_maintenance_context"      => qt_ql: nl_sig_has_skill_framework_maintenance_context      => has_skill_framework_maintenance_context,
+    "has_skill_installer_context"                  => qt_ql: nl_sig_has_skill_installer_context                  => has_skill_installer_context,
+    "has_source_slide_format_context"              => qt_ql: nl_sig_has_source_slide_format_context              => has_source_slide_format_context,
+    "has_systematic_debug_context"                 => qt_ql: nl_sig_has_systematic_debug_context                 => has_systematic_debug_context,
+    "has_team_orchestration_context"               => qt_ql: nl_sig_has_team_orchestration_context               => has_team_orchestration_context,
+    "is_meta_routing_task"                         => qt:    nl_sig_is_meta_routing_task                         => is_meta_routing_task,
+    "paper_skill_requires_context"                 => slug:  nl_sig_paper_skill_requires_context                 => paper_skill_requires_context,
+    "should_defer_to_artifact_gate"                => rec_qt_ql: nl_sig_should_defer_to_artifact_gate            => should_defer_to_artifact_gate,
+    "should_prefer_design_contract_over_artifact"  => rec_qt_ql: nl_sig_should_prefer_design_contract_over_artifact => should_prefer_design_contract_over_artifact,
+    "should_route_to_gh_fix_ci"                    => qt_ql: nl_sig_should_route_to_gh_fix_ci                    => should_route_to_gh_fix_ci,
+    "should_suppress_non_target_artifact_gate"     => rec_qt_ql: nl_sig_should_suppress_non_target_artifact_gate => should_suppress_non_target_artifact_gate,
 }
-
-fn nl_sig_has_ci_failure_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_ci_failure_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_copywriting_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_copywriting_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_design_contract_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_design_contract_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_design_contract_negation_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_design_contract_negation_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_design_output_audit_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_design_output_audit_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_design_reference_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_design_reference_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_design_workflow_protocol_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_design_workflow_protocol_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_diagramming_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_diagramming_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_github_pr_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_github_pr_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_math_review_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_math_review_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_direct_revision_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_direct_revision_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_figure_layout_review_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_figure_layout_review_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_logic_evidence_review_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_logic_evidence_review_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_ref_first_workflow_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_ref_first_workflow_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_review_judgment_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_review_judgment_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_workbench_frontdoor_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_workbench_frontdoor_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_writing_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_writing_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_prose_edit_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_prose_edit_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_paper_prose_negation_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_paper_prose_negation_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_parallel_execution_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_parallel_execution_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_pr_triage_summary_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_pr_triage_summary_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_prose_naturalization_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_prose_naturalization_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_rendered_visual_evidence_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_rendered_visual_evidence_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_runtime_lightweighting_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_runtime_lightweighting_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_scientific_figure_plotting_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_scientific_figure_plotting_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_sentry_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_sentry_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_skill_creator_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_skill_creator_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_skill_framework_maintenance_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_skill_framework_maintenance_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_skill_installer_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_skill_installer_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_source_slide_format_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_source_slide_format_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_systematic_debug_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_systematic_debug_context(query_text, query_token_list)
-}
-
-fn nl_sig_has_team_orchestration_context(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    has_team_orchestration_context(query_text, query_token_list)
-}
-
-fn nl_sig_is_meta_routing_task(
-    _record: &SkillRecord,
-    query_text: &str,
-    _query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    is_meta_routing_task(query_text)
-}
-
-fn nl_sig_paper_skill_requires_context(
-    record: &SkillRecord,
-    _query_text: &str,
-    _query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    paper_skill_requires_context(&record.slug)
-}
-
-fn nl_sig_should_defer_to_artifact_gate(
-    record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    should_defer_to_artifact_gate(record, query_text, query_token_list)
-}
-
-fn nl_sig_should_prefer_design_contract_over_artifact(
-    record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    should_prefer_design_contract_over_artifact(record, query_text, query_token_list)
-}
-
-fn nl_sig_should_route_to_gh_fix_ci(
-    _record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    should_route_to_gh_fix_ci(query_text, query_token_list)
-}
-
-fn nl_sig_should_suppress_non_target_artifact_gate(
-    record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-    _query_tokens: &HashSet<String>,
-) -> bool {
-    should_suppress_non_target_artifact_gate(record, query_text, query_token_list)
-}
-
-/// Sorted `when.signal` registry: single source for allowlist + evaluation.
-const NL_SIGNAL_REGISTRY: &[NlSignalEntry] = &[
-    NlSignalEntry {
-        name: "has_beamer_slide_context",
-        eval: nl_sig_has_beamer_slide_context,
-    },
-    NlSignalEntry {
-        name: "has_bounded_subagent_context",
-        eval: nl_sig_has_bounded_subagent_context,
-    },
-    NlSignalEntry {
-        name: "has_ci_failure_context",
-        eval: nl_sig_has_ci_failure_context,
-    },
-    NlSignalEntry {
-        name: "has_copywriting_context",
-        eval: nl_sig_has_copywriting_context,
-    },
-    NlSignalEntry {
-        name: "has_design_contract_context",
-        eval: nl_sig_has_design_contract_context,
-    },
-    NlSignalEntry {
-        name: "has_design_contract_negation_context",
-        eval: nl_sig_has_design_contract_negation_context,
-    },
-    NlSignalEntry {
-        name: "has_design_output_audit_context",
-        eval: nl_sig_has_design_output_audit_context,
-    },
-    NlSignalEntry {
-        name: "has_design_reference_context",
-        eval: nl_sig_has_design_reference_context,
-    },
-    NlSignalEntry {
-        name: "has_design_workflow_protocol_context",
-        eval: nl_sig_has_design_workflow_protocol_context,
-    },
-    NlSignalEntry {
-        name: "has_diagramming_context",
-        eval: nl_sig_has_diagramming_context,
-    },
-    NlSignalEntry {
-        name: "has_github_pr_context",
-        eval: nl_sig_has_github_pr_context,
-    },
-    NlSignalEntry {
-        name: "has_math_review_context",
-        eval: nl_sig_has_math_review_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_context",
-        eval: nl_sig_has_paper_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_direct_revision_context",
-        eval: nl_sig_has_paper_direct_revision_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_figure_layout_review_context",
-        eval: nl_sig_has_paper_figure_layout_review_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_logic_evidence_review_context",
-        eval: nl_sig_has_paper_logic_evidence_review_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_prose_edit_context",
-        eval: nl_sig_has_paper_prose_edit_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_prose_negation_context",
-        eval: nl_sig_has_paper_prose_negation_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_ref_first_workflow_context",
-        eval: nl_sig_has_paper_ref_first_workflow_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_review_judgment_context",
-        eval: nl_sig_has_paper_review_judgment_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_workbench_frontdoor_context",
-        eval: nl_sig_has_paper_workbench_frontdoor_context,
-    },
-    NlSignalEntry {
-        name: "has_paper_writing_context",
-        eval: nl_sig_has_paper_writing_context,
-    },
-    NlSignalEntry {
-        name: "has_parallel_execution_context",
-        eval: nl_sig_has_parallel_execution_context,
-    },
-    NlSignalEntry {
-        name: "has_pr_triage_summary_context",
-        eval: nl_sig_has_pr_triage_summary_context,
-    },
-    NlSignalEntry {
-        name: "has_prose_naturalization_context",
-        eval: nl_sig_has_prose_naturalization_context,
-    },
-    NlSignalEntry {
-        name: "has_rendered_visual_evidence_context",
-        eval: nl_sig_has_rendered_visual_evidence_context,
-    },
-    NlSignalEntry {
-        name: "has_runtime_lightweighting_context",
-        eval: nl_sig_has_runtime_lightweighting_context,
-    },
-    NlSignalEntry {
-        name: "has_scientific_figure_plotting_context",
-        eval: nl_sig_has_scientific_figure_plotting_context,
-    },
-    NlSignalEntry {
-        name: "has_sentry_context",
-        eval: nl_sig_has_sentry_context,
-    },
-    NlSignalEntry {
-        name: "has_skill_creator_context",
-        eval: nl_sig_has_skill_creator_context,
-    },
-    NlSignalEntry {
-        name: "has_skill_framework_maintenance_context",
-        eval: nl_sig_has_skill_framework_maintenance_context,
-    },
-    NlSignalEntry {
-        name: "has_skill_installer_context",
-        eval: nl_sig_has_skill_installer_context,
-    },
-    NlSignalEntry {
-        name: "has_source_slide_format_context",
-        eval: nl_sig_has_source_slide_format_context,
-    },
-    NlSignalEntry {
-        name: "has_systematic_debug_context",
-        eval: nl_sig_has_systematic_debug_context,
-    },
-    NlSignalEntry {
-        name: "has_team_orchestration_context",
-        eval: nl_sig_has_team_orchestration_context,
-    },
-    NlSignalEntry {
-        name: "is_meta_routing_task",
-        eval: nl_sig_is_meta_routing_task,
-    },
-    NlSignalEntry {
-        name: "paper_skill_requires_context",
-        eval: nl_sig_paper_skill_requires_context,
-    },
-    NlSignalEntry {
-        name: "should_defer_to_artifact_gate",
-        eval: nl_sig_should_defer_to_artifact_gate,
-    },
-    NlSignalEntry {
-        name: "should_prefer_design_contract_over_artifact",
-        eval: nl_sig_should_prefer_design_contract_over_artifact,
-    },
-    NlSignalEntry {
-        name: "should_route_to_gh_fix_ci",
-        eval: nl_sig_should_route_to_gh_fix_ci,
-    },
-    NlSignalEntry {
-        name: "should_suppress_non_target_artifact_gate",
-        eval: nl_sig_should_suppress_non_target_artifact_gate,
-    },
-];
 
 /// Sorted JSON array of every `NL_SIGNAL_REGISTRY[].name` for policy tests / CI (`router-rs framework nl-route-signal-registry-contract`).
 pub(crate) fn nl_route_signal_registry_names_json() -> String {
