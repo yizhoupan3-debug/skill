@@ -352,7 +352,8 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
             "claude-desktop",
             "antigravity-cli",
             "antigravity-app",
-            "antigravity"
+            "antigravity",
+            "opencode"
         ])
     );
     assert_eq!(
@@ -1041,6 +1042,7 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
             "antigravity-cli".to_string(),
             "antigravity-app".to_string(),
             "antigravity".to_string(),
+            "opencode".to_string(),
         ],
         &supported,
     )
@@ -2951,8 +2953,54 @@ fn eval_route_cli_reports_metrics() {
         response["total_cases"].as_u64().expect("total_cases") as usize,
         expected_total
     );
-    assert!(response["route_accuracy"].as_f64().unwrap() > 0.0);
+    // Routing regression gate: route_accuracy must be >= 0.95 across all eval cases.
+    let route_accuracy = response["route_accuracy"]
+        .as_f64()
+        .expect("route_accuracy field");
+    assert!(
+        route_accuracy >= 0.95,
+        "Routing regression detected: route_accuracy {:.4} < 0.95 threshold \
+         ({} passed, {} failed out of {} total). \
+         Fix the failing cases in tests/routing_eval_cases.json before merging.",
+        route_accuracy,
+        response["passed"].as_u64().unwrap_or(0),
+        response["failed"].as_u64().unwrap_or(0),
+        expected_total,
+    );
     assert!(response["passed"].as_u64().unwrap() > 0);
+    // overtrigger must be zero (false positives are worse than false negatives)
+    let wrong_owner_rate = response["wrong_owner_rate"]
+        .as_f64()
+        .unwrap_or(0.0);
+    assert!(
+        wrong_owner_rate < 0.05,
+        "Wrong-owner rate {:.4} exceeds 5% tolerance (threshold 0.05).",
+        wrong_owner_rate,
+    );
+    // Per-case owner_correct: every eval case with expected_owner must route
+    // to the expected skill. This catches manifest-only slugs that were
+    // previously missing from the runtime index.
+    let failures = response["failures"]
+        .as_array()
+        .expect("failures array");
+    let owner_failures: Vec<&serde_json::Value> = failures
+        .iter()
+        .filter(|f| f["field"].as_str() == Some("selected_skill"))
+        .collect();
+    assert!(
+        owner_failures.is_empty(),
+        "Per-case owner mismatch detected ({} case(s)): {}",
+        owner_failures.len(),
+        owner_failures
+            .iter()
+            .map(|f| format!(
+                "\n  case={}: expected={} got={}",
+                f["case_id"].as_str().unwrap_or("?"),
+                f["expected"].as_str().unwrap_or("?"),
+                f["got"].as_str().unwrap_or("?"),
+            ))
+            .collect::<String>(),
+    );
 }
 
 #[test]
@@ -3056,6 +3104,7 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
         "skill_contract_quality",
         "subagent_lane_integrity",
         "review_gate_integrity",
+        "contract_integrity",
     ] {
         assert!(tracks.contains(expected), "missing track {expected}");
     }

@@ -15,8 +15,8 @@
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 30,
-    "hot_skill_count": 30,
+    "full_skill_count": 44,
+    "hot_skill_count": 44,
     "manifest_skill_count": 56,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
@@ -51,7 +51,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -84,7 +85,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -112,7 +114,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -141,7 +144,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -200,7 +204,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -231,7 +236,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -259,7 +265,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -291,7 +298,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -321,7 +329,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -355,7 +364,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -394,7 +404,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -428,7 +439,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -457,7 +469,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -490,7 +503,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -529,7 +543,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -579,7 +594,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -618,7 +634,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -655,7 +672,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -692,7 +710,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -725,7 +744,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -758,7 +778,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -796,7 +817,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill"
     ],
@@ -820,7 +842,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command"
     ],
@@ -845,7 +868,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command"
     ],
@@ -869,7 +893,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command"
     ],
@@ -894,7 +919,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command"
     ],
@@ -919,7 +945,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command"
     ],
@@ -944,7 +971,8 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command"
     ],
@@ -969,9 +997,490 @@
         "claude-desktop",
         "codex-app",
         "codex-cli",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command"
+    ],
+    [
+      "paper-reviewer",
+      "L2",
+      "owner",
+      "none",
+      "n/a",
+      "Specialist review lane behind $paper-workbench. Use when the user clearly wants review-only judgment, or explicitly asks for one review dimension such as claim, novelty, evidence, math, references, figures, tables, language, or layout.",
+      [
+        "$paper-reviewer",
+        "paper-reviewer",
+        "paper review",
+        "paper reviewer",
+        "审稿",
+        "审一下论文",
+        "审一下 paper",
+        "严审",
+        "整篇严审",
+        "能不能投",
+        "投稿前把关",
+        "外部调研严审",
+        "查文献后审",
+        "外研必填检索轨迹",
+        "closest-work 偷袭预演",
+        "contradiction sweep paper",
+        "投稿前 review",
+        "顶刊审稿标准",
+        "顶会审稿标准",
+        "顶刊顶会 review"
+      ],
+      "P2",
+      "skills/paper-reviewer/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor",
+        "opencode"
+      ],
+      "skill"
+    ],
+    [
+      "python-env-management",
+      "L4",
+      "owner",
+      "none",
+      "n/a",
+      "macOS Python governance with uv-only (Rust) packaging: PATH single-track, per-project uv.lock, pip ban, migration runbook.",
+      [
+        "python 环境管理",
+        "python 版本混乱",
+        "不用 pip",
+        "uv 包管理",
+        "uv.lock",
+        ".python-version",
+        "全局 python 包",
+        "python PATH",
+        "pip 禁用",
+        "python 长期治理",
+        "macos python setup",
+        "astral uv"
+      ],
+      "P2",
+      "skills/python-env-management/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor",
+        "opencode"
+      ],
+      "skill"
+    ],
+    [
+      "diagramming",
+      "L3",
+      "owner",
+      "none",
+      "n/a",
+      "Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams. Use when the user asks",
+      [
+        "Mermaid or Graphviz/DOT",
+        "readable markdown-ready text diagrams",
+        "flowchart",
+        "流程图",
+        "research diagram",
+        "研究流程图",
+        "technical roadmap",
+        "技术路线图",
+        "方法图",
+        "实验流程",
+        "pipeline 图",
+        "sequence diagram",
+        "时序图",
+        "erd"
+      ],
+      "P2",
+      "skills/.archive-cold/diagramming/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "hatch-pet",
+      "L3",
+      "owner",
+      "none",
+      "n/a",
+      "Create, repair, validate, preview, and package animated pet spritesheets from character art, screenshots, generated images, or visual references. Use when a user wants to hatch a custom pet.",
+      [
+        "hatch-pet",
+        "hatch pet",
+        "hatch a Codex pet",
+        "Codex pet",
+        "custom animated pet",
+        "custom pet",
+        "pet spritesheet",
+        "pet atlas",
+        "spritesheet.webp",
+        "pet.json",
+        "8x9 atlas",
+        "animated pet",
+        "电子宠物",
+        "自定义宠物",
+        "生成宠物",
+        "宠物 spritesheet"
+      ],
+      "P1",
+      "skills/.archive-cold/hatch-pet/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "image-generated",
+      "L1",
+      "owner",
+      "none",
+      "n/a",
+      "Generate or edit raster images through official OpenAI API using the bundled Rust CLI.",
+      [
+        "生成图片",
+        "生图",
+        "编辑图片",
+        "画一张图",
+        "做封面图",
+        "image generation",
+        "generate image",
+        "OpenAI",
+        "DALL-E",
+        "image-generated"
+      ],
+      "P2",
+      "skills/.archive-cold/image-generated/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "jupyter-notebook",
+      "L3",
+      "owner",
+      "none",
+      "n/a",
+      "Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for experiments, exploratory analysis, demos, and tutorials with clean cell structure, reproducibility, and reusable templates. U",
+      [
+        "Jupyter notebook",
+        "ipynb",
+        "实验 notebook",
+        "分析 notebook",
+        "tutorial notebook",
+        "a notebook instead of a script",
+        "jupyter",
+        "notebook",
+        "experiment"
+      ],
+      "P2",
+      "skills/.archive-cold/jupyter-notebook/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "latex-compile-acceleration",
+      "L4",
+      "owner",
+      "none",
+      "n/a",
+      "Speed up LaTeX compile and preview workflows",
+      [
+        "LaTeX 编译太慢",
+        "watch 太慢",
+        "preview loop",
+        "编译稳定性",
+        "CI 缓存优化",
+        "latexmk",
+        "Tectonic",
+        "TeXpresso",
+        "TikZ externalization",
+        "PGFPlots externalization",
+        "\\includeonly",
+        "subfiles",
+        "standalone",
+        "mylatexformat",
+        "preamble 预编译",
+        ".latexmkrc"
+      ],
+      "P1",
+      "skills/.archive-cold/latex-compile-acceleration/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "mac-memory-management",
+      "L4",
+      "owner",
+      "none",
+      "n/a",
+      "Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stability.",
+      [
+        "apple silicon mps",
+        "torch.mps",
+        "unified memory pressure",
+        "mac ml oom",
+        "macos swap pressure",
+        "mps oom",
+        "mps throughput",
+        "mac dataloader memory",
+        "apple silicon training memory",
+        "Apple Silicon 内存压力",
+        "MPS 爆内存",
+        "Mac 训练吞吐优化"
+      ],
+      "P2",
+      "skills/.archive-cold/mac-memory-management/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "paper-reviser",
+      "L2",
+      "owner",
+      "none",
+      "n/a",
+      "Specialist revision lane behind `$paper-workbench`. Use when the route is already clearly \"change the paper now\" based on reviewer comments, known findings, or a fixed decision to narrow scope. This s",
+      [
+        "$paper-reviser",
+        "paper-reviser",
+        "只进改稿 lane",
+        "按现有 findings 直接改稿",
+        "直接改稿不要先审",
+        "缩口径",
+        "按这个维度改",
+        "只改摘要",
+        "只改图表维度",
+        "写 rebuttal",
+        "顶刊标准改稿",
+        "顶会标准改稿",
+        "顶刊顶会改稿",
+        "top-tier revision",
+        "revise for top conference",
+        "revise for top journal"
+      ],
+      "P2",
+      "skills/.archive-cold/paper-reviser/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "ppt-beamer",
+      "L4",
+      "owner",
+      "none",
+      "n/a",
+      "Create, revise, and compile presentation decks with LaTeX Beamer when you want editable `.tex` plus PDF instead of HTML or `.pptx`. Use when the user asks for Beamer slides, LaTeX 幻灯片, 学术 PPT, or need",
+      [
+        "Beamer slides",
+        "LaTeX 幻灯片",
+        "学术 PPT",
+        "theme 调整",
+        "Beamer 编译",
+        "papers into slides",
+        "adjust themes",
+        "fix Beamer compile",
+        "layout issues",
+        "build a repeatable citation-aware slide workflow"
+      ],
+      "P2",
+      "skills/.archive-cold/ppt-beamer/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "skill-creator",
+      "L0",
+      "owner",
+      "none",
+      "preferred",
+      "Design or revise one cross-host skill package under skills/",
+      [
+        "codex skill",
+        "create skill",
+        "frontmatter cleanup",
+        "skill authoring",
+        "skill debugging",
+        "skill package",
+        "trigger wording",
+        "update skill"
+      ],
+      "P1",
+      "skills/.system/skill-creator/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "skill-installer",
+      "L0",
+      "owner",
+      "none",
+      "preferred",
+      "Install curated or remote Codex skills",
+      [
+        "install skill",
+        "list skills",
+        "curated skills",
+        "github skill"
+      ],
+      "P1",
+      "skills/.system/skill-installer/SKILL.md",
+      [
+        "codex-app",
+        "codex-cli"
+      ],
+      "skill"
+    ],
+    [
+      "source-slide-formats",
+      "L4",
+      "owner",
+      "none",
+      "n/a",
+      "Build presentation sources in Markdown, Slidev, Marp, or HTML/CSS and export them to deck artifacts. Use after the `$slides` gate when the user explicitly wants source-authored slides, browser/PDF exp",
+      [
+        "source slide formats",
+        "Markdown slides",
+        "Slidev",
+        "Marp",
+        "HTML slides",
+        "browser-matched PDF",
+        "presentation.html",
+        "source-first slides",
+        "用 Markdown 做 slides",
+        "根据大纲做 HTML slides"
+      ],
+      "P2",
+      "skills/.archive-cold/source-slide-formats/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
+    ],
+    [
+      "systematic-debugging",
+      "L0",
+      "gate",
+      "evidence",
+      "n/a",
+      "Investigate unknown failures before fixing",
+      [
+        "systematic-debugging",
+        "root-cause analysis",
+        "flake isolation",
+        "incident triage",
+        "diagnostic playbook"
+      ],
+      "P1",
+      "skills/.archive-cold/systematic-debugging/SKILL.md",
+      [
+        "antigravity",
+        "antigravity-app",
+        "antigravity-cli",
+        "claude-code",
+        "claude-desktop",
+        "codex-app",
+        "codex-cli",
+        "cursor"
+      ],
+      "skill"
     ]
   ],
   "version": 3

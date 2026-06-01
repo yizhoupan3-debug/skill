@@ -125,6 +125,12 @@ pub(crate) fn score_route_candidate<'a>(
     {
         score += 100.0;
         reasons.push(format!("Exact skill name matched: {}.", record.slug));
+   
+        for slug_tok in tokenize_route_text(&record.slug_lower) {
+            if query_tokens.contains(slug_tok.as_str()) {
+                matched_query_tokens.insert(slug_tok.as_str());
+            }
+        }
     }
 
     let matched_gates = record
