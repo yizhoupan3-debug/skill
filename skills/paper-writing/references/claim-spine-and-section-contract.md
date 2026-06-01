@@ -1,6 +1,6 @@
 # Claim spine & section contract（叙事骨架与章节契约）
 
-用于 **`$paper-writing`** / **`$paper-reviser`** / **`$paper-workbench`** 改稿前对齐：**主张一张卡** + **各主章节读者任务**，避免「段落顺了但贡献线断了」或静默抬口径。
+用于 **`$paper-writing`** / **`$paper-workbench`** 改稿前对齐：**主张一张卡** + **各主章节读者任务**，避免「段落顺了但贡献线断了」或静默抬口径。
 
 ## Claim card（改前 Step 0，一轮一张）
 

@@ -47,7 +47,7 @@ router_rs_cmd() {
   if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
     candidates+=("${CARGO_TARGET_DIR}/release/router-rs")
   fi
-  candidates+=("/tmp/skill-cargo-target/release/router-rs")
+  candidates+=("/tmp/skill-${UID:-0}-cargo-target/release/router-rs")
   local c
   for c in "${candidates[@]}"; do
     if [[ -x "$c" ]]; then

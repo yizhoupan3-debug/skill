@@ -21,7 +21,11 @@ trigger_hints:
   - frontmatter cleanup
   - skill debugging
 metadata:
+  version: "1.0.0"
+  platforms: [codex]
   short-description: Create or update a skill
+risk: low
+source: project
 ---
 
 # Skill Creator

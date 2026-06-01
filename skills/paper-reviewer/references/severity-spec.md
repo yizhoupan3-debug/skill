@@ -1,6 +1,6 @@
 # Paper Skill Severity Spec (Shared)
 
-Paper review and revision modes (`paper-reviewer`, `paper-reviser`, logic mode,
+Paper review and revision modes (`paper-reviewer`, inline revision, logic mode,
 notation sweep) use this severity system.
 
 ## Severity Levels
@@ -31,7 +31,7 @@ notation sweep) use this severity system.
 - `paper-reviewer` discovers and classifies issues using this scheme
 - `paper-reviewer` logic mode uses this scheme for logic audit findings
 - `paper-reviewer` notation sweep uses this scheme for notation issues
-- `paper-reviser` receives issues tagged with this scheme and fixes by priority order
+- `paper-workbench` inline revision receives issues tagged with this scheme and fixes by priority order
 - `paper-writing` output uses severity when multiple text issues are found
 
 ## Mapping to Common Alternative Schemes

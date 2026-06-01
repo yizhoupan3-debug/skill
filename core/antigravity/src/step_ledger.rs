@@ -266,21 +266,213 @@ fn step_ledger_contains_idempotency_key(
         if trimmed.is_empty() {
             continue;
         }
-        if serde_json::from_str::<Value>(trimmed)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("idempotency_key")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })
-            .as_deref()
-            == Some(idempotency_key)
-        {
+        if scan_jsonl_for_idempotency_key(trimmed, idempotency_key) {
             return Ok(true);
         }
     }
     Ok(false)
+}
+
+/// Lightweight JSON scanner that checks whether a JSONL line contains an
+/// `"idempotency_key"` field whose string value equals `target`. This avoids
+/// deserializing the full line into `serde_json::Value`, eliminating the
+/// intermediate heap allocations that `Value` (as a general DOM) produces.
+fn scan_jsonl_for_idempotency_key(line: &str, target: &str) -> bool {
+    let mut chars = line.chars().peekable();
+    if chars.next() != Some('{') {
+        return false;
+    }
+    let mut depth: u32 = 0;
+
+    loop {
+        // Phase 1: skip to the next quoted key or structural delimiter
+        let c = loop {
+            match chars.next() {
+                Some(ch) if ch.is_ascii_whitespace() || ch == ',' || ch == ':' => continue,
+                Some(ch) => break ch,
+                None => return false,
+            }
+        };
+        match c {
+            '}' if depth == 0 => return false,
+            '}' | ']' => {
+                depth = depth.saturating_sub(1);
+                continue;
+            }
+            '{' | '[' => {
+                depth += 1;
+                continue;
+            }
+            '"' => {}
+            _ => return false,
+        }
+
+        // Phase 2: read key string
+        let mut key = String::new();
+        loop {
+            match chars.next() {
+                None => return false,
+                Some('"') => break,
+                Some('\\') => {
+                    key.push('\\');
+                    if let Some(esc) = chars.next() {
+                        key.push(esc);
+                    }
+                }
+                Some(ch) => key.push(ch),
+            }
+        }
+
+        // Phase 3: skip colon + whitespace to reach the value
+        loop {
+            match chars.peek() {
+                Some(ch) if ch.is_ascii_whitespace() || *ch == ':' => {
+                    chars.next();
+                }
+                _ => break,
+            }
+        }
+
+        // Phase 4: handle value
+        if key == "idempotency_key" {
+            // Found the idempotency_key field — check if its value matches target.
+            return match chars.next() {
+                Some('"') => {
+                    // Read the string value and compare with target
+                    let mut val = String::new();
+                    loop {
+                        match chars.next() {
+                            None => return false,
+                            Some('"') => return val == target,
+                            Some('\\') => {
+                                if let Some(esc) = chars.next() {
+                                    val.push(esc);
+                                }
+                            }
+                            Some(ch) => val.push(ch),
+                        }
+                    }
+                }
+                Some('{') | Some('[') => {
+                    skip_container_value(&mut chars);
+                    false // container value can't be a string match
+                }
+                Some('n') => {
+                    // null — not a match
+                    let _ = chars_eq(&mut chars, "ull");
+                    false
+                }
+                Some('t') => {
+                    let _ = chars_eq(&mut chars, "rue");
+                    false
+                }
+                Some('f') => {
+                    let _ = chars_eq(&mut chars, "alse");
+                    false
+                }
+                Some(_) => {
+                    // Number or bare scalar — skip it, not a string match
+                    while let Some(ch) = chars.peek() {
+                        match ch {
+                            '}' | ',' | ']' | ' ' | '\n' | '\r' | '\t' => break,
+                            _ => {
+                                chars.next();
+                            }
+                        }
+                    }
+                    false
+                }
+                None => false,
+            };
+        }
+
+        // Not the idempotency_key field — skip its value.
+        match chars.next() {
+            Some('"') => {
+                loop {
+                    match chars.next() {
+                        None => return false,
+                        Some('"') => break,
+                        Some('\\') => {
+                            let _ = chars.next();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Some('{') | Some('[') => {
+                skip_container_value(&mut chars);
+            }
+            Some('n') => {
+                if !chars_eq(&mut chars, "ull") {
+                    return false;
+                }
+            }
+            Some('t') => {
+                if !chars_eq(&mut chars, "rue") {
+                    return false;
+                }
+            }
+            Some('f') => {
+                if !chars_eq(&mut chars, "alse") {
+                    return false;
+                }
+            }
+            Some(_) => {
+                while let Some(ch) = chars.peek() {
+                    match ch {
+                        '}' | ',' | ']' | ' ' | '\n' | '\r' | '\t' => break,
+                        _ => {
+                            chars.next();
+                        }
+                    }
+                }
+            }
+            None => return false,
+        }
+    }
+}
+
+/// Skip past a JSON container value (object or array) whose opening delimiter
+/// has already been consumed. Handles nested containers and quoted strings with
+/// escape sequences correctly.
+fn skip_container_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    let mut depth: u32 = 0;
+    loop {
+        match chars.next() {
+            None => return,
+            Some('{') | Some('[') => depth += 1,
+            Some('}') | Some(']') => {
+                if depth == 0 {
+                    return;
+                }
+                depth -= 1;
+            }
+            Some('"') => {
+                loop {
+                    match chars.next() {
+                        None => return,
+                        Some('"') => break,
+                        Some('\\') => {
+                            let _ = chars.next();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Verify that the remaining chars match the expected literal string.
+fn chars_eq(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, expected: &str) -> bool {
+    for ch in expected.chars() {
+        if chars.next() != Some(ch) {
+            return false;
+        }
+    }
+    true
 }
 
 fn resolve_repo_root_from_payload(payload: &Value) -> Result<PathBuf, String> {
@@ -391,6 +583,22 @@ mod tests {
         assert!(err.contains("safe path component"), "{err}");
         assert!(!repo.join("artifacts/outside/STEP_LEDGER.jsonl").exists());
         let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn scanner_detects_idempotency_key_without_full_value_deserialization() {
+        let line = r#"{"schema_version":"v1","authority":"rust-step-ledger","recorded_at":"2024-01-01T00:00:00Z","task_id":"t","step_id":"s1","phase":"implementation","status":"in_progress","input_digest":"sha256:abc","retry_count":0,"side_effects":[],"evidence_ref":null,"next_resume_hint":null,"idempotency_key":"sha256:deadbeef"}"#;
+        assert!(scan_jsonl_for_idempotency_key(line, "sha256:deadbeef"));
+        assert!(!scan_jsonl_for_idempotency_key(line, "sha256:notexist"));
+        // Key not present
+        assert!(!scan_jsonl_for_idempotency_key(r#"{"step_id":"s1"}"#, "x"));
+        // Null value
+        assert!(!scan_jsonl_for_idempotency_key(r#"{"idempotency_key":null}"#, "x"));
+        // Nested containers before the key
+        assert!(scan_jsonl_for_idempotency_key(
+            r#"{"meta":{"a":[1,[2]]},"idempotency_key":"ok"}"#,
+            "ok"
+        ));
     }
 
     #[test]

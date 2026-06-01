@@ -61,7 +61,15 @@ if [[ ! -f "$META" ]]; then
   exit 1
 fi
 
-APPLIED_ID="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['appliedId'])" "$META")"
+APPLIED_ID="$(python3 -c "
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    print(data['appliedId'])
+except Exception as e:
+    print(f'error: failed to read appliedId from {sys.argv[1]}: {e}', file=sys.stderr)
+    sys.exit(1)
+" "$META")"
 CONFIG_FILE="$CONFIG_LIB/${APPLIED_ID}.json"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then

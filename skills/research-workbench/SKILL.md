@@ -29,15 +29,6 @@ trigger_hints:
   - ablation 方案
   - benchmark 方案
   - 非手稿科研
-do_not_use:
-  - 数学推导
-  - 定理证明
-  - 公式推导
-  - 不等式证明
-  - 收敛性证明
-  - 存在唯一性证明
-  - 变分推导
-  - 线性代数证明
 metadata:
   version: "1.0.0"
   platforms: [supported]
@@ -76,7 +67,7 @@ review, revise, write, or submit a manuscript**.
 
 - The object is a manuscript, submission, reviewer response, paper structure, or "能不能投" decision -> use `$paper-workbench`.
 - The user only asks which statistical test to use -> use `$statistical-analysis`.
-- The user only asks for a formal proof or derivation with no project/research orchestration -> use `$math-derivation`.
+- The user only asks for a formal proof, derivation, or pure-math task (数学推导、定理证明、公式推导、不等式证明、收敛性证明、存在唯一性证明、变分推导、线性代数证明) with no project/research orchestration -> use `$math-derivation`.
 - The user only asks for citation metadata cleanup or BibTeX formatting -> use `$citation-management`.
 - The user only asks for reproducibility hygiene -> use `$experiment-reproducibility`.
 - The user asks for ordinary code implementation without research-grade evidence gates -> answer in the current coding context.

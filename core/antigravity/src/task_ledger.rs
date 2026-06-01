@@ -85,6 +85,12 @@ pub fn acquire_task_ledger_lock_with_timeout(
 }
 
 /// Append one ledger row while the caller already holds L1 (`apply_task_ledger_mutation`).
+///
+/// Optimised to avoid O(n) full deserialisation on every append:
+/// - idempotency key check scans lines from the tail (recent duplicates are
+///   near the end; rare worst-case still O(n) but constant-factor much smaller
+///   because we skip full `serde_json::from_str` until a substring match).
+/// - `seq` is derived from line count, not from a parsed `Vec`.
 pub fn append_transaction_assuming_l1_held(
     repo_root: &Path,
     task_id: &str,
@@ -96,44 +102,64 @@ pub fn append_transaction_assuming_l1_held(
             .map_err(|err| format!("failed to create dir {}: {err}", parent.display()))?;
     }
 
-    let mut transactions = Vec::new();
     if path.is_file() {
         let content = fs::read_to_string(&path)
             .map_err(|err| format!("failed to read task ledger: {err}"))?;
 
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            if let Ok(existing_tx) = serde_json::from_str::<LedgerTransaction>(line) {
-                if let (Some(ref key), Some(ref existing_key)) =
-                    (&tx.idempotency_key, &existing_tx.idempotency_key)
-                {
-                    if key == existing_key {
+        // --- idempotency: reverse-scan lines, skip full parse when possible ---
+        if let Some(ref new_key) = tx.idempotency_key {
+            for line in content.lines().rev() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                // Cheap substring pre-filter: only pay for full deserialisation
+                // when the raw JSON line actually contains the key string.
+                if !line.contains(new_key.as_str()) {
+                    continue;
+                }
+                if let Ok(existing_tx) = serde_json::from_str::<LedgerTransaction>(line) {
+                    if existing_tx.idempotency_key.as_deref() == Some(new_key.as_str()) {
                         return Ok(());
                     }
                 }
-                transactions.push(existing_tx);
             }
         }
+
+        // --- seq: count non-empty lines (no deserialisation needed) ---
+        let line_count = content.lines().filter(|l| !l.trim().is_empty()).count() as u64;
+
+        let mut final_tx = tx;
+        final_tx.seq = Some(line_count);
+
+        let serialized = serde_json::to_string(&final_tx)
+            .map_err(|err| format!("failed to serialize transaction: {err}"))?;
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|err| format!("failed to open task ledger: {err}"))?;
+
+        writeln!(file, "{}", serialized)
+            .map_err(|err| format!("failed to write transaction: {err}"))?;
+    } else {
+        // File does not exist yet — first entry, seq = 0.
+        let mut final_tx = tx;
+        final_tx.seq = Some(0);
+
+        let serialized = serde_json::to_string(&final_tx)
+            .map_err(|err| format!("failed to serialize transaction: {err}"))?;
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|err| format!("failed to open task ledger: {err}"))?;
+
+        writeln!(file, "{}", serialized)
+            .map_err(|err| format!("failed to write transaction: {err}"))?;
     }
-
-    let next_seq = transactions.len() as u64;
-    let mut final_tx = tx;
-    final_tx.seq = Some(next_seq);
-
-    let serialized = serde_json::to_string(&final_tx)
-        .map_err(|err| format!("failed to serialize transaction: {err}"))?;
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|err| format!("failed to open task ledger: {err}"))?;
-
-    writeln!(file, "{}", serialized)
-        .map_err(|err| format!("failed to write transaction: {err}"))?;
 
     Ok(())
 }
@@ -206,6 +232,50 @@ mod tests {
         let raw = fs::read_to_string(&path).expect("read");
         let line: LedgerTransaction = serde_json::from_str(raw.trim()).expect("parse");
         assert_eq!(line.seq, Some(0));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn append_dedup_by_idempotency_key_and_seq_increments() {
+        let tmp = unique_tmp("dedup");
+        fs::create_dir_all(tmp.join("artifacts/current/t2")).expect("mkdir");
+
+        // Append three distinct transactions.
+        for i in 0..3u64 {
+            let tx = LedgerTransaction {
+                ts: format!("2026-01-01T00:00:0{i}Z"),
+                tx_type: "step".to_string(),
+                payload: serde_json::json!({"i": i}),
+                idempotency_key: Some(format!("key-{i}")),
+                seq: None,
+                schema_version: Some(1),
+            };
+            append_transaction_assuming_l1_held(&tmp, "t2", tx).expect("append");
+        }
+
+        // Re-submit key-1 — must be silently deduped.
+        let dup = LedgerTransaction {
+            ts: "2026-01-01T00:00:99Z".to_string(),
+            tx_type: "step".to_string(),
+            payload: serde_json::json!({"dup": true}),
+            idempotency_key: Some("key-1".to_string()),
+            seq: None,
+            schema_version: Some(1),
+        };
+        append_transaction_assuming_l1_held(&tmp, "t2", dup).expect("dedup should be no-op");
+
+        // File must still have exactly 3 lines.
+        let path = task_ledger_path(&tmp, "t2").expect("path");
+        let raw = fs::read_to_string(&path).expect("read");
+        let lines: Vec<&str> = raw.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(lines.len(), 3, "duplicate must not add a new line");
+
+        // seq values must be 0, 1, 2.
+        for (idx, line) in lines.iter().enumerate() {
+            let tx: LedgerTransaction = serde_json::from_str(line).expect("parse");
+            assert_eq!(tx.seq, Some(idx as u64));
+        }
+
         let _ = fs::remove_dir_all(&tmp);
     }
 }

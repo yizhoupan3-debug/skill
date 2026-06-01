@@ -24,7 +24,7 @@ flowchart TB
   end
 
   subgraph write [执行]
-    PV["$paper-reviser 内联"]
+    PV["$paper-workbench 内联 revision"]
     PG[prose-quality-gate]
     OUT[Stage A → prose_qc → Stage B]
   end
@@ -54,7 +54,7 @@ flowchart TB
 | **0 路由** | router-rs + NL | 用户话术 / **粘贴手稿** / 口语改稿 | 命中 **`paper-workbench`**（`has_paper_prose_edit_context`；**无需**用户 token） | 用户显式仅工程/非手稿 |
 | **1 Intake** | `$paper-workbench` | 任务 + 稿件片段 | `language_register` + `edit_scope` + `scope_items` + Claim card（四槽） | 词/单句级 + `writing_mode: sentence-only` |
 | **2 科学栏** | `$paper-reviewer` / exhaustive | 手稿 | verdict + `findings_by_dimension.language[]`（含 `prose_repair_class`） | 用户仅润色且 claim 已冻结并写明 |
-| **3 改稿** | `$paper-reviser` 内联 | findings + R&R | 结构/证据改动 + `change_id`；触句时同阶段 4 | 无结构改动、仅 prose |
+| **3 改稿** | `$paper-workbench` inline revision | findings + R&R | 结构/证据改动 + `change_id`；触句时同阶段 4 | 无结构改动、仅 prose |
 | **4 写作** | `$paper-writing` 内联 | 冻结 claim + scope | `tone_audit` + **`prose_qc`** + Stage B 正文 | 仅 Stage A 提纲轮 |
 | **5 验收** | `$paper-workbench` 收口 | 4 的交付 | 用户可见：register → 检视 → 正文；可选写入 `PROSE_QC_LOG` | 单轮对话不收口 |
 

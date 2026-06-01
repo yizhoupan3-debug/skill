@@ -11,13 +11,22 @@ else
     # Map rg flags to grep equivalents for CI environments without ripgrep.
     local -a args=()
     local pattern="" targets=()
+    local -a exclude_globs=()
+    local in_g=0
     for arg in "$@"; do
+      if (( in_g )); then
+        in_g=0
+        case "$arg" in
+          !*) exclude_globs+=("${arg#!}") ;;  # negative glob: file-level exclude
+          *.md) args+=("--include=$arg") ;;
+          *.yml) args+=("--include=$arg") ;;
+        esac
+        continue
+      fi
       case "$arg" in
         -n) args+=("-n") ;;
-        -g) ;; # skip -g; handle glob below
+        -g) in_g=1 ;;
         -v) args+=("-v") ;;
-        *.md) args+=("--include=$arg") ;;
-        *.yml) args+=("--include=$arg") ;;
         -) targets+=("-") ;;
         /*) targets+=("$arg") ;;
         *)
@@ -29,7 +38,10 @@ else
           ;;
       esac
     done
-    grep -rE "${args[@]}" "$pattern" "${targets[@]}" 2>/dev/null || true
+    for excl in "${exclude_globs[@]}"; do
+      args+=("--exclude=$excl")
+    done
+    command grep -rE "${args[@]}" "$pattern" "${targets[@]}" 2>/dev/null || true
   }
 fi
 
@@ -79,11 +91,14 @@ if ((${#filtered[@]} > 0)); then
 fi
 
 # Workflows must not reintroduce bare pip for governed Python jobs.
-if _search -n 'pip install|setup-python' .github/workflows/ -g '*.yml' 2>/dev/null \
-  | grep -v 'check-skills-no-operator-pip|astral-sh/setup-uv' >/dev/null 2>&1; then
+# Exclude the check-skills file itself by name (file-level, not line-level).
+_wf_hits=$(
+  _search -n 'pip install|setup-python' .github/workflows/ \
+    -g '*.yml' -g '!check-skills-no-operator-pip.yml' 2>/dev/null || true
+)
+if [[ -n "$_wf_hits" ]]; then
   echo "FAIL: .github/workflows contains pip install or setup-python (use setup-uv + uv sync)"
-  _search -n 'pip install|setup-python' .github/workflows/ -g '*.yml' \
-    | grep -v 'check-skills-no-operator-pip|astral-sh/setup-uv' || true
+  printf '%s\n' "$_wf_hits"
   exit 1
 fi
 

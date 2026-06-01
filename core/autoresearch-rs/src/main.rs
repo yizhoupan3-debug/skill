@@ -1435,7 +1435,7 @@ fn ensure_state_defaults(state: &Value) -> Value {
 
 fn load_state(path: &Path) -> Result<Value> {
     let raw = fs::read_to_string(path)?;
-    let data: Value = serde_yaml::from_str(&raw)
+    let data: Value = serde_yml::from_str(&raw)
         .or_else(|_| serde_json::from_str(&raw))
         .with_context(|| format!("State file must be YAML/JSON: {}", path.display()))?;
     if !data.is_object() {
@@ -1552,7 +1552,7 @@ fn dump_state(path: &Path, state: &Value) -> Result<()> {
     set_key(&mut state_to_write, "updated_at", json!(now_iso()));
     let actions = recommend_next_actions(&state_to_write);
     set_key(&mut state_to_write, "next_actions", json!(actions));
-    let rendered = serde_yaml::to_string(&state_to_write)?;
+    let rendered = serde_yml::to_string(&state_to_write)?;
     fs::write(path, rendered)?;
     Ok(())
 }
@@ -1706,7 +1706,7 @@ fn capture_git_provenance(workspace: &Path) -> Value {
     }
     let inherited = fs::read_to_string(workspace.join("research-state.yaml"))
         .ok()
-        .and_then(|raw| serde_yaml::from_str::<Value>(&raw).ok())
+        .and_then(|raw| serde_yml::from_str::<Value>(&raw).ok())
         .and_then(|state| state.get("git").cloned())
         .filter(|git| {
             git.get("available")

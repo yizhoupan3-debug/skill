@@ -54,8 +54,8 @@ TARGET_DIR="${CARGO_TARGET_DIR:-}"
 for candidate in \
   ${TARGET_DIR:+"$TARGET_DIR/release/router-rs"} \
   ${TARGET_DIR:+"$TARGET_DIR/debug/router-rs"} \
-  "/tmp/skill-cargo-target/release/router-rs" \
-  "/tmp/skill-cargo-target/debug/router-rs" \
+  "/tmp/skill-${UID:-0}-cargo-target/release/router-rs" \
+  "/tmp/skill-${UID:-0}-cargo-target/debug/router-rs" \
   "$REPO_ROOT/core/router-rs/target/release/router-rs" \
   "$REPO_ROOT/core/router-rs/target/debug/router-rs"
 do
@@ -81,16 +81,20 @@ hook_payload() {
   local sid="bench-$$"
   case "$(echo "$ev" | tr '[:upper:]' '[:lower:]')" in
     posttooluse)
-      printf '%s' "{\"session_id\":\"$sid\",\"cwd\":\"$REPO_ROOT\",\"tool_name\":\"Read\",\"tool_path\":\"README.md\"}"
+      jq -n --arg sid "$sid" --arg cwd "$REPO_ROOT" \
+        '{session_id:$sid, cwd:$cwd, tool_name:"Read", tool_path:"README.md"}'
       ;;
     stop)
-      printf '%s' "{\"session_id\":\"$sid\",\"cwd\":\"$REPO_ROOT\",\"prompt\":\"\",\"agent_response\":\"done\"}"
+      jq -n --arg sid "$sid" --arg cwd "$REPO_ROOT" \
+        '{session_id:$sid, cwd:$cwd, prompt:"", agent_response:"done"}'
       ;;
     sessionstart|sessionend)
-      printf '%s' "{\"session_id\":\"$sid\",\"cwd\":\"$REPO_ROOT\"}"
+      jq -n --arg sid "$sid" --arg cwd "$REPO_ROOT" \
+        '{session_id:$sid, cwd:$cwd}'
       ;;
     *)
-      printf '%s' "{\"session_id\":\"$sid\",\"cwd\":\"$REPO_ROOT\",\"prompt\":\"bench ping\"}"
+      jq -n --arg sid "$sid" --arg cwd "$REPO_ROOT" \
+        '{session_id:$sid, cwd:$cwd, prompt:"bench ping"}'
       ;;
   esac
 }

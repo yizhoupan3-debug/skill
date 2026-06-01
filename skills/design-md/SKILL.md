@@ -97,7 +97,7 @@ contract is clear, hand off to the narrowest downstream owner.
    CLI is acceptable in the environment, run `npx @google/design.md lint DESIGN.md`.
 7. Hand off:
    - the relevant implementation owner for visual direction, CSS, or component changes
-   - `$slides`, `$source-slide-formats`, or `$ppt-beamer` for deck authoring
+   - `$slides` for deck authoring; Markdown/HTML source slides → 直接在当前上下文处理（`$source-slide-formats` 已归档）; Beamer → 直接在当前上下文处理（`$ppt-beamer` 已归档）
    - `$visual-review` for rendered UI/deck proof
    - this gate for prompt shaping or final acceptance summary when the contract is the artifact
 

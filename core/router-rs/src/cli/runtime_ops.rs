@@ -5,6 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use hex;
 use std::collections::HashSet;
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};

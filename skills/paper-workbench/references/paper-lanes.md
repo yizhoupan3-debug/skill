@@ -6,7 +6,7 @@ Lane choices:
 
 - `whole manuscript`: submission readiness, venue fit, and top blockers.
 - `review-only`: hand to `paper-reviewer` when the user explicitly wants critique without edits.
-- `revision`: hand to `paper-reviser` when comments/findings are known and edits should happen now.
+- `revision`: hand to `paper-workbench` inline revision when comments/findings are known and edits should happen now.
 - `bounded prose`: hand to inline `paper-writing` when claim scope is fixed — **via workbench prose intake** (`language_register`, Claim card, `prose_qc`); see [`prose-chain-contract.md`](prose-chain-contract.md).
 - `literature`: keep ref / related-work corpus building under `paper-workbench` as source-backed context, then hand bounded prose to `paper-writing` (no separate top-level literature skill).
 

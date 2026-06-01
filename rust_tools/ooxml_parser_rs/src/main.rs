@@ -1501,7 +1501,7 @@ mod tests {
     use super::*;
     use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use zip::write::FileOptions;
+    use zip::write::SimpleFileOptions;
     use zip::CompressionMethod;
     use zip::ZipWriter;
 
@@ -1516,7 +1516,7 @@ mod tests {
     }
 
     fn write_zip_entry<W: Write + Seek>(zip: &mut ZipWriter<W>, path: &str, content: &[u8]) {
-        let options = FileOptions::default().compression_method(CompressionMethod::Stored);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
         zip.start_file(path, options).unwrap();
         zip.write_all(content).unwrap();
     }

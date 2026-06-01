@@ -54,6 +54,17 @@ case "${MODE:-}" in
     ;;
 esac
 
+for cmd in python3 npm; do
+  command -v "$cmd" >/dev/null 2>&1 || { echo "error: $cmd not found; install it first" >&2; exit 1; }
+done
+
+echo "==> Setting permission mode: $MODE"
+if [[ "$MODE" == "bypassPermissions" ]]; then
+  echo "WARNING: bypassPermissions skips all Allow/Deny prompts." >&2
+  echo "  Use only in trusted local dev environments." >&2
+  echo ""
+fi
+
 patch_desktop_config() {
   local cfg="$1"
   if [[ ! -f "$cfg" ]]; then
@@ -118,7 +129,7 @@ patch_leveldb() {
   (
     cd "$tmpdir"
     npm init -y >/dev/null 2>&1
-    npm install "classic-level@1.2.0" >/dev/null 2>&1
+    npm install "classic-level@1.2.0" --ignore-scripts --no-audit --no-fund >/dev/null 2>&1
     local cfg_for_db="$CONFIG_3P"
     [[ -f "$cfg_for_db" ]] || cfg_for_db=""
     node - "$db_path" "$MODE" "$cfg_for_db" <<'NODE'

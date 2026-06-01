@@ -13,7 +13,7 @@
 |------|--------|----------|
 | 前门 / 编排 | `$paper-workbench` | 任何手稿级模糊请求；ref-first；先审再改；workflow 抱怨 |
 | 判断 | `$paper-reviewer` | 审稿、严审、能不能投、单维度审；**不改稿**除非用户切换 |
-| 执行 | `$paper-reviser` | findings/审稿意见已就绪、要动稿；遵守 `edit_scope` |
+| 执行 | `$paper-workbench` (inline revision) | findings/审稿意见已就绪、要动稿；遵守 `edit_scope` |
 | 表达 | `$paper-writing` | claim 边界已冻结下的局部/授权范围内润色与叙事 |
 | 引用真源 | `$citation-management` | `.bib`、参考文献表、DOI/格式、文后一致性 |
 
@@ -66,10 +66,10 @@
 
 ## 宿主与专科入口（真源一段）
 
-手稿专科（`paper-workbench` / `paper-writing` / `paper-reviser` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：热路由 owner 以 [`../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（当前仅 `paper-workbench` + `paper-writing` 热表；`paper-reviewer` 内联、`paper-reviser` 冷归档路径）；技能安装与宿主投影以 **`router-rs framework host-integration install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`../../../docs/host_adapter_contract.md`](../../../docs/host_adapter_contract.md)。
+手稿专科（`paper-workbench` / `paper-writing` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：热路由 owner 以 [`../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（当前仅 `paper-workbench` + `paper-writing` 热表；`paper-reviewer` 内联）；技能安装与宿主投影以 **`router-rs framework host-integration install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`../../../docs/host_adapter_contract.md`](../../../docs/host_adapter_contract.md)。
 
 - **`$paper-workbench`**：在 **Codex 与 Cursor** 上均为**用户可显式 invocation 的前门**（`user-invocable`，宿主以各环境 `SKILL.md` / 路由为准）。
-- **`$paper-writing` / `$paper-reviewer` / `$paper-reviser`**：保持 **`disable-model-invocation: true`** 与既有 Codex 元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、改稿、润色 lane）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。
+- **`$paper-writing` / `$paper-reviewer`**：保持 **`disable-model-invocation: true`** 与既有 Codex 元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、润色 lane）。revision 由 workbench 自身 inline 处理（`edit_scope` gate）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。
 
 ## 可选工具
 

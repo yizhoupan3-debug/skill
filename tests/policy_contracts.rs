@@ -934,8 +934,8 @@ fn parse_skill_md_frontmatter_map(path: &Path) -> Map<String, Value> {
         .or_else(|| rest.find("\n---\r\n"))
         .unwrap_or_else(|| panic!("{}: missing closing ---", path.display()));
     let yaml_txt = &rest[..end];
-    let yaml_val: serde_yaml::Value =
-        serde_yaml::from_str(yaml_txt).unwrap_or_else(|e| panic!("{}: yaml: {e}", path.display()));
+    let yaml_val: serde_yml::Value =
+        serde_yml::from_str(yaml_txt).unwrap_or_else(|e| panic!("{}: yaml: {e}", path.display()));
     serde_json::to_value(yaml_val)
         .expect("yaml to json")
         .as_object()

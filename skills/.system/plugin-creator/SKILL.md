@@ -14,7 +14,10 @@ trigger_hints:
   - local plugin
   - codex plugin
 metadata:
+  version: "1.0.0"
   platforms: [codex]
+risk: low
+source: project
 ---
 
 # Plugin Creator

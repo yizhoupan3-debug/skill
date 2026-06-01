@@ -1,6 +1,6 @@
 # Claim–evidence decision ladder（主张—证据决策阶梯）
 
-跨 **`$paper-workbench` / `$paper-reviewer` / `$paper-reviser`** 的真源：**默认反对用「降 claim / 缩口径」代替「该补的证据与分析」**。叙事上按**强对抗审稿**校准：先问「最坏审稿人会怎么卡」，再写建议。缩主张是**低成本改稿**，但在许多场景下是对科学贡献的**逃避**；技能栈必须把顺序写死，避免模型图省事。
+跨 **`$paper-workbench` / `$paper-reviewer`** 的真源：**默认反对用「降 claim / 缩口径」代替「该补的证据与分析」**。叙事上按**强对抗审稿**校准：先问「最坏审稿人会怎么卡」，再写建议。缩主张是**低成本改稿**，但在许多场景下是对科学贡献的**逃避**；技能栈必须把顺序写死，避免模型图省事。
 
 ## 第一性原理
 
@@ -57,7 +57,7 @@ narrowing_is_primary_because: <null | 指向 §「何时允许」之一>
 - 若 `narrowing_is_primary_because` 非空，**禁止**省略 `evidence_first_options`：仍须简述「考虑过哪些增量、为何仍不足以顶住栏位」，避免假二分。
 - 对用户可见表述保持审稿语言；**不要把本文件名或「阶梯」元话术**塞进主答案，除非用户要协议工件。
 
-## `$paper-reviser` 执行硬契约
+## Inline revision 执行硬契约
 
 - Findings 仍判定为 **「可用补充证据/分析闭合」** 时：**主批次默认 repair**（按意见补图、补表、补方法、补统计表述），**不得**把整轮改成单纯降 claim 了事。
 - **narrow / delete / de-emphasize** 可与 repair 同轮，但须有用户或 reviewer 侧的 **`narrowing_is_primary_because`**（或等效记录），否则 narrow 只能作为**备选补丁**列在「若不做实验则…」。

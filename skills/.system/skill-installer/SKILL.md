@@ -13,8 +13,11 @@ trigger_hints:
   - curated skills
   - github skill
 metadata:
-  short-description: Install curated skills from openai/skills or other repos
+  version: "1.0.0"
   platforms: [codex]
+  short-description: Install curated skills from openai/skills or other repos
+risk: low
+source: project
 ---
 
 # Skill Installer

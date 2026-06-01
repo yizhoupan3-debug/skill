@@ -98,7 +98,7 @@ Default posture:
   provisional bar and label it as provisional instead of blocking
 - when the user asks for top-tier readiness, apply the selective-venue bar from
   `$paper-workbench` before allowing language or layout issues to dominate
-- review before rewriting; switch to `$paper-reviser` only after findings are
+- review before rewriting; switch to `$paper-workbench` for edits only after findings are
   accepted or the user explicitly asks for edits
 - when evidence does not support the current claim level, default **not** to
   "just narrow" — follow
@@ -118,7 +118,7 @@ Default posture:
 ## Do not use
 
 - The user wants the front door for a paper task -> use `$paper-workbench`
-- The user wants the paper changed now -> use `$paper-reviser`
+- The user wants the paper changed now -> use `$paper-workbench` for inline revision
 - The user wants only local wording polish -> use `$paper-writing`
 - The user wants pure mathematical proof/derivation verification without a full paper context -> use `$math-derivation` (note: `$math-derivation` enforces a checker-backed verification standard that this skill does not)
 

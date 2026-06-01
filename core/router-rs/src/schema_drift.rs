@@ -8,6 +8,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use hex;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -270,7 +271,7 @@ fn sha256_hex_lines(lines: &[String]) -> String {
     let joined = lines.join("\n");
     let mut hasher = Sha256::new();
     hasher.update(joined.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifactsDriftSnapshot {

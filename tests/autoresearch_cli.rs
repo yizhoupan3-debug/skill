@@ -281,8 +281,8 @@ fn run_ctl(args: &[&str]) -> Output {
     run(command)
 }
 
-fn load_state(workspace: &std::path::Path) -> serde_yaml::Value {
-    serde_yaml::from_str(&std::fs::read_to_string(workspace.join("research-state.yaml")).unwrap())
+fn load_state(workspace: &std::path::Path) -> serde_yml::Value {
+    serde_yml::from_str(&std::fs::read_to_string(workspace.join("research-state.yaml")).unwrap())
         .unwrap()
 }
 

@@ -5,6 +5,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use hex;
 use std::collections::HashSet;
 use std::fs;
 use std::fs::OpenOptions;
@@ -442,7 +443,7 @@ fn stable_memory_key(path: &Path) -> Result<String, String> {
 fn payload_sha256(payload_text: &str) -> String {
     let mut digest = Sha256::new();
     digest.update(payload_text.as_bytes());
-    format!("{:x}", digest.finalize())
+    hex::encode(digest.finalize())
 }
 
 fn stream_sha256_hex_reader(reader: &mut impl Read) -> Result<String, std::io::Error> {
@@ -455,7 +456,7 @@ fn stream_sha256_hex_reader(reader: &mut impl Read) -> Result<String, std::io::E
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn stream_sha256_hex_path(path: &Path) -> Result<String, std::io::Error> {
@@ -506,7 +507,7 @@ fn memory_storage_root() -> Result<PathBuf, String> {
         std::env::current_dir().map_err(|err| format!("resolve current dir failed: {err}"))?;
     let mut digest = Sha256::new();
     digest.update(cwd.display().to_string().as_bytes());
-    let namespace = format!("{:x}", digest.finalize());
+    let namespace = hex::encode(digest.finalize());
     Ok(std::env::temp_dir()
         .join("router-rs-runtime-memory-v1")
         .join(namespace))
@@ -516,7 +517,7 @@ fn memory_artifact_path(path: &Path) -> Result<PathBuf, String> {
     let stable_key = stable_memory_key(path)?;
     let mut digest = Sha256::new();
     digest.update(stable_key.as_bytes());
-    let key = format!("{:x}", digest.finalize());
+    let key = hex::encode(digest.finalize());
     Ok(memory_storage_root()?.join(format!("{key}.payload")))
 }
 
@@ -785,7 +786,7 @@ fn filesystem_atomic_temp_path(
     digest.update(pid.to_le_bytes());
     digest.update(b"\x1e");
     digest.update(attempt.to_le_bytes());
-    let tag = format!("{:x}", digest.finalize());
+    let tag = hex::encode(digest.finalize());
     parent.join(format!(".router-rs.{file_name}.{tag}.tmp"))
 }
 

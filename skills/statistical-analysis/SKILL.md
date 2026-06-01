@@ -66,7 +66,7 @@ This skill owns **statistical method selection, execution, and interpretation** 
 ## Do not use
 
 - The user wants one front door for a research-project task rather than statistics only -> use `$research-workbench` and keep this skill only for statistical questions
-- The task is ML model training or evaluation -> use `$mac-memory-management` when Apple Silicon memory/runtime constraints dominate; otherwise answer in the current implementation context
+- The task is ML model training or evaluation -> answer in the current implementation context when Apple Silicon memory/runtime constraints dominate（`$mac-memory-management` 已归档）; otherwise answer in the current implementation context
 - The task is data wrangling or cleaning -> answer in the current data/implementation context
 - The task is plotting without statistical analysis → use `$scientific-figure-plotting`
 - The task is paper writing → use `$paper-writing` (but may co-invoke for results sections)

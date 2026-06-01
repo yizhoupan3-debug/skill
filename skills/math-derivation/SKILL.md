@@ -86,7 +86,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 - The task is explaining math intuitively without formal proof → answer directly
 - The task is ML model math with coding focus (loss function implementation, gradient code) -> answer in the current implementation context; do not route to a retired AI/research skill
 - The task is reviewing paper-level scientific logic -> use `$paper-reviewer` logic mode
-- The task is LaTeX compilation or rendering → use `$latex-compile-acceleration`
+- The task is LaTeX compilation or rendering → answer in the current context（`$latex-compile-acceleration` 已归档）
 
 ## Derivation workflow
 

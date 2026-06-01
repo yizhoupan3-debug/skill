@@ -1,16 +1,16 @@
 # Paper Gate Protocol
 
-This file defines the shared gate-chain contract used by `$paper-workbench`,
-`$paper-reviewer`, and `$paper-reviser`.
+This file defines the shared gate-chain contract used by `$paper-workbench` and
+`$paper-reviewer`.
 
 **Stack map / when to open this file**: see
 [`paper-workbench/references/RESEARCH_PAPER_STACK.md`](paper-workbench/references/RESEARCH_PAPER_STACK.md)
 (L3 only — multi-turn disk state).
 
 `$paper-workbench` is the default front door (the only hot-route user entry in
-`SKILL_ROUTING_RUNTIME.json`). `$paper-reviewer` and `$paper-reviser` are
-**inline specialist lanes** loaded from the front door—not parallel hot-route
-owners (`paper-reviser` skill file lives under `.archive-cold/`). The protocol
+`SKILL_ROUTING_RUNTIME.json`). `$paper-reviewer` is an
+**inline specialist lane** loaded from the front door—not a parallel hot-route
+owner. The protocol
 still keeps the internal main chain and sidecar lanes explicit so no capability
 is lost when the front door is unified.
 
@@ -48,7 +48,7 @@ Default external response should stay compact:
 
 ## Edit scope gate (surgical vs refactor)
 
-Manuscript edits from `$paper-workbench`, `$paper-writing`, and `$paper-reviser`
+Manuscript edits from `$paper-workbench` and `$paper-writing`
 must respect **`edit_scope`** so localized polish is not collapsed into
 whole-paper refactoring. Prose touches must follow
 [`paper-workbench/references/prose-chain-contract.md`](paper-workbench/references/prose-chain-contract.md)
@@ -58,7 +58,7 @@ whole-paper refactoring. Prose touches must follow
 - **`surgical`**: bounded slices only; `lane_scope` is the disk-backed form of
   this gate.
 - **`refactor`**: explicit user opt-in or strong refactor signals; allows
-  cross-section restructuring under `$paper-reviser` honesty rules.
+  cross-section restructuring under inline revision honesty rules.
 - **`refactor`** 常拆成**多个** `lane_scope` 批次；各批次仍用 `lanes/` 侧车，主链串行
   合并，语义见 `edit-scope-gate.md` 末段。
 - **`surgical`** 的防扩写、锚定、改动上限、`change_id` 交付清单与改前自检，一律以同文件

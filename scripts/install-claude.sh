@@ -57,7 +57,7 @@ router_rs_cmd() {
   if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
     candidates+=("${CARGO_TARGET_DIR}/release/router-rs")
   fi
-  candidates+=("/tmp/skill-cargo-target/release/router-rs")
+  candidates+=("/tmp/skill-${UID:-0}-cargo-target/release/router-rs")
   local c
   for c in "${candidates[@]}"; do
     if [[ -x "$c" ]]; then
@@ -189,7 +189,7 @@ echo "==> status" >&2
 PATCH_EGRESS="${FRAMEWORK_ROOT}/scripts/patch-claude-desktop-3p-cowork-egress.sh"
 if [[ "$CODE_ONLY" -eq 0 && -x "$PATCH_EGRESS" ]]; then
   echo "==> 3P Cowork egress (coworkEgressAllowedHosts)" >&2
-  "$PATCH_EGRESS" --allow-all || true
+  "$PATCH_EGRESS" --allow-all || echo 'warn: 3P egress patch failed' >&2
 fi
 
 echo "" >&2

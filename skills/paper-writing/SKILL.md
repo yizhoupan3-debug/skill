@@ -118,10 +118,10 @@ when those surfaces are not in **`scope_items`**.
 ## Do Not Use
 
 - Whole-paper judgment, novelty, or experimental validity review -> use `$paper-reviewer` logic mode.
-- Programmatic reviewer lists, Major/Minor point-by-point R&R, or meta-review checklists that require **manuscript / figure / appendix / reproducibility closures** -> keep the execution spine under `$paper-workbench` / `$paper-reviser` until point-to-point closure mapping exists; then use this skill only for bounded prose patches inside confirmed scope.
+- Programmatic reviewer lists, Major/Minor point-by-point R&R, or meta-review checklists that require **manuscript / figure / appendix / reproducibility closures** -> keep the execution spine under `$paper-workbench` until point-to-point closure mapping exists; then use this skill only for bounded prose patches inside confirmed scope.
 - Literature search/synthesis before writing -> keep the task in `$paper-workbench` until the source-backed story context is fixed.
 - Citation formatting or verification -> use `$citation-management`.
-- Generic non-academic prose -> use the owning domain skill, or `$documentation-engineering` for project docs.
+- Generic non-academic prose -> use the owning domain skill; answer in the current context for project docs（`$documentation-engineering` 已归档）.
 
 ## Language register（中英分场景，自动推断）
 
@@ -170,7 +170,7 @@ Default on every manuscript pass unless the user explicitly waives it:
 
 - Do not **wordsmith a weaker claim** into the manuscript to dodge a gap that
   the reviewer lane still classifies as closable with evidence/analysis; route
-  back to `$paper-reviewer` / `$paper-reviser` per
+  back to `$paper-reviewer` / `$paper-workbench` per
   [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md).
 - For **response / rebuttal prose**: do not let polite acknowledgment or a
   longer limitation paragraph **stand in for** the manuscript edits or evidence
@@ -200,7 +200,7 @@ When a manuscript is revised across turns, keep a visible claim lock:
    - forbidden_upgrade_terms
 2. Treat the ledger as authoritative for wording choices.
 3. If requested edits conflict with the ledger, stop and route to
-   `$paper-reviewer`/`$paper-reviser` for a claim decision first.
+   `$paper-reviewer`/`$paper-workbench` for a claim decision first.
 4. Do not hide missing evidence in "future work" wording if the current sentence
    still implies support.
 
@@ -220,7 +220,7 @@ Contribution right（move 对该会场确实重要）**、**(3) Novelty separati
 - Keep closest-work contrast precise; do not imply novelty that the citation set has not established.
 - Surface limitations where they protect the claim instead of weakening it.
 - If top-tier readiness depends on missing evidence, stop and route back to
-  `$paper-reviewer` or `$paper-reviser` rather than polishing around the gap.
+  `$paper-reviewer` or `$paper-workbench` rather than polishing around the gap.
 
 ## Top-tier Narrative Style
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-chrono = "0.4.44"
+chrono.workspace = true
 fs2 = "0.4.3"
 libc = "0.2.186"
 serde = { version = "1.0", features = ["derive"] }

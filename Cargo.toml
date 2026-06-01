@@ -10,7 +10,7 @@ which = "8"
 regex = "1.11"
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
+serde_yml = "=0.0.12"  # serde_yaml 0.9 已归档; serde_yml 0.0.12 是最后完整实现版本
 tempfile = "3.15"
 
 [workspace]
@@ -35,6 +35,9 @@ exclude = [
     "codex-aggregator"
 ]
 resolver = "2"
+
+[workspace.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 
 [profile.release]
 lto = true

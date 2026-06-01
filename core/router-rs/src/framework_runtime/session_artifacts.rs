@@ -18,6 +18,7 @@ use super::types::{
 use chrono::{Local, SecondsFormat};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use hex;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -847,7 +848,7 @@ fn sha256_json(value: &Value) -> String {
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub(super) fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {

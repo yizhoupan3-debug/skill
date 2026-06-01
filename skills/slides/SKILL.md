@@ -164,7 +164,7 @@ Slide-native visuals (presentation medium):
 
 1. Intake quickly: extract goal, source material, output path, and format.
 2. If reusable visual identity or style-contract acceptance is required, hand off to `$design-md` before authoring.
-3. If user explicitly wants Markdown/HTML source, reroute to `source-slide-formats`; if Beamer, reroute to `ppt-beamer`.
+3. If user explicitly wants Markdown/HTML source, answer in the current context（`$source-slide-formats` 已归档）; if Beamer, answer in the current context（`$ppt-beamer` 已归档）.
 4. Native `.pptx` lane selection:
    - New or rebuilt deck: use `deck.plan.json` as source of truth.
    - Existing deck small edits: inspect existing `.pptx` first, then patch the smallest safe surface.

@@ -46,7 +46,7 @@ fn run_ctl(args: Vec<String>) -> String {
 }
 
 fn load_state(workspace: &Path) -> Value {
-    serde_yaml::from_str(&fs::read_to_string(workspace.join("research-state.yaml")).unwrap())
+    serde_yml::from_str(&fs::read_to_string(workspace.join("research-state.yaml")).unwrap())
         .unwrap()
 }
 

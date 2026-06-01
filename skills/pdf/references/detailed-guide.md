@@ -19,7 +19,7 @@ This skill does not own:
 If the task shifts to adjacent skill territory, route to:
 - `$doc` for `.docx`
 - `$visual-review` for image-grounded render review
-- `$paper-reviewer` or `$paper-reviser` when PDF layout judgment is part of manuscript-wide review/revision
+- `$paper-reviewer` or `$paper-workbench` when PDF layout judgment is part of manuscript-wide review/revision
 
 ## Finding-driven framework role
 

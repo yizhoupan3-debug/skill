@@ -62,10 +62,6 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
 }
 
 pub fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &str) {
-    if !true {
-        // STUBBED
-        return;
-    }
     if task_id.trim().is_empty() {
         return;
     }

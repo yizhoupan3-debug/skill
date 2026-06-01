@@ -3964,7 +3964,7 @@ fn validate_compaction_artifact_digest(
 pub(crate) fn sha256_hex(payload: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(payload);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 struct ResolvedTraceSource {

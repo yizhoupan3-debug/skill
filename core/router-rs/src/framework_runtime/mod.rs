@@ -5,6 +5,7 @@ use crate::closeout_enforcement::{
 use chrono::{Local, SecondsFormat};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use hex;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -286,7 +287,7 @@ fn stable_json_sha256(value: &Value) -> Result<String, String> {
         .map_err(|err| format!("serialize contract digest input failed: {err}"))?;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 /// Machine-readable per-host harness surface from `RUNTIME_REGISTRY.json` (for contract-summary / audits).
@@ -455,7 +456,7 @@ pub(crate) fn hash_file_for_test(path: &Path) -> Result<String, String> {
         fs::read(path).map_err(|err| format!("read file failed for {}: {err}", path.display()))?;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, String> {

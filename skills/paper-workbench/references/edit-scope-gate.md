@@ -1,6 +1,6 @@
 # 手稿编辑范围门控（精准修改 vs 大面积重构）
 
-在调用 `$paper-writing`、`$paper-reviser` 或在本 front door 内落地改稿前，必须先确定 **`edit_scope`**，避免「只说润色两句」却触发整篇删并、叙事重写或口径升级。
+在调用 `$paper-writing` 或在本 front door 内落地改稿前，必须先确定 **`edit_scope`**，避免「只说润色两句」却触发整篇删并、叙事重写或口径升级。
 
 ## 两种模式（互斥）
 
@@ -80,7 +80,7 @@ summary_of_edit: <一句说明改了什么类别：措辞/标点/清晰度，不
 
 允许：
 
-- `$paper-reviser` 全合同：删、缩、附录路由、降 claim、按审稿意见批量改多节；
+- inline revision 全合同：删、缩、附录路由、降 claim、按审稿意见批量改多节；
 - 多节联动叙事、throughline 重塑（仍受 claim ledger / 证据锚约束）。
 
 **审稿 / R&R 提醒**：即便在 `refactor`，**也不得**把「降 claim / 挪附录 / 加长 limitation」当默认 escape；须先满足 [`claim-evidence-ladder.md`](claim-evidence-ladder.md) 的证据优先顺序与 §「审稿意见 / R&R：逐条关停与逃逸红线」，再动 ceiling。
@@ -101,7 +101,7 @@ sections_touched:
 claim_ledger_touch_statement: <none | 摘要：哪些 claim_id / allowed_claim_level 被动到；若仅排版或未改主张句写 none>
 ```
 
-并与 `$paper-reviser` 批次末的 `claim_ledger_delta` / `evidence_anchor_delta` 叙述一致：凡声称动了主张边界，`claim_ledger_touch_statement` 不得写 `none`。
+并与 inline revision 批次末的 `claim_ledger_delta` / `evidence_anchor_delta` 叙述一致：凡声称动了主张边界，`claim_ledger_touch_statement` 不得写 `none`。
 
 ## 强信号词（启发式，非穷尽）
 
@@ -150,7 +150,7 @@ edit_scope: refactor
 ## 与 `PAPER_GATE_PROTOCOL` 的关系
 
 磁盘门控里的 `lane_scope`（如 `figure:F3-F6`）是 **surgical 的正式化**。**`refactor`**
-仍应拆成多个可合并批次，每个批次可对应各自的 `lane_scope`；由 **`$paper-reviser`**
+仍应拆成多个可合并批次，每个批次可对应各自的 `lane_scope`；由 **inline revision**
 主链串行决策与合并，而不是把 `refactor` 误读成「只能有一个 `lane_scope`」。
 
 ## 自检（改稿结束前 10 秒）

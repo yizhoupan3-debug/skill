@@ -3,6 +3,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use hex;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -686,7 +687,7 @@ fn stable_digest(value: &Value) -> String {
 fn sha256_hex(payload: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(payload);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn build_artifact_ref(kind: &str, path: &Path, payload: &str, producer: &str) -> Value {
