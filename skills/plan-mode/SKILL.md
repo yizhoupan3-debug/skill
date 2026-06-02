@@ -3,7 +3,7 @@ name: plan-mode
 description: |
   跨宿主 Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨模块/高风险/用户要求时升级为 audit plan。
   `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: research` 为纯调研计划（只读 todos，末条不含 /gitx plan）。
-  `overview` 须按 profile 显式声明实现面边界：`research` 含调研期零实现面改动硬声明（可选窄例外：`overview` **单句**声明允许回写的结论文档 / plan 路径集合；`.cursor/plans/<本文件>.plan.md` 仅为常见示例而非唯一形式），`execution` 标明允许按 todos 修改并由末条完成计划/Git 证据收口。
+  `overview` 须按 profile 显式声明实现面边界：`research` 含调研期零实现面改动硬声明（可选窄例外：`overview` **单句**声明允许回写的结论文档 / plan 路径集合；`<host-plans-dir>/<本文件>.plan.md` 仅为常见示例而非唯一形式），`execution` 标明允许按 todos 修改并由末条完成计划/Git 证据收口。
   Use at 每轮对话开始 / first-turn / conversation start when the user wants Plan 模式、策划文档闸门、可验收 todo、
   或明确要走「计划→实现→验证→对照 git 收口」而不是直接堆代码。
   Aligns execution-item / verification shapes with `skills/SKILL_FRAMEWORK_PROTOCOLS.md`；continuity 分层见 `docs/harness_architecture.md`。
@@ -25,10 +25,12 @@ trigger_hints:
   - 调研计划
   - 纯调研
   - research-only plan
+  - Cursor Plan
+  - CreatePlan
 metadata:
-  version: "1.6.6"
+  version: "2.0.0"
   platforms: [supported]
-  tags: [plan, cursor-plan, workflow, gate, closeout]
+  tags: [plan, workflow, gate, closeout]
 ---
 
 # plan-mode
@@ -59,16 +61,16 @@ metadata:
 | **execution plan** | 需要落盘、跨文件或需对照实现的任务 | `plan_profile: execution`（或缺省）；todos 写四元组；末条做计划 vs 实际 + Git 状态证据收口。 |
 | **audit plan** | 跨模块、高风险、安全/供应链、用户明确要求审计划/深度 review | execution plan + 可选 review-only findings + 更严格证据门槛；是否启用 subagent 仍受 `AGENTS.md` 执行梯子约束。 |
 
-**与继承面**：**轻量**指不强制完整 audit 叙事与继承面占位；若本文件为 **`plan_profile: execution`（或缺省）** 且满足下方 **宿主集成 → CreatePlan 输出契约** 硬条款 **第 2 条** 触发条件，仍**须**含 **`## 执行计划继承面`**。
+**与继承面**：**轻量**指不强制完整 audit 叙事与继承面占位；若本文件为 **`plan_profile: execution`（或缺省）** 且满足下方 **宿主工具产出契约** 硬条款 **第 2 条** 触发条件，仍**须**含 **`## 执行计划继承面`**。
 
 与 `name` / `overview` / `todos` **同级**的 frontmatter 字段 **`plan_profile`** 区分计划类型：
 
 | 取值 | 含义 |
 |------|------|
-| **`execution`**（**缺省**） | 标准实现计划：可含改代码、加测试、改配置等 todo；末条须按计划 vs 实际 + **Git 状态证据**收口，宿主支持时使用 **`/gitx plan`**（见 **宿主集成**）。若 todo 触及 Python 依赖/CI/本机 PATH，须引用 **`$python-env-management`**，禁止 operator `pip`。 |
+| **`execution`**（**缺省**） | 标准实现计划：可含改代码、加测试、改配置等 todo；末条须按计划 vs 实际 + **Git 状态证据**收口，宿主支持时使用 **`/gitx plan`**（见 **宿主工具产出契约**）。若 todo 触及 Python 依赖/CI/本机 PATH，须引用 **`$python-env-management`**，禁止 operator `pip`。 |
 | **`research`** | **调研专用**：todos **仅**只读调研与结论合成；**禁止**以「实现 / 改行为 / 加测试 / 改 CI」为单条主线；**末条不得**把 **`/gitx plan`** 当作本 profile 的必需验证。 |
 
-若宿主 **CreatePlan** 剥离未知 YAML 键：生成后在本文件 **手动补写** `plan_profile: research`。可选用文件名 **`*.research.plan.md`** 作为人类可读标签；**hook 与契约真源仍以 frontmatter 为准**（本仓库当前 **不**按文件名解析 profile）。
+若宿主工具 **剥离** 未知 YAML 键（如 `plan_profile`）：生成后在本文件 **手动补写** `plan_profile: research`。可选用文件名 **`*.research.plan.md`** 作为人类可读标签；**hook 与契约真源仍以 frontmatter 为准**（本仓库当前 **不**按文件名解析 profile）。Cursor 宿主专属的 YAML 键剥离处理：见 [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md)。
 
 ### 两类计划对照表
 
@@ -88,14 +90,14 @@ metadata:
 
 - 本文件为**调研计划**；调研执行期**不修改** tracked 的**源码 / 配置 / 测试 / CI 工作流 / 依赖锁文件**等实现面资产。
 - 任何**实现 / 改行为 / 加测试**仅出现在**另开的** `plan_profile: execution`（或缺省）计划中。
-- **窄例外（可选，须显式声明）**：若执行期需要**仅**回写结论文档 / plan 以记录结论，须在 `overview` **单句**列出允许路径集合（例如 `.cursor/plans/<本文件>.plan.md`），且末条 `Verify` 仍约束 `git status --porcelain` 为空或仅含上述已声明路径。
+- **窄例外（可选，须显式声明）**：若执行期需要**仅**回写结论文档 / plan 以记录结论，须在 `overview` **单句**列出允许路径集合（例如 `<host-plans-dir>/<本文件>.plan.md`），且末条 `Verify` 仍约束 `git status --porcelain` 为空或仅含上述已声明路径。
 - 若用户明确要求**不声明窄例外**（不回写任何落盘结论文档 / plan），则**不**在 `overview` 写允许回写路径，结论只留在对话；不得默认隐式改任何未声明路径。
 
 **最小模板（可裁剪复制）**：
 
 ```text
 本文件为调研计划（plan_profile: research）。调研执行期不修改 tracked 源码 / 配置 / 测试 / CI / 依赖锁等实现面资产；后续实现另开 plan_profile: execution（或缺省）计划。
-[可选窄例外] 仅允许在末条 Verify 约束内回写 overview 已声明的路径（示例：`.cursor/plans/<本文件>.plan.md`）；不触达其它路径。
+[可选窄例外] 仅允许在末条 Verify 约束内回写 overview 已声明的路径（示例：`<host-plans-dir>/<本文件>.plan.md`）；不触达其它路径。
 ```
 
 ### `execution`：overview 一句式模板
@@ -114,7 +116,7 @@ metadata:
 
 | 字段 | 要求 |
 |------|------|
-| **继承指针** | 一行：`docs/plans/<file>.md#锚` 或 `.cursor/plans/<research>.plan.md`（路径真实存在或可检） |
+| **继承指针** | 一行：`docs/plans/<file>.md#锚` 或 `<host-plans-dir>/<research>.plan.md`（路径真实存在或可检） |
 | **Goal / Non-goals** | 各**一行**，从 research §合成 压缩，禁止长段粘贴 research 正文 |
 | **不变量** | 调研已钉死的边界（若无写「无」） |
 | **已否决方案** | 每项半行；若无写「无」 |
@@ -123,7 +125,7 @@ metadata:
 
 **与四元组**：`scope` 路径应能从继承指针或矩阵映射追溯到仓库内证据；`Verify` 不得无故弱于 research 已给出的验证类型。
 
-**与 `.cursor/rules/cursor-plan-output.mdc`**：alwaysApply 仍以四元组、末条计划/Git 证据收口，以及 **有前置 research/等价结论文档/外部合成材料时 execution 须有 `## 执行计划继承面`** 的指针级硬自检为准（插入位置：第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**正文内、先于**任意**正文 Markdown checkbox / 其它分节任务，与 CreatePlan 契约第 **2** 条一致）；继承面字段与行数上限仍以本节为真源；**不**在该 `.mdc` 内重复展开继承面全文（减法：`cursor-plan-output` 不镜像表格以免双真源膨胀）。
+**与 `.cursor/rules/cursor-plan-output.mdc`**：alwaysApply 仍以四元组、末条计划/Git 证据收口，以及 **有前置 research/等价结论文档/外部合成材料时 execution 须有 `## 执行计划继承面`** 的指针级硬自检为准（插入位置：第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**正文内、先于**任意**正文 Markdown checkbox / 其它分节任务，与宿主工具产出契约一致）；继承面字段与行数上限仍以本节为真源；Cursor 宿主专属的 `.mdc` 与继承面映射细节：见 [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md)。
 
 ### `research`：正文建议结构
 
@@ -134,13 +136,13 @@ metadata:
 ### `research`：每条 todo 与末条收口
 
 - **动作**：以读、搜、`rg`、对照文档、只读 code review、外部资料只读拉取为主；**Verify** 须为只读命令或可勾选的人工对照（不得依赖「改文件后跑测试通过」作为唯一手段）。
-- **profile 级 Non-goals**：在 `overview` 或每条 todo 写明 **不改**仓库内 tracked **源码 / 配置 / 测试**；若执行中须回写结论文档 / plan 以写入结论，须在**末条** `Verify` 中显式允许的路径集合与 `overview` 窄例外单句一致（示例：`.cursor/plans/<本文件>.plan.md`）。
+- **profile 级 Non-goals**：在 `overview` 或每条 todo 写明 **不改**仓库内 tracked **源码 / 配置 / 测试**；若执行中须回写结论文档 / plan 以写入结论，须在**末条** `Verify` 中显式允许的路径集合与 `overview` 窄例外单句一致（示例：`<host-plans-dir>/<本文件>.plan.md`）。
 - **末条 todo（调研收口）**：`Done when`：§调研问题与结论 逐条有结论文或 open gap；与各前置 todo 结论交叉一致、无自相矛盾。`Verify`：**不**含 **`/gitx plan`**；须含 **`git status --porcelain`** 为空 **或** 输出仅含已声明允许的 plan 路径，并含「对照正文指定节与 YAML `todos` 逐项」的可客观勾选表述。
 
 **末条示例（`research`，按实际文件名替换路径）**：
 
 ```text
-对照调研问题矩阵与合成结论并完成调研收口 @ .cursor/plans/<本文件>.plan.md
+对照调研问题矩阵与合成结论并完成调研收口 @ <host-plans-dir>/<本文件>.plan.md
 | Done: §调研问题与结论 逐条有结论或 open gap；与前置 todos 无矛盾
 | Verify: git status --porcelain 为空或仅列出 overview 已声明允许的路径；人工逐项对照 §调研问题与结论 与 frontmatter todos（不得要求 /gitx plan）
 ```
@@ -174,26 +176,26 @@ metadata:
 | 连续性 / 框架只读视图 | 按需 | `router-rs framework snapshot` 或文档约定命令输出摘要 | `docs/harness_architecture.md`；勿在 plan 正文发明第二套账本 |
 | **可选审 plan** | 仅当用户明确要求 review plan / 审计划 | review-only findings（问题、风险、缺失验证），不改代码 | 可落盘 `docs/plans/<topic>_findings*.md` |
 | 对抗式 / 全切片 **深度代码审** | 用户要 hostile / security / 整 PR 级 review 时 | review-only：默认 **severity 排序的 findings**（P0–P2 符号锚点），verdict 至多一行可选；只找问题，不改代码 | [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) |
-| Cursor **review** 硬路径（宿主） | 深度 review 类任务 | 以仓库根 **`AGENTS.md`** → **Execution Ladder** 与 **`.cursor/hook-state`** 为准；清门只用宿主注入的 **`router-rs …`** 单行短码 | 不在 plan 正文自拟长段机读块 |
+| Cursor **review** 硬路径（宿主） | 深度 review 类任务 | 以仓库根 **`AGENTS.md`** → **Execution Ladder** 与宿主 hook 状态为准；清门只用宿主注入的单行短码 | 不在 plan 正文自拟长段机读块；宿主差异见下方 **## 宿主差异** |
 | 调研收口 | `research` | `git status --porcelain` + 正文矩阵对照 | **Plan profile** 末条 |
 | Git 计划收口 | `execution`（或下游计划） | 计划 vs 实际 + Git 状态证据；宿主支持时用 **`/gitx plan`**（与 **`/gitx`** 同契约） | [`skills/gitx/SKILL.md`](../gitx/SKILL.md) |
 
 ### 宿主侧计划落盘（与协作）
 
-Cursor 官方说明：计划默认保存在**用户目录**，需 **「Save to workspace」** 才进入工作区以便版本管理与团队共享；内部 todo 与文件不同步等宿主/社区讨论，见上文 [**宿主侧计划落盘（与协作）**](#宿主侧计划落盘与协作) 与 [`docs/plans/README.md`](../../docs/plans/README.md)。
+宿主侧的 Save to workspace 机制与计划落盘路径差异：见下方 **## 宿主差异** 与 [`docs/plans/README.md`](../../docs/plans/README.md)。
 
 ## Workflow（四步）
 
 1. **本地证据先进计划**（见上节 **能力与工件联动表**「本地代码与配置调研」）：在写结构化计划前，完成域内必要的深读、检索或代码定位；计划应收敛已有证据，而不是用计划代替定位结论。
-2. **Todo 必须可验收**：每条 todo 在同一条可见文案里写全 **四元组**（见下文 **Todo 可执行性**）；**通过 Cursor CreatePlan 生成的 `.plan.md` 还须满足下文 CreatePlan 输出契约**。与 `skills/SKILL_FRAMEWORK_PROTOCOLS.md` 的 execution item / verification 思想对齐（不必冗长复制 schema）。
+2. **Todo 必须可验收**：每条 todo 在同一条可见文案里写全 **四元组**（见下文 **Todo 可执行性**）；宿主工具生成的 `.plan.md` 还须满足宿主工具的产出契约（见上文 **宿主工具产出契约**）。与 `skills/SKILL_FRAMEWORK_PROTOCOLS.md` 的 execution item / verification 思想对齐（不必冗长复制 schema）。
 3. **可选 review 只找问题**：仅当用户明确要求 review plan / 审计划 / 深度 review，或任务本身是跨模块高风险审计时，review lane 只读计划与证据，输出 findings / risks / missing tests（**默认 compact**：severity 序、少叙事；与用户可见深度代码审同约定，见 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)）；不改代码、不自动修复。主线程再决定是否把问题转成 plan delta。
 4. **收口（依 `plan_profile`）**：
    - **`research`**：完成 **调研合成与问题矩阵收口**（见 **Plan profile** 末条要求）；**不**把 **`/gitx plan`** 作为本 profile 的必需验证。
-   - **缺省 / `execution`**：**获批且实现与测试通过后** 做计划 vs 实际逐项对照（scope、验证、未做项的原因）并记录 Git 状态证据（如 `git status --short --branch`、`git diff --stat`）。宿主支持时可用 **`/gitx plan`** 作为同契约入口。CreatePlan 产出的 frontmatter **最后一条** todo 必须将该收口写进可执行项（见 **CreatePlan 输出契约**）。
+   - **`execution`**：**获批且实现与测试通过后** 做计划 vs 实际逐项对照（scope、验证、未做项的原因）并记录 Git 状态证据（如 `git status --short --branch`、`git diff --stat`）。宿主支持时可用 **`/gitx plan`** 作为同契约入口。宿主工具产出的 frontmatter **最后一条** todo 必须将该收口写进可执行项（见上文 **宿主工具产出契约**）。
 
 ### 计划执行完成后的**用户可见**回复（Chat）
 
-**与末条 todo / 工件分层**：对照计划、跑 Verify、Git 证据、更新 `.plan.md` 勾选或 closeout 记录仍须按 **CreatePlan 输出契约**与仓库 **Closeout** 做完；**面向用户的聊天收尾**默认**不**按各条 todo 朗读「验证了哪些命令 / 哪些用例 / 哪些路径」。
+**与末条 todo / 工件分层**：对照计划、跑 Verify、Git 证据、更新 `.plan.md` 勾选或 closeout 记录仍须按本文档的宿主工具产出契约与仓库 **Closeout** 做完；**面向用户的聊天收尾**默认**不**按各条 todo 朗读「验证了哪些命令 / 哪些用例 / 哪些路径」。
 
 **默认结构（宏观、短）**，按顺序各 **一至数句** 即可：
 
@@ -202,13 +204,14 @@ Cursor 官方说明：计划默认保存在**用户目录**，需 **「Save to w
 3. **缺口**（仅当非「是」时）：一句话点出未覆盖项或阻塞，不展开验证细节。
 4. **下一步推荐**：可选的一条建议（续做、合并、另开计划、人工验收等）。
 
-语气与「几句带过」见 [`.cursor/rules/session-close-summary.mdc`](../../.cursor/rules/session-close-summary.mdc)；与仓库根 **`AGENTS.md`** → **Closeout** 的「证据优先落工件、聊天不默认堆证据」一致。
+语气与「几句带过」与仓库根 **`AGENTS.md`** → **Closeout** 的「证据优先落工件、聊天不默认堆证据」一致。Cursor 宿主专属的收尾风格约束（`.cursor/rules/session-close-summary.mdc` 引用）：见 [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md)。
 
 ## Continuity 与工件
 
 - **分层与 hook**：控制面、证据与续跑注入边界以 `docs/harness_architecture.md` 为准；不要在 skill 正文发明第二套账本格式。
-- **计划落盘**：权威草稿/链接建议 `.cursor/plans/`；仓库协作或审计需要的摘要可复制或同步到 `docs/plans/`，与仓库内其它计划文档同一叙事。
-- **Plan Build 与 goal**：Cursor Plan Build **不**自动武装 lifecycle goal 门控；连续执行仅由用户显式 **`/implementx`**（及 `/verifyx`）启动。Pre-goal 提示见 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`**（`AUTOPILOT_*` 仅为 env 遗留名；`/autopilot` 斜杠已退役）。
+- **计划落盘**：权威草稿/链接建议宿主工作区内的 plans 目录（如 `.cursor/plans/`、`docs/plans/` 等）；仓库协作或审计需要的摘要可复制或同步到 `docs/plans/`，与仓库内其它计划文档同一叙事。
+- **Plan Build 与 goal**：宿主 Plan Build **不**自动武装 lifecycle goal 门控；连续执行仅由用户显式 **`/implementx`**（及 `/verifyx`）启动。Cursor 宿主专属的 Plan Build 与 goal 门控细节：见 [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md)。
+- **收尾回复语气**：面向用户的聊天收尾默认**不**按各条 todo 朗读验证细节；语气与「几句带过」见仓库根 **`AGENTS.md`** → **Closeout**。Cursor 宿主专属的收尾风格约束：见 [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md)。
 
 ## Todo 可执行性（四元组、对齐与依赖）
 
@@ -239,7 +242,7 @@ Non-goals: <可选>
 - **弱**：`优化 registry 双轨`（无范围、无 Done、无 Verify）。
 - **强**：`从 RUNTIME_REGISTRY 移除 host_targets.entrypoint_files 并同步 fixture @ configs/framework/RUNTIME_REGISTRY.json, tests/common/mod.rs | Done: rg 在 configs/framework 与 tests 下无该键（例外在 § 单列）| Verify: cargo test --manifest-path core/router-rs/Cargo.toml`（仓库以实际约定命令为准）。
 - **强（execution 收口与 gitx 习惯对齐）**：末条或关联 closeout 文档中写明 **`git diff --stat`**（或一句「本次无代码 diff」）和 `git status --short --branch`；宿主支持时 `Verify` 可附带 **`/gitx plan`**，与 [`skills/gitx/SKILL.md`](../gitx/SKILL.md) 中实质性 diff 记录习惯一致。
-- **强（可选审 plan 修订可复核）**：仅当用户明确要求审 plan / review plan 时，对**本计划文件**执行例如 `git diff .cursor/plans/<本计划>.plan.md | head -n 40`（路径按实际替换），或将等价 diff 摘要写入 closeout；避免仅用 `rg Finding` 而看不到计划正文是否已合并修订。
+- **强（可选审 plan 修订可复核）**：仅当用户明确要求审 plan / review plan 时，对**本计划文件**执行例如 `git diff plans/<本计划>.plan.md | head -n 40`（路径按实际替换），或将等价 diff 摘要写入 closeout；避免仅用 `rg Finding` 而看不到计划正文是否已合并修订。
 - **强（深度 review 防空壳）**：若 todo 指向深度代码审，`Done` 须要求 P0–P2 中**至少一条**含具体**符号锚点**（函数名/常量名等）；`Verify` 用 `rg` 命中该符号之一。
 
 ### YAML 与正文对齐
@@ -253,39 +256,7 @@ Non-goals: <可选>
 - **分支 / 多选一**（如 A/B/C）：为每条分支写独立 todo，并标明 **仅当** 某决策成立时执行；依赖另一条时写 **`Blocked by: <todo-id>`** 或等价「先完成 §P0.1」。
 - **忌**单条「执行整条 P0 链」：改为链上每一步一条可验证 todo，便于勾选与 **`/gitx plan`**（`execution`）或 **调研矩阵 / 证据**（`research`）对照。
 
-## CreatePlan 输出契约（Cursor）
-
-**适用范围**：宿主通过 **CreatePlan** 新建或更新、落盘为 **`.plan.md`** 的计划（常见路径：工作区 `.cursor/plans/`；以 Cursor 实际写入为准）。**Skill 路由不会改写磁盘上的 plan 文件**；合规依赖主线程在调用 CreatePlan **之后**对照本节自检，必要时编辑该 `.plan.md` 补齐。
-
-**Profile 分岔**：`plan_profile: research` 时须同时满足 **Plan profile（`plan_profile`）** 与下表 **`research` 列**；**缺省**或 **`execution`** 时满足 **`execution` 列**。
-
-**硬条款**：
-
-0. **`overview` 必含 profile 声明**：
-   - **`plan_profile: research`**：`overview` 须含与 **Plan profile** → **`research`：overview 必填声明模板** 等价的「调研期零实现面改动」声明；如声明窄例外（回写结论文档 / plan 等路径，须在**同一 `overview` 单句**中列出允许路径集合），且末条 `Verify` 仍按 `research` 列约束 `git status --porcelain`。
-   - **`plan_profile: execution`（缺省）**：`overview` 须有一句标明本计划允许按 todos 修改实现面资产，且末条用计划/Git 状态证据收口（见 **Plan profile** → **`execution`：overview 一句式模板**）。
-
-1. **每条** frontmatter `todos[].content` 须在**同一条字符串**内可见 **四元组**（动作、范围 1–3 路径、Done when、Verify），与上文 **Todo 可执行性**一致；禁止「content 只有阶段名、细节全在正文」。
-2. **`execution` 正文与前置调研**：若有前置 `plan_profile: research`、`docs/plans/` 下调研结论文档或外部合成材料，在第二个 `---`（**YAML frontmatter 闭合行**，非正文 Markdown 横线 `---`）**之后**的正文内须有 **`## 执行计划继承面`**，且须位于**任意正文 Markdown checkbox 清单或其它分节任务叙述之前**（**不得**写入 YAML frontmatter）；字段见 **执行计划继承面（research→execution）**；无前置调研的 execution 可省略本节，或在 **`## 执行计划继承面`** 小节内写一行 **`继承指针：无（无前置调研）`**。
-3. **`todos` 最后一条**（依 profile）：
-
-| | **`execution`（缺省）** | **`research`** |
-|---|-------------------------|------------------|
-| **语义** | 计划 vs 实际 + **Git 状态证据收口** | **调研合成** + 工作区无意外改动 |
-| **`Done when`** | 可客观判定：已对照计划正文与 todos 逐项；未执行项有写明原因或 defer | §调研问题与结论 等逐条有结论文或 **open gap**；与各前置 todo 一致 |
-| **`Verify`** | 须显式包含 Git 状态证据（如 `git status --short --branch`、`git diff --stat`）；宿主支持时可包含 **`/gitx plan`**（与 **`/gitx`** 同契约，见 [`skills/gitx/SKILL.md`](../gitx/SKILL.md)） | **不得**将 **`/gitx plan`** 作为必需项；须含 **`git status --porcelain`** 约束（见 **Plan profile**）与对照正文 + YAML `todos` 的表述 |
-
-两条 profile 下末条均须含完整四元组（`execution` 动作可写「对照计划与实现并记录 Git 状态证据」；`research` 动作可写「对照调研问题矩阵与合成结论并完成调研收口」）。
-
-4. 若正文含 Markdown checkbox 清单：**id / 顺序 / 验收**与 YAML `todos` 对齐。
-5. **条件分支**（A/B/C）：每条分支独立 todo + **仅当** / **`Blocked by: <todo-id>`**；禁止单条「执行整条链」替代逐步验收。
-
-**不合规 vs 合规（摘要）**：
-
-- **不合规（`execution`）**：`overview` 不含「允许按 todos 修改实现面 + 计划/Git 证据收口」声明；`content: "实现功能"`；末条无 Git 状态证据。
-- **不合规（`research`）**：`overview` 未含调研期零实现面改动硬声明；todo 主线为改代码/加测试；末条 **`Verify`** 仍强制 **`/gitx plan`** 作为唯一收口。
-- **合规（`execution` 末条）**：`overview` 已含 execution 一句式声明；`content` 内 `Done:` / `Verify:` 齐全，且 `Verify:` 含 `git status --short --branch`、`git diff --stat` 等 Git 状态证据；宿主支持时可附带 **`/gitx plan`**。
-- **合规（`research` 末条）**：`overview` 已含 research 零改动声明（如使用窄例外亦已单句声明）；`Verify:` **不含** **`/gitx plan`**，且含 **`git status --porcelain`** 与正文对照表述（见 **Plan profile** 末条示例）。
+**宿主工具产出契约**：宿主工具生成或更新的 `.plan.md` 文件须满足四元组、profile 分岔、继承面与末条收口等核心规范。**Skill 路由不会改写磁盘上的 plan 文件**；合规依赖主线程在调用宿主工具 **之后**对照本文档自检，必要时编辑该 `.plan.md` 补齐。Cursor 宿主专属的 CreatePlan 输出契约（含硬条款、不合规示例与 Save to workspace 机制）：见 [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md)。
 
 ## Related
 
@@ -296,4 +267,19 @@ Non-goals: <可选>
 - 本文件 [**Todo 可执行性（四元组、对齐与依赖）**](#todo-可执行性四元组对齐与依赖) — 四元组、YAML/正文对齐与拆分依赖。
 - 本文件 [**Workflow**](#workflow四步) 第 3 步 + [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) — 可选审 plan / 深度 review 的 findings 与 Verify 习惯。
 - 本文件 [**执行计划继承面（research→execution）**](#执行计划继承面researchexecution) — 继承指针、外部准入表与减法规则。
-- `.cursor/rules/cursor-plan-output.mdc` — Cursor alwaysApply 下对 CreatePlan 产出的硬自检清单。
+- [`.cursor/rules/cursor-plan-output.mdc`](references/cursor-createplan-contract.md) — Cursor alwaysApply 下对 CreatePlan 产出的硬自检清单（详见 references）。
+- [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) — Cursor 宿主专属：CreatePlan 输出契约、Save to workspace、Plan Build 与 goal 门控、session-close-summary 引用。
+
+## 宿主差异
+
+本 skill 为宿主无关设计。以下为宿主专属的技术细节，均已下沉到 `references/` 或以指针形式保留：
+
+| 宿主特性 | 说明 | 详细文档 |
+|----------|------|----------|
+| Cursor **CreatePlan** 输出契约 | 硬条款（overview 声明、四元组、继承面、末条收口）、不合规/合规示例、Profile 分岔表 | [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) |
+| Cursor **Save to workspace** | 计划默认保存在用户目录，需手动 Save to workspace 才进入工作区 | [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) |
+| Cursor **Plan Build 与 goal** | Plan Build 不自动武装 lifecycle goal 门控；`/implementx` 显式启动 | [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) |
+| Cursor **`.cursor/rules/cursor-plan-output.mdc`** | alwaysApply 自检清单与继承面映射、减法规则 | [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) |
+| Cursor **review 硬路径** | `.cursor/hook-state` + 宿主注入单行短码清门；详见 `AGENTS.md` Execution Ladder | 本文件 **能力与工件联动表** |
+| Cursor **session-close-summary** | 收尾回复语气与结构约束（`.cursor/rules/session-close-summary.mdc`） | [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) |
+| 通用 **宿主工作区路径** | 计划草稿落在宿主工作区（如 `.cursor/plans/`、`docs/plans/` 等） | 本文件 **Continuity 与工件** |
