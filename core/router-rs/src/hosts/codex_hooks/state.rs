@@ -9,6 +9,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
