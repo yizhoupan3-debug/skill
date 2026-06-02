@@ -3,6 +3,7 @@
 //! Truth source: `configs/framework/HARNESS_OPERATOR_NUDGES.json` under repo root.
 //! Disable all injected nudges: `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` (same soft-off tokens as other `ROUTER_RS_*` defaults).
 #![allow(dead_code)]
+// TODO: integrate — 整体模块级 dead_code 豁免，待新 hook 接口接入后收紧
 
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
