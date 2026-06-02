@@ -74,7 +74,6 @@ fn runtime_registry_my_light_lifecycle_profile_review_fields() {
     let root = project_root();
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
     let my_light = &registry["lifecycle_profiles"]["my-light"];
-    assert_eq!(my_light["disable_review_gate_hard_block"], true);
     assert_eq!(my_light["disable_spawn_first_nudge"], true);
     assert!(
         my_light.get("commands").is_none(),

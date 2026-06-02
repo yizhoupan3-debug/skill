@@ -882,10 +882,10 @@ mod antigravity_hard_blocking_tests {
     }
 
     #[test]
-    fn antigravity_closeout_gate_hard_blocks_unsatisfied_by_default() {
+    fn antigravity_closeout_gate_advisory_unsatisfied_by_default() {
         let repo = test_repo_dir();
-        // Default seed has no successful evidence and no session summary, closeout verdict is ADVISORY.
-        // We call handle_mcp_request for closeout_gate under "antigravity" host.
+        // Default seed has no successful evidence and no session summary.
+        // Under advisory-only mode, closeout_gate returns OK with ADVISORY verdict (not hard-blocked).
         let req = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -895,25 +895,26 @@ mod antigravity_hard_blocking_tests {
                 "arguments": {}
             }
         });
-        
+
         let response = crate::claude_desktop_hooks::handle_mcp_request(
             &req.to_string(),
             &repo,
             "antigravity",
         ).expect("should get response");
 
-        assert!(response["result"]["isError"].as_bool().unwrap_or(false));
-        let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Antigravity App Hard Block]"));
-        
+        // Advisory mode: NOT an error, just reports findings
+        assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
+        let text = response["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("ADVISORY"), "expected ADVISORY verdict; got {text}");
+
         let _ = std::fs::remove_dir_all(&repo);
     }
 
     #[test]
-    fn antigravity_goal_state_manage_complete_hard_blocks_unsatisfied_by_default() {
+    fn antigravity_goal_state_manage_complete_advisory_unsatisfied() {
         let repo = test_repo_dir();
-        // Default seed has unsatisfied closeout gates.
-        // We try to mark goal as complete under "antigravity" host.
+        // Under advisory-only mode, the MCP layer does not hard-block complete.
+        // The test now expects a task_id validation error instead of a hard block.
         let req = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -932,9 +933,16 @@ mod antigravity_hard_blocking_tests {
             "antigravity",
         ).expect("should get response");
 
-        assert!(response["result"]["isError"].as_bool().unwrap_or(false));
+        // Advisory mode: no hard block, but task_id validation still applies
         let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Antigravity App Hard Block] Cannot mark goal as complete"));
+        assert!(
+            !error_msg.contains("[Antigravity App Hard Block]"),
+            "should NOT contain hard block message in advisory mode; got {error_msg}"
+        );
+        assert!(
+            error_msg.contains("task_id is required") || !response["result"]["isError"].as_bool().unwrap_or(false),
+            "expected task_id validation or success (not hard block); got {error_msg}"
+        );
 
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -999,7 +1007,7 @@ mod antigravity_hard_blocking_tests {
     }
 
     #[test]
-    fn antigravity_review_goal_without_evidence_hard_blocks() {
+    fn antigravity_review_goal_without_evidence_advisory() {
         let repo = test_repo_dir();
         let task_id = "test-strict-review";
         
@@ -1051,10 +1059,13 @@ mod antigravity_hard_blocking_tests {
             "antigravity",
         ).expect("should get response");
 
-        assert!(response["result"]["isError"].as_bool().unwrap_or(false));
-        let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Antigravity App Hard Block]"));
-        assert!(error_msg.contains("review work but no hook-level reviewer evidence"));
+        // Advisory mode: complete is NOT hard-blocked even with review goal.
+        // The MCP layer no longer intercepts complete, so it proceeds to goal_state_manage.
+        assert!(
+            !response["result"]["isError"].as_bool().unwrap_or(false),
+            "advisory mode should not block goal_state_manage complete; got {:?}",
+            response["result"]["content"][0]["text"]
+        );
 
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -1160,8 +1171,9 @@ mod claude_desktop_hard_blocking_tests {
     }
 
     #[test]
-    fn desktop_closeout_gate_hard_blocks_unsatisfied_by_default() {
+    fn desktop_closeout_gate_advisory_unsatisfied_by_default() {
         let repo = test_repo_dir();
+        // Advisory-only mode: closeout_gate reports findings but does not hard-block.
         let req = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -1177,9 +1189,9 @@ mod claude_desktop_hard_blocking_tests {
             "claude-desktop",
         )
         .expect("response");
-        assert!(response["result"]["isError"].as_bool().unwrap_or(false));
-        let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Claude Desktop Hard Block]"));
+        assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
+        let text = response["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("ADVISORY"), "expected ADVISORY verdict; got {text}");
         let _ = std::fs::remove_dir_all(&repo);
     }
 
@@ -1219,8 +1231,9 @@ mod claude_desktop_hard_blocking_tests {
     }
 
     #[test]
-    fn desktop_goal_state_manage_complete_hard_blocks_unsatisfied_by_default() {
+    fn desktop_goal_state_manage_complete_advisory_unsatisfied() {
         let repo = test_repo_dir();
+        // Advisory mode: no hard block, but task_id validation still applies
         let req = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -1236,14 +1249,20 @@ mod claude_desktop_hard_blocking_tests {
             "claude-desktop",
         )
         .expect("response");
-        assert!(response["result"]["isError"].as_bool().unwrap_or(false));
         let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Claude Desktop Hard Block]"));
+        assert!(
+            !error_msg.contains("[Claude Desktop Hard Block]"),
+            "should NOT contain hard block message in advisory mode; got {error_msg}"
+        );
+        assert!(
+            error_msg.contains("task_id is required") || !response["result"]["isError"].as_bool().unwrap_or(false),
+            "expected task_id validation or success (not hard block); got {error_msg}"
+        );
         let _ = std::fs::remove_dir_all(&repo);
     }
 
     #[test]
-    fn desktop_review_goal_without_evidence_hard_blocks() {
+    fn desktop_review_goal_without_evidence_advisory() {
         let repo = test_repo_dir();
         let task_id = "desktop-strict-review";
         std::fs::write(
@@ -1288,9 +1307,11 @@ mod claude_desktop_hard_blocking_tests {
             "claude-desktop",
         )
         .expect("response");
-        assert!(response["result"]["isError"].as_bool().unwrap_or(false));
-        let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(error_msg.contains("[Claude Desktop Hard Block]"));
+        // Advisory mode: NOT hard-blocked even with review goal and no reviewer evidence
+        assert!(!response["result"]["isError"].as_bool().unwrap_or(false),
+            "advisory mode should not block; got {:?}",
+            response["result"]["content"][0]["text"]
+        );
         let _ = std::fs::remove_dir_all(&repo);
     }
 
