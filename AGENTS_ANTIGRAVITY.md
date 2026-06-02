@@ -31,7 +31,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-
 ## 并行子代理与 review
 
 - **`my-light`**：两宿主均关闭 hook 硬 `REVIEW_GATE`（CLI 仍可有 Codex 式门控 env）。
-- **CLI**：大规模任务优先 `invoke_subagent`；review 证据 PostTool+Stop（见 `code-review-deep` Antigravity CLI 段）。
+- **CLI**：大规模任务优先 `invoke_subagent`；review 证据 PostTool+Stop（见 `code-review-deep` Antigravity CLI 段）。注册 7 个 lifecycle 事件：SessionStart、PreToolUse、UserPromptSubmit、PostToolUse、Stop、SubagentStart、SubagentStop。
 - **App**：无 shell hooks；review 靠 `review-lanes/*.md` + MCP Hard Block（非 my-light）。
 
 ## 连续性
