@@ -167,6 +167,17 @@ struct RegistryCache {
 static REGISTRY_CACHE: LazyLock<Mutex<Option<RegistryCache>>> =
     LazyLock::new(|| Mutex::new(None));
 
+/// Load and parse the registry JSON from disk (shared by cache miss paths).
+fn load_and_cache(path: &std::path::Path) -> Result<Value, String> {
+    let raw = fs::read_to_string(path).map_err(|err| {
+        format!("framework alias registry unavailable at {}: {err}", path.display())
+    })?;
+    let parsed: Value = serde_json::from_str(&raw).map_err(|err| {
+        format!("framework alias registry parse failed at {}: {err}", path.display())
+    })?;
+    Ok(parsed)
+}
+
 fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Value, String> {
     let registry_path = repo_root
         .join("configs")
@@ -181,22 +192,12 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
             if entry.mtime == mtime {
                 entry.payload.clone()
             } else {
-                let raw = fs::read_to_string(&registry_path).map_err(|err| {
-                    format!("framework alias registry unavailable at {}: {err}", registry_path.display())
-                })?;
-                let parsed: Value = serde_json::from_str(&raw).map_err(|err| {
-                    format!("framework alias registry parse failed at {}: {err}", registry_path.display())
-                })?;
+                let parsed = load_and_cache(&registry_path)?;
                 *cache = Some(RegistryCache { payload: parsed.clone(), mtime });
                 parsed
             }
         } else {
-            let raw = fs::read_to_string(&registry_path).map_err(|err| {
-                format!("framework alias registry unavailable at {}: {err}", registry_path.display())
-            })?;
-            let parsed: Value = serde_json::from_str(&raw).map_err(|err| {
-                format!("framework alias registry parse failed at {}: {err}", registry_path.display())
-            })?;
+            let parsed = load_and_cache(&registry_path)?;
             *cache = Some(RegistryCache { payload: parsed.clone(), mtime });
             parsed
         }

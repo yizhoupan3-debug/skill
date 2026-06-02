@@ -16,16 +16,19 @@ use std::path::{Path, PathBuf};
 pub const RFV_LOOP_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
 pub const RFV_LOOP_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
 /// Repo-relative path; keep in sync with `cursor_hooks` merge logic that surfaces this substring.
+// TODO: integrate
 #[allow(dead_code)]
 pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
 /// `retrieval_trace` prose fields must be at least this many **trimmed** chars under strict mode.
+// TODO: integrate
 #[allow(dead_code)]
 pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
 /// Allowed `verify_result` enum (uppercase); see `reasoning-depth-contract.md`.
 /// `append_round` rejects values outside this set so PASS/FAIL is auditable, not free-form.
 pub const ALLOWED_VERIFY_RESULTS: &[&str] = &["PASS", "FAIL", "SKIPPED", "UNKNOWN"];
 
+// TODO: integrate
 #[allow(dead_code)]
 fn nonempty_trimmed_string_at(value: &Value, ctx: &str, key: &str) -> Result<(), String> {
     let Some(t) = value.as_str() else {
@@ -37,6 +40,7 @@ fn nonempty_trimmed_string_at(value: &Value, ctx: &str, key: &str) -> Result<(),
     Ok(())
 }
 
+// TODO: integrate
 #[allow(dead_code)]
 fn validate_nonempty_string_items(arr: &[Value], ctx: &str, arr_name: &str) -> Result<(), String> {
     if arr.is_empty() {
@@ -50,6 +54,7 @@ fn validate_nonempty_string_items(arr: &[Value], ctx: &str, arr_name: &str) -> R
 }
 
 /// Heuristic: source string looks like a machine-checkable external pointer (URL, DOI, arXiv, …).
+// TODO: integrate
 #[allow(dead_code)]
 pub fn source_traceable_heuristic(s: &str) -> bool {
     let t = s.trim();
@@ -85,6 +90,7 @@ pub fn source_traceable_heuristic(s: &str) -> bool {
     false
 }
 
+// TODO: integrate
 #[allow(dead_code)]
 fn validate_source_list_traceable(
     sources: &[Value],

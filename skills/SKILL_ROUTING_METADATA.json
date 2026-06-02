@@ -1,9 +1,6 @@
 {
   "schema_version": "skill-routing-metadata-v1",
   "skills": {
-    "adversarial-loop": {
-      "selection_reason": "allowlisted first-turn owner"
-    },
     "agent-swarm-orchestration": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -40,22 +37,7 @@
     "gitx": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
-    "hatch-pet": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "image-generated": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
     "implementx": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "jupyter-notebook": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "latex-compile-acceleration": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "mac-memory-management": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "math-derivation": {
@@ -64,16 +46,7 @@
     "mcp-server-management": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
-    "paper-reviewer": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "paper-reviser": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
     "paper-workbench": {
-      "selection_reason": "allowlisted first-turn owner"
-    },
-    "paper-writing": {
       "selection_reason": "allowlisted first-turn owner"
     },
     "pdf": {
@@ -83,9 +56,6 @@
       "selection_reason": "allowlisted first-turn owner"
     },
     "planx": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "ppt-beamer": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "python-env-management": {
@@ -106,17 +76,11 @@
     "slides": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
-    "source-slide-formats": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
     "spreadsheets": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "statistical-analysis": {
       "selection_reason": "allowlisted first-turn owner"
-    },
-    "token-optimization": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "update": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"

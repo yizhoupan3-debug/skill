@@ -11,9 +11,13 @@ use std::io::{BufWriter, Write};
 
 #[derive(Debug, Clone, Default)]
 pub struct CacheStats {
+    /// Anthropic API 返回的 cache 命中 token 数（cache_read_input_tokens）。
     pub cache_read_input_tokens: u64,
+    /// 本次调用写入缓存的 token 数（cache_creation_input_tokens）。
     pub cache_creation_input_tokens: u64,
+    /// 非缓存输入 token 数（cache_read 是 input 的子集，由 API 分别报告）。
     pub input_tokens: u64,
+    /// 模型输出 token 数（output_tokens）。
     pub output_tokens: u64,
 }
 use std::path::{Path, PathBuf};
@@ -94,6 +98,7 @@ pub fn record_tool_call(repo_root: &Path, tool_name: &str, cache_stats: Option<C
             tu.insert("output".to_string(), json!(cur_out + stats.output_tokens));
             tu.insert("cache_read".to_string(), json!(cur_cr + stats.cache_read_input_tokens));
             tu.insert("cache_creation".to_string(), json!(cur_cc + stats.cache_creation_input_tokens));
+            // total = input + output; cache tokens are subsets of input, reported in separate fields
             tu.insert("total".to_string(), json!(cur_in + stats.input_tokens + cur_out + stats.output_tokens));
         }
 

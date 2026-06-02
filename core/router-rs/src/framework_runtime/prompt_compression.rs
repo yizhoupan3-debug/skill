@@ -15,7 +15,7 @@ pub fn build_framework_prompt_compression_envelope(payload: Value, context_windo
         .or_else(|| payload.get("budget"))
         .and_then(Value::as_u64)
         .and_then(|value| usize::try_from(value).ok())
-        .or_else(|| context_window_size.map(|s| s / 4))
+        .or_else(|| context_window_size.filter(|&s| s > 0).map(|s| s / 4))
         .ok_or_else(|| {
             "framework prompt compression requires token_budget or budget, or context_window_size".to_string()
         })?;

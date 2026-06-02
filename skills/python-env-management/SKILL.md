@@ -58,9 +58,9 @@ Canonical full specification: [`SPEC.md`](SPEC.md).
 
 ## Do not use
 
-- The task is **running ML under Apple Silicon memory pressure** → answer in the current implementation context after the env is on uv（`$mac-memory-management` 已归档）
+- The task is **running ML under Apple Silicon memory pressure** → answer in the current implementation context after the env is on uv（`` 已归档）
 - The task is **experiment seeds / DVC / MLflow reproducibility** without env restructuring → use `$experiment-reproducibility`
-- The task is **notebook authoring pedagogy** only → answer in the current context; install Jupyter via **`uv add --dev`** + **`uv sync --all-groups`**, not pip（`$jupyter-notebook` 已归档）
+- The task is **notebook authoring pedagogy** only → answer in the current context; install Jupyter via **`uv add --dev`** + **`uv sync --all-groups`**, not pip（`` 已归档）
 - The task is **Rust application code** in this repo → use Cargo / `router-rs`, not Python
 - The user only needs a single package in a throwaway REPL with no governance → still prefer `uvx`, never pip
 
@@ -103,7 +103,7 @@ uv run python -c "import sys; print(sys.executable)"
 ## Cross-skill boundaries
 
 - After `uv sync`, reproducibility layers in `$experiment-reproducibility` apply to **seeds, data, configs**—not to replacing uv.
-- `$mac-memory-management`（已归档）在当前上下文中处理训练代码的内存约束；先用本 skill 修复环境。
+- ``（已归档）在当前上下文中处理训练代码的内存约束；先用本 skill 修复环境。
 
 ## Routing
 

@@ -427,3 +427,9 @@ Final response template (use 3-4 bullets):
 ### 专业格式参考
 - LaTeX Beamer 幻灯片：参见 `references/beamer.md`
 - 源码格式（Slidev/Marp/HTML）：参见 `references/source-formats.md`
+
+## Exit Criteria
+
+- deck.plan.json 已生成（含 slide 列表 + 布局决策）
+- 美学门控已通过（一致性 / 可读性 / 品牌匹配）
+- 用户确认输出格式（LaTeX Beamer / HTML / Markdown）

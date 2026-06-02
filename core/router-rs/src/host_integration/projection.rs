@@ -291,7 +291,7 @@ pub(crate) fn default_projection_tools_for_scope(
     Ok(tools)
 }
 
-struct HostProjectionAdapter {
+pub(crate) struct HostProjectionAdapter {
     tool: &'static str,
     host_id: &'static str,
     aliases: &'static [&'static str],
@@ -1234,7 +1234,7 @@ pub(crate) fn remove_claude_projection(
 }
 
 #[derive(Debug, Default)]
-struct AgentSettingsRemoval {
+pub(crate) struct AgentSettingsRemoval {
     changed: bool,
     would_change: bool,
     removed_file: bool,
@@ -1305,7 +1305,7 @@ pub(crate) fn remove_claude_settings_hooks(
 }
 
 #[derive(Debug, Deserialize)]
-struct HostProjectionNarrative {
+pub(crate) struct HostProjectionNarrative {
     schema_version: String,
     #[serde(default, alias = "gsd_default_lifecycle_paragraph")]
     default_lifecycle_paragraph: String,
@@ -2766,7 +2766,7 @@ pub(crate) fn write_antigravity_projection_manifest(
 }
 
 #[derive(Debug, Clone, Copy)]
-struct ProjectionManifestOwnership {
+pub(crate) struct ProjectionManifestOwnership {
     managed: bool,
     owns_projection_file: bool,
 }
@@ -3044,11 +3044,11 @@ pub(crate) fn cursor_mcp_server_key_path() -> &'static str {
 }
 
 #[derive(Debug, Clone)]
-struct CursorMcpInstallOutcome {
-    managed: bool,
-    changed: bool,
-    reason: &'static str,
-    skipped_user_owned: bool,
+pub(crate) struct CursorMcpInstallOutcome {
+    pub(crate) managed: bool,
+    pub(crate) changed: bool,
+    pub(crate) reason: &'static str,
+    pub(crate) skipped_user_owned: bool,
 }
 
 pub(crate) fn install_cursor_mcp_server(
@@ -4034,7 +4034,7 @@ pub(crate) fn build_default_continuity_bootstrap(
 }
 
 #[derive(Clone)]
-struct MigrationPlan {
+pub(crate) struct MigrationPlan {
     source: String,
     destination: String,
 }

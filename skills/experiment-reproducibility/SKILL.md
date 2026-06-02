@@ -60,10 +60,10 @@ This skill owns **experiment reproducibility management** for research.
 ## Do not use
 
 - The user wants one front door for a research-project task rather than reproducibility only -> use `$research-workbench` and keep this skill only for reproducibility constraints
-- The task is about training models -> answer in the current implementation context（`$mac-memory-management` 已归档，不再路由）
+- The task is about training models -> answer in the current implementation context（`` 已归档，不再路由）
 - The task is about CI/CD pipeline -> answer in the current implementation context, or use `$gh-fix-ci` only for failing GitHub Actions checks
 - The task is about general Docker setup -> answer in the current implementation context
-- The task is about paper writing → use `$paper-writing`
+- The task is about paper writing → use `@lane:writer`
 
 ## Cross-references
 
@@ -72,7 +72,7 @@ This skill owns **experiment reproducibility management** for research.
 - `$research-workbench`, project owners, and experiment owners may use this skill as the rigor / reproducibility lane
 - Inner-loop research automation should route deep reproducibility requirements here
 - Works with performance work when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs
-- Works with performance/memory analysis when reproducibility must account for Mac memory constraints and fallback behavior（`$mac-memory-management` 已归档，在当前上下文中直接处理 Apple Silicon 内存约束）
+- Works with performance/memory analysis when reproducibility must account for Mac memory constraints and fallback behavior（`` 已归档，在当前上下文中直接处理 Apple Silicon 内存约束）
 - For Python install/lock/PATH governance (uv-only, no pip), use `$python-env-management` first; this skill owns seeds, data, and experiment records atop a pinned `uv.lock`
 - When invoked as a **gate-chain lane owner** (G2 / G5 / G14 reproducibility
   checks under the manuscript protocol), follow the lane contract in

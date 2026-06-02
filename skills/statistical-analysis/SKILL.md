@@ -66,11 +66,11 @@ This skill owns **statistical method selection, execution, and interpretation** 
 ## Do not use
 
 - The user wants one front door for a research-project task rather than statistics only -> use `$research-workbench` and keep this skill only for statistical questions
-- The task is ML model training or evaluation -> answer in the current implementation context when Apple Silicon memory/runtime constraints dominate（`$mac-memory-management` 已归档）; otherwise answer in the current implementation context
+- The task is ML model training or evaluation -> answer in the current implementation context when Apple Silicon memory/runtime constraints dominate（`` 已归档）; otherwise answer in the current implementation context
 - The task is data wrangling or cleaning -> answer in the current data/implementation context
 - The task is plotting without statistical analysis → use `$scientific-figure-plotting`
-- The task is paper writing → use `$paper-writing` (but may co-invoke for results sections)
-- The task is about paper-level scientific logic or claims-vs-evidence alignment → use `$paper-reviewer` logic mode (which may route statistical questions here)
+- The task is paper writing → use `@lane:writer` (but may co-invoke for results sections)
+- The task is about paper-level scientific logic or claims-vs-evidence alignment → use `@lane:reviewer` logic mode (which may route statistical questions here)
 
 ## References
 
@@ -166,8 +166,8 @@ assumption check, or interpretation is settled.
 ## Cross-references
 
 - `$research-workbench` and current project owners may use this skill as the statistics / uncertainty lane
-- `$paper-reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
-- `$paper-reviewer` Tier-1 statistical rigor checks may route here
+- `@lane:reviewer` logic mode routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
+- `@lane:reviewer` Tier-1 statistical rigor checks may route here
 - `$experiment-reproducibility` routes result validation statistics here
 - When invoked as a **gate-chain lane owner** (G2 / G3 / G5 statistical rigor
   checks under the manuscript protocol), follow the lane contract in

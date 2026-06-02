@@ -192,11 +192,13 @@ impl CodexLifecycleHostKind {
         self.strings().spawn_first_host_id
     }
 
+    // TODO: integrate
     #[allow(dead_code)]
     fn paper_prose_hook_env(self) -> &'static str {
         self.strings().paper_prose_hook_env
     }
 
+    // TODO: integrate
     #[allow(dead_code)]
     fn paper_adversarial_hook_env(self) -> &'static str {
         self.strings().paper_adversarial_hook_env
@@ -237,6 +239,7 @@ const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_START: &str = "Recording Antigravity C
 const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_STOP: &str = "Recording Antigravity CLI subagent stop";
 /// Default UTF-8 **byte** budget for merged Codex `additionalContext` (SessionStart / UserPromptSubmit).
 const CODEX_ADDITIONAL_CONTEXT_MAX_BYTES: usize = 640;
+// TODO: integrate
 #[allow(dead_code)]
 static CODEX_SESSION_KEY_FALLBACK_WARN: Once = Once::new();
 static ATOMIC_WRITE_NONCE: AtomicU64 = AtomicU64::new(0);
@@ -1053,11 +1056,13 @@ pub(crate) fn hooks_install_acquire_lock(home: &Path) -> Result<HooksInstallLock
     acquire_install_lock(home)
 }
 
+// TODO: integrate
 #[allow(dead_code)]
 pub(crate) fn lifecycle_hook_command_timeout_secs(host: CodexLifecycleHostKind, event: &str) -> u64 {
     codex_hook_command_timeout_secs(host, event)
 }
 
+// TODO: integrate
 #[allow(dead_code)]
 pub(crate) fn lifecycle_hook_event_status_message(host: CodexLifecycleHostKind, event_name: &str) -> &'static str {
     hook_event_status_message(host, event_name)

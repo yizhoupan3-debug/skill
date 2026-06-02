@@ -134,18 +134,18 @@ This skill is the one front door for paper work.
 
 与本立场冲突的捷径（降口径逃难、rebuttal-only、代码空诺、数学直觉化、`surgical` 全局乱改等）一律以 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 为硬闸。
 
-启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`$paper-reviewer`** 的 External lane shape 约定。
+启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
 
 **宿主 hook（L4 短码）**：`router-rs` 在 **Cursor `beforeSubmit`** 与 **Claude Code / Antigravity CLI `UserPromptSubmit`** 命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` / `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` / `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
 
 It exists so the user does not need to decide first whether the job is
-`$paper-reviewer`, `$paper-writing`, or a review/revision dimension mode.
+`@lane:reviewer`, `@lane:writer`, or a review/revision dimension mode.
 
 ## Progressive disclosure（渐进披露）— 减入口、减抽象
 
 **第一性原理**：用户要的是「这篇稿子下一步怎么办」，不是背诵技能拓扑。
 
-- **L0（默认）**：只暴露本前门与用户可理解的结果（verdict / blockers / next move / edit_scope 若即将改稿）。**不要**要求用户在 `$paper-reviewer`、`$paper-writing` 之间先选一个；在对话内自行路由。
+- **L0（默认）**：只暴露本前门与用户可理解的结果（verdict / blockers / next move / edit_scope 若即将改稿）。**不要**要求用户在 `@lane:reviewer`、`@lane:writer` 之间先选一个；在对话内自行路由。
 - **L1**：用户已明确「只润色」「只审不改」「按 R1 改」或给出 `edit_scope` / `scope_items` 时，再收紧模式，仍不必展开全套维度名。
 - **L2（排障 / 强用户）**：用户**点名**某专科 skill 或某维度（logic / figure-table / notation）时，直接尊重；文档里的 lane map 供实现方用，不是菜单。
 - **L3（长程）**：多轮冻结 claim、并行 sidecar、`PAPER_GATE_PROTOCOL` 磁盘树 —— **仅当**任务真的需要跨会话状态时再物化；日常一轮交互不要默认铺协议。
@@ -154,7 +154,7 @@ It exists so the user does not need to decide first whether the job is
 
 **全栈索引**（技能 × reference × L0–L3）：[`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md)。
 
-**宿主与专科契约（与 stack 对齐）**：`$paper-workbench` 在所有宿主上均为用户可 invocation 的前门；`$paper-writing` / `$paper-reviewer` 保持 `disable-model-invocation`，表示由本前门在**任一支宿主**上**内联**加载的专科 lane，而非与用户入口并列的第二扇门。权威表述见 [`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md) §宿主与专科入口。
+**宿主与专科契约（与 stack 对齐）**：`$paper-workbench` 在所有宿主上均为用户可 invocation 的前门；`@lane:writer` / `@lane:reviewer` 保持 `disable-model-invocation`，表示由本前门在**任一支宿主**上**内联**加载的专科 lane，而非与用户入口并列的第二扇门。权威表述见 [`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md) §宿主与专科入口。
 
 ## Use this when
 
@@ -173,13 +173,13 @@ It exists so the user does not need to decide first whether the job is
 
 - The user wants to advance a non-manuscript research project, topic, or experiment plan -> use `$research-workbench`; this front door is manuscript-only
 - The user explicitly wants only one narrow lane and names it clearly:
-  - local text polish only -> stay on **`$paper-workbench`** prose intake (inline `$paper-writing` after Claim card / `edit_scope`; do not treat `$paper-writing` as a parallel user entry)
+  - local text polish only -> stay on **`$paper-workbench`** prose intake (inline `@lane:writer` after Claim card / `edit_scope`; do not treat `@lane:writer` as a parallel user entry)
   - literature corpus / related work only -> keep the work here as source-backed paper context until it narrows to writing or citation hygiene
-  - notation consistency only -> use `notation sweep` under `$paper-reviewer`
+  - notation consistency only -> use `notation sweep` under `@lane:reviewer`
 
 ## Edit scope gate (mandatory before any manuscript edit)
 
-Any path that touches the manuscript (`$paper-writing` or
+Any path that touches the manuscript (`@lane:writer` or
 edits executed from this front door) must first fix **`edit_scope`** using
 [`references/edit-scope-gate.md`](references/edit-scope-gate.md):
 
@@ -199,7 +199,7 @@ Optional machine token on its own line: `edit_scope: surgical` or
 
 ## Audit depth routing (`audit_depth`)
 
-Resolve **`audit_depth`** before inline `$paper-reviewer` (machine token on its own line
+Resolve **`audit_depth`** before inline `@lane:reviewer` (machine token on its own line
 overrides heuristics: `audit_depth: exhaustive` | `audit_depth: compact`).
 
 | `audit_depth` | Default when | Inline reviewer behavior | User-visible output |
@@ -207,7 +207,7 @@ overrides heuristics: `audit_depth: exhaustive` | `audit_depth: compact`).
 | **exhaustive** | 整篇严审 / 能不能投 / 投稿前把关 / 全文审核 / 帮我审这篇 / strict reviewer / 顶刊审稿 / 穷举 / 逐句 / 逐公式 | Load [`paper-exhaustive-audit.md`](references/paper-exhaustive-audit.md); **pass through** depth — reviewer must not override | Verdict first, then **full** `findings_by_dimension` + `warning_items`; output **must** include `audit_depth: exhaustive` |
 | **compact** | 快速看一下 / 只审 claim / 只审图表 / 只审语言 / 单维度 + narrow scope | Compressed 8-step reviewer workflow | Verdict + top blockers summary |
 
-**Pass-through rule**: when workbench invokes `$paper-reviewer`, the resolved
+**Pass-through rule**: when workbench invokes `@lane:reviewer`, the resolved
 `audit_depth` is authoritative for that turn; reviewer must not re-default to compact.
 
 Optional sidecars during exhaustive review:
@@ -240,26 +240,26 @@ separate "known blocker" from "uncertainty that needs lookup".
 
 自动执行：
 
-1. **推断** `language_register`（见 [`../paper-writing/SKILL.md`](../paper-writing/SKILL.md) §Language register）
+1. **推断** `language_register`（见 [`../.archive-cold/paper-writing/SKILL.md`](../.archive-cold/paper-writing/SKILL.md) §Language register）
 2. **默认** `edit_scope: surgical` + 从用户粘贴/点名推断 `scope_items`（模糊时**一问** surgical vs refactor，**不问** register）
 3. **默认** `writing_mode: ladder-full` + 极简 Claim card（四槽可短，不可省略）
 4. 若 claim/evidence 明显未冻结且用户要「能不能投」→ 先 reviewer；**纯改文字**则 Claim card 后直写
 
-转发 `$paper-writing` 时**自带**上述默认值，用户无 token 也须完整交付 `tone_audit` + `prose_qc` + Stage B（或 Stage A-only 若 ladder_blocked）。
+转发 `@lane:writer` 时**自带**上述默认值，用户无 token 也须完整交付 `tone_audit` + `prose_qc` + Stage B（或 Stage A-only 若 ladder_blocked）。
 
 **全链路真源**：[`references/prose-chain-contract.md`](references/prose-chain-contract.md)（路由 → intake → reviewer language findings → reviser → inline writing → 可选 `PROSE_QC_LOG`）。多轮改稿建议维护 [`references/templates/PROSE_QC_LOG.template.md`](references/templates/PROSE_QC_LOG.template.md)。
 
 ## Prose quality chain（默认开启）
 
-凡触达正文句子的路径（含 inline `$paper-writing`）默认走 prose chain，**不得**跳过 `language_register` 或 `prose_qc`：
+凡触达正文句子的路径（含 inline `@lane:writer`）默认走 prose chain，**不得**跳过 `language_register` 或 `prose_qc`：
 
 | 步骤 | 动作 |
 | --- | --- |
 | 1 | NL/用户入口 → **本前门**（不直跳 `paper-writing`） |
 | 2 | Intake：`language_register` + `edit_scope` + Claim card |
-| 3 | 若 claim 未冻结或用户要「能不能投」→ inline `$paper-reviewer`（language findings 含 `prose_repair_class`） |
+| 3 | 若 claim 未冻结或用户要「能不能投」→ inline `@lane:reviewer`（language findings 含 `prose_repair_class`） |
 | 4 | 若有 R&R / 结构改动 → inline revision（本前门 edit_scope gate 内） |
-| 5 | Inline `$paper-writing`：`ladder-full` → `tone_audit` + `prose_qc` → Stage B |
+| 5 | Inline `@lane:writer`：`ladder-full` → `tone_audit` + `prose_qc` → Stage B |
 | 6 | 收口：可选 append `paper_story/PROSE_QC_LOG.md` |
 
 宿主短码：**`PAPER_PROSE_QUALITY_HOOK` 默认开**（`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK=0` 关闭），见 prose-chain-contract §L4。
@@ -315,13 +315,13 @@ that failure behind better English.
 
 ## Internal lane map
 
-- strict submission judgment -> `$paper-reviewer`
-- claim / novelty / evidence pressure test -> `logic mode` under `$paper-reviewer`
-- target-journal ref corpus and story-norm extraction -> source-backed paper context here, then `$paper-writing`
+- strict submission judgment -> `@lane:reviewer`
+- claim / novelty / evidence pressure test -> `logic mode` under `@lane:reviewer`
+- target-journal ref corpus and story-norm extraction -> source-backed paper context here, then `@lane:writer`
 - external calibration during review -> keep the main owner here or in
-  `$paper-reviewer`; keep full corpus / novelty sweeps inside this paper front door
+  `@lane:reviewer`; keep full corpus / novelty sweeps inside this paper front door
 - findings-driven manuscript changes -> this front door's inline revision (respect **`edit_scope`**)
-- local prose rewrite after scope is frozen -> `$paper-writing` (default **`surgical`** unless user escalates to **`refactor`**); **须**先设 **`language_register`** 并走 [`../paper-writing/references/prose-quality-gate.md`](../paper-writing/references/prose-quality-gate.md)（见下 §Prose quality intake）
+- local prose rewrite after scope is frozen -> `@lane:writer` (default **`surgical`** unless user escalates to **`refactor`**); **须**先设 **`language_register`** 并走 [`references/prose-quality-gate.md`](references/prose-quality-gate.md)（见下 §Prose quality intake）
 - figures / tables / captions / rendered presentation -> `figure-table mode`
 - notation / abbreviations / formula references -> `notation sweep`
 - page/word budget -> `length budget mode`
@@ -346,7 +346,7 @@ For the full manuscript stack map and progressive reading order, use
 
 ## What this skill should deliver
 
-本前门转发或收口 **`$paper-writing`** 的改稿时，**统一输出顺序**须先回声门控与叙事契约，再贴正文块：**`edit_scope` → `scope_items`/`non_goals` 或 `refactor_intent`/`risk_note` → Claim card（四槽）→ `language_register` →（可选 Stage A 提纲）→ `tone_audit` → `prose_qc` → prose/hunks → `change_id` 账本（`surgical`）或 `sections_touched` + `claim_ledger_touch_statement`/`claim_ledger_delta`（`refactor`）**；细则见 [`../paper-writing/SKILL.md`](../paper-writing/SKILL.md) **Output Defaults**、[`../paper-writing/references/prose-quality-gate.md`](../paper-writing/references/prose-quality-gate.md) 与 [`references/edit-scope-gate.md`](references/edit-scope-gate.md)。
+本前门转发或收口 **`@lane:writer`** 的改稿时，**统一输出顺序**须先回声门控与叙事契约，再贴正文块：**`edit_scope` → `scope_items`/`non_goals` 或 `refactor_intent`/`risk_note` → Claim card（四槽）→ `language_register` →（可选 Stage A 提纲）→ `tone_audit` → `prose_qc` → prose/hunks → `change_id` 账本（`surgical`）或 `sections_touched` + `claim_ledger_touch_statement`/`claim_ledger_delta`（`refactor`）**；细则见 [`../.archive-cold/paper-writing/SKILL.md`](../.archive-cold/paper-writing/SKILL.md) **Output Defaults**、[`references/prose-quality-gate.md`](references/prose-quality-gate.md) 与 [`references/edit-scope-gate.md`](references/edit-scope-gate.md)。
 
 Keep the user-facing output simple:
 
@@ -381,8 +381,8 @@ These artifacts are required before repeated local polishing passes.
 When the user wants to learn target-journal references before writing:
 
 1. Build the 20-paper target-journal corpus and ref-learning brief as source-backed paper context under this front door.
-2. Route to `$paper-reviewer` logic mode only if the corpus exposes a claim/evidence or novelty mismatch.
-3. Route to `$paper-writing` for story spine, section plan, and bounded prose rewrite.
+2. Route to `@lane:reviewer` logic mode only if the corpus exposes a claim/evidence or novelty mismatch.
+3. Route to `@lane:writer` for story spine, section plan, and bounded prose rewrite.
 4. Keep `$citation-management` for final citation truth and `.bib` hygiene, not for the initial story-learning pass.
 
 The handoff artifact should be simple:
@@ -428,3 +428,9 @@ In filesystem-backed work, the stable artifacts are:
 - Do not close a revision round with **only** softer claims when findings say
   the honest primary path is **new evidence or analysis**; align with
   [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)
+
+## Exit Criteria
+
+- verdict 已输出（accept / revise / reject + claim-evidence ladder 完整）
+- edit_scope 已门控（仅限 declared scope 内的文件）
+- 用户已确认下一步动作（提交修改 / 补充实验 / 放弃）

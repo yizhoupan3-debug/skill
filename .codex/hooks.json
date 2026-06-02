@@ -1,16 +1,17 @@
 {
   "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
   "hooks": {
-    "PostToolUse": [
+    "SessionStart": [
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" PostToolUse",
-            "statusMessage": "Recording Codex tool evidence",
-            "timeout": 5,
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" SessionStart",
+            "statusMessage": "Loading Codex live state",
+            "timeout": 3,
             "type": "command"
           }
-        ]
+        ],
+        "matcher": "startup|resume|clear"
       }
     ],
     "PreToolUse": [
@@ -25,17 +26,28 @@
         ]
       }
     ],
-    "SessionStart": [
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" SessionStart",
-            "statusMessage": "Loading Codex live state",
-            "timeout": 3,
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" UserPromptSubmit",
+            "statusMessage": "Loading Codex turn context",
+            "timeout": 8,
             "type": "command"
           }
-        ],
-        "matcher": "startup|resume|clear"
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" PostToolUse",
+            "statusMessage": "Recording Codex tool evidence",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -50,13 +62,25 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
+    "SubagentStart": [
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" UserPromptSubmit",
-            "statusMessage": "Loading Codex turn context",
-            "timeout": 8,
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" SubagentStart",
+            "statusMessage": "Recording Codex subagent start",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" SubagentStop",
+            "statusMessage": "Recording Codex subagent stop",
+            "timeout": 5,
             "type": "command"
           }
         ]

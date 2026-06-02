@@ -46,7 +46,7 @@ const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME: &str = ".framework-projection-desktop.json";
 const FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME: &str = ".framework-projection-antigravity.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
-const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
+const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 9] = [
     "discussx",
     "planx",
     "implementx",
@@ -54,7 +54,6 @@ const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
     "code-review-deep",
     "deepinterview",
     "gitx",
-    "adversarial-loop",
     "plan-mode",
     "update",
 ];
@@ -92,7 +91,7 @@ struct GeneratedArtifactManifestEntry {
 
 #[derive(Parser)]
 #[command(author, version, about)]
-struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     command: Commands,
 }
@@ -210,7 +209,7 @@ enum Commands {
 }
 
 #[derive(clap::Args, Debug, Clone)]
-struct ProjectionCommand {
+pub(crate) struct ProjectionCommand {
     #[arg(long, alias = "repo-root")]
     framework_root: Option<PathBuf>,
     #[arg(long)]
@@ -240,7 +239,7 @@ struct ProjectionCommand {
 }
 
 #[derive(clap::Args, Debug, Clone)]
-struct ProjectionStatusCommand {
+pub(crate) struct ProjectionStatusCommand {
     #[arg(long, alias = "repo-root")]
     framework_root: Option<PathBuf>,
     #[arg(long)]

@@ -285,7 +285,7 @@ pub(crate) fn allowed_dot_generated_artifact(path: &str) -> bool {
     )
 }
 
-struct GeneratedArtifactTempRoot {
+pub(crate) struct GeneratedArtifactTempRoot {
     path: PathBuf,
 }
 
