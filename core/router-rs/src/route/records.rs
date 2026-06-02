@@ -282,6 +282,7 @@ fn min_entry_mtime(entry: &RecordsCacheEntry) -> Option<u64> {
 }
 
 /// Invalidate all records cache entries (full flush).
+#[allow(dead_code)]
 pub(crate) fn invalidate_records_cache() -> Result<(), String> {
     let mut state = records_cache_state()
         .write()

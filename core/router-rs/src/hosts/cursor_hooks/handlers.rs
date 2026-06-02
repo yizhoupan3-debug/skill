@@ -516,6 +516,11 @@ pub struct ReviewGateState {
     pub updated_at: Option<String>,
 }
 
+impl crate::hosts::hook_state_common::HookStateVersion for ReviewGateState {
+    const STATE_VERSION: u32 = 1;
+    fn version(&self) -> u32 { self.version }
+}
+
 fn merge_fail_closed_user_messages(out: &mut Value, msg: &str) {
     out["followup_message"] = Value::String(msg.to_string());
     out["user_message"] = Value::String(msg.to_string());
@@ -1410,6 +1415,7 @@ fn merge_additional_context(output: &mut Value, extra: &str) {
 
 #[cfg(unix)]
 struct UnixLockState {
+#[allow(dead_code)]
     path: PathBuf,
     _file: std::fs::File,
 }

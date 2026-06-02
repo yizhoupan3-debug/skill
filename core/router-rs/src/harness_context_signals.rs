@@ -6,6 +6,7 @@
 //! (theorem/lemma/…) do not fire; toolchain hits still fire earlier. Narrow overrides:
 //! `formal proof` / `mathematical proof` still fire inside PoC (e.g. rigorous PoC writeups).
 
+#![allow(dead_code)]
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;

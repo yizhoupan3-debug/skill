@@ -2,6 +2,7 @@
 //!
 //! Truth source: `configs/framework/HARNESS_OPERATOR_NUDGES.json` under repo root.
 //! Disable all injected nudges: `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` (same soft-off tokens as other `ROUTER_RS_*` defaults).
+#![allow(dead_code)]
 
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,

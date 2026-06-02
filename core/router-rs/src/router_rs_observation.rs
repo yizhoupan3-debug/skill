@@ -16,6 +16,7 @@ pub enum HookObservationHost {
     /// Claude Code hook JSON (`router-rs claude hook`).
     ClaudeCode,
     /// Claude Desktop MCP transport.
+#[allow(dead_code)]
     ClaudeDesktop,
 }
 

@@ -793,7 +793,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
     }
 
     // Track every tool call for anomaly detection.
-    if let Err(e) = record_tool_call(repo_root, tool_name) {
+    if let Err(e) = record_tool_call(repo_root, tool_name, None) {
         eprintln!("[router-rs warning] record_tool_call failed: {e}");
     }
 

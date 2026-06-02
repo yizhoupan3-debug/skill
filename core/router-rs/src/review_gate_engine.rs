@@ -77,6 +77,7 @@ pub(crate) fn independent_context_fork(fork: Option<bool>) -> bool {
     matches!(fork, Some(false))
 }
 
+#[allow(dead_code)]
 pub(crate) fn independent_reviewer_evidence(review_lane: bool, fork: Option<bool>) -> bool {
     review_lane && cursor_review_independent_fork(fork, review_lane)
 }

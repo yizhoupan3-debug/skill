@@ -1168,6 +1168,7 @@ mod shell_command_verification_heuristic_tests {
     }
 }
 
+#[allow(dead_code)]
 fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView) -> bool {
     if snapshot.task_pointers_present {
         return true;

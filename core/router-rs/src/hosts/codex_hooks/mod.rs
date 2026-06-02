@@ -15,7 +15,7 @@ use crate::review_gate_engine::{
     maybe_bump_codex_review_phase_for_compact_findings, ReviewGateFacts,
 };
 use crate::router_env_flags::{
-    router_rs_env_enabled_default_false, router_rs_env_enabled_default_true,
+    router_rs_env_enabled_default_false,
     router_rs_operator_inject_globally_enabled,
 };
 use chrono::Utc;
@@ -28,12 +28,11 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::fs;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::process::Command;
@@ -193,6 +192,7 @@ impl CodexLifecycleHostKind {
         self.strings().spawn_first_host_id
     }
 
+    #[allow(dead_code)]
     fn paper_prose_hook_env(self) -> &'static str {
         self.strings().paper_prose_hook_env
     }
@@ -237,6 +237,7 @@ const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_START: &str = "Recording Antigravity C
 const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_STOP: &str = "Recording Antigravity CLI subagent stop";
 /// Default UTF-8 **byte** budget for merged Codex `additionalContext` (SessionStart / UserPromptSubmit).
 const CODEX_ADDITIONAL_CONTEXT_MAX_BYTES: usize = 640;
+#[allow(dead_code)]
 static CODEX_SESSION_KEY_FALLBACK_WARN: Once = Once::new();
 static ATOMIC_WRITE_NONCE: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
@@ -300,6 +301,8 @@ pub(crate) struct HooksMergeStat {
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct CodexLifecycleContextState {
     #[serde(default)]
+    version: u32,
+    #[serde(default)]
     seq: i64,
     #[serde(default)]
     review_subagent_seen: bool,
@@ -325,6 +328,10 @@ pub(super) struct CodexLifecycleContextState {
     review_subagent_tool: Option<String>,
 }
 
+impl crate::hosts::hook_state_common::HookStateVersion for CodexLifecycleContextState {
+    const STATE_VERSION: u32 = 1;
+    fn version(&self) -> u32 { self.version }
+}
 
 fn codex_prompt_text(event: &Value) -> String {
     for key in ["prompt", "user_prompt", "message", "input"] {
@@ -659,7 +666,7 @@ fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
     }
     let tool_name = codex_tool_name(event);
     let tool_input = codex_tool_input(event);
-    if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &tool_name) {
+    if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &tool_name, None) {
         eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
     }
     if !saw_subagent_codex(&tool_name, &tool_input) {
@@ -1046,10 +1053,12 @@ pub(crate) fn hooks_install_acquire_lock(home: &Path) -> Result<HooksInstallLock
     acquire_install_lock(home)
 }
 
+#[allow(dead_code)]
 pub(crate) fn lifecycle_hook_command_timeout_secs(host: CodexLifecycleHostKind, event: &str) -> u64 {
     codex_hook_command_timeout_secs(host, event)
 }
 
+#[allow(dead_code)]
 pub(crate) fn lifecycle_hook_event_status_message(host: CodexLifecycleHostKind, event_name: &str) -> &'static str {
     hook_event_status_message(host, event_name)
 }

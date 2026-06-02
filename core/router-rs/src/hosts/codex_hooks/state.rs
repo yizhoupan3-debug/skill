@@ -2,11 +2,10 @@ use super::{lifecycle_host, CodexLifecycleContextState, CodexLifecycleHostKind};
 use crate::router_env_flags::router_rs_env_enabled_default_true;
 use sha2::{Digest, Sha256};
 use serde_json::{json, Value};
-use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read};
+use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
@@ -23,6 +22,7 @@ static ATOMIC_WRITE_NONCE: AtomicU64 = AtomicU64::new(0);
 /// Structured error type for Codex hook operations.
 /// Replaces ad-hoc `Result<_, String>` with typed, matchable errors.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum CodexHookError {
     /// Failed to create the hook-state directory.
     StateDirCreate(io::Error),

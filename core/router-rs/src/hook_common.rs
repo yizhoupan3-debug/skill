@@ -365,6 +365,7 @@ pub fn is_my_pre_execution_entry_prompt(text: &str) -> bool {
 }
 
 /// Retired: `/autopilot` is not a framework entrypoint. Always false.
+#[allow(dead_code)]
 pub fn is_autopilot_entrypoint_prompt(_text: &str) -> bool {
     false
 }

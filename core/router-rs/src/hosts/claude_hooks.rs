@@ -648,11 +648,18 @@ struct TouchState {
     framework_tested: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 struct ReviewGateState {
+    #[serde(default)]
+    version: u32,
     review_required: bool,
     review_override: bool,
     independent_reviewer_seen: bool,
+}
+
+impl crate::hosts::hook_state_common::HookStateVersion for ReviewGateState {
+    const STATE_VERSION: u32 = 1;
+    fn version(&self) -> u32 { self.version }
 }
 
 fn try_extract_session_string(payload: &Value) -> Option<String> {
@@ -775,6 +782,10 @@ fn legacy_review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
 
 fn review_gate_state_from_json(value: &Value) -> ReviewGateState {
     ReviewGateState {
+        version: value
+            .get("version")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as u32,
         review_required: value
             .get("review_required")
             .and_then(Value::as_bool)

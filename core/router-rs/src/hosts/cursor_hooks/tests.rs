@@ -6714,7 +6714,7 @@ fn session_start_resets_session_call_tracker() {
     fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
     crate::session_call_tracker::init_tracker(&repo).expect("seed");
     for _ in 0..50 {
-        crate::session_call_tracker::record_tool_call(&repo, "Read").expect("record");
+        crate::session_call_tracker::record_tool_call(&repo, "Read", None).expect("record");
     }
     let before = crate::session_call_tracker::read_tracker_state(&repo).expect("read");
     assert!(before["total_calls"].as_u64().unwrap_or(0) >= 50);
