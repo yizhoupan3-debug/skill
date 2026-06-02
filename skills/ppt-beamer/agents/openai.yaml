@@ -1,0 +1,4 @@
+interface:
+  display_name: "PPT Beamer"
+  short_description: "Build restrained academic Beamer decks and polished PDFs"
+  default_prompt: "Use $ppt-beamer to create a polished LaTeX Beamer deck with the default academic/course-report template and compile the final PDF."

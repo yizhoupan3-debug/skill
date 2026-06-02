@@ -651,6 +651,30 @@
       },
       "kind": "skill",
       "skill_path": "skills/visual-review/SKILL.md"
+    },
+    "token-optimization": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "claude-code",
+          "claude-desktop",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/token-optimization/SKILL.md"
+    },
+    "mcp-server-management": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "claude-code",
+          "claude-desktop",
+          "cursor"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/mcp-server-management/SKILL.md"
     }
   },
   "source_of_truth": false

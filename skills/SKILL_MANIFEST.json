@@ -825,7 +825,7 @@
       [
         "claude-code"
       ],
-      "skill",
+      "cold",
       null,
       null,
       null,
@@ -1448,6 +1448,72 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
+        "cursor"
+      ],
+      "skill",
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      "token-optimization",
+      "L3",
+      "owner",
+      null,
+      "P2",
+      "Optimize token usage through prompt caching, output compression, and context window management.\nPreserves task completion quality while reducing token consumption and API costs.",
+      "n/a",
+      [
+        "token 优化",
+        "减少 token",
+        "prompt caching",
+        "降低成本",
+        "上下文压缩",
+        "token budget",
+        "context window",
+        "cost optimization"
+      ],
+      "project",
+      3,
+      "skills/token-optimization/SKILL.md",
+      [
+        "antigravity",
+        "claude-code",
+        "claude-desktop",
+        "cursor"
+      ],
+      "skill",
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      "mcp-server-management",
+      "L3",
+      "owner",
+      null,
+      "P2",
+      "创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。\n覆盖 stdio/SSE/streamable-http 三种传输模式，Python FastMCP 和 Rust 两种主流实现，\n以及 Claude Code / Claude Desktop 集成、MCP Registry 注册、调试故障排查全流程。",
+      "n/a",
+      [
+        "MCP server",
+        "创建 MCP",
+        "MCP 调试",
+        "MCP 注册",
+        "MCP 配置",
+        "tool server",
+        "MCP 开发",
+        "model context protocol"
+      ],
+      "project",
+      3,
+      "skills/mcp-server-management/SKILL.md",
+      [
+        "antigravity",
+        "claude-code",
+        "claude-desktop",
         "cursor"
       ],
       "skill",

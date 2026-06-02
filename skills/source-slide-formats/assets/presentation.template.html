@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, initial-scale=1.0">
+  <title>Presentation Template</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;800;900&family=Noto+Serif+SC:wght@400;600;700;900&display=swap');
+
+    :root {
+      --slide-w: 1920px;
+      --slide-h: 1080px;
+      --bg-dark: #07090e;
+      --bento-bg: rgba(255,255,255,0.04);
+      --bento-border: rgba(255,255,255,0.08);
+      --bento-glow: rgba(255,255,255,0.02);
+      --accent: #ff5238;
+      --accent-dim: rgba(255,82,56,0.12);
+      --gold: #f2c057;
+      --blue: #4fa8f7;
+      --green: #41db84;
+      --text-main: #e8e8ec;
+      --text-dim: #9ca3b8;
+      --text-dark: #5a6175;
+      --pad-x: 72px;
+      --pad-top: 64px;
+      --pad-bottom: 56px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-snap-type: y mandatory; overflow-y: scroll; scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+      font-size: 17px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0.028;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 256px 256px;
+    }
+
+    .slide {
+      width: var(--slide-w);
+      height: var(--slide-h);
+      min-height: var(--slide-h);
+      max-height: var(--slide-h);
+      padding: var(--pad-top) var(--pad-x) var(--pad-bottom);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      scroll-snap-align: start;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(ellipse 600px 400px at 12% 45%, rgba(255,82,56,0.035), transparent),
+        radial-gradient(ellipse 500px 350px at 88% 25%, rgba(79,168,247,0.025), transparent);
+    }
+
+    .slide-inner {
+      width: 100%;
+      max-width: 1776px;
+      height: 100%;
+      max-height: 968px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 10px;
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    h1, h2, .serif {
+      font-family: 'Noto Serif SC', serif;
+    }
+
+    h1 {
+      font-size: 58px;
+      font-weight: 900;
+      line-height: 1.18;
+      letter-spacing: -1px;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      font-size: 40px;
+      font-weight: 700;
+      line-height: 1.18;
+      letter-spacing: -0.5px;
+      margin-bottom: 14px;
+    }
+
+    .subtitle {
+      max-width: 760px;
+      color: var(--text-dim);
+      font-size: 22px;
+      font-weight: 300;
+      line-height: 1.55;
+    }
+
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      grid-auto-rows: auto;
+      gap: 16px;
+      flex: 1;
+      min-height: 0;
+      align-content: start;
+    }
+
+    .bento {
+      background: var(--bento-bg);
+      border: 1px solid var(--bento-border);
+      border-radius: 16px;
+      padding: 22px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.04),
+        inset 0 0 30px var(--bento-glow),
+        0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .bento::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 50%;
+      border-radius: 16px 16px 0 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .bento.img-bg { padding: 0; border: none; background: transparent; }
+
+    .bento.img-bg img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 16px;
+      filter: brightness(0.82) contrast(1.08) saturate(1.1);
+    }
+
+    .img-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      padding: 30px 22px 18px;
+      background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0) 100%);
+      border-radius: 0 0 16px 16px;
+    }
+
+    .b-title {
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--bento-border);
+      color: var(--text-dim);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .dense-list {
+      list-style: none;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .dense-list li {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 17px;
+      line-height: 1.65;
+    }
+
+    .dense-list li:last-child { border-bottom: none; }
+    .dense-list .idx { color: var(--text-dark); font-weight: 900; }
+
+    .stat-hero {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      flex: 1;
+    }
+
+    .stat-hero .num {
+      margin-bottom: 6px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 54px;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--accent);
+    }
+
+    .stat-hero .lbl {
+      color: var(--text-dim);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .stat-hero .desc {
+      margin-top: 6px;
+      color: var(--text-dark);
+      font-size: 16px;
+      line-height: 1.65;
+    }
+
+    .cover-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    .cover-bg img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.35;
+      filter: saturate(0.8) contrast(1.1);
+    }
+
+    .cover-bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(100deg, var(--bg-dark) 28%, rgba(7,9,14,0.2) 100%);
+    }
+
+    .cover-content {
+      position: relative;
+      z-index: 10;
+      max-width: 800px;
+      padding-left: 40px;
+    }
+
+    .cite-bar {
+      position: absolute;
+      bottom: 24px;
+      left: var(--pad-x);
+      max-width: 900px;
+      color: var(--text-dark);
+      font-size: 11px;
+      line-height: 1.6;
+      letter-spacing: 0.3px;
+      z-index: 50;
+      opacity: 0.85;
+    }
+
+    .page-num {
+      position: absolute;
+      right: var(--pad-x);
+      bottom: 24px;
+      color: var(--text-dark);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      z-index: 50;
+    }
+
+    .col-3 { grid-column: span 3; }
+    .col-4 { grid-column: span 4; }
+    .col-5 { grid-column: span 5; }
+    .col-6 { grid-column: span 6; }
+    .col-7 { grid-column: span 7; }
+    .col-8 { grid-column: span 8; }
+    .col-12 { grid-column: span 12; }
+    .row-2 { grid-row: span 2; }
+    .row-3 { grid-row: span 3; }
+  </style>
+</head>
+<body>
+  <section class="slide" style="justify-content: center; align-items: flex-start;">
+    <div class="cover-bg"><img src="./assets/slide1_cover.jpg" alt="cover background"></div>
+    <div class="slide-inner cover-content" style="justify-content: center;">
+      <div class="tag">Course Presentation</div>
+      <h1>主标题<br>高亮副标题</h1>
+      <p class="subtitle">用 1 句话概括问题、对象或研究结论。</p>
+    </div>
+    <div class="page-num">01 / 02</div>
+  </section>
+
+  <section class="slide">
+    <div class="slide-inner" style="padding-top: 10px;">
+      <div style="margin-bottom: 16px;">
+        <div class="tag">Section 01</div>
+        <h2>页面主标题</h2>
+      </div>
+      <div class="bento-grid">
+        <div class="bento col-5 row-3 img-bg">
+          <img src="./assets/slide2_image.jpg" alt="site image">
+          <div class="img-overlay">
+            <div>图像标题</div>
+            <div style="font-size: 12px; color: rgba(255,255,255,0.65); margin-top: 3px;">图像说明</div>
+          </div>
+        </div>
+        <div class="bento col-3">
+          <div class="stat-hero">
+            <div class="num">58.8</div>
+            <div class="lbl">关键指标</div>
+            <div class="desc">用短句解释这个数字为什么重要。</div>
+          </div>
+        </div>
+        <div class="bento col-4">
+          <div class="b-title">Analysis</div>
+          <ul class="dense-list">
+            <li><span class="idx">1</span><div><strong>要点一</strong><br>控制在 2-3 行内。</div></li>
+            <li><span class="idx">2</span><div><strong>要点二</strong><br>优先写结论，不写长说明。</div></li>
+            <li><span class="idx">3</span><div><strong>要点三</strong><br>每页不要堆太多卡片。</div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="cite-bar">[1] Source A | [2] Source B</div>
+    <div class="page-num">02 / 02</div>
+  </section>
+</body>
+</html>

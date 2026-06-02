@@ -1,0 +1,7 @@
+@misc{example-source,
+  title        = {Example Source Title},
+  author       = {{Example Organization}},
+  year         = {2026},
+  url          = {https://example.com/report},
+  note         = {Accessed 2026-03-16}
+}
