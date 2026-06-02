@@ -218,3 +218,9 @@ Before finishing, verify:
 ## Trigger examples
 - "强制进行框架深度审计 / 检查路由策略与同步状态。"
 - "Use the runtime verification gate to audit this framework-policy for sync-health idealism."
+
+## Exit Criteria
+
+- MANIFEST/RUNTIME 已同步（framework skills validate 通过）
+- 路由测试通过（cargo test --test routing_tests）
+- 新增/修改的 skill 可被路由命中

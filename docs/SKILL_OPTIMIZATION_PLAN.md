@@ -1,3 +1,5 @@
+> **SUPERSEDED** — This plan has been superseded by `artifacts/current/SKILL_ECOSYSTEM_AUDIT_FINAL.md` (2026-06-03). Refer to the new audit report for the current optimization roadmap.
+
 # Skill 仓库综合优化 Plan
 
 > 基于 7 个审计 agent 的交叉分析 + adversarial review 修订后生成。

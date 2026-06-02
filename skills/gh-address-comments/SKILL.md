@@ -106,3 +106,9 @@ In that case:
 ## Reference
 
 For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).
+
+## Exit Criteria
+
+- 所有 reviewer comments 已逐条回复（resolved 或 replied）
+- PR 状态已更新（comment 已 post 或 commit 已 push）
+- 用户确认回复策略（直接修改 / 解释说明 / 标记 wontfix）

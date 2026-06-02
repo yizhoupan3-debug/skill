@@ -85,7 +85,7 @@
 
 - **Default: overwrite in place** on `.tex`, `.Rmd`, and manuscript `.md` — use StrReplace or write the same path; do **not** create `*.bak_*`, `*.bak`, or macOS-style numbered duplicates (`file 2.tex`) unless the user explicitly asks for a backup in that turn.
 - **R Markdown projects**: edit **`.Rmd` only** (plus project scripts); regenerate `.tex`/`.pdf` via the repo’s `render_*.R`. Do not treat pandoc-generated `.tex` as the source of truth or leave numbered build artifacts in the report directory.
-- **Manuscript prose quality chain** (润色/写作/中英文分场景): front door [`skills/paper-workbench/references/prose-chain-contract.md`](skills/paper-workbench/references/prose-chain-contract.md); gate [`skills/paper-writing/references/prose-quality-gate.md`](skills/paper-writing/references/prose-quality-gate.md). **`language_register` and `writing_mode: ladder-full` are inferred automatically** — do not wait for user tokens.
+- **Manuscript prose quality chain** (润色/写作/中英文分场景): front door [`skills/paper-workbench/references/prose-chain-contract.md`](skills/paper-workbench/references/prose-chain-contract.md); gate [`skills/paper-workbench/references/prose-quality-gate.md`](skills/paper-workbench/references/prose-quality-gate.md). **`language_register` and `writing_mode: ladder-full` are inferred automatically** — do not wait for user tokens.
 - Paper-workbench detail: [`skills/paper-workbench/references/edit-scope-gate.md`](skills/paper-workbench/references/edit-scope-gate.md) §文件写入默认.
 
 ## Git

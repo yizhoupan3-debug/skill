@@ -206,3 +206,9 @@ Server 可通过 `ctx.info()` / `ctx.warning()` / `ctx.error()` 发送日志到 
 
 - **router-rs-framework**：`core/router-rs/` — Rust stdio MCP server，提供框架路由、goal 管理、closeout 等工具
 - **browser-mcp**：`core/browser-mcp/` — Rust stdio MCP server，浏览器自动化，带 session supervisor 和 background job 管理
+
+## Exit Criteria
+
+- MCP 服务器可启动（进程存活 + 无 crash）
+- 工具可调用（至少一个 tool 返回正常响应）
+- 配置已持久化到 settings.json

@@ -2,19 +2,6 @@
   "derived_from": "skills/SKILL_MANIFEST.json",
   "schema_version": "skill-plugin-catalog-v1",
   "skills": {
-    "adversarial-loop": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/adversarial-loop/SKILL.md"
-    },
     "agent-swarm-orchestration": {
       "host_support": {
         "platforms": [
@@ -171,32 +158,6 @@
       "kind": "skill",
       "skill_path": "skills/gitx/SKILL.md"
     },
-    "hatch-pet": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/hatch-pet/SKILL.md"
-    },
-    "image-generated": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/image-generated/SKILL.md"
-    },
     "implementx": {
       "host_support": {
         "platforms": [
@@ -209,45 +170,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/implementx/SKILL.md"
-    },
-    "jupyter-notebook": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/jupyter-notebook/SKILL.md"
-    },
-    "latex-compile-acceleration": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/latex-compile-acceleration/SKILL.md"
-    },
-    "mac-memory-management": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/mac-memory-management/SKILL.md"
     },
     "math-derivation": {
       "host_support": {
@@ -275,32 +197,6 @@
       "kind": "skill",
       "skill_path": "skills/mcp-server-management/SKILL.md"
     },
-    "paper-reviewer": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/paper-reviewer/SKILL.md"
-    },
-    "paper-reviser": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/paper-reviser/SKILL.md"
-    },
     "paper-workbench": {
       "host_support": {
         "platforms": [
@@ -313,19 +209,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/paper-workbench/SKILL.md"
-    },
-    "paper-writing": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/paper-writing/SKILL.md"
     },
     "pdf": {
       "host_support": {
@@ -365,19 +248,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/planx/SKILL.md"
-    },
-    "ppt-beamer": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/ppt-beamer/SKILL.md"
     },
     "python-env-management": {
       "host_support": {
@@ -457,19 +327,6 @@
       "kind": "skill",
       "skill_path": "skills/slides/SKILL.md"
     },
-    "source-slide-formats": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/source-slide-formats/SKILL.md"
-    },
     "spreadsheets": {
       "host_support": {
         "platforms": [
@@ -495,19 +352,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/statistical-analysis/SKILL.md"
-    },
-    "token-optimization": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-code",
-          "claude-desktop",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/token-optimization/SKILL.md"
     },
     "update": {
       "host_support": {

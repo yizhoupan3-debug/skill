@@ -238,14 +238,17 @@
     ],
     [
       "deepinterview",
-      "L0",
+      "L1",
       "owner",
       "none",
       "P1",
       "Native repo deep-interview workflow for evidence-first clarification and convergence review.",
       "n/a",
       [
-        "/deepinterview"
+        "/deepinterview",
+        "深度采访",
+        "先问清楚",
+        "澄清需求"
       ],
       "runtime",
       0,
@@ -350,9 +353,10 @@
         "表格或版式修复",
         "render-aware",
         "docx",
-        "word",
         "pagination",
-        "document layout"
+        "document layout",
+        "word document",
+        "docx"
       ],
       "project",
       3,
@@ -415,16 +419,16 @@
       "Address GitHub PR review comments and lightweight PR triage summaries with gh-source-gate.",
       "required",
       [
-        "github",
-        "pull request",
-        "pull request summary",
+        "/gh-address-comments",
+        "address comments",
         "PR review summary",
-        "PR triage",
-        "reviewer feedback digest",
-        "changed-file digest",
-        "changed files summary",
+        "pull request summary",
+        "PR comments",
         "review comments",
-        "gh cli"
+        "PR 评论回复",
+        "reviewer 意见处理",
+        "review feedback",
+        "address PR feedback"
       ],
       "project",
       3,
@@ -449,11 +453,17 @@
       "Triage and fix failing GitHub Actions PR checks with gh-source-gate.",
       "required",
       [
-        "github",
-        "ci",
+        "/gh-fix-ci",
+        "fix ci",
+        "ci failed",
+        "ci failure",
         "github actions",
-        "gh cli",
-        "pull request"
+        "CI 失败排查",
+        "CI 修复",
+        "workflow 失败",
+        "fix build",
+        "green ci",
+        "ci broken"
       ],
       "project",
       3,
@@ -471,7 +481,7 @@
     ],
     [
       "gitx",
-      "L0",
+      "L2",
       "owner",
       "none",
       "P1",
@@ -492,145 +502,6 @@
         "opencode"
       ],
       "framework_command",
-      null,
-      null
-    ],
-    [
-      "jupyter-notebook",
-      "L3",
-      "owner",
-      "none",
-      "P2",
-      "Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for experiments, exploratory analysis, demos, and tutorials with clean cell structure, reproducibility, and reusable templates. U",
-      "n/a",
-      [
-        "Jupyter notebook",
-        "ipynb",
-        "实验 notebook",
-        "分析 notebook",
-        "tutorial notebook",
-        "a notebook instead of a script",
-        "jupyter",
-        "notebook",
-        "experiment"
-      ],
-      "project",
-      3,
-      "skills/jupyter-notebook/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null,
-      null
-    ],
-    [
-      "latex-compile-acceleration",
-      "L4",
-      "owner",
-      "none",
-      "P1",
-      "Speed up LaTeX compile and preview workflows",
-      "n/a",
-      [
-        "LaTeX 编译太慢",
-        "watch 太慢",
-        "preview loop",
-        "编译稳定性",
-        "CI 缓存优化",
-        "latexmk",
-        "Tectonic",
-        "TeXpresso",
-        "TikZ externalization",
-        "PGFPlots externalization",
-        "\\includeonly",
-        "subfiles",
-        "standalone",
-        "mylatexformat",
-        "preamble 预编译",
-        ".latexmkrc"
-      ],
-      "project",
-      3,
-      "skills/latex-compile-acceleration/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null,
-      null
-    ],
-    [
-      "adversarial-loop",
-      "L1",
-      "owner",
-      "none",
-      "P1",
-      "Adversarial multi-pass review-fix-verify with progressive rubric disclosure (supervisor-led). Use when the user says `$adversarial-loop`, wants multi-pass adversarial criticism and fixes without reveali",
-      "preferred",
-      [
-        "$adversarial-loop",
-        "adversarial loop",
-        "progressive disclosure review",
-        "LOOP_ROUND_COMPLETE",
-        "对抗审查循环",
-        "渐进披露审查"
-      ],
-      "project",
-      3,
-      "skills/adversarial-loop/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null,
-      null
-    ],
-    [
-      "mac-memory-management",
-      "L4",
-      "owner",
-      "none",
-      "P2",
-      "Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stability.",
-      "n/a",
-      [
-        "apple silicon mps",
-        "torch.mps",
-        "unified memory pressure",
-        "mac ml oom",
-        "macos swap pressure",
-        "mps oom",
-        "mps throughput",
-        "mac dataloader memory",
-        "apple silicon training memory",
-        "Apple Silicon 内存压力",
-        "MPS 爆内存",
-        "Mac 训练吞吐优化"
-      ],
-      "project",
-      3,
-      "skills/mac-memory-management/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
       null,
       null
     ],
@@ -776,7 +647,10 @@
         "rendering",
         "layout",
         "typography",
-        "reportlab"
+        "reportlab",
+        "编辑 PDF",
+        "合并 PDF",
+        "PDF 转文字"
       ],
       "project",
       3,
@@ -815,40 +689,6 @@
       "project",
       3,
       "skills/plan-mode/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null,
-      null
-    ],
-    [
-      "ppt-beamer",
-      "L4",
-      "owner",
-      "none",
-      "P2",
-      "Create, revise, and compile presentation decks with LaTeX Beamer when you want editable `.tex` plus PDF instead of HTML or `.pptx`. Use when the user asks for Beamer slides, LaTeX 幻灯片, 学术 PPT, or need",
-      "n/a",
-      [
-        "Beamer slides",
-        "LaTeX 幻灯片",
-        "学术 PPT",
-        "theme 调整",
-        "Beamer 编译",
-        "papers into slides",
-        "adjust themes",
-        "fix Beamer compile",
-        "layout issues",
-        "build a repeatable citation-aware slide workflow"
-      ],
-      "project",
-      3,
-      "skills/ppt-beamer/SKILL.md",
       [
         "antigravity",
         "claude-desktop",
@@ -1049,8 +889,7 @@
         "slides",
         "PowerPoint",
         "presentation deck",
-        "presentation",
-        "artifact tool"
+        "presentation"
       ],
       "project",
       3,
@@ -1069,40 +908,6 @@
         "Edit",
         "Bash"
       ],
-      null
-    ],
-    [
-      "source-slide-formats",
-      "L4",
-      "owner",
-      "none",
-      "P2",
-      "Build presentation sources in Markdown, Slidev, Marp, or HTML/CSS and export them to deck artifacts. Use after the `$slides` gate when the user explicitly wants source-authored slides, browser/PDF exp",
-      "n/a",
-      [
-        "source slide formats",
-        "Markdown slides",
-        "Slidev",
-        "Marp",
-        "HTML slides",
-        "browser-matched PDF",
-        "presentation.html",
-        "source-first slides",
-        "用 Markdown 做 slides",
-        "根据大纲做 HTML slides"
-      ],
-      "project",
-      3,
-      "skills/source-slide-formats/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null,
       null
     ],
     [
@@ -1153,7 +958,20 @@
       "Refresh key docs, git tracking, and stale/dead repo surfaces; includes framework generated-artifact checks when applicable.",
       "n/a",
       [
-        "/update"
+        "/update",
+        "一口气更新",
+        "更新关键文档",
+        "科研文档更新",
+        "刷新文档",
+        "扫描文档",
+        "git 跟踪文件",
+        "git tracking",
+        "死代码清理",
+        "旧文档清理",
+        "stale files",
+        "dead code",
+        "registry 更新",
+        "同步投影"
       ],
       "runtime",
       0,
@@ -1197,38 +1015,6 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null,
-      null
-    ],
-    [
-      "token-optimization",
-      "L3",
-      "owner",
-      "none",
-      "P2",
-      "Optimize token usage through prompt caching, output compression, and context window management.\nPreserves task completion quality while reducing token consumption and API costs.",
-      "n/a",
-      [
-        "token 优化",
-        "减少 token",
-        "prompt caching",
-        "降低成本",
-        "上下文压缩",
-        "token budget",
-        "context window",
-        "cost optimization"
-      ],
-      "project",
-      3,
-      "skills/token-optimization/SKILL.md",
-      [
-        "antigravity",
-        "claude-code",
-        "claude-desktop",
         "cursor",
         "opencode"
       ],

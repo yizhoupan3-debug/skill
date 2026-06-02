@@ -348,30 +348,6 @@
       "first_turn": true
     },
     {
-      "id": "source-slide-formats-beats-generic-slides",
-      "category": "gate-vs-owner-conflict",
-      "task": "用 Markdown 做 slides，后续用 Slidev 预览和导出",
-      "focus_skill": "source-slide-formats",
-      "expected_owner": "source-slide-formats",
-      "expected_overlay": null,
-      "forbidden_owners": [
-        "slides"
-      ],
-      "first_turn": true
-    },
-    {
-      "id": "ppt-beamer-beats-generic-slides",
-      "category": "gate-vs-owner-conflict",
-      "task": "LaTeX Beamer slides，帮我修 Beamer 编译和版式",
-      "focus_skill": "ppt-beamer",
-      "expected_owner": "ppt-beamer",
-      "expected_overlay": null,
-      "forbidden_owners": [
-        "slides"
-      ],
-      "first_turn": true
-    },
-    {
       "id": "hatch-pet-custom-codex-pet-package",
       "category": "gate-vs-owner-conflict",
       "task": "帮我做一个 Codex custom animated pet，输出 pet.json 和 spritesheet.webp",
@@ -392,19 +368,6 @@
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "forbidden_owners": [],
-      "first_turn": true
-    },
-    {
-      "id": "adversarial-loop-explicit-skill",
-      "category": "explicit-adversarial-loop-command",
-      "task": "按 $adversarial-loop 跑多轮对抗审查修复验证",
-      "focus_skill": "adversarial-loop",
-      "expected_owner": "adversarial-loop",
-      "expected_overlay": null,
-      "forbidden_owners": [
-        "agent-swarm-orchestration",
-        "skill-framework-developer"
-      ],
       "first_turn": true
     },
     {
@@ -476,14 +439,6 @@
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "notes": "Multi-agent delegation should route to agent-swarm-orchestration gate"
-    },
-    {
-      "id": "route-008-latex-compile",
-      "category": "should-trigger",
-      "task": "LaTeX 编译太慢了，帮我加速",
-      "expected_owner": "latex-compile-acceleration",
-      "expected_overlay": null,
-      "notes": "LaTeX compile speed should route to latex-compile-acceleration (L4)"
     },
     {
       "id": "route-009b-sci-polish-abstract",

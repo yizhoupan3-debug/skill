@@ -45,13 +45,13 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 ## Do Not Use
 
 - Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to `$paper-workbench` for manuscripts or `$research-workbench` for non-manuscript research.
-- Writing or polishing manuscript prose -> use `$paper-writing`.
-- Checking paper logic beyond citations -> use `$paper-reviewer` logic mode.
+- Writing or polishing manuscript prose -> use `@lane:writer`.
+- Checking paper logic beyond citations -> use `@lane:reviewer` logic mode.
 - Formatting non-academic documents without citations.
 
 ## Truth Rules
 
-- **诚信红线**（不可核验主张、图像诚信、自我剽窃）：[`references/integrity-redlines.md`](references/integrity-redlines.md)；与 `$paper-reviewer` **P0** 口径对齐（致命问题先报、不粉饰）。
+- **诚信红线**（不可核验主张、图像诚信、自我剽窃）：[`references/integrity-redlines.md`](references/integrity-redlines.md)；与 `@lane:reviewer` **P0** 口径对齐（致命问题先报、不粉饰）。
 - When manuscript context is available, keep citation keys and bibliography
   titles aligned with the frozen terminology in
   [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)

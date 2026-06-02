@@ -95,3 +95,9 @@ In that case:
 ## Reference
 
 For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).
+
+## Exit Criteria
+
+- CI 状态从红变绿（或已确认为 flaky/infra issue）
+- 失败原因已根因分析并记录
+- fix 已 push 并通过 CI 验证

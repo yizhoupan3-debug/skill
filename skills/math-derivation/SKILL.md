@@ -80,13 +80,13 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 ## Do not use
 
 - The task is choosing/running a statistical test -> use `$statistical-analysis`
-- The task is research-grade technical critique of a method/algorithm -> use `$paper-reviewer` when it is paper-level; otherwise answer in the current task context without invoking a retired research owner
-- The task is auditing notation consistency in a paper -> use `$paper-reviewer` notation sweep
+- The task is research-grade technical critique of a method/algorithm -> use `@lane:reviewer` when it is paper-level; otherwise answer in the current task context without invoking a retired research owner
+- The task is auditing notation consistency in a paper -> use `@lane:reviewer` notation sweep
 - The task is numerical computation or coding -> answer in the current implementation context, or use `$scientific-figure-plotting` when the deliverable is a publication figure
 - The task is explaining math intuitively without formal proof → answer directly
 - The task is ML model math with coding focus (loss function implementation, gradient code) -> answer in the current implementation context; do not route to a retired AI/research skill
-- The task is reviewing paper-level scientific logic -> use `$paper-reviewer` logic mode
-- The task is LaTeX compilation or rendering → answer in the current context（`$latex-compile-acceleration` 已归档）
+- The task is reviewing paper-level scientific logic -> use `@lane:reviewer` logic mode
+- The task is LaTeX compilation or rendering → answer in the current context（（latex-compile-acceleration 已归档，内联处理） 已归档）
 
 ## Derivation workflow
 

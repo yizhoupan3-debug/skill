@@ -38,7 +38,6 @@
 |---|---|---|
 | `runtime delegation gate` | 复杂任务 + 可并行 sidecar + 仓库授权 | 运行时派单决策 |
 | `systematic-debugging` [archived] | bug / 异常 / 失败 + 根因未知 | 先复现定位，再交回 owner |
-| `openai-docs` | OpenAI API / 模型 / 产品 + 需官方当前文档 | source-of-truth gate |
 | `design-md` | 用户需要持久设计 token、参考源、风格映射或验收合同，而不是直接改页面 | design source-grounding gate |
 | `visual-review` | 已有截图 / 渲染图 / 可见证据 | evidence-first visual read |
 | `pdf` / `doc` / `spreadsheets` | 主对象是 artifact 文件 | artifact-native workflow |
@@ -50,19 +49,15 @@
 L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
     skill-framework-developer, update
     [archived: systematic-debugging]
-    (+ hot framework commands: deepinterview, discussx, planx, implementx, verifyx, gitx)
-L1  adversarial-loop, citation-management, deepinterview, openai-docs, plan-mode
+    (+ hot framework commands: discussx, planx, implementx, verifyx
+L1  deepinterview, citation-management, plan-mode
+L2  code-review-deep, gitx, paper-workbench, research-workbench
     (.archive-cold: documentation-engineering, image-generated)
-L2  code-review-deep, gitx, paper-workbench, paper-writing, research-workbench
-    (hot runtime owners; paper-reviewer inline-only; paper-reviser archive inline)
 L3  design-md, diagramming, doc, experiment-reproducibility, infographic,
-    jupyter-notebook, pdf, screenshot, slides, spreadsheets, tao-ci,
     tikz-paper-figure, visual-review
     (.archive-cold: hatch-pet)
 L4  math-derivation, scientific-figure-plotting, statistical-analysis (hot)
     algo-trading, assignment-compliance, copywriting, email-template,
-    financial-data-fetching, latex-compile-acceleration, mac-memory-management,
-    ppt-beamer, python-env-management, source-slide-formats, youtube-summarizer
     (.archive-cold: all L4 slugs except the three hot rows above)
 Runtime lanes  planning, execution/code, language/framework, platform/integration,
                verification/review, memory and prompt policy, research workflow
@@ -89,12 +84,9 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
 - `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
 - `slides` native PPTX lane → 通用 PPT / 现有 deck artifact gate / 显式 `deck.plan.json` / Rust PPTX 源码工作流
-- `slides` vs `source-slide-formats` → 通用演示文稿入口 vs 显式 Markdown / Slidev / Marp / HTML source slides
-- `latex-compile-acceleration` vs `ppt-beamer` → 编译优化 vs Beamer 内容/版式
 - research retrieval runtime vs `gh-address-comments` → repo / issue / PR / timeline 深挖 vs 当前 PR 状态汇总
 - research retrieval runtime vs `skill-framework-developer` external scout mode → 通用调研 vs 为本地 skill 库做吸收式对标
 - `runtime checklist planning` vs `runtime checklist execution` → 生成/整理 execution-ready checklist vs 按 checklist 执行
-- `paper-workbench` vs `paper-reviewer` / `paper-reviser` / `paper-writing` → manuscript front door vs 明确只审 / 按 findings 改 / 局部文字
 
 ## 重路由信号
 
