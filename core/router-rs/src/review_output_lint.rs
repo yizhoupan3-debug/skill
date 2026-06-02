@@ -23,6 +23,7 @@ pub enum LintSeverity {
 #[derive(Debug, Clone)]
 pub struct LintFinding {
     pub severity: LintSeverity,
+#[allow(dead_code)]
     pub message: String,
 }
 
@@ -39,6 +40,7 @@ static SCOPE_PREFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*(Scope:|Out of scope:)").expect("scope prefix regex"));
 
 /// Whether assistant text contains at least one compact review finding line (`[P0]`–`[P2]` or `Caveat:`).
+#[allow(dead_code)]
 pub fn assistant_has_compact_review_finding_line(text: &str) -> bool {
     text.lines().any(|line| {
         let t = line.trim();

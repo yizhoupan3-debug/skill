@@ -2,6 +2,7 @@
 
 use serde_json::{json, Map, Value};
 use std::fs;
+use std::sync::{LazyLock, Mutex};
 use std::path::Path;
 
 use super::constants::{
@@ -79,6 +80,7 @@ pub fn build_framework_alias_envelope(
         })
     } else {
         let entry_prompt = render_framework_alias_prompt(&entry_contract);
+        let (stable_prefix, dynamic_context) = render_framework_alias_prompt_parts(&entry_contract);
         json!({
             "ok": true,
             "name": alias_name,
@@ -101,6 +103,8 @@ pub fn build_framework_alias_envelope(
             ],
             "entry_prompt": entry_prompt,
             "entry_prompt_token_estimate": estimate_token_count(&entry_prompt),
+            "stable_prefix": stable_prefix,
+            "dynamic_context": dynamic_context,
             "compact": false,
         })
     };
@@ -155,23 +159,48 @@ fn build_framework_alias_continuity_summary(continuity: &Value, max_lines: usize
     })
 }
 
+struct RegistryCache {
+    payload: Value,
+    mtime: std::time::SystemTime,
+}
+
+static REGISTRY_CACHE: LazyLock<Mutex<Option<RegistryCache>>> =
+    LazyLock::new(|| Mutex::new(None));
+
 fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Value, String> {
     let registry_path = repo_root
         .join("configs")
         .join("framework")
         .join("RUNTIME_REGISTRY.json");
-    let raw = fs::read_to_string(&registry_path).map_err(|err| {
-        format!(
-            "framework alias registry unavailable at {}: {err}",
-            registry_path.display()
-        )
-    })?;
-    let payload = serde_json::from_str::<Value>(&raw).map_err(|err| {
-        format!(
-            "framework alias registry parse failed at {}: {err}",
-            registry_path.display()
-        )
-    })?;
+    let mtime = std::fs::metadata(&registry_path)
+        .and_then(|m| m.modified())
+        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+    let payload = {
+        let mut cache = REGISTRY_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref entry) = *cache {
+            if entry.mtime == mtime {
+                entry.payload.clone()
+            } else {
+                let raw = fs::read_to_string(&registry_path).map_err(|err| {
+                    format!("framework alias registry unavailable at {}: {err}", registry_path.display())
+                })?;
+                let parsed: Value = serde_json::from_str(&raw).map_err(|err| {
+                    format!("framework alias registry parse failed at {}: {err}", registry_path.display())
+                })?;
+                *cache = Some(RegistryCache { payload: parsed.clone(), mtime });
+                parsed
+            }
+        } else {
+            let raw = fs::read_to_string(&registry_path).map_err(|err| {
+                format!("framework alias registry unavailable at {}: {err}", registry_path.display())
+            })?;
+            let parsed: Value = serde_json::from_str(&raw).map_err(|err| {
+                format!("framework alias registry parse failed at {}: {err}", registry_path.display())
+            })?;
+            *cache = Some(RegistryCache { payload: parsed.clone(), mtime });
+            parsed
+        }
+    };
     payload
         .get("framework_commands")
         .and_then(Value::as_object)
@@ -583,6 +612,60 @@ fn render_framework_alias_prompt(entry_contract: &Value) -> String {
         lines.push(format!("不够再开 `{skill_path}`。"));
     }
     lines.join("\n")
+}
+
+/// Split entry_prompt into stable (summary, rules, guardrails) and dynamic (task/phase/status, next_actions) parts.
+pub(super) fn render_framework_alias_prompt_parts(entry_contract: &Value) -> (String, String) {
+    let summary = value_text(entry_contract.get("summary"));
+    let context = entry_contract
+        .get("context")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let route_rules = value_string_list(entry_contract.get("route_rules"));
+    let guardrails = value_string_list(entry_contract.get("guardrails"));
+    let acceptance = value_string_list(entry_contract.get("acceptance"));
+    let next_actions = value_string_list(entry_contract.get("next_actions"));
+    let skill_path = value_text(entry_contract.get("skill_fallback_path"));
+
+    // Stable prefix: summary + rules + guardrails + acceptance + skill_path
+    let mut stable = Vec::new();
+    if !summary.is_empty() {
+        stable.push(summary);
+    }
+    if !route_rules.is_empty() {
+        stable.push(format!("路由={}", route_rules.join(";")));
+    }
+    if !guardrails.is_empty() {
+        stable.push(format!("约束={}", guardrails.join(";")));
+    }
+    if !acceptance.is_empty() {
+        stable.push(format!("验收={}", acceptance.join(";")));
+    }
+    if !skill_path.is_empty() {
+        stable.push(format!("扩展=`{skill_path}`"));
+    }
+
+    // Dynamic context: task/phase/status + next_actions
+    let task = value_text(context.get("task"));
+    let phase = value_text(context.get("phase"));
+    let status = value_text(context.get("status"));
+    let mut dynamic = Vec::new();
+    if !task.is_empty() || !phase.is_empty() || !status.is_empty() {
+        dynamic.push(format!(
+            "当前={} / {} / {}",
+            if task.is_empty() { "无" } else { task.as_str() },
+            if phase.is_empty() { "无" } else { phase.as_str() },
+            if status.is_empty() { "无" } else { status.as_str() },
+        ));
+    }
+    if !next_actions.is_empty() {
+        dynamic.push(format!("下一步={}", next_actions.join(";")));
+    }
+
+    (stable.join("
+"), dynamic.join("
+"))
 }
 
 pub(super) fn estimate_token_count(text: &str) -> usize {

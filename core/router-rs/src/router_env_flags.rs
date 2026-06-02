@@ -25,10 +25,14 @@
 
 use std::env;
 
+#[allow(dead_code)]
 const ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT_ENV: &str = "ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT";
+#[allow(dead_code)]
 const ROUTER_RS_DEPTH_SCORE_MODE_ENV: &str = "ROUTER_RS_DEPTH_SCORE_MODE";
 const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
+#[allow(dead_code)]
 const ROUTER_RS_DEPTH_COMPLIANCE_HINT_ENV: &str = "ROUTER_RS_DEPTH_COMPLIANCE_HINT";
+#[allow(dead_code)]
 const ROUTER_RS_TASK_STATE_AGGREGATE_AUTO_ENV: &str = "ROUTER_RS_TASK_STATE_AGGREGATE_AUTO";
 const ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV: &str =
     "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
@@ -239,12 +243,14 @@ pub fn router_rs_operator_inject_globally_enabled() -> bool {
 }
 
 /// `ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT`：仅影响 RFV advisory struct hint。
+#[allow(dead_code)]
 pub fn router_rs_rfv_external_struct_hint_enabled() -> bool {
     router_rs_operator_inject_globally_enabled()
         && router_rs_env_enabled_default_true(ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT_ENV)
 }
 
 /// `ROUTER_RS_DEPTH_SCORE_MODE=strict` 时启用 strict 第三分公式。
+#[allow(dead_code)]
 pub fn router_rs_depth_score_mode_strict() -> bool {
     match env::var(ROUTER_RS_DEPTH_SCORE_MODE_ENV) {
         Ok(value) => value.trim().eq_ignore_ascii_case("strict"),
@@ -258,6 +264,7 @@ pub fn router_rs_continuity_post_tool_evidence_enabled() -> bool {
 }
 
 /// `深度信号:` line in continuity digest. Default off unless strict depth mode or `ROUTER_RS_DEPTH_COMPLIANCE_HINT=1`.
+#[allow(dead_code)]
 pub fn router_rs_depth_compliance_hint_enabled() -> bool {
     router_rs_depth_score_mode_strict()
         || router_rs_env_enabled_default_false(ROUTER_RS_DEPTH_COMPLIANCE_HINT_ENV)
@@ -265,6 +272,7 @@ pub fn router_rs_depth_compliance_hint_enabled() -> bool {
 
 
 /// Auto-refresh `TASK_STATE.json` after ledger mutations. Default off; CLI `task-state-aggregate-sync` always runs.
+#[allow(dead_code)]
 pub fn router_rs_task_state_aggregate_auto_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_TASK_STATE_AGGREGATE_AUTO_ENV)
 }

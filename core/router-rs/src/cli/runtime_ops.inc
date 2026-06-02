@@ -4885,7 +4885,12 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
     match op {
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
-        "framework_prompt_compression" => build_framework_prompt_compression_envelope(payload),
+        "framework_prompt_compression" => {
+                let ctx_size = payload.get("context_window_size")
+                    .and_then(serde_json::Value::as_u64)
+                    .map(|v| v as usize);
+                build_framework_prompt_compression_envelope(payload, ctx_size)
+            },
         "framework_session_artifact_write" => write_framework_session_artifacts(payload),
         "framework_hook_evidence_append" => framework_hook_evidence_append(payload),
         "framework_autopilot_goal" | "framework_goal_drive" => autopilot_goal::framework_goal_drive(payload),

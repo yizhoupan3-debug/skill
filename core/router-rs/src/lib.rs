@@ -17,6 +17,7 @@ pub(crate) use hosts::antigravity_cli_hooks;
 pub(crate) use hosts::codex_hooks;
 pub(crate) use hosts::cursor_hooks;
 pub mod cli;
+pub mod types;
 mod closeout_enforcement;
 mod eval_route;
 mod execution_contract;

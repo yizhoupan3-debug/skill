@@ -845,6 +845,7 @@ fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn normalize_next_actions(payload: &Value) -> Vec<String> {
     let actions = if payload.get("schema_version").and_then(Value::as_str)
         == Some("next-actions-v2")

@@ -1,1545 +1,7 @@
-use crate::framework_runtime::{framework_root_from_executable_path, is_framework_root};
-use crate::runtime_registry::{
-    load_runtime_registry, load_runtime_registry_payload,
-    load_runtime_registry_payload_if_repo_local,
-};
-use chrono::Local;
-use clap::{Parser, Subcommand};
-use serde::Deserialize;
-use serde_json::{json, Map, Value};
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
-
-const CONFIG_SCHEMA_HEADER: &str =
-    "#:schema https://developers.openai.com/codex/config-schema.json\n";
-const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
-    "model-with-reasoning",
-    "fast-mode",
-    "context-remaining",
-    "git-branch",
-];
-const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
-const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
-const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
-const HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION: &str = "framework-host-projection-narrative-v2";
-const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
-    "framework-generated-artifacts-manifest-v1";
-const GENERATED_ARTIFACT_GENERATOR_TIMEOUT: Duration = Duration::from_secs(300);
-const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
-    ".codex",
-    ".git",
-    ".mypy_cache",
-    ".opencode",
-    ".ruff_cache",
-    ".serena",
-    "artifacts",
-    "node_modules",
-    "output",
-    "target",
-];
-const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
-const FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME: &str = ".framework-projection-desktop.json";
-const FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME: &str = ".framework-projection-antigravity.json";
-const DEFAULT_PROJECT_SCOPE: &str = "project";
-const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 10] = [
-    "discussx",
-    "planx",
-    "implementx",
-    "verifyx",
-    "code-review-deep",
-    "deepinterview",
-    "gitx",
-    "adversarial-loop",
-    "plan-mode",
-    "update",
-];
-/// Metadata-only doctor and full drift-gate both use paths declared in
-/// `configs/framework/GENERATED_ARTIFACTS.json` (`framework maint update-one-shot`).
-const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
-    "imagegen",
-    "openai-docs",
-    "plugin-creator",
-    "skill-creator",
-    "skill-installer",
-];
-const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
-    ["active_task.json", "focus_task.json", "task_registry.json"];
-const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 5] = [
-    "SESSION_SUMMARY.md",
-    "NEXT_ACTIONS.json",
-    "EVIDENCE_INDEX.json",
-    "TRACE_METADATA.json",
-    ".supervisor_state.json",
-];
-
-#[derive(Debug, Clone, Deserialize)]
-struct GeneratedArtifactsManifest {
-    schema_version: String,
-    generated_artifacts: Vec<GeneratedArtifactManifestEntry>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct GeneratedArtifactManifestEntry {
-    path: String,
-    generator: String,
-    compare: String,
-}
-
-#[derive(Parser)]
-#[command(author, version, about)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    ExportRuntimeRegistry {
-        #[arg(long, alias = "framework-root")]
-        repo_root: Option<PathBuf>,
-    },
-    ResolveSkillsSource {
-        #[arg(long)]
-        repo_root: PathBuf,
-    },
-    ValidateDefaultBootstrap {
-        #[arg(long)]
-        bootstrap_path: PathBuf,
-        #[arg(long)]
-        repo_root: PathBuf,
-    },
-    BuildDefaultBootstrap {
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long)]
-        output_dir: Option<PathBuf>,
-        #[arg(long, default_value = "")]
-        query: String,
-        #[arg(long)]
-        artifact_source_dir: Option<PathBuf>,
-        #[arg(long)]
-        workspace: Option<String>,
-        #[arg(long, default_value_t = 8)]
-        top: usize,
-    },
-    PlanCurrentArtifactClutter {
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long)]
-        active_task_id: String,
-    },
-    MigrateCurrentArtifactClutter {
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long)]
-        active_task_id: String,
-    },
-    EnsureDefaultBootstrap {
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long)]
-        output_dir: Option<PathBuf>,
-    },
-    InstallNativeIntegration {
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long)]
-        home_config_path: PathBuf,
-        #[arg(long)]
-        home_codex_skills_path: PathBuf,
-        #[arg(long)]
-        bootstrap_output_dir: Option<PathBuf>,
-        #[arg(long)]
-        skip_home_codex_skills_link: bool,
-        #[arg(long)]
-        skip_default_bootstrap: bool,
-    },
-    InstallSkills {
-        #[arg(long, alias = "framework-root")]
-        repo_root: Option<PathBuf>,
-        #[arg(long)]
-        project_root: Option<PathBuf>,
-        #[arg(long)]
-        artifact_root: Option<PathBuf>,
-        #[arg(long)]
-        home: Option<PathBuf>,
-        #[arg(long)]
-        codex_home: Option<PathBuf>,
-        #[arg(long)]
-        cursor_home: Option<PathBuf>,
-        #[arg(long)]
-        claude_home: Option<PathBuf>,
-        #[arg(long)]
-        antigravity_home: Option<PathBuf>,
-        #[arg(long)]
-        antigravity_cli_home: Option<PathBuf>,
-        #[arg(long)]
-        opencode_home: Option<PathBuf>,
-        #[arg(long)]
-        to: Vec<String>,
-        #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
-        scope: String,
-        #[arg(long)]
-        bootstrap_output_dir: Option<PathBuf>,
-        #[arg(long)]
-        skip_default_bootstrap: bool,
-        #[arg(default_value = "status")]
-        command: String,
-        #[arg()]
-        tools: Vec<String>,
-    },
-    Install(ProjectionCommand),
-    Status(ProjectionStatusCommand),
-    Remove(ProjectionCommand),
-    Cleanup(ProjectionCommand),
-    CompatibilityAliases,
-    GeneratedArtifactsStatus {
-        #[arg(long, alias = "repo-root")]
-        framework_root: Option<PathBuf>,
-        #[arg(long)]
-        artifact_root: Option<PathBuf>,
-        /// Skip running manifest generators (existence/forbidden/missing-only probe).
-        #[arg(long)]
-        skip_generator_run: bool,
-    },
-}
-
-#[derive(clap::Args, Debug, Clone)]
-struct ProjectionCommand {
-    #[arg(long, alias = "repo-root")]
-    framework_root: Option<PathBuf>,
-    #[arg(long)]
-    project_root: Option<PathBuf>,
-    #[arg(long)]
-    artifact_root: Option<PathBuf>,
-    #[arg(long)]
-    codex_home: Option<PathBuf>,
-    #[arg(long)]
-    cursor_home: Option<PathBuf>,
-    #[arg(long)]
-    claude_home: Option<PathBuf>,
-    #[arg(long)]
-    antigravity_home: Option<PathBuf>,
-    #[arg(long)]
-    antigravity_cli_home: Option<PathBuf>,
-    #[arg(long)]
-    opencode_home: Option<PathBuf>,
-    #[arg(long)]
-    home: Option<PathBuf>,
-    #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
-    scope: String,
-    #[arg(long)]
-    to: Vec<String>,
-    #[arg(long)]
-    dry_run: bool,
-}
-
-#[derive(clap::Args, Debug, Clone)]
-struct ProjectionStatusCommand {
-    #[arg(long, alias = "repo-root")]
-    framework_root: Option<PathBuf>,
-    #[arg(long)]
-    project_root: Option<PathBuf>,
-    #[arg(long)]
-    artifact_root: Option<PathBuf>,
-    #[arg(long)]
-    codex_home: Option<PathBuf>,
-    #[arg(long)]
-    cursor_home: Option<PathBuf>,
-    #[arg(long)]
-    claude_home: Option<PathBuf>,
-    #[arg(long)]
-    antigravity_home: Option<PathBuf>,
-    #[arg(long)]
-    antigravity_cli_home: Option<PathBuf>,
-    #[arg(long)]
-    opencode_home: Option<PathBuf>,
-    #[arg(long)]
-    home: Option<PathBuf>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ResolvedProjectionRoots {
-    pub(crate) framework_root: PathBuf,
-    pub(crate) project_root: PathBuf,
-    pub(crate) artifact_root: PathBuf,
-    /// OS account home for Desktop official config paths and stable MCP binary (not `CLAUDE_HOME` parent).
-    pub(crate) account_home_root: PathBuf,
-    pub(crate) codex_home_root: PathBuf,
-    pub(crate) cursor_home_root: PathBuf,
-    pub(crate) claude_home_root: PathBuf,
-    pub(crate) antigravity_home_root: PathBuf,
-    pub(crate) antigravity_cli_home_root: PathBuf,
-    pub(crate) opencode_home_root: PathBuf,
-}
-
-pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
-    let forwarded_args = if matches!(args.first().map(String::as_str), Some("--")) {
-        &args[1..]
-    } else {
-        args
-    };
-    let iter = std::iter::once("router-rs-host-integration".to_string())
-        .chain(forwarded_args.iter().cloned());
-    run_host_integration_payload(Cli::parse_from(iter))
-}
-
-fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
-    let payload = match cli.command {
-        Commands::ExportRuntimeRegistry { repo_root } => {
-            let framework_root = resolve_framework_root(repo_root.as_deref())?;
-            serde_json::to_value(load_runtime_registry_payload(&framework_root)?)
-                .map_err(|err| err.to_string())?
-        }
-        Commands::ResolveSkillsSource { repo_root } => json!({
-            "path": normalize_path(&repo_root)?
-                .join(skills_source_rel(&repo_root)?)
-                .to_string_lossy(),
-        }),
-        Commands::ValidateDefaultBootstrap {
-            bootstrap_path,
-            repo_root,
-        } => json!({
-            "ok": validate_default_bootstrap(&bootstrap_path, &repo_root)?,
-        }),
-        Commands::BuildDefaultBootstrap {
-            repo_root,
-            output_dir,
-            query,
-            artifact_source_dir,
-            workspace,
-            top,
-        } => build_default_bootstrap_payload(
-            &repo_root,
-            output_dir.as_deref(),
-            &query,
-            artifact_source_dir.as_deref(),
-            workspace.as_deref(),
-            top,
-        )?,
-        Commands::PlanCurrentArtifactClutter {
-            repo_root,
-            active_task_id,
-        } => json!({
-            "plans": migration_plan_values(&plan_current_artifact_clutter_migrations(
-                &normalize_path(&repo_root)?,
-                &active_task_id,
-            )?),
-        }),
-        Commands::MigrateCurrentArtifactClutter {
-            repo_root,
-            active_task_id,
-        } => json!({
-            "moved": migrate_current_artifact_clutter(&normalize_path(&repo_root)?, &active_task_id)?,
-        }),
-        Commands::EnsureDefaultBootstrap {
-            repo_root,
-            output_dir,
-        } => ensure_default_bootstrap(&repo_root, output_dir.as_deref())?,
-        Commands::InstallNativeIntegration {
-            repo_root,
-            home_config_path,
-            home_codex_skills_path,
-            bootstrap_output_dir,
-            skip_home_codex_skills_link,
-            skip_default_bootstrap,
-        } => install_native_integration(
-            &repo_root,
-            &home_config_path,
-            &home_codex_skills_path,
-            bootstrap_output_dir.as_deref(),
-            !skip_home_codex_skills_link,
-            !skip_default_bootstrap,
-        )?,
-        Commands::InstallSkills {
-            repo_root,
-            project_root,
-            artifact_root,
-            home,
-            codex_home,
-            cursor_home,
-            claude_home,
-            antigravity_home,
-            antigravity_cli_home,
-            opencode_home,
-            to,
-            scope,
-            bootstrap_output_dir,
-            skip_default_bootstrap,
-            command,
-            tools,
-            ..
-        } => {
-            let _ = (bootstrap_output_dir, skip_default_bootstrap);
-            let selected = install_skills_projection_tools(&command, &tools, &to);
-            let projection_command = ProjectionCommand {
-                framework_root: repo_root,
-                project_root,
-                artifact_root,
-                codex_home,
-                cursor_home,
-                claude_home,
-                antigravity_home: antigravity_home.clone(),
-                antigravity_cli_home,
-                opencode_home,
-                home,
-                scope,
-                to: selected,
-                dry_run: false,
-            };
-            let normalized_command = canonical_install_skills_command(&command);
-            let has_selected_targets = !projection_command.to.is_empty();
-            match normalized_command.as_str() {
-                "status" | "ls" if !has_selected_targets => {
-                    projection_status_command(ProjectionStatusCommand {
-                        framework_root: projection_command.framework_root.clone(),
-                        project_root: projection_command.project_root.clone(),
-                        artifact_root: projection_command.artifact_root.clone(),
-                        codex_home: projection_command.codex_home.clone(),
-                        cursor_home: projection_command.cursor_home.clone(),
-                        claude_home: projection_command.claude_home.clone(),
-                        antigravity_home: projection_command.antigravity_home.clone(),
-                        antigravity_cli_home: projection_command.antigravity_cli_home.clone(),
-                        opencode_home: projection_command.opencode_home.clone(),
-                        home: projection_command.home.clone(),
-                    })?
-                }
-                "remove" | "rm" => projection_remove_command(projection_command, true)?,
-                _ => projection_install_command(projection_command, true)?,
-            }
-        }
-        Commands::Install(command) => projection_install_command(command, false)?,
-        Commands::Status(command) => projection_status_command(command)?,
-        Commands::Remove(command) => projection_remove_command(command, false)?,
-        Commands::Cleanup(command) => projection_cleanup_command(command)?,
-        Commands::CompatibilityAliases => compatibility_alias_inventory(),
-        Commands::GeneratedArtifactsStatus {
-            framework_root,
-            artifact_root,
-            skip_generator_run,
-        } => generated_artifacts_status(
-            framework_root.as_deref(),
-            artifact_root.as_deref(),
-            skip_generator_run
-                || std::env::var("ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS")
-                    .ok()
-                    .is_some_and(|value| {
-                        matches!(
-                            value.trim().to_ascii_lowercase().as_str(),
-                            "1" | "true" | "yes" | "on"
-                        )
-                    }),
-        )?,
-    };
-    Ok(payload)
-}
-
-fn normalize_path(path: &Path) -> Result<PathBuf, String> {
-    if path.is_absolute() {
-        Ok(path.to_path_buf())
-    } else {
-        Ok(std::env::current_dir()
-            .map_err(|err| err.to_string())?
-            .join(path))
-    }
-}
-
-fn try_framework_root_from_workspace_env() -> Option<PathBuf> {
-    for name in ["ROUTER_RS_CURSOR_WORKSPACE_ROOT", "CURSOR_WORKSPACE_ROOT"] {
-        let Some(raw) = std::env::var_os(name) else {
-            continue;
-        };
-        let candidate = PathBuf::from(raw);
-        if let Ok(root) = normalize_path(&candidate) {
-            if is_framework_root(&root) {
-                return Some(root);
-            }
-        }
-    }
-    None
-}
-
-fn try_framework_root_from_current_exe() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    framework_root_from_executable_path(&exe)
-}
-
-fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String> {
-    if let Some(path) = explicit {
-        return normalize_path(path);
-    }
-    if let Some(path) = std::env::var_os("SKILL_FRAMEWORK_ROOT") {
-        return normalize_path(&PathBuf::from(path));
-    }
-    let cwd = std::env::current_dir().map_err(|err| err.to_string())?;
-    if is_framework_root(&cwd) {
-        return normalize_path(&cwd);
-    }
-    for ancestor in cwd.ancestors() {
-        if is_framework_root(ancestor) {
-            return normalize_path(ancestor);
-        }
-    }
-    if let Some(root) = try_framework_root_from_workspace_env() {
-        return Ok(root);
-    }
-    if let Some(root) = try_framework_root_from_current_exe() {
-        return Ok(root);
-    }
-    Err(
-        "missing framework_root; pass --framework-root, set SKILL_FRAMEWORK_ROOT, \
-         or set ROUTER_RS_CURSOR_WORKSPACE_ROOT / CURSOR_WORKSPACE_ROOT to the framework checkout when cwd is outside the repo"
-            .to_string(),
-    )
-}
-
-fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String> {
-    let root = resolve_framework_root(explicit)?;
-    if !is_framework_root(&root) {
-        return Err(format!(
-            "stale or missing framework_root: {}. Repair by passing --framework-root pointing at the framework checkout containing configs/framework/RUNTIME_REGISTRY.json and core/router-rs/Cargo.toml",
-            root.display()
-        ));
-    }
-    Ok(root)
-}
-
-fn resolve_project_root(explicit: Option<&Path>, framework_root: &Path) -> Result<PathBuf, String> {
-    if let Some(path) = explicit {
-        return normalize_path(path);
-    }
-    if let Some(path) = std::env::var_os("SKILL_PROJECT_ROOT") {
-        return normalize_path(&PathBuf::from(path));
-    }
-    let cwd = std::env::current_dir().map_err(|err| err.to_string())?;
-    if let Some(git_root) = nearest_marker_root(&cwd, ".git") {
-        return normalize_discovered_project_root(&git_root, framework_root);
-    }
-    for marker in ["AGENTS.md"] {
-        if let Some(root) = nearest_marker_root(&cwd, marker) {
-            return normalize_discovered_project_root(&root, framework_root);
-        }
-    }
-    if is_framework_root(framework_root) && cwd.starts_with(framework_root) {
-        return normalize_path(framework_root);
-    }
-    Err("missing project_root; pass --project-root or set SKILL_PROJECT_ROOT".to_string())
-}
-
-fn normalize_discovered_project_root(
-    candidate: &Path,
-    framework_root: &Path,
-) -> Result<PathBuf, String> {
-    let candidate = normalize_path(candidate)?;
-    let framework_root = normalize_path(framework_root)?;
-    if is_framework_root(&candidate) && candidate != framework_root {
-        return Err(format!(
-            "ambiguous project_root discovery: {} looks like a framework checkout but does not match framework_root {}. Pass both --framework-root and --project-root explicitly",
-            candidate.display(),
-            framework_root.display()
-        ));
-    }
-    Ok(candidate)
-}
-
-fn resolve_artifact_root(
-    explicit: Option<&Path>,
-    framework_root: &Path,
-) -> Result<PathBuf, String> {
-    if let Some(path) = explicit {
-        return normalize_path(path);
-    }
-    if let Some(path) = std::env::var_os("SKILL_ARTIFACT_ROOT") {
-        return normalize_path(&PathBuf::from(path));
-    }
-    Ok(framework_root.join("artifacts"))
-}
-
-pub fn resolve_maint_roots(
-    framework_root: Option<&Path>,
-    artifact_root: Option<&Path>,
-) -> Result<(PathBuf, PathBuf), String> {
-    let framework_root = resolve_projection_framework_root(framework_root)?;
-    let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
-    Ok((framework_root, artifact_root))
-}
-
-pub(crate) fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
-    let manifest = framework_root.join("core/router-rs/Cargo.toml");
-    if !manifest.is_file() {
-        return None;
-    }
-    let output = std::process::Command::new("cargo")
-        .args([
-            "metadata",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--manifest-path",
-        ])
-        .arg(&manifest)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
-    let td = meta.get("target_directory")?.as_str()?;
-    let base = PathBuf::from(td);
-    for tail in ["release/router-rs", "debug/router-rs"] {
-        let candidate = base.join(tail);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-fn is_ephemeral_executable_path(path: &str) -> bool {
-    crate::router_self::is_ephemeral_router_rs_path(path)
-}
-
-fn is_repo_build_executable_path(path: &str, framework_root: &Path) -> bool {
-    crate::router_self::is_repo_build_router_rs_path(path, framework_root)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum McpRouterRsCommand {
-    OnPath,
-    Absolute(PathBuf),
-    CargoBootstrap,
-}
-
-fn resolve_mcp_router_rs_command(framework_root: &Path) -> McpRouterRsCommand {
-    if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty()
-            && Path::new(trimmed).is_file()
-            && !is_ephemeral_executable_path(trimmed)
-            && validate_mcp_command_binary(trimmed, Some(framework_root)).is_ok()
-        {
-            return McpRouterRsCommand::Absolute(PathBuf::from(trimmed));
-        }
-    }
-    if let Ok(exe) = which::which("router-rs") {
-        let path_text = exe.to_string_lossy();
-        if !is_ephemeral_executable_path(&path_text)
-            && !is_repo_build_executable_path(&path_text, framework_root)
-        {
-            return McpRouterRsCommand::OnPath;
-        }
-    }
-    let installed = crate::router_self::default_router_rs_install_path();
-    if installed.is_file() {
-        return McpRouterRsCommand::Absolute(installed);
-    }
-    McpRouterRsCommand::CargoBootstrap
-}
-
-fn mcp_router_rs_command_value(command: &McpRouterRsCommand) -> Value {
-    match command {
-        McpRouterRsCommand::OnPath => json!("router-rs"),
-        McpRouterRsCommand::Absolute(path) => json!(path.to_string_lossy()),
-        McpRouterRsCommand::CargoBootstrap => json!("cargo"),
-    }
-}
-
-fn ensure_router_rs_installed_for_mcp_with_roots(roots: &ResolvedProjectionRoots) -> Result<(), String> {
-    if matches!(
-        resolve_mcp_router_rs_command(&roots.framework_root),
-        McpRouterRsCommand::CargoBootstrap
-    ) {
-        crate::router_self::ensure_router_rs_installed_for_runtime()?;
-    }
-    Ok(())
-}
-
-fn host_account_home_from_roots(roots: &ResolvedProjectionRoots) -> PathBuf {
-    roots.account_home_root.clone()
-}
-
-fn ensure_claude_desktop_mcp_binary(roots: &ResolvedProjectionRoots) -> Result<PathBuf, String> {
-    let path =
-        crate::router_self::install_router_rs_for_desktop_mcp_at(&host_account_home_from_roots(
-            roots,
-        ))?;
-    crate::router_self::validate_router_rs_binary_runnable(&path)?;
-    Ok(path)
-}
-
-fn resolve_stable_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
-    match resolve_mcp_router_rs_command(framework_root) {
-        McpRouterRsCommand::OnPath => which::which("router-rs").ok(),
-        McpRouterRsCommand::Absolute(path) => Some(path),
-        McpRouterRsCommand::CargoBootstrap => None,
-    }
-}
-
-fn router_rs_cargo_bootstrap_args(framework_root: &Path, host_args: &[&str]) -> Vec<String> {
-    let manifest_path = framework_root.join("core/router-rs/Cargo.toml");
-    let mut args = vec![
-        "run".to_string(),
-        "--release".to_string(),
-        "--quiet".to_string(),
-        "--manifest-path".to_string(),
-        manifest_path.to_string_lossy().into_owned(),
-        "--".to_string(),
-    ];
-    for arg in host_args {
-        args.push(arg.to_string());
-    }
-    args
-}
-
-fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> Result<(), String> {
-    if cmd == "cargo" {
-        if which::which("cargo").is_err() {
-            return Err("Cargo is not found on system PATH".to_string());
-        }
-        return Ok(());
-    }
-    if cmd == "router-rs" {
-        if which::which("router-rs").is_err() {
-            return Err(
-                "router-rs is not found on system PATH; run `router-rs self install`".to_string(),
-            );
-        }
-        return Ok(());
-    }
-    let path = Path::new(cmd);
-    if !path.is_file() {
-        return Err(format!("MCP executable binary '{cmd}' is missing on disk"));
-    }
-    if is_ephemeral_executable_path(cmd) {
-        return Err(format!(
-            "MCP executable '{cmd}' points at an ephemeral build path; run `router-rs self install` then `framework host-integration install --to <host>`"
-        ));
-    }
-    if framework_root.is_some_and(|root| is_repo_build_executable_path(cmd, root)) {
-        return Err(format!(
-            "MCP executable '{cmd}' points at a repo build artifact; run `router-rs self install` then `framework host-integration install --to <host>`"
-        ));
-    }
-    Ok(())
-}
-
-fn resolve_host_home(
-    explicit: Option<&Path>,
-    shared_home: Option<&Path>,
-    env_var: &str,
-    default_leaf: &str,
-) -> Result<PathBuf, String> {
-    if let Some(path) = explicit {
-        return normalize_path(path);
-    }
-    if let Some(home) = shared_home {
-        return Ok(normalize_path(home)?.join(default_leaf));
-    }
-    if let Some(path) = std::env::var_os(env_var) {
-        return normalize_path(&PathBuf::from(path));
-    }
-    Ok(default_home_dir().join(default_leaf))
-}
-
-pub(crate) fn resolve_projection_roots(
-    framework_root: Option<&Path>,
-    project_root: Option<&Path>,
-    artifact_root: Option<&Path>,
-    codex_home: Option<&Path>,
-    cursor_home: Option<&Path>,
-    claude_home: Option<&Path>,
-    antigravity_home: Option<&Path>,
-    antigravity_cli_home: Option<&Path>,
-    opencode_home: Option<&Path>,
-    shared_home: Option<&Path>,
-) -> Result<ResolvedProjectionRoots, String> {
-    let framework_root = resolve_projection_framework_root(framework_root)?;
-    let project_root = resolve_project_root(project_root, &framework_root)?;
-    let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
-    let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
-    let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
-    let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
-    let antigravity_home_root = resolve_host_home(antigravity_home, shared_home, "ANTIGRAVITY_HOME", ".gemini")?;
-    let antigravity_cli_home_root =
-        resolve_host_home(antigravity_cli_home, shared_home, "ANTIGRAVITY_CLI_HOME", ".antigravitycli")?;
-    let opencode_home_root = resolve_host_home(
-        opencode_home,
-        shared_home,
-        "OPENCODE_HOME",
-        ".opencode",
-    )?;
-    let account_home_root = match shared_home {
-        Some(home) => normalize_path(home)?,
-        None => default_home_dir(),
-    };
-    Ok(ResolvedProjectionRoots {
-        framework_root,
-        project_root,
-        artifact_root,
-        account_home_root,
-        codex_home_root,
-        cursor_home_root,
-        claude_home_root,
-        antigravity_home_root,
-        antigravity_cli_home_root,
-        opencode_home_root,
-    })
-}
-
-fn nearest_marker_root(start: &Path, marker: &str) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .find(|candidate| candidate.join(marker).exists())
-        .map(Path::to_path_buf)
-}
-
-fn compatibility_alias_inventory() -> Value {
-    json!({
-        "schema_version": "framework-compatibility-alias-inventory-v1",
-        "aliases": [
-            {
-                "alias": "codex host-integration ...",
-                "primary_command": "framework host-integration ...",
-                "owner": "host-integration",
-                "reason": "backward-compatible parser path for existing Codex automation that has not moved to the host-neutral namespace",
-                "independent_behavior": false,
-                "kept_policy": "thin parser alias only; dispatches to the same host-integration implementation as the primary command",
-                "removal_condition": "remove after all checked-in docs, tests, bootstrap snippets, and generated host entrypoints use framework host-integration",
-            },
-            {
-                "alias": "framework host-integration install-skills",
-                "primary_command": "framework host-integration install",
-                "owner": "host-integration",
-                "reason": "backward-compatible install command spelling for existing project-local projection setup calls",
-                "independent_behavior": false,
-                "kept_policy": "thin subcommand alias only; maps to install with compatibility_alias=true metadata",
-                "removal_condition": "remove after project-local projection installs and docs no longer call install-skills",
-            },
-            {
-                "alias": "--repo-root",
-                "primary_command": "--framework-root",
-                "owner": "root-resolution",
-                "reason": "backward-compatible flag for selecting the shared framework root in old automation",
-                "independent_behavior": false,
-                "kept_policy": "framework-root alias only; never resolves or fills project_root",
-                "removal_condition": "kept indefinitely unless all old automation migrates to --framework-root and no docs/tests/generated entrypoints reference --repo-root",
-            }
-        ]
-    })
-}
-
-/// Lightweight summary for `framework doctor` (full manifest regen is expensive).
-pub(crate) fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value, String> {
-    generated_artifacts_status(
-        Some(repo_root),
-        Some(&repo_root.join("artifacts")),
-        true,
-    )
-}
-
-fn generated_artifacts_status(
-    framework_root: Option<&Path>,
-    artifact_root: Option<&Path>,
-    skip_generator_run: bool,
-) -> Result<Value, String> {
-    let framework_root = resolve_framework_root(framework_root)?;
-    let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
-    let manifest_path = framework_root.join("configs/framework/GENERATED_ARTIFACTS.json");
-    let manifest = read_json_if_exists(&manifest_path)?.ok_or_else(|| {
-        format!(
-            "missing generated artifact manifest: {}",
-            manifest_path.display()
-        )
-    })?;
-    let manifest: GeneratedArtifactsManifest = serde_json::from_value(manifest)
-        .map_err(|err| format!("invalid generated artifact manifest: {err}"))?;
-    if manifest.schema_version != GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION {
-        return Err(format!(
-            "unsupported generated artifact manifest schema_version {:?} at {}; expected {}",
-            manifest.schema_version,
-            manifest_path.display(),
-            GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION
-        ));
-    }
-    let temp_root_guard = if skip_generator_run {
-        None
-    } else {
-        Some(prepare_generated_artifact_temp_root(
-            &framework_root,
-            &artifact_root,
-        )?)
-    };
-    let temp_root = temp_root_guard.as_ref().map(|guard| guard.path());
-    let mut results = Vec::new();
-    let mut ok = true;
-    let mut declared_paths = BTreeSet::new();
-    let mut executed_generators = BTreeSet::new();
-
-    for artifact in &manifest.generated_artifacts {
-        validate_generated_artifact_entry(artifact)?;
-        declared_paths.insert(artifact.path.clone());
-        if !skip_generator_run {
-            let temp_root = temp_root.expect("temp root prepared when generators run");
-            if executed_generators.insert(artifact.generator.clone()) {
-                run_generated_artifact_generator(&artifact.generator, &framework_root, temp_root)?;
-            }
-        }
-        let checked_in_path = framework_root.join(&artifact.path);
-        let regenerated_path = temp_root.map(|root| root.join(&artifact.path));
-        let exists = checked_in_path.is_file();
-        let regenerated_exists = regenerated_path
-            .as_ref()
-            .is_some_and(|path| path.is_file());
-        let checked_in = if exists {
-            Some(fs::read(&checked_in_path).map_err(|err| err.to_string())?)
-        } else {
-            None
-        };
-        let regenerated = if regenerated_exists {
-            let path = regenerated_path.as_ref().expect("regenerated path");
-            Some(fs::read(path).map_err(|err| err.to_string())?)
-        } else {
-            None
-        };
-        let forbidden = checked_in
-            .as_ref()
-            .and_then(|bytes| std::str::from_utf8(bytes).ok())
-            .map(|content| {
-                if artifact.compare == "normalized-text" {
-                    let normalized = normalize_generated_artifact_text(content, &[&framework_root]);
-                    generated_artifact_forbidden_markers(&artifact.path, &normalized)
-                } else {
-                    generated_artifact_forbidden_markers(&artifact.path, content)
-                }
-            })
-            .unwrap_or_default();
-        let drifted = if skip_generator_run {
-            false
-        } else {
-            generated_artifact_drifted(
-                &artifact.compare,
-                checked_in.as_deref(),
-                regenerated.as_deref(),
-                &framework_root,
-                temp_root.expect("temp root prepared when drift is checked"),
-            )?
-        };
-        let clean = if skip_generator_run {
-            exists && forbidden.is_empty()
-        } else {
-            exists && regenerated_exists && !drifted && forbidden.is_empty()
-        };
-        ok &= clean;
-        results.push(json!({
-            "path": artifact.path,
-            "exists": exists,
-            "regenerated_exists": regenerated_exists,
-            "clean": clean,
-            "drifted": drifted,
-            "forbidden_markers": forbidden,
-            "compare": artifact.compare,
-            "generator": artifact.generator,
-        }));
-    }
-
-    let undeclared = undeclared_generated_framework_artifacts(&framework_root, &declared_paths)?;
-    ok &= undeclared.is_empty();
-    let drifted_artifacts: Vec<Value> = results
-        .iter()
-        .filter(|artifact| artifact.get("drifted").and_then(Value::as_bool) == Some(true))
-        .map(|artifact| {
-            json!({
-                "path": artifact["path"].clone(),
-                "generator": artifact["generator"].clone(),
-                "compare": artifact["compare"].clone(),
-            })
-        })
-        .collect();
-
-    Ok(json!({
-        "schema_version": "framework-generated-artifacts-status-v1",
-        "ok": ok,
-        "manifest_status": {
-            "mode": if skip_generator_run {
-                "manifest-backed-generated-artifact-metadata-only"
-            } else {
-                "manifest-backed-generated-artifact-drift-gate"
-            },
-            "artifact_root": artifact_root.to_string_lossy(),
-            "temp_root": temp_root
-                .map(|path| path.to_string_lossy().to_string())
-                .unwrap_or_default(),
-            "skip_generator_run": skip_generator_run,
-            "undeclared_generated_artifacts": undeclared,
-            "declared_generated_artifact_paths": declared_paths.iter().cloned().collect::<Vec<_>>(),
-            "drifted_artifacts": drifted_artifacts,
-        },
-        "drift_gate": {
-            "enabled": true,
-            "compare": ["byte-for-byte", "normalized-text"],
-            "manifest": manifest_path.to_string_lossy(),
-        },
-        "framework_root": framework_root.to_string_lossy(),
-        "artifact_root": artifact_root.to_string_lossy(),
-        "manifest": manifest_path.to_string_lossy(),
-        "generated_artifacts": results,
-    }))
-}
-
-fn validate_generated_artifact_entry(
-    artifact: &GeneratedArtifactManifestEntry,
-) -> Result<(), String> {
-    if Path::new(&artifact.path).is_absolute()
-        || artifact.path.contains("..")
-        || (artifact.path.starts_with('.') && !allowed_dot_generated_artifact(&artifact.path))
-    {
-        return Err(format!(
-            "generated artifact path must be repo-relative and non-traversing: {}",
-            artifact.path
-        ));
-    }
-    if !matches!(
-        artifact.compare.as_str(),
-        "byte-for-byte" | "normalized-text"
-    ) {
-        return Err(format!(
-            "unsupported generated artifact compare mode for {}: {}",
-            artifact.path, artifact.compare
-        ));
-    }
-    Ok(())
-}
-
-fn generated_artifact_drifted(
-    compare: &str,
-    checked_in: Option<&[u8]>,
-    regenerated: Option<&[u8]>,
-    framework_root: &Path,
-    regenerated_root: &Path,
-) -> Result<bool, String> {
-    match compare {
-        "byte-for-byte" => Ok(checked_in != regenerated),
-        "normalized-text" => {
-            let Some(checked_in) = checked_in else {
-                return Ok(regenerated.is_some());
-            };
-            let Some(regenerated) = regenerated else {
-                return Ok(true);
-            };
-            let checked_in = std::str::from_utf8(checked_in)
-                .map_err(|err| format!("normalized-text artifact is not UTF-8: {err}"))?;
-            let regenerated = std::str::from_utf8(regenerated)
-                .map_err(|err| format!("normalized-text artifact is not UTF-8: {err}"))?;
-            Ok(
-                normalize_generated_artifact_text(checked_in, &[framework_root, regenerated_root])
-                    != normalize_generated_artifact_text(
-                        regenerated,
-                        &[framework_root, regenerated_root],
-                    ),
-            )
-        }
-        other => Err(format!(
-            "unsupported generated artifact compare mode: {other}"
-        )),
-    }
-}
-
-fn normalize_generated_artifact_text(content: &str, roots: &[&Path]) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let mut normalized = content.to_string();
-    let mut roots = roots
-        .iter()
-        .map(|root| root.to_string_lossy().to_string())
-        .collect::<Vec<_>>();
-    roots.sort_unstable_by_key(|root| std::cmp::Reverse(root.len()));
-    for root in roots {
-        normalized = normalized.replace(&root, "${FRAMEWORK_ROOT}");
-    }
-    normalized.replace(&home, "${HOME}")
-}
-
-fn allowed_dot_generated_artifact(path: &str) -> bool {
-    matches!(
-        path,
-        ".codex/host_entrypoints_sync_manifest.json"
-            | ".codex/README.md"
-            | ".codex/prompts/framework.md"
-            | ".claude/rules/framework.md"
-            | ".claude/settings.json"
-            | ".claude/.framework-projection.json"
-            | ".claude/CLAUDE.md"
-            | ".claude/mcp.json"
-            | ".claude/.framework-projection-desktop.json"
-            | ".gemini/antigravity/rules/framework.md"
-            | ".gemini/settings.json"
-            | ".gemini/mcp.json"
-            | ".opencode/opencode.json"
-            | ".opencode/.framework-projection.json"
-    )
-}
-
-struct GeneratedArtifactTempRoot {
-    path: PathBuf,
-}
-
-impl GeneratedArtifactTempRoot {
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for GeneratedArtifactTempRoot {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-        if let Some(parent) = self.path.parent() {
-            let _ = fs::remove_dir(parent);
-        }
-    }
-}
-
-fn prepare_generated_artifact_temp_root(
-    framework_root: &Path,
-    artifact_root: &Path,
-) -> Result<GeneratedArtifactTempRoot, String> {
-    let temp_root = artifact_root
-        .join("generated-artifacts-drift-check")
-        .join(format!(
-            "run-{}",
-            Local::now().timestamp_nanos_opt().unwrap_or_default()
-        ));
-    copy_framework_tree_for_generation(framework_root, &temp_root)?;
-    Ok(GeneratedArtifactTempRoot { path: temp_root })
-}
-
-fn copy_framework_tree_for_generation(source: &Path, destination: &Path) -> Result<(), String> {
-    fs::create_dir_all(destination)
-        .map_err(|err| format!("failed to create {}: {err}", destination.display()))?;
-    for entry in fs::read_dir(source)
-        .map_err(|err| format!("failed to read directory {}: {err}", source.display()))?
-    {
-        let entry = entry.map_err(|err| {
-            format!(
-                "failed to read directory entry under {}: {err}",
-                source.display()
-            )
-        })?;
-        let path = entry.path();
-        let name = entry.file_name();
-        let name_text = name.to_string_lossy();
-        let target = destination.join(&name);
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|err| format!("failed to inspect {}: {err}", path.display()))?;
-        if metadata.file_type().is_symlink() {
-            continue;
-        }
-        if metadata.is_dir() {
-            if should_skip_generated_artifact_copy_dir(&name_text) {
-                continue;
-            }
-            copy_framework_tree_for_generation(&path, &target)?;
-        } else if metadata.is_file() {
-            if should_skip_generated_artifact_copy_file(&name_text) {
-                continue;
-            }
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
-            }
-            fs::copy(&path, &target).map_err(|err| {
-                format!(
-                    "failed to copy {} to {}: {err}",
-                    path.display(),
-                    target.display()
-                )
-            })?;
-        }
-    }
-    Ok(())
-}
-
-fn should_skip_generated_artifact_copy_dir(name: &str) -> bool {
-    GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES.contains(&name)
-}
-
-fn should_skip_generated_artifact_copy_file(name: &str) -> bool {
-    name == ".DS_Store" || name.ends_with(".marker")
-}
-
-fn run_generated_artifact_generator(
-    generator: &str,
-    framework_root: &Path,
-    temp_root: &Path,
-) -> Result<(), String> {
-    let timeout = generated_artifact_generator_timeout();
-    let log_stamp = Local::now().timestamp_nanos_opt().unwrap_or_default();
-    let stdout_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stdout.log"));
-    let stderr_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stderr.log"));
-    let stdout_file = fs::File::create(&stdout_path)
-        .map_err(|err| format!("failed to create {}: {err}", stdout_path.display()))?;
-    let stderr_file = fs::File::create(&stderr_path)
-        .map_err(|err| format!("failed to create {}: {err}", stderr_path.display()))?;
-    let mut child = Command::new("sh")
-        .arg("-c")
-        .arg(rewrite_generated_artifact_generator(
-            generator,
-            framework_root,
-            temp_root,
-        ))
-        .current_dir(temp_root)
-        .env("SKILL_FRAMEWORK_ROOT", temp_root)
-        .env("SKILL_ARTIFACT_ROOT", temp_root.join("artifacts"))
-        .env("ROUTER_RS_NO_REBUILD", "1")
-        .stdout(Stdio::from(stdout_file))
-        .stderr(Stdio::from(stderr_file))
-        .spawn()
-        .map_err(|err| err.to_string())?;
-    let start = Instant::now();
-    loop {
-        if child.try_wait().map_err(|err| err.to_string())?.is_some() {
-            break;
-        }
-        if start.elapsed() >= timeout {
-            let _ = child.kill();
-            let _ = child.wait().map_err(|err| err.to_string())?;
-            let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
-            let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
-            return Err(format!(
-                "generated artifact generator timed out after {}s: {generator}\nstdout:\n{}\nstderr:\n{}",
-                timeout.as_secs(),
-                stdout,
-                stderr
-            ));
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-    let status = child.wait().map_err(|err| err.to_string())?;
-    let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
-    let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
-    let _ = fs::remove_file(&stdout_path);
-    let _ = fs::remove_file(&stderr_path);
-    if status.success() {
-        return Ok(());
-    }
-    Err(format!(
-        "generated artifact generator failed: {generator}\nstdout:\n{}\nstderr:\n{}",
-        stdout, stderr
-    ))
-}
-
-fn generated_artifact_generator_timeout() -> Duration {
-    match std::env::var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS")
-        .ok()
-        .and_then(|raw| raw.parse::<u64>().ok())
-    {
-        Some(0) | None => GENERATED_ARTIFACT_GENERATOR_TIMEOUT,
-        Some(seconds) => Duration::from_secs(seconds),
-    }
-}
-
-fn rewrite_generated_artifact_generator(
-    generator: &str,
-    framework_root: &Path,
-    temp_root: &Path,
-) -> String {
-    generator
-        .replace(
-            &framework_root.to_string_lossy().to_string(),
-            &temp_root.to_string_lossy(),
-        )
-        .replace(
-            "./scripts/",
-            &format!("{}/scripts/", temp_root.to_string_lossy()),
-        )
-        .replace(
-            " scripts/",
-            &format!(" {}/scripts/", temp_root.to_string_lossy()),
-        )
-}
-
-fn generated_artifact_forbidden_markers(path: &str, content: &str) -> Vec<&'static str> {
-    let mut markers = Vec::new();
-    for (name, needle) in [
-        ("expanded-codex-home", "/Users/joe/.codex"),
-        (
-            "expanded-consuming-project-root",
-            r"${HOME}/Documents/skill",
-        ),
-        ("copied-skill-body", "# Plan To Code"),
-    ] {
-        if content.contains(needle) {
-            markers.push(name);
-        }
-    }
-    if !path.starts_with("skills/SKILL_") && content.contains("\"skills\":[[") {
-        markers.push("copied-runtime-payload");
-    }
-    markers
-}
-
-fn undeclared_generated_framework_artifacts(
-    framework_root: &Path,
-    declared_paths: &BTreeSet<String>,
-) -> Result<Vec<String>, String> {
-    let allowed_reports = surface_policy_generated_reports(framework_root)?;
-    let mut undeclared = Vec::new();
-    let candidates = generated_artifact_reverse_reference_candidates(framework_root)?;
-    for path in candidates {
-        let rel = path
-            .strip_prefix(framework_root)
-            .map_err(|err| err.to_string())?
-            .to_string_lossy()
-            .into_owned();
-        if !declared_paths.contains(&rel) && !allowed_reports.contains(&rel) {
-            undeclared.push(rel);
-        }
-    }
-    undeclared.sort();
-    undeclared.dedup();
-    Ok(undeclared)
-}
-
-fn surface_policy_generated_reports(framework_root: &Path) -> Result<BTreeSet<String>, String> {
-    let path = framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json");
-    let Some(policy) = read_json_if_exists(&path)? else {
-        return Ok(BTreeSet::new());
-    };
-    let mut reports = BTreeSet::new();
-    for key in ["derived_reports", "deprecated_or_foldable_reports"] {
-        let Some(items) = policy.get(key).and_then(Value::as_array) else {
-            continue;
-        };
-        for item in items {
-            let Some(rel) = item.as_str() else {
-                continue;
-            };
-            reports.insert(rel.to_string());
-        }
-    }
-    Ok(reports)
-}
-
-fn generated_artifact_reverse_reference_candidates(
-    framework_root: &Path,
-) -> Result<Vec<PathBuf>, String> {
-    let mut candidates = Vec::new();
-    for rel in [
-        "configs/framework",
-        "docs",
-        "tests",
-        ".github/workflows",
-        ".codex",
-        ".claude",
-        ".gemini",
-        ".cursor/rules",
-    ] {
-        collect_generated_artifact_marker_files(
-            framework_root,
-            &framework_root.join(rel),
-            &mut candidates,
-        )?;
-    }
-    let rel = "AGENTS.md";
-    collect_generated_artifact_marker_files(
-        framework_root,
-        &framework_root.join(rel),
-        &mut candidates,
-    )?;
-    collect_root_skill_generated_surfaces(framework_root, &mut candidates)?;
-    Ok(candidates)
-}
-
-fn collect_root_skill_generated_surfaces(
-    framework_root: &Path,
-    candidates: &mut Vec<PathBuf>,
-) -> Result<(), String> {
-    let skills_root = framework_root.join("skills");
-    if !skills_root.is_dir() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(&skills_root).map_err(|err| err.to_string())? {
-        let entry = entry.map_err(|err| err.to_string())?;
-        let path = entry.path();
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if name.starts_with("SKILL_") {
-            collect_generated_artifact_marker_files(framework_root, &path, candidates)?;
-        }
-    }
-    Ok(())
-}
-
-fn collect_generated_artifact_marker_files(
-    framework_root: &Path,
-    path: &Path,
-    candidates: &mut Vec<PathBuf>,
-) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-    if path.is_dir() {
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            return Ok(());
-        };
-        if matches!(name, ".git" | "target" | "artifacts") {
-            return Ok(());
-        }
-        for entry in fs::read_dir(path).map_err(|err| err.to_string())? {
-            let entry = entry.map_err(|err| err.to_string())?;
-            collect_generated_artifact_marker_files(framework_root, &entry.path(), candidates)?;
-        }
-        return Ok(());
-    }
-    if !path.is_file() || !is_generated_artifact_scan_file(path) {
-        return Ok(());
-    }
-    let Some(content) = read_text_if_exists(path)? else {
-        return Ok(());
-    };
-    if !content.contains("generated-by-") && !is_managed_projection_content(&content) {
-        return Ok(());
-    }
-    let rel = path
-        .strip_prefix(framework_root)
-        .map_err(|err| err.to_string())?;
-    if rel.components().any(|component| {
-        component
-            .as_os_str()
-            .to_str()
-            .is_some_and(|item| matches!(item, "target" | "artifacts"))
-    }) {
-        return Ok(());
-    }
-    candidates.push(path.to_path_buf());
-    Ok(())
-}
-
-fn is_generated_artifact_scan_file(path: &Path) -> bool {
-    if matches!(
-        path.file_name().and_then(|name| name.to_str()),
-        Some("AGENTS.md")
-    ) {
-        return true;
-    }
-    matches!(
-        path.extension().and_then(|ext| ext.to_str()),
-        Some("json" | "md" | "toml" | "yaml" | "yml" | "txt")
-    )
-}
-
-fn skills_source_rel(repo_root: &Path) -> Result<String, String> {
-    let registry = load_runtime_registry(repo_root)?;
-    let source_rel = registry
-        .workspace_bootstrap_defaults
-        .skills
-        .source_rel
-        .unwrap_or_else(|| "skills".to_string());
-    validate_source_rel(&source_rel)?;
-    Ok(source_rel)
-}
-
-fn validate_source_rel(source_rel: &str) -> Result<(), String> {
-    let candidate = Path::new(source_rel);
-    if candidate.as_os_str().is_empty() {
-        return Err("skills source_rel must not be empty".to_string());
-    }
-    if candidate.is_absolute() {
-        return Err(format!(
-            "skills source_rel must be repository-relative, got absolute path: {source_rel}"
-        ));
-    }
-    if candidate
-        .components()
-        .any(|component| matches!(component, std::path::Component::ParentDir))
-    {
-        return Err(format!(
-            "skills source_rel must not contain '..' segments: {source_rel}"
-        ));
-    }
-    Ok(())
-}
-
-fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String> {
-    if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
-        let path = PathBuf::from(raw);
-        if path.is_file() {
-            return Ok(path);
-        }
-    }
-    let installed = crate::router_self::default_router_rs_install_path();
-    if installed.is_file() {
-        return Ok(installed);
-    }
-    if let Ok(exe) = which::which("router-rs") {
-        let path_text = exe.to_string_lossy();
-        if !is_ephemeral_executable_path(&path_text) {
-            return Ok(exe);
-        }
-    }
-    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
-        let base = PathBuf::from(td);
-        for candidate in [base.join("release/router-rs"), base.join("debug/router-rs")] {
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
-    }
-    let cur = std::env::current_exe().map_err(|err| err.to_string())?;
-    if cur
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name == "router-rs" || name.starts_with("router-rs"))
-    {
-        return Ok(cur);
-    }
-    let repo_root = normalize_path(repo_root)?;
-    for candidate in [
-        repo_root.join("target/release/router-rs"),
-        repo_root.join("target/debug/router-rs"),
-        repo_root.join("core/router-rs/target/release/router-rs"),
-        repo_root.join("core/router-rs/target/debug/router-rs"),
-    ] {
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-    }
-    Err(format!(
-        "could not resolve router-rs executable for subprocess (try `cargo build --release --manifest-path core/router-rs/Cargo.toml`, `router-rs self install`, or set ROUTER_RS_BIN); repo_root={}",
-        repo_root.display()
-    ))
-}
-
-fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, String> {
-    let exe = resolve_router_rs_executable(repo_root)?;
-    let output = Command::new(&exe)
-        .args(args)
-        .arg("--repo-root")
-        .arg(repo_root)
-        .output()
-        .map_err(|err| err.to_string())?;
-    if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
-        return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if stderr.is_empty() {
-        format!(
-            "router-rs subprocess failed (status {:?}); executable {}",
-            output.status,
-            exe.display()
-        )
-    } else {
-        stderr
-    })
-}
+use super::*;
 
 #[allow(clippy::too_many_arguments)]
-fn install_native_integration(
+pub(crate) fn install_native_integration(
     repo_root: &Path,
     home_config_path: &Path,
     home_codex_skills_path: &Path,
@@ -1597,7 +59,7 @@ fn install_native_integration(
     }))
 }
 
-fn projection_install_command(
+pub(crate) fn projection_install_command(
     command: ProjectionCommand,
     compatibility_alias: bool,
 ) -> Result<Value, String> {
@@ -1626,7 +88,7 @@ fn projection_install_command(
     projection_envelope("install", compatibility_alias, &roots, Some(scope), results)
 }
 
-fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, String> {
+pub(crate) fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, String> {
     let roots = resolve_projection_roots(
         command.framework_root.as_deref(),
         command.project_root.as_deref(),
@@ -1647,18 +109,18 @@ fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, 
     projection_envelope("status", false, &roots, None, results)
 }
 
-fn projection_remove_command(
+pub(crate) fn projection_remove_command(
     command: ProjectionCommand,
     compatibility_alias: bool,
 ) -> Result<Value, String> {
     projection_remove_or_cleanup_command(command, compatibility_alias, false)
 }
 
-fn projection_cleanup_command(command: ProjectionCommand) -> Result<Value, String> {
+pub(crate) fn projection_cleanup_command(command: ProjectionCommand) -> Result<Value, String> {
     projection_remove_or_cleanup_command(command, false, true)
 }
 
-fn projection_remove_or_cleanup_command(
+pub(crate) fn projection_remove_or_cleanup_command(
     command: ProjectionCommand,
     compatibility_alias: bool,
     cleanup_mode: bool,
@@ -1695,7 +157,7 @@ fn projection_remove_or_cleanup_command(
     )
 }
 
-fn validate_cleanup_scope(
+pub(crate) fn validate_cleanup_scope(
     command: &ProjectionCommand,
     scope: &str,
     tools: &[String],
@@ -1717,7 +179,7 @@ fn validate_cleanup_scope(
     Ok(())
 }
 
-fn projection_envelope(
+pub(crate) fn projection_envelope(
     command: &str,
     compatibility_alias: bool,
     roots: &ResolvedProjectionRoots,
@@ -1756,7 +218,7 @@ fn projection_envelope(
     }))
 }
 
-fn resolved_roots_payload(
+pub(crate) fn resolved_roots_payload(
     roots: &ResolvedProjectionRoots,
     pairs: &[(String, String)],
 ) -> Result<Value, String> {
@@ -1784,7 +246,7 @@ fn resolved_roots_payload(
     }))
 }
 
-fn selected_projection_tools(
+pub(crate) fn selected_projection_tools(
     framework_root: &Path,
     raw_tools: &[String],
     default_all: bool,
@@ -1818,7 +280,7 @@ fn selected_projection_tools(
     Ok(selected)
 }
 
-fn default_projection_tools_for_scope(
+pub(crate) fn default_projection_tools_for_scope(
     framework_root: &Path,
     scope: &str,
 ) -> Result<Vec<String>, String> {
@@ -1913,7 +375,7 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
     },
 ];
 
-fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.account_home_root.join(".config/opencode/opencode.json")
     } else {
@@ -1921,7 +383,7 @@ fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf
     }
 }
 
-fn opencode_projection_config_dir(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn opencode_projection_config_dir(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.account_home_root.join(".config/opencode")
     } else {
@@ -1929,7 +391,7 @@ fn opencode_projection_config_dir(roots: &ResolvedProjectionRoots, scope: &str) 
     }
 }
 
-fn opencode_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+pub(crate) fn opencode_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     make_mcp_server_payload_with_env(
         roots,
         &["opencode", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
@@ -1938,7 +400,7 @@ fn opencode_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     )
 }
 
-fn install_opencode_projection(
+pub(crate) fn install_opencode_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
@@ -2002,7 +464,7 @@ fn install_opencode_projection(
     }))
 }
 
-fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+pub(crate) fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let project_path = opencode_config_path(roots, "project");
     let user_path = opencode_config_path(roots, "user");
     let project_exists = project_path.is_file();
@@ -2058,7 +520,7 @@ fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, 
     }))
 }
 
-fn remove_opencode_projection(
+pub(crate) fn remove_opencode_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
@@ -2099,29 +561,29 @@ fn remove_opencode_projection(
     }))
 }
 
-fn opencode_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+pub(crate) fn opencode_home_root_string(roots: &ResolvedProjectionRoots) -> String {
     roots.opencode_home_root.to_string_lossy().into_owned()
 }
 
-fn opencode_home_explicit(command: &ProjectionCommand) -> bool {
+pub(crate) fn opencode_home_explicit(command: &ProjectionCommand) -> bool {
     command.opencode_home.is_some() || std::env::var_os("OPENCODE_HOME").is_some()
 }
 
-fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
+pub(crate) fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
     let normalized = tool.trim().to_lowercase();
     HOST_PROJECTION_ADAPTERS
         .iter()
         .find(|adapter| adapter.tool == normalized)
 }
 
-fn projection_adapter_for_raw(raw: &str) -> Option<&'static HostProjectionAdapter> {
+pub(crate) fn projection_adapter_for_raw(raw: &str) -> Option<&'static HostProjectionAdapter> {
     let normalized = raw.trim().to_lowercase();
     HOST_PROJECTION_ADAPTERS.iter().find(|adapter| {
         adapter.tool == normalized || adapter.aliases.iter().any(|alias| *alias == normalized)
     })
 }
 
-fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
+pub(crate) fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
     let pairs = crate::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
         framework_root,
     )?;
@@ -2140,7 +602,7 @@ fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, Strin
     Ok(tools)
 }
 
-fn validate_projection_adapters_against_registry(framework_root: &Path) -> Result<(), String> {
+pub(crate) fn validate_projection_adapters_against_registry(framework_root: &Path) -> Result<(), String> {
     let registry = crate::runtime_registry::load_runtime_registry_json(framework_root)?;
     let supported = crate::framework_host_targets::host_targets_supported_host_ids(&registry)?;
     for adapter in HOST_PROJECTION_ADAPTERS {
@@ -2154,7 +616,7 @@ fn validate_projection_adapters_against_registry(framework_root: &Path) -> Resul
     Ok(())
 }
 
-fn projection_alias_summary() -> String {
+pub(crate) fn projection_alias_summary() -> String {
     HOST_PROJECTION_ADAPTERS
         .iter()
         .flat_map(|adapter| {
@@ -2167,7 +629,7 @@ fn projection_alias_summary() -> String {
         .join(", ")
 }
 
-fn canonical_scope(scope: &str) -> Result<&'static str, String> {
+pub(crate) fn canonical_scope(scope: &str) -> Result<&'static str, String> {
     match scope.trim().to_lowercase().as_str() {
         "" | "project" | "project-local" => Ok("project"),
         "user" => Ok("user"),
@@ -2179,7 +641,7 @@ fn canonical_scope(scope: &str) -> Result<&'static str, String> {
 
 /// Cursor framework rules (`framework.mdc`) and browser MCP projection are **user-scope only**.
 /// Project repos keep `.cursor/hooks.json` and harness gate rules locally.
-fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str, String> {
+pub(crate) fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str, String> {
     if projection_adapter(tool).is_some_and(|adapter| adapter.tool == "cursor") {
         let _ = canonical_scope(scope)?;
         return Ok("user");
@@ -2187,7 +649,7 @@ fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str, St
     canonical_scope(scope)
 }
 
-fn install_projection_tool(
+pub(crate) fn install_projection_tool(
     roots: &ResolvedProjectionRoots,
     tool: &str,
     scope: &str,
@@ -2200,7 +662,7 @@ fn install_projection_tool(
     (adapter.install)(roots, effective_scope)
 }
 
-fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
+pub(crate) fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
     if tool == "codex-app" {
         return Ok(non_installable_projection_result("codex-app", "status"));
     }
@@ -2208,7 +670,7 @@ fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result
     (adapter.status)(roots)
 }
 
-fn remove_projection_tool(
+pub(crate) fn remove_projection_tool(
     roots: &ResolvedProjectionRoots,
     tool: &str,
     scope: &str,
@@ -2222,7 +684,7 @@ fn remove_projection_tool(
     (adapter.remove)(roots, effective_scope, dry_run)
 }
 
-fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
+pub(crate) fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
     json!({
         "status": "unsupported",
         "supported": false,
@@ -2233,50 +695,50 @@ fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
     })
 }
 
-fn codex_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+pub(crate) fn codex_home_root_string(roots: &ResolvedProjectionRoots) -> String {
     roots.codex_home_root.to_string_lossy().into_owned()
 }
 
-fn cursor_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+pub(crate) fn cursor_home_root_string(roots: &ResolvedProjectionRoots) -> String {
     roots.cursor_home_root.to_string_lossy().into_owned()
 }
 
-fn claude_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+pub(crate) fn claude_home_root_string(roots: &ResolvedProjectionRoots) -> String {
     roots.claude_home_root.to_string_lossy().into_owned()
 }
 
-fn codex_home_explicit(command: &ProjectionCommand) -> bool {
+pub(crate) fn codex_home_explicit(command: &ProjectionCommand) -> bool {
     command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some()
 }
 
-fn cursor_home_explicit(command: &ProjectionCommand) -> bool {
+pub(crate) fn cursor_home_explicit(command: &ProjectionCommand) -> bool {
     command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some()
 }
 
-fn claude_home_explicit(command: &ProjectionCommand) -> bool {
+pub(crate) fn claude_home_explicit(command: &ProjectionCommand) -> bool {
     command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some()
 }
 
-fn antigravity_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+pub(crate) fn antigravity_home_root_string(roots: &ResolvedProjectionRoots) -> String {
     roots.antigravity_home_root.to_string_lossy().into_owned()
 }
 
-fn antigravity_home_explicit(command: &ProjectionCommand) -> bool {
+pub(crate) fn antigravity_home_explicit(command: &ProjectionCommand) -> bool {
     command.antigravity_home.is_some() || std::env::var_os("ANTIGRAVITY_HOME").is_some()
 }
 
-fn antigravity_cli_home_root_string(roots: &ResolvedProjectionRoots) -> String {
+pub(crate) fn antigravity_cli_home_root_string(roots: &ResolvedProjectionRoots) -> String {
     roots
         .antigravity_cli_home_root
         .to_string_lossy()
         .into_owned()
 }
 
-fn antigravity_cli_home_explicit(command: &ProjectionCommand) -> bool {
+pub(crate) fn antigravity_cli_home_explicit(command: &ProjectionCommand) -> bool {
     std::env::var_os("ANTIGRAVITY_CLI_HOME").is_some()
 }
 
-fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
+pub(crate) fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
     let target = codex_entrypoint_target(roots, scope);
     let changed = write_text_if_changed(&target, &render_codex_framework_entrypoint(roots, scope))?;
     let prompt_entrypoints =
@@ -2304,7 +766,7 @@ fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Res
     }))
 }
 
-fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+pub(crate) fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let project_target = codex_entrypoint_target(roots, "project");
     let user_target = codex_entrypoint_target(roots, "user");
     Ok(json!({
@@ -2324,7 +786,7 @@ fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, Str
     }))
 }
 
-fn install_cursor_projection(
+pub(crate) fn install_cursor_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
@@ -2378,7 +840,7 @@ fn install_cursor_projection(
     }))
 }
 
-fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+pub(crate) fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let user_target = cursor_entrypoint_target(roots, "user");
     let mcp_path = cursor_mcp_config_path(roots);
     let rules_ready = managed_projection_file_exists(&user_target)?;
@@ -2434,7 +896,7 @@ fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, St
     }))
 }
 
-fn remove_codex_projection(
+pub(crate) fn remove_codex_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
@@ -2469,7 +931,7 @@ fn remove_codex_projection(
     }))
 }
 
-fn remove_cursor_projection(
+pub(crate) fn remove_cursor_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
@@ -2544,7 +1006,7 @@ fn remove_cursor_projection(
     }))
 }
 
-fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.claude_home_root.join("rules").join("framework.md")
     } else {
@@ -2556,7 +1018,7 @@ fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> Pat
     }
 }
 
-fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.claude_home_root.join("settings.json")
     } else {
@@ -2564,14 +1026,14 @@ fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathB
     }
 }
 
-fn build_router_rs_claude_hook_command(event: &str) -> String {
+pub(crate) fn build_router_rs_claude_hook_command(event: &str) -> String {
     format!(
         "/usr/bin/env bash -c 'ROOT=\"${{CLAUDE_PROJECT_ROOT:-$PWD}}\"; FW=\"${{SKILL_FRAMEWORK_ROOT:-$ROOT}}\"; if [[ -r \"$ROOT/.claude/router-rs-hook.env\" ]]; then set -a; . \"$ROOT/.claude/router-rs-hook.env\"; set +a; fi; exec \"$FW/configs/framework/claude-router-rs-hook.sh\" {event}'",
         event = event
     )
 }
 
-fn managed_claude_hook_entry(event: &str) -> Value {
+pub(crate) fn managed_claude_hook_entry(event: &str) -> Value {
     json!({
         "matcher": "",
         "hooks": [{
@@ -2581,7 +1043,7 @@ fn managed_claude_hook_entry(event: &str) -> Value {
     })
 }
 
-fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
+pub(crate) fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
     match value {
         Value::String(s) => {
             s.contains("claude-router-rs-hook.sh")
@@ -2594,7 +1056,7 @@ fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
     }
 }
 
-fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value, String> {
+pub(crate) fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value, String> {
     let mut root = match existing {
         Some(Value::Object(map)) => map,
         Some(_) => return Err("Claude settings root must be a JSON object".to_string()),
@@ -2618,13 +1080,13 @@ fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value, String>
     Ok(Value::Object(root))
 }
 
-fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool, String> {
+pub(crate) fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool, String> {
     let existing = read_json_if_exists(settings_path)?;
     let merged = merge_claude_settings_hooks(existing)?;
     write_json_if_changed(settings_path, &merged)
 }
 
-fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+pub(crate) fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
     let dest = roots.project_root.join(".claude/router-rs-hook.env");
     if dest.is_file() {
         return Ok(false);
@@ -2648,7 +1110,7 @@ fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<
     Ok(true)
 }
 
-fn install_claude_projection(
+pub(crate) fn install_claude_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
@@ -2681,7 +1143,7 @@ fn install_claude_projection(
     }))
 }
 
-fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+pub(crate) fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let project_target = claude_entrypoint_target(roots, "project");
     let user_target = claude_entrypoint_target(roots, "user");
     let project_settings = claude_settings_target(roots, "project");
@@ -2706,7 +1168,7 @@ fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, St
     }))
 }
 
-fn remove_claude_projection(
+pub(crate) fn remove_claude_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
@@ -2780,7 +1242,7 @@ struct AgentSettingsRemoval {
     removed_events: Vec<String>,
 }
 
-fn remove_claude_settings_hooks(
+pub(crate) fn remove_claude_settings_hooks(
     settings_path: &Path,
     dry_run: bool,
 ) -> Result<AgentSettingsRemoval, String> {
@@ -2852,7 +1314,7 @@ struct HostProjectionNarrative {
     review_findings_only_paragraph: String,
 }
 
-fn lifecycle_paragraph_for_host(narrative: &HostProjectionNarrative, host_projection: &str) -> String {
+pub(crate) fn lifecycle_paragraph_for_host(narrative: &HostProjectionNarrative, host_projection: &str) -> String {
     narrative
         .lifecycle_by_host
         .get(host_projection)
@@ -2870,7 +1332,7 @@ fn lifecycle_paragraph_for_host(narrative: &HostProjectionNarrative, host_projec
         .unwrap_or_else(|| narrative.default_lifecycle_paragraph.clone())
 }
 
-fn load_host_projection_narrative(framework_root: &Path) -> Result<HostProjectionNarrative, String> {
+pub(crate) fn load_host_projection_narrative(framework_root: &Path) -> Result<HostProjectionNarrative, String> {
     let path = framework_root.join("configs/framework/host_projection_narrative.json");
     let raw = fs::read_to_string(&path)
         .map_err(|err| format!("read host projection narrative {}: {err}", path.display()))?;
@@ -2887,7 +1349,7 @@ fn load_host_projection_narrative(framework_root: &Path) -> Result<HostProjectio
     Ok(narrative)
 }
 
-fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+pub(crate) fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
     let narrative = load_host_projection_narrative(&roots.framework_root)
         .expect("host projection narrative must load before rendering claude entrypoint");
     let runtime_rel = skills_source_rel(&roots.framework_root)
@@ -2900,13 +1362,13 @@ fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
     )
 }
 
-fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path) -> String {
+pub(crate) fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path) -> String {
     path.strip_prefix(&roots.project_root)
         .map(|rel| rel.to_string_lossy().trim_start_matches('/').to_string())
         .unwrap_or_else(|_| path.to_string_lossy().into_owned())
 }
 
-fn write_claude_projection_manifest(
+pub(crate) fn write_claude_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     command_path: &Path,
@@ -2935,7 +1397,7 @@ fn write_claude_projection_manifest(
     )
 }
 
-fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
+pub(crate) fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
     let payload = read_json_if_exists(path)?;
     let mut managed_events = Vec::new();
     if let Some(Value::Object(root)) = payload.as_ref() {
@@ -2959,7 +1421,7 @@ fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
-fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
+pub(crate) fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
@@ -2979,7 +1441,7 @@ fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
-fn install_claude_desktop_projection(
+pub(crate) fn install_claude_desktop_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
@@ -3053,7 +1515,7 @@ fn install_claude_desktop_projection(
     }))
 }
 
-fn claude_desktop_research_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn claude_desktop_research_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.claude_home_root.join("settings.json")
     } else {
@@ -3061,7 +1523,7 @@ fn claude_desktop_research_settings_target(roots: &ResolvedProjectionRoots, scop
     }
 }
 
-fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+pub(crate) fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let project_mcp_path = roots.project_root.join(".claude/mcp.json");
     let project_claude_md_path = roots.project_root.join(".claude/CLAUDE.md");
     let user_mcp_paths = claude_desktop_user_mcp_config_paths(roots);
@@ -3120,13 +1582,13 @@ fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<V
     }))
 }
 
-fn claude_desktop_router_rs_framework_payload(root: &Value) -> Option<Value> {
+pub(crate) fn claude_desktop_router_rs_framework_payload(root: &Value) -> Option<Value> {
     root.get("mcpServers")
         .and_then(|servers| servers.get("router-rs-framework"))
         .cloned()
 }
 
-fn remove_claude_desktop_projection(
+pub(crate) fn remove_claude_desktop_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
@@ -3255,12 +1717,12 @@ pub(crate) fn claude_desktop_official_mcp_config_path_for_home(home: &Path) -> P
 }
 
 #[cfg(target_os = "macos")]
-fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
+pub(crate) fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
     home.join("Library/Application Support/Claude-3p/claude_desktop_config.json")
 }
 
 #[cfg(not(target_os = "macos"))]
-fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
+pub(crate) fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
     claude_desktop_official_mcp_config_path_for_home(home)
 }
 
@@ -3277,7 +1739,7 @@ pub(crate) fn claude_desktop_user_mcp_config_paths(roots: &ResolvedProjectionRoo
     paths
 }
 
-fn claude_desktop_config_preserves_non_mcp_keys(path: &Path) -> bool {
+pub(crate) fn claude_desktop_config_preserves_non_mcp_keys(path: &Path) -> bool {
     read_json_if_exists(path)
         .ok()
         .flatten()
@@ -3285,7 +1747,7 @@ fn claude_desktop_config_preserves_non_mcp_keys(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn strip_claude_desktop_framework_mcp_servers(path: &Path) -> Result<bool, String> {
+pub(crate) fn strip_claude_desktop_framework_mcp_servers(path: &Path) -> Result<bool, String> {
     let Some(mut payload) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -3311,7 +1773,7 @@ fn strip_claude_desktop_framework_mcp_servers(path: &Path) -> Result<bool, Strin
     write_json_if_changed(path, &payload).map(|_| true)
 }
 
-fn claude_desktop_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn claude_desktop_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         claude_desktop_official_mcp_config_path_for_home(&host_account_home_from_roots(roots))
     } else {
@@ -3319,7 +1781,7 @@ fn claude_desktop_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> Pa
     }
 }
 
-fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.claude_home_root.join("CLAUDE.md")
     } else {
@@ -3327,11 +1789,11 @@ fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str)
     }
 }
 
-fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
+pub(crate) fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
     make_mcp_server_payload_with_env(roots, host_args, description, None)
 }
 
-fn make_mcp_server_payload_with_env(
+pub(crate) fn make_mcp_server_payload_with_env(
     roots: &ResolvedProjectionRoots,
     host_args: &[&str],
     description: &str,
@@ -3363,7 +1825,7 @@ fn make_mcp_server_payload_with_env(
     payload
 }
 
-fn claude_desktop_mcp_env(roots: &ResolvedProjectionRoots) -> Value {
+pub(crate) fn claude_desktop_mcp_env(roots: &ResolvedProjectionRoots) -> Value {
     let mut env = Map::new();
     env.insert(
         "SKILL_FRAMEWORK_ROOT".to_string(),
@@ -3387,7 +1849,8 @@ fn claude_desktop_mcp_env(roots: &ResolvedProjectionRoots) -> Value {
     Value::Object(env)
 }
 
-fn workspace_router_rs_release_binary(framework_root: &Path) -> Option<PathBuf> {
+#[allow(dead_code)]
+pub(crate) fn workspace_router_rs_release_binary(framework_root: &Path) -> Option<PathBuf> {
     if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
         let candidate = PathBuf::from(td).join("release/router-rs");
         if candidate.is_file() {
@@ -3446,7 +1909,7 @@ fn workspace_router_rs_release_binary(framework_root: &Path) -> Option<PathBuf> 
     None
 }
 
-fn claude_desktop_mcp_router_command(roots: &ResolvedProjectionRoots) -> Value {
+pub(crate) fn claude_desktop_mcp_router_command(roots: &ResolvedProjectionRoots) -> Value {
     if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
         let trimmed = raw.trim();
         if !trimmed.is_empty()
@@ -3486,7 +1949,7 @@ fn claude_desktop_mcp_router_command(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+pub(crate) fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let mut payload = make_mcp_server_payload_with_env(
         roots,
         &["claude-desktop", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
@@ -3502,7 +1965,7 @@ fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     payload
 }
 
-fn claude_desktop_browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+pub(crate) fn claude_desktop_browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let mut payload = make_mcp_server_payload_with_env(
         roots,
         &[
@@ -3556,7 +2019,7 @@ const CLAUDE_DESKTOP_RESEARCH_SANDBOX_DOMAINS: &[&str] = &[
     "localhost",
 ];
 
-fn merge_json_string_array(existing: &mut Value, additions: &[&str]) {
+pub(crate) fn merge_json_string_array(existing: &mut Value, additions: &[&str]) {
     if !existing.is_array() {
         *existing = json!([]);
     }
@@ -3571,14 +2034,14 @@ fn merge_json_string_array(existing: &mut Value, additions: &[&str]) {
     }
 }
 
-fn remove_json_string_array_values(value: &mut Value, remove: &[&str]) {
+pub(crate) fn remove_json_string_array_values(value: &mut Value, remove: &[&str]) {
     let Some(arr) = value.as_array_mut() else {
         return;
     };
     arr.retain(|entry| entry.as_str().is_some_and(|s| !remove.contains(&s)));
 }
 
-fn strip_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
+pub(crate) fn strip_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
     let Some(mut root) = read_json_if_exists(settings_path)? else {
         return Ok(false);
     };
@@ -3643,7 +2106,7 @@ fn strip_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, 
     write_json_if_changed(settings_path, &root)
 }
 
-fn merge_claude_desktop_research_settings(existing: Option<Value>) -> Result<Value, String> {
+pub(crate) fn merge_claude_desktop_research_settings(existing: Option<Value>) -> Result<Value, String> {
     let mut root = match existing {
         Some(Value::Object(map)) => map,
         Some(_) => {
@@ -3715,7 +2178,7 @@ fn merge_claude_desktop_research_settings(existing: Option<Value>) -> Result<Val
     Ok(Value::Object(root))
 }
 
-fn install_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
+pub(crate) fn install_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
     let existing = read_json_if_exists(settings_path)?;
     let merged = merge_claude_desktop_research_settings(existing)?;
     if let Some(parent) = settings_path.parent() {
@@ -3724,7 +2187,7 @@ fn install_claude_desktop_research_settings(settings_path: &Path) -> Result<bool
     write_json_if_changed(settings_path, &merged)
 }
 
-fn write_claude_desktop_mcp_json(
+pub(crate) fn write_claude_desktop_mcp_json(
     path: &Path,
     roots: &ResolvedProjectionRoots,
 ) -> Result<bool, String> {
@@ -3754,7 +2217,7 @@ fn write_claude_desktop_mcp_json(
         .map(|file_changed| file_changed || framework_changed || browser_changed)
 }
 
-fn write_claude_desktop_claude_md(
+pub(crate) fn write_claude_desktop_claude_md(
     path: &Path,
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -3828,7 +2291,7 @@ fn write_claude_desktop_claude_md(
     write_text_if_changed(path, &content)
 }
 
-fn write_claude_desktop_projection_manifest(
+pub(crate) fn write_claude_desktop_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     mcp_paths: &[PathBuf],
@@ -3865,7 +2328,7 @@ fn write_claude_desktop_projection_manifest(
     )
 }
 
-fn install_antigravity_cli_projection(
+pub(crate) fn install_antigravity_cli_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
@@ -3889,7 +2352,7 @@ fn install_antigravity_cli_projection(
     }))
 }
 
-fn antigravity_cli_projection_home(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn antigravity_cli_projection_home(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.antigravity_cli_home_root.clone()
     } else {
@@ -3897,7 +2360,7 @@ fn antigravity_cli_projection_home(roots: &ResolvedProjectionRoots, scope: &str)
     }
 }
 
-fn write_antigravity_cli_projection_manifest(
+pub(crate) fn write_antigravity_cli_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     hooks_path: &Path,
@@ -3914,7 +2377,7 @@ fn write_antigravity_cli_projection_manifest(
     )
 }
 
-fn antigravity_cli_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+pub(crate) fn antigravity_cli_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     use crate::hosts::antigravity_cli_hooks::antigravity_cli_hooks_install_status;
     let project_home = antigravity_cli_projection_home(roots, "project");
     let user_home = antigravity_cli_projection_home(roots, "user");
@@ -3951,7 +2414,7 @@ fn antigravity_cli_projection_status(roots: &ResolvedProjectionRoots) -> Result<
     }))
 }
 
-fn remove_antigravity_cli_projection(
+pub(crate) fn remove_antigravity_cli_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
@@ -4003,7 +2466,7 @@ fn remove_antigravity_cli_projection(
     }))
 }
 
-fn install_antigravity_projection(
+pub(crate) fn install_antigravity_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
@@ -4045,7 +2508,7 @@ fn install_antigravity_projection(
     }))
 }
 
-fn antigravity_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+pub(crate) fn antigravity_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
     let project_mcp_path = roots.project_root.join(".gemini/mcp.json");
     let project_settings_path = roots.project_root.join(".gemini/settings.json");
     let project_framework_md_path = roots.project_root.join(".gemini/antigravity/rules/framework.md");
@@ -4109,7 +2572,7 @@ fn antigravity_projection_status(roots: &ResolvedProjectionRoots) -> Result<Valu
     }))
 }
 
-fn remove_antigravity_projection(
+pub(crate) fn remove_antigravity_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
@@ -4171,7 +2634,7 @@ fn remove_antigravity_projection(
     }))
 }
 
-fn antigravity_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn antigravity_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.antigravity_home_root.join("mcp.json")
     } else {
@@ -4179,7 +2642,7 @@ fn antigravity_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathB
     }
 }
 
-fn antigravity_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn antigravity_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.antigravity_home_root.join("settings.json")
     } else {
@@ -4187,7 +2650,7 @@ fn antigravity_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> 
     }
 }
 
-fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.antigravity_home_root.join("antigravity/rules/framework.md")
     } else {
@@ -4195,7 +2658,7 @@ fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &str)
     }
 }
 
-fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+pub(crate) fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     make_mcp_server_payload(
         roots,
         &["antigravity-app", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
@@ -4203,7 +2666,7 @@ fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     )
 }
 
-fn write_antigravity_mcp_json(
+pub(crate) fn write_antigravity_mcp_json(
     path: &Path,
     roots: &ResolvedProjectionRoots,
 ) -> Result<bool, String> {
@@ -4230,7 +2693,7 @@ fn write_antigravity_mcp_json(
     write_json_if_changed(path, &payload)
 }
 
-fn write_antigravity_settings_json(
+pub(crate) fn write_antigravity_settings_json(
     path: &Path,
     _roots: &ResolvedProjectionRoots,
     _scope: &str,
@@ -4242,7 +2705,7 @@ fn write_antigravity_settings_json(
     write_json_if_changed(path, &payload)
 }
 
-fn write_antigravity_framework_md(
+pub(crate) fn write_antigravity_framework_md(
     path: &Path,
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -4271,7 +2734,7 @@ fn write_antigravity_framework_md(
     write_text_if_changed(path, &content)
 }
 
-fn antigravity_projection_manifest_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn antigravity_projection_manifest_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     let app = projection_manifest_path(roots, "antigravity-app", scope);
     if app.exists() {
         return app;
@@ -4279,7 +2742,7 @@ fn antigravity_projection_manifest_path(roots: &ResolvedProjectionRoots, scope: 
     projection_manifest_path(roots, "antigravity", scope)
 }
 
-fn write_antigravity_projection_manifest(
+pub(crate) fn write_antigravity_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     mcp_path: &Path,
@@ -4308,7 +2771,7 @@ struct ProjectionManifestOwnership {
     owns_projection_file: bool,
 }
 
-fn projection_manifest_status(path: &Path) -> Result<Value, String> {
+pub(crate) fn projection_manifest_status(path: &Path) -> Result<Value, String> {
     let manifest = read_json_if_exists(path)?;
     Ok(projection_manifest_status_from_payload(
         path,
@@ -4316,7 +2779,7 @@ fn projection_manifest_status(path: &Path) -> Result<Value, String> {
     ))
 }
 
-fn projection_manifest_status_from_payload(path: &Path, manifest: Option<&Value>) -> Value {
+pub(crate) fn projection_manifest_status_from_payload(path: &Path, manifest: Option<&Value>) -> Value {
     json!({
         "path": path.to_string_lossy(),
         "exists": path.is_file(),
@@ -4324,7 +2787,7 @@ fn projection_manifest_status_from_payload(path: &Path, manifest: Option<&Value>
     })
 }
 
-fn projection_manifest_ownership(
+pub(crate) fn projection_manifest_ownership(
     path: &Path,
     host_projection: &str,
     scope: &str,
@@ -4338,7 +2801,7 @@ fn projection_manifest_ownership(
     })
 }
 
-fn projection_manifest_is_managed(
+pub(crate) fn projection_manifest_is_managed(
     path: &Path,
     host_projection: Option<&str>,
     scope: Option<&str>,
@@ -4353,7 +2816,7 @@ fn projection_manifest_is_managed(
     ))
 }
 
-fn projection_manifest_payload_is_managed(
+pub(crate) fn projection_manifest_payload_is_managed(
     manifest: Option<&Value>,
     host_projection: Option<&str>,
     scope: Option<&str>,
@@ -4380,7 +2843,7 @@ fn projection_manifest_payload_is_managed(
     true
 }
 
-fn projection_manifest_files_include(manifest_path: &Path, projection_path: &Path) -> Result<bool, String> {
+pub(crate) fn projection_manifest_files_include(manifest_path: &Path, projection_path: &Path) -> Result<bool, String> {
     let Some(manifest) = read_json_if_exists(manifest_path)? else {
         return Ok(false);
     };
@@ -4407,7 +2870,7 @@ fn projection_manifest_files_include(manifest_path: &Path, projection_path: &Pat
         .unwrap_or(false))
 }
 
-fn removed_projection_paths(
+pub(crate) fn removed_projection_paths(
     projection_removed: bool,
     projection_path: &Path,
     manifest_removed: bool,
@@ -4425,7 +2888,7 @@ fn removed_projection_paths(
     Value::Array(paths)
 }
 
-fn append_mcp_path(paths: &mut Value, include: bool, mcp_path: &Path) {
+pub(crate) fn append_mcp_path(paths: &mut Value, include: bool, mcp_path: &Path) {
     if !include {
         return;
     }
@@ -4434,7 +2897,7 @@ fn append_mcp_path(paths: &mut Value, include: bool, mcp_path: &Path) {
     }
 }
 
-fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.codex_home_root.join("prompts").join("framework.md")
     } else {
@@ -4446,7 +2909,7 @@ fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> Path
     }
 }
 
-fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.cursor_home_root.join("rules").join("framework.mdc")
     } else {
@@ -4458,7 +2921,7 @@ fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> Pat
     }
 }
 
-fn codex_prompt_entrypoints_root(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub(crate) fn codex_prompt_entrypoints_root(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots.codex_home_root.clone()
     } else {
@@ -4466,7 +2929,7 @@ fn codex_prompt_entrypoints_root(roots: &ResolvedProjectionRoots, scope: &str) -
     }
 }
 
-fn projection_manifest_path(
+pub(crate) fn projection_manifest_path(
     roots: &ResolvedProjectionRoots,
     host_projection: &str,
     scope: &str,
@@ -4518,7 +2981,7 @@ fn projection_manifest_path(
     }
 }
 
-fn write_codex_projection_manifest(
+pub(crate) fn write_codex_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     command_path: &Path,
@@ -4538,7 +3001,7 @@ fn write_codex_projection_manifest(
     )
 }
 
-fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+pub(crate) fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
     let narrative = load_host_projection_narrative(&roots.framework_root)
         .expect("host projection narrative must load before rendering codex entrypoint");
     let runtime_rel = skills_source_rel(&roots.framework_root)
@@ -4551,7 +3014,7 @@ fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &st
     )
 }
 
-fn write_cursor_projection_manifest(
+pub(crate) fn write_cursor_projection_manifest(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     managed_files: &[String],
@@ -4572,11 +3035,11 @@ fn write_cursor_projection_manifest(
     )
 }
 
-fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> PathBuf {
+pub(crate) fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> PathBuf {
     roots.cursor_home_root.join("mcp.json")
 }
 
-fn cursor_mcp_server_key_path() -> &'static str {
+pub(crate) fn cursor_mcp_server_key_path() -> &'static str {
     "mcp_servers.browser-mcp"
 }
 
@@ -4588,7 +3051,7 @@ struct CursorMcpInstallOutcome {
     skipped_user_owned: bool,
 }
 
-fn install_cursor_mcp_server(
+pub(crate) fn install_cursor_mcp_server(
     roots: &ResolvedProjectionRoots,
     path: &Path,
 ) -> Result<CursorMcpInstallOutcome, String> {
@@ -4652,7 +3115,7 @@ fn install_cursor_mcp_server(
 }
 
 /// Entries that look framework-managed but stale (ephemeral/repo-target/cargo bootstrap) may be rewritten.
-fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Path) -> bool {
+pub(crate) fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Path) -> bool {
     if !cursor_browser_mcp_is_managed_shape(existing) {
         return false;
     }
@@ -4679,7 +3142,7 @@ fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &
     is_repo_build_executable_path(cmd, framework_root)
 }
 
-fn remove_cursor_mcp_server(path: &Path) -> Result<bool, String> {
+pub(crate) fn remove_cursor_mcp_server(path: &Path) -> Result<bool, String> {
     let Some(mut payload) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -4701,7 +3164,7 @@ fn remove_cursor_mcp_server(path: &Path) -> Result<bool, String> {
     Ok(changed)
 }
 
-fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
+pub(crate) fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
     vec![
         "browser".into(),
         "mcp-stdio".into(),
@@ -4710,7 +3173,7 @@ fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String>
     ]
 }
 
-fn cursor_browser_mcp_repo_root_from_args(args: &[Value]) -> Option<String> {
+pub(crate) fn cursor_browser_mcp_repo_root_from_args(args: &[Value]) -> Option<String> {
     let str_args: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
     for window in str_args.windows(2) {
         if window[0] == "--repo-root" {
@@ -4720,7 +3183,7 @@ fn cursor_browser_mcp_repo_root_from_args(args: &[Value]) -> Option<String> {
     None
 }
 
-fn cursor_browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
+pub(crate) fn cursor_browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
     let Some(cmd) = server.get("command").and_then(Value::as_str) else {
         return false;
     };
@@ -4735,12 +3198,12 @@ fn cursor_browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
         && cursor_browser_mcp_repo_root_from_args(args).is_some()
 }
 
-fn cursor_browser_mcp_is_managed_shape(server: &Value) -> bool {
+pub(crate) fn cursor_browser_mcp_is_managed_shape(server: &Value) -> bool {
     cursor_browser_mcp_is_framework_shaped(server)
         || cursor_browser_mcp_is_cargo_bootstrap_shaped(server)
 }
 
-fn cursor_browser_mcp_is_framework_shaped(server: &Value) -> bool {
+pub(crate) fn cursor_browser_mcp_is_framework_shaped(server: &Value) -> bool {
     let Some(args) = server.get("args").and_then(Value::as_array) else {
         return false;
     };
@@ -4751,7 +3214,7 @@ fn cursor_browser_mcp_is_framework_shaped(server: &Value) -> bool {
         && cursor_browser_mcp_repo_root_from_args(args).is_some()
 }
 
-fn cursor_browser_mcp_command_is_router_rs(server: &Value, framework_root: &Path) -> bool {
+pub(crate) fn cursor_browser_mcp_command_is_router_rs(server: &Value, framework_root: &Path) -> bool {
     let Some(cmd) = server.get("command").and_then(Value::as_str) else {
         return false;
     };
@@ -4773,7 +3236,7 @@ fn cursor_browser_mcp_command_is_router_rs(server: &Value, framework_root: &Path
         || cmd.ends_with("\\router-rs")
 }
 
-fn cursor_mcp_server_semantically_matches_framework(
+pub(crate) fn cursor_mcp_server_semantically_matches_framework(
     existing: &Value,
     roots: &ResolvedProjectionRoots,
 ) -> bool {
@@ -4797,7 +3260,7 @@ fn cursor_mcp_server_semantically_matches_framework(
     cursor_browser_mcp_command_is_router_rs(existing, &roots.framework_root)
 }
 
-fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+pub(crate) fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let args = cursor_mcp_browser_stdio_args(roots);
     match resolve_mcp_router_rs_command(&roots.framework_root) {
         McpRouterRsCommand::CargoBootstrap => json!({
@@ -4816,7 +3279,7 @@ fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<bool, String> {
+pub(crate) fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<bool, String> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -4831,7 +3294,7 @@ fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<b
         .unwrap_or(false))
 }
 
-fn cursor_mcp_server_matches_framework(
+pub(crate) fn cursor_mcp_server_matches_framework(
     roots: &ResolvedProjectionRoots,
     path: &Path,
 ) -> Result<Option<bool>, String> {
@@ -4850,7 +3313,7 @@ fn cursor_mcp_server_matches_framework(
     ))
 }
 
-fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
+pub(crate) fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
     let Some(payload) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -4861,7 +3324,7 @@ fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
         .is_some())
 }
 
-fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+pub(crate) fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
     let narrative = load_host_projection_narrative(&roots.framework_root)
         .expect("host projection narrative must load before rendering cursor entrypoint");
     let runtime_rel = skills_source_rel(&roots.framework_root)
@@ -4874,14 +3337,14 @@ fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &s
     )
 }
 
-fn managed_projection_file_exists(path: &Path) -> Result<bool, String> {
+pub(crate) fn managed_projection_file_exists(path: &Path) -> Result<bool, String> {
     let Some(content) = read_text_if_exists(path)? else {
         return Ok(false);
     };
     Ok(is_managed_projection_content(&content))
 }
 
-fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
+pub(crate) fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
@@ -4901,7 +3364,7 @@ fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
-fn cursor_projection_file_status(path: &Path) -> Result<Value, String> {
+pub(crate) fn cursor_projection_file_status(path: &Path) -> Result<Value, String> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
@@ -4921,21 +3384,21 @@ fn cursor_projection_file_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
-fn is_managed_projection_content(content: &str) -> bool {
+pub(crate) fn is_managed_projection_content(content: &str) -> bool {
     content.contains("managed_by: skill-framework")
         && content.contains(&format!(
             "framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION}"
         ))
 }
 
-fn canonical_install_skills_command(command: &str) -> String {
+pub(crate) fn canonical_install_skills_command(command: &str) -> String {
     match command.trim() {
         "" => "status".to_string(),
         raw => raw.to_lowercase(),
     }
 }
 
-fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String]) -> Vec<String> {
+pub(crate) fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String]) -> Vec<String> {
     if !to.is_empty() {
         return to.to_vec();
     }
@@ -4950,7 +3413,7 @@ fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String
     }
 }
 
-fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
+pub(crate) fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
     let normalized = raw.trim().to_lowercase();
     if normalized == "codex-app" {
         let registry = crate::runtime_registry::load_runtime_registry_json(framework_root)?;
@@ -4974,7 +3437,7 @@ fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, Strin
     ))
 }
 
-fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
+pub(crate) fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
     let mut tools = registry_projection_tools(framework_root).unwrap_or_else(|_| {
         vec![
             "codex".to_string(),
@@ -4988,7 +3451,7 @@ fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> 
     tools
 }
 
-fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
+pub(crate) fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
     let prompt_dir = codex_dir.join("prompts");
     json!({
         "changed": false,
@@ -4999,7 +3462,7 @@ fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
     })
 }
 
-fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
+pub(crate) fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
     let repo_root = normalize_path(repo_root)?;
     let source_rel = skills_source_rel(&repo_root)?;
     let candidate = repo_root.join(&source_rel);
@@ -5013,7 +3476,7 @@ fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
     Ok(normalized)
 }
 
-fn shared_codex_skill_surface(repo_root: &Path) -> PathBuf {
+pub(crate) fn shared_codex_skill_surface(repo_root: &Path) -> PathBuf {
     repo_root.join(CODEX_SKILL_SURFACE_REL)
 }
 
@@ -5028,7 +3491,7 @@ pub(crate) fn ensure_codex_skill_surface(repo_root: &Path) -> Result<Value, Stri
     )
 }
 
-fn ensure_host_skill_surface(
+pub(crate) fn ensure_host_skill_surface(
     repo_root: &Path,
     surface_path: &dyn Fn(&Path) -> PathBuf,
     manifest_name: &str,
@@ -5111,11 +3574,11 @@ fn ensure_host_skill_surface(
     }))
 }
 
-fn desired_codex_skill_surface_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
+pub(crate) fn desired_codex_skill_surface_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
     desired_host_skill_surface_slugs(repo_root, true)
 }
 
-fn ensure_codex_skill_surface_runtime(
+pub(crate) fn ensure_codex_skill_surface_runtime(
     repo_root: &Path,
     surface_root: &Path,
     desired: &[String],
@@ -5168,11 +3631,11 @@ fn ensure_codex_skill_surface_runtime(
     write_json_if_changed(&surface_root.join("SKILL_ROUTING_RUNTIME.json"), &runtime)
 }
 
-fn codex_surface_skill_path(slug: &str) -> String {
+pub(crate) fn codex_surface_skill_path(slug: &str) -> String {
     format!("skills/{slug}/SKILL.md")
 }
 
-fn desired_host_skill_surface_slugs(
+pub(crate) fn desired_host_skill_surface_slugs(
     repo_root: &Path,
     skip_system_provided_codex_skills: bool,
 ) -> Result<Vec<String>, String> {
@@ -5217,7 +3680,7 @@ fn desired_host_skill_surface_slugs(
     Ok(desired.into_iter().collect())
 }
 
-fn system_skill_source_exists(source_root: &Path, slug: &str) -> bool {
+pub(crate) fn system_skill_source_exists(source_root: &Path, slug: &str) -> bool {
     source_root
         .join(".system")
         .join(slug)
@@ -5225,11 +3688,11 @@ fn system_skill_source_exists(source_root: &Path, slug: &str) -> bool {
         .is_file()
 }
 
-fn is_codex_system_provided_skill(slug: &str) -> bool {
+pub(crate) fn is_codex_system_provided_skill(slug: &str) -> bool {
     CODEX_SYSTEM_PROVIDED_SKILLS.contains(&slug)
 }
 
-fn codex_skill_surface_source_path(
+pub(crate) fn codex_skill_surface_source_path(
     repo_root: &Path,
     slug: &str,
 ) -> Result<Option<PathBuf>, String> {
@@ -5241,12 +3704,12 @@ fn codex_skill_surface_source_path(
     Ok(None)
 }
 
-fn is_framework_command(repo_root: &Path, slug: &str) -> Result<bool, String> {
+pub(crate) fn is_framework_command(repo_root: &Path, slug: &str) -> Result<bool, String> {
     Ok(framework_command_names(repo_root)?.contains(slug))
 }
 
 /// Whether a `framework_commands` slug may appear on Codex/Cursor skill surface (default true).
-fn framework_command_surface_publish(repo_root: &Path, slug: &str) -> Result<bool, String> {
+pub(crate) fn framework_command_surface_publish(repo_root: &Path, slug: &str) -> Result<bool, String> {
     let registry = load_runtime_registry_payload(repo_root)?;
     let Some(command) = registry
         .get("framework_commands")
@@ -5261,7 +3724,7 @@ fn framework_command_surface_publish(repo_root: &Path, slug: &str) -> Result<boo
         .unwrap_or(true))
 }
 
-fn ensure_framework_command_skill(
+pub(crate) fn ensure_framework_command_skill(
     repo_root: &Path,
     target_path: &Path,
     slug: &str,
@@ -5277,7 +3740,7 @@ fn ensure_framework_command_skill(
     write_text_if_changed(&target_path.join("SKILL.md"), &content)
 }
 
-fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Result<String, String> {
+pub(crate) fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Result<String, String> {
     let registry = load_runtime_registry_payload(repo_root)?;
     let command = registry
         .get("framework_commands")
@@ -5340,7 +3803,7 @@ fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Result<String
     ))
 }
 
-fn framework_command_names(repo_root: &Path) -> Result<BTreeSet<String>, String> {
+pub(crate) fn framework_command_names(repo_root: &Path) -> Result<BTreeSet<String>, String> {
     let Some(registry) = load_runtime_registry_payload_if_repo_local(repo_root)? else {
         return Ok(BTreeSet::new());
     };
@@ -5351,7 +3814,7 @@ fn framework_command_names(repo_root: &Path) -> Result<BTreeSet<String>, String>
         .unwrap_or_default())
 }
 
-fn runtime_hot_skill_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
+pub(crate) fn runtime_hot_skill_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
     let runtime_path = shared_skills_source(repo_root)?.join("SKILL_ROUTING_RUNTIME.json");
     let Some(content) = read_text_if_exists(&runtime_path)? else {
         return Ok(Vec::new());
@@ -5370,7 +3833,7 @@ fn runtime_hot_skill_slugs(repo_root: &Path) -> Result<Vec<String>, String> {
     Ok(from_skills)
 }
 
-fn codex_skills_matches_source(target_path: &Path, source_path: &Path) -> Result<bool, String> {
+pub(crate) fn codex_skills_matches_source(target_path: &Path, source_path: &Path) -> Result<bool, String> {
     let source_path = normalize_path(source_path)?;
     let Ok(metadata) = fs::symlink_metadata(target_path) else {
         return Ok(false);
@@ -5390,21 +3853,21 @@ fn codex_skills_matches_source(target_path: &Path, source_path: &Path) -> Result
     normalize_path(&resolved).map(|resolved| resolved == source_path)
 }
 
-fn default_home_dir() -> PathBuf {
+pub(crate) fn default_home_dir() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn default_bootstrap_output_dir(repo_root: &Path) -> PathBuf {
+pub(crate) fn default_bootstrap_output_dir(repo_root: &Path) -> PathBuf {
     repo_root.join("artifacts").join("bootstrap")
 }
 
-fn default_bootstrap_mirror_path(output_dir: &Path) -> PathBuf {
+pub(crate) fn default_bootstrap_mirror_path(output_dir: &Path) -> PathBuf {
     output_dir.join("framework_default_bootstrap.json")
 }
 
-fn workspace_name_from_root(repo_root: &Path) -> String {
+pub(crate) fn workspace_name_from_root(repo_root: &Path) -> String {
     repo_root
         .file_name()
         .and_then(|name| name.to_str())
@@ -5412,11 +3875,11 @@ fn workspace_name_from_root(repo_root: &Path) -> String {
         .to_string()
 }
 
-fn current_local_timestamp() -> String {
+pub(crate) fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-fn safe_slug(label: &str) -> String {
+pub(crate) fn safe_slug(label: &str) -> String {
     let mut slug = String::new();
     let mut previous_dash = false;
     for ch in label.chars().flat_map(|ch| ch.to_lowercase()) {
@@ -5448,7 +3911,7 @@ fn safe_slug(label: &str) -> String {
     }
 }
 
-fn build_framework_task_id(label: &str) -> String {
+pub(crate) fn build_framework_task_id(label: &str) -> String {
     let stamp = current_local_timestamp()
         .chars()
         .filter(|value| value.is_ascii_alphanumeric())
@@ -5466,7 +3929,7 @@ fn build_framework_task_id(label: &str) -> String {
     }
 }
 
-fn compact_evolution_proposals(payload: &Value) -> Value {
+pub(crate) fn compact_evolution_proposals(payload: &Value) -> Value {
     json!({
         "proposal_count": payload.get("proposal_count").and_then(Value::as_u64).unwrap_or(0),
         "proposals": payload
@@ -5477,7 +3940,7 @@ fn compact_evolution_proposals(payload: &Value) -> Value {
     })
 }
 
-fn build_default_bootstrap_payload(
+pub(crate) fn build_default_bootstrap_payload(
     repo_root: &Path,
     output_dir: Option<&Path>,
     query: &str,
@@ -5548,7 +4011,7 @@ fn build_default_bootstrap_payload(
     }))
 }
 
-fn build_default_continuity_bootstrap(
+pub(crate) fn build_default_continuity_bootstrap(
     repo_root: &Path,
     artifact_source_dir: Option<&Path>,
     task_id: Option<&str>,
@@ -5576,7 +4039,7 @@ struct MigrationPlan {
     destination: String,
 }
 
-fn migration_plan_values(plans: &[MigrationPlan]) -> Value {
+pub(crate) fn migration_plan_values(plans: &[MigrationPlan]) -> Value {
     Value::Array(
         plans
             .iter()
@@ -5590,21 +4053,21 @@ fn migration_plan_values(plans: &[MigrationPlan]) -> Value {
     )
 }
 
-fn evidence_artifact_root(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
+pub(crate) fn evidence_artifact_root(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
     let root = repo_root.join("artifacts").join("evidence");
     task_id
         .map(|value| root.join(safe_slug(value)))
         .unwrap_or(root)
 }
 
-fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf {
+pub(crate) fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf {
     let root = repo_root.join("artifacts").join("scratch");
     run_id
         .map(|value| root.join(safe_slug(value)))
         .unwrap_or(root)
 }
 
-fn move_path(source: &Path, destination: &Path) -> Result<String, String> {
+pub(crate) fn move_path(source: &Path, destination: &Path) -> Result<String, String> {
     let mut resolved_destination = destination.to_path_buf();
     if resolved_destination.exists() {
         let suffix = current_local_timestamp().replace(':', "").replace('+', "_");
@@ -5627,7 +4090,7 @@ fn move_path(source: &Path, destination: &Path) -> Result<String, String> {
     Ok(resolved_destination.to_string_lossy().into_owned())
 }
 
-fn destination_for_current_artifact(
+pub(crate) fn destination_for_current_artifact(
     repo_root: &Path,
     path: &Path,
     active_task_id: &str,
@@ -5700,7 +4163,7 @@ fn destination_for_current_artifact(
     Some(evidence_artifact_root(repo_root, Some("archived-current")).join(suffix))
 }
 
-fn plan_current_artifact_clutter_migrations(
+pub(crate) fn plan_current_artifact_clutter_migrations(
     repo_root: &Path,
     active_task_id: &str,
 ) -> Result<Vec<MigrationPlan>, String> {
@@ -5738,7 +4201,7 @@ fn plan_current_artifact_clutter_migrations(
     Ok(plans)
 }
 
-fn migrate_current_artifact_clutter(
+pub(crate) fn migrate_current_artifact_clutter(
     repo_root: &Path,
     active_task_id: &str,
 ) -> Result<Vec<String>, String> {
@@ -5753,7 +4216,7 @@ fn migrate_current_artifact_clutter(
     Ok(moved)
 }
 
-fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool {
+pub(crate) fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool {
     let normalized_repo_root = repo_root
         .canonicalize()
         .unwrap_or_else(|_| repo_root.to_path_buf())
@@ -5785,7 +4248,7 @@ fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool
         .unwrap_or(false)
 }
 
-fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Result<Value, String> {
+pub(crate) fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Result<Value, String> {
     let resolved_output_dir = output_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_bootstrap_output_dir(repo_root));
@@ -5851,7 +4314,7 @@ fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Resu
     }))
 }
 
-fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> Result<bool, String> {
+pub(crate) fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> Result<bool, String> {
     let path = normalize_path(bootstrap_path)?;
     let repo_root = normalize_path(repo_root)?;
     let Some(content) = read_text_if_exists(&path)? else {
@@ -5861,7 +4324,7 @@ fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> Result
     Ok(bootstrap_payload_matches_contract(&payload, &repo_root))
 }
 
-fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
+pub(crate) fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -5872,7 +4335,7 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-fn ensure_codex_hooks_feature_disabled(config_path: &Path) -> Result<(bool, bool), String> {
+pub(crate) fn ensure_codex_hooks_feature_disabled(config_path: &Path) -> Result<(bool, bool), String> {
     const HOOKS_DISABLED_LINE: &str = "hooks = false";
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
@@ -5922,7 +4385,7 @@ fn ensure_codex_hooks_feature_disabled(config_path: &Path) -> Result<(bool, bool
     Ok((changed, false))
 }
 
-fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {
+pub(crate) fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {
     let mut offset = 0usize;
     let mut start: Option<usize> = None;
     for line in content.split_inclusive('\n') {
@@ -5939,7 +4402,7 @@ fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)
     start.map(|value| (value, content.len()))
 }
 
-fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
+pub(crate) fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     let status_line = format_status_line();
     if let Some((start, end)) = find_tui_block_bounds(&content) {
@@ -5972,7 +4435,7 @@ fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
     write_text_if_changed(config_path, &updated)
 }
 
-fn find_tui_block_bounds(content: &str) -> Option<(usize, usize)> {
+pub(crate) fn find_tui_block_bounds(content: &str) -> Option<(usize, usize)> {
     let mut offset = 0usize;
     let mut start: Option<usize> = None;
     for line in content.split_inclusive('\n') {
@@ -5989,17 +4452,17 @@ fn find_tui_block_bounds(content: &str) -> Option<(usize, usize)> {
     start.map(|value| (value, content.len()))
 }
 
-fn is_status_line(line: &str) -> bool {
+pub(crate) fn is_status_line(line: &str) -> bool {
     is_named_setting(line, "status_line")
 }
 
-fn is_named_setting(line: &str, key: &str) -> bool {
+pub(crate) fn is_named_setting(line: &str, key: &str) -> bool {
     line.split_once('=')
         .map(|(name, _)| name.trim() == key)
         .unwrap_or(false)
 }
 
-fn format_status_line() -> String {
+pub(crate) fn format_status_line() -> String {
     let items = DEFAULT_TUI_STATUS_ITEMS
         .iter()
         .map(|item| format!("\"{item}\""))
@@ -6008,7 +4471,7 @@ fn format_status_line() -> String {
     format!("status_line = [{items}]")
 }
 
-fn ensure_codex_skills_symlink(target_path: &Path, source_path: &Path) -> Result<bool, String> {
+pub(crate) fn ensure_codex_skills_symlink(target_path: &Path, source_path: &Path) -> Result<bool, String> {
     let source_path = normalize_path(source_path)?;
     if codex_skills_matches_source(target_path, &source_path)? {
         return Ok(false);
@@ -6024,16 +4487,16 @@ fn ensure_codex_skills_symlink(target_path: &Path, source_path: &Path) -> Result
 }
 
 #[cfg(unix)]
-fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
+pub(crate) fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
     std::os::unix::fs::symlink(source_path, target_path).map_err(|err| err.to_string())
 }
 
 #[cfg(windows)]
-fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
+pub(crate) fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
     std::os::windows::fs::symlink_dir(source_path, target_path).map_err(|err| err.to_string())
 }
 
-fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
+pub(crate) fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
     match fs::read_to_string(path) {
         Ok(content) => Ok(Some(content)),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -6041,7 +4504,7 @@ fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
     }
 }
 
-fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
+pub(crate) fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
     let existing = read_text_if_exists(path)?;
     if existing.as_deref() == Some(content) {
         return Ok(false);
@@ -6053,7 +4516,7 @@ fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
     Ok(true)
 }
 
-fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
+pub(crate) fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
     let formatted = format!(
         "{}\n",
         serde_json::to_string_pretty(payload).map_err(|err| err.to_string())?
@@ -6061,7 +4524,7 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
     write_text_if_changed(path, &formatted)
 }
 
-fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
+pub(crate) fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
     let Some(content) = read_text_if_exists(path)? else {
         return Ok(None);
     };
@@ -6070,7 +4533,7 @@ fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
         .map_err(|err| format!("failed parsing {}: {err}", path.display()))
 }
 
-fn remove_path(path: &Path) -> io::Result<()> {
+pub(crate) fn remove_path(path: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
         fs::remove_dir_all(path)
@@ -6079,405 +4542,9 @@ fn remove_path(path: &Path) -> io::Result<()> {
     }
 }
 
-fn symlink_exists(path: &Path) -> bool {
+pub(crate) fn symlink_exists(path: &Path) -> bool {
     fs::symlink_metadata(path)
         .map(|metadata| metadata.file_type().is_symlink())
         .unwrap_or(false)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn unique_test_root(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "router-rs-{name}-{}-{}",
-            std::process::id(),
-            Local::now().timestamp_nanos_opt().unwrap_or_default()
-        ))
-    }
-
-    fn write_test_file(path: &Path, content: &str) {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, content).unwrap();
-    }
-
-    fn repo_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-    }
-    #[test]
-    fn build_router_rs_claude_hook_command_sources_optional_env_file() {
-        let cmd = build_router_rs_claude_hook_command("Stop");
-        assert!(
-            cmd.contains("router-rs-hook.env"),
-            "expected optional hook env injection path segment: {cmd}"
-        );
-        assert!(
-            cmd.contains("set -a"),
-            "expected set -a for env sourcing: {cmd}"
-        );
-        assert!(
-            !cmd.contains("grep -Eq"),
-            "Cursor stdin prefilter must not short-circuit before router-rs (see claude_hooks payload_looks_like_cursor_hook_stdin): {cmd}"
-        );
-    }
-
-    #[test]
-    fn canonical_tool_name_reports_registry_supported_tools_and_aliases() {
-        let root = repo_root();
-
-        assert_eq!(canonical_tool_name("codex-cli", &root).unwrap(), "codex");
-        assert_eq!(canonical_tool_name("claude-code", &root).unwrap(), "claude");
-
-        let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
-        assert!(
-            err.contains("Supported tools: codex, cursor, claude, claude-desktop, antigravity-cli, antigravity, opencode, codex-app"),
-            "{err}"
-        );
-        assert!(err.contains("codex-cli"), "{err}");
-        assert!(err.contains("claude-code"), "{err}");
-    }
-
-    #[test]
-    fn projection_adapters_are_aligned_with_runtime_registry() {
-        let root = repo_root();
-
-        validate_projection_adapters_against_registry(&root).unwrap();
-        assert_eq!(
-            registry_projection_tools(&root).unwrap(),
-            vec![
-                "codex".to_string(),
-                "cursor".to_string(),
-                "claude".to_string(),
-                "claude-desktop".to_string(),
-                "antigravity-cli".to_string(),
-                "antigravity".to_string(),
-                "opencode".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn runtime_registry_missing_in_repo_root_returns_actionable_error() {
-        let root = unique_test_root("runtime-registry-missing");
-        fs::create_dir_all(&root).unwrap();
-
-        let err =
-            load_runtime_registry_payload(&root).expect_err("expected missing registry error");
-        let expected_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
-        assert!(
-            err.contains(expected_registry.to_string_lossy().as_ref()),
-            "error should include expected repo-local registry path: {err}"
-        );
-        assert!(
-            err.contains("framework-root"),
-            "error should mention framework-root / --framework-root: {err}"
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn runtime_registry_repo_root_registry_is_used() {
-        use crate::runtime_registry::RUNTIME_REGISTRY_SCHEMA_VERSION;
-        let root = unique_test_root("runtime-registry-repo-local");
-        let repo_registry = root.join("configs/framework/RUNTIME_REGISTRY.json");
-        write_test_file(
-            &repo_registry,
-            r#"{
-  "schema_version": "framework-runtime-registry-v1",
-  "runtime_profiles": []
-}"#,
-        );
-
-        let payload =
-            load_runtime_registry_payload(&root).expect("expected repo-local registry to load");
-        assert_eq!(
-            payload["schema_version"],
-            json!(RUNTIME_REGISTRY_SCHEMA_VERSION)
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn generated_artifact_copy_skips_local_state_and_dependency_dirs() {
-        let root = unique_test_root("copy-skip");
-        let source = root.join("source");
-        let destination = root.join("destination");
-        write_test_file(&source.join("Cargo.toml"), "[package]\n");
-        for skipped in [
-            ".codex/cache/cache.json",
-            ".git/config",
-            ".mypy_cache/state",
-            ".opencode/state",
-            ".ruff_cache/cache",
-            ".serena/state",
-            "artifacts/current/state.json",
-            "core/router-rs/target/debug/router-rs",
-            "target/debug/root",
-            "tools/browser-mcp/node_modules/package/index.js",
-            "output/image.png",
-            "skills/.system/.codex-system-skills.marker",
-        ] {
-            write_test_file(&source.join(skipped), "local state");
-        }
-
-        copy_framework_tree_for_generation(&source, &destination).unwrap();
-
-        assert!(destination.join("Cargo.toml").is_file());
-        for skipped in [
-            ".codex",
-            ".git",
-            ".mypy_cache",
-            ".opencode",
-            ".ruff_cache",
-            ".serena",
-            "artifacts",
-            "core/router-rs/target",
-            "target",
-            "tools/browser-mcp/node_modules",
-            "output",
-            "skills/.system/.codex-system-skills.marker",
-        ] {
-            assert!(
-                !destination.join(skipped).exists(),
-                "copied skipped generated-artifact dir: {skipped}"
-            );
-        }
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn generated_artifact_temp_root_is_removed_on_drop() {
-        let root = unique_test_root("temp-drop");
-        let framework_root = root.join("framework");
-        let artifact_root = root.join("artifacts");
-        write_test_file(&framework_root.join("Cargo.toml"), "[package]\n");
-
-        let temp_path = {
-            let guard =
-                prepare_generated_artifact_temp_root(&framework_root, &artifact_root).unwrap();
-            let temp_path = guard.path().to_path_buf();
-            assert!(temp_path.exists());
-            temp_path
-        };
-
-        assert!(
-            !temp_path.exists(),
-            "generated artifact temp root was not cleaned"
-        );
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn generated_artifact_generator_success_and_failure_paths_are_reported() {
-        let root = unique_test_root("generator-success-failure");
-        fs::create_dir_all(&root).unwrap();
-
-        let ok = run_generated_artifact_generator("printf 'ok\\n'", &root, &root);
-        assert!(ok.is_ok(), "expected generator success");
-
-        let fail = run_generated_artifact_generator("printf 'boom\\n' 1>&2; exit 23", &root, &root);
-        assert!(fail.is_err(), "expected generator failure");
-        let fail_msg = fail.err().unwrap();
-        assert!(
-            fail_msg.contains("generated artifact generator failed"),
-            "failure message should include generator failed marker: {fail_msg}"
-        );
-        assert!(
-            fail_msg.contains("boom"),
-            "failure message should include stderr output: {fail_msg}"
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn generated_artifact_generator_timeout_kills_process() {
-        let root = unique_test_root("generator-timeout");
-        fs::create_dir_all(&root).unwrap();
-        std::env::set_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS", "1");
-
-        let timeout = run_generated_artifact_generator("sleep 5", &root, &root);
-        assert!(timeout.is_err(), "expected timeout failure");
-        let timeout_msg = timeout.err().unwrap();
-        assert!(
-            timeout_msg.contains("timed out after 1s"),
-            "timeout message should include configured timeout: {timeout_msg}"
-        );
-
-        std::env::remove_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS");
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn is_ephemeral_executable_path_flags_sandbox_and_tmp_builds() {
-        assert!(is_ephemeral_executable_path(
-            "/var/folders/xx/T/cursor-sandbox-cache/abc/cargo-target/debug/router-rs"
-        ));
-        assert!(is_ephemeral_executable_path(
-            "/tmp/skill-cargo-target/debug/router-rs"
-        ));
-        assert!(!is_ephemeral_executable_path(
-            "/Users/joe/.local/bin/router-rs"
-        ));
-    }
-
-    #[test]
-    fn validate_mcp_command_binary_rejects_repo_target_artifacts() {
-        let root = unique_test_root("mcp-validate-repo-target");
-        let framework_root = root.join("framework");
-        let artifact = framework_root
-            .join("core/router-rs/target/release/router-rs");
-        fs::create_dir_all(artifact.parent().unwrap()).unwrap();
-        write_test_file(&artifact, "#!/bin/sh\n");
-
-        let err = validate_mcp_command_binary(
-            &artifact.to_string_lossy(),
-            Some(&framework_root),
-        )
-        .expect_err("repo target artifact must be rejected");
-        assert!(
-            err.contains("ephemeral build path") || err.contains("repo build artifact"),
-            "unexpected error: {err}"
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn install_cursor_mcp_server_rewrites_stale_browser_mcp_command() {
-        let root = unique_test_root("cursor-mcp-install");
-        let home = root.join("home");
-        let framework_root = root.join("framework");
-        let cursor_home = root.join("cursor-home");
-        fs::create_dir_all(home.join(".local/bin")).unwrap();
-        fs::create_dir_all(&cursor_home).unwrap();
-        write_test_file(
-            &home.join(".local/bin/router-rs"),
-            "#!/bin/sh\n",
-        );
-        write_test_file(
-            &framework_root.join("core/router-rs/Cargo.toml"),
-            "[package]\nname = \"router-rs\"\n",
-        );
-        write_test_file(
-            &cursor_home.join("mcp.json"),
-            &format!(
-                r#"{{
-  "mcp_servers": {{
-    "browser-mcp": {{
-      "command": "cargo",
-      "args": ["run", "--release", "--quiet", "--manifest-path", "{}/stale/Cargo.toml", "--", "browser", "mcp-stdio", "--repo-root", "{}"]
-    }}
-  }}
-}}"#,
-                framework_root.display(),
-                framework_root.display()
-            ),
-        );
-
-        let roots = ResolvedProjectionRoots {
-            framework_root: framework_root.clone(),
-            project_root: framework_root.clone(),
-            artifact_root: framework_root.join("artifacts"),
-            account_home_root: home.clone(),
-            codex_home_root: root.join("codex"),
-            cursor_home_root: cursor_home.clone(),
-            claude_home_root: root.join("claude"),
-            antigravity_home_root: root.join("gemini"),
-            antigravity_cli_home_root: root.join("antigravitycli"),
-            opencode_home_root: root.join("opencode"),
-        };
-        std::env::set_var("HOME", &home);
-        let outcome =
-            install_cursor_mcp_server(&roots, &cursor_home.join("mcp.json")).expect("install");
-        assert!(outcome.changed, "expected stale browser-mcp entry to be rewritten");
-        assert!(!outcome.skipped_user_owned);
-
-        let payload = read_json_if_exists(&cursor_home.join("mcp.json"))
-            .expect("read mcp")
-            .expect("mcp exists");
-        let command = payload["mcp_servers"]["browser-mcp"]["command"]
-            .as_str()
-            .expect("command");
-        assert!(
-            command == "router-rs" || command.ends_with("/.local/bin/router-rs"),
-            "expected stable PATH or install-path command, got {command}"
-        );
-
-        std::env::remove_var("HOME");
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn resolve_mcp_router_rs_command_prefers_path_over_repo_target() {
-        let root = unique_test_root("mcp-resolve");
-        let home = root.join("home");
-        let framework_root = root.join("framework");
-        fs::create_dir_all(home.join(".local/bin")).unwrap();
-        fs::create_dir_all(framework_root.join("core/router-rs/target/release")).unwrap();
-        write_test_file(&home.join(".local/bin/router-rs"), "#!/bin/sh\n");
-        write_test_file(
-            &framework_root.join("core/router-rs/target/release/router-rs"),
-            "#!/bin/sh\n",
-        );
-        std::env::set_var("HOME", &home);
-        std::env::remove_var("ROUTER_RS_BIN");
-
-        let command = resolve_mcp_router_rs_command(&framework_root);
-        assert_ne!(command, McpRouterRsCommand::CargoBootstrap);
-        match command {
-            McpRouterRsCommand::OnPath | McpRouterRsCommand::Absolute(_) => {}
-            McpRouterRsCommand::CargoBootstrap => unreachable!(),
-        }
-
-        std::env::remove_var("HOME");
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn resolve_projection_roots_uses_os_home_not_claude_home_parent_for_account_home() {
-        let root = unique_test_root("account-home-root");
-        let os_home = root.join("os-home");
-        let custom_claude = root.join("custom-claude/.claude");
-        fs::create_dir_all(&custom_claude).unwrap();
-        let prior_home = std::env::var_os("HOME");
-        let prior_claude = std::env::var_os("CLAUDE_HOME");
-        std::env::set_var("HOME", &os_home);
-        std::env::set_var("CLAUDE_HOME", &custom_claude);
-
-        let roots = resolve_projection_roots(
-            None,
-            Some(&root.join("project")),
-            None,
-            None,
-            None,
-            Some(&custom_claude),
-            None,
-            None,
-            None,
-            None,
-        )
-        .expect("resolve roots");
-        assert_eq!(roots.account_home_root, os_home);
-        assert_eq!(roots.claude_home_root, custom_claude);
-        assert_eq!(roots.opencode_home_root, os_home.join(".opencode"));
-
-        if let Some(h) = prior_home {
-            std::env::set_var("HOME", h);
-        } else {
-            std::env::remove_var("HOME");
-        }
-        if let Some(c) = prior_claude {
-            std::env::set_var("CLAUDE_HOME", c);
-        } else {
-            std::env::remove_var("CLAUDE_HOME");
-        }
-        let _ = fs::remove_dir_all(root);
-    }
-}

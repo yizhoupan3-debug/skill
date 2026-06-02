@@ -480,6 +480,7 @@ fn write_session_artifact_set(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn write_json_artifact_if_changed(
     path: &Path,
     payload: &Value,
@@ -735,6 +736,7 @@ fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
+#[allow(dead_code)]
 fn sha256_json(value: &Value) -> String {
     sha256_hex(
         serde_json::to_string(value)

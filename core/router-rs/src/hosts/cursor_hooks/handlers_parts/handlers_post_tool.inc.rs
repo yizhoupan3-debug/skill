@@ -6,7 +6,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
         if !post_tool_use_needs_work(repo_root, event, &name, None) {
             return json!({});
         }
-        if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name) {
+        if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name, None) {
             eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
         }
         let mut lock = acquire_state_lock(repo_root, event);
@@ -27,7 +27,7 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     if !post_tool_use_needs_work(repo_root, event, &name, None) {
         return json!({});
     }
-    if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name) {
+    if let Err(e) = crate::session_call_tracker::record_tool_call(repo_root, &name, None) {
         eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
     }
     let mut lock = acquire_state_lock(repo_root, event);

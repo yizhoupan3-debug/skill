@@ -63,6 +63,7 @@ pub fn default_router_rs_install_path() -> PathBuf {
 }
 
 /// Stable MCP binary for Claude Desktop (survives `/tmp` cargo target cleanup; re-signed on macOS).
+#[allow(dead_code)]
 pub fn default_router_rs_desktop_mcp_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
     router_rs_desktop_mcp_dir_for_home(Path::new(&home))
@@ -72,6 +73,7 @@ pub fn router_rs_desktop_mcp_dir_for_home(home: &Path) -> PathBuf {
     home.join(".local/share/skill-framework/bin")
 }
 
+#[allow(dead_code)]
 pub fn default_router_rs_desktop_mcp_path() -> PathBuf {
     default_router_rs_desktop_mcp_dir().join("router-rs")
 }
@@ -174,6 +176,7 @@ fn pick_router_rs_copy_source() -> Result<PathBuf, String> {
 }
 
 /// Install a codesign-safe router-rs for Claude Desktop MCP (not ephemeral `/tmp` paths).
+#[allow(dead_code)]
 pub fn install_router_rs_for_desktop_mcp() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
     install_router_rs_for_desktop_mcp_at(Path::new(&home))

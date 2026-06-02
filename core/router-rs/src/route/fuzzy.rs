@@ -10,6 +10,7 @@ use std::collections::HashSet;
 
 /// Score threshold below which exact-match results are considered
 /// insufficient and fuzzy fallback may activate.
+#[allow(dead_code)]
 pub(crate) const FUZZY_FALLBACK_THRESHOLD: f64 = 0.3;
 
 /// Minimum trigram similarity required for a fuzzy match to be accepted.
@@ -54,6 +55,7 @@ fn jaccard_similarity(a: &HashSet<String>, b: &HashSet<String>) -> f64 {
 ///
 /// Both inputs are normalized (lowercased, whitespace-collapsed) before
 /// trigram extraction. Returns a Jaccard similarity in [0.0, 1.0].
+#[allow(dead_code)]
 pub(crate) fn trigram_similarity(a: &str, b: &str) -> f64 {
     let norm_a = normalize_text(a);
     let norm_b = normalize_text(b);

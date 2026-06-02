@@ -23,6 +23,7 @@ pub(crate) enum PaperProseHookHost {
     Codex,
     Claude,
     AntigravityCli,
+#[allow(dead_code)]
     ClaudeDesktop,
 }
 

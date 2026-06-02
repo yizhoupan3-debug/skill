@@ -8,15 +8,16 @@ use super::constants::{
 };
 use super::value_text;
 
-pub fn build_framework_prompt_compression_envelope(payload: Value) -> Result<Value, String> {
+pub fn build_framework_prompt_compression_envelope(payload: Value, context_window_size: Option<usize>) -> Result<Value, String> {
     let prompt = value_text(payload.get("prompt").or_else(|| payload.get("text")));
     let token_budget = payload
         .get("token_budget")
         .or_else(|| payload.get("budget"))
         .and_then(Value::as_u64)
         .and_then(|value| usize::try_from(value).ok())
+        .or_else(|| context_window_size.map(|s| s / 4))
         .ok_or_else(|| {
-            "framework prompt compression requires token_budget or budget".to_string()
+            "framework prompt compression requires token_budget or budget, or context_window_size".to_string()
         })?;
     let result = compress_prompt_with_rust_policy(&prompt, token_budget);
     Ok(json!({
