@@ -166,7 +166,7 @@ Slide-native visuals (presentation medium):
 
 1. Intake quickly: extract goal, source material, output path, and format.
 2. If reusable visual identity or style-contract acceptance is required, hand off to `$design-md` before authoring.
-3. If user explicitly wants Markdown/HTML source, answer in the current context（`$source-slide-formats` 已归档）; if Beamer, answer in the current context（`$ppt-beamer` 已归档）.
+3. If user explicitly wants Markdown/HTML source,参见 `references/source-formats.md`; if Beamer, 参见 `references/beamer.md`.
 4. Native `.pptx` lane selection:
    - New or rebuilt deck: use `deck.plan.json` as source of truth.
    - Existing deck small edits: inspect existing `.pptx` first, then patch the smallest safe surface.
@@ -423,3 +423,7 @@ Final response template (use 3-4 bullets):
 - [references/native-pptx/layout-patterns.md](references/native-pptx/layout-patterns.md)
 - [references/native-pptx/visualization_patterns.md](references/native-pptx/visualization_patterns.md)
 - [references/native-pptx/rust-cli.md](references/native-pptx/rust-cli.md)
+
+### 专业格式参考
+- LaTeX Beamer 幻灯片：参见 `references/beamer.md`
+- 源码格式（Slidev/Marp/HTML）：参见 `references/source-formats.md`

@@ -16,6 +16,7 @@ routing_priority: P2
 session_start: n/a
 user-invocable: false
 disable-model-invocation: true
+status: deprecated
 trigger_hints:
   - token 优化
   - 减少 token
@@ -26,6 +27,8 @@ trigger_hints:
   - context window
   - cost optimization
 ---
+
+> **DEPRECATED** — Claude Code 原生已支持 prompt caching、context compaction 和 token 优化。本 skill 不再维护，内容保留作为参考。
 
 # Token Optimization
 

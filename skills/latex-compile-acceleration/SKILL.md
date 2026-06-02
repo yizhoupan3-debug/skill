@@ -13,6 +13,7 @@ routing_priority: P1
 session_start: n/a
 user-invocable: false
 disable-model-invocation: true
+status: archived
 short_description: Speed up LaTeX compile and preview workflows
 trigger_hints:
   - LaTeX 编译太慢

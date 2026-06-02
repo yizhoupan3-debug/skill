@@ -13,6 +13,7 @@ routing_gate: none
 session_start: n/a
 user-invocable: false
 disable-model-invocation: true
+status: archived
 risk: low
 source: community
 trigger_hints:

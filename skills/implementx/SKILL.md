@@ -2,7 +2,7 @@
 name: implementx
 description: |
   Personal lifecycle — execute ALL waves in one breath. Main thread schedules lanes only; subagents write compact lane-notes.
-  Sets drive_until_done true. REVIEW_GATE hard block off under lifecycle_profile my-light.
+  Sets drive_until_done true. No hard block; advisory mode under lifecycle_profile my-light.
   Use for /implementx after /planx.
 routing_layer: L0
 routing_owner: owner
@@ -105,7 +105,7 @@ implement 阶段特殊字段：`drive_until_done: true`；无 Stop `GOAL_CONTINU
 
 > 以下内容仅在特定宿主环境下生效。通用流程不受影响。
 
-- **`lifecycle_profile: my-light`**：Stop 不注入 hard `AG_FOLLOWUP`（goal continuity 手动管理：`framework_goal_drive` stdio + artifacts boards）。`beforeSubmit` 不 arm `goal_required`。Closeout / `CLOSEOUT_FOLLOWUP` 在 completion claimed 时仍可适用。
+- **`lifecycle_profile: my-light`**：closeout/complete 为 advisory；手动管理 goal 连续性（`goal_state_manage` MCP / `framework_goal_drive` stdio + artifacts boards）。
 - **Cursor**：omit `Task` `model`（继承父会话）；`.cursor/rules/subagent-model-inherit.mdc` 参考。
 - **CLI/Terminal**：积极鼓励并行 lane（≥2 独立子问题时应 spawn 子代理）；详见 `docs/hosts/` 下对应宿主文档。
 

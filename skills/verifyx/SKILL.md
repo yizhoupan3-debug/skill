@@ -48,8 +48,8 @@ metadata:
 ### 2. Ship
 
 - Git clean / intentional uncommitted documented
-- `closeout_evaluate` stdio（或 CLI `router-rs closeout evaluate --record-path artifacts/closeout/<task_id>.json`）→ 写入 closeout record（**embed** evidence rows / verify summary before purge）
-- `framework_goal_drive` → `operation: complete` — 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范
+- MCP `closeout_record_write`（Claude Desktop）或 CLI `router-rs closeout evaluate --record-path artifacts/closeout/<task_id>.json`（CLI 宿主）→ 写入 closeout record（**embed** evidence rows / verify summary before purge）
+- MCP `goal_state_manage(operation="complete")`（Claude Desktop）或 CLI `framework_goal_drive complete`（CLI 宿主）— 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范
 - Closeout `notes` may record purge intent (e.g. `task_artifacts_purged; task_dir_removed`) — **not** separate schema fields; `CLOSEOUT_RECORD_SCHEMA.json` / `CloseoutRecord` use `deny_unknown_fields`
 
 ### 3. Post-verify task-dir purge (**deferred by default**)

@@ -47,7 +47,7 @@ metadata:
 |------|---------|
 | `artifacts/current/<task_id>/ROADMAP.md` | Phases, exit criteria, verification commands |
 | `artifacts/current/<task_id>/WAVE_STATE.json` | Each wave: `parallel_group`, `depends_on`, `execution_mode`, `lanes[]` |
-| `artifacts/current/<task_id>/GOAL_STATE.json` | Via `framework_goal_drive` stdio — 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范 |
+| `artifacts/current/<task_id>/GOAL_STATE.json` | Via `goal_state_manage` MCP（Claude Desktop）/ `framework_goal_drive` stdio（CLI 宿主）— 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范 |
 | `artifacts/current/<task_id>/PLAN_TRACE.md` | 计划版本历史与执行进度追踪（人机可读） |
 
 ### GOAL_STATE writes
