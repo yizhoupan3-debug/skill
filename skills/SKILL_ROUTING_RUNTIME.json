@@ -16,9 +16,9 @@
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 41,
-    "hot_skill_count": 41,
-    "manifest_skill_count": 56,
+    "full_skill_count": 37,
+    "hot_skill_count": 37,
+    "manifest_skill_count": 42,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
   },
@@ -489,73 +489,37 @@
       "preferred",
       "Unified front door for paper work. Use when the user has a manuscript-level task and should not ",
       [
-        "帮我审这篇 paper",
-        "帮我审这篇论文",
-        "帮我看这篇 paper 现在能不能投",
-        "能不能投",
-        "投稿前把关",
-        "整篇严审",
-        "整篇 review",
-        "科研优化",
-        "收窄修改范围",
-        "定点修改",
-        "补丁式修改",
-        "不要扩写",
-        "edit_scope: surgical",
-        "patch-level edit",
-        "hunk only",
-        "不要随便动别的段",
-        "论文润色",
-        "SCI润色",
-        "英文论文润色",
         "论文写作",
         "写论文",
+        "论文润色",
+        "英文论文润色",
+        "SCI润色",
         "学术润色",
-        "改这段",
-        "不通顺",
-        "降AI味",
-        "manuscript polish",
-        "academic writing"
+        "帮我审这篇 paper",
+        "帮我审这篇论文",
+        "paper review",
+        "严审",
+        "能不能投",
+        "投稿前把关",
+        "全文审核",
+        "根据 reviewer comments 改论文",
+        "按审稿意见改论文",
+        "缩口径",
+        "写 rebuttal",
+        "整体推进这篇论文",
+        "先审再改",
+        "顶刊标准",
+        "顶会标准",
+        "top-tier paper",
+        "CCF-A 论文",
+        "精准修改",
+        "大面积重构",
+        "只改摘要",
+        "顶刊标准改稿",
+        "顶会标准改稿"
       ],
       "P2",
       "skills/paper-workbench/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      "allowlisted first-turn owner"
-    ],
-    [
-      "paper-writing",
-      "L2",
-      "owner",
-      "none",
-      "preferred",
-      "Write, restructure, or polish bounded academic-paper prose after the claim/evidence boundary is ",
-      [
-        "论文写作",
-        "写论文",
-        "论文润色",
-        "英文论文润色",
-        "SCI润色",
-        "顶刊写作",
-        "顶会写作",
-        "顶刊顶会写作",
-        "top-tier academic writing",
-        "top conference writing",
-        "top journal writing",
-        "学术润色",
-        "manuscript editing",
-        "academic writing",
-        "scientific writing",
-        "写摘要"
-      ],
-      "P2",
-      "skills/paper-writing/SKILL.md",
       [
         "antigravity",
         "claude-desktop",
@@ -894,47 +858,6 @@
       null
     ],
     [
-      "paper-reviewer",
-      "L2",
-      "owner",
-      "none",
-      "n/a",
-      "Specialist review lane behind $paper-workbench. Use when the user clearly wants review-only judgment, or explicitly asks for one review dimension such as claim, novelty, evidence, math, references, figures, tables, language, or layout.",
-      [
-        "$paper-reviewer",
-        "paper-reviewer",
-        "paper review",
-        "paper reviewer",
-        "审稿",
-        "审一下论文",
-        "审一下 paper",
-        "严审",
-        "整篇严审",
-        "能不能投",
-        "投稿前把关",
-        "外部调研严审",
-        "查文献后审",
-        "外研必填检索轨迹",
-        "closest-work 偷袭预演",
-        "contradiction sweep paper",
-        "投稿前 review",
-        "顶刊审稿标准",
-        "顶会审稿标准",
-        "顶刊顶会 review"
-      ],
-      "P2",
-      "skills/paper-reviewer/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null
-    ],
-    [
       "python-env-management",
       "L4",
       "owner",
@@ -996,7 +919,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null
@@ -1025,7 +949,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null
@@ -1061,7 +986,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null
@@ -1093,43 +1019,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
-      ],
-      "skill",
-      null
-    ],
-    [
-      "paper-reviser",
-      "L2",
-      "owner",
-      "none",
-      "n/a",
-      "Specialist revision lane behind `$paper-workbench`. Use when the route is already clearly \"change the paper now\" based on reviewer comments, known findings, or a fixed decision to narrow scope. This s",
-      [
-        "$paper-reviser",
-        "paper-reviser",
-        "只进改稿 lane",
-        "按现有 findings 直接改稿",
-        "直接改稿不要先审",
-        "缩口径",
-        "按这个维度改",
-        "只改摘要",
-        "只改图表维度",
-        "写 rebuttal",
-        "顶刊标准改稿",
-        "顶会标准改稿",
-        "顶刊顶会改稿",
-        "top-tier revision",
-        "revise for top conference",
-        "revise for top journal"
-      ],
-      "P2",
-      "skills/paper-reviser/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null
@@ -1159,7 +1050,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null
@@ -1189,7 +1081,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null
@@ -1217,7 +1110,8 @@
         "antigravity",
         "claude-code",
         "claude-desktop",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null
@@ -1245,7 +1139,8 @@
         "antigravity",
         "claude-code",
         "claude-desktop",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null

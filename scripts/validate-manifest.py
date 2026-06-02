@@ -7,6 +7,9 @@
   3. 冷热一致性: kind=cold 不应出现在 routing; kind=skill 应在 routing
   4. L0 gate skill 应有 routing_priority (priority) 字段
   5. manifest 与 plugin catalog slug 集合一致性
+  6. plugin catalog host_support.platforms 无重复
+  7. plugin catalog skill_path 文件存在性
+  8. trigger_hints 重叠检测 (INFO, 不阻断)
 
 用法:
   python3 scripts/validate-manifest.py          # 校验
@@ -188,6 +191,69 @@ def rule_manifest_catalog_slug_consistency(
     return len(issues) == 0, issues
 
 
+def rule_catalog_platforms_dedup(catalog: dict) -> tuple[bool, list[str]]:
+    """规则 6: plugin catalog host_support.platforms 无重复."""
+    issues: list[str] = []
+    for slug, entry in catalog.get("skills", {}).items():
+        platforms = entry.get("host_support", {}).get("platforms", [])
+        if not isinstance(platforms, list):
+            issues.append(f"  {slug}: host_support.platforms 不是数组")
+            continue
+        if len(platforms) != len(set(platforms)):
+            duped = [k for k, v in Counter(platforms).items() if v > 1]
+            issues.append(f"  {slug}: 重复平台 {duped}")
+    return len(issues) == 0, issues
+
+
+def rule_catalog_path_exists(catalog: dict, project_root: Path) -> tuple[bool, list[str]]:
+    """规则 7: plugin catalog skill_path 指向的文件必须存在."""
+    issues: list[str] = []
+    for slug, entry in catalog.get("skills", {}).items():
+        sp = entry.get("skill_path", "")
+        if sp and not (project_root / sp).is_file():
+            issues.append(f"  {slug}: {sp} -> 文件不存在")
+    return len(issues) == 0, issues
+
+
+def rule_trigger_hints_overlap(manifest: dict) -> tuple[bool, list[str]]:
+    """规则 8 (INFO): 检测不同 skill 之间 trigger_hints 的重叠.
+
+    一些重叠是合理的（如 paper-reviewer 和 paper-workbench 共享审稿相关 hint），
+    因此本规则仅报告重叠项，不设为 FAIL。
+    """
+    issues: list[str] = []
+    m_keys = build_index(manifest["keys"])
+    m_slug_idx = m_keys["slug"]
+    m_th_idx = m_keys.get("trigger_hints")
+
+    if m_th_idx is None:
+        return True, ["  manifest 缺少 trigger_hints 字段定义, 跳过"]
+
+    # 构建 hint -> [slug, ...] 映射（忽略大小写）
+    hint_to_slugs: dict[str, list[str]] = {}
+    for skill in manifest["skills"]:
+        slug = skill[m_slug_idx]
+        hints = skill[m_th_idx]
+        if not isinstance(hints, list):
+            continue
+        for hint in hints:
+            key = hint.lower().strip()
+            if key:
+                hint_to_slugs.setdefault(key, []).append(slug)
+
+    # 找出被 2 个以上 skill 共享的 hint
+    for key in sorted(hint_to_slugs):
+        slugs = hint_to_slugs[key]
+        if len(slugs) > 1:
+            # 还原原始大小写（取第一个出现的）
+            issues.append(
+                f'  "{key}" 共享于: {", ".join(sorted(set(slugs)))}'
+            )
+
+    # INFO 规则始终返回 True
+    return True, issues
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -220,6 +286,12 @@ def main():
          lambda: rule_l0_gate_priority(manifest)),
         ("R5", "manifest <-> catalog slug 一致性",
          lambda: rule_manifest_catalog_slug_consistency(manifest, catalog)),
+        ("R6", "catalog host_support.platforms 无重复",
+         lambda: rule_catalog_platforms_dedup(catalog)),
+        ("R7", "catalog skill_path 存在性",
+         lambda: rule_catalog_path_exists(catalog, project_root)),
+        ("R8", "trigger_hints 重叠检测 (INFO)",
+         lambda: rule_trigger_hints_overlap(manifest)),
     ]
 
     all_passed = True
@@ -241,8 +313,14 @@ def main():
         print("  mode:      --fix (自动修复)")
     print("=" * 60)
 
+    # INFO-level rules (always pass, but show details under INFO label)
+    INFO_RULES = {"R8"}
+
     for code, desc, passed, details in results:
-        status = "PASS" if passed else "FAIL"
+        if code in INFO_RULES:
+            status = "INFO"
+        else:
+            status = "PASS" if passed else "FAIL"
         print(f"\n[{status}] {code}: {desc}")
         for line in details:
             print(line)

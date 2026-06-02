@@ -118,8 +118,8 @@ the request is about framework structure rather than one isolated file edit.
 
 ## Do not use
 
-- The task is **concrete single skill package creation/update** after the boundary is known → use [`$skill-creator`](../.system/skill-creator/SKILL.md)
-- The task is **new skill intake / install / relink / re-index** → use [`$skill-installer`](../.system/skill-installer/SKILL.md)
+- The task is **concrete single skill package creation/update** after the boundary is known → use [`$skill-creator`](../.archive-cold/.system/skill-creator/SKILL.md)
+- The task is **new skill intake / install / relink / re-index** → use [`$skill-installer`](../.archive-cold/.system/skill-installer/SKILL.md)
 
 ## Primary operating principle
 

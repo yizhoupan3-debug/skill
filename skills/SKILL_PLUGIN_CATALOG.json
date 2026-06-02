@@ -7,12 +7,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -23,12 +20,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -39,12 +33,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -55,12 +46,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -71,12 +59,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -87,12 +72,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -103,28 +85,22 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/diagramming/SKILL.md"
+      "skill_path": "skills/diagramming/SKILL.md"
     },
     "discussx": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -135,12 +111,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -151,12 +124,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -167,12 +137,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -183,12 +150,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -199,12 +163,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -215,12 +176,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -231,12 +189,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -247,12 +202,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -263,102 +215,87 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/jupyter-notebook/SKILL.md"
+      "skill_path": "skills/jupyter-notebook/SKILL.md"
     },
     "latex-compile-acceleration": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/latex-compile-acceleration/SKILL.md"
+      "skill_path": "skills/latex-compile-acceleration/SKILL.md"
     },
     "mac-memory-management": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/mac-memory-management/SKILL.md"
+      "skill_path": "skills/mac-memory-management/SKILL.md"
     },
     "math-derivation": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
       "skill_path": "skills/math-derivation/SKILL.md"
     },
-    "openai-docs": {
+    "mcp-server-management": {
       "host_support": {
         "platforms": [
+          "antigravity",
           "claude-code",
-          "claude-code"
+          "claude-desktop",
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/openai-docs/SKILL.md"
+      "skill_path": "skills/mcp-server-management/SKILL.md"
     },
     "paper-reviewer": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/paper-reviewer/SKILL.md"
+      "skill_path": "skills/.archive-cold/paper-reviewer/SKILL.md"
     },
     "paper-reviser": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -369,12 +306,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -385,28 +319,22 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/paper-writing/SKILL.md"
+      "skill_path": "skills/.archive-cold/paper-writing/SKILL.md"
     },
     "pdf": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -417,12 +345,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -433,12 +358,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -449,44 +371,35 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/ppt-beamer/SKILL.md"
+      "skill_path": "skills/ppt-beamer/SKILL.md"
     },
     "python-env-management": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/python-env-management/SKILL.md"
+      "skill_path": "skills/python-env-management/SKILL.md"
     },
     "research-workbench": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -497,12 +410,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -513,12 +423,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -529,12 +436,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -545,12 +449,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -561,28 +462,22 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
-      "skill_path": "skills/.archive-cold/source-slide-formats/SKILL.md"
+      "skill_path": "skills/source-slide-formats/SKILL.md"
     },
     "spreadsheets": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -593,28 +488,35 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
       "skill_path": "skills/statistical-analysis/SKILL.md"
+    },
+    "token-optimization": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "claude-code",
+          "claude-desktop",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/token-optimization/SKILL.md"
     },
     "update": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -625,12 +527,9 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -641,40 +540,13 @@
         "platforms": [
           "antigravity",
           "claude-desktop",
-          "claude-desktop",
           "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
       "skill_path": "skills/visual-review/SKILL.md"
-    },
-    "token-optimization": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-code",
-          "claude-desktop",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/token-optimization/SKILL.md"
-    },
-    "mcp-server-management": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-code",
-          "claude-desktop",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/mcp-server-management/SKILL.md"
     }
   },
   "source_of_truth": false

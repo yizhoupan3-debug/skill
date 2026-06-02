@@ -54,7 +54,7 @@ This skill owns GitHub Actions PR-check triage: turning failing checks into a ra
 Default helper:
 
 ```bash
-cargo run --manifest-path rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- \
+cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- \
   inspect-pr-checks --repo . --json
 ```
 

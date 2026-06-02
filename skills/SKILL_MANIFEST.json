@@ -48,7 +48,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -84,7 +85,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -125,7 +127,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -156,7 +159,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -183,7 +187,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -210,7 +215,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -237,7 +243,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -263,7 +270,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -301,7 +309,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -340,7 +349,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -373,7 +383,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -412,7 +423,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -447,7 +459,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -477,7 +490,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -504,7 +518,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -545,7 +560,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "cold",
       null,
@@ -580,7 +596,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "cold",
       null,
@@ -614,7 +631,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -655,7 +673,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -686,7 +705,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -723,7 +743,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -755,12 +776,13 @@
       ],
       "project",
       3,
-      "skills/.archive-cold/python-env-management/SKILL.md",
+      "skills/python-env-management/SKILL.md",
       [
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -795,37 +817,10 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
-      null,
-      null,
-      null,
-      null
-    ],
-    [
-      "openai-docs",
-      "L1",
-      "gate",
-      "source",
-      "P1",
-      "Use official OpenAI docs first for current OpenAI guidance",
-      "required",
-      [
-        "OpenAI docs",
-        "OpenAI API",
-        "Responses API",
-        "Apps SDK",
-        "Codex docs",
-        "官方文档"
-      ],
-      "project",
-      3,
-      "skills/openai-docs/SKILL.md",
-      [
-        "claude-code"
-      ],
-      "cold",
       null,
       null,
       null,
@@ -859,14 +854,15 @@
       ],
       "project",
       3,
-      "skills/paper-reviewer/SKILL.md",
+      "skills/.archive-cold/paper-reviewer/SKILL.md",
       [
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
-      "skill",
+      "cold",
       null,
       null,
       null,
@@ -900,14 +896,15 @@
       ],
       "project",
       3,
-      "skills/paper-reviser/SKILL.md",
+      "skills/.archive-cold/paper-reviser/SKILL.md",
       [
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
-      "skill",
+      "cold",
       null,
       null,
       null,
@@ -922,22 +919,34 @@
       "Unified front door for paper work. Use when the user has a manuscript-level task and should not have to choose between review, revision, logic, figures, or prose lanes first. Good for requests like \"帮",
       "preferred",
       [
+        "论文写作",
+        "写论文",
+        "论文润色",
+        "英文论文润色",
+        "SCI润色",
+        "学术润色",
         "帮我审这篇 paper",
         "帮我审这篇论文",
-        "帮我看这篇 paper 现在能不能投",
+        "paper review",
+        "严审",
         "能不能投",
         "投稿前把关",
-        "整篇严审",
-        "整篇 review",
-        "科研优化",
-        "收窄修改范围",
-        "定点修改",
-        "补丁式修改",
-        "不要扩写",
-        "edit_scope: surgical",
-        "patch-level edit",
-        "hunk only",
-        "不要随便动别的段"
+        "全文审核",
+        "根据 reviewer comments 改论文",
+        "按审稿意见改论文",
+        "缩口径",
+        "写 rebuttal",
+        "整体推进这篇论文",
+        "先审再改",
+        "顶刊标准",
+        "顶会标准",
+        "top-tier paper",
+        "CCF-A 论文",
+        "精准修改",
+        "大面积重构",
+        "只改摘要",
+        "顶刊标准改稿",
+        "顶会标准改稿"
       ],
       "project",
       3,
@@ -946,7 +955,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -989,14 +999,15 @@
       ],
       "project",
       3,
-      "skills/paper-writing/SKILL.md",
+      "skills/.archive-cold/paper-writing/SKILL.md",
       [
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
-      "skill",
+      "cold",
       null,
       null,
       null,
@@ -1024,7 +1035,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1059,7 +1071,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1094,7 +1107,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1126,7 +1140,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1165,7 +1180,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1200,7 +1216,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1231,7 +1248,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1272,7 +1290,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1306,7 +1325,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -1346,7 +1366,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1386,7 +1407,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1412,7 +1434,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -1448,7 +1471,8 @@
         "antigravity",
         "claude-desktop",
         "claude-code",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1481,7 +1505,8 @@
         "antigravity",
         "claude-code",
         "claude-desktop",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1514,7 +1539,8 @@
         "antigravity",
         "claude-code",
         "claude-desktop",
-        "cursor"
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,

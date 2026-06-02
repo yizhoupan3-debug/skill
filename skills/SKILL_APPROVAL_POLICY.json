@@ -1,0 +1,6 @@
+{
+  "derived_from": "skills/SKILL_MANIFEST.json",
+  "policies": {},
+  "schema_version": "skill-approval-policy-v1",
+  "source_of_truth": false
+}

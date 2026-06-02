@@ -5,12 +5,12 @@
   "source_of_truth": false,
   "summary": {
     "activation_counts": {
-      "default": 11,
+      "default": 12,
       "disabled": 0,
       "explicit_opt_in": 41
     },
     "tier_counts": {
-      "core": 11,
+      "core": 12,
       "deprecated": 0,
       "experimental": 0,
       "optional": 41
