@@ -1,6 +1,6 @@
 # Agent Policy (Cross-Host)
 
-跨宿主叙述性协议真源。宿主差异见 `AGENTS_CURSOR.md`、`AGENTS_CODEX.md`、`AGENTS_CLAUDE.md`、`AGENTS_ANTIGRAVITY.md`。
+跨宿主叙述性协议真源。宿主差异见 `AGENTS_CURSOR.md`、`AGENTS_CODEX.md`、`AGENTS_CLAUDE.md`、`AGENTS_ANTIGRAVITY.md`、`AGENTS_OPENCODE.md`。
 
 ## 权威分层（改哪里才生效）
 

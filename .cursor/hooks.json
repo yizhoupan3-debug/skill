@@ -27,7 +27,7 @@
       {
         "_doc": "会话结束：清 hook-state（review gate）。ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0 时不 terminate 终端（见 .cursor/router-rs-hook.env）。",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SessionEnd",
-        "timeout": 15
+        "timeout": 20
       }
     ],
     "postToolUse": [

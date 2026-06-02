@@ -44,7 +44,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint
 
 ## 多代理编排 (Multi-Agent Orchestration)
 
-Codex 宿主**鼓励积极使用多代理**以提升并行执行效率与 review 质量。与 Cursor 的 hook 级 `subagentStart`/`subagentStop` 门控不同，Codex 端的多代理行为由**文档契约与 agent 自觉**驱动，不依赖 hook 生命周期事件。
+Codex 宿主**鼓励积极使用多代理**以提升并行执行效率与 review 质量。v0.133.0+ 起支持 `SubagentStart`/`SubagentStop` hook 事件（由 `router-rs` 自动注册），可用于 review gate 子代理计数与遥测。旧版 Codex CLI 仍通过 PostToolUse 工具名推断兼容。
 
 ### 默认行为
 
@@ -65,4 +65,16 @@ Codex 宿主**鼓励积极使用多代理**以提升并行执行效率与 review
 
 - **Cursor**：有 `subagentStart`/`subagentStop` hook 事件 + 专用 gate 文件（`execution-subagent-gate.mdc`、`review-subagent-gate.mdc`）+ 模型继承规则。
 - **Claude Code**：原生 `Task` 工具 + `PreToolUse` 硬阻断。
-- **Codex**：无 hook 级子代理事件；多代理行为由本节文档契约 + `implementx` skill 契约约束。agent 应**同等积极**地使用并行 lane，不因缺少 hook 门控而退缩为主线程串行。
+- **Codex**（v0.133.0+）：有 `SubagentStart`/`SubagentStop` hook 事件（由 `router-rs codex sync` 自动注册），review gate 子代理计数与 Cursor 对齐。旧版 Codex CLI 仍通过 PostToolUse 工具名推断兼容。多代理行为同时受本节文档契约 + `implementx` skill 契约约束。
+
+## Claude Desktop 独有工具的替代路径
+
+Codex 宿主缺少 Claude Desktop 的 MCP 工具，以下为等效替代：
+
+| Claude Desktop 工具 | Codex 替代 | 说明 |
+|---------------------|-----------|------|
+| `goal_state_manage` (MCP) | `framework_goal_drive` stdio 二进制 | goal 生命周期管理 |
+| `session_checkpoint` (MCP) | Stop hook 自动检查 | checkpoint 由 hook 注入 |
+| `web_fetch` (MCP) | agent 自行 `curl` / 浏览器工具 | 无框架层 HTTP 代理 |
+| `rfv_loop_manage` (MCP) | `framework_rfv_drive` stdio 二进制 | RFV 循环管理 |
+| `record_evidence` (MCP) | PostToolUse hook 自动记录 | evidence 由 hook 追加 |
