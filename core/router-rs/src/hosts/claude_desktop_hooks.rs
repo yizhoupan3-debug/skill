@@ -34,12 +34,7 @@ use std::time::{Duration, Instant};
 const WEB_FETCH_MAX_BYTES_DEFAULT: usize = 50_000;
 const WEB_FETCH_TIMEOUT_SECS: u64 = 30;
 
-fn mcp_host_supports_hard_closeout(host_id: &str) -> bool {
-    matches!(
-        host_id,
-        "antigravity-app" | "antigravity" | "claude-desktop" | "opencode"
-    )
-}
+
 
 /// Shared host display label for MCP-hosted sessions.
 /// Used by hard-block, closeout gate, and review gate prompts.
@@ -52,9 +47,7 @@ fn mcp_host_display_label(host_id: &str) -> &'static str {
     }
 }
 
-fn mcp_host_hard_block_label(host_id: &str) -> &'static str {
-    mcp_host_display_label(host_id)
-}
+
 fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
     let current = repo_root.join("artifacts/current");
     let Ok(entries) = fs::read_dir(&current) else {
@@ -804,56 +797,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         eprintln!("[router-rs warning] record_tool_call failed: {e}");
     }
 
-    // MCP hard closeout (Antigravity App + Claude Desktop; my-light skips)
-    if mcp_host_supports_hard_closeout(host_id) {
-        let task_id_override = arguments
-            .get("task_id")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        let task_view = resolve_task_view(repo_root, task_id_override);
-        let lifecycle_profile = task_view
-            .goal_state
-            .as_ref()
-            .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
-            .unwrap_or("");
-        let hard_block_disabled = mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile);
-        let host_name = mcp_host_hard_block_label(host_id);
 
-        if !hard_block_disabled && tool_name == "goal_state_manage" {
-            if let Some("complete") = arguments.get("operation").and_then(Value::as_str) {
-                match evaluate_mcp_closeout_gate(arguments, repo_root, host_id) {
-                    Ok(verdict) if verdict.hard_block => {
-                        return json!({
-                            "jsonrpc": "2.0",
-                            "id": id,
-                            "result": {
-                                "content": [{
-                                    "type": "text",
-                                    "text": format!(
-                                        "Error: [{host_name} Hard Block] Cannot mark goal as complete because closeout gates are not satisfied. Detail:\n{}",
-                                        verdict.formatted,
-                                    )
-                                }],
-                                "isError": true,
-                            },
-                        });
-                    }
-                    Err(e) => {
-                        return json!({
-                            "jsonrpc": "2.0",
-                            "id": id,
-                            "result": {
-                                "content": [{ "type": "text", "text": format!("Error during pre-closeout check: {e}") }],
-                                "isError": true,
-                            },
-                        });
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
 
     let mut result = match tool_name {
         "framework_snapshot" => tool_framework_snapshot(repo_root),
@@ -870,31 +814,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
 
-    if mcp_host_supports_hard_closeout(host_id) && tool_name == "closeout_gate" {
-        if let Ok(ref content) = result {
-            let task_id_override = arguments
-                .get("task_id")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty());
-            let task_view = resolve_task_view(repo_root, task_id_override);
-            let lifecycle_profile = task_view
-                .goal_state
-                .as_ref()
-                .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
-                .unwrap_or("");
-            if !mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile) {
-                if let Ok(verdict) = evaluate_mcp_closeout_gate(arguments, repo_root, host_id) {
-                    if verdict.hard_block {
-                        let host_name = mcp_host_hard_block_label(host_id);
-                        result = Err(format!(
-                            "[{host_name} Hard Block] Closeout Gate not satisfied. Details:\n{content}",
-                        ));
-                    }
-                }
-            }
-        }
-    }
+
 
     match result {
         Ok(content) => {
@@ -1210,17 +1130,9 @@ pub(crate) struct McpCloseoutGateVerdict {
     pub formatted: String,
 }
 
-fn mcp_closeout_host_label(host_id: &str) -> &'static str {
-    mcp_host_display_label(host_id)
-}
 
-fn mcp_closeout_hard_block_disabled(repo_root: &Path, lifecycle_profile: &str) -> bool {
-    crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
-        Some(repo_root),
-        lifecycle_profile,
-    )
-    .unwrap_or(false)
-}
+
+
 
 pub(crate) fn evaluate_mcp_closeout_gate(
     arguments: &Value,
@@ -1234,7 +1146,7 @@ pub(crate) fn evaluate_mcp_closeout_gate(
         .filter(|s| !s.is_empty());
     let task_view = resolve_task_view(repo_root, task_id_override);
     let mut findings: Vec<String> = Vec::new();
-    let host_name = mcp_closeout_host_label(host_id);
+    let host_name = mcp_host_display_label(host_id);
 
     findings.push(format!(
         "review_gate: {host_name} has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested (prompts/review_gate)"
@@ -1279,13 +1191,6 @@ pub(crate) fn evaluate_mcp_closeout_gate(
         findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
     }
 
-    let lifecycle_profile = task_view
-        .goal_state
-        .as_ref()
-        .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
-        .unwrap_or("");
-    let hard_block_disabled = mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile);
-
     let review_goal = task_view
         .goal_state
         .as_ref()
@@ -1313,16 +1218,10 @@ pub(crate) fn evaluate_mcp_closeout_gate(
 
     let verdict_label = if all_clear {
         "PASS: all closeout gates satisfied"
-    } else if hard_block_disabled {
-        if checkpoint_only {
-            "ADVISORY: checkpoint missing — call session_checkpoint before complete (my-light: MCP hard block disabled)"
-        } else {
-            "ADVISORY: closeout gates not satisfied (my-light: MCP hard block disabled)"
-        }
     } else if checkpoint_only {
-        "BLOCKED: checkpoint missing — call session_checkpoint before complete (MCP hard block when not my-light)"
+        "ADVISORY: checkpoint missing — call session_checkpoint before complete"
     } else {
-        "BLOCKED: closeout gates not satisfied (MCP hard block when not my-light)"
+        "ADVISORY: closeout gates not satisfied"
     };
 
     let formatted = format!(
@@ -1333,7 +1232,7 @@ pub(crate) fn evaluate_mcp_closeout_gate(
     Ok(McpCloseoutGateVerdict {
         all_clear,
         checkpoint_only,
-        hard_block: !all_clear && !hard_block_disabled,
+        hard_block: false,
         formatted,
     })
 }
@@ -1448,20 +1347,13 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, host_id: &str
         repo_root,
         host_id,
     ) {
-        let task_view = crate::task_state::resolve_task_view(repo_root, Some(task_id));
-        let lifecycle_profile = task_view
-            .goal_state
-            .as_ref()
-            .and_then(|g| g.get("lifecycle_profile").and_then(Value::as_str))
-            .unwrap_or("");
-        let hard_block_disabled = mcp_closeout_hard_block_disabled(repo_root, lifecycle_profile);
         if let Some(obj) = result.as_object_mut() {
             obj.insert(
                 "mcp_closeout_gate".to_string(),
                 json!({
                     "all_clear": mcp_verdict.all_clear,
                     "checkpoint_only": mcp_verdict.checkpoint_only,
-                    "hard_block": mcp_verdict.hard_block && !hard_block_disabled,
+                    "hard_block": mcp_verdict.hard_block,
                 }),
             );
         }
@@ -1645,13 +1537,9 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path, host
         }
         "review_gate" => {
             let host_name = mcp_host_display_label(host_id);
-            let gate_mode = if mcp_host_supports_hard_closeout(host_id) {
-                format!(
-                    "{host_name} closeout is hard-blocked at MCP tool level for non-my-light profiles — unsatisfied closeout blocks goal_state_manage complete."
-                )
-            } else {
-                "Desktop review gate is advisory only — MCP cannot hard-block Stop.".to_string()
-            };
+            let gate_mode = format!(
+                "{host_name} closeout is advisory — MCP tool layer reports findings but does not block goal_state_manage complete."
+            );
             {
                 let lanes = crate::runtime_registry::claude_reviewer_lanes_sorted(Some(repo_root));
                 let lane_lines = if lanes.is_empty() {

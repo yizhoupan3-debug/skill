@@ -213,19 +213,12 @@ fn agent_review_gate_disabled() -> bool {
     crate::router_env_flags::router_rs_env_enabled_default_false(host.review_gate_disable_env())
 }
 
-/// Env disable, my-light profile, or registry `lifecycle_profiles.my-light.disable_review_gate_hard_block`.
+/// Env disable **or** `my-light` profile (advisory-only mode).
 fn claude_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
     if agent_review_gate_disabled() {
         return true;
     }
-    if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
-        return false;
-    }
-    crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
-        Some(repo_root),
-        "my-light",
-    )
-    .unwrap_or(true)
+    crate::hook_common::review_gate_hard_block_disabled(Some(repo_root), text)
 }
 
 fn claude_user_prompt_text(payload: &Value) -> String {

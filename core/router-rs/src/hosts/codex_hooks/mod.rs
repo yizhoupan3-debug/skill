@@ -449,28 +449,15 @@ fn codex_review_gate_disabled_by_env() -> bool {
     router_rs_env_enabled_default_false(lifecycle_host().review_gate_disable_env())
 }
 
-/// Env disable (my-light profile only), my-light profile, or registry `lifecycle_profiles.my-light.disable_review_gate_hard_block`.
+/// Env disable (my-light profile only) **or** `my-light` profile (advisory-only mode).
 /// In non-my-light lifecycle profile, env-var bypass is **ignored** — review gate stays hard-enabled.
 fn codex_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
-    let is_my_light = crate::hook_common::my_light_profile_active(Some(repo_root), text);
-    if is_my_light && codex_review_gate_disabled_by_env() {
+    if crate::hook_common::review_gate_hard_block_disabled(Some(repo_root), text) {
         return true;
     }
-    if !is_my_light {
-        return false;
-    }
-    match crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
-        Some(repo_root),
-        "my-light",
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            eprintln!(
-                "[router-rs] codex review gate: registry read failed ({err}); my-light prompt still suppresses hard block"
-            );
-            true
-        }
-    }
+    // Codex: env bypass only valid in my-light profile (non-my-light ignores env)
+    crate::hook_common::my_light_profile_active(Some(repo_root), text)
+        && codex_review_gate_disabled_by_env()
 }
 
 fn clear_codex_review_gate_hook_state(repo_root: &Path, event: &Value) {

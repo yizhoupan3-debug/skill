@@ -436,6 +436,15 @@ pub fn should_inject_spawn_first_review_nudge(
         && crate::runtime_registry::review_spawn_first_enabled(repo_root)
 }
 
+
+/// Whether review gate hard block is disabled for this prompt.
+///
+/// Advisory-only mode: hard block is always disabled when `my_light_profile_active` is true.
+/// Host-specific env-disable bypasses are handled by each host's own `*_review_gate_suppressed`.
+pub fn review_gate_hard_block_disabled(repo_root: Option<&std::path::Path>, text: &str) -> bool {
+    my_light_profile_active(repo_root, text)
+}
+
 fn strong_code_review_anchor(sanitized: &str, tokens: &[String]) -> bool {
     if crate::route::has_github_pr_context(sanitized, tokens) {
         return true;
@@ -752,4 +761,54 @@ mod tests {
         assert!(is_deep_review_gate_lane_normalized("general-purpose"));
         assert!(is_deep_review_gate_lane_normalized("best-of-n-runner"));
     }
+
+    #[test]
+    fn my_light_profile_active_prompt_match_returns_true_without_root() {
+        // Prompt matching (/implementx) activates my-light even without repo_root
+        assert!(my_light_profile_active(None, "/implementx 继续"));
+        assert!(my_light_profile_active(None, "/discussx 讨论架构"));
+        assert!(my_light_profile_active(None, "/planx"));
+        assert!(my_light_profile_active(None, "/verifyx"));
+    }
+
+    #[test]
+    fn my_light_profile_active_returns_false_for_non_lifecycle_prompt_without_root() {
+        assert!(!my_light_profile_active(None, "深度review整个路由系统"));
+        assert!(!my_light_profile_active(None, "fix the bug"));
+        assert!(!my_light_profile_active(None, ""));
+    }
+
+    #[test]
+    fn my_light_profile_active_test_override_takes_priority() {
+        let _lock = crate::test_env_sync::process_env_lock();
+        // Override to false even though prompt matches /implementx
+        set_test_my_light_override(Some(false));
+        assert!(!my_light_profile_active(None, "/implementx"));
+        // Override to true even for non-lifecycle prompt
+        set_test_my_light_override(Some(true));
+        assert!(my_light_profile_active(None, "random text"));
+        // Clear override, prompt match works again
+        set_test_my_light_override(None);
+        assert!(my_light_profile_active(None, "/implementx"));
+    }
+
+    #[test]
+    fn review_gate_hard_block_disabled_false_when_not_my_light() {
+        let _lock = crate::test_env_sync::process_env_lock();
+        set_test_my_light_override(Some(false));
+        assert!(!review_gate_hard_block_disabled(None, "fix the bug"));
+        assert!(!review_gate_hard_block_disabled(None, "/implementx"));
+        set_test_my_light_override(None);
+    }
+
+    #[test]
+    fn review_gate_hard_block_disabled_true_when_my_light_active() {
+        let _lock = crate::test_env_sync::process_env_lock();
+        set_test_my_light_override(Some(true));
+        // Advisory-only: my-light active → hard block disabled
+        assert!(review_gate_hard_block_disabled(None, "/implementx"));
+        assert!(review_gate_hard_block_disabled(None, "random text"));
+        set_test_my_light_override(None);
+    }
+
 }

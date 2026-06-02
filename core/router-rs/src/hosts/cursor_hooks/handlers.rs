@@ -2150,14 +2150,7 @@ fn cursor_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
     if cursor_review_gate_disabled_by_env() {
         return true;
     }
-    if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
-        return false;
-    }
-    crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
-        Some(repo_root),
-        "my-light",
-    )
-    .unwrap_or(true)
+    crate::hook_common::review_gate_hard_block_disabled(Some(repo_root), text)
 }
 
 /// `subagentStart` 只能拒绝/提示，不能主动关闭既有 subagent；这里用活跃数避免继续堆积。
