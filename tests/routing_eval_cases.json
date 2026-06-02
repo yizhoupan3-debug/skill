@@ -257,7 +257,8 @@
       "forbidden_owners": [
         "jupyter-notebook"
       ],
-      "first_turn": true
+      "first_turn": true,
+      "notes": "manifest 回退路由；'root-cause analysis' 触发 systematic-debugging (L0 gate)"
     },
     {
       "id": "systematic-debugging-bug-tdd-regression-case",
@@ -266,7 +267,8 @@
       "focus_skill": "systematic-debugging",
       "expected_owner": "systematic-debugging",
       "expected_overlay": null,
-      "first_turn": true
+      "first_turn": true,
+      "notes": "manifest 回退路由；systematic-debugging 在 manifest 中 (cold)，route_task_with_manifest_fallback 能命中"
     },
     {
       "id": "systematic-debugging-generic-bug-fix-beats-github-ci",
@@ -278,7 +280,8 @@
       "forbidden_owners": [
         "gh-fix-ci"
       ],
-      "first_turn": true
+      "first_turn": true,
+      "notes": "manifest 回退路由；'fix bug' 触发 systematic-debugging (L0 gate)"
     },
     {
       "id": "gh-fix-ci-shorthand-ci-failure-beats-generic-debugging",
@@ -574,7 +577,9 @@
       "task": "修复 CI 里 \\begin{document} 模板编译失败",
       "expected_owner": "gh-fix-ci",
       "expected_overlay": null,
-      "forbidden_owners": ["paper-workbench"],
+      "forbidden_owners": [
+        "paper-workbench"
+      ],
       "notes": "CI LaTeX fix routes gh-fix-ci; must not false-positive paper-workbench prose chain"
     },
     {
@@ -665,16 +670,18 @@
       "focus_skill": "python-env-management",
       "expected_owner": "python-env-management",
       "expected_overlay": null,
-      "expected_layer": "runtime",
+      "expected_layer": "L4",
       "first_turn": true,
-      "notes": "冷表 skill；manifest/runtime 路由；AGENTS 要求显式 $python-env-management"
+      "notes": "冷表 skill；manifest L4 层路由；AGENTS 要求显式 $python-env-management"
     },
     {
       "id": "openai-docs-cursor-negative",
       "category": "should-not-trigger",
       "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
       "host_id": "cursor",
-      "forbidden_owners": ["openai-docs"],
+      "forbidden_owners": [
+        "openai-docs"
+      ],
       "notes": "Codex-only openai-docs must not route on cursor after host_platforms fix"
     },
     {

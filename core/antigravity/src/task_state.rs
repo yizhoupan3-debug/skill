@@ -172,8 +172,8 @@ pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let body = format!(r#"{{"task_id":"{focus_id}"}}"#);
-    if std::fs::write(&path, &body).is_err() {
+    let body = serde_json::json!({"task_id": focus_id});
+    if crate::utils::atomic_write::write_atomic_json(&path, &body).is_err() {
         return false;
     }
     eprintln!(

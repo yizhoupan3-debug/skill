@@ -43,6 +43,7 @@ depends_on:
 | 运行期核心行为与沙箱统一规约 | [runtime_unified_spec.md](runtime_unified_spec.md) |
 | Python 环境治理（uv-only，冷表显式 `$python-env-management`） | [`skills/.archive-cold/python-env-management/SKILL.md`](../skills/.archive-cold/python-env-management/SKILL.md) |
 | 历史迁移、减法记录 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
+| 统一运维手册（全 7 宿主：安装 / CC Switch / 联网 / 权限 / 故障恢复 / 安全 / 备份） | [maintenance/claude-desktop-runbook.md](maintenance/claude-desktop-runbook.md) |
 | Plans 索引（ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
 
 ## 概念与源码映射

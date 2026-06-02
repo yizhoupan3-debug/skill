@@ -54,8 +54,9 @@ pub use types::FrameworkAliasBuildOptions;
 
 use constants::{
     CLOSEOUT_COMPLETION_STATUSES, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
-    EVIDENCE_INDEX_SCHEMA_VERSION, NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME,
-    SUPERVISOR_STATE_FILENAME, TASK_REGISTRY_SCHEMA_VERSION, TRACE_METADATA_FILENAME,
+    EVIDENCE_INDEX_SCHEMA_VERSION,
+    SESSION_SUMMARY_FILENAME,
+    SUPERVISOR_STATE_FILENAME, TASK_POINTERS_FILENAME, TASK_REGISTRY_SCHEMA_VERSION, TRACE_METADATA_FILENAME,
 };
 use types::FrameworkRuntimeView;
 
@@ -94,9 +95,7 @@ pub fn build_framework_runtime_snapshot_envelope(
             "current_root": snapshot.current_root.display().to_string(),
             "mirror_root": snapshot.mirror_root.display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
-            "control_plane_present": snapshot.active_task_pointer_present
-                && snapshot.focus_task_pointer_present
-                && snapshot.task_registry_present
+            "control_plane_present": snapshot.task_pointers_present
                 && !snapshot.supervisor_state.is_empty(),
             "control_plane_missing": missing_control_plane_anchors(&snapshot),
             "control_plane_inconsistency_reasons": snapshot.control_plane_inconsistency_reasons,
@@ -125,8 +124,7 @@ pub fn build_framework_runtime_snapshot_envelope(
             },
             "paths": {
                 "session_summary": snapshot.current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-                "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-                "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+                                "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
                 "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
                 "current_pointer_root": snapshot.mirror_root.display().to_string(),
                 "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
@@ -1146,7 +1144,7 @@ mod shell_command_verification_heuristic_tests {
 }
 
 fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView) -> bool {
-    if snapshot.active_task_pointer_present {
+    if snapshot.task_pointers_present {
         return true;
     }
     let summary_path = snapshot.current_root.join(SESSION_SUMMARY_FILENAME);

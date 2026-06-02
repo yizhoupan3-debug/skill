@@ -4,6 +4,7 @@ use super::constants::{
     NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY, ROUTE_AUTHORITY,
     ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
+use super::fuzzy::{fuzzy_fallback_score, FUZZY_MIN_SIMILARITY};
 use super::scoring::{
     compact_route_reasons, pick_overlay, pick_owner, reasons_class, round2,
     score_bucket, score_route_candidate,
@@ -185,6 +186,7 @@ pub(crate) fn route_task(
             route_context,
             layer: record.layer.clone(),
             score: 100.0,
+            fuzzy_match: false,
             route_snapshot: build_route_snapshot(
                 "rust",
                 &record.slug,
@@ -224,6 +226,45 @@ pub(crate) fn route_task(
     };
 
     if viable.is_empty() {
+        // --- Fuzzy fallback: try trigram similarity against all records ---
+        let fuzzy_result = records
+            .iter()
+            .map(|record| (record, fuzzy_fallback_score(query, record)))
+            .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal));
+        if let Some((record, sim)) = fuzzy_result {
+            eprintln!(
+                "[router-rs route] FUZZY RESCUE: query=\"{}\" skill=\"{}\" sim={:.3}",
+                query, record.slug, sim
+            );
+            let fuzzy_reasons = compact_route_reasons(&[
+                format!("Fuzzy trigram fallback rescued match (similarity={sim:.3})."),
+            ]);
+            return Ok(RouteDecision {
+                decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+                authority: ROUTE_AUTHORITY.to_string(),
+                compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+                task: query.to_string(),
+                session_id: session_id.to_string(),
+                selected_skill: record.slug.clone(),
+                selected_skill_path: record.skill_path.clone(),
+                overlay_skill: None,
+                route_context,
+                layer: record.layer.clone(),
+                score: round2(sim * 100.0),
+                reasons: fuzzy_reasons.clone(),
+                matched_token_count: 0,
+                fuzzy_match: true,
+                route_snapshot: build_route_snapshot(
+                    "rust",
+                    &record.slug,
+                    None,
+                    &record.layer,
+                    round2(sim * 100.0),
+                    &fuzzy_reasons,
+                ),
+            });
+        }
         eprintln!(
             "[router-rs route] NO SKILL HIT: query=\"{}\" session_id=\"{}\"",
             query, session_id
@@ -246,6 +287,7 @@ pub(crate) fn route_task(
             score: 0.0,
             reasons: fallback_reasons.clone(),
             matched_token_count: 0,
+            fuzzy_match: false,
             route_snapshot: build_route_snapshot(
                 "rust",
                 NO_SKILL_SELECTED,
@@ -281,6 +323,7 @@ pub(crate) fn route_task(
             score: 0.0,
             reasons: fallback_reasons.clone(),
             matched_token_count: 0,
+            fuzzy_match: false,
             route_snapshot: build_route_snapshot(
                 "rust",
                 NO_SKILL_SELECTED,
@@ -300,6 +343,45 @@ pub(crate) fn route_task(
     }
     let selected = pick_owner(viable, &normalized_query, &query_token_list, scoring_weights());
     if selected.score < scoring_weights().layer_threshold(&selected.record.layer) {
+        // --- Fuzzy fallback: try trigram similarity before giving up ---
+        let fuzzy_result = records
+            .iter()
+            .map(|record| (record, fuzzy_fallback_score(query, record)))
+            .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal));
+        if let Some((record, sim)) = fuzzy_result {
+            eprintln!(
+                "[router-rs route] FUZZY RESCUE (below-threshold): query=\"{}\" skill=\"{}\" sim={:.3} exact_score={:.2}",
+                query, record.slug, sim, selected.score
+            );
+            let fuzzy_reasons = compact_route_reasons(&[
+                format!("Fuzzy trigram fallback rescued below-threshold match (similarity={sim:.3}, exact_score={:.2}).", selected.score),
+            ]);
+            return Ok(RouteDecision {
+                decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+                authority: ROUTE_AUTHORITY.to_string(),
+                compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+                task: query.to_string(),
+                session_id: session_id.to_string(),
+                selected_skill: record.slug.clone(),
+                selected_skill_path: record.skill_path.clone(),
+                overlay_skill: None,
+                route_context,
+                layer: record.layer.clone(),
+                score: round2(sim * 100.0),
+                reasons: fuzzy_reasons.clone(),
+                matched_token_count: 0,
+                fuzzy_match: true,
+                route_snapshot: build_route_snapshot(
+                    "rust",
+                    &record.slug,
+                    None,
+                    &record.layer,
+                    round2(sim * 100.0),
+                    &fuzzy_reasons,
+                ),
+            });
+        }
         eprintln!(
             "[router-rs route] BELOW THRESHOLD: query=\"{}\" selected={} score={:.2} threshold={:.2}",
             query,
@@ -325,6 +407,7 @@ pub(crate) fn route_task(
             score: 0.0,
             reasons: fallback_reasons.clone(),
             matched_token_count: 0,
+            fuzzy_match: false,
             route_snapshot: build_route_snapshot(
                 "rust",
                 NO_SKILL_SELECTED,
@@ -376,6 +459,7 @@ pub(crate) fn route_task(
         ),
         reasons: compact_reasons,
         matched_token_count: selected.matched_token_count,
+        fuzzy_match: false,
     })
 }
 
@@ -414,6 +498,7 @@ pub(crate) fn literal_framework_alias_decision(
         ),
         reasons,
         matched_token_count: 0,
+        fuzzy_match: false,
     })
 }
 
@@ -645,6 +730,7 @@ mod should_retry_with_manifest_tests {
             score,
             reasons: Vec::new(),
             matched_token_count: 0,
+            fuzzy_match: false,
             route_snapshot: RouteDecisionSnapshotPayload {
                 engine: "rust".to_string(),
                 selected_skill: skill.to_string(),

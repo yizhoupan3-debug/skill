@@ -37,7 +37,7 @@ depends_on: []
 
 | 分类 | 工具数 | 主要 Server |
 |------|--------|-------------|
-| browser-core | 14 | browser-mcp |
+| browser-core | 15 | browser-mcp |
 | chrome-automation | 21 | Claude_in_Chrome |
 | session-mgmt | 6 | browser-mcp |
 | background | 3 | browser-mcp |
@@ -46,7 +46,7 @@ depends_on: []
 | preview | 13 | Claude_Preview |
 | file-system | 1 | ccd_directory |
 | session-other | 5 | ccd_session, ccd_session_mgmt |
-| **合计** | **77** | **9 server** |
+| **合计** | **78** | **9 server** |
 
 ---
 
@@ -70,6 +70,7 @@ browser-mcp 提供的 Playwright 级浏览器控制。
 | `browser_wait_for` | browser-core | 等待页面条件（文本出现/消失、URL 匹配等） | 低 |
 | `browser_save_session` | browser-core | 持久化浏览器上下文到磁盘 | 中 |
 | `browser_restore_session` | browser-core | 从磁盘恢复浏览器上下文 | 中 |
+| `runtime_heartbeat` | browser-core | 空闲时发出心跳（无新事件时） | 低 |
 
 ---
 
@@ -150,7 +151,7 @@ router-rs-framework 提供的框架生命周期管理工具。
 |--------|------|----------|----------|
 | `framework_snapshot` | framework | 框架运行时快照（含连续性视图） | 低 |
 | `skill_route` | framework | 自然语言查询，返回匹配的 skill 路由结果 | 低 |
-| `goal_state_manage` | framework | Goal 生命周期管理（start/checkpoint/pause/resume/complete/clear） | 中 |
+| `goal_state_manage` | framework | Goal 生命周期管理（start/checkpoint/pause/resume/complete/clear/block） | 中 |
 | `goal_state_read` | framework | 读取当前 task 的 GOAL_STATE.json | 低 |
 | `closeout_gate` | framework | 返回 closeout 状态与缺失项清单（advisory） | 低 |
 | `closeout_record_write` | framework | 写入并验证 closeout record（artifacts/closeout/） | 高 |
@@ -219,15 +220,17 @@ CCD 会话辅助、学术检索和定时任务管理。
 | `update_scheduled_task` | scheduling | scheduled-tasks | 更新已有定时任务的 prompt/schedule/状态 | 中 |
 | `list_scheduled_tasks` | scheduling | scheduled-tasks | 列出所有定时任务及其状态 | 低 |
 
+> 含附录共 **84** 个工具（主分类 78 + research/scheduling 6）。
+
 ---
 
 ## 风险等级汇总
 
 | 风险等级 | 工具数 | 代表性工具 |
 |----------|--------|-----------|
-| **低** | 48 | `browser_get_state`, `read_page`, `preview_snapshot`, `goal_state_read` |
-| **中** | 22 | `browser_click`, `navigate`, `session_resume_due`, `goal_state_manage` |
-| **高** | 7 | `computer`, `javascript_tool`, `session_terminate`, `background_terminate`, `closeout_record_write`, `preview_eval`, `browser_close` |
+| **低** | 34 | `browser_get_state`, `read_page`, `preview_snapshot`, `goal_state_read` |
+| **中** | 25 | `browser_click`, `navigate`, `session_resume_due`, `goal_state_manage` |
+| **高** | 9 | `computer`, `javascript_tool`, `session_terminate`, `background_terminate`, `closeout_record_write`, `preview_eval`, `browser_close`, `session_launch`, `archive_session` |
 
 ---
 

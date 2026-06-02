@@ -149,6 +149,7 @@ ls -t ~/Library/Application\ Support/Claude-3p/local-agent-mode-sessions/*/*/*/a
 | 补丁后仍弹窗 | 确认 LevelDB 步骤未报 locked；旧会话请新开 |
 | CC Switch 重配 | 重跑 egress + permission 两个脚本 |
 | WebSearch 429 | MiniMax / gateway 限流，与框架无关 |
+| `SSRF_BLOCKED` | browser_open 目标为内网地址或非 http(s) 协议，改用公网 URL |
 
 日志：`tail -f ~/Library/Logs/Claude-3p/main.log`
 
@@ -167,3 +168,4 @@ ls -t ~/Library/Application\ Support/Claude-3p/local-agent-mode-sessions/*/*/*/a
 | egress 脚本 | `./scripts/patch-claude-desktop-3p-cowork-egress.sh` |
 | 权限脚本 | `./scripts/patch-claude-desktop-permission-mode.sh` |
 | 总览 | [`claude-desktop.md`](claude-desktop.md) |
+| 统一运维手册 | [`maintenance/claude-desktop-runbook.md`](../maintenance/claude-desktop-runbook.md) |

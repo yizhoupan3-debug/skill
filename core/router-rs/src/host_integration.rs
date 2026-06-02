@@ -69,12 +69,11 @@ const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
 ];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
     ["active_task.json", "focus_task.json", "task_registry.json"];
-const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [
+const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 5] = [
     "SESSION_SUMMARY.md",
     "NEXT_ACTIONS.json",
     "EVIDENCE_INDEX.json",
     "TRACE_METADATA.json",
-    "CONTINUITY_JOURNAL.json",
     ".supervisor_state.json",
 ];
 
@@ -6327,7 +6326,7 @@ mod tests {
         )
         .expect_err("repo target artifact must be rejected");
         assert!(
-            err.contains("repo build artifact"),
+            err.contains("ephemeral build path") || err.contains("repo build artifact"),
             "unexpected error: {err}"
         );
 

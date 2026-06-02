@@ -14,7 +14,7 @@ trigger_hints:
   - github skill
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [claude-code]
   short-description: Install curated skills from openai/skills or other repos
 risk: low
 source: project

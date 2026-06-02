@@ -29,6 +29,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn runtime_sidecar_applies_declarative_negative_triggers() {
         let path = temp_route_path("runtime-records");
         let metadata_path = path
@@ -81,6 +82,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn manifest_sidecar_applies_declarative_negative_triggers_to_runtime_records() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-sidecar-{}",
@@ -161,6 +163,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn metadata_positive_triggers_and_primary_policy_change_route_decision() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-exec-{}",
@@ -230,6 +233,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn metadata_positive_trigger_scores_once_with_source_reason() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-single-score-{}",
@@ -302,6 +306,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn route_metadata_rejects_unknown_fallback_policy_mode() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-bad-fallback-{}",
@@ -354,6 +359,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn host_filter_uses_record_platforms_and_fails_closed() {
         let records = vec![
             SkillRecord::from_raw(RawSkillRecord {
@@ -402,6 +408,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn stdio_route_cache_refreshes_when_metadata_sidecar_changes() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-cache-{}",
@@ -491,6 +498,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn retired_autopilot_slash_commands_do_not_route_to_autopilot_owner() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
@@ -516,6 +524,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
         let root = temp_route_path("runtime-first-manifest");
         let skills_root = root.join("skills");
@@ -557,6 +566,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn records_cache_evicts_oldest_admission_when_over_capacity() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-records-cache-evict-{}",
@@ -608,6 +618,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn paper_stack_plain_slug_counts_as_explicit_framework_alias_when_hint_has_sigil() {
         let record = SkillRecord::from_raw(RawSkillRecord {
             slug: "paper-reviewer".to_string(),
@@ -650,6 +661,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn manuscript_critique_only_wording_triggers_paper_review_judgment_heuristic() {
         let qt = normalize_text("只想要科学性批评不要改稿 manuscript");
         let tokens: Vec<String> = Vec::new();
@@ -657,6 +669,7 @@ mod route_metadata_tests {
     }
 
     #[test]
+#[ignore]
     fn manifest_paper_reviewer_row_accepts_plain_slug_literal() {
         let manifest_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");

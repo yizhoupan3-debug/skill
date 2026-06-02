@@ -319,10 +319,10 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     }
 
     // TODO(R9-tech-debt): task-scoped depth / `GOAL_STATE.completion_gates` alignment
-    // Status: deferred (filed 2026-05-19 during continuity system review)
-    // Blocked by: (1) GOAL completion_gates ledger policy resolution,
-    //             (2) CLOSEOUT_RECORD serde/schema lockstep coordination
-    // Workaround: Use GOAL `complete` + RFV `append_round` close_gates instead
+    // Status: Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
+    //   下一迭代目标：重新评估 closeout 与 completion_gates 对齐
+    //   ——Phase 3 合并完成后 state model 已简化 (5 files → 2 control-plane anchors),
+    //     closeout gate 应对齐 GOAL_STATE.completion_gates.min_depth_score。
     // References:
     //   - Contract: docs/references/rfv-loop/reasoning-depth-contract.md
     // Expected behavior when implemented: closeout gate should check min_depth_score

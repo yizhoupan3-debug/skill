@@ -12,7 +12,11 @@
     "source_position",
     "skill_path",
     "host_platforms",
-    "kind"
+    "kind",
+    "allowedTools",
+    "model",
+    "disableModelInvocations",
+    "context"
   ],
   "plugin_abi_version": "skill-plugin-abi-v1",
   "schema_version": "skill-manifest-v2",
@@ -36,10 +40,14 @@
       0,
       "skills/.system/plugin-creator/SKILL.md",
       [
-        "codex-app",
-        "codex-cli"
+        "claude-code",
+        "claude-code"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "skill-creator",
@@ -64,15 +72,19 @@
       "skills/.system/skill-creator/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "skill-installer",
@@ -92,10 +104,14 @@
       0,
       "skills/.system/skill-installer/SKILL.md",
       [
-        "codex-app",
-        "codex-cli"
+        "claude-code",
+        "claude-code"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "agent-swarm-orchestration",
@@ -122,15 +138,19 @@
       "skills/agent-swarm-orchestration/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "algo-trading",
@@ -157,15 +177,19 @@
       "skills/.archive-cold/algo-trading/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "assignment-compliance",
@@ -192,15 +216,19 @@
       "skills/.archive-cold/assignment-compliance/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "citation-management",
@@ -228,15 +256,19 @@
       "skills/citation-management/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "code-review-deep",
@@ -269,15 +301,23 @@
       "skills/code-review-deep/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      [
+        "Read",
+        "Bash",
+        "Agent"
+      ],
+      null,
+      null,
+      null
     ],
     [
       "copywriting",
@@ -309,15 +349,19 @@
       "skills/.archive-cold/copywriting/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "discussx",
@@ -336,15 +380,19 @@
       "skills/discussx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "framework_command"
+      "framework_command",
+      null,
+      "haiku",
+      null,
+      null
     ],
     [
       "planx",
@@ -363,15 +411,19 @@
       "skills/planx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "framework_command"
+      "framework_command",
+      null,
+      "sonnet",
+      null,
+      null
     ],
     [
       "implementx",
@@ -390,15 +442,19 @@
       "skills/implementx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "framework_command"
+      "framework_command",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "verifyx",
@@ -417,15 +473,19 @@
       "skills/verifyx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "framework_command"
+      "framework_command",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "deepinterview",
@@ -443,15 +503,19 @@
       "skills/deepinterview/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "framework_command"
+      "framework_command",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "design-md",
@@ -481,15 +545,19 @@
       "skills/design-md/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "diagramming",
@@ -520,15 +588,19 @@
       "skills/.archive-cold/diagramming/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "doc",
@@ -553,15 +625,19 @@
       "skills/doc/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "documentation-engineering",
@@ -588,15 +664,19 @@
       "skills/.archive-cold/documentation-engineering/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "email-template",
@@ -623,15 +703,19 @@
       "skills/.archive-cold/email-template/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "experiment-reproducibility",
@@ -662,15 +746,19 @@
       "skills/experiment-reproducibility/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "financial-data-fetching",
@@ -693,15 +781,19 @@
       "skills/.archive-cold/financial-data-fetching/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "gh-address-comments",
@@ -728,15 +820,19 @@
       "skills/gh-address-comments/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "gh-fix-ci",
@@ -758,15 +854,19 @@
       "skills/gh-fix-ci/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "gitx",
@@ -785,15 +885,19 @@
       "skills/gitx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "framework_command"
+      "framework_command",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "hatch-pet",
@@ -826,15 +930,19 @@
       "skills/.archive-cold/hatch-pet/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "image-generated",
@@ -861,15 +969,19 @@
       "skills/.archive-cold/image-generated/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "infographic",
@@ -896,15 +1008,19 @@
       "skills/.archive-cold/infographic/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "jupyter-notebook",
@@ -930,15 +1046,19 @@
       "skills/.archive-cold/jupyter-notebook/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "latex-compile-acceleration",
@@ -971,15 +1091,19 @@
       "skills/.archive-cold/latex-compile-acceleration/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "adversarial-loop",
@@ -1002,15 +1126,19 @@
       "skills/adversarial-loop/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "mac-memory-management",
@@ -1039,15 +1167,19 @@
       "skills/.archive-cold/mac-memory-management/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "python-env-management",
@@ -1076,15 +1208,19 @@
       "skills/.archive-cold/python-env-management/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "math-derivation",
@@ -1111,15 +1247,19 @@
       "skills/math-derivation/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "openai-docs",
@@ -1141,10 +1281,14 @@
       3,
       "skills/openai-docs/SKILL.md",
       [
-        "codex-app",
-        "codex-cli"
+        "claude-code",
+        "claude-code"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "paper-reviewer",
@@ -1177,15 +1321,19 @@
       "skills/paper-reviewer/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "paper-reviser",
@@ -1218,15 +1366,19 @@
       "skills/.archive-cold/paper-reviser/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "paper-workbench",
@@ -1259,15 +1411,26 @@
       "skills/paper-workbench/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "WebSearch",
+        "WebFetch"
+      ],
+      null,
+      null,
+      null
     ],
     [
       "paper-writing",
@@ -1300,15 +1463,19 @@
       "skills/paper-writing/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "pdf",
@@ -1330,15 +1497,19 @@
       "skills/pdf/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "plan-mode",
@@ -1365,15 +1536,19 @@
       "skills/plan-mode/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "ppt-beamer",
@@ -1400,15 +1575,19 @@
       "skills/.archive-cold/ppt-beamer/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "spreadsheets",
@@ -1432,15 +1611,19 @@
       "skills/primary-runtime/spreadsheets/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "research-workbench",
@@ -1471,15 +1654,19 @@
       "skills/research-workbench/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "scientific-figure-plotting",
@@ -1506,15 +1693,19 @@
       "skills/scientific-figure-plotting/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "screenshot",
@@ -1538,15 +1729,19 @@
       "skills/.archive-cold/screenshot/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "sentry",
@@ -1569,15 +1764,19 @@
       "skills/sentry/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "skill-framework-developer",
@@ -1610,15 +1809,19 @@
       "skills/skill-framework-developer/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "slides",
@@ -1644,15 +1847,24 @@
       "skills/slides/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash"
+      ],
+      null,
+      null,
+      null
     ],
     [
       "source-slide-formats",
@@ -1679,15 +1891,19 @@
       "skills/.archive-cold/source-slide-formats/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "statistical-analysis",
@@ -1719,15 +1935,19 @@
       "skills/statistical-analysis/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "systematic-debugging",
@@ -1749,15 +1969,19 @@
       "skills/.archive-cold/systematic-debugging/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "tao-ci",
@@ -1781,10 +2005,14 @@
       3,
       "skills/.archive-cold/tao-ci/SKILL.md",
       [
-        "codex-app",
-        "codex-cli"
+        "claude-code",
+        "claude-code"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "tikz-paper-figure",
@@ -1815,15 +2043,19 @@
       "skills/.archive-cold/tikz-paper-figure/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "update",
@@ -1841,15 +2073,19 @@
       "skills/update/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "framework_command"
+      "framework_command",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "visual-review",
@@ -1877,15 +2113,19 @@
       "skills/visual-review/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "youtube-summarizer",
@@ -1909,15 +2149,19 @@
       "skills/.archive-cold/youtube-summarizer/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "cold"
+      "cold",
+      null,
+      null,
+      null,
+      null
     ]
   ]
 }

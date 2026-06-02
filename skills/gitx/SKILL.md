@@ -49,7 +49,7 @@ bridge_behavior: mobile_complete_once
 
 # gitx
 
-`gitx` 是给 Codex 用的 Git 收口快捷入口。推荐显式入口：`/gitx`（不再使用 `$gitx`）。
+`gitx` 是 Git 收口快捷入口。推荐显式入口：`/gitx`（不再使用 `$gitx`）。
 
 ## When to use
 
@@ -133,7 +133,7 @@ bridge_behavior: mobile_complete_once
    - 真正改 Git 状态的临界区仍保持串行，不要并发提交、并发 merge
 6. 高输出验证默认优先走 repo 里的 RTK 规则：
    - `cargo test` / `npm test` / `git diff` 这类噪声命令，允许自动加 `rtk`
-   - 若需要原始输出，用 `--no-rtk`
+   - 若需要原始输出，不加 `rtk` 前缀直接运行原始命令
 7. 自动化覆盖低风险分支合并：
    - 目标分支和源分支可由用户请求、当前分支、upstream 或 worktree 上下文明确推断时，可以继续执行
    - merge 前确认 `git status --short --branch` 干净或只有本次已纳入提交面的改动
@@ -152,7 +152,7 @@ bridge_behavior: mobile_complete_once
 12. 推送：
    - 推送前确认 upstream、ahead/behind、remote 目标
    - 用显式 remote 和 branch；不要盲推
-   - 默认在收口完成后立即推送，不需要再次征求用户确认
+   - 推送前征求用户确认（遵循宿主安全协议：Claude Code 要求显式 push 授权）
    - 仅在高风险阻塞场景暂停推送并说明原因：冲突、非快进拒绝、分叉历史不清、目标远端不明确、或权限/认证失败
 
 ## Hard constraints

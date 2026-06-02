@@ -37,7 +37,7 @@ const WEB_FETCH_TIMEOUT_SECS: u64 = 30;
 fn mcp_host_supports_hard_closeout(host_id: &str) -> bool {
     matches!(
         host_id,
-        "antigravity-app" | "antigravity" | "claude-desktop"
+        "antigravity-app" | "antigravity" | "claude-desktop" | "opencode"
     )
 }
 
@@ -346,11 +346,11 @@ fn parse_content_length(line: &str) -> Result<usize, String> {
     // Note: line may contain trailing \r\n from read_line
     let lower = line.to_ascii_lowercase();
     let value_str = if lower.starts_with("content-length :") {
-        // Skip "content-length :" (15 chars)
-        line[15..].trim()
+        // Skip "content-length :" (16 chars)
+        line[16..].trim()
     } else if lower.starts_with("content-length:") {
-        // Skip "content-length:" (14 chars)
-        line[14..].trim()
+        // Skip "content-length:" (15 chars)
+        line[15..].trim()
     } else {
         return Err(format!("invalid Content-Length header: {}", line));
     };
@@ -577,6 +577,31 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                                 "type": "string",
                                 "description": "append_round 时需要",
                             },
+                            "verify_result": {
+                                "type": "string",
+                                "enum": ["PASS", "FAIL", "SKIPPED", "UNKNOWN"],
+                                "description": "验证结果（append_round 时需要）",
+                            },
+                            "supervisor_decision": {
+                                "type": "string",
+                                "description": "supervisor 决策（append_round 时需要）",
+                            },
+                            "reason": {
+                                "type": "string",
+                                "description": "原因说明（append_round 时需要）",
+                            },
+                            "external_research_summary": {
+                                "type": "string",
+                                "description": "外部调研摘要（append_round 时可选）",
+                            },
+                            "max_rounds": {
+                                "type": "integer",
+                                "description": "最大轮次（start 时可选，默认 100）",
+                            },
+                            "allow_external_research": {
+                                "type": "boolean",
+                                "description": "是否允许外部调研（start 时可选，默认 false）",
+                            },
                         },
                         "required": ["operation"],
                     },
@@ -628,6 +653,23 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                             "notes": {
                                 "type": "string",
                             },
+                            "artifacts_checked": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": {"type": "string"},
+                                        "exists": {"type": "boolean"},
+                                        "size_bytes": {"type": "integer"},
+                                        "checks": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                },
+                                "description": "产物验证记录",
+                            },
+                            "started_at": {
+                                "type": "string",
+                                "description": "任务开始时间（ISO 8601）",
+                            },
                         },
                         "required": ["task_id", "summary", "verification_status"],
                     },
@@ -672,10 +714,57 @@ pub(crate) fn handle_tools_list(id: Option<Value>) -> Value {
                             "note": {
                                 "type": "string",
                                 "description": "备注信息",
+                            },
                             "blocker": {
                                 "type": "string",
                                 "description": "blocker 描述（block 时需要）",
                             },
+                            "non_goals": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "非目标列表（start 时可选）",
+                            },
+                            "done_when": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "完成条件列表（start 时可选）",
+                            },
+                            "validation_commands": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "验证命令列表（start 时可选）",
+                            },
+                            "drive_until_done": {
+                                "type": "boolean",
+                                "description": "是否自动驱动到完成（start 时可选，默认 false）",
+                            },
+                            "lifecycle_profile": {
+                                "type": "string",
+                                "enum": ["my", "my-light"],
+                                "description": "生命周期 profile（start 时可选，默认 my-light）",
+                            },
+                            "current_horizon": {
+                                "type": "string",
+                                "description": "当前阶段/视野（start 时可选）",
+                            },
+                            "completion_gates": {
+                                "type": "object",
+                                "description": "完成门控配置（start 时可选）",
+                                "properties": {
+                                    "enabled": {"type": "boolean"},
+                                    "min_depth_score": {"type": "number"},
+                                    "require_successful_evidence_row": {"type": "boolean"},
+                                    "min_goal_checkpoints": {"type": "integer"},
+                                    "block_on_rfv_pass_without_evidence": {"type": "boolean"},
+                                },
+                            },
+                            "metadata": {
+                                "type": "object",
+                                "description": "附加元数据（start 时可选）",
+                            },
+                            "set_focus": {
+                                "type": "boolean",
+                                "description": "是否同时设置 focus_task 指针（start 时可选，默认 true）",
                             },
                         },
                         "required": ["operation"],
@@ -2088,5 +2177,55 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("nonexistent"));
+    }
+
+    #[test]
+    fn parse_content_length_normal() {
+        assert_eq!(parse_content_length("Content-Length: 42").unwrap(), 42);
+    }
+
+    #[test]
+    fn parse_content_length_with_crlf() {
+        assert_eq!(parse_content_length("Content-Length: 100
+").unwrap(), 100);
+    }
+
+    #[test]
+    fn parse_content_length_with_ows() {
+        // "Content-Length :" with space before colon (RFC 7230 OWS)
+        assert_eq!(parse_content_length("Content-Length : 50").unwrap(), 50);
+    }
+
+    #[test]
+    fn parse_content_length_case_insensitive() {
+        assert_eq!(parse_content_length("content-length: 7").unwrap(), 7);
+    }
+
+    #[test]
+    fn parse_content_length_rejects_empty() {
+        assert!(parse_content_length("Content-Length: ").is_err());
+    }
+
+    #[test]
+    fn parse_content_length_rejects_non_numeric() {
+        assert!(parse_content_length("Content-Length: abc").is_err());
+    }
+
+    #[test]
+    fn parse_content_length_rejects_negative() {
+        assert!(parse_content_length("Content-Length: -1").is_err());
+    }
+
+    #[test]
+    fn parse_content_length_rejects_missing_header() {
+        assert!(parse_content_length("X-Other: 42").is_err());
+    }
+
+    #[test]
+    fn parse_content_length_large_value() {
+        assert_eq!(
+            parse_content_length("Content-Length: 1048576").unwrap(),
+            1_048_576
+        );
     }
 }

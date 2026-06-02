@@ -10,7 +10,8 @@
     "priority",
     "skill_path",
     "host_platforms",
-    "kind"
+    "kind",
+    "selection_reason"
   ],
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
@@ -45,16 +46,17 @@
       "skills/agent-swarm-orchestration/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "gh-address-comments",
@@ -79,16 +81,17 @@
       "skills/gh-address-comments/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "gh-fix-ci",
@@ -108,16 +111,17 @@
       "skills/gh-fix-ci/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "sentry",
@@ -138,16 +142,17 @@
       "skills/sentry/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "openai-docs",
@@ -167,10 +172,11 @@
       "P1",
       "skills/openai-docs/SKILL.md",
       [
-        "codex-app",
-        "codex-cli"
+        "claude-code",
+        "claude-code"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "design-md",
@@ -198,16 +204,17 @@
       "skills/design-md/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "doc",
@@ -230,16 +237,17 @@
       "skills/doc/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "pdf",
@@ -259,16 +267,17 @@
       "skills/pdf/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "slides",
@@ -292,16 +301,17 @@
       "skills/slides/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "spreadsheets",
@@ -323,16 +333,17 @@
       "skills/primary-runtime/spreadsheets/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "visual-review",
@@ -358,16 +369,17 @@
       "skills/visual-review/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "skill-framework-developer",
@@ -398,16 +410,17 @@
       "skills/skill-framework-developer/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "citation-management",
@@ -433,16 +446,17 @@
       "skills/citation-management/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "adversarial-loop",
@@ -463,16 +477,17 @@
       "skills/adversarial-loop/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "plan-mode",
@@ -497,16 +512,17 @@
       "skills/plan-mode/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "code-review-deep",
@@ -537,16 +553,17 @@
       "skills/code-review-deep/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "paper-workbench",
@@ -588,16 +605,17 @@
       "skills/paper-workbench/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "paper-writing",
@@ -628,16 +646,17 @@
       "skills/paper-writing/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "research-workbench",
@@ -666,16 +685,17 @@
       "skills/research-workbench/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "experiment-reproducibility",
@@ -704,16 +724,17 @@
       "skills/experiment-reproducibility/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "math-derivation",
@@ -738,16 +759,17 @@
       "skills/math-derivation/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "scientific-figure-plotting",
@@ -772,16 +794,17 @@
       "skills/scientific-figure-plotting/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "statistical-analysis",
@@ -811,16 +834,17 @@
       "skills/statistical-analysis/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      "allowlisted first-turn owner"
     ],
     [
       "deepinterview",
@@ -836,16 +860,17 @@
       "skills/deepinterview/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "framework_command"
+      "framework_command",
+      null
     ],
     [
       "gitx",
@@ -862,16 +887,17 @@
       "skills/gitx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "framework_command"
+      "framework_command",
+      null
     ],
     [
       "update",
@@ -887,16 +913,17 @@
       "skills/update/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "framework_command"
+      "framework_command",
+      null
     ],
     [
       "discussx",
@@ -913,16 +940,17 @@
       "skills/discussx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "framework_command"
+      "framework_command",
+      null
     ],
     [
       "planx",
@@ -939,16 +967,17 @@
       "skills/planx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "framework_command"
+      "framework_command",
+      null
     ],
     [
       "implementx",
@@ -965,16 +994,17 @@
       "skills/implementx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "framework_command"
+      "framework_command",
+      null
     ],
     [
       "verifyx",
@@ -991,16 +1021,17 @@
       "skills/verifyx/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "framework_command"
+      "framework_command",
+      null
     ],
     [
       "paper-reviewer",
@@ -1035,16 +1066,17 @@
       "skills/paper-reviewer/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "python-env-management",
@@ -1071,16 +1103,17 @@
       "skills/python-env-management/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor",
         "opencode"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "diagramming",
@@ -1109,15 +1142,16 @@
       "skills/.archive-cold/diagramming/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "hatch-pet",
@@ -1148,15 +1182,16 @@
       "skills/.archive-cold/hatch-pet/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "image-generated",
@@ -1181,15 +1216,16 @@
       "skills/.archive-cold/image-generated/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "jupyter-notebook",
@@ -1213,15 +1249,16 @@
       "skills/.archive-cold/jupyter-notebook/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "latex-compile-acceleration",
@@ -1252,15 +1289,16 @@
       "skills/.archive-cold/latex-compile-acceleration/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "mac-memory-management",
@@ -1287,15 +1325,16 @@
       "skills/.archive-cold/mac-memory-management/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "paper-reviser",
@@ -1326,15 +1365,16 @@
       "skills/.archive-cold/paper-reviser/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "ppt-beamer",
@@ -1359,15 +1399,16 @@
       "skills/.archive-cold/ppt-beamer/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ],
     [
       "source-slide-formats",
@@ -1392,15 +1433,16 @@
       "skills/.archive-cold/source-slide-formats/SKILL.md",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
+        "claude-desktop",
+        "claude-desktop",
         "claude-code",
         "claude-desktop",
-        "codex-app",
-        "codex-cli",
+        "claude-code",
+        "claude-code",
         "cursor"
       ],
-      "skill"
+      "skill",
+      null
     ]
   ],
   "version": 3

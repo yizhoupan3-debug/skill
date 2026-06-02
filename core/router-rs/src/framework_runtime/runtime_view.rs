@@ -36,28 +36,41 @@ pub(super) fn load_framework_runtime_view(
     } else {
         Map::new()
     };
-    let active_task_pointer_path = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
-    let focus_task_pointer_path = mirror_root.join(FOCUS_TASK_POINTER_NAME);
-    let task_registry_path = mirror_root.join(TASK_REGISTRY_NAME);
-    let active_task_pointer_present = active_task_pointer_path.is_file();
-    let focus_task_pointer_present = focus_task_pointer_path.is_file();
-    let task_registry_present = task_registry_path.is_file();
-    let pointer = read_json_control_plane_field(
-        &active_task_pointer_path,
-        "active_task.json",
-        &mut control_plane_parse_errors,
-    );
-    let focus_pointer = read_json_control_plane_field(
-        &focus_task_pointer_path,
-        "focus_task.json",
-        &mut control_plane_parse_errors,
-    );
-    let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
-        normalized_task_registry(&read_json_control_plane_field(
-            &task_registry_path,
-            "task_registry.json",
+    let task_pointers_path = mirror_root.join(TASK_POINTERS_FILENAME);
+    let task_pointers_present = task_pointers_path.is_file();
+    let (pointer, focus_pointer, registry_payload) = if task_pointers_present {
+        let combined = read_json_control_plane_field(
+            &task_pointers_path,
+            "TASK_POINTERS.json",
             &mut control_plane_parse_errors,
-        ));
+        );
+        let active_ptr = combined.get("active_task_id").map(|tid| {
+            json!({ "task_id": tid })
+        }).unwrap_or_else(|| Value::Object(Map::new()));
+        let focus_ptr = combined.get("focus_task_id").map(|tid| {
+            json!({ "task_id": tid })
+        }).unwrap_or_else(|| Value::Object(Map::new()));
+        (active_ptr, focus_ptr, combined)
+    } else {
+        let active_path = mirror_root.join("active_task.json");
+        let focus_path = mirror_root.join("focus_task.json");
+        let registry_path = mirror_root.join("task_registry.json");
+        let active = read_json_control_plane_field(
+            &active_path, "active_task.json", &mut control_plane_parse_errors,
+        );
+        let focus = read_json_control_plane_field(
+            &focus_path, "focus_task.json", &mut control_plane_parse_errors,
+        );
+        let registry = read_json_control_plane_field(
+            &registry_path, "task_registry.json", &mut control_plane_parse_errors,
+        );
+        (active, focus, registry)
+    };
+    let active_task_pointer_present = task_pointers_present || mirror_root.join("active_task.json").is_file();
+    let focus_task_pointer_present = task_pointers_present || mirror_root.join("focus_task.json").is_file();
+    let task_registry_present = task_pointers_present || mirror_root.join("task_registry.json").is_file();
+    let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
+        normalized_task_registry(&registry_payload);
     let registry_task_ids_before_selection = known_task_ids.clone();
     let focus_task_id = {
         let direct = safe_slug(&value_text(focus_pointer.get("task_id")));
@@ -183,7 +196,7 @@ pub(super) fn load_framework_runtime_view(
 
     FrameworkRuntimeView {
         session_summary_text: read_text_if_exists(&read_task_or_mirror(SESSION_SUMMARY_FILENAME)),
-        next_actions: read_json_if_exists(&read_task_or_mirror(NEXT_ACTIONS_FILENAME)),
+        next_actions: Value::Object(Map::new()),  // populated from supervisor_state
         evidence_index: read_json_if_exists(&read_task_or_mirror(EVIDENCE_INDEX_FILENAME)),
         trace_metadata: read_json_if_exists(&read_task_or_mirror(TRACE_METADATA_FILENAME)),
         supervisor_state,
@@ -193,9 +206,7 @@ pub(super) fn load_framework_runtime_view(
         current_root: preferred_root,
         mirror_root,
         task_root,
-        active_task_pointer_present,
-        focus_task_pointer_present,
-        task_registry_present,
+        task_pointers_present,
         active_task_id,
         focus_task_id,
         control_plane_inconsistency_reasons,
@@ -305,11 +316,6 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
             } else {
                 String::new()
             },
-            if object_has_any_signal(&snapshot.next_actions).not() {
-                "NEXT_ACTIONS".to_string()
-            } else {
-                String::new()
-            },
             if object_has_any_signal(&snapshot.trace_metadata).not() {
                 "TRACE_METADATA".to_string()
             } else {
@@ -410,7 +416,6 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
         "terminal_reasons": terminal_reasons,
     });
     let has_any_runtime_signal = !snapshot.session_summary_text.trim().is_empty()
-        || object_has_any_signal(&snapshot.next_actions)
         || object_has_any_signal(&snapshot.evidence_index)
         || object_has_any_signal(&snapshot.trace_metadata)
         || !supervisor.is_empty();
@@ -438,7 +443,7 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
         && !task.is_empty();
     let recovery_hints = match state {
         "missing" => json!([
-            "Refresh SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity."
+            "Refresh SESSION_SUMMARY.md, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity."
         ]),
         "completed" => json!([
             "Keep this task only as recent-completed context; do not inject it as current execution.",
@@ -449,7 +454,7 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
             "Do not continue from the stale snapshot without a new supervisor-owned continuity refresh."
         ]),
         "inconsistent" => json!([
-            "Reconcile SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, artifacts/current pointers, task_registry.json, and .supervisor_state.json before injecting continuity.",
+            "Reconcile SESSION_SUMMARY.md, TRACE_METADATA.json, TASK_POINTERS.json, and .supervisor_state.json before injecting continuity.",
             "Treat the current snapshot as blocked until the supervisor rewrites a consistent continuity bundle."
         ]),
         _ => json!([]),
@@ -484,7 +489,6 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
         "summary_fields": summary,
         "paths": {
             "session_summary": snapshot.current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
             "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
             "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
@@ -496,20 +500,10 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
 
 pub(super) fn missing_control_plane_anchors(snapshot: &FrameworkRuntimeView) -> Vec<String> {
     stable_line_items(vec![
-        if snapshot.active_task_pointer_present {
+        if snapshot.task_pointers_present {
             String::new()
         } else {
-            ACTIVE_TASK_POINTER_NAME.to_string()
-        },
-        if snapshot.focus_task_pointer_present {
-            String::new()
-        } else {
-            FOCUS_TASK_POINTER_NAME.to_string()
-        },
-        if snapshot.task_registry_present {
-            String::new()
-        } else {
-            TASK_REGISTRY_NAME.to_string()
+            TASK_POINTERS_FILENAME.to_string()
         },
         if snapshot.supervisor_state.is_empty() {
             SUPERVISOR_STATE_FILENAME.to_string()
@@ -847,7 +841,7 @@ fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
 
 fn normalize_next_actions(payload: &Value) -> Vec<String> {
     let actions = if payload.get("schema_version").and_then(Value::as_str)
-        == Some(NEXT_ACTIONS_SCHEMA_VERSION)
+        == Some("next-actions-v2")
     {
         payload.get("next_actions")
     } else {
@@ -903,10 +897,11 @@ fn coerce_next_action_line(value: &Value) -> String {
 }
 
 fn authoritative_next_actions(
-    snapshot_payload: &Value,
+    _snapshot_payload: &Value,
     supervisor_state: &Map<String, Value>,
 ) -> Vec<String> {
-    let supervisor_actions = supervisor_state
+    // Phase 3B: supervisor_state.next_actions is the single source of truth
+    supervisor_state
         .get("next_actions")
         .and_then(Value::as_array)
         .map(|rows| {
@@ -917,12 +912,7 @@ fn authoritative_next_actions(
                     .collect(),
             )
         })
-        .unwrap_or_default();
-    if supervisor_actions.is_empty() {
-        normalize_next_actions(snapshot_payload)
-    } else {
-        supervisor_actions
-    }
+        .unwrap_or_default()
 }
 
 fn fallback_route_from_supervisor(supervisor_state: &Map<String, Value>) -> Vec<String> {

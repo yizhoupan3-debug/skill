@@ -12,10 +12,10 @@ trigger_hints:
   - scaffold plugin
   - plugin marketplace
   - local plugin
-  - codex plugin
+  - claude-code plugin
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [claude-code]
 risk: low
 source: project
 ---

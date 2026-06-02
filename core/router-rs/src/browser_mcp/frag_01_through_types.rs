@@ -420,7 +420,7 @@ fn tool_definitions(repo_root: &Path) -> Vec<Value> {
             "session_launch",
             "Launch Session Worker",
             "Launch one long-running worker session through the Rust session supervisor.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "tmuxSession": {"type": "string"}, "nativeTmux": {"type": "boolean"}, "dryRun": {"type": "boolean"}}, "required": ["host", "cwd"]}),
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "tmuxSession": {"type": "string"}, "nativeTmux": {"type": "boolean"}, "dryRun": {"type": "boolean"}, "worktreeName": {"type": "string", "description": "git worktree branch name; supervisor creates the worktree before launching"}, "worktreePath": {"type": "string", "description": "explicit worktree directory path (overrides worktreeName)"}}, "required": ["host", "cwd"]}),
             empty_output.clone(),
         ),
         tool_definition(

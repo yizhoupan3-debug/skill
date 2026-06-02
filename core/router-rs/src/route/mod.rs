@@ -5,6 +5,7 @@ mod aliases;
 mod constants;
 #[cfg(test)]
 mod eval;
+mod fuzzy;
 mod gate_hints;
 #[cfg(test)]
 mod metadata_tests;
@@ -18,6 +19,7 @@ pub(crate) use scoring_config::scoring_weights;
 mod signals;
 mod skill_record;
 mod text;
+pub(crate) use fuzzy::{fuzzy_fallback_score, trigram_similarity, FUZZY_FALLBACK_THRESHOLD, FUZZY_MIN_SIMILARITY};
 mod types;
 
 pub(crate) use constants::{

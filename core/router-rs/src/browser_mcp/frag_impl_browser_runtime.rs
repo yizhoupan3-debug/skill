@@ -242,6 +242,12 @@ impl BrowserRuntime {
         if let Some(backoff_seconds) = optional_u64(input, "backoffSeconds")? {
             payload["backoff_seconds"] = json!(backoff_seconds);
         }
+        if let Some(worktree_name) = optional_string(input, "worktreeName") {
+            payload["worktree_name"] = Value::String(worktree_name);
+        }
+        if let Some(worktree_path) = optional_string(input, "worktreePath") {
+            payload["worktree_path"] = Value::String(worktree_path);
+        }
         handle_session_supervisor_operation(payload)
             .map_err(|err| runtime_error("SESSION_SUPERVISOR_FAILED", &err))
     }
@@ -303,6 +309,8 @@ impl BrowserRuntime {
 
     fn open(&mut self, input: &Value) -> Result<Value, Value> {
         let url = required_string_arg(input, "url")?;
+        crate::web_fetch_guard::validate_browser_open_url(&url)
+            .map_err(|e| runtime_error("SSRF_BLOCKED", &e))?;
         let new_tab = optional_bool(input, "newTab").unwrap_or(false);
         let session_id = self.get_or_create_session()?;
         let tab_id = {

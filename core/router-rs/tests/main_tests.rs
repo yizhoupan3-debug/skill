@@ -9,7 +9,8 @@ use crate::cli::runtime_ops::LiveExecuteResult;
 use crate::route::RouteDecision;
 use crate::route::{
     evaluate_routing_cases, load_records_cached_for_stdio_with_default_runtime_path,
-    load_routing_eval_cases, read_json, value_to_string, ROUTE_POLICY_SCHEMA_VERSION,
+    load_records_from_manifest, load_routing_eval_cases, read_json, value_to_string,
+    ROUTE_POLICY_SCHEMA_VERSION,
 };
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -582,9 +583,6 @@ fn framework_snapshot_missing_recovery_anchors_is_not_resumable() {
 #[test]
 fn framework_session_writer_materializes_complete_focus_continuity() {
     let _env = crate::test_env_sync::process_env_lock();
-    let prev_journal = std::env::var_os("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
-    std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", "1");
-
     let repo_root = temp_dir_path("framework-session-writer-continuity");
     let output_dir = repo_root.join("artifacts").join("current");
     let payload = json!({
@@ -615,7 +613,6 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
         task_root.join("NEXT_ACTIONS.json"),
         task_root.join("EVIDENCE_INDEX.json"),
         task_root.join("TRACE_METADATA.json"),
-        task_root.join("CONTINUITY_JOURNAL.json"),
         repo_root.join(".supervisor_state.json"),
         repo_root.join("artifacts/current/active_task.json"),
         repo_root.join("artifacts/current/focus_task.json"),
@@ -663,64 +660,12 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
         repo_root.join("NEXT_ACTIONS.json"),
         repo_root.join("EVIDENCE_INDEX.json"),
         repo_root.join("TRACE_METADATA.json"),
-        repo_root.join("CONTINUITY_JOURNAL.json"),
         repo_root.join("artifacts/current/SESSION_SUMMARY.md"),
         repo_root.join("artifacts/current/NEXT_ACTIONS.json"),
         repo_root.join("artifacts/current/EVIDENCE_INDEX.json"),
         repo_root.join("artifacts/current/TRACE_METADATA.json"),
-        repo_root.join("artifacts/current/CONTINUITY_JOURNAL.json"),
     ] {
         assert!(!path.exists(), "unexpected mirror {}", path.display());
-    }
-    let journal = serde_json::from_str::<Value>(
-        &fs::read_to_string(task_root.join("CONTINUITY_JOURNAL.json")).expect("read journal"),
-    )
-    .expect("parse journal");
-    assert_eq!(journal["schema_version"], json!("continuity-journal-v1"));
-    assert_eq!(journal["checkpoint_count"], json!(1));
-    assert!(journal["latest_checkpoint_id"]
-        .as_str()
-        .is_some_and(|value| value.len() == 64));
-    assert!(
-        journal["checkpoints"][0]["artifact_hashes"]["supervisor_state"]
-            .as_str()
-            .is_some_and(|value| value.len() == 64)
-    );
-
-    match prev_journal {
-        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", v),
-        None => std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL"),
-    }
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn framework_session_writer_skips_journal_by_default() {
-    let _env = crate::test_env_sync::process_env_lock();
-    let prev_journal = std::env::var_os("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
-    std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
-
-    let repo_root = temp_dir_path("framework-session-no-journal");
-    let output_dir = repo_root.join("artifacts").join("current");
-    let _ = write_framework_session_artifacts(json!({
-        "repo_root": repo_root,
-        "output_dir": output_dir,
-        "task_id": "no-journal-task",
-        "task": "t",
-        "phase": "implementation",
-        "status": "in_progress",
-        "summary": "s",
-        "focus": true,
-        "next_actions": []
-    }))
-    .expect("write");
-    let journal = repo_root
-        .join("artifacts/current/no-journal-task/CONTINUITY_JOURNAL.json");
-    assert!(!journal.is_file(), "journal must not be written by default");
-
-    match prev_journal {
-        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", v),
-        None => std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL"),
     }
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -1132,57 +1077,6 @@ fn post_tool_evidence_no_ops_without_continuity_seed() {
             .exists(),
         "evidence file should not be created without continuity anchors"
     );
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-#[test]
-fn framework_session_artifact_write_rejects_corrupt_continuity_journal() {
-    let _env = crate::test_env_sync::process_env_lock();
-    let prev_journal = std::env::var_os("ROUTER_RS_CONTINUITY_WRITE_JOURNAL");
-    std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", "1");
-
-    let repo_root = temp_dir_path("framework-session-corrupt-journal");
-    let output_dir = repo_root.join("artifacts").join("current");
-    let first = write_framework_session_artifacts(json!({
-        "repo_root": repo_root,
-        "output_dir": output_dir,
-        "task_id": "journal-corrupt",
-        "task": "Journal corrupt",
-        "phase": "implementation",
-        "status": "in_progress",
-        "summary": "Seed journal.",
-        "focus": true,
-        "next_actions": ["Continue"]
-    }))
-    .expect("first write");
-    let task_id = first["task_id"].as_str().expect("task id");
-    let journal_path = repo_root
-        .join("artifacts/current")
-        .join(task_id)
-        .join("CONTINUITY_JOURNAL.json");
-    fs::write(&journal_path, "{not valid json").expect("corrupt journal");
-
-    let err = write_framework_session_artifacts(json!({
-        "repo_root": repo_root,
-        "output_dir": output_dir,
-        "task_id": task_id,
-        "task": "Journal corrupt",
-        "phase": "implementation",
-        "status": "in_progress",
-        "summary": "Second write.",
-        "focus": true,
-        "next_actions": ["Continue"]
-    }))
-    .expect_err("corrupt journal should fail before overwrite");
-    assert!(
-        err.contains("parse json failed") || err.contains("CONTINUITY_JOURNAL"),
-        "unexpected error: {err}"
-    );
-
-    match prev_journal {
-        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL", v),
-        None => std::env::remove_var("ROUTER_RS_CONTINUITY_WRITE_JOURNAL"),
-    }
     let _ = fs::remove_dir_all(&repo_root);
 }
 
@@ -2276,7 +2170,7 @@ fn stdio_request_routes_common_ops_to_expected_domains() {
 #[test]
 fn stdio_request_dispatches_route_snapshot_payload() {
     let response = handle_stdio_json_line(
-        r#"{"id":2,"op":"route_snapshot","payload":{"engine":"rust","selected_skill":"router","overlay_skill":null,"layer":"L2","score":42.0,"reasons":["matched"]}}"#,
+        r#"{"id":2,"op":"route_snapshot","payload":{"engine":"rust","selected_skill":"router","overlay_skill":null,"layer":"L2","score":42.0,"reasons":["matched"],"matched_token_count":1}}"#,
     );
     assert!(response.ok);
     assert_eq!(response.id, json!(2));
@@ -2689,8 +2583,18 @@ fn routing_eval_report_matches_expected_baseline() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let manifest_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-    let records =
+    let mut records =
         load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
+    // Merge manifest-only skills (e.g. cold skills) so evaluate_routing_cases can find them.
+    if let Ok(manifest_records) = load_records_from_manifest(&manifest_path) {
+        let existing_slugs: std::collections::HashSet<String> =
+            records.iter().map(|r| r.slug.clone()).collect();
+        for rec in manifest_records {
+            if !existing_slugs.contains(&rec.slug) {
+                records.push(rec);
+            }
+        }
+    }
     let cases =
         load_routing_eval_cases(&routing_eval_case_path()).expect("load routing eval cases");
     let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
@@ -2782,7 +2686,19 @@ fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
 fn routing_eval_runtime_fallback_matches_expected_baseline() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    let manifest_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
+    let mut records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    // Merge manifest-only skills (e.g. cold skills) so evaluate_routing_cases can find them.
+    if let Ok(manifest_records) = load_records_from_manifest(&manifest_path) {
+        let existing_slugs: std::collections::HashSet<String> =
+            records.iter().map(|r| r.slug.clone()).collect();
+        for rec in manifest_records {
+            if !existing_slugs.contains(&rec.slug) {
+                records.push(rec);
+            }
+        }
+    }
     let cases =
         load_routing_eval_cases(&routing_eval_case_path()).expect("load routing eval cases");
     let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");

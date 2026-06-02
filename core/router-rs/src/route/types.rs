@@ -147,6 +147,8 @@ pub(crate) struct RouteDecision {
     pub(crate) score: f64,
     pub(crate) reasons: Vec<String>,
     pub(crate) matched_token_count: usize,
+    #[serde(default)]
+    pub(crate) fuzzy_match: bool,
     pub(crate) route_snapshot: RouteDecisionSnapshotPayload,
 }
 

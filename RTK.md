@@ -33,8 +33,12 @@ rtk find skills -name 'SKILL.md'
 rtk grep "RTK\\.md|rtk" .
 rtk git status
 rtk git diff --stat
+rtk git log
 rtk cargo test
+rtk cargo build
+rtk cargo check
 rtk npm test
+rtk pytest
 ```
 
 When a direct RTK subcommand is not available or not needed, wrap the original command explicitly:
@@ -56,18 +60,22 @@ rtk cargo test --manifest-path ./core/router-rs/Cargo.toml
 
 This repository already contains a project-scoped RTK filter file at [`/.rtk/filters.toml`](.rtk/filters.toml).
 
-Current local filters are targeted and narrow:
+Current local filters cover common development commands (cargo, npm, pytest, git):
 
 - `cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills validate|refresh ...`
+- `cargo build` / `cargo test` / `cargo check`
+- `npm test`
+- `pytest`
+- `git status` / `git diff` / `git log`
 
 Do not assume every repo script has a custom RTK filter. If a command is uncommon, RTK may still help, but it may only provide generic compaction.
 
 ## Verification on this machine
 
-Verified locally on April 19, 2026:
+Verified locally on June 2, 2026:
 
 - `rtk` binary path: `/opt/homebrew/bin/rtk`
-- version: `rtk 0.33.0-rc.54`
+- version: `rtk 0.40.0`
 - `rtk gain` is working and reports accumulated savings on this machine
 
 ## Working rule for Codex in this repo

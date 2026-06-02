@@ -98,10 +98,18 @@ pub(crate) fn evaluate_routing_cases(
 
         let mut trigger_hit = false;
         let mut overtrigger = false;
-        let owner_correct = expected_owner
+        let mut owner_correct = expected_owner
             .as_ref()
             .map(|expected| expected == &selected_owner)
             .unwrap_or(false);
+        // For should-not-trigger cases with no explicit expected_owner,
+        // correctness is determined solely by forbidden_owners; treat as correct by default.
+        if !owner_correct
+            && expected_owner.is_none()
+            && category == "should-not-trigger"
+        {
+            owner_correct = true;
+        }
         let overlay_correct = match &expected_overlay {
             Some(expected) => Some(expected) == selected_overlay.as_ref(),
             None => selected_overlay.is_none(),

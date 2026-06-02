@@ -168,7 +168,8 @@
         "claude-desktop": "/discussx",
         "antigravity-cli": "/discussx",
         "antigravity-app": "/discussx",
-        "antigravity": "/discussx"
+        "antigravity": "/discussx",
+        "opencode": "/discussx"
       },
       "lineage": {
         "source": "repo-native",
@@ -185,7 +186,8 @@
         "claude-desktop": "/planx",
         "antigravity-cli": "/planx",
         "antigravity-app": "/planx",
-        "antigravity": "/planx"
+        "antigravity": "/planx",
+        "opencode": "/planx"
       }
     },
     "implementx": {
@@ -198,7 +200,8 @@
         "claude-desktop": "/implementx",
         "antigravity-cli": "/implementx",
         "antigravity-app": "/implementx",
-        "antigravity": "/implementx"
+        "antigravity": "/implementx",
+        "opencode": "/implementx"
       },
       "implementation_bar": [
         "one-breath-all-waves",
@@ -225,7 +228,8 @@
         "claude-desktop": "/verifyx",
         "antigravity-cli": "/verifyx",
         "antigravity-app": "/verifyx",
-        "antigravity": "/verifyx"
+        "antigravity": "/verifyx",
+        "opencode": "/verifyx"
       }
     },
     "team": {
@@ -238,7 +242,8 @@
         "claude-desktop": "/team",
         "antigravity-cli": "/team",
         "antigravity-app": "/team",
-        "antigravity": "/team"
+        "antigravity": "/team",
+        "opencode": "/team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -289,7 +294,8 @@
         "claude-desktop": "/deepinterview",
         "antigravity-cli": "/deepinterview",
         "antigravity-app": "/deepinterview",
-        "antigravity": "/deepinterview"
+        "antigravity": "/deepinterview",
+        "opencode": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -313,7 +319,8 @@
         "claude-desktop": "/gitx",
         "antigravity-cli": "/gitx",
         "antigravity-app": "/gitx",
-        "antigravity": "/gitx"
+        "antigravity": "/gitx",
+        "opencode": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -338,7 +345,8 @@
         "claude-desktop": "/update",
         "antigravity-cli": "/update",
         "antigravity-app": "/update",
-        "antigravity": "/update"
+        "antigravity": "/update",
+        "opencode": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -578,6 +586,57 @@
           "cap": "review_gate_router_observation",
           "status": "unsupported",
           "rationale": "Desktop MCP has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
+        }
+      ]
+    },
+    "opencode": {
+      "profile_id": "opencode_profile",
+      "host_id": "opencode",
+      "transport": "opencode-cli",
+      "context_files": [
+        "AGENTS_OPENCODE.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "project",
+          "relative": ".opencode/opencode.json"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "project",
+          "relative": ".opencode/opencode.json"
+        }
+      ],
+      "session_supervisor_driver": "unsupported",
+      "session_supervisor_status": {
+        "supported": false,
+        "rationale": "Opencode host does not expose external tmux session management or auto-resume. Long-running goals on Opencode must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
+      },
+      "resume_command_examples": [
+        "Continue in the same Opencode session"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
+        "framework_alias_entrypoints"
+      ],
+      "harness_capability_exceptions": [
+        {
+          "cap": "closeout_evidence_hooks",
+          "status": "unsupported",
+          "rationale": "Opencode MCP transport cannot install CLI-level PreToolUse hard gates; closeout for non-my-light is hard-blocked at MCP tool level (goal_state_manage complete / closeout_gate); my-light remains advisory."
+        },
+        {
+          "cap": "review_gate_router_observation",
+          "status": "unsupported",
+          "rationale": "Opencode has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
         }
       ]
     },

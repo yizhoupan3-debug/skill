@@ -74,7 +74,7 @@
 ## Closeout
 
 - 必须有验证证据或明确 blocker；聊天回复不必长篇贴 diff。
-- `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 分层见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md) 与 [`docs/harness_architecture.md`](docs/harness_architecture.md) §5。
+- `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 分层见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md) 与 [`docs/harness_architecture/04-closeout-and-depth.md`](docs/harness_architecture/04-closeout-and-depth.md)。
 
 ## Goal drive
 

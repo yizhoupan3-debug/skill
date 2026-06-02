@@ -167,6 +167,31 @@ pub(crate) fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<s
     Ok(addrs)
 }
 
+
+/// Validates URLs for `browser_open` - blocks non-http(s) schemes (`file://`,
+/// `data:`, `javascript:`, etc.) and reuses the web_fetch SSRF guards
+/// (private IPs, metadata endpoints, blocked host suffixes).
+pub(crate) fn validate_browser_open_url(url: &str) -> Result<(), String> {
+    let trimmed = url.trim();
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| format!("browser_open invalid URL: {url}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(format!(
+            "browser_open blocked scheme '{}' - only http(s) allowed: {}",
+            parsed.scheme(),
+            url
+        ));
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| format!("browser_open URL missing host: {url}"))?;
+    validate_web_fetch_host(host)?;
+    if let Some(port) = parsed.port() {
+        validate_web_fetch_port(port)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,4 +277,116 @@ mod tests {
         let base = reqwest::Url::parse("https://example.com/").unwrap();
         assert!(resolve_web_fetch_redirect(&base, "http://127.0.0.1/").is_err());
     }
+
+    // --- browser_open specific tests ---
+
+    #[test]
+    fn browser_open_rejects_file_scheme() {
+        assert!(validate_browser_open_url("file:///etc/passwd").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_data_scheme() {
+        assert!(validate_browser_open_url("data:text/html,<h1>hi</h1>").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_javascript_scheme() {
+        assert!(validate_browser_open_url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_loopback() {
+        assert!(validate_browser_open_url("http://127.0.0.1/").is_err());
+        assert!(validate_browser_open_url("http://localhost/").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_private_ip() {
+        assert!(validate_browser_open_url("http://10.0.0.1/").is_err());
+        assert!(validate_browser_open_url("http://192.168.1.1/").is_err());
+        assert!(validate_browser_open_url("http://172.16.0.1/").is_err());
+    }
+
+    #[test]
+    fn browser_open_accepts_public_url() {
+        assert!(validate_browser_open_url("https://example.com/").is_ok());
+        assert!(validate_browser_open_url("http://github.com/").is_ok());
+    }
+
+    // --- Additional coverage tests ---
+
+    #[test]
+    fn rejects_private_ip_ranges_10_172_192() {
+        assert!(validate_web_fetch_url("http://10.0.0.1/").is_err());
+        assert!(validate_web_fetch_url("http://10.255.255.255/").is_err());
+        assert!(validate_web_fetch_url("http://172.16.0.1/").is_err());
+        assert!(validate_web_fetch_url("http://172.31.255.255/").is_err());
+        assert!(validate_web_fetch_url("http://192.168.1.1/").is_err());
+        assert!(validate_web_fetch_url("http://192.168.255.255/").is_err());
+    }
+
+    #[test]
+    fn rejects_localhost_subdomain() {
+        assert!(validate_web_fetch_url("http://foo.localhost/").is_err());
+        assert!(validate_web_fetch_url("http://bar.localhost/").is_err());
+    }
+
+    #[test]
+    fn rejects_ipv6_unique_local_and_link_local() {
+        assert!(validate_web_fetch_url("http://[fd00::1]/").is_err());
+        assert!(validate_web_fetch_url("http://[fe80::1]/").is_err());
+    }
+
+    #[test]
+    fn rejects_ipv6_unspecified() {
+        assert!(validate_web_fetch_url("http://[::]/").is_err());
+    }
+
+    #[test]
+    fn rejects_ipv6_mapped_private() {
+        assert!(validate_web_fetch_url("http://[::ffff:10.0.0.1]/").is_err());
+        assert!(validate_web_fetch_url("http://[::ffff:192.168.1.1]/").is_err());
+    }
+
+    #[test]
+    fn rejects_port_zero() {
+        assert!(validate_web_fetch_url("http://example.com:0/").is_err());
+    }
+
+    #[test]
+    fn rejects_trailing_dot_localhost() {
+        assert!(validate_web_fetch_url("http://localhost./").is_err());
+    }
+
+    #[test]
+    fn rejects_case_variants() {
+        assert!(validate_web_fetch_url("http://LOCALHOST/").is_err());
+        assert!(validate_web_fetch_url("http://Foo.Local/").is_err());
+        assert!(validate_web_fetch_url("http://Bar.Internal/").is_err());
+    }
+
+    #[test]
+    fn browser_open_rejects_ipv6_variants() {
+        assert!(validate_browser_open_url("http://[::1]/").is_err());
+        assert!(validate_browser_open_url("http://[fd00::1]/").is_err());
+        assert!(validate_browser_open_url("http://[::ffff:10.0.0.1]/").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_to_private_ip() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "http://10.0.0.1/").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "http://192.168.1.1/").is_err());
+        assert!(resolve_web_fetch_redirect(&base, "http://169.254.169.254/").is_err());
+    }
+
+    #[test]
+    fn rejects_redirect_to_localhost() {
+        let base = reqwest::Url::parse("https://example.com/").unwrap();
+        assert!(resolve_web_fetch_redirect(&base, "http://localhost/").is_err());
+    }
+
+
+
 }

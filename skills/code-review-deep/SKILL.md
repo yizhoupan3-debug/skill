@@ -114,8 +114,8 @@ For broad/deep/PR-level code review, use **spawn-first pairing**: before the mai
 
 **ANTIGRAVITY_REVIEW_GATE clearance（分宿主）**:
 
-- **`antigravity-cli`（终端 hooks）**: Codex 式 — `PostToolUse` 可数 deep lane + `Stop` compact；**无** Cursor `subagentStart`/`subagentStop` shell 事件。Stop 短码/env 前缀 `ANTIGRAVITY_CLI_REVIEW_GATE` / `ROUTER_RS_ANTIGRAVITY_CLI_REVIEW_GATE_*`（见 `antigravity_cli_hooks`）。`my-light` 关闭硬拦。
-- **`antigravity-app`（MCP / Desktop）**: **无** shell hook 表。Findings **必须**写入 `artifacts/current/<task_id>/review-lanes/*.md`（或 `closeout_gate` + `review_evidence_attested=true`）；MCP `complete`/`closeout_gate` 可触发 `[Antigravity Hard Block]`。`my-light` 关闭硬拦。
+- **`claude-code`（终端 hooks）**: Codex 式 — `PostToolUse` 可数 deep lane + `Stop` compact；**无** Cursor `subagentStart`/`subagentStop` shell 事件。Stop 短码/env 前缀 `ANTIGRAVITY_CLI_REVIEW_GATE` / `ROUTER_RS_ANTIGRAVITY_CLI_REVIEW_GATE_*`（见 `antigravity_cli_hooks`）。`my-light` 关闭硬拦。
+- **`claude-desktop`（MCP / Desktop）**: **无** shell hook 表。Findings **必须**写入 `artifacts/current/<task_id>/review-lanes/*.md`（或 `closeout_gate` + `review_evidence_attested=true`）；MCP `complete`/`closeout_gate` 可触发 `[Antigravity Hard Block]`。`my-light` 关闭硬拦。
 
 **Host countable evidence (Cursor / Codex `REVIEW_GATE` / Codex Stop ledger)** matches `hook_common::is_deep_review_gate_lane_normalized`: the subagent lane (after host normalization) must be in `configs/framework/RUNTIME_REGISTRY.json` → `review_gate.deep_gate_lanes` only (`general-purpose` / `best-of-n-runner` / `deep-reviewer` and normalized equivalents — see `docs/host_adapter_contract.md` §0.1). **`explore`, `ci-investigator`, `cursor-guide`, `review`/`reviewer`/`critic`/`code-review`, and other custom lane names not listed in registry do not count** on Cursor/Codex—even with **`fork_context=false`**. **Claude Code** uses `review_gate.claude_reviewer_lanes` (superset); do not assume those extra strings satisfy Cursor/Codex hooks.
 

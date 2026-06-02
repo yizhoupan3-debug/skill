@@ -722,11 +722,7 @@ fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
     let generated = [
         "skills/SKILL_MANIFEST.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
-        "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
         "skills/SKILL_PLUGIN_CATALOG.json",
-        "skills/SKILL_ROUTING_METADATA.json",
-        "skills/SKILL_HEALTH_MANIFEST.json",
-        "skills/SKILL_ROUTING_INDEX.md",
     ]
     .iter()
     .map(|path| read_text(&project_root().join(path)))
@@ -904,7 +900,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
 fn runtime_hot_index_stays_separate_from_plugin_and_routing_catalogs() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
-    let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
     assert_eq!(runtime["version"], 3);
     assert_eq!(runtime["schema_version"], "skill-routing-runtime-v3");
     let rows = runtime["skills"].as_array().expect("runtime rows");
@@ -916,10 +911,6 @@ fn runtime_hot_index_stays_separate_from_plugin_and_routing_catalogs() {
     assert_eq!(
         plugin_catalog["skills"]["skill-framework-developer"]["kind"],
         "skill"
-    );
-    assert_eq!(
-        routing_metadata["skills"]["skill-framework-developer"]["selection_reason"],
-        "allowlisted first-turn owner"
     );
 }
 
@@ -1300,6 +1291,7 @@ fn host_projection_narrative_covers_installable_hosts() {
 }
 
 #[test]
+#[ignore] // depends on deleted SKILL_ROUTING_METADATA.json, SKILL_ROUTING_RUNTIME_EXPLAIN.json, SKILL_HEALTH_MANIFEST.json
 fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
     let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
@@ -1352,6 +1344,7 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
 }
 
 #[test]
+#[ignore] // depends on deleted SKILL_ROUTING_METADATA.json, SKILL_ROUTING_RUNTIME_EXPLAIN.json, SKILL_HEALTH_MANIFEST.json
 fn plugin_catalog_routing_metadata_companion_schemas_contract() {
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
     let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
@@ -1975,7 +1968,6 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
         "configs/framework/RUNTIME_REGISTRY.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
         "skills/SKILL_PLUGIN_CATALOG.json",
-        "skills/SKILL_HEALTH_MANIFEST.json",
     ] {
         let text = read_text(&root.join(rel));
         for needle in forbidden {
@@ -2020,16 +2012,6 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
     assert!(
         plugin_catalog["skills"].get("team").is_none(),
         "team alias must not be a plugin skill record"
-    );
-    let routing_metadata = read_json(&root.join("skills/SKILL_ROUTING_METADATA.json"));
-    assert!(
-        routing_metadata["skills"].get("team").is_none(),
-        "team alias must not be a routing metadata owner"
-    );
-    let health = read_json(&root.join("skills/SKILL_HEALTH_MANIFEST.json"));
-    assert!(
-        health["skills"].get("runtime:team").is_none(),
-        "team alias must not be a runtime health skill"
     );
     assert!(
         !root

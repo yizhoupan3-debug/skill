@@ -1,18 +1,17 @@
 use super::constants::{
-    ACTIVE_TASK_POINTER_NAME, CONTINUITY_JOURNAL_FILENAME, CONTINUITY_JOURNAL_SCHEMA_VERSION,
     CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
-    FOCUS_TASK_POINTER_NAME, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION, NEXT_ACTIONS_FILENAME,
-    NEXT_ACTIONS_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
-    SUPERVISOR_STATE_SCHEMA_VERSION, TASK_REGISTRY_NAME, TERMINAL_VERIFICATION_STATUSES,
-    TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
+    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+    FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
+    SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
+    SUPERVISOR_STATE_SCHEMA_VERSION, TASK_POINTERS_FILENAME, TASK_POINTERS_SCHEMA_VERSION,
+    TERMINAL_STORY_STATES, TERMINAL_VERIFICATION_STATUSES,
 };
 use super::json_io::{read_json_strict, read_text_if_exists};
 use super::json_value::{
     nonempty_string, safe_slug, value_bool_or_none, value_string_list, value_text,
 };
 use super::types::{
-    ArtifactPaths, ArtifactPayloads, ContinuityJournalInput, SessionArtifactWritePlan,
+    ArtifactPaths, ArtifactPayloads, SessionArtifactWritePlan,
     SupervisorStateInput, TaskRegistryEntry,
 };
 use chrono::{Local, SecondsFormat};
@@ -36,11 +35,8 @@ impl SessionArtifactWritePlan {
             "summary": self.summary,
             "paths": {
                 "session_summary": self.summary_path.display().to_string(),
-                "next_actions": self.next_actions_path.display().to_string(),
-                "evidence_index": self.evidence_path.display().to_string(),
-                "trace_metadata": self.trace_metadata_path.display().to_string(),
-                "continuity_journal": self.journal_path.display().to_string(),
-            },
+                                "evidence_index": self.evidence_path.display().to_string(),
+                    },
             "changed_paths": self.changed_paths,
         })
     }
@@ -117,24 +113,21 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         output_root.clone()
     };
     let summary_path = primary_dir.join(SESSION_SUMMARY_FILENAME);
-    let next_actions_path = primary_dir.join(NEXT_ACTIONS_FILENAME);
     let evidence_path = primary_dir.join(EVIDENCE_INDEX_FILENAME);
-    let trace_metadata_path = primary_dir.join(TRACE_METADATA_FILENAME);
-    let journal_path = primary_dir.join(CONTINUITY_JOURNAL_FILENAME);
     let summary_text = render_session_summary(&task, &phase, &status, &summary);
-    let next_actions_payload = build_next_actions_payload(&next_actions);
     let evidence_payload = if write_evidence {
         build_evidence_index_payload(&evidence)
     } else {
         read_json_strict(&evidence_path)?
     };
-    let trace_metadata_payload = build_trace_metadata_payload(
-        &task,
-        &phase,
-        &status,
-        payload.get("trace_metadata"),
-        payload.get("matched_skills"),
-    );
+    let next_actions_payload = json!({
+        "schema_version": "next-actions-v2",
+        "next_actions": &next_actions,
+    });
+    let next_actions_payload = json!({
+        "schema_version": "next-actions-v2",
+        "next_actions": &next_actions,
+    });
     let supervisor_state_payload = build_session_supervisor_state_payload(SupervisorStateInput {
         task_id: &task_id,
         task: &task,
@@ -143,31 +136,13 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         summary: summary.trim(),
         next_actions_payload: &next_actions_payload,
         evidence_payload: &evidence_payload,
-        trace_metadata_payload: &trace_metadata_payload,
+        matched_skills: payload.get("matched_skills"),
         artifact_dir: &primary_dir,
         supervisor_state: payload.get("supervisor_state"),
         execution_contract: payload.get("execution_contract"),
         blockers: payload.get("blockers"),
         continuity: payload.get("continuity"),
     });
-    let write_journal = crate::router_env_flags::router_rs_continuity_write_journal_enabled();
-    let journal_payload = if write_journal {
-        build_continuity_journal_payload(ContinuityJournalInput {
-            task_id: &task_id,
-            task: &task,
-            phase: &phase,
-            status: &status,
-            artifact_dir: &primary_dir,
-            summary_text: &summary_text,
-            next_actions_payload: &next_actions_payload,
-            evidence_payload: &evidence_payload,
-            trace_metadata_payload: &trace_metadata_payload,
-            supervisor_state_payload: &supervisor_state_payload,
-            existing_journal: read_json_strict(&journal_path)?,
-        })
-    } else {
-        read_json_strict(&journal_path).unwrap_or_else(|_| json!({}))
-    };
     Ok(SessionArtifactWritePlan {
         task,
         phase,
@@ -180,16 +155,10 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         mirror_output_dir: (!mirror_output_dir.is_empty())
             .then(|| PathBuf::from(mirror_output_dir)),
         summary_path,
-        next_actions_path,
         evidence_path,
-        trace_metadata_path,
-        journal_path,
         write_evidence,
-        next_actions_payload,
         evidence_payload,
-        trace_metadata_payload,
         supervisor_state_payload,
-        journal_payload,
         expected_active_task_hash: nonempty_string(payload.get("expected_active_task_hash")),
         expected_focus_task_hash: nonempty_string(payload.get("expected_focus_task_hash")),
         expected_supervisor_state_hash: nonempty_string(
@@ -201,25 +170,15 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
 
 fn write_primary_session_artifacts(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
     let summary_text = render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
-    let next_actions_payload = plan.next_actions_payload.clone();
     let evidence_payload = plan.write_evidence.then(|| plan.evidence_payload.clone());
-    let trace_metadata_payload = plan.trace_metadata_payload.clone();
-    let write_journal = crate::router_env_flags::router_rs_continuity_write_journal_enabled();
-    let journal_payload = write_journal.then(|| plan.journal_payload.clone());
     write_session_artifact_set(
         ArtifactPaths {
             summary: &plan.summary_path,
-            next_actions: &plan.next_actions_path,
             evidence: &plan.evidence_path,
-            trace_metadata: Some(&plan.trace_metadata_path),
-            journal: write_journal.then_some(&plan.journal_path),
         },
         ArtifactPayloads {
             summary_text: &summary_text,
-            next_actions: &next_actions_payload,
             evidence: evidence_payload.as_ref(),
-            trace_metadata: &trace_metadata_payload,
-            journal: journal_payload.as_ref(),
         },
         &mut plan.changed_paths,
     )
@@ -231,31 +190,18 @@ fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<
             return Ok(());
         };
         let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
-        let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
         let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
-        let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
-        let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
         let summary_text =
             render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
-        let next_actions_payload = plan.next_actions_payload.clone();
         let evidence_payload = plan.write_evidence.then(|| plan.evidence_payload.clone());
-        let trace_metadata_payload = plan.trace_metadata_payload.clone();
-        let write_journal = crate::router_env_flags::router_rs_continuity_write_journal_enabled();
-        let journal_payload = write_journal.then(|| plan.journal_payload.clone());
         write_session_artifact_set(
             ArtifactPaths {
                 summary: &mirror_summary,
-                next_actions: &mirror_next_actions,
                 evidence: &mirror_evidence,
-                trace_metadata: Some(&mirror_trace),
-                journal: write_journal.then_some(&mirror_journal),
             },
             ArtifactPayloads {
                 summary_text: &summary_text,
-                next_actions: &next_actions_payload,
                 evidence: evidence_payload.as_ref(),
-                trace_metadata: &trace_metadata_payload,
-                journal: journal_payload.as_ref(),
             },
             &mut plan.changed_paths,
         )?;
@@ -269,10 +215,10 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
     };
     let mirror_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
     let updated_at = current_local_timestamp();
-    let registry_known = task_id_known_in_registry(&mirror_root, &plan.task_id);
+    let registry_known = task_id_known_in_task_pointers(&mirror_root, &plan.task_id);
     let should_touch_registry = !plan.update_registry_only_if_known || registry_known;
     if should_touch_registry
-        && write_task_registry_entry(
+        && write_task_pointers_entry(
             &mirror_root,
             TaskRegistryEntry {
                 task_id: &plan.task_id,
@@ -282,6 +228,9 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
                 resume_allowed: Some(!super::is_terminal(
                     &plan.status,
                     TERMINAL_VERIFICATION_STATUSES,
+                ) && !super::is_terminal(
+                    &plan.status,
+                    TERMINAL_STORY_STATES,
                 )),
                 updated_at: &updated_at,
                 focus_task_id: if plan.focus {
@@ -293,7 +242,7 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
         )?
     {
         plan.changed_paths
-            .push(mirror_root.join(TASK_REGISTRY_NAME).display().to_string());
+            .push(mirror_root.join(TASK_POINTERS_FILENAME).display().to_string());
     }
     if plan.focus {
         write_focused_repo_mirrors(plan, &repo_root, &mirror_root, &updated_at)?;
@@ -330,7 +279,7 @@ fn write_focused_repo_mirrors(
     mirror_root: &Path,
     updated_at: &str,
 ) -> Result<(), String> {
-    let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
+    let active_pointer = mirror_root.join(TASK_POINTERS_FILENAME);
     assert_expected_file_hash(
         &active_pointer,
         plan.expected_active_task_hash.as_deref(),
@@ -344,24 +293,18 @@ fn write_focused_repo_mirrors(
             "updated_at": updated_at,
             "task_root": plan.summary_path.parent().map(|path| path.display().to_string()).unwrap_or_default(),
             "session_summary": plan.summary_path.display().to_string(),
-            "next_actions": plan.next_actions_path.display().to_string(),
             "evidence_index": plan.evidence_path.display().to_string(),
-            "trace_metadata": plan.trace_metadata_path.display().to_string(),
-            "continuity_journal": plan.journal_path.display().to_string(),
         }),
     )? {
         plan.changed_paths
             .push(active_pointer.display().to_string());
     }
-    let focus_pointer = mirror_root.join(FOCUS_TASK_POINTER_NAME);
+    let focus_pointer = mirror_root.join(TASK_POINTERS_FILENAME);
     assert_expected_file_hash(
         &focus_pointer,
         plan.expected_focus_task_hash.as_deref(),
         "focus task pointer",
     )?;
-    if write_focus_task_pointer(mirror_root, &plan.task_id, &plan.task, updated_at)? {
-        plan.changed_paths.push(focus_pointer.display().to_string());
-    }
     let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
     assert_expected_file_hash(
         &supervisor_state_path,
@@ -375,24 +318,8 @@ fn write_focused_repo_mirrors(
     Ok(())
 }
 
-fn write_focus_task_pointer(
-    mirror_root: &Path,
-    task_id: &str,
-    task: &str,
-    updated_at: &str,
-) -> Result<bool, String> {
-    write_json_if_changed(
-        &mirror_root.join(FOCUS_TASK_POINTER_NAME),
-        &json!({
-            "task_id": task_id,
-            "task": task,
-            "updated_at": updated_at,
-        }),
-    )
-}
-
-fn task_id_known_in_registry(mirror_root: &Path, task_id: &str) -> bool {
-    let registry_path = mirror_root.join(TASK_REGISTRY_NAME);
+fn task_id_known_in_task_pointers(mirror_root: &Path, task_id: &str) -> bool {
+    let registry_path = mirror_root.join(TASK_POINTERS_FILENAME);
     let Ok(existing) = read_json_strict(&registry_path) else {
         return false;
     };
@@ -401,11 +328,11 @@ fn task_id_known_in_registry(mirror_root: &Path, task_id: &str) -> bool {
         .any(|row| safe_slug(&value_text(row.get("task_id"))) == task_id)
 }
 
-fn write_task_registry_entry(
+fn write_task_pointers_entry(
     mirror_root: &Path,
     entry: TaskRegistryEntry<'_>,
 ) -> Result<bool, String> {
-    let existing = read_json_strict(&mirror_root.join(TASK_REGISTRY_NAME))?;
+    let existing = read_json_strict(&mirror_root.join(TASK_POINTERS_FILENAME)).unwrap_or_else(|_| json!({}));
     let focus_task = entry.focus_task_id.map_or_else(
         || safe_slug(&value_text(existing.get("focus_task_id"))),
         ToString::to_string,
@@ -451,7 +378,22 @@ fn write_task_registry_entry(
         }));
     }
     let compacted = super::normalize_task_registry_rows(focus_task, rows).0;
-    write_json_if_changed(&mirror_root.join(TASK_REGISTRY_NAME), &compacted)
+    // Merge compacted registry back into TASK_POINTERS.json
+    let mut out = json!({
+        "schema_version": TASK_POINTERS_SCHEMA_VERSION,
+    });
+    if let Some(obj) = out.as_object_mut() {
+        if let Some(tid) = existing.get("active_task_id") {
+            obj.insert("active_task_id".to_string(), tid.clone());
+        }
+        if let Some(ftid) = compacted.get("focus_task_id") {
+            obj.insert("focus_task_id".to_string(), ftid.clone());
+        }
+        if let Some(tasks) = compacted.get("tasks") {
+            obj.insert("tasks".to_string(), tasks.clone());
+        }
+    }
+    write_json_if_changed(&mirror_root.join(TASK_POINTERS_FILENAME), &out)
 }
 
 fn write_session_artifact_set(
@@ -462,20 +404,11 @@ fn write_session_artifact_set(
     if write_text_if_changed(paths.summary, payloads.summary_text)? {
         changed_paths.push(paths.summary.display().to_string());
     }
-    if write_json_if_changed(paths.next_actions, payloads.next_actions)? {
-        changed_paths.push(paths.next_actions.display().to_string());
-    }
     if let Some(evidence) = payloads.evidence {
         let _lock = crate::runtime_storage::acquire_runtime_path_lock(paths.evidence)?;
         if write_json_if_changed(paths.evidence, evidence)? {
             changed_paths.push(paths.evidence.display().to_string());
         }
-    }
-    if let Some(path) = paths.trace_metadata {
-        write_json_artifact_if_changed(path, payloads.trace_metadata, changed_paths)?;
-    }
-    if let (Some(path), Some(payload)) = (paths.journal, payloads.journal) {
-        write_json_artifact_if_changed(path, payload, changed_paths)?;
     }
     Ok(())
 }
@@ -571,52 +504,11 @@ fn render_session_summary(task: &str, phase: &str, status: &str, summary: &str) 
     .join("\n")
 }
 
-fn build_next_actions_payload(actions: &[String]) -> Value {
-    json!({
-        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
-        "next_actions": actions,
-    })
-}
-
 fn build_evidence_index_payload(entries: &[Value]) -> Value {
     json!({
         "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
         "artifacts": entries,
     })
-}
-
-fn build_trace_metadata_payload(
-    task: &str,
-    phase: &str,
-    status: &str,
-    trace_metadata: Option<&Value>,
-    matched_skills: Option<&Value>,
-) -> Value {
-    let mut payload = trace_metadata
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    payload.insert(
-        "schema_version".to_string(),
-        Value::String(TRACE_METADATA_SCHEMA_VERSION.to_string()),
-    );
-    payload.insert("task".to_string(), Value::String(task.to_string()));
-    payload.insert("phase".to_string(), Value::String(phase.to_string()));
-    payload.insert(
-        "verification_status".to_string(),
-        Value::String(status.to_string()),
-    );
-    payload
-        .entry("updated_at".to_string())
-        .or_insert_with(|| Value::String(current_local_timestamp()));
-    if let Some(skills) = normalized_string_array(matched_skills)
-        .or_else(|| normalized_string_array(payload.get("matched_skills")))
-    {
-        payload.insert("matched_skills".to_string(), Value::Array(skills));
-    } else {
-        payload.insert("matched_skills".to_string(), Value::Array(Vec::new()));
-    }
-    Value::Object(payload)
 }
 
 fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Value {
@@ -696,84 +588,22 @@ fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Va
         "blockers".to_string(),
         normalized_blockers(input.blockers.or_else(|| payload.get("blockers"))),
     );
-    payload.insert(
-        "trace_metadata".to_string(),
-        input.trace_metadata_payload.clone(),
-    );
+    // matched_skills merged into supervisor_state.trace
+    if let Some(skills) = input.matched_skills {
+        let mut trace = serde_json::Map::new();
+        trace.insert("matched_skills".to_string(), skills.clone());
+        trace.insert("updated_at".to_string(), Value::String(chrono::Utc::now().to_rfc3339()));
+        payload.insert("trace".to_string(), Value::Object(trace));
+    }
     payload.insert(
         "artifact_refs".to_string(),
         json!({
             "task_root": input.artifact_dir.display().to_string(),
             "session_summary": input.artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": input.artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": input.artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
-            "continuity_journal": input.artifact_dir.join(CONTINUITY_JOURNAL_FILENAME).display().to_string(),
+                        "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
         }),
     );
     Value::Object(payload)
-}
-
-fn build_continuity_journal_payload(input: ContinuityJournalInput<'_>) -> Value {
-    let summary_sha = sha256_hex(input.summary_text.as_bytes());
-    let next_actions_sha = sha256_json(input.next_actions_payload);
-    let evidence_sha = sha256_json(input.evidence_payload);
-    let trace_sha = sha256_json(input.trace_metadata_payload);
-    let supervisor_sha = sha256_json(input.supervisor_state_payload);
-    let checkpoint_hash = sha256_hex(
-        [
-            summary_sha.as_str(),
-            next_actions_sha.as_str(),
-            evidence_sha.as_str(),
-            trace_sha.as_str(),
-            supervisor_sha.as_str(),
-        ]
-        .join(":")
-        .as_bytes(),
-    );
-    let checkpoint = json!({
-        "checkpoint_id": checkpoint_hash,
-        "task_id": input.task_id,
-        "task": input.task,
-        "phase": input.phase,
-        "status": input.status,
-        "created_at": current_local_timestamp(),
-        "artifact_hashes": {
-            "session_summary": summary_sha,
-            "next_actions": next_actions_sha,
-            "evidence_index": evidence_sha,
-            "trace_metadata": trace_sha,
-            "supervisor_state": supervisor_sha,
-        },
-        "artifact_refs": {
-            "task_root": input.artifact_dir.display().to_string(),
-            "session_summary": input.artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": input.artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": input.artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
-        }
-    });
-    let mut checkpoints = input
-        .existing_journal
-        .get("checkpoints")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|item| item.get("checkpoint_id").and_then(Value::as_str) != Some(&checkpoint_hash))
-        .collect::<Vec<_>>();
-    checkpoints.push(checkpoint);
-    while checkpoints.len() > 20 {
-        checkpoints.remove(0);
-    }
-    json!({
-        "schema_version": CONTINUITY_JOURNAL_SCHEMA_VERSION,
-        "task_id": input.task_id,
-        "task": input.task,
-        "latest_checkpoint_id": checkpoint_hash,
-        "checkpoint_count": checkpoints.len(),
-        "checkpoints": checkpoints,
-    })
 }
 
 fn normalized_verification(existing: Option<&Value>, status: &str) -> Value {

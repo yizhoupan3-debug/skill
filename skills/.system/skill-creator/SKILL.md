@@ -15,14 +15,14 @@ trigger_hints:
   - create skill
   - update skill
   - skill package
-  - codex skill
+  - claude-code skill
   - skill authoring
   - trigger wording
   - frontmatter cleanup
   - skill debugging
 metadata:
   version: "1.0.0"
-  platforms: [codex]
+  platforms: [claude-code]
   short-description: Create or update a skill
 risk: low
 source: project

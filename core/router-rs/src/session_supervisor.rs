@@ -288,6 +288,8 @@ fn launch_worker(
     let tmux_session = optional_non_empty_string(payload, "tmux_session")
         .unwrap_or_else(|| format!("supervisor-{}", sanitize_segment(&worker_id)));
     let native_tmux_requested = optional_bool(payload, "native_tmux").unwrap_or(false);
+    let worktree_name_val = optional_non_empty_string(payload, "worktree_name");
+    let worktree_path_val = optional_non_empty_string(payload, "worktree_path");
     let launch_command = build_driver_command(
         &host,
         &cwd,
@@ -296,7 +298,8 @@ fn launch_worker(
         &resume_mode,
         false,
         native_tmux_requested,
-        optional_non_empty_string(payload, "worktree_name"),
+        worktree_name_val.clone(),
+        worktree_path_val.clone(),
     )?;
     let resume_command = Some(build_driver_command(
         &host,
@@ -306,7 +309,8 @@ fn launch_worker(
         &resume_mode,
         true,
         native_tmux_requested,
-        optional_non_empty_string(payload, "worktree_name"),
+        worktree_name_val,
+        worktree_path_val,
     )?);
     let retry_policy = payload
         .get("retry_policy")
@@ -361,7 +365,8 @@ fn launch_worker(
             Some("dry_run launch planned".to_string()),
         );
     } else {
-        let spawn = launch_in_tmux(&worker.launch_command, &tmux_session, &cwd)?;
+        let tmux_cwd = worker.worktree_path.as_deref().unwrap_or(&cwd);
+        let spawn = launch_in_tmux(&worker.launch_command, &tmux_session, tmux_cwd)?;
         worker.tmux_pane = Some(spawn.pane_id);
         worker.status = "running".to_string();
         worker.updated_at = now.to_string();
@@ -569,6 +574,41 @@ fn detect_rate_limit(evidence_text: &str, patterns: &[Regex]) -> Option<BlockCla
     None
 }
 
+fn is_safe_worktree_slug(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn resolve_worktree_cwd(cwd: &str, worktree_name: Option<&str>, worktree_path: Option<&str>) -> String {
+    if let Some(path) = worktree_path {
+        let p = std::path::Path::new(path);
+        if p.is_absolute() {
+            // Reject paths with traversal components
+            if p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+                return cwd.to_string();
+            }
+            return path.to_string();
+        }
+        // Relative path: resolve against cwd, reject traversal
+        let resolved = std::path::Path::new(cwd).join(p);
+        if resolved.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            return cwd.to_string();
+        }
+        return resolved.to_string_lossy().to_string();
+    }
+    if let Some(name) = worktree_name {
+        if !is_safe_worktree_slug(name) {
+            return cwd.to_string();
+        }
+        let wt_path = std::path::Path::new(cwd).join(".claude/worktrees").join(name);
+        return wt_path.to_string_lossy().to_string();
+    }
+    cwd.to_string()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_driver_command(
     host: &str,
@@ -578,12 +618,14 @@ fn build_driver_command(
     resume_mode: &str,
     resume_only: bool,
     _native_tmux_requested: bool,
-    _worktree_name: Option<String>,
+    worktree_name: Option<String>,
+    worktree_path: Option<String>,
 ) -> Result<DriverCommandSpec, String> {
+    let effective_cwd = resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
     let lowered = host.trim().to_ascii_lowercase();
     match lowered.as_str() {
         "codex" | "codex-cli" => {
-            let mut args = vec!["-C".to_string(), cwd.to_string()];
+            let mut args = vec!["-C".to_string(), effective_cwd.clone()];
             if resume_only {
                 args.push("resume".to_string());
                 if let Some(target) = resume_target {
@@ -608,6 +650,27 @@ fn build_driver_command(
                 supports_external_tmux: true,
             })
         }
+        "claude" | "claude-code" => {
+            let mut args = vec!["--print".to_string()];
+            if resume_only {
+                if let Some(target) = resume_target {
+                    args.push("--resume".to_string());
+                    args.push(target);
+                }
+            } else if let Some(ref p) = prompt {
+                args.push("-p".to_string());
+                args.push(p.clone());
+            }
+            Ok(DriverCommandSpec {
+                driver_id: "claude_code_driver".to_string(),
+                binary: "claude".to_string(),
+                shell_command: shell_join("claude", &args),
+                args,
+                supports_resume: true,
+                supports_native_tmux: false,
+                supports_external_tmux: true,
+            })
+        }
         other => Err(format!("Unsupported session supervisor host: {other}")),
     }
 }
@@ -615,6 +678,7 @@ fn build_driver_command(
 fn driver_id_for_host(host: &str) -> &'static str {
     match host.trim().to_ascii_lowercase().as_str() {
         "codex" | "codex-cli" => "codex_driver",
+        "claude" | "claude-code" => "claude_code_driver",
         _ => "unknown_driver",
     }
 }
@@ -1066,6 +1130,7 @@ mod tests {
             true,
             false,
             None,
+            None,
         )
         .expect("build codex resume command");
         assert_eq!(command.driver_id, "codex_driver");
@@ -1222,5 +1287,146 @@ mod tests {
             assert!(worker_ids.contains(&format!("worker-{idx}")));
         }
         let _ = fs::remove_file(state_path);
+    }
+
+    #[test]
+    fn resolve_worktree_cwd_defaults_to_cwd() {
+        assert_eq!(resolve_worktree_cwd("/repo", None, None), "/repo");
+    }
+
+    #[test]
+    fn resolve_worktree_cwd_with_safe_name() {
+        assert_eq!(
+            resolve_worktree_cwd("/repo", Some("my-feature"), None),
+            "/repo/.claude/worktrees/my-feature"
+        );
+    }
+
+    #[test]
+    fn resolve_worktree_cwd_rejects_traversal_in_name() {
+        // name with ../ should be rejected, falling back to cwd
+        assert_eq!(
+            resolve_worktree_cwd("/repo", Some("../etc"), None),
+            "/repo"
+        );
+        assert_eq!(
+            resolve_worktree_cwd("/repo", Some(".."), None),
+            "/repo"
+        );
+        assert_eq!(
+            resolve_worktree_cwd("/repo", Some("a/b"), None),
+            "/repo"
+        );
+    }
+
+    #[test]
+    fn resolve_worktree_cwd_with_explicit_path() {
+        assert_eq!(
+            resolve_worktree_cwd("/repo", None, Some("/wt/my-branch")),
+            "/wt/my-branch"
+        );
+    }
+
+    #[test]
+    fn resolve_worktree_cwd_rejects_traversal_in_path() {
+        assert_eq!(
+            resolve_worktree_cwd("/repo", None, Some("/repo/../etc/passwd")),
+            "/repo"
+        );
+    }
+
+    #[test]
+    fn resolve_worktree_cwd_relative_path_resolves_against_cwd() {
+        assert_eq!(
+            resolve_worktree_cwd("/repo", None, Some("worktrees/foo")),
+            "/repo/worktrees/foo"
+        );
+    }
+
+    #[test]
+    fn resolve_worktree_cwd_path_overrides_name() {
+        // worktree_path takes priority over worktree_name
+        assert_eq!(
+            resolve_worktree_cwd("/repo", Some("branch-name"), Some("/explicit/path")),
+            "/explicit/path"
+        );
+    }
+
+    #[test]
+    fn claude_host_builds_print_command() {
+        let command = build_driver_command(
+            "claude-code",
+            "/tmp/project",
+            Some("hello world".to_string()),
+            None,
+            "last",
+            false,
+            false,
+            None,
+            None,
+        )
+        .expect("build claude command");
+        assert_eq!(command.driver_id, "claude_code_driver");
+        assert_eq!(command.binary, "claude");
+        assert!(command.args.contains(&"--print".to_string()));
+        assert!(command.args.contains(&"-p".to_string()));
+        assert!(command.args.contains(&"hello world".to_string()));
+        assert!(command.supports_resume);
+    }
+
+    #[test]
+    fn claude_host_resume_command() {
+        let command = build_driver_command(
+            "claude",
+            "/tmp/project",
+            None,
+            Some("session-123".to_string()),
+            "specific",
+            true,
+            false,
+            None,
+            None,
+        )
+        .expect("build claude resume command");
+        assert_eq!(command.driver_id, "claude_code_driver");
+        assert!(command.args.contains(&"--resume".to_string()));
+        assert!(command.args.contains(&"session-123".to_string()));
+    }
+
+    #[test]
+    fn claude_host_with_worktree_uses_effective_cwd() {
+        let command = build_driver_command(
+            "claude",
+            "/repo",
+            Some("test".to_string()),
+            None,
+            "last",
+            false,
+            false,
+            Some("my-branch".to_string()),
+            None,
+        )
+        .expect("build claude with worktree");
+        // claude host does not embed cwd in args (unlike codex -C),
+        // but the command should build successfully with worktree
+        assert_eq!(command.driver_id, "claude_code_driver");
+        assert!(command.args.contains(&"--print".to_string()));
+        assert!(command.args.contains(&"test".to_string()));
+    }
+
+    #[test]
+    fn is_safe_worktree_slug_accepts_valid_names() {
+        assert!(is_safe_worktree_slug("my-feature"));
+        assert!(is_safe_worktree_slug("fix_bug_123"));
+        assert!(is_safe_worktree_slug("v2"));
+    }
+
+    #[test]
+    fn is_safe_worktree_slug_rejects_unsafe_names() {
+        assert!(!is_safe_worktree_slug(""));           // empty
+        assert!(!is_safe_worktree_slug("../etc"));     // traversal
+        assert!(!is_safe_worktree_slug("a/b"));        // slash
+        assert!(!is_safe_worktree_slug("a b"));        // space
+        assert!(!is_safe_worktree_slug(&"x".repeat(129))); // too long
     }
 }

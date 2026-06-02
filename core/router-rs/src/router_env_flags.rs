@@ -29,7 +29,6 @@ const ROUTER_RS_RFV_EXTERNAL_STRUCT_HINT_ENV: &str = "ROUTER_RS_RFV_EXTERNAL_STR
 const ROUTER_RS_DEPTH_SCORE_MODE_ENV: &str = "ROUTER_RS_DEPTH_SCORE_MODE";
 const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
 const ROUTER_RS_DEPTH_COMPLIANCE_HINT_ENV: &str = "ROUTER_RS_DEPTH_COMPLIANCE_HINT";
-const ROUTER_RS_CONTINUITY_WRITE_JOURNAL_ENV: &str = "ROUTER_RS_CONTINUITY_WRITE_JOURNAL";
 const ROUTER_RS_TASK_STATE_AGGREGATE_AUTO_ENV: &str = "ROUTER_RS_TASK_STATE_AGGREGATE_AUTO";
 const ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED_ENV: &str =
     "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
@@ -264,10 +263,6 @@ pub fn router_rs_depth_compliance_hint_enabled() -> bool {
         || router_rs_env_enabled_default_false(ROUTER_RS_DEPTH_COMPLIANCE_HINT_ENV)
 }
 
-/// `CONTINUITY_JOURNAL.json` on session batch write. Default off; `=1` enables.
-pub fn router_rs_continuity_write_journal_enabled() -> bool {
-    router_rs_env_enabled_default_false(ROUTER_RS_CONTINUITY_WRITE_JOURNAL_ENV)
-}
 
 /// Auto-refresh `TASK_STATE.json` after ledger mutations. Default off; CLI `task-state-aggregate-sync` always runs.
 pub fn router_rs_task_state_aggregate_auto_enabled() -> bool {
@@ -448,7 +443,6 @@ mod tests {
         let keys = [
             "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE",
             "ROUTER_RS_DEPTH_COMPLIANCE_HINT",
-            "ROUTER_RS_CONTINUITY_WRITE_JOURNAL",
             "ROUTER_RS_TASK_STATE_AGGREGATE_AUTO",
         ];
         let prev: Vec<_> = keys
@@ -460,7 +454,6 @@ mod tests {
         }
         assert!(!super::router_rs_continuity_post_tool_evidence_enabled());
         assert!(!super::router_rs_depth_compliance_hint_enabled());
-        assert!(!super::router_rs_continuity_write_journal_enabled());
         assert!(!super::router_rs_task_state_aggregate_auto_enabled());
         env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1");
         assert!(super::router_rs_continuity_post_tool_evidence_enabled());
