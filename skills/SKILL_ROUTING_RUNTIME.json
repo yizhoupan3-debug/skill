@@ -155,30 +155,6 @@
       null
     ],
     [
-      "openai-docs",
-      "L1",
-      "gate",
-      "source",
-      "required",
-      "Use official OpenAI docs first for current OpenAI guidance",
-      [
-        "OpenAI docs",
-        "OpenAI API",
-        "Responses API",
-        "Apps SDK",
-        "Codex docs",
-        "官方文档"
-      ],
-      "P1",
-      "skills/openai-docs/SKILL.md",
-      [
-        "claude-code",
-        "claude-code"
-      ],
-      "skill",
-      null
-    ],
-    [
       "design-md",
       "L3",
       "gate",
@@ -1140,80 +1116,6 @@
       ],
       "P2",
       "skills/.archive-cold/diagramming/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-desktop",
-        "claude-code",
-        "claude-desktop",
-        "claude-code",
-        "claude-code",
-        "cursor"
-      ],
-      "skill",
-      null
-    ],
-    [
-      "hatch-pet",
-      "L3",
-      "owner",
-      "none",
-      "n/a",
-      "Create, repair, validate, preview, and package animated pet spritesheets from character art, screenshots, generated images, or visual references. Use when a user wants to hatch a custom pet.",
-      [
-        "hatch-pet",
-        "hatch pet",
-        "hatch a Codex pet",
-        "Codex pet",
-        "custom animated pet",
-        "custom pet",
-        "pet spritesheet",
-        "pet atlas",
-        "spritesheet.webp",
-        "pet.json",
-        "8x9 atlas",
-        "animated pet",
-        "电子宠物",
-        "自定义宠物",
-        "生成宠物",
-        "宠物 spritesheet"
-      ],
-      "P1",
-      "skills/.archive-cold/hatch-pet/SKILL.md",
-      [
-        "antigravity",
-        "claude-desktop",
-        "claude-desktop",
-        "claude-code",
-        "claude-desktop",
-        "claude-code",
-        "claude-code",
-        "cursor"
-      ],
-      "skill",
-      null
-    ],
-    [
-      "image-generated",
-      "L1",
-      "owner",
-      "none",
-      "n/a",
-      "Generate or edit raster images through official OpenAI API using the bundled Rust CLI.",
-      [
-        "生成图片",
-        "生图",
-        "编辑图片",
-        "画一张图",
-        "做封面图",
-        "image generation",
-        "generate image",
-        "OpenAI",
-        "DALL-E",
-        "image-generated"
-      ],
-      "P2",
-      "skills/.archive-cold/image-generated/SKILL.md",
       [
         "antigravity",
         "claude-desktop",

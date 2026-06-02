@@ -15,6 +15,7 @@ source: local
 routing_layer: L0
 routing_owner: gate
 routing_gate: source
+routing_priority: P2
 session_start: required
 trigger_hints:
   - Sentry evidence
@@ -53,7 +54,7 @@ It gathers and ranks evidence from Sentry before deeper debugging or implementat
 
 ## Do not use
 
-- Local debugging without Sentry evidence → 直接在当前上下文做系统化调试（`$systematic-debugging` 已归档）
+- Local debugging without Sentry evidence → 直接在当前上下文做系统化调试（systematic-debugging 已归档）
 - Sentry configuration or alert setup changes
 - Code fixing as the main task
 - No Sentry access is available
@@ -66,10 +67,10 @@ It gathers and ranks evidence from Sentry before deeper debugging or implementat
 4. Rank by impact, recency, frequency, and regression risk.
 5. Convert evidence into actionable debugging next steps.
 
-## Handoff to systematic-debugging
+## 调试后续步骤
 
 After extracting Sentry evidence, if the root cause is still not confirmed:
-- **Must perform systematic root-cause debugging** in the current context before domain fix（`$systematic-debugging` 已归档，不再路由）.
+- **Must perform systematic root-cause debugging** in the current context before domain fix（systematic-debugging 已归档，不再路由）.
 - Pass along the extracted stack trace and Sentry event metadata as the evidence block.
 - Do not jump directly to a "fix" without root-cause isolation when the Sentry trace is ambiguous.
 

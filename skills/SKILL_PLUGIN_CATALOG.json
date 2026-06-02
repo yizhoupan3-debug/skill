@@ -34,38 +34,6 @@
       "kind": "skill",
       "skill_path": "skills/agent-swarm-orchestration/SKILL.md"
     },
-    "algo-trading": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/algo-trading/SKILL.md"
-    },
-    "assignment-compliance": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/assignment-compliance/SKILL.md"
-    },
     "citation-management": {
       "host_support": {
         "platforms": [
@@ -97,22 +65,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/code-review-deep/SKILL.md"
-    },
-    "copywriting": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/copywriting/SKILL.md"
     },
     "deepinterview": {
       "host_support": {
@@ -194,38 +146,6 @@
       "kind": "skill",
       "skill_path": "skills/doc/SKILL.md"
     },
-    "documentation-engineering": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/documentation-engineering/SKILL.md"
-    },
-    "email-template": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/email-template/SKILL.md"
-    },
     "experiment-reproducibility": {
       "host_support": {
         "platforms": [
@@ -241,22 +161,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/experiment-reproducibility/SKILL.md"
-    },
-    "financial-data-fetching": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/financial-data-fetching/SKILL.md"
     },
     "gh-address-comments": {
       "host_support": {
@@ -353,22 +257,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/implementx/SKILL.md"
-    },
-    "infographic": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/infographic/SKILL.md"
     },
     "jupyter-notebook": {
       "host_support": {
@@ -556,16 +444,6 @@
       "kind": "skill",
       "skill_path": "skills/planx/SKILL.md"
     },
-    "plugin-creator": {
-      "host_support": {
-        "platforms": [
-          "claude-code",
-          "claude-code"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.system/plugin-creator/SKILL.md"
-    },
     "ppt-beamer": {
       "host_support": {
         "platforms": [
@@ -630,22 +508,6 @@
       "kind": "skill",
       "skill_path": "skills/scientific-figure-plotting/SKILL.md"
     },
-    "screenshot": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/screenshot/SKILL.md"
-    },
     "sentry": {
       "host_support": {
         "platforms": [
@@ -662,22 +524,6 @@
       "kind": "skill",
       "skill_path": "skills/sentry/SKILL.md"
     },
-    "skill-creator": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.system/skill-creator/SKILL.md"
-    },
     "skill-framework-developer": {
       "host_support": {
         "platforms": [
@@ -693,16 +539,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/skill-framework-developer/SKILL.md"
-    },
-    "skill-installer": {
-      "host_support": {
-        "platforms": [
-          "claude-code",
-          "claude-code"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.system/skill-installer/SKILL.md"
     },
     "slides": {
       "host_support": {
@@ -768,48 +604,6 @@
       "kind": "skill",
       "skill_path": "skills/statistical-analysis/SKILL.md"
     },
-    "systematic-debugging": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/systematic-debugging/SKILL.md"
-    },
-    "tao-ci": {
-      "host_support": {
-        "platforms": [
-          "claude-code",
-          "claude-code"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/tao-ci/SKILL.md"
-    },
-    "tikz-paper-figure": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/tikz-paper-figure/SKILL.md"
-    },
     "update": {
       "host_support": {
         "platforms": [
@@ -857,22 +651,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/visual-review/SKILL.md"
-    },
-    "youtube-summarizer": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-desktop",
-          "claude-desktop",
-          "claude-code",
-          "claude-desktop",
-          "claude-code",
-          "claude-code",
-          "cursor"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/.archive-cold/youtube-summarizer/SKILL.md"
     }
   },
   "source_of_truth": false

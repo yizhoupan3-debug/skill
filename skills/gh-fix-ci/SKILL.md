@@ -19,6 +19,7 @@ runtime_requirements:
 routing_layer: L0
 routing_owner: gate
 routing_gate: source
+routing_priority: P2
 session_start: required
 trigger_hints:
   - github
