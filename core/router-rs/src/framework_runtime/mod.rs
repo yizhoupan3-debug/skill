@@ -797,7 +797,13 @@ pub(crate) fn append_evidence_index_merged_row(
         return Ok(());
     }
 
-    let evidence_path = current_root.join(EVIDENCE_INDEX_FILENAME);
+    // Write evidence to task-local subdirectory when a task_id is resolved,
+    // matching the read path in FrameworkRuntimeView and
+    // task_evidence_artifacts_summary_for_task.
+    let evidence_path = match resolved_task_id {
+        Some(ref tid) => current_root.join(tid).join(EVIDENCE_INDEX_FILENAME),
+        None => current_root.join(EVIDENCE_INDEX_FILENAME),
+    };
     if let Some(parent) = evidence_path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
     }
