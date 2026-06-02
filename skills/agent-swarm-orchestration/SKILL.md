@@ -174,9 +174,9 @@ If the discussion touches current-session execution:
 - Supervisor owns integration and final verification.
 - **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
 
-## Claude Code Hooks 集成（2025-2026）
+## Hooks 集成
 
-Claude Code Hooks 已扩展至 30+ 事件类型，以下对 agent 编排最有价值：
+部分宿主已扩展至 30+ hook 事件类型，以下对 agent 编排最有价值：
 
 ### 子代理生命周期
 - SubagentStart / SubagentStop：监控子代理启动和终止
@@ -195,7 +195,7 @@ Claude Code Hooks 已扩展至 30+ 事件类型，以下对 agent 编排最有�
 - FileChanged + async hook：文件变更后自动运行测试/lint，不阻塞主流程
 
 ### 设计约束
-- 保持宿主无关性：Hooks 是 Claude Code 特有能力，跨宿主场景需降级为手动流程
+- 保持宿主无关性：Hooks 是宿主特有能力，跨宿主场景需降级为手动流程
 - 提取编排模式（依赖管理、并行执行、结果汇总）但保持平台中立
 
 ## Trigger examples

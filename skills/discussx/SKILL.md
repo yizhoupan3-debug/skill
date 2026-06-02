@@ -10,6 +10,8 @@ routing_priority: P1
 session_start: n/a
 user-invocable: true
 disable-model-invocation: true
+risk: low
+source: local
 trigger_hints:
   - /discussx
   - discussx

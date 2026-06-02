@@ -13,6 +13,8 @@ routing_gate: none
 session_start: n/a
 user-invocable: false
 disable-model-invocation: true
+risk: low
+source: community
 trigger_hints:
   - Beamer slides
   - LaTeX 幻灯片

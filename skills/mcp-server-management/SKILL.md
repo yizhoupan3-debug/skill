@@ -3,7 +3,7 @@ name: mcp-server-management
 description: |
   创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。
   覆盖 stdio/SSE/streamable-http 三种传输模式，Python FastMCP 和 Rust 两种主流实现，
-  以及 Claude Code / Claude Desktop 集成、MCP Registry 注册、调试故障排查全流程。
+  以及宿主集成（MCP client 配置）、MCP Registry 注册、调试故障排查全流程。
 metadata:
   version: "1.0.0"
   platforms: [supported]
@@ -31,7 +31,7 @@ trigger_hints:
 ## 概述
 
 MCP (Model Context Protocol) 是 AI agent 连接外部工具和数据的事实标准协议。
-它定义了 host（如 Claude Code / Claude Desktop）、client 和 server 之间的通信规范，
+它定义了 host（宿主环境）、client 和 server 之间的通信规范，
 使 agent 能够调用外部工具、读取资源、使用 prompt 模板。
 
 核心概念：
@@ -103,7 +103,7 @@ mcp.run()
 
 验证：`echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' | python server.py`
 
-## 集成到 Claude Code
+## 集成到宿主环境
 
 ### .mcp.json（项目级）
 

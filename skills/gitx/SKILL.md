@@ -152,7 +152,7 @@ bridge_behavior: mobile_complete_once
 12. 推送：
    - 推送前确认 upstream、ahead/behind、remote 目标
    - 用显式 remote 和 branch；不要盲推
-   - 推送前征求用户确认（遵循宿主安全协议：Claude Code 要求显式 push 授权）
+   - 推送前征求用户确认（遵循宿主安全协议：多数宿主要求显式 push 授权）
    - 仅在高风险阻塞场景暂停推送并说明原因：冲突、非快进拒绝、分叉历史不清、目标远端不明确、或权限/认证失败
 
 ## Hard constraints

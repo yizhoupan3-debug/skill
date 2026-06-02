@@ -34,7 +34,7 @@
 - hands 是 tool（`execute(name, input) → string`）→ 可替换
 - 来源：https://www.anthropic.com/engineering/managed-agents
 
-## 2. Claude Code 官方文档
+## 2. Agent 官方文档
 
 ### Subagents
 
@@ -55,7 +55,7 @@
 
 ### Agent Teams
 
-- 多 Claude Code 实例独立工作；shared task list + inter-agent messaging
+- 多 agent 实例独立工作；shared task list + inter-agent messaging
 - 推荐 3-5 teammate；5-6 tasks per teammate
 - subagent 定义可复用为 teammate 角色
 - hooks：TeammateIdle / TaskCreated / TaskCompleted

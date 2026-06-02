@@ -14,6 +14,8 @@ routing_priority: P2
 session_start: preferred
 user-invocable: true
 disable-model-invocation: false
+risk: low
+source: local
 trigger_hints:
   - Cursor Plan
   - Plan 模式

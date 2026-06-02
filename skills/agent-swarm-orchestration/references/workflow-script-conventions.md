@@ -1,7 +1,7 @@
 # Workflow 脚本编写约定
 
 > 适用于 `.claude/workflows/` 下的 Dynamic Workflow JS 脚本。
-> 参考：Claude Code Best Practices、agent-swarm-orchestration 规范、reasoning-depth-contract。
+> 参考：Agent Best Practices、agent-swarm-orchestration 规范、reasoning-depth-contract。
 
 ## 阶段结构（最少 4 阶段）
 

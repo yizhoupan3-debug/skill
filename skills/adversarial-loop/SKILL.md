@@ -13,6 +13,8 @@ routing_priority: P1
 session_start: preferred
 user-invocable: false
 disable-model-invocation: true
+risk: low
+source: local
 trigger_hints:
   - $adversarial-loop
   - adversarial loop

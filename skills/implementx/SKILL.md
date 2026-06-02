@@ -12,6 +12,8 @@ routing_priority: P1
 session_start: n/a
 user-invocable: true
 disable-model-invocation: true
+risk: low
+source: local
 trigger_hints:
   - /implementx
   - implementx
@@ -67,7 +69,7 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 
 **Model (Cursor)**: omit `Task` `model` (inherit parent session); do not default `claude-*` / `sonnet*`. See `.cursor/rules/subagent-model-inherit.mdc`.
 
-**Model (Claude Code)**: inherit主会话模型，不显式指定。Claude Code 端积极鼓励并行 lane——≥2 独立子问题时**应** spawn 子代理，通常 3–5 个 `fork_context=false` lane，不因缺少 hook 级子代理事件而退缩为主线程串行。详见 [`docs/hosts/codex-cli.md` § 多代理编排](../../docs/hosts/codex-cli.md)。
+**Model (CLI/Terminal)**: inherit主会话模型，不显式指定。CLI 端积极鼓励并行 lane——≥2 独立子问题时**应** spawn 子代理，通常 3–5 个 `fork_context=false` lane，不因缺少 hook 级子代理事件而退缩为主线程串行。详见 [`docs/hosts/codex-cli.md` § 多代理编排](../../docs/hosts/codex-cli.md)。
 
 ## Spec-driven 并行构建
 
