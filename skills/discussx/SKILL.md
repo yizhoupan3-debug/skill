@@ -9,6 +9,7 @@ routing_gate: none
 routing_priority: P1
 session_start: n/a
 user-invocable: true
+disable-model-invocation: true
 trigger_hints:
   - /discussx
   - discussx

@@ -112,8 +112,7 @@ writing_handoff: surgical | refactor  # 若需多段/全节骨架重组
 | 文件 | 环境变量（prose **默认开**） | 注入事件 |
 | --- | --- | --- |
 | `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt` | `ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` | Cursor `beforeSubmit` |
-| 同上 | `ROUTER_RS_CODEX_PAPER_PROSE_HOOK` | Codex CLI `UserPromptSubmit` |
-| 同上 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` | Claude Code `UserPromptSubmit` |
+| 同上 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` [legacy: CODEX] | Claude Code / Legacy Codex CLI `UserPromptSubmit` |
 | 同上 | `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK` | Antigravity CLI `UserPromptSubmit` |
 | `configs/framework/PAPER_ADVERSARIAL_HOOK.txt` | `ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1`（四宿主对称；**默认关**） | 同上 |
 

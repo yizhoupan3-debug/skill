@@ -58,10 +58,10 @@ Prefer the bundled templates for consistent structure and fewer JSON mistakes.
 ## Skill path (set once)
 
 ```bash
-export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export SKILL_REPO_ROOT="${SKILL_REPO_ROOT:-$(git rev-parse --show-toplevel)}"
 ```
 
-User-scoped skills install under `$CODEX_HOME/skills` (default: `~/.codex/skills`).
+User-scoped skills are managed in the repository under `skills/`.
 
 ## Workflow
 1. Lock the intent.
@@ -73,13 +73,13 @@ Copy a bundled template to avoid hand-authoring raw notebook JSON from scratch.
 
 ```bash
 mkdir -p output/jupyter-notebook
-cp "$CODEX_HOME/skills/jupyter-notebook/assets/experiment-template.ipynb" \
+cp "$SKILL_REPO_ROOT/skills/jupyter-notebook/assets/experiment-template.ipynb" \
   output/jupyter-notebook/compare-prompt-variants.ipynb
 ```
 
 ```bash
 mkdir -p output/jupyter-notebook
-cp "$CODEX_HOME/skills/jupyter-notebook/assets/tutorial-template.ipynb" \
+cp "$SKILL_REPO_ROOT/skills/jupyter-notebook/assets/tutorial-template.ipynb" \
   output/jupyter-notebook/intro-to-embeddings.ipynb
 ```
 

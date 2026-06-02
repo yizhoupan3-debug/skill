@@ -38,7 +38,7 @@ Common fields on each `artifacts[]` row: `command_preview`, `recorded_at`, `exit
 
 ## Evidence Types
 
-### Cursor/Codex PostTool (Auto, opt-in)
+### Cross-host PostTool (Auto, opt-in)
 
 When `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` and router-rs hooks detect verification-like commands:
 

@@ -136,7 +136,7 @@ This skill is the one front door for paper work.
 
 启用外研时，审稿/校准产出须满足 [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`$paper-reviewer`** 的 External lane shape 约定。
 
-**宿主 hook（L4 短码）**：`router-rs` 在 **Cursor `beforeSubmit`** 与 **Codex / Claude Code / Antigravity CLI `UserPromptSubmit`** 命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` / `ROUTER_RS_CODEX_PAPER_PROSE_HOOK` / `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` / `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
+**宿主 hook（L4 短码）**：`router-rs` 在 **Cursor `beforeSubmit`** 与 **Claude Code / Antigravity CLI `UserPromptSubmit`** 命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` / `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` / `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
 
 It exists so the user does not need to decide first whether the job is
 `$paper-reviewer`, `$paper-writing`, or a review/revision dimension mode.
@@ -154,7 +154,7 @@ It exists so the user does not need to decide first whether the job is
 
 **全栈索引**（技能 × reference × L0–L3）：[`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md)。
 
-**宿主与专科契约（与 stack 对齐）**：`$paper-workbench` 在 Codex 与 Cursor 上均为用户可 invocation 的前门；`$paper-writing` / `$paper-reviewer` 保持 `disable-model-invocation`，表示由本前门在**任一支宿主**上**内联**加载的专科 lane，而非与用户入口并列的第二扇门。权威表述见 [`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md) §宿主与专科入口。
+**宿主与专科契约（与 stack 对齐）**：`$paper-workbench` 在所有宿主上均为用户可 invocation 的前门；`$paper-writing` / `$paper-reviewer` 保持 `disable-model-invocation`，表示由本前门在**任一支宿主**上**内联**加载的专科 lane，而非与用户入口并列的第二扇门。权威表述见 [`references/RESEARCH_PAPER_STACK.md`](references/RESEARCH_PAPER_STACK.md) §宿主与专科入口。
 
 ## Use this when
 

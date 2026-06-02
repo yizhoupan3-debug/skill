@@ -2,9 +2,9 @@
 
 ## 单一事实来源
 
-- `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.codex/skills` 当成主路径前提。
+- `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.claude/commands` 当成主路径前提。
 - system skill 放 `skills/.system/`。不要同时保留两份 live source。
-- `~/.codex/skills` 是 Codex/App/CLI 共用的轻量安装面；常与 host integration 生成的 `artifacts/codex-skill-surface/skills` 投影配套，用于 CLI 可见的薄别名。**框架命令的真源在仓库内**：个人默认 **`discussx` / `planx` / `implementx` / `verifyx`**（legacy `/gsd-*` 已移除）。`team` → `skills/agent-swarm-orchestration/SKILL.md`。改 routing 后执行 `just publish` + `host-integration install`。治理与路由边界仍见 `skills/skill-framework-developer/SKILL.md`；不要在 `~/.codex/skills` 手修 canonical body。
+- `~/.claude/commands` 是 Claude Code 共用的轻量安装面；常与 host integration 生成的 `artifacts/codex-skill-surface/skills` 投影配套，用于 CLI 可见的薄别名。**框架命令的真源在仓库内**：个人默认 **`discussx` / `planx` / `implementx` / `verifyx`**（legacy `/gsd-*` 已移除）。`team` → `skills/agent-swarm-orchestration/SKILL.md`。改 routing 后执行 `just publish` + `host-integration install`。治理与路由边界仍见 `skills/skill-framework-developer/SKILL.md`；不要在 `~/.claude/commands` 手修 canonical body。
 - 不再维护 skill health 分。路由真源只保留 source manifest、skill frontmatter、generated manifest/runtime，以及真实回归用例；不要新增健康快照或把健康分写回 schema。
 - 过期计划/历史文档（`docs/plans/*` stub、`docs/history/`、`configs/codex/docs/`）已删除；勿恢复为「第二真源」。索引见 [`docs/plans/README.md`](../docs/plans/README.md)、[`MIGRATION.md`](../MIGRATION.md)。
 
@@ -47,7 +47,7 @@
 - 触发词是否变化 → 更新 description
 - 边界是否变化 → 同步改 `SKILL_ROUTING_RUNTIME.json` / `SKILL_MANIFEST.json`，再 `framework skills refresh --write --write-companions`
 - 是否引入第二份 live source → 删除多余副本
-- 是否需要刷新 Codex/App/CLI 可见入口 → 运行 `cargo run --manifest-path core/router-rs/Cargo.toml -- codex host-integration install-skills --repo-root \"$PWD\" install`（或使用已安装的 `router-rs` 等价命令），不要手动改 `~/.codex/skills`
+- 是否需要刷新 Claude Code 可见入口 → 运行 `cargo run --manifest-path core/router-rs/Cargo.toml -- codex host-integration install-skills --repo-root \"$PWD\" install`（或使用已安装的 `router-rs` 等价命令），不要手动改 `~/.claude/commands`
 
 ## 边界重叠处理
 

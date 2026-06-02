@@ -108,7 +108,7 @@ Expect: `python3` → 3.12.x; executable under `~/.local/share/uv/`; `pip3` → 
 2. Restore `Library/Python/3.11/bin` in `~/.zshrc` PATH line.
 3. Remove pip guards from `~/.zprofile.local`.
 
-## IDE / Cursor / Codex
+## IDE / 编辑器
 
 IDEs may inject their own PATH. After editing shell files, **restart the IDE** so integrated terminals inherit the cleaned PATH.
 

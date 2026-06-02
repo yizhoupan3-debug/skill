@@ -5,6 +5,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: preferred
+user-invocable: true
+disable-model-invocation: true
 trigger_hints:
   - 文献引用管理
   - 参考文献核查

@@ -99,7 +99,7 @@ the request is about framework structure rather than one isolated file edit.
 
 ## When to use
 
-- The user wants to redesign the Codex skill framework or route selection policy
+- The user wants to redesign the skill framework or route selection policy
 - The user wants routine skill-library validation, sync checks, or drift cleanup
 - The task is **框架自优化 / 路由诊断 / 触发精准度优化 / 减少 token 消耗**
 - The user asks how to handle **新增 skill / 新加入 skill / 维护规范 / 维护流程**
@@ -112,14 +112,14 @@ the request is about framework structure rather than one isolated file edit.
   - "优化整个 skill 框架"
   - "科研相关 skill 太不好用了，持续优化，允许外部调研"
   - "写作 skill 还是不好用，帮我继续收紧"
-  - "这个 Codex skill 到底该谁当 owner？"
+  - "这个 skill 到底该谁当 owner？"
   - "边界重叠怎么处理，先改旧 skill 还是新建？"
   - "把这个框架改得更快、更准、更省 token"
 
 ## Do not use
 
-- The task is **concrete single skill package creation/update** after the boundary is known → use [`$skill-creator`](../.archive-cold/.system/skill-creator/SKILL.md)
-- The task is **new skill intake / install / relink / re-index** → use [`$skill-installer`](../.archive-cold/.system/skill-installer/SKILL.md)
+- The task is **concrete single skill package creation/update** after the boundary is known → do it directly in this skill's workflow
+- The task is **new skill intake / install / relink / re-index** → do it directly in this skill's workflow
 
 ## Primary operating principle
 
@@ -163,8 +163,8 @@ Use this owner split:
 - **`batch wording normalization`** → consistent shape across many skill files
 - **`miss repair`** → smallest safe route repair after a concrete miss, plus regression case
 - **`external scout`** → external skill ecosystem benchmarking when the output is local framework guidance
-- **`skill-creator`** → create/update/split a specific Codex skill package
-- **`skill-installer`** → import, normalize, link, and re-index a new skill
+- **`skill-creator`** [archived, merged here] → create/update/split a specific skill package
+- **`skill-installer`** [archived, merged here] → import, normalize, link, and re-index a new skill
 
 Default to **incumbent-first** repair:
 
@@ -216,5 +216,5 @@ Before finishing, verify:
 - **Superior Quality Audit**: For framework-level redesigns, apply the runtime verification gate (see [`skills/SKILL_FRAMEWORK_PROTOCOLS.md`](../SKILL_FRAMEWORK_PROTOCOLS.md)) and verify against its “Superior Quality Bar / verification gate” criteria.
 
 ## Trigger examples
-- "强制进行 Codex 框架深度审计 / 检查路由策略与同步状态。"
+- "强制进行框架深度审计 / 检查路由策略与同步状态。"
 - "Use the runtime verification gate to audit this framework-policy for sync-health idealism."

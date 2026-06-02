@@ -95,8 +95,8 @@ serial full-build path for sign-off**.
   `$ppt-beamer`.
 - Main task is rendered PDF inspection or visual QA: use `$pdf` or
   `$visual-review`.
-- Build is failing and the root cause is unknown: use `$systematic-debugging`
-  first, then return here for speed/stability.
+- Build is failing and the root cause is unknown: debug systematically
+  in the current context first, then return here for speed/stability.
 - Task is generic JS/TS/Python/Rust build tooling: answer in the current
   implementation context instead of routing through this LaTeX-specific owner.
 - User asks to rewrite TeX compilation itself in Rust: treat it as a new tool

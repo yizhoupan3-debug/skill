@@ -79,7 +79,7 @@ network_access: local
 - 普通依赖升级或包版本升级
 - 单一功能修 bug 且不涉及仓库知识状态或卫生维护
 - Git commit、branch、merge、push 收口：用 **`/gitx`**
-- 只改单个 skill 文案且不刷新 registry：用 **`$skill-creator`**
+- 只改单个 skill 文案且不刷新 registry：用 **`$skill-framework-developer`**
 
 ## Rust audit entrypoint
 

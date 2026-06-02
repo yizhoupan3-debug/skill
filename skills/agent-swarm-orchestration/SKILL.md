@@ -123,9 +123,9 @@ Reject spawning with an explicit reason:
 - `verification_missing`
 - `token_overhead_dominates`
 
-## Codex sidecar prompt contract
+## Sidecar prompt contract
 
-Codex sidecars should feel like precise lane workers, not vague assistants.
+Sidecars should feel like precise lane workers, not vague assistants.
 
 **Cursor**: omit `Task` `model` so subagents inherit the parent session model; do not default Claude/Sonnet unless the parent already uses Anthropic (see `.cursor/rules/subagent-model-inherit.mdc`).
 

@@ -4,7 +4,7 @@ description: |
   Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams.
   Use when the user asks for Mermaid or Graphviz/DOT, `.mmd` diagrams, 流程图, 研究流程图, 技术路线图, 方法图, 实验流程, pipeline 图, 时序图, 架构图, Gantt charts, user journeys, or wants readable markdown-ready text diagrams. Also use for Mermaid or Graphviz/DOT 美化, 导出 PNG/SVG, 自定义主题, diagramming-cli, or mmdc.
 metadata:
-  model: haiku
+  model: claude-haiku-4-5-20251001
   version: "2.0.0"
   platforms: [supported]
   tags:

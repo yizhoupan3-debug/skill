@@ -17,6 +17,8 @@ routing_owner: gate
 routing_gate: source
 routing_priority: P2
 session_start: required
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - Sentry evidence
   - sentry
@@ -54,7 +56,7 @@ It gathers and ranks evidence from Sentry before deeper debugging or implementat
 
 ## Do not use
 
-- Local debugging without Sentry evidence → 直接在当前上下文做系统化调试（systematic-debugging 已归档）
+- Local debugging without Sentry evidence → 直接在当前上下文做系统化调试
 - Sentry configuration or alert setup changes
 - Code fixing as the main task
 - No Sentry access is available

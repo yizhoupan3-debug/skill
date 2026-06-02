@@ -21,6 +21,8 @@ routing_owner: gate
 routing_gate: source
 routing_priority: P2
 session_start: required
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - github
   - ci

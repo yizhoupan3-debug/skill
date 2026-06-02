@@ -68,8 +68,8 @@
 
 手稿专科（`paper-workbench` / `paper-writing` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：热路由 owner 以 [`../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（当前仅 `paper-workbench` + `paper-writing` 热表；`paper-reviewer` 内联）；技能安装与宿主投影以 **`router-rs framework host-integration install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`../../../docs/host_adapter_contract.md`](../../../docs/host_adapter_contract.md)。
 
-- **`$paper-workbench`**：在 **Codex 与 Cursor** 上均为**用户可显式 invocation 的前门**（`user-invocable`，宿主以各环境 `SKILL.md` / 路由为准）。
-- **`$paper-writing` / `$paper-reviewer`**：保持 **`disable-model-invocation: true`** 与既有 Codex 元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、润色 lane）。revision 由 workbench 自身 inline 处理（`edit_scope` gate）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。
+- **`$paper-workbench`**：在**所有宿主**上均为**用户可显式 invocation 的前门**（`user-invocable`，宿主以各环境 `SKILL.md` / 路由为准）。
+- **`$paper-writing` / `$paper-reviewer`**：保持 **`disable-model-invocation: true`** 与既有元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、润色 lane）。revision 由 workbench 自身 inline 处理（`edit_scope` gate）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。
 
 ## 可选工具
 

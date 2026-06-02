@@ -223,10 +223,10 @@ agent 之间不能只传自然语言大段描述，最好有结构化交接。
 - handoff 数据结构
 - 一条可运行的端到端流程
 
-## Codex Notes
+## Runtime Notes
 
-- 若用户只是希望当前会话并行处理，不要把“实现多 agent 系统”和“立刻开很多 sub-agent”混为一谈
-- 在当前 Codex 环境里，运行时是否真的执行 delegation 取决于当前 session policy；但设计层应保持 sidecar-ready 结构，并在不可派发时退化为 local-supervisor 模式
+- 若用户只是希望当前会话并行处理，不要把”实现多 agent 系统”和”立刻开很多 sub-agent”混为一谈
+- 在当前运行时环境里，是否真的执行 delegation 取决于当前 session policy；但设计层应保持 sidecar-ready 结构，并在不可派发时退化为 local-supervisor 模式
 - 这个 skill 更适合设计或实现多 agent 产品、框架、流水线代码
 - 优先从 2 到 4 个角色开始，不要一上来设计十几个 agent
 

@@ -26,7 +26,7 @@
 
 - `skill-ci.yml`：push / PR 校验、生成物漂移拦截
 - `evolution-audit.yml`：定时健康审计、同步 routing 产物、创建维护 issue
-- Codex app automations（默认位于 `~/.codex/automations/<id>/automation.toml`；若显式设置 `CODEX_HOME`，则位于 `$CODEX_HOME/automations/<id>/automation.toml`）：
+- Claude Code automations（默认位于 `~/.claude/automations/<id>/automation.toml`；若显式设置 `CLAUDE_CODE_HOME`，则位于 `$CLAUDE_CODE_HOME/automations/<id>/automation.toml`）：
   异步收集维护任务、例行检查、产物刷新
 
 自动化输出会在后续回合以 **evidence/source artifact** 形式进入路由，
@@ -37,7 +37,7 @@
 | Gate | 先检查条件 | 角色 |
 |---|---|---|
 | `runtime delegation gate` | 复杂任务 + 可并行 sidecar + 仓库授权 | 运行时派单决策 |
-| `systematic-debugging` | bug / 异常 / 失败 + 根因未知 | 先复现定位，再交回 owner |
+| `systematic-debugging` [archived] | bug / 异常 / 失败 + 根因未知 | 先复现定位，再交回 owner |
 | `openai-docs` | OpenAI API / 模型 / 产品 + 需官方当前文档 | source-of-truth gate |
 | `design-md` | 用户需要持久设计 token、参考源、风格映射或验收合同，而不是直接改页面 | design source-grounding gate |
 | `visual-review` | 已有截图 / 渲染图 / 可见证据 | evidence-first visual read |
@@ -48,7 +48,8 @@
 
 ```text
 L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
-    skill-framework-developer, systematic-debugging, update
+    skill-framework-developer, update
+    [archived: systematic-debugging]
     (+ hot framework commands: deepinterview, discussx, planx, implementx, verifyx, gitx)
 L1  adversarial-loop, citation-management, deepinterview, openai-docs, plan-mode
     (.archive-cold: documentation-engineering, image-generated)
@@ -68,23 +69,23 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 ```
 
 > 冷表分层对齐 `skills/SKILL_MANIFEST.json`；热表 owner 以 `skills/SKILL_ROUTING_RUNTIME.json` 为准。
-> System skills（`.system/`）: `plugin-creator`, `skill-creator`, `skill-installer`
+> System skills（`.system/`）[archived]: `plugin-creator`, `skill-creator`, `skill-installer`
 
 ## 各层何时做主 owner
 
 | 层 | 做主 owner 的条件 | 不要误用 |
 |---|---|---|
 | **L0** | 任务本身是 skill 治理、路由、触发修复、框架自优化，或需要跨文件长周期的内核级指挥 (`runtime execution controller`) | 不要把普通实现问题抬到 L0 |
-| **L1** | 执行方式是核心：计划、TDD、调试、重构、文档 | 根因已知时别默认 `systematic-debugging` |
+| **L1** | 执行方式是核心：计划、TDD、调试、重构、文档 | 根因已知时别默认 debugging（systematic-debugging 已归档） |
 | **L2** | 技术底座或运行时问题 | 语言/框架语义问题走更窄 skill |
 | **L3** | 明确的平台、工具、产物、领域边界 | 不要把 L3 当泛化兜底 |
 | **L4** | 高语义专业任务 | 不要用 L4 替代前置 gate |
 
 ## 易混淆边界
 
-- `skill-framework-developer` vs `skill-creator` → 框架治理 / miss repair / wording modes vs 实际改一个 skill 包
-- `skill-creator` vs `skill-installer` → 本地 authoring vs 新 skill intake / relink
-- `systematic-debugging` vs 领域 owner → 根因未知 vs 根因已知
+- `skill-framework-developer` vs `skill-creator` [archived] → 框架治理 / miss repair / wording modes vs 实际改一个 skill 包（skill-creator 已合并入 skill-framework-developer）
+- `skill-creator` [archived] vs `skill-installer` [archived] → 本地 authoring vs 新 skill intake / relink（两者均已合并入 skill-framework-developer）
+- `systematic-debugging` [archived] vs 领域 owner → 根因未知 vs 根因已知（systematic-debugging 已归档，在当前上下文中直接做系统化调试）
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
 - `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
 - `slides` native PPTX lane → 通用 PPT / 现有 deck artifact gate / 显式 `deck.plan.json` / Rust PPTX 源码工作流

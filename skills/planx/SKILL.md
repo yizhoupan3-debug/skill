@@ -10,6 +10,7 @@ routing_gate_evidence: "REQUIREMENTS.md exists"
 routing_priority: P1
 session_start: n/a
 user-invocable: true
+disable-model-invocation: true
 trigger_hints:
   - /planx
   - planx

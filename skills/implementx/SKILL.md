@@ -11,6 +11,7 @@ routing_gate_evidence: "ROADMAP.md and WAVE_STATE.json exist"
 routing_priority: P1
 session_start: n/a
 user-invocable: true
+disable-model-invocation: true
 trigger_hints:
   - /implementx
   - implementx

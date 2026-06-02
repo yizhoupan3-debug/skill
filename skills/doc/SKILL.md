@@ -6,6 +6,8 @@ routing_owner: gate
 routing_gate: artifact
 routing_priority: P1
 session_start: required
+user-invocable: false
+disable-model-invocation: true
 trigger_hints:
   - structured Word edits
   - 模板化文档生成

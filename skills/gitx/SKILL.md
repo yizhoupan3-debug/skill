@@ -1,7 +1,7 @@
 ---
 name: gitx
 description: |
-  Codex 里的 Git 主入口。Use when the user says `/gitx` or natural `gitx`, or
+  Git 主入口。Use when the user says `/gitx` or natural `gitx`, or
   needs branch、merge、rebase、push、worktree、仓库收口、推送失败排查等 Git 实操。
   This skill owns practical Git work in this repo, from quick diagnosis to end-to-end closeout.
 routing_layer: L2
@@ -62,7 +62,7 @@ bridge_behavior: mobile_complete_once
 ## Do not use
 
 - 只是要一个通用 shell 命令/管道，而不是 Git 协作或仓库状态问题 -> 直接在当前上下文回答或执行
-- 根因还不清楚，先要查为什么坏了 -> 直接在当前上下文做系统化调试（`$systematic-debugging` 已归档）
+- 根因还不清楚，先要查为什么坏了 -> 直接在当前上下文做系统化调试（无需外部skill）
 - 只是做 PR 评论收口 -> `$gh-address-comments`
 - 只是做纯代码 review，不涉及提交流程 -> 使用普通 code review 输出，不走 Git 收口入口
 
