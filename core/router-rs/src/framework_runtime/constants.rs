@@ -36,6 +36,7 @@ pub(super) const TASK_POINTERS_SCHEMA_VERSION: &str = "task-pointers-v1";
 pub(super) const SESSION_SUMMARY_FILENAME: &str = "SESSION_SUMMARY.md";
 pub(super) const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
 pub(super) const TRACE_METADATA_FILENAME: &str = "TRACE_METADATA.json";
+pub(super) const NEXT_ACTIONS_FILENAME: &str = "NEXT_ACTIONS.json";
 pub(super) const SUPERVISOR_STATE_FILENAME: &str = ".supervisor_state.json";
 pub(super) const EVIDENCE_INDEX_SCHEMA_VERSION: &str = "evidence-index-v2";
 pub(super) const TRACE_METADATA_SCHEMA_VERSION: &str = "trace-metadata-v2";

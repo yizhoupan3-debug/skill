@@ -196,7 +196,7 @@ pub(super) fn load_framework_runtime_view(
 
     FrameworkRuntimeView {
         session_summary_text: read_text_if_exists(&read_task_or_mirror(SESSION_SUMMARY_FILENAME)),
-        next_actions: Value::Object(Map::new()),  // populated from supervisor_state
+        next_actions: read_json_if_exists(&read_task_or_mirror(NEXT_ACTIONS_FILENAME)),
         evidence_index: read_json_if_exists(&read_task_or_mirror(EVIDENCE_INDEX_FILENAME)),
         trace_metadata: read_json_if_exists(&read_task_or_mirror(TRACE_METADATA_FILENAME)),
         supervisor_state,
@@ -313,6 +313,11 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
         stable_line_items(vec![
             if snapshot.session_summary_text.trim().is_empty() {
                 "SESSION_SUMMARY".to_string()
+            } else {
+                String::new()
+            },
+            if next_actions.is_empty() {
+                "NEXT_ACTIONS".to_string()
             } else {
                 String::new()
             },
@@ -489,6 +494,7 @@ pub(super) fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Va
         "summary_fields": summary,
         "paths": {
             "session_summary": snapshot.current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+            "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
             "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
             "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
@@ -897,11 +903,28 @@ fn coerce_next_action_line(value: &Value) -> String {
 }
 
 fn authoritative_next_actions(
-    _snapshot_payload: &Value,
+    snapshot_payload: &Value,
     supervisor_state: &Map<String, Value>,
 ) -> Vec<String> {
-    // Phase 3B: supervisor_state.next_actions is the single source of truth
-    supervisor_state
+    // Phase 3B: supervisor_state.next_actions is the single source of truth;
+    // fall back to snapshot NEXT_ACTIONS.json payload when supervisor_state is empty.
+    let from_supervisor = supervisor_state
+        .get("next_actions")
+        .and_then(Value::as_array)
+        .map(|rows| {
+            stable_line_items(
+                rows.iter()
+                    .map(coerce_next_action_line)
+                    .filter(|item| !item.is_empty())
+                    .collect(),
+            )
+        });
+    if let Some(actions) = from_supervisor {
+        if !actions.is_empty() {
+            return actions;
+        }
+    }
+    snapshot_payload
         .get("next_actions")
         .and_then(Value::as_array)
         .map(|rows| {
