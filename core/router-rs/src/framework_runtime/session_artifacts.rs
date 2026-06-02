@@ -2,9 +2,10 @@ use super::constants::{
     CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
     FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
     FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
-    SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
+    NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
     SUPERVISOR_STATE_SCHEMA_VERSION, TASK_POINTERS_FILENAME, TASK_POINTERS_SCHEMA_VERSION,
     TERMINAL_STORY_STATES, TERMINAL_VERIFICATION_STATUSES,
+    TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
 };
 use super::json_io::{read_json_strict, read_text_if_exists};
 use super::json_value::{
@@ -120,13 +121,16 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
     } else {
         read_json_strict(&evidence_path)?
     };
+    let next_actions_path = primary_dir.join(NEXT_ACTIONS_FILENAME);
     let next_actions_payload = json!({
         "schema_version": "next-actions-v2",
         "next_actions": &next_actions,
     });
-    let next_actions_payload = json!({
-        "schema_version": "next-actions-v2",
-        "next_actions": &next_actions,
+    let trace_metadata_path = primary_dir.join(TRACE_METADATA_FILENAME);
+    let trace_metadata_payload = json!({
+        "schema_version": TRACE_METADATA_SCHEMA_VERSION,
+        "task": &task,
+        "matched_skills": payload.get("matched_skills").cloned().unwrap_or_else(|| json!([])),
     });
     let supervisor_state_payload = build_session_supervisor_state_payload(SupervisorStateInput {
         task_id: &task_id,
@@ -155,6 +159,10 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
         mirror_output_dir: (!mirror_output_dir.is_empty())
             .then(|| PathBuf::from(mirror_output_dir)),
         summary_path,
+        next_actions_path,
+        next_actions_payload,
+        trace_metadata_path,
+        trace_metadata_payload,
         evidence_path,
         write_evidence,
         evidence_payload,
@@ -181,7 +189,16 @@ fn write_primary_session_artifacts(plan: &mut SessionArtifactWritePlan) -> Resul
             evidence: evidence_payload.as_ref(),
         },
         &mut plan.changed_paths,
-    )
+    )?;
+    if write_json_if_changed(&plan.next_actions_path, &plan.next_actions_payload)? {
+        plan.changed_paths
+            .push(plan.next_actions_path.display().to_string());
+    }
+    if write_json_if_changed(&plan.trace_metadata_path, &plan.trace_metadata_payload)? {
+        plan.changed_paths
+            .push(plan.trace_metadata_path.display().to_string());
+    }
+    Ok(())
 }
 
 fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
@@ -205,6 +222,16 @@ fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<
             },
             &mut plan.changed_paths,
         )?;
+        let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
+        if write_json_if_changed(&mirror_next_actions, &plan.next_actions_payload)? {
+            plan.changed_paths
+                .push(mirror_next_actions.display().to_string());
+        }
+        let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
+        if write_json_if_changed(&mirror_trace, &plan.trace_metadata_payload)? {
+            plan.changed_paths
+                .push(mirror_trace.display().to_string());
+        }
     }
     Ok(())
 }
@@ -279,7 +306,7 @@ fn write_focused_repo_mirrors(
     mirror_root: &Path,
     updated_at: &str,
 ) -> Result<(), String> {
-    let active_pointer = mirror_root.join(TASK_POINTERS_FILENAME);
+    let active_pointer = mirror_root.join("active_task.json");
     assert_expected_file_hash(
         &active_pointer,
         plan.expected_active_task_hash.as_deref(),
@@ -290,21 +317,61 @@ fn write_focused_repo_mirrors(
         &json!({
             "task_id": plan.task_id,
             "task": plan.task,
-            "updated_at": updated_at,
-            "task_root": plan.summary_path.parent().map(|path| path.display().to_string()).unwrap_or_default(),
             "session_summary": plan.summary_path.display().to_string(),
-            "evidence_index": plan.evidence_path.display().to_string(),
         }),
     )? {
         plan.changed_paths
             .push(active_pointer.display().to_string());
     }
-    let focus_pointer = mirror_root.join(TASK_POINTERS_FILENAME);
+    let focus_pointer = mirror_root.join("focus_task.json");
     assert_expected_file_hash(
         &focus_pointer,
         plan.expected_focus_task_hash.as_deref(),
         "focus task pointer",
     )?;
+    if write_json_if_changed(
+        &focus_pointer,
+        &json!({
+            "task_id": plan.task_id,
+            "task": plan.task,
+        }),
+    )? {
+        plan.changed_paths
+            .push(focus_pointer.display().to_string());
+    }
+    let registry_path = mirror_root.join("task_registry.json");
+    let existing_registry = read_json_strict(&registry_path).unwrap_or_else(|_| json!({}));
+    let mut registry_rows = super::registry_rows_from_payload(&existing_registry);
+    let mut found = false;
+    for row in &mut registry_rows {
+        if let Some(map) = row.as_object_mut() {
+            if safe_slug(&value_text(map.get("task_id"))) == plan.task_id {
+                map.insert("task".to_string(), Value::String(plan.task.clone()));
+                map.insert("phase".to_string(), Value::String(plan.phase.clone()));
+                map.insert("status".to_string(), Value::String(plan.status.clone()));
+                map.insert("updated_at".to_string(), Value::String(updated_at.to_string()));
+                map.insert("resume_allowed".to_string(), Value::Bool(true));
+                found = true;
+                break;
+            }
+        }
+    }
+    if !found {
+        registry_rows.push(json!({
+            "task_id": plan.task_id,
+            "task": plan.task,
+            "phase": plan.phase,
+            "status": plan.status,
+            "updated_at": updated_at,
+            "resume_allowed": true,
+        }));
+    }
+    let (normalized_registry, _, _) =
+        super::normalize_task_registry_rows(plan.task_id.clone(), registry_rows);
+    if write_json_if_changed(&registry_path, &normalized_registry)? {
+        plan.changed_paths
+            .push(registry_path.display().to_string());
+    }
     let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
     assert_expected_file_hash(
         &supervisor_state_path,
@@ -588,19 +655,20 @@ fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Va
         "blockers".to_string(),
         normalized_blockers(input.blockers.or_else(|| payload.get("blockers"))),
     );
-    // matched_skills merged into supervisor_state.trace
+    // matched_skills merged into supervisor_state.trace_metadata
     if let Some(skills) = input.matched_skills {
         let mut trace = serde_json::Map::new();
         trace.insert("matched_skills".to_string(), skills.clone());
         trace.insert("updated_at".to_string(), Value::String(chrono::Utc::now().to_rfc3339()));
-        payload.insert("trace".to_string(), Value::Object(trace));
+        payload.insert("trace_metadata".to_string(), Value::Object(trace));
     }
     payload.insert(
         "artifact_refs".to_string(),
         json!({
             "task_root": input.artifact_dir.display().to_string(),
             "session_summary": input.artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-                        "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+            "next_actions": input.artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+            "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
         }),
     );
     Value::Object(payload)
