@@ -320,7 +320,7 @@ pub(crate) fn is_repo_build_executable_path(path: &str, framework_root: &Path) -
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum McpRouterRsCommand {
+pub(crate) enum McpRouterRsCommand {
     OnPath,
     Absolute(PathBuf),
     CargoBootstrap,

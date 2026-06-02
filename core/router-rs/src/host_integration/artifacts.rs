@@ -296,7 +296,7 @@ impl GeneratedArtifactTempRoot {
 }
 
 impl Drop for GeneratedArtifactTempRoot {
-    pub(crate) fn drop(&mut self) {
+    fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
         if let Some(parent) = self.path.parent() {
             let _ = fs::remove_dir(parent);
