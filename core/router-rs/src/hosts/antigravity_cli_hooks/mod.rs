@@ -14,7 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub(crate) const ANTIGRAVITY_CLI_HOOKS_PATH: &str = ".antigravitycli/hooks.json";
-pub const INSTALL_EVENTS: [&str; 5] = INSTALL_LIFECYCLE_EVENTS;
+pub const INSTALL_EVENTS: [&str; 7] = INSTALL_LIFECYCLE_EVENTS;
 const ANTIGRAVITY_CLI_HOOK_AUTHORITY: &str = "rust-antigravity-cli-hooks";
 const LIFECYCLE_STATE_DIR_LEAF: &str = ".antigravitycli";
 

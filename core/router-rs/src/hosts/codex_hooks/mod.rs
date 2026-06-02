@@ -1,3 +1,7 @@
+mod state;
+pub(crate) use state::CodexHookError;
+use state::*;
+
 use crate::framework_runtime::{
     build_framework_contract_summary_envelope, try_append_post_tool_shell_evidence,
 };
@@ -87,14 +91,55 @@ const CODEX_REVIEW_SUBAGENT_TYPES: &[&str] = &[
     "cursor-guide",
     "cursorguide",
 ];
-pub(crate) const INSTALL_LIFECYCLE_EVENTS: [&str; 5] = [
+pub(crate) const INSTALL_LIFECYCLE_EVENTS: [&str; 7] = [
     "SessionStart",
     "PreToolUse",
     "UserPromptSubmit",
     "PostToolUse",
     "Stop",
+    "SubagentStart",
+    "SubagentStop",
 ];
-const INSTALL_EVENTS: [&str; 5] = INSTALL_LIFECYCLE_EVENTS;
+const INSTALL_EVENTS: [&str; 7] = INSTALL_LIFECYCLE_EVENTS;
+
+struct HostStrings {
+    review_gate_tag: &'static str,
+    review_gate_disable_env: &'static str,
+    stop_hook_active_bypass_env: &'static str,
+    require_stable_session_key_env: &'static str,
+    hook_state_salt_env: &'static str,
+    hook_state_unreadable_tag: &'static str,
+    lifecycle_label: &'static str,
+    spawn_first_host_id: &'static str,
+    paper_prose_hook_env: &'static str,
+    paper_adversarial_hook_env: &'static str,
+}
+
+const CODEX_STRINGS: HostStrings = HostStrings {
+    review_gate_tag: "CODEX_REVIEW_GATE",
+    review_gate_disable_env: "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
+    stop_hook_active_bypass_env: "ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS",
+    require_stable_session_key_env: "ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY",
+    hook_state_salt_env: "ROUTER_RS_CODEX_HOOK_STATE_SALT",
+    hook_state_unreadable_tag: "CODEX_HOOK_STATE_UNREADABLE",
+    lifecycle_label: "Codex",
+    spawn_first_host_id: "codex-cli",
+    paper_prose_hook_env: "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
+    paper_adversarial_hook_env: "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
+};
+
+const ANTIGRAVITY_CLI_STRINGS: HostStrings = HostStrings {
+    review_gate_tag: "ANTIGRAVITY_CLI_REVIEW_GATE",
+    review_gate_disable_env: "ROUTER_RS_ANTIGRAVITY_CLI_REVIEW_GATE_DISABLE",
+    stop_hook_active_bypass_env: "ROUTER_RS_ANTIGRAVITY_CLI_STOP_HOOK_ACTIVE_BYPASS",
+    require_stable_session_key_env: "ROUTER_RS_ANTIGRAVITY_CLI_REQUIRE_STABLE_SESSION_KEY",
+    hook_state_salt_env: "ROUTER_RS_ANTIGRAVITY_CLI_HOOK_STATE_SALT",
+    hook_state_unreadable_tag: "ANTIGRAVITY_CLI_HOOK_STATE_UNREADABLE",
+    lifecycle_label: "Antigravity CLI",
+    spawn_first_host_id: "antigravity-cli",
+    paper_prose_hook_env: "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
+    paper_adversarial_hook_env: "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK",
+};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CodexLifecycleHostKind {
@@ -109,75 +154,52 @@ impl CodexLifecycleHostKind {
         state_dir_leaf: ".antigravitycli",
     };
 
-    fn review_gate_tag(self) -> &'static str {
+    fn strings(self) -> &'static HostStrings {
         match self.state_dir_leaf {
-            ".antigravitycli" => "ANTIGRAVITY_CLI_REVIEW_GATE",
-            _ => "CODEX_REVIEW_GATE",
+            ".antigravitycli" => &ANTIGRAVITY_CLI_STRINGS,
+            _ => &CODEX_STRINGS,
         }
+    }
+
+    fn review_gate_tag(self) -> &'static str {
+        self.strings().review_gate_tag
     }
 
     fn review_gate_disable_env(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_REVIEW_GATE_DISABLE",
-            _ => "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
-        }
+        self.strings().review_gate_disable_env
     }
 
     fn stop_hook_active_bypass_env(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_STOP_HOOK_ACTIVE_BYPASS",
-            _ => "ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS",
-        }
+        self.strings().stop_hook_active_bypass_env
     }
 
     fn require_stable_session_key_env(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_REQUIRE_STABLE_SESSION_KEY",
-            _ => "ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY",
-        }
+        self.strings().require_stable_session_key_env
     }
 
     fn hook_state_salt_env(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_HOOK_STATE_SALT",
-            _ => "ROUTER_RS_CODEX_HOOK_STATE_SALT",
-        }
+        self.strings().hook_state_salt_env
     }
 
     fn hook_state_unreadable_tag(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "ANTIGRAVITY_CLI_HOOK_STATE_UNREADABLE",
-            _ => "CODEX_HOOK_STATE_UNREADABLE",
-        }
+        self.strings().hook_state_unreadable_tag
     }
 
     fn lifecycle_label(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "Antigravity CLI",
-            _ => "Codex",
-        }
+        self.strings().lifecycle_label
     }
 
     fn spawn_first_host_id(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "antigravity-cli",
-            _ => "codex-cli",
-        }
+        self.strings().spawn_first_host_id
     }
 
     fn paper_prose_hook_env(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
-            _ => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
-        }
+        self.strings().paper_prose_hook_env
     }
 
     #[allow(dead_code)]
     fn paper_adversarial_hook_env(self) -> &'static str {
-        match self.state_dir_leaf {
-            ".antigravitycli" => "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK",
-            _ => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
-        }
+        self.strings().paper_adversarial_hook_env
     }
 
     fn paper_prose_hook_host(self) -> crate::paper_prose_hook::PaperProseHookHost {
@@ -187,12 +209,14 @@ impl CodexLifecycleHostKind {
     }
 }
 
+
 thread_local! {
     static LIFECYCLE_HOST: Cell<CodexLifecycleHostKind> =
         const { Cell::new(CodexLifecycleHostKind::CODEX) };
 }
 
-fn lifecycle_host() -> CodexLifecycleHostKind {
+
+pub(super) fn lifecycle_host() -> CodexLifecycleHostKind {
     LIFECYCLE_HOST.with(|cell| cell.get())
 }
 pub const ROUTER_RS_HOOK_PROJECTION_VERSION: &str = "v1.0.0";
@@ -201,6 +225,8 @@ const INSTALL_STATUS_SESSION_START: &str = "Loading Codex live state";
 const INSTALL_STATUS_PRE_TOOL: &str = "Checking generated-surface guard";
 const INSTALL_STATUS_POST_TOOL: &str = "Recording Codex tool evidence";
 const INSTALL_STATUS_STOP: &str = "Enforcing Codex review gate";
+const INSTALL_STATUS_SUBAGENT_START: &str = "Recording Codex subagent start";
+const INSTALL_STATUS_SUBAGENT_STOP: &str = "Recording Codex subagent stop";
 /// Default UTF-8 **byte** budget for merged Codex `additionalContext` (SessionStart / UserPromptSubmit).
 const CODEX_ADDITIONAL_CONTEXT_MAX_BYTES: usize = 640;
 static CODEX_SESSION_KEY_FALLBACK_WARN: Once = Once::new();
@@ -214,6 +240,7 @@ fn codex_hook_command_timeout_secs(event: &str) -> u64 {
     match event {
         "SessionStart" => 3,
         "PostToolUse" => 5,
+        "SubagentStart" | "SubagentStop" => 5,
         _ => 8,
     }
 }
@@ -261,7 +288,7 @@ pub(crate) struct HooksMergeStat {
 }
 
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
-struct CodexLifecycleContextState {
+pub(super) struct CodexLifecycleContextState {
     #[serde(default)]
     seq: i64,
     #[serde(default)]
@@ -288,495 +315,6 @@ struct CodexLifecycleContextState {
     review_subagent_tool: Option<String>,
 }
 
-fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexLifecycleContextState) {
-    if state.review_subagent_seen
-        && !state.generic_subagent_seen
-        && !state.review_lane_seen
-        && !state.parallel_lane_seen
-    {
-        state.generic_subagent_seen = true;
-        state.review_lane_seen = true;
-        state.parallel_lane_seen = true;
-    }
-}
-
-fn codex_state_dir(repo_root: &Path) -> PathBuf {
-    repo_root
-        .join(lifecycle_host().state_dir_leaf)
-        .join("hook-state")
-}
-
-/// Unix: `flock(2)` on `<state>.lock` so same-process threads serialize correctly.
-/// Non-Unix: `O_EXCL` lock file + stale detection (legacy).
-#[cfg(unix)]
-struct CodexStateLock {
-    file: File,
-}
-
-#[cfg(unix)]
-impl Drop for CodexStateLock {
-    fn drop(&mut self) {
-        let fd = self.file.as_raw_fd();
-        unsafe {
-            let _ = libc::flock(fd, libc::LOCK_UN);
-        }
-    }
-}
-
-#[cfg(not(unix))]
-struct CodexStateLock {
-    path: PathBuf,
-}
-
-#[cfg(not(unix))]
-impl Drop for CodexStateLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
-/// Stable session identifier for hook-state filenames.
-fn codex_stable_session_raw(event: &Value) -> Option<String> {
-    fn trimmed_nonempty(value: &str) -> Option<String> {
-        let t = value.trim();
-        (!t.is_empty()).then(|| t.to_string())
-    }
-    for key in [
-        "session_id",
-        "sessionId",
-        "conversation_id",
-        "conversationId",
-        "thread_id",
-        "threadId",
-    ] {
-        if let Some(s) = event
-            .get(key)
-            .and_then(Value::as_str)
-            .and_then(trimmed_nonempty)
-        {
-            return Some(s);
-        }
-    }
-    let env_keys: &[&str] = match lifecycle_host() {
-        CodexLifecycleHostKind::ANTIGRAVITY_CLI => &[
-            "ANTIGRAVITY_CLI_SESSION_ID",
-            "ANTIGRAVITY_CLI_CONVERSATION_ID",
-            "CODEX_SESSION_ID",
-            "CODEX_CONVERSATION_ID",
-        ],
-        _ => &["CODEX_SESSION_ID", "CODEX_CONVERSATION_ID"],
-    };
-    for env_key in env_keys {
-        if let Ok(v) = env::var(env_key) {
-            if let Some(s) = trimmed_nonempty(&v) {
-                return Some(s);
-            }
-        }
-    }
-    None
-}
-
-fn codex_require_stable_session_key_enabled() -> bool {
-    router_rs_env_enabled_default_true(lifecycle_host().require_stable_session_key_env())
-}
-
-/// Fallback hook-state key material when no stable session id (repo-scoped, not one global file).
-fn codex_unstable_session_key_raw(repo_root: &Path, event: &Value) -> String {
-    let repo = repo_root.to_string_lossy();
-    let cwd = event
-        .get("cwd")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("");
-    if cwd.is_empty() {
-        eprintln!(
-            "[router-rs] codex hook-state: unstable fallback with empty cwd — prefer stable session ids or set ROUTER_RS_CODEX_HOOK_STATE_SALT"
-        );
-    }
-    let payload_session = codex_stable_session_raw(event).unwrap_or_default();
-    let salt = env::var(lifecycle_host().hook_state_salt_env())
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_default();
-    let cwd_key = if cwd.is_empty() {
-        "<empty-cwd>"
-    } else {
-        cwd.as_ref()
-    };
-    if salt.is_empty() {
-        format!("unstable:repo={repo}|cwd={cwd_key}|payload_session={payload_session}")
-    } else {
-        format!("unstable:repo={repo}|cwd={cwd_key}|payload_session={payload_session}|salt={salt}")
-    }
-}
-
-fn codex_session_key(repo_root: &Path, event: &Value) -> String {
-    let raw = codex_stable_session_raw(event).unwrap_or_else(|| {
-        CODEX_SESSION_KEY_FALLBACK_WARN.call_once(|| {
-            eprintln!(
-                "[router-rs] codex hook-state: no stable session id (set CODEX_SESSION_ID / CODEX_CONVERSATION_ID or include session_id / sessionId / conversation_id / thread_id in hook payloads). With ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY disabled, hook-state uses a deterministic fallback keyed by repo (+ cwd / ROUTER_RS_CODEX_HOOK_STATE_SALT) — not a stable per-conversation id."
-            );
-        });
-        codex_unstable_session_key_raw(repo_root, event)
-    });
-    let mut hasher = Sha256::new();
-    hasher.update(raw.as_bytes());
-    let digest = hasher.finalize();
-    let full_hex = digest
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<String>();
-    full_hex.chars().take(32).collect()
-}
-
-fn codex_state_path(repo_root: &Path, event: &Value) -> PathBuf {
-    codex_state_dir(repo_root)
-        .join(format!("review-subagent-{}.json", codex_session_key(repo_root, event)))
-}
-
-fn parse_lock_metadata(text: &str) -> (Option<u32>, Option<u64>) {
-    let mut pid = None;
-    let mut ts = None;
-    for part in text.split_whitespace() {
-        if let Some(value) = part.strip_prefix("pid=") {
-            pid = value.parse::<u32>().ok();
-        } else if let Some(value) = part.strip_prefix("ts=") {
-            ts = value.parse::<u64>().ok();
-        }
-    }
-    (pid, ts)
-}
-
-#[cfg(unix)]
-fn process_is_alive(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-    // Avoid spawning `kill` (PATH / sandbox failures must not look like "process dead").
-    unsafe {
-        let rc = libc::kill(pid as libc::pid_t, 0);
-        if rc == 0 {
-            return true;
-        }
-        let err = std::io::Error::last_os_error();
-        match err.raw_os_error() {
-            Some(libc::ESRCH) => false,
-            Some(libc::EPERM) => true,
-            _ => true,
-        }
-    }
-}
-
-#[cfg(not(unix))]
-fn process_is_alive(_pid: u32) -> bool {
-    true
-}
-
-fn lock_is_stale(path: &Path) -> bool {
-    let text = match fs::read_to_string(path) {
-        Ok(value) => value,
-        Err(_) => return true,
-    };
-    let (pid, ts) = parse_lock_metadata(&text);
-    if pid.is_none() && ts.is_none() {
-        if text.trim().is_empty() {
-            let now_ms = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0);
-            if let Ok(meta) = fs::metadata(path) {
-                if let Ok(modified) = meta.modified() {
-                    let modified_ms = modified
-                        .duration_since(UNIX_EPOCH)
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(0);
-                    if now_ms.saturating_sub(modified_ms) <= 1_000 {
-                        return false;
-                    }
-                }
-            }
-        }
-        return true;
-    }
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-    if let Some(process_id) = pid {
-        if process_is_alive(process_id) {
-            return false;
-        }
-    }
-    ts.is_none_or(|t| now_ms.saturating_sub(t) > 30_000)
-}
-
-#[cfg(unix)]
-fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, String> {
-    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
-    if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| format!("state_dir_create_failed: {err}"))?;
-    }
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(|err| format!("state_lock_open_failed: {err}"))?;
-    let fd = file.as_raw_fd();
-    let deadline = SystemTime::now() + Duration::from_secs(20);
-    loop {
-        let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
-        if rc == 0 {
-            break;
-        }
-        let err = io::Error::last_os_error();
-        if err.raw_os_error() == Some(libc::EWOULDBLOCK)
-            || err.raw_os_error() == Some(libc::EAGAIN)
-        {
-            if SystemTime::now() >= deadline {
-                return Err("state_lock_timeout".to_string());
-            }
-            thread::sleep(Duration::from_millis(5));
-            continue;
-        }
-        return Err(format!("state_lock_flock_failed: {err}"));
-    }
-    Ok(CodexStateLock { file })
-}
-
-#[cfg(not(unix))]
-fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, String> {
-    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
-    let started = SystemTime::now();
-    loop {
-        let open = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path);
-        match open {
-            Ok(mut file) => {
-                let now_ms = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
-                let stamp = format!("pid={} ts={now_ms}\n", std::process::id());
-                use std::io::Write as _;
-                file.write_all(stamp.as_bytes())
-                    .map_err(|err| format!("state_lock_write_failed: {err}"))?;
-                file.sync_all()
-                    .map_err(|err| format!("state_lock_sync_failed: {err}"))?;
-                return Ok(CodexStateLock { path: lock_path });
-            }
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                if lock_is_stale(&lock_path) {
-                    let _ = fs::remove_file(&lock_path);
-                    continue;
-                }
-                if started.elapsed().unwrap_or_else(|_| Duration::from_secs(0))
-                    > Duration::from_secs(20)
-                {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(5));
-            }
-            Err(err) => return Err(format!("state_lock_acquire_failed: {err}")),
-        }
-    }
-    Err("state_lock_timeout".to_string())
-}
-
-fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLifecycleContextState>, String> {
-    let text = match fs::read_to_string(path) {
-        Ok(value) => value,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err("state_read_failed".to_string()),
-    };
-    let mut value: Value =
-        serde_json::from_str(&text).map_err(|_| "state_json_invalid".to_string())?;
-    if let Some(obj) = value.as_object_mut() {
-        let schema_v1 = obj
-            .get("schema_version")
-            .and_then(Value::as_i64)
-            .is_some_and(|v| v == 1);
-        if schema_v1
-            && obj
-                .get("delegation_required")
-                .and_then(Value::as_bool)
-                .is_some_and(|v| v)
-            && !obj
-                .get("review_subagent_seen")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        {
-            obj.entry("seq".to_string()).or_insert(json!(1));
-        }
-    }
-    serde_json::from_value::<CodexLifecycleContextState>(value)
-        .map(|mut parsed| {
-            codex_merge_legacy_subagent_gate_evidence(&mut parsed);
-            Some(parsed)
-        })
-        .map_err(|_| "state_json_invalid".to_string())
-}
-
-fn codex_load_state(
-    repo_root: &Path,
-    event: &Value,
-) -> Result<Option<CodexLifecycleContextState>, String> {
-    codex_load_state_from_path(&codex_state_path(repo_root, event))
-}
-
-fn codex_save_state_to_path(state_path: &Path, state: &CodexLifecycleContextState) -> bool {
-    let directory = state_path
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
-    let target = state_path.to_path_buf();
-    let mut payload = match serde_json::to_string_pretty(state) {
-        Ok(value) => value,
-        Err(_) => return false,
-    };
-    payload.push('\n');
-    if fs::create_dir_all(&directory).is_err() {
-        return false;
-    }
-    let file_name = target
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("state.json");
-    let mut tmp = None;
-    let mut tmp_file = None;
-    for _ in 0..64 {
-        let nonce = ATOMIC_WRITE_NONCE.fetch_add(1, Ordering::Relaxed);
-        let candidate = directory.join(format!(".tmp-{}-{file_name}-{nonce}", std::process::id()));
-        match OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&candidate)
-        {
-            Ok(file) => {
-                tmp = Some(candidate);
-                tmp_file = Some(file);
-                break;
-            }
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(_) => return false,
-        }
-    }
-    let Some(tmp) = tmp else {
-        return false;
-    };
-    let Some(mut tmp_file) = tmp_file else {
-        return false;
-    };
-    use std::io::Write as _;
-    if tmp_file.write_all(payload.as_bytes()).is_err() {
-        let _ = fs::remove_file(&tmp);
-        return false;
-    }
-    if tmp_file.sync_all().is_err() {
-        let _ = fs::remove_file(&tmp);
-        return false;
-    }
-    drop(tmp_file);
-    if fs::rename(&tmp, &target).is_err() {
-        let _ = fs::remove_file(&tmp);
-        return false;
-    }
-    #[cfg(unix)]
-    if let Some(parent) = target.parent() {
-        if let Ok(dir) = OpenOptions::new().read(true).open(parent) {
-            let _ = dir.sync_all();
-        }
-    }
-    true
-}
-
-fn prune_stale_hook_state_files(dir: &Path) {
-    const MAX_FILES: usize = 50;
-    const MAX_AGE_SECS: u64 = 7 * 24 * 3600;
-
-    let entries: Vec<_> = match fs::read_dir(dir) {
-        Ok(it) => it
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                let name = e.file_name();
-                let s = name.to_string_lossy();
-                s.starts_with("review-subagent-") && s.ends_with(".json")
-            })
-            .collect(),
-        Err(_) => return,
-    };
-
-    let now_secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    let mut with_mtime: Vec<(u64, PathBuf)> = entries
-        .iter()
-        .filter_map(|e| {
-            let mtime = e
-                .metadata()
-                .ok()?
-                .modified()
-                .ok()?
-                .duration_since(UNIX_EPOCH)
-                .ok()?
-                .as_secs();
-            Some((mtime, e.path()))
-        })
-        .collect();
-    with_mtime.sort_by_key(|(mtime, _)| *mtime);
-
-    let mut to_remove: Vec<PathBuf> = with_mtime
-        .iter()
-        .filter(|(mtime, _)| now_secs.saturating_sub(*mtime) > MAX_AGE_SECS)
-        .map(|(_, p)| p.clone())
-        .collect();
-
-    let to_remove_set: std::collections::HashSet<_> = to_remove.iter().cloned().collect();
-    let remaining: Vec<_> = with_mtime
-        .iter()
-        .filter(|(_, p)| !to_remove_set.contains(p))
-        .collect();
-
-    if remaining.len() > MAX_FILES {
-        let excess = remaining.len() - MAX_FILES;
-        for (_, path) in remaining.iter().take(excess) {
-            to_remove.push(path.clone());
-        }
-    }
-
-    for path in to_remove {
-        let _ = fs::remove_file(&path);
-    }
-}
-
-fn with_codex_state_lock<T, F>(repo_root: &Path, event: &Value, f: F) -> Result<T, String>
-where
-    F: FnOnce(
-        Option<CodexLifecycleContextState>,
-    ) -> Result<(Option<CodexLifecycleContextState>, T), String>,
-{
-    let state_path = codex_state_path(repo_root, event);
-    if let Some(parent) = state_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| format!("state_dir_create_failed: {err}"))?;
-        prune_stale_hook_state_files(parent);
-    }
-    let _guard = acquire_codex_state_lock(&state_path)?;
-    let loaded = codex_load_state_from_path(&state_path)?;
-    let (next_state, output) = f(loaded)?;
-    if let Some(state) = next_state {
-        if !codex_save_state_to_path(&state_path, &state) {
-            return Err("state_write_failed".to_string());
-        }
-    }
-    Ok(output)
-}
 
 fn codex_prompt_text(event: &Value) -> String {
     for key in ["prompt", "user_prompt", "message", "input"] {
@@ -1310,6 +848,63 @@ fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
     None
 }
 
+fn handle_codex_subagent_start(repo_root: &Path, event: &Value) -> Option<Value> {
+    let tool_name = codex_tool_name(event);
+    let tool_input = codex_tool_input(event);
+    let prompt = codex_prompt_text(event);
+    let facts = ReviewGateFacts::from_prompt(&prompt);
+    let recognized = codex_recognized_subagent_kind(&tool_input);
+
+    match with_codex_state_lock(repo_root, event, |loaded| {
+        let mut state = match loaded {
+            Some(value) => value,
+            None => CodexLifecycleContextState {
+                seq: 1,
+                review_required: facts.review_required,
+                review_override: facts.review_override,
+                ..CodexLifecycleContextState::default()
+            },
+        };
+        state.generic_subagent_seen = true;
+        let tool_label = recognized
+            .as_ref()
+            .map(|kind| format!("{tool_name}#{kind}"))
+            .unwrap_or_else(|| format!("{tool_name}#untyped"));
+        state.review_subagent_tool = Some(tool_label);
+        let (review_lane, parallel_lane) =
+            codex_subagent_lane_bits_from_kind(recognized.as_deref());
+        if review_lane {
+            state.review_lane_seen = true;
+        }
+        if parallel_lane {
+            state.parallel_lane_seen = true;
+        }
+        state.review_subagent_seen = true;
+        state.subagent_start_count = state.subagent_start_count.saturating_add(1);
+        if review_lane {
+            state.phase = state.phase.max(2);
+            if facts.review_required
+                && !crate::hook_common::my_light_profile_active(Some(repo_root), &prompt)
+            {
+                state.review_required = true;
+            }
+        }
+        Ok((Some(state), ()))
+    }) {
+        Ok(()) => None,
+        Err(err) => {
+            eprintln!("[router-rs] codex subagent start persist failed: {err}");
+            Some(codex_hook_state_persist_block_payload())
+        }
+    }
+}
+
+fn handle_codex_subagent_stop(_repo_root: &Path, _event: &Value) -> Option<Value> {
+    // SubagentStop is informational; PostToolUse handles the review gate logic.
+    // Return None to allow the agent to continue.
+    None
+}
+
 fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> Option<Value> {
     if !router_rs_operator_inject_globally_enabled() {
         return None;
@@ -1408,6 +1003,8 @@ fn run_codex_lifecycle_context_hook_inner(
         "userpromptsubmit" => handle_codex_userpromptsubmit(repo_root, payload),
         "posttooluse" => handle_codex_posttooluse(repo_root, payload),
         "stop" => handle_codex_stop(repo_root, payload),
+        "subagentstart" => handle_codex_subagent_start(repo_root, payload),
+        "subagentstop" => handle_codex_subagent_stop(repo_root, payload),
         "" => Some(codex_lifecycle_input_error(&format!(
             "{} lifecycle hook input schema invalid: missing hook_event_name/event.",
             host.lifecycle_label()
@@ -1656,9 +1253,9 @@ fn acquire_install_lock(codex_home: &Path) -> Result<HooksInstallLock, String> {
                 let stamp = format!("pid={} ts={now_ms}\n", std::process::id());
                 use std::io::Write as _;
                 file.write_all(stamp.as_bytes())
-                    .map_err(|err| format!("install_lock_write_failed: {err}"))?;
+                    .map_err(CodexHookError::StateLockWrite)?;
                 file.sync_all()
-                    .map_err(|err| format!("install_lock_sync_failed: {err}"))?;
+                    .map_err(CodexHookError::StateLockSync)?;
                 return Ok(HooksInstallLock { path: lock_path });
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
@@ -1690,7 +1287,17 @@ fn projection_version_older(manifest_version: &str, current: &str) -> bool {
     }
 }
 
+static DRIFT_CACHE: LazyLock<std::sync::Mutex<(std::time::Instant, Option<String>)>> =
+    LazyLock::new(|| std::sync::Mutex::new((std::time::Instant::now() - std::time::Duration::from_secs(600), None)));
+
 fn codex_projection_drift_warning(repo_root: &Path) -> Option<String> {
+    const CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+    {
+        let guard = DRIFT_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.0.elapsed() < CACHE_TTL {
+            return guard.1.clone();
+        }
+    }
     let warning = "[router-rs] hook projection drift detected; consider re-running `router-rs framework maint install-codex-user-hooks`.".to_string();
     let local_codex_home = repo_root.join("codex-home");
     let manifest_path = if local_codex_home.is_dir() {
@@ -1717,10 +1324,15 @@ fn codex_projection_drift_warning(repo_root: &Path) -> Option<String> {
         .get("projection_version")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    if projection_version_older(projection, ROUTER_RS_HOOK_PROJECTION_VERSION) {
-        return Some(warning);
+    let result = if projection_version_older(projection, ROUTER_RS_HOOK_PROJECTION_VERSION) {
+        Some(warning)
+    } else {
+        None
+    };
+    if let Ok(mut guard) = DRIFT_CACHE.lock() {
+        *guard = (std::time::Instant::now(), result.clone());
     }
-    None
+    result
 }
 
 pub fn resolve_codex_home(arg: Option<&Path>) -> Result<PathBuf, String> {
@@ -1952,6 +1564,9 @@ fn write_atomic_text(path: &Path, text: &str) -> Result<(), String> {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     let nonce = ATOMIC_WRITE_NONCE.fetch_add(1, Ordering::Relaxed);
+
+
+
     let tmp_path = parent.join(format!(
         ".{stem}.tmp-{}-{ts_nanos}-{nonce}",
         std::process::id()
@@ -1983,6 +1598,8 @@ fn hook_event_status_message(event_name: &str) -> &'static str {
         "UserPromptSubmit" => INSTALL_STATUS_USER_PROMPT,
         "PostToolUse" => INSTALL_STATUS_POST_TOOL,
         "Stop" => INSTALL_STATUS_STOP,
+        "SubagentStart" => INSTALL_STATUS_SUBAGENT_START,
+        "SubagentStop" => INSTALL_STATUS_SUBAGENT_STOP,
         _ => "",
     }
 }
@@ -2319,6 +1936,8 @@ fn codex_lifecycle_event_name(command: &str) -> Option<&'static str> {
         "userpromptsubmit" => Some("UserPromptSubmit"),
         "posttooluse" => Some("PostToolUse"),
         "stop" => Some("Stop"),
+        "subagentstart" => Some("SubagentStart"),
+        "subagentstop" => Some("SubagentStop"),
         _ => None,
     }
 }
@@ -2727,18 +2346,24 @@ fn bash_segment_mentions_generated_path(segment: &str, hint: &str) -> bool {
 }
 
 fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
-    let escaped = regex::escape(hint);
-    [
-        format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#),
-        format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#),
-        format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#),
-    ]
-    .iter()
-    .any(|pattern| {
-        Regex::new(pattern)
-            .ok()
-            .map(|regex| regex.is_match(segment))
-            .unwrap_or(false)
+    thread_local! {
+        static HINT_RE_CACHE: std::cell::RefCell<std::collections::HashMap<String, [Regex; 3]>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+    HINT_RE_CACHE.with(|cache| {
+        let mut map = cache.borrow_mut();
+        let regexes = map.entry(hint.to_string()).or_insert_with(|| {
+            let escaped = regex::escape(hint);
+            let p1 = format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            let p2 = format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            let p3 = format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            [
+                Regex::new(&p1).unwrap(),
+                Regex::new(&p2).unwrap(),
+                Regex::new(&p3).unwrap(),
+            ]
+        });
+        regexes.iter().any(|re| re.is_match(segment))
     })
 }
 
@@ -3633,14 +3258,13 @@ mod tests {
             });
             let path = super::super::codex_state_path(&repo, &payload);
             fs::write(&path, b"{not json").unwrap();
-            let out =
-                super::super::handle_codex_stop(&repo, &payload).expect("expected block payload");
-            assert_eq!(out["decision"], json!("block"));
-            let msg = out["followup_message"].as_str().unwrap_or("");
-            assert!(
-                msg.contains("CODEX_HOOK_STATE_UNREADABLE"),
-                "unexpected followup: {msg}"
-            );
+            // B-3: corrupted state auto-recovers (backup .bak + reset to fresh)
+            let out = super::super::handle_codex_stop(&repo, &payload);
+            // Stop with no review_required proceeds normally (None = allow)
+            assert!(out.is_none(), "corrupted state should auto-recover, not block: {out:?}");
+            // Verify backup was created
+            let bak_path = path.with_extension("json.bak");
+            assert!(bak_path.exists(), "corrupt file should be backed up to .bak");
         }
 
         #[test]
@@ -3973,12 +3597,17 @@ mod tests {
                 "tool_name":"Task",
                 "tool_input":{"subagent_type":"explore"}
             });
+            // B-3: corrupted state auto-recovers; PostToolUse proceeds with fresh state
             let out = run_gate(&repo, &post).unwrap();
-            assert_eq!(
-                out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str),
-                Some("block"),
-                "invalid hook-state must fail-closed on PostToolUse: {out:?}"
+            // Fresh state with subagent_type=explore should trigger review gate
+            // but not due to corruption block
+            assert!(
+                out.is_none() || out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str) != Some("block"),
+                "invalid hook-state should auto-recover on PostToolUse, not block: {out:?}"
             );
+            // Verify backup was created
+            let bak_path = state_path.with_extension("json.bak");
+            assert!(bak_path.exists(), "corrupt file should be backed up to .bak");
         }
 
         #[test]
