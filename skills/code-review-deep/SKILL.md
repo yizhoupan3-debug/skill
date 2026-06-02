@@ -150,6 +150,37 @@ Structured output expectations align with
 - **Testing honesty**: if tests were not run, say so compactly once (footer of findings or residual-risk line) and name the residual risk.
 - **Security claims**: state exploitability or blast radius; speculative abuse without a reachable path is a caveat/open question, not a blocker.
 
+## 安全审计维度
+
+参考 Trail of Bits 安全审计方法论，在代码审查中增加安全检查。
+
+### OWASP Top 10 检查清单
+- 注入（SQL/NoSQL/OS/LDAP）：检查用户输入是否参数化或转义
+- 认证缺陷：session 管理、密码存储、MFA 绕过
+- 敏感数据暴露：日志中是否打印 secrets/API keys/tokens
+- XXE：XML 解析是否禁用外部实体
+- 访问控制缺陷：IDOR、权限提升、水平越权
+- 安全配置错误：默认密码、debug 模式、CORS 策略
+- XSS：输出编码、CSP 头、DOM 操作
+- 不安全反序列化：untrusted data 反序列化
+- 含已知漏洞的组件：依赖版本检查
+- 日志和监控不足：安全事件是否被记录
+
+### 依赖安全
+- package.json / requirements.txt / Cargo.toml 已知漏洞
+- 锁定版本 vs 范围版本
+- 供应链攻击防护（lockfile 完整性）
+
+### Secret Detection
+- 硬编码 credentials、API keys、tokens
+- .env 文件是否在 .gitignore
+- 配置文件中的敏感值
+
+### 报告格式
+- 安全发现按严重程度分级：Critical / High / Medium / Low / Info
+- 每个发现包含：位置、描述、影响、修复建议
+- 与代码质量发现分开报告
+
 ## Deliverable shape
 
 **Default (compact)** — **top to bottom** for host-visible text:

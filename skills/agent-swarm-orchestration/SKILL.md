@@ -174,6 +174,30 @@ If the discussion touches current-session execution:
 - Supervisor owns integration and final verification.
 - **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
 
+## Claude Code Hooks 集成（2025-2026）
+
+Claude Code Hooks 已扩展至 30+ 事件类型，以下对 agent 编排最有价值：
+
+### 子代理生命周期
+- SubagentStart / SubagentStop：监控子代理启动和终止
+- 可用于审计、资源管理、依赖追踪
+
+### 上下文管理
+- PreCompact / PostCompact：上下文压缩前后的干预
+- PreCompact 时序列化关键状态到文件，PostCompact 时恢复
+- 对长 session 的 task 连续性至关重要
+
+### 智能拦截
+- Prompt-based hooks：用 LLM prompt 作为 hook 处理器，实现语义级拦截
+- Agent-based hooks：用完整 agent 作为 hook 处理器，执行多步验证
+
+### 文件监控
+- FileChanged + async hook：文件变更后自动运行测试/lint，不阻塞主流程
+
+### 设计约束
+- 保持宿主无关性：Hooks 是 Claude Code 特有能力，跨宿主场景需降级为手动流程
+- 提取编排模式（依赖管理、并行执行、结果汇总）但保持平台中立
+
 ## Trigger examples
 - "强制进行 Agent 编排深度审计 / 检查协作链路与任务达成结果。"
 - "Use the runtime verification gate to audit this agent swarm for orchestration-consensus idealism."

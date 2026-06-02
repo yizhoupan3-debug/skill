@@ -68,6 +68,33 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 
 **Model (Claude Code)**: inherit主会话模型，不显式指定。Claude Code 端积极鼓励并行 lane——≥2 独立子问题时**应** spawn 子代理，通常 3–5 个 `fork_context=false` lane，不因缺少 hook 级子代理事件而退缩为主线程串行。详见 [`docs/hosts/codex-cli.md` § 多代理编排](../../docs/hosts/codex-cli.md)。
 
+## Spec-driven 并行构建
+
+当任务可分解为独立子模块时，使用 spec-driven 模式提升执行效率。
+
+### 三阶段管线
+1. **Spec 阶段**：将需求转化为结构化规格说明（输入/输出/约束/验收标准）
+2. **并行 Build 阶段**：将 spec 分配给多个 subagent 并行实现
+   - 每个 subagent 接收独立的 spec 片段
+   - subagent 之间无依赖，可完全并行
+   - 使用 worktree 隔离避免文件冲突
+3. **集成验证阶段**：收集所有 subagent 产物，运行集成测试
+
+### 与 Wave Execution Model 对齐
+- 每个 wave 可包含多个 spec-driven 并行构建
+- Wave 间仍保持串行依赖
+- Spec 文件存储在 artifacts/current/ 下
+
+### 何时使用
+- 任务可分解为 3+ 个独立子模块
+- 子模块之间接口明确
+- 有明确的集成测试方案
+
+### 何时不用
+- 子模块之间强耦合
+- 需要共享状态或增量修改
+- 只有 1-2 个子任务
+
 ## GOAL_STATE writes (HARD)
 
 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范。

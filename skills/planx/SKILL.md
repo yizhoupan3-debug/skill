@@ -45,10 +45,53 @@ metadata:
 | `artifacts/current/<task_id>/ROADMAP.md` | Phases, exit criteria, verification commands |
 | `artifacts/current/<task_id>/WAVE_STATE.json` | Each wave: `parallel_group`, `depends_on`, `execution_mode`, `lanes[]` |
 | `artifacts/current/<task_id>/GOAL_STATE.json` | Via `framework_goal_drive` stdio — 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范 |
+| `artifacts/current/<task_id>/PLAN_TRACE.md` | 计划版本历史与执行进度追踪（人机可读） |
 
 ### GOAL_STATE writes
 
 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范。
+
+## 持久化计划文件模式
+
+增强 planx 的跨会话状态追踪能力。
+
+### 计划文件结构
+- 主文件：ROADMAP.md（已有）
+- 状态文件：WAVE_STATE.json（已有）
+- 新增：PLAN_TRACE.md — 计划版本历史和执行进度
+
+### PLAN_TRACE.md 格式
+
+```markdown
+# Plan Trace: {项目名}
+
+## v1 — 初始计划
+- 创建时间: {timestamp}
+- 阶段数: N
+- 关键决策: ...
+
+## v1.1 — 执行调整
+- 调整原因: {wave N 发现新依赖}
+- 变更: {新增/删除/重排的任务}
+- 影响范围: {哪些后续 wave 受影响}
+
+## 执行进度
+| Wave | 状态 | 开始 | 完成 | 备注 |
+|------|------|------|------|------|
+| W1 | done | ... | ... | |
+| W2 | in_progress | ... | - | 进行中 |
+| W3 | pending | - | - | |
+```
+
+### 跨会话恢复
+- session 启动时读取 PLAN_TRACE.md 恢复进度
+- 从最后一个 checkpoint 继续
+- 无需用户重复描述上下文
+
+### 与现有产物的兼容
+- ROADMAP.md：高层阶段规划（不变）
+- WAVE_STATE.json：当前 wave 机器可读状态（不变）
+- PLAN_TRACE.md：新增的人机可读完整追踪记录
 
 ## Outputs (schema)
 
