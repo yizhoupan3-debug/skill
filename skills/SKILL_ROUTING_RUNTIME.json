@@ -18,7 +18,7 @@
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
     "full_skill_count": 37,
     "hot_skill_count": 37,
-    "manifest_skill_count": 42,
+    "manifest_skill_count": 37,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
   },
@@ -46,8 +46,8 @@
       "skills/agent-swarm-orchestration/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -70,15 +70,14 @@
         "reviewer feedback digest",
         "changed-file digest",
         "changed files summary",
-        "review comments",
-        "gh cli"
+        "review comments"
       ],
       "P2",
       "skills/gh-address-comments/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -96,15 +95,14 @@
         "github",
         "ci",
         "github actions",
-        "gh cli",
-        "pull request"
+        "gh cli"
       ],
       "P2",
       "skills/gh-fix-ci/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -130,8 +128,8 @@
       "skills/sentry/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -164,8 +162,8 @@
       "skills/design-md/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -193,8 +191,8 @@
       "skills/doc/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -219,8 +217,8 @@
       "skills/pdf/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -249,8 +247,8 @@
       "skills/slides/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -277,8 +275,8 @@
       "skills/primary-runtime/spreadsheets/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -309,8 +307,8 @@
       "skills/visual-review/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -346,8 +344,8 @@
       "skills/skill-framework-developer/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -378,8 +376,8 @@
       "skills/citation-management/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -405,8 +403,8 @@
       "skills/adversarial-loop/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -436,8 +434,8 @@
       "skills/plan-mode/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -473,8 +471,8 @@
       "skills/code-review-deep/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -522,8 +520,8 @@
       "skills/paper-workbench/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -557,8 +555,8 @@
       "skills/research-workbench/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -592,8 +590,8 @@
       "skills/experiment-reproducibility/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -623,8 +621,8 @@
       "skills/math-derivation/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -654,8 +652,8 @@
       "skills/scientific-figure-plotting/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -690,8 +688,8 @@
       "skills/statistical-analysis/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -712,8 +710,8 @@
       "skills/deepinterview/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -735,8 +733,8 @@
       "skills/gitx/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -757,8 +755,8 @@
       "skills/update/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -780,8 +778,8 @@
       "skills/discussx/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -803,8 +801,8 @@
       "skills/planx/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -826,8 +824,8 @@
       "skills/implementx/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -849,8 +847,8 @@
       "skills/verifyx/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -882,8 +880,8 @@
       "skills/python-env-management/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -917,8 +915,8 @@
       "skills/diagramming/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -947,8 +945,8 @@
       "skills/jupyter-notebook/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -984,8 +982,8 @@
       "skills/latex-compile-acceleration/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -1017,8 +1015,8 @@
       "skills/mac-memory-management/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -1048,8 +1046,8 @@
       "skills/ppt-beamer/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
@@ -1079,8 +1077,8 @@
       "skills/source-slide-formats/SKILL.md",
       [
         "antigravity",
-        "claude-desktop",
         "claude-code",
+        "claude-desktop",
         "cursor",
         "opencode"
       ],
