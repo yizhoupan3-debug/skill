@@ -63,14 +63,11 @@ Visible chat **structure** (adapt depth to turn; omit empty sections):
 | `artifacts/current/<task_id>/REQUIREMENTS.md` | Living requirements — **update every round** |
 | `artifacts/current/<task_id>/DECISIONS.md` | Locked choices only |
 | `artifacts/current/<task_id>/OPEN_QUESTIONS.md` | **Unresolved items only** — separate file (required once discuss starts) |
-| `artifacts/current/<task_id>/GOAL_STATE.json` | Via **`framework_goal_drive` stdio** only (see below); `lifecycle_profile: my-light`, `drive_until_done: false` |
+| `artifacts/current/<task_id>/GOAL_STATE.json` | Via `framework_goal_drive` stdio — 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范 |
 
-### GOAL_STATE writes (HARD)
+### GOAL_STATE writes
 
-- **Do not** `Write` / `StrReplace` `GOAL_STATE.json` directly — mutating paths go through **`framework_goal_drive`** (`router-rs --stdio-json`, op `framework_goal_drive`) so `TASK_LEDGER.jsonl` stays consistent with Stop hydration.
-- **Initial**: `operation: start` with `drive_until_done: false`, `lifecycle_profile: my-light`, goal contract fields from `REQUIREMENTS.md`.
-- **Status / checkpoint**: `checkpoint` with `note`; terminal transitions use `pause` / `complete` as appropriate before `/planx`.
-- Hook layer **reads** GOAL only; it does not write checkpoints.
+遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范。
 
 ### OPEN_QUESTIONS.md (HARD)
 

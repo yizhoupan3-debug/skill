@@ -1,3 +1,9 @@
+import { agent, parallel, pipeline, phase, log } from 'workflow'
+import {
+  FINDINGS_SCHEMA, VERDICT_SCHEMA,
+  normalizeFile, normalizeLine, lineOverlap, conservativeMerge,
+} from './workflow-helpers.js'
+
 export const meta = {
   name: 'deep-review-template',
   description: '通用多 agent 深度审查模板：Scan → Merge → Verify → Synthesize 四阶段',
@@ -7,87 +13,6 @@ export const meta = {
     { title: 'Verify', detail: '对抗性验证' },
     { title: 'Synthesize', detail: '结构化报告' },
   ],
-}
-
-// ── Schemas ──────────────────────────────────────────────────────────────────
-
-const FINDINGS_SCHEMA = {
-  type: 'object',
-  properties: {
-    findings: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          severity: { type: 'string', enum: ['P0', 'P1', 'P2'] },
-          title: { type: 'string' },
-          file: { type: 'string' },
-          line: { type: 'string' },
-          description: { type: 'string' },
-          evidence: { type: 'string' },
-          fix_suggestion: { type: 'string' },
-          lens: { type: 'string' },
-        },
-        required: ['severity', 'title', 'file', 'description', 'evidence', 'lens'],
-      },
-    },
-  },
-  required: ['findings'],
-}
-
-const VERDICT_SCHEMA = {
-  type: 'object',
-  properties: {
-    is_real: { type: 'boolean' },
-    confirmed_severity: { type: 'string', enum: ['P0', 'P1', 'P2'] },
-    root_cause: { type: 'string' },
-    reasoning: { type: 'string' },
-    fix_suggestion: { type: 'string' },
-  },
-  required: ['is_real', 'reasoning'],
-}
-
-// ── Dedup ────────────────────────────────────────────────────────────────────
-
-function normalizeFile(f) { return (f.file || '').replace(/^\.\//, '').trim() }
-
-function normalizeLine(line) {
-  if (!line) return [0, 0]
-  const parts = String(line).match(/\d+/g)
-  if (!parts) return [0, 0]
-  return [parseInt(parts[0]) || 0, parseInt(parts[parts.length - 1]) || parseInt(parts[0]) || 0]
-}
-
-function lineOverlap(a, b) {
-  const [aS, aE] = normalizeLine(a), [bS, bE] = normalizeLine(b)
-  if (aS === 0 || bS === 0) return 0
-  const ov = Math.max(0, Math.min(aE, bE) - Math.max(aS, bS) + 1)
-  return ov / Math.max(Math.min(aE - aS + 1, bE - bS + 1), 1)
-}
-
-function conservativeMerge(findings) {
-  const groups = []
-  for (const f of findings) {
-    const nf = normalizeFile(f)
-    let merged = false
-    for (const g of groups) {
-      if (normalizeFile(g[0]) === nf && g[0].lens === f.lens && lineOverlap(g[0].line, f.line) > 0.5) {
-        g.push(f); merged = true; break
-      }
-    }
-    if (!merged) groups.push([f])
-  }
-  return groups.map(g => {
-    if (g.length === 1) return g[0]
-    const order = { P0: 0, P1: 1, P2: 2 }
-    g.sort((a, b) => (order[a.severity] ?? 99) - (order[b.severity] ?? 99))
-    const best = { ...g[0] }
-    const extra = g.slice(1).filter(f => f.evidence !== best.evidence).map(f => f.evidence)
-    if (extra.length) best.evidence += '\n\n--- 补充 ---\n' + extra.join('\n')
-    best.description += `（${g.length} 个扫描器报告）`
-    return best
-  })
 }
 
 // ── Lenses（按需自定义）─────────────────────────────────────────────────────

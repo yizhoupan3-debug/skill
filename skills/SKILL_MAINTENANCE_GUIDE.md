@@ -12,6 +12,20 @@
 
 1. 创建 `skills/<skill-name>/SKILL.md`，frontmatter 必填：`name`, `description`, `routing_layer`, `routing_owner`, `routing_gate`, `session_start`
 2. Body 必含：`## When to use` + `## Do not use`
+3. **Manifest 新增字段**（SKILL_MANIFEST.json 位置索引 13–16）：
+
+   | 字段 | 索引 | 类型 | 必填 | 说明 |
+   |------|------|------|------|------|
+   | `allowedTools` | 13 | `string[] \| null` | 否 | 该 skill 运行时允许使用的工具列表，如 `["Read","Bash","Agent"]`。`null` 表示不限制。 |
+   | `model` | 14 | `string \| null` | 否 | 推荐运行模型。可选值：`haiku`（轻量路由/讨论）、`sonnet`（规划/中等任务）、`opus`（深度分析）。`null` 表示使用宿主默认模型。 |
+   | `disableModelInvocations` | 15 | `boolean \| null` | 否 | 设为 `true` 禁止模型自动触发此 skill（仅允许用户显式调用）。`null` 等效于 `false`。 |
+   | `context` | 16 | `string \| null` | 否 | 补充上下文说明，用于在路由匹配时为模型提供额外背景信息。一般留 `null`。 |
+
+   填写原则：
+   - 轻量路由/讨论类 skill（如 `discussx`）建议设 `model: "haiku"`
+   - 规划类 skill（如 `planx`）建议设 `model: "sonnet"`
+   - 需要严格工具管控的 skill（如 `code-review-deep`）显式列出 `allowedTools`
+   - 大多数 skill 只需填 `allowedTools` 和 `model`，其余留 `null`
 3. 更新手维护路由真源（**必须**）：
    - 编辑 `skills/SKILL_ROUTING_RUNTIME.json` 与 `skills/SKILL_MANIFEST.json`（slug、trigger、path 与 frontmatter 对齐）。
    - 运行 companion 再生（**不**改 runtime/manifest）：

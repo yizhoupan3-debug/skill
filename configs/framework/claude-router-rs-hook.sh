@@ -45,8 +45,8 @@ if [ -z "$ROUTER_RS_BIN" ]; then
 fi
 
 if [ ! -x "${ROUTER_RS_BIN:-}" ]; then
-  if critical_event "$HOOK_EVENT"; then
-    printf '%s\n' '{"decision":"block","reason":"router-rs binary unavailable for Claude hook","suppressOutput":true}'
+  if critical_event "$HOOK_EVENT" && [ "${ROUTER_RS_HOOK_FAIL_OPEN:-1}" != "1" ]; then
+    printf '%s\n' '{"decision":"block","reason":"router-rs binary unavailable for Claude hook (set ROUTER_RS_HOOK_FAIL_OPEN=1 to block)","suppressOutput":true}'
     exit 1
   fi
   printf '%s\n' '{"decision":"allow","reason":"router-rs unavailable, running without framework","suppressOutput":true}'

@@ -25,6 +25,17 @@ metadata:
 
 **Entry gate**: user must explicitly invoke `/planx` (or clear plan intent) after `/discussx`; do not enter from agent nudge alone.
 
+## When to use vs plan-mode
+
+- **planx**（本 skill）：my lifecycle 标准计划层，产出 `ROADMAP.md` + `WAVE_STATE.json`，必须在 `/discussx` 之后由用户显式触发。**不适用于 Cursor Plan 模式**。
+- **plan-mode**（`skills/plan-mode/`）：跨宿主 Plan 闸门，覆盖 Cursor CreatePlan、调研计划、可验收 todo。**不适用于 my lifecycle 的 wave/phase 编排**。
+- 两者**互斥**：同一任务只用其一。my lifecycle 用 planx，Cursor Plan 模式用 plan-mode。
+
+## Do not use
+
+- 用户在 Cursor Plan 模式下需要策划文档闸门 → 使用 `plan-mode`
+- 任务不涉及 my lifecycle 的 phase/wave 规划 → 使用 `plan-mode` 或直接实现
+
 **Inputs**: `REQUIREMENTS.md`, `DECISIONS.md`, `OPEN_QUESTIONS.md` (carry unresolved items into plan scope or wave notes).
 
 ## Disk outputs
@@ -33,11 +44,11 @@ metadata:
 |------|---------|
 | `artifacts/current/<task_id>/ROADMAP.md` | Phases, exit criteria, verification commands |
 | `artifacts/current/<task_id>/WAVE_STATE.json` | Each wave: `parallel_group`, `depends_on`, `execution_mode`, `lanes[]` |
-| `artifacts/current/<task_id>/GOAL_STATE.json` | **`framework_goal_drive` stdio** only — set `status` via ledger-backed ops (`start` / `checkpoint` / `pause`); keep `lifecycle_profile: my-light`, `drive_until_done: false` |
+| `artifacts/current/<task_id>/GOAL_STATE.json` | Via `framework_goal_drive` stdio — 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范 |
 
-### GOAL_STATE writes (HARD)
+### GOAL_STATE writes
 
-Same contract as `skills/discussx/SKILL.md` §GOAL_STATE writes. **Forbidden**: direct file edit of `GOAL_STATE.json`.
+遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范。
 
 ## Outputs (schema)
 

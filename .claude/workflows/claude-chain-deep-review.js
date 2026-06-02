@@ -1,3 +1,9 @@
+import { agent, parallel, pipeline, phase, log } from 'workflow'
+import {
+  FINDINGS_SCHEMA, VERDICT_SCHEMA, READ_INSTRUCTION,
+  normalizeFile, normalizeLine, lineOverlap, conservativeMerge,
+} from './workflow-helpers.js'
+
 export const meta = {
   name: 'claude-chain-deep-review',
   description: '全面深度审查 Claude 全链路（hooks、host integration、install scripts、配置、文档），找出真实问题',
@@ -7,45 +13,6 @@ export const meta = {
     { title: 'Verify', detail: '对立验证每个 finding，确认为真实问题' },
     { title: 'Synthesize', detail: '按 severity 排序，生成最终结构化报告' },
   ],
-}
-
-// ── Schemas ──────────────────────────────────────────────────────────────────
-
-const FINDINGS_SCHEMA = {
-  type: 'object',
-  properties: {
-    findings: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          severity: { type: 'string', enum: ['P0', 'P1', 'P2'] },
-          title: { type: 'string' },
-          file: { type: 'string' },
-          line: { type: 'string' },
-          description: { type: 'string' },
-          evidence: { type: 'string' },
-          fix_suggestion: { type: 'string' },
-          lens: { type: 'string' },
-        },
-        required: ['severity', 'title', 'file', 'description', 'evidence', 'lens'],
-      },
-    },
-  },
-  required: ['findings'],
-}
-
-const VERDICT_SCHEMA = {
-  type: 'object',
-  properties: {
-    is_real: { type: 'boolean' },
-    confirmed_severity: { type: 'string', enum: ['P0', 'P1', 'P2'] },
-    root_cause: { type: 'string' },
-    reasoning: { type: 'string' },
-    fix_suggestion: { type: 'string' },
-  },
-  required: ['is_real', 'reasoning'],
 }
 
 const REPORT_SCHEMA = {
@@ -83,69 +50,6 @@ const REPORT_SCHEMA = {
     },
   },
   required: ['total_scanned', 'confirmed_count', 'findings', 'coverage'],
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-const READ_INSTRUCTION = `请使用 Bash 工具的 cat 命令读取文件（不要用 Read 工具，因为框架保护了这些文件）。`
-
-function normalizeFile(f) {
-  return (f.file || '').replace(/^\.\//, '').trim()
-}
-
-function normalizeLine(line) {
-  if (!line) return [0, 0]
-  const parts = String(line).match(/\d+/g)
-  if (!parts) return [0, 0]
-  return [parseInt(parts[0]) || 0, parseInt(parts[parts.length - 1]) || parseInt(parts[0]) || 0]
-}
-
-function lineOverlap(a, b) {
-  const [aStart, aEnd] = normalizeLine(a)
-  const [bStart, bEnd] = normalizeLine(b)
-  if (aStart === 0 || bStart === 0) return 0
-  const overlap = Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart) + 1)
-  const aLen = Math.max(aEnd - aStart + 1, 1)
-  const bLen = Math.max(bEnd - bStart + 1, 1)
-  return overlap / Math.min(aLen, bLen)
-}
-
-/**
- * 保守去重：仅在 (file + lens + 行号重叠>50%) 时合并。
- * 不同 lens 保留为独立条目（同一行代码的安全问题和正确性问题是不同发现）。
- */
-function conservativeMerge(findings) {
-  const groups = []
-  for (const f of findings) {
-    const nf = normalizeFile(f)
-    let merged = false
-    for (const g of groups) {
-      const gg = g[0]
-      if (
-        normalizeFile(gg) === nf &&
-        gg.lens === f.lens &&
-        lineOverlap(gg.line, f.line) > 0.5
-      ) {
-        g.push(f)
-        merged = true
-        break
-      }
-    }
-    if (!merged) groups.push([f])
-  }
-  return groups.map(g => {
-    if (g.length === 1) return g[0]
-    // 合并：保留最高 severity，合并 evidence，保留所有来源
-    const severityOrder = { P0: 0, P1: 1, P2: 2 }
-    g.sort((a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99))
-    const best = { ...g[0] }
-    const extraEvidence = g.slice(1).filter(f => f.evidence !== best.evidence).map(f => f.evidence)
-    if (extraEvidence.length > 0) {
-      best.evidence = best.evidence + '\n\n--- 补充证据 ---\n' + extraEvidence.join('\n')
-    }
-    best.description = best.description + `（${g.length} 个独立扫描器报告此问题）`
-    return best
-  })
 }
 
 // ── Phase 1: Scan ────────────────────────────────────────────────────────────

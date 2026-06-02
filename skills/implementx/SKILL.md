@@ -66,23 +66,13 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 
 **Model (Cursor)**: omit `Task` `model` (inherit parent session); do not default `claude-*` / `sonnet*`. See `.cursor/rules/subagent-model-inherit.mdc`.
 
-**Model (Codex)**: inherit主会话模型，不显式指定。Codex 端积极鼓励并行 lane——≥2 独立子问题时**应** spawn 子代理，通常 3–5 个 `fork_context=false` lane，不因缺少 hook 级子代理事件而退缩为主线程串行。详见 [`docs/hosts/codex-cli.md` § 多代理编排](../../docs/hosts/codex-cli.md)。
+**Model (Claude Code)**: inherit主会话模型，不显式指定。Claude Code 端积极鼓励并行 lane——≥2 独立子问题时**应** spawn 子代理，通常 3–5 个 `fork_context=false` lane，不因缺少 hook 级子代理事件而退缩为主线程串行。详见 [`docs/hosts/codex-cli.md` § 多代理编排](../../docs/hosts/codex-cli.md)。
 
 ## GOAL_STATE writes (HARD)
 
-- All **`GOAL_STATE.json`** mutations during execution use **`framework_goal_drive`** (`checkpoint`, `complete`, etc.) — not direct `Write` on the JSON file.
-- Wave progress → `checkpoint` notes; evidence → `EVIDENCE_INDEX` / validation commands per skill.
+遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范。
 
-## GOAL_STATE on start
-
-显式 stdio 启动（**无** Stop `GOAL_CONTINUE` hook 注入，2026-05 连续性拔除）。**`start` / `resume` 同时写入** `artifacts/current/active_task.json`（及默认 `focus_task.json`，`set_focus: false` 可跳过 focus）；**禁止**手改 `{}` 作指针占位。
-
-```bash
-# status=running, drive_until_done=true, lifecycle_profile=my-light
-printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"my-light"}}' | router-rs --stdio-json
-```
-
-`complete` / `clear` 会中性化指向该 `task_id` 的 active/focus 指针（删除文件，不留空对象）。
+implement 阶段特殊字段：`drive_until_done: true`；无 Stop `GOAL_CONTINUE` hook 注入（2026-05 连续性拔除）。
 
 ## Next
 
