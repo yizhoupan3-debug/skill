@@ -38,7 +38,7 @@ depends_on:
 |--------|----------|----------------|-----------------|
 | PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../core/router-rs/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
-| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration.rs`](../../core/router-rs/src/host_integration.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
+| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/router-rs/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`）；`ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。

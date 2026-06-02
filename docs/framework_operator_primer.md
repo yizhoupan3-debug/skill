@@ -67,7 +67,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 | 主题 | 行为 |
 |------|------|
 | **Registry `review_gate` lane** | 真源 `configs/framework/RUNTIME_REGISTRY.json`；[`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) **磁盘读取**（`` shim；无 compile-time embed）。改 lane 后**无需** `cargo build`；重启 hook 子进程即可。 |
-| **宿主投影 My/review 文案** | `configs/framework/host_projection_narrative.json`；`host-integration install` 渲染 Codex/Cursor/Claude 入口时读取。勿在 `host_integration.rs` 硬编码段落。 |
+| **宿主投影 My/review 文案** | `configs/framework/host_projection_narrative.json`；`host-integration install` 渲染 Codex/Cursor/Claude 入口时读取。勿在 `host_integration/mod.rs` 硬编码段落。 |
 | **`generated-artifacts-status`** | **`framework doctor`** 与 `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍跑全量 **drift-gate**（含慢 generator）。 |
 | **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** hook-state review 字段（细节见下节 **REVIEW_GATE** 链接）。 |
 | **active 无 GOAL、focus 有 GOAL** | 运行 `router-rs framework task-state-resolve` 或修正 `active_task.json`（**无** SessionStart 中文 hint 注入）。 |

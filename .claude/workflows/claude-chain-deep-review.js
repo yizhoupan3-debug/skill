@@ -65,7 +65,7 @@ const scanResults = await parallel([
 **文件列表**：
 - core/router-rs/src/hosts/claude_hooks.rs（Claude Code 四事件 hook）
 - core/router-rs/src/hosts/claude_desktop_hooks.rs（Claude Desktop MCP hook）
-- core/router-rs/src/host_integration.rs（host 集成安装逻辑）
+- core/router-rs/src/host_integration/mod.rs（host 集成安装逻辑）
 
 **审查维度**：
 1. 逻辑错误：if/else 分支覆盖不全、match arm 缺失、条件判断反转
@@ -92,7 +92,7 @@ ${READ_INSTRUCTION}
 **文件列表**：
 - core/router-rs/src/hosts/claude_hooks.rs
 - core/router-rs/src/hosts/claude_desktop_hooks.rs
-- core/router-rs/src/host_integration.rs
+- core/router-rs/src/host_integration/mod.rs
 - core/router-rs/src/web_fetch_guard.rs
 - core/router-rs/src/hook_outbound_protect.rs
 - core/router-rs/src/hook_policy.rs
@@ -162,7 +162,7 @@ ${READ_INSTRUCTION}
 **审查范围**：
 - core/router-rs/src/hosts/claude_hooks.rs
 - core/router-rs/src/hosts/claude_desktop_hooks.rs
-- core/router-rs/src/host_integration.rs
+- core/router-rs/src/host_integration/mod.rs
 - scripts/install-claude.sh
 - scripts/install-claude-desktop.sh
 - AGENTS_CLAUDE.md
@@ -204,7 +204,7 @@ ${READ_INSTRUCTION}
 **被测代码**：
 - core/router-rs/src/hosts/claude_hooks.rs
 - core/router-rs/src/hosts/claude_desktop_hooks.rs
-- core/router-rs/src/host_integration.rs
+- core/router-rs/src/host_integration/mod.rs
 
 **审查维度**：
 1. 关键路径是否有测试覆盖

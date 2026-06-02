@@ -28,7 +28,7 @@ depends_on:
 - 任何 plugin、projection、routing explain、兼容迁移叙事都不进热 runtime。
 - 冷真源 = **编译器 / 契约 / CI 消费集**，并非 hook 热路径读物：
   - [`skills/SKILL_PLUGIN_CATALOG.json`](../../skills/SKILL_PLUGIN_CATALOG.json)：`router-rs framework skills` 校验/刷新；policy contract 消费。
-  - [`skills/SKILL_ROUTING_METADATA.json`](../../skills/SKILL_ROUTING_METADATA.json)：路由 metadata 真源；`tests/policy_contracts.rs` 与 `host_integration.rs` 校验。
+  - [`skills/SKILL_ROUTING_METADATA.json`](../../skills/SKILL_ROUTING_METADATA.json)：路由 metadata 真源；`tests/policy_contracts.rs` 与 `host_integration/mod.rs` 校验。
   - [`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`](../../skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json)：路由解释器衍生物，policy 契约校验目标；不要把它当 router-rs 第二真源去删。
 
 ### 2.3 控制面配置与生成物（2026-05-20 硬化）
@@ -39,7 +39,7 @@ depends_on:
 | [`configs/framework/host_projection_narrative.json`](../../configs/framework/host_projection_narrative.json) | 各宿主 framework 投影内的 **My lifecycle 默认链** 与 **review findings-only** 英文段落；`framework host-integration install` 渲染时读取。叙事政策仍以 [`AGENTS.md`](../../AGENTS.md) 为跨宿主真源，本 JSON 仅为安装产物文案真源。 |
 | [`configs/framework/GENERATED_ARTIFACTS.json`](../../configs/framework/GENERATED_ARTIFACTS.json) | 声明须纳入版本库的生成物路径、generator 命令与 `compare` 模式（`byte-for-byte` / `normalized-text`）。 |
 
-**`generated-artifacts-status` 两种模式**（[`host_integration.rs`](../../core/router-rs/src/host_integration.rs)）：
+**`generated-artifacts-status` 两种模式**（[`host_integration/mod.rs`](../../core/router-rs/src/host_integration/mod.rs)）：
 
 | 模式 | 触发 | 行为 |
 |------|------|------|

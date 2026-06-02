@@ -91,7 +91,7 @@ depends_on:
 | Claude Code hook | [`claude_hooks.rs`](../core/router-rs/src/hosts/claude_hooks.rs) |
 | Claude Desktop MCP | `claude_desktop_hooks.rs` / `router-rs claude-desktop agent` |
 | entrypoint sync | [`host_entrypoint_sync.rs`](../core/router-rs/src/host_entrypoint_sync.rs) |
-| install / 投影 | [`host_integration.rs`](../core/router-rs/src/host_integration.rs) |
+| install / 投影 | [`host_integration/mod.rs`](../core/router-rs/src/host_integration/mod.rs) |
 | CLI 分发 | [`dispatch.rs`](../core/router-rs/src/cli/dispatch.rs) |
 | 闭集 id / install_tool | `configs/framework/RUNTIME_REGISTRY.json` |
 | review_gate loader | [`runtime_registry/mod.rs`](../core/router-rs/src/runtime_registry/mod.rs) |
@@ -115,7 +115,7 @@ depends_on:
 | 注册表 | `RUNTIME_REGISTRY.json`，[`tests/common/mod.rs`](../tests/common/mod.rs)，[`framework_host_targets.rs`](../core/router-rs/src/framework_host_targets.rs) |
 | L3 入口 | `hosts/<host>_hooks/`（如 [`codex_hooks/mod.rs`](../core/router-rs/src/hosts/codex_hooks/mod.rs)）或 `<host>_hooks.rs`，[`main.rs`](../core/router-rs/src/main.rs) |
 | CLI 分发 | [`dispatch_body.txt`](../core/router-rs/src/cli/dispatch_body.txt)，[`dispatch.rs`](../core/router-rs/src/cli/dispatch.rs) |
-| 安装 / 投影 | [`host_integration.rs`](../core/router-rs/src/host_integration.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
+| 安装 / 投影 | [`host_integration/mod.rs`](../core/router-rs/src/host_integration/mod.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
 | L4 + 验证 | 宿主 `hooks.json`，[`tests/host_integration.rs`](../tests/host_integration.rs)，[`tests/policy_contracts.rs`](../tests/policy_contracts.rs) |
 
 - [ ] **`RUNTIME_REGISTRY.json`**：`host_targets.supported`、`install_tool`、`host_entrypoints` 与现网对称。
@@ -123,7 +123,7 @@ depends_on:
 - [ ] **`framework_host_targets.rs`**：只读注册表，fail-closed。
 - [ ] **`hosts/<host>_hooks/`** 或 **`<host>_hooks.rs`** + **`main.rs`** mod。
 - [ ] **`dispatch_body.txt`** / **`dispatch.rs`**：`router-rs <host> hook <event> …`。
-- [ ] **`host_integration.rs`**：install + 投影 + `GENERATED_ARTIFACTS.json`。
+- [ ] **`host_integration/mod.rs`**：install + 投影 + `GENERATED_ARTIFACTS.json`。
 - [ ] **L4 样例**：argv + 超时 + stdin 透传，shell 不复制 L3。
 - [ ] **测试**：`cargo test --manifest-path core/router-rs/Cargo.toml`；根 `cargo test`。
 - [ ] **`AGENTS.md`**：Codex 投影链变更时补一句权威分层说明。
