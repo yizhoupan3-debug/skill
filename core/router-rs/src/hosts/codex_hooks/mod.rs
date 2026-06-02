@@ -526,12 +526,23 @@ fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, String>
         .open(&lock_path)
         .map_err(|err| format!("state_lock_open_failed: {err}"))?;
     let fd = file.as_raw_fd();
-    let rc = unsafe { libc::flock(fd, libc::LOCK_EX) };
-    if rc != 0 {
-        return Err(format!(
-            "state_lock_flock_failed: {}",
-            io::Error::last_os_error()
-        ));
+    let deadline = SystemTime::now() + Duration::from_secs(20);
+    loop {
+        let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+        if rc == 0 {
+            break;
+        }
+        let err = io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::EWOULDBLOCK)
+            || err.raw_os_error() == Some(libc::EAGAIN)
+        {
+            if SystemTime::now() >= deadline {
+                return Err("state_lock_timeout".to_string());
+            }
+            thread::sleep(Duration::from_millis(5));
+            continue;
+        }
+        return Err(format!("state_lock_flock_failed: {err}"));
     }
     Ok(CodexStateLock { file })
 }
@@ -890,12 +901,14 @@ fn codex_review_gate_disabled_by_env() -> bool {
     router_rs_env_enabled_default_false(lifecycle_host().review_gate_disable_env())
 }
 
-/// Env disable, my-light profile, or registry `lifecycle_profiles.my-light.disable_review_gate_hard_block`.
+/// Env disable (my-light profile only), my-light profile, or registry `lifecycle_profiles.my-light.disable_review_gate_hard_block`.
+/// In non-my-light lifecycle profile, env-var bypass is **ignored** — review gate stays hard-enabled.
 fn codex_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
-    if codex_review_gate_disabled_by_env() {
+    let is_my_light = crate::hook_common::my_light_profile_active(Some(repo_root), text);
+    if is_my_light && codex_review_gate_disabled_by_env() {
         return true;
     }
-    if !crate::hook_common::my_light_profile_active(Some(repo_root), text) {
+    if !is_my_light {
         return false;
     }
     match crate::runtime_registry::lifecycle_profile_disables_review_gate_hard_block(
@@ -1588,7 +1601,10 @@ pub(crate) fn build_hook_binary_preamble(
     ));
     command.push_str(&format!(
         "RS_BIN=\"\"; \
-if [ -n \"${{ROUTER_RS_BIN:-}}\" ] && [ -x \"${{ROUTER_RS_BIN}}\" ]; then RS_BIN=\"${{ROUTER_RS_BIN}}\"; \
+if [ -n \"${{ROUTER_RS_BIN:-}}\" ] && [ -x \"${{ROUTER_RS_BIN}}\" ]; then \
+_CMDV=\"$(command -v router-rs 2>/dev/null || true)\"; \
+if [ \"$ROUTER_RS_BIN\" = \"$_CMDV\" ] || [[ \"$ROUTER_RS_BIN\" == \"${project_var}/\"* ]]; then RS_BIN=\"${{ROUTER_RS_BIN}}\"; \
+else echo \"[router-rs] ROUTER_RS_BIN rejected (not in repo or PATH): $ROUTER_RS_BIN\" >&2; fi; \
 elif [ -x \"${project_var}/core/router-rs/target/release/router-rs\" ]; then RS_BIN=\"${project_var}/core/router-rs/target/release/router-rs\"; \
 elif [ -x \"${project_var}/core/router-rs/target/debug/router-rs\" ]; then RS_BIN=\"${project_var}/core/router-rs/target/debug/router-rs\"; \
 elif [ -x \"${project_var}/target/release/router-rs\" ]; then RS_BIN=\"${project_var}/target/release/router-rs\"; \
@@ -4301,6 +4317,7 @@ mod tests {
         fn codex_review_gate_disable_env_skips_block() {
             let _g = env_lock();
             let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
+            crate::hook_common::set_test_my_light_override(Some(true));
             std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
             let repo = fresh_repo();
             let start = json!({
@@ -4322,6 +4339,7 @@ mod tests {
                 Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
                 None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
             }
+            crate::hook_common::set_test_my_light_override(None);
         }
 
         #[test]
@@ -4342,6 +4360,7 @@ mod tests {
                     .map(|s| s.review_required)
                     .unwrap_or(false)
             );
+            crate::hook_common::set_test_my_light_override(Some(true));
             std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
             let ups_disable = json!({
                 "hook_event_name":"UserPromptSubmit",
@@ -4357,6 +4376,7 @@ mod tests {
                 Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
                 None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
             }
+            crate::hook_common::set_test_my_light_override(None);
         }
 
         #[test]
@@ -4371,6 +4391,7 @@ mod tests {
                 "prompt":"全面review"
             });
             let _ = run_gate(&repo, &arm).unwrap();
+            crate::hook_common::set_test_my_light_override(Some(true));
             std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
             let post = json!({
                 "hook_event_name":"PostToolUse",
@@ -4388,6 +4409,7 @@ mod tests {
                 Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
                 None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
             }
+            crate::hook_common::set_test_my_light_override(None);
         }
 
         #[test]

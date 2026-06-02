@@ -5,6 +5,13 @@
 # Machine-wide defaults belong in ~/.codex/config.toml.
 
 approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+# Restrict writable roots to the repository directory.
+# Prevents agent from writing outside the workspace.
+writable_roots = ["${workspace}"]
+
 [features]
 hooks = true
 memories = false
