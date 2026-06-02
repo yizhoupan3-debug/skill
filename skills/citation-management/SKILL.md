@@ -18,7 +18,7 @@ trigger_hints:
   - ACM
   - GB/T 7714
 metadata:
-  version: "2.3.2"
+  version: "2.4.0"
   platforms: [supported]
   tags: [citation, bibliography, bibtex, reference, doi, academic]
 risk: low
@@ -65,11 +65,27 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 - Treat publisher metadata and DOI records as stronger than copied reference text.
 - Keep unresolved ambiguity visible in the output.
 
+## Tools
+
+**首选：paperplain MCP**（论文元数据验证与发现）
+
+| 场景 | 工具 | 说明 |
+|------|------|------|
+| 有 DOI 的条目 | `mcp__paperplain__fetch_paper(doi)` | 替代手工 Crossref API 调用，返回完整摘要与元数据 |
+| 仅有标题的条目 | `mcp__paperplain__find_paper_by_title(title)` | Semantic Scholar 标题匹配，返回 DOI、作者、摘要 |
+| 领域文献发现 | `mcp__paperplain__search_research(query)` | 跨 PubMed/ArXiv/Semantic Scholar 搜索 |
+
+**Fallback**（paperplain 未覆盖时）：
+- DOAJ（开放获取期刊目录）
+- 手工 Crossref API（`https://api.crossref.org/works/{doi}`）
+- PubMed/PMC API
+- 出版商官方页面
+
 ## Workflow
 
 1. Identify the citation style and input format.
 2. Parse all entries and detect duplicates, missing fields, and malformed records.
-3. Verify high-risk records through DOI, PMID, Crossref, publisher pages, or trusted indexes.
+3. Verify high-risk records: **优先**用 `mcp__paperplain__fetch_paper(doi)` 验证有 DOI 的条目；仅有标题时用 `mcp__paperplain__find_paper_by_title(title)` 补全元数据；对 paperplain 未覆盖的条目（如 DOAJ 特定字段、非学术出版物），fallback 到 Crossref/PMID/出版商页面。
 4. Normalize names, titles, venues, years, pages, identifiers, and capitalization.
 5. Check in-text citations against the reference list when manuscript text is available.
 6. Return cleaned entries plus unresolved items.

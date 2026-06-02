@@ -107,7 +107,7 @@ writing_handoff: surgical | refactor  # 若需多段/全节骨架重组
 
 ## L4 宿主短码（per-host）
 
-**L3 skill + NL 路由跨宿主**；**L4 短码**仅在具备 `UserPromptSubmit` / `beforeSubmit` 的宿主注入（Cursor、Codex CLI、Claude Code、Antigravity CLI）。`claude-desktop`、`codex-app`、`antigravity-app` 无 UPS hook —— 仅 skill/NL。
+**L3 skill + NL 路由跨宿主**；**L4 短码**仅在具备 `UserPromptSubmit` / `beforeSubmit` 的宿主注入（Cursor、Claude Code）。`claude-desktop`、`claude-code` 无 UPS hook —— 仅 skill/NL。
 
 | 文件 | 环境变量（prose **默认开**） | 注入事件 |
 | --- | --- | --- |

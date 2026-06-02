@@ -168,20 +168,17 @@ Default on every manuscript pass unless the user explicitly waives it:
 
 ## Claim-Safety Rules
 
-- Do not **wordsmith a weaker claim** into the manuscript to dodge a gap that
-  the reviewer lane still classifies as closable with evidence/analysis; route
-  back to `$paper-reviewer` / `$paper-workbench` per
+- Do not **wordsmith a weaker claim** to dodge a closable gap; follow
   [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md).
 - For **response / rebuttal prose**: do not let polite acknowledgment or a
   longer limitation paragraph **stand in for** the manuscript edits or evidence
   work the comment requires; align with
   [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
-  §「修稿与审稿回应：不得以话术防御顶替实质修改」and the R&R section of the same
-  claim–evidence ladder.
+  §「修稿与审稿回应：不得以话术防御顶替实质修改」.
 - **Code or math reviewer comments** are not "tone" tasks: the response text must
-  point to **artifacts** (hashes/commands/proof appendices/errata) dictated by
+  point to **artifacts** (hashes/commands/proof appendices/errata) per
   [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
-  §「代码/实现质疑」与 **§数学/推导质疑**，not vague release timelines or cautious rephrasing alone.
+  §「代码/实现质疑」与 §「数学/推导质疑」.
 - Do not add unsupported novelty, superiority, causality, or clinical/practical impact.
 - Keep hedging aligned with evidence strength.
 - Preserve methods, results, numbers, abbreviations, and citation intent.
@@ -316,12 +313,14 @@ Then adapt density to task shape:
 
 ## References
 
-- [../paper-workbench/references/RESEARCH_PAPER_STACK.md](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
-- [../paper-workbench/references/research-language-norms.md](../paper-workbench/references/research-language-norms.md)
-- [references/claim-spine-and-section-contract.md](./references/claim-spine-and-section-contract.md)
-- [references/section-by-section.md](./references/section-by-section.md)
-- [references/storytelling-patterns.md](./references/storytelling-patterns.md)
-- [references/rebuttal-patterns.md](./references/rebuttal-patterns.md)
-- [references/revision-playbook.md](./references/revision-playbook.md)
-- [references/prose-quality-gate.md](./references/prose-quality-gate.md)
-- [references/prose-exemplars.md](./references/prose-exemplars.md)
+- [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
+- [`../paper-workbench/references/edit-scope-gate.md`](../paper-workbench/references/edit-scope-gate.md)
+- [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
+- [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+- [`references/claim-spine-and-section-contract.md`](./references/claim-spine-and-section-contract.md)
+- [`references/section-by-section.md`](./references/section-by-section.md)
+- [`references/storytelling-patterns.md`](./references/storytelling-patterns.md)
+- [`references/rebuttal-patterns.md`](./references/rebuttal-patterns.md)
+- [`references/revision-playbook.md`](./references/revision-playbook.md)
+- [`references/prose-quality-gate.md`](./references/prose-quality-gate.md)
+- [`references/prose-exemplars.md`](./references/prose-exemplars.md)

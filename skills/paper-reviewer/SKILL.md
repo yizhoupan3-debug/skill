@@ -100,10 +100,8 @@ Default posture:
   `$paper-workbench` before allowing language or layout issues to dominate
 - review before rewriting; switch to `$paper-workbench` for edits only after findings are
   accepted or the user explicitly asks for edits
-- when evidence does not support the current claim level, default **not** to
-  "just narrow" — follow
-  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md):
-  surface **evidence_first_options** before treating downgrade as the primary move
+- when evidence does not support the current claim level, follow
+  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
 
 ## Use this when
 
@@ -278,12 +276,11 @@ For compact interactive review, use this compressed order:
    norms, and venue fit.
 4. Identify the highest-priority decision risk: name the shortest evidence-based
    reason reviewers may request major revision.
-5. Separate fix types: **prioritize** new evidence / stronger analysis / fairer
-   comparisons before treating claim narrowing as the primary fix (see
-   [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md));
-   then appendix routing, citation repair, figure/table/layout repair, or prose
-   cleanup.
-   Treat **implementation–paper mismatches**, **unreproducible claims**, **complexity promises without anchors**, **proof gaps**, and **incorrect theorem conditions** as **repair-class** unless the ladder's narrowing conditions are met—not as "language tweaks".
+5. Separate fix types per
+   [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md):
+   **evidence-first** before narrowing, then appendix routing, citation repair,
+   figure/table/layout repair, or prose cleanup. Code/math/provenance doubts are
+   **repair-class** by default.
 6. Emit claim ledger updates when claim ceiling, scope markers, or evidence
    anchors changed.
 7. Apply the language checks in
@@ -341,25 +338,21 @@ assume a scaffold script exists.
   proceed provisionally and mark the uncertainty
 - Do not make the final answer a gate-progress report unless the user asked for
   protocol artifacts
-- If the strongest honest move is to cut, narrow, or move something to appendix,
-  say so plainly **after** ruling in or ruling out **evidence_first** paths per
+- Cut, narrow, appendix routing, code/math skepticism, and R&R closure — all
+  follow
   [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md);
-  do not recommend narrow-as-default when plausible add-on evidence/analysis would
-  close a B-tier gap
+  the ladder is the single source for evidence-first ordering, R&R escape
+  red lines (逐条绑定、默认可修优先、禁止 rebuttal-only、语义逃避),
+  代码/实现质疑, and 数学/推导质疑
 - Do not blur whole-paper review and local text polish into one owner
 - Do not call a paper "top-tier ready" unless contribution, closest-work
   separation, decisive evidence, and reviewer-scrutiny robustness all hold.
-- When the user pastes **external reviewer letters** or checklist-style comments:
-  every point must be classified into **repair / narrow / unrelated / unclear**
-  before recommending prose; **do not endorse** closures that are
-  **rebuttal-only**, **limitation-wall**, or **claim-softening-only** when the
-  point is prima facie closable via evidence, fairness, reproducibility, or
-  scoped manuscript edits ([`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md) §「审稿意见 / R&R」).
-- Skepticism about **code / implementation alignment** or **correctness /
-  reproducibility** must not be waved away with prose: flag as **repair** unless
-  the user proves an immovable blocker; insist on concrete next moves per
-  [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md) §「代码/实现质疑」.
-- Skepticism about **proofs / derivations / theorem conditions** must not be
-  closed by hedging alone: classify as **repair** (补丁证明、勘误、收窄或可证降级)
-  per the same ladder §「数学/推导质疑」; explicitly reject closures that only
-  "sound more cautious" without fixing the inference chain.
+
+## References
+
+- [`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
+- [`../paper-workbench/references/edit-scope-gate.md`](../paper-workbench/references/edit-scope-gate.md)
+- [`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
+- [`references/review-dimensions.md`](references/review-dimensions.md)
+- [`references/severity-spec.md`](references/severity-spec.md)
+- [`references/review-rubric-playbook.md`](references/review-rubric-playbook.md)

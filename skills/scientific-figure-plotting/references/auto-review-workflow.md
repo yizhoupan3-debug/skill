@@ -10,7 +10,7 @@ visual quality assurance.
        ↓
 2. Export as PNG (≥300 DPI) to tmp/
        ↓
-3. View exported image (view_file)
+3. View exported image (Read tool)
        ↓
 4. Run visual-review checklist
        ↓
