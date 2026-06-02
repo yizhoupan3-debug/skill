@@ -13,7 +13,7 @@
          - 仅当用户**当轮明确要求英文**时可切换。
          - **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」；对用户可见层避免中英混排。
 
-         **默认生命周期：My** — `/discussx` → `/planx` → `/implementx` → `/verifyx`。Goal 经 MCP stdio（`goal_state_manage`）；非 `my-light` 时 `closeout_gate` / complete 在 MCP 工具层硬拦；无 PreToolUse/Stop shell hook。
+         **默认生命周期：My** — `/discussx` → `/planx` → `/implementx` → `/verifyx`。Goal 经 MCP stdio（`goal_state_manage`）；`closeout_gate` / complete 在 MCP 工具层为 advisory（不阻断）；无 PreToolUse/Stop shell hook。
 
          ## 会话（按序）
 
@@ -22,7 +22,7 @@
          3. `goal_state_manage operation=start`（宏任务）
          4. 验证后 `record_evidence`
          5. `closeout_gate` → `goal_state_manage operation=complete`
-         - 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory；非 my-light 时 MCP **硬拦**
+         - 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory（MCP 工具层不阻断）
 
          ## 无 CLI hook 硬拦
 

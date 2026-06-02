@@ -247,7 +247,7 @@ Desktop 不读 CLI 的 `permissions.defaultMode`。实际来源两层：
 |------|------|
 | Stop 后任务未完成 | `/implementx` + `framework_goal_drive` stdio |
 | hook-state 不可读 | `.claude/hook-state/` 文件损坏 -> 删除后重开会话 |
-| REVIEW_GATE 硬拦 | my-light 不应触发；非 my-light 用 `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` |
+| REVIEW_GATE 硬拦 | my-light 不触发（advisory）；可用 `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` 完全关闭 |
 | Paper prose hook 干扰 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK=0` 关闭 |
 
 ---

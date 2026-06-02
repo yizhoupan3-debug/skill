@@ -153,7 +153,6 @@
   },
   "lifecycle_profiles": {
     "my-light": {
-      "disable_review_gate_hard_block": true,
       "disable_spawn_first_nudge": true
     }
   },

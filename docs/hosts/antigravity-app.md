@@ -14,7 +14,7 @@ depends_on:
 
 - **MCP**：`router-rs-framework` → `router-rs antigravity-app agent`（或 deprecated `antigravity agent`）
 - **Planning Mode** + 物化 `ROADMAP.md` / `WAVE_STATE.json`
-- **无 shell hook 表**；closeout 靠 MCP `goal_state_manage` / `closeout_gate`（非 my-light 时可 [Antigravity Hard Block]）
+- **无 shell hook 表**；closeout 靠 MCP `goal_state_manage` / `closeout_gate`（advisory 模式，不阻断）
 - **Review**：物理 `review-lanes/*.md`；非 Cursor multiset
 
 ## 安装

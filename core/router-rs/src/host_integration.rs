@@ -3490,7 +3490,7 @@ fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let mut payload = make_mcp_server_payload_with_env(
         roots,
         &["claude-desktop", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
-        "Framework snapshot, skill routing, goal/closeout gating (MCP hard block for non-my-light)",
+        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory)",
         Some(claude_desktop_mcp_env(roots)),
     );
     if let Some(obj) = payload.as_object_mut() {
@@ -4248,7 +4248,7 @@ fn write_antigravity_framework_md(
          4. 验证后 `record_evidence`\n\
          5. `closeout_gate` → `goal_state_manage operation=complete`\n\n\
          ## 门控说明（App / MCP）\n\n\
-         - **App 无 shell hook 表**；`goal_state_manage complete` 与 `closeout_gate` 在 MCP 工具层可硬拦截（[Antigravity Hard Block]）。终端 **Antigravity CLI** 使用 `.antigravitycli/hooks.json`（见 CLI 手册）。\n\n\
+         - **App 无 shell hook 表**；`goal_state_manage complete` 与 `closeout_gate` 在 MCP 工具层报告 findings（advisory，不阻断）。终端 **Antigravity CLI** 使用 `.antigravitycli/hooks.json`（见 CLI 手册）。\n\n\
          ## 共享资源\n\n\
          与其它宿主共用 `artifacts/current/` 工作区。路由：`{runtime_rel}`。\n"
     );
