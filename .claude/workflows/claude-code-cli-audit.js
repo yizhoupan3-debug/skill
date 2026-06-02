@@ -146,13 +146,13 @@ try {
 } catch (e) {}
 writeFileSync(reportPath, report)
 
-// 提交报告，确保 worktree 环境下修改也能落盘
+// 暂存报告，由用户手动 commit（安全约束：禁止自动提交）
 try {
   const { execSync } = await import('child_process')
-  execSync(`git add "${reportPath}" && git commit -m "docs: audit report — claude-code-cli" --no-verify`, { cwd: '/Users/joe/Developer/skill', timeout: 10000 })
-  log('报告已 commit')
+  execSync(`git add "${reportPath}"`, { cwd: '/Users/joe/Developer/skill', timeout: 10000 })
+  log('报告已暂存，请手动 commit: git commit -m "docs: audit report — claude-code-cli"')
 } catch (e) {
-  log('报告 commit 跳过: ' + (e.message || e))
+  log('报告暂存跳过: ' + (e.message || e))
 }
 
 log('综合报告已保存至: ' + reportPath)
