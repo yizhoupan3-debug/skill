@@ -92,7 +92,7 @@ struct GeneratedArtifactManifestEntry {
 
 #[derive(Parser)]
 #[command(author, version, about)]
-struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     command: Commands,
 }
@@ -210,7 +210,7 @@ enum Commands {
 }
 
 #[derive(clap::Args, Debug, Clone)]
-struct ProjectionCommand {
+pub(crate) struct ProjectionCommand {
     #[arg(long, alias = "repo-root")]
     framework_root: Option<PathBuf>,
     #[arg(long)]
@@ -240,7 +240,7 @@ struct ProjectionCommand {
 }
 
 #[derive(clap::Args, Debug, Clone)]
-struct ProjectionStatusCommand {
+pub(crate) struct ProjectionStatusCommand {
     #[arg(long, alias = "repo-root")]
     framework_root: Option<PathBuf>,
     #[arg(long)]

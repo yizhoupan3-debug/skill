@@ -10,6 +10,31 @@ depends_on:
 
 面向：**在本仓库或接入本框架的工作区里日常干活的人**。长设计与契约仍以 [AGENTS.md](../AGENTS.md)、[harness_architecture.md](harness_architecture.md)、[host_adapter_contract.md](host_adapter_contract.md) 为准；本文只解决「先读哪、宿主差在哪、卡门了怎么办」。
 
+## 核心术语速查
+
+| 术语 | 一句话定义 |
+|------|-----------|
+| **lifecycle_profile** | 生命周期配置档（如 `my` / `my-light`），控制门控强度与 closeout 行为；写于 `GOAL_STATE.json` |
+| **closeout_gate** | 完成前的收口检查门——校验 changed_files / verification / blockers 等项是否齐备；未满足时非 my-light 硬拦 `complete` |
+| **closeout_record** | 收口产物 JSON（`artifacts/closeout/<task_id>.json`），记录摘要、变更文件、风险与验证状态 |
+| **REVIEW_GATE** | Stop 事件上的深度审稿门控；lane 未收尾时 Cursor 输出 `router-rs REVIEW_GATE incomplete` 或 Codex `decision:block` |
+| **AG_FOLLOWUP** | Stop 事件上的 Goal 契约续跑提示；`router-rs AG_FOLLOWUP missing_parts=…` 表示 goal 阶段仍缺片段 |
+| **goal_drive** | 宏目标驱动模式——通过 `framework_goal_drive` stdio 或 MCP `goal_state_manage` 驱动 `/implementx`→`/verifyx` 连续执行 |
+| **goal_state_manage** | MCP 工具，管理 `GOAL_STATE.json` 的 start / checkpoint / pause / resume / complete / clear / block 操作 |
+| **GOAL_CONTINUE** | 已废弃的 hook 注入续跑令牌；2026-05 起宏目标续跑改用 `framework_goal_drive` stdio + 手动画板 |
+| **RFV loop** | Review → Fix → Verify 迭代循环；状态写于 `RFV_LOOP_STATE.json`，每轮 round 由 `rfv_loop_manage` 追加 |
+| **evidence_index** | 工具执行后的证据索引（`EVIDENCE_INDEX`），PostToolUse 自动追加；`record_evidence` MCP 可手动写入 |
+| **spawn-first** | 审稿策略：首轮工具调用前先 spawn 可数 reviewer 子代理，减少 Stop 时 `REVIEW_GATE` nag |
+| **fork_context** | Cursor 子代理上下文标识；解析为 `false` 时视为独立 fork，满足深度 review lane 要求 |
+| **compact envelope** | 深度 review 输出的紧凑信封格式（含 lens 透镜），默认 findings-only 只读，详见 `skills/code-review-deep/SKILL.md` |
+| **deep_gate_lanes** | 深度审稿 lane 闭集（代码 / 安全 / 架构等），定义于 `RUNTIME_REGISTRY.json`；所有 lane 收尾方可清 `REVIEW_GATE` |
+| **hook-state** | 宿主 hook 的持久化状态目录（如 `.cursor/hook-state/`），存储 review 进度、subagent 计数等；持久化失败时默认 fail-closed |
+| **projection** | 宿主投影——同一策略在不同宿主（Codex / Cursor / Claude Desktop）上的渲染文案与行为差异；配置于 `host_projection_narrative.json` |
+| **host_adapter** | 宿主适配层；将框架统一协议翻译为各宿主 hook 语义（Stop 硬拦 vs followup_message），契约见 `host_adapter_contract.md` |
+| **skill_routing** | 技能热路由——`SKILL_ROUTING_RUNTIME.json` 为唯一入口，命中后只读对应 `skill_path`，不一次加载全量元数据 |
+| **framework_snapshot** | MCP 工具 / CLI，返回当前仓库的框架运行时快照（含连续性视图、MCP 工具可用性、lifecycle 状态） |
+| **session_checkpoint** | MCP 工具，写入 `SESSION_SUMMARY` 与 `NEXT_ACTIONS` 到 task 产物目录；2026-05 起 Stop hook 不自动写，需显式调用 |
+
 ## 推荐阅读顺序（热路径）
 
 1. [AGENTS.md](../AGENTS.md) — 路由、执行梯子、Closeout、跨宿主不变量  
