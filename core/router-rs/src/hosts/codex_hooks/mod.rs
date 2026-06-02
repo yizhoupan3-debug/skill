@@ -227,6 +227,14 @@ const INSTALL_STATUS_POST_TOOL: &str = "Recording Codex tool evidence";
 const INSTALL_STATUS_STOP: &str = "Enforcing Codex review gate";
 const INSTALL_STATUS_SUBAGENT_START: &str = "Recording Codex subagent start";
 const INSTALL_STATUS_SUBAGENT_STOP: &str = "Recording Codex subagent stop";
+
+const INSTALL_STATUS_ANTIGRAVITY_SESSION_START: &str = "Loading Antigravity CLI session state";
+const INSTALL_STATUS_ANTIGRAVITY_PRE_TOOL: &str = "Checking Antigravity CLI generated-surface guard";
+const INSTALL_STATUS_ANTIGRAVITY_USER_PROMPT: &str = "Loading Antigravity CLI turn context";
+const INSTALL_STATUS_ANTIGRAVITY_POST_TOOL: &str = "Recording Antigravity CLI tool evidence";
+const INSTALL_STATUS_ANTIGRAVITY_STOP: &str = "Enforcing Antigravity CLI review gate";
+const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_START: &str = "Recording Antigravity CLI subagent start";
+const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_STOP: &str = "Recording Antigravity CLI subagent stop";
 /// Default UTF-8 **byte** budget for merged Codex `additionalContext` (SessionStart / UserPromptSubmit).
 const CODEX_ADDITIONAL_CONTEXT_MAX_BYTES: usize = 640;
 static CODEX_SESSION_KEY_FALLBACK_WARN: Once = Once::new();
@@ -236,11 +244,13 @@ thread_local! {
     static FORCE_ATOMIC_WRITE_FAIL: Cell<bool> = const { Cell::new(false) };
 }
 
-fn codex_hook_command_timeout_secs(event: &str) -> u64 {
+fn codex_hook_command_timeout_secs(host: CodexLifecycleHostKind, event: &str) -> u64 {
     match event {
         "SessionStart" => 3,
         "PostToolUse" => 5,
-        "SubagentStart" | "SubagentStop" => 5,
+        "SubagentStart" | "SubagentStop" => {
+            if host.state_dir_leaf == ".antigravitycli" { 10 } else { 5 }
+        }
         _ => 8,
     }
 }
@@ -998,7 +1008,7 @@ fn run_codex_lifecycle_context_hook_inner(
     if event_name == "pretooluse" && host == CodexLifecycleHostKind::ANTIGRAVITY_CLI {
         return run_pre_tool_use(repo_root, payload);
     }
-    Ok(match event_name.as_str() {
+    let mut result: Option<Value> = match event_name.as_str() {
         "sessionstart" => handle_codex_session_start(repo_root, payload),
         "userpromptsubmit" => handle_codex_userpromptsubmit(repo_root, payload),
         "posttooluse" => handle_codex_posttooluse(repo_root, payload),
@@ -1013,7 +1023,11 @@ fn run_codex_lifecycle_context_hook_inner(
             "{} lifecycle hook input schema invalid: unsupported hook_event_name/event `{other}`.",
             host.lifecycle_label()
         ))),
-    })
+    };
+    if let Some(ref mut out) = result {
+        crate::autopilot_goal::scrub_followup_fields_in_hook_output(out);
+    }
+    Ok(result)
 }
 
 pub(crate) fn read_hook_stdin_payload() -> Result<Value, String> {
@@ -1021,11 +1035,12 @@ pub(crate) fn read_hook_stdin_payload() -> Result<Value, String> {
 }
 
 pub(crate) fn merge_lifecycle_install_hooks_json(
+    host: CodexLifecycleHostKind,
     existing: Option<Value>,
     hook_commands: &BTreeMap<String, String>,
     events: &[&str],
 ) -> Result<(Value, HooksMergeStat), String> {
-    merge_hooks_json_for_events(existing, hook_commands, events)
+    merge_hooks_json_for_events(host, existing, hook_commands, events)
 }
 
 pub(crate) fn hooks_install_serialize_pretty(value: &Value) -> Result<String, String> {
@@ -1044,12 +1059,12 @@ pub(crate) fn hooks_install_acquire_lock(home: &Path) -> Result<HooksInstallLock
     acquire_install_lock(home)
 }
 
-pub(crate) fn lifecycle_hook_command_timeout_secs(event: &str) -> u64 {
-    codex_hook_command_timeout_secs(event)
+pub(crate) fn lifecycle_hook_command_timeout_secs(host: CodexLifecycleHostKind, event: &str) -> u64 {
+    codex_hook_command_timeout_secs(host, event)
 }
 
-pub(crate) fn lifecycle_hook_event_status_message(event_name: &str) -> &'static str {
-    hook_event_status_message(event_name)
+pub(crate) fn lifecycle_hook_event_status_message(host: CodexLifecycleHostKind, event_name: &str) -> &'static str {
+    hook_event_status_message(host, event_name)
 }
 
 pub(crate) fn run_codex_pre_tool_use_hook(
@@ -1069,12 +1084,12 @@ fn run_codex_review_subagent_gate(
 pub fn build_codex_hook_manifest() -> Value {
     let mut hooks = serde_json::Map::new();
     for event in INSTALL_EVENTS {
-        let timeout = codex_hook_command_timeout_secs(event);
+        let timeout = codex_hook_command_timeout_secs(CodexLifecycleHostKind::CODEX, event);
         let hook = json!({
             "type": "command",
             "command": build_project_hook_command(event),
             "timeout": timeout,
-            "statusMessage": hook_event_status_message(event),
+            "statusMessage": hook_event_status_message(CodexLifecycleHostKind::CODEX, event),
         });
         let mut entry = json!({
             "hooks": [hook],
@@ -1591,16 +1606,28 @@ fn serialize_ascii_json_pretty(value: &Value) -> Result<String, String> {
     Ok(out)
 }
 
-fn hook_event_status_message(event_name: &str) -> &'static str {
-    match event_name {
-        "SessionStart" => INSTALL_STATUS_SESSION_START,
-        "PreToolUse" => INSTALL_STATUS_PRE_TOOL,
-        "UserPromptSubmit" => INSTALL_STATUS_USER_PROMPT,
-        "PostToolUse" => INSTALL_STATUS_POST_TOOL,
-        "Stop" => INSTALL_STATUS_STOP,
-        "SubagentStart" => INSTALL_STATUS_SUBAGENT_START,
-        "SubagentStop" => INSTALL_STATUS_SUBAGENT_STOP,
-        _ => "",
+fn hook_event_status_message(host: CodexLifecycleHostKind, event_name: &str) -> &'static str {
+    match host.state_dir_leaf {
+        ".antigravitycli" => match event_name {
+            "SessionStart" => INSTALL_STATUS_ANTIGRAVITY_SESSION_START,
+            "PreToolUse" => INSTALL_STATUS_ANTIGRAVITY_PRE_TOOL,
+            "UserPromptSubmit" => INSTALL_STATUS_ANTIGRAVITY_USER_PROMPT,
+            "PostToolUse" => INSTALL_STATUS_ANTIGRAVITY_POST_TOOL,
+            "Stop" => INSTALL_STATUS_ANTIGRAVITY_STOP,
+            "SubagentStart" => INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_START,
+            "SubagentStop" => INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_STOP,
+            _ => "",
+        },
+        _ => match event_name {
+            "SessionStart" => INSTALL_STATUS_SESSION_START,
+            "PreToolUse" => INSTALL_STATUS_PRE_TOOL,
+            "UserPromptSubmit" => INSTALL_STATUS_USER_PROMPT,
+            "PostToolUse" => INSTALL_STATUS_POST_TOOL,
+            "Stop" => INSTALL_STATUS_STOP,
+            "SubagentStart" => INSTALL_STATUS_SUBAGENT_START,
+            "SubagentStop" => INSTALL_STATUS_SUBAGENT_STOP,
+            _ => "",
+        },
     }
 }
 
@@ -1674,10 +1701,11 @@ fn merge_hooks_json(
     existing: Option<Value>,
     hook_commands: &BTreeMap<String, String>,
 ) -> Result<(Value, HooksMergeStat), String> {
-    merge_hooks_json_for_events(existing, hook_commands, &INSTALL_EVENTS)
+    merge_hooks_json_for_events(CodexLifecycleHostKind::CODEX, existing, hook_commands, &INSTALL_EVENTS)
 }
 
 fn merge_hooks_json_for_events(
+    host: CodexLifecycleHostKind,
     existing: Option<Value>,
     hook_commands: &BTreeMap<String, String>,
     events: &[&str],
@@ -1741,8 +1769,8 @@ fn merge_hooks_json_for_events(
                 "hooks": [{
                     "type": "command",
                     "command": hook_command,
-                    "timeout": codex_hook_command_timeout_secs(event),
-                    "statusMessage": hook_event_status_message(event),
+                    "timeout": codex_hook_command_timeout_secs(host, event),
+                    "statusMessage": hook_event_status_message(host, event),
                 }]
             }));
             added_entries += 1;
@@ -3249,6 +3277,8 @@ mod tests {
 
         #[test]
         fn stop_blocks_when_hook_state_corrupt() {
+            let _guard = env_lock();
+            std::env::set_var("ROUTER_RS_HOOK_STATE_FAIL_OPEN", "true");
             let repo = fresh_repo();
             let payload = json!({
                 "hook_event_name":"Stop",
@@ -3580,6 +3610,8 @@ mod tests {
 
         #[test]
         fn post_tool_use_with_invalid_state_blocks_fail_closed() {
+            let _guard = env_lock();
+            std::env::set_var("ROUTER_RS_HOOK_STATE_FAIL_OPEN", "true");
             let repo = fresh_repo();
             let start = json!({
                 "hook_event_name":"UserPromptSubmit",

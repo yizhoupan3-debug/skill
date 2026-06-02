@@ -132,7 +132,7 @@ pub fn install_antigravity_cli_hooks(
         None
     };
     let (merged_hooks, hooks_stat) =
-        merge_lifecycle_install_hooks_json(hooks_value, &hook_commands, &INSTALL_EVENTS)?;
+        merge_lifecycle_install_hooks_json(crate::hosts::codex_hooks::CodexLifecycleHostKind::ANTIGRAVITY_CLI, hooks_value, &hook_commands, &INSTALL_EVENTS)?;
     let hooks_serialized = hooks_install_serialize_pretty(&merged_hooks)?;
     let hooks_changed = hooks_text.as_deref() != Some(hooks_serialized.as_str());
     let mut backup_path: Option<PathBuf> = None;
@@ -261,7 +261,7 @@ fn canonical_antigravity_cli_hook_command(command: &str) -> Result<&'static str,
     match command.trim().to_ascii_lowercase().as_str() {
         "lifecycle-context" | "review-subagent-gate" => Ok("lifecycle-context"),
         "pre-tool-use" | "pretooluse" => Ok("pre-tool-use"),
-        "sessionstart" | "userpromptsubmit" | "posttooluse" | "stop" => Ok("lifecycle-context"),
+        "sessionstart" | "userpromptsubmit" | "posttooluse" | "stop" | "subagentstart" | "subagentstop" => Ok("lifecycle-context"),
         other => Err(format!("Unsupported Antigravity CLI hook command: {other}")),
     }
 }

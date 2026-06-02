@@ -8,6 +8,7 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read};
 #[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -323,35 +324,71 @@ pub(super) fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLo
     if let Some(parent) = lock_path.parent() {
         fs::create_dir_all(parent).map_err(CodexHookError::StateDirCreate)?;
     }
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(CodexHookError::StateLockOpen)?;
-    let fd = file.as_raw_fd();
+    const MAX_INODE_RETRIES: usize = 3;
     let deadline = SystemTime::now() + Duration::from_secs(20);
+    let mut inode_mismatch_retries: usize = 0;
     loop {
-        // SAFETY: `fd` is a valid fd from `OpenOptions::open`;
-        // `LOCK_EX|LOCK_NB` is a non-blocking exclusive lock attempt.
-        let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
-        if rc == 0 {
-            break;
-        }
-        let err = io::Error::last_os_error();
-        if err.raw_os_error() == Some(libc::EWOULDBLOCK)
-            || err.raw_os_error() == Some(libc::EAGAIN)
-        {
-            if SystemTime::now() >= deadline {
-                return Err(CodexHookError::StateLockTimeout);
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(CodexHookError::StateLockOpen)?;
+        let fd = file.as_raw_fd();
+        // Spin until we acquire the exclusive lock (or timeout).
+        loop {
+            // SAFETY: `fd` is a valid fd from `OpenOptions::open`;
+            // `LOCK_EX|LOCK_NB` is a non-blocking exclusive lock attempt.
+            let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+            if rc == 0 {
+                break;
             }
-            thread::sleep(Duration::from_millis(5));
-            continue;
+            let err = io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EWOULDBLOCK)
+                || err.raw_os_error() == Some(libc::EAGAIN)
+            {
+                if SystemTime::now() >= deadline {
+                    return Err(CodexHookError::StateLockTimeout);
+                }
+                thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            return Err(CodexHookError::StateLockFlock(err));
         }
-        return Err(CodexHookError::StateLockFlock(err));
+        // --- inode verification (TOCTOU guard) ---
+        // After acquiring the lock, verify that the fd still refers to the
+        // same inode as the path on disk.  A rename/replace between our open
+        // and flock would otherwise let us lock a stale file.
+        let fd_inode = file.metadata().map(|m| m.ino());
+        let path_inode = match fs::metadata(&lock_path) {
+            Ok(m) => Ok(m.ino()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(0),
+            Err(e) => Err(e),
+        };
+        match (fd_inode, path_inode) {
+            (Ok(fi), Ok(pi)) if fi == pi => {
+                // Inodes match -- lock is valid.
+                return Ok(CodexStateLock { file });
+            }
+            _ => {
+                // Inode mismatch or metadata error -- release lock, retry.
+                // The Drop impl on file will call flock(LOCK_UN).
+                drop(file);
+                inode_mismatch_retries += 1;
+                if inode_mismatch_retries >= MAX_INODE_RETRIES {
+                    return Err(CodexHookError::StateLockFlock(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "inode verification failed after {MAX_INODE_RETRIES} retries; possible lock-file TOCTOU race on {}",
+                            lock_path.display()
+                        ),
+                    )));
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
     }
-    Ok(CodexStateLock { file })
 }
 
 #[cfg(not(unix))]
@@ -406,7 +443,13 @@ pub(super) fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLife
         Err(err) => {
             eprintln!("[router-rs] hook-state JSON parse failed ({err}); backing up and resetting");
             let _ = fs::rename(path, path.with_extension("json.bak"));
-            return Ok(None);
+            if env::var("ROUTER_RS_HOOK_STATE_FAIL_OPEN")
+                .map(|v| v == "true")
+                .unwrap_or(false)
+            {
+                return Ok(None);
+            }
+            return Err(CodexHookError::StateJsonInvalid(format!("JSON parse failed: {err}")));
         }
     };
     if let Some(obj) = value.as_object_mut() {
