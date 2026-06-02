@@ -50,7 +50,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 | **窄范围不拦** | `review ./file`、`small_task`、不用子代理 → 不武装 gate |
 | **勿做** | 为提高 spawn 率而收紧清门（`≥2` lane、lane 文件必达） |
 
-## D10 — 子代理模型继承（2026-05-21）
+## D10 — Cursor 子代理模型继承（2026-05-21）
 
 | 主题 | 操作 |
 |------|------|
@@ -120,11 +120,11 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 - **Claude**：`PostToolUse` 仅 touched settings/framework 时才有上下文；共享 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（`.claude/router-rs-hook.env`）。
 - **恢复旧 Cursor 事件**：见 [`MIGRATION.md`](../MIGRATION.md)。
 
-## Codex：hook 重复触发
+## Codex CLI：hook 重复触发
 
 若 **用户级** `~/.codex/hooks.json` 与 **项目** `.codex/hooks.json` 均注册 `router-rs codex hook`，同一事件可能执行多次（证据重复、状态竞态）。`router-rs framework doctor` 会对每份 hooks 文件统计并 WARN；保留一份入口即可。
 
-## Codex：`AGENTS.md` 与二进制快照
+## Codex CLI：`AGENTS.md` 与二进制快照
 
 若修改跨宿主策略 [`AGENTS.md`](../AGENTS.md) 或 Codex 差异 [`AGENTS_CODEX.md`](../AGENTS_CODEX.md) 且依赖 Codex 侧投影：策略正文在 **编译期嵌入** 的 `router-rs` 中（`AGENTS.md` + `AGENTS_CODEX.md` concat）；改文后须 rebuild + `framework sync-entrypoints`（见 [`AGENTS_CODEX.md`](../AGENTS_CODEX.md) §Codex 构建快照）。
 

@@ -5,7 +5,7 @@ depends_on: []
 
 # MCP 工具分类标签文档
 
-> 基于当前会话暴露的全部 MCP 工具，按功能域分类并标注风险等级。
+> 基于当前会话暴露的全部 MCP 工具，按功能域分类并标注风险等级。MCP 协议跨宿主可用，但具体可用工具集因宿主而异（Claude Desktop / Cursor / OpenCode 等均有各自的 MCP 配置），参见各宿主手册。
 
 ## MCP Server 来源
 
@@ -236,9 +236,9 @@ CCD 会话辅助、学术检索和定时任务管理。
 
 ## 配置来源
 
-| 文件 | 内容 |
-|------|------|
-| `.mcp.json` | `paperplain`（npx paperplain-mcp）—— 唯一项目级 MCP server |
-| `.claude/settings.json` | hooks（PreToolUse / PostToolUse / Stop / UserPromptSubmit）+ Bash/WebFetch 权限白名单 + 沙箱策略 |
-| `.claude/settings.local.json` | 本地 cargo 权限扩展 |
-| 宿主侧 | `router-rs-framework`、`browser-mcp`、`Claude_in_Chrome`、`Claude_Preview`、`ccd_*`、`scheduled-tasks` 由用户级 MCP 配置注入 |
+| 文件 | 内容 | 适用宿主 |
+|------|------|----------|
+| `.mcp.json` | `paperplain`（npx paperplain-mcp）—— 唯一项目级 MCP server | 全宿主 |
+| `.claude/settings.json` | hooks（PreToolUse / PostToolUse / Stop / UserPromptSubmit）+ Bash/WebFetch 权限白名单 + 沙箱策略 | Claude Code |
+| `.claude/settings.local.json` | 本地 cargo 权限扩展 | Claude Code |
+| 宿主侧 | `router-rs-framework`、`browser-mcp`、`Claude_in_Chrome`、`Claude_Preview`、`ccd_*`、`scheduled-tasks` 由用户级 MCP 配置注入 | Claude Desktop |
