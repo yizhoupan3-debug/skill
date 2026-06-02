@@ -780,22 +780,23 @@ pub(crate) fn append_evidence_index_merged_row(
         .map(str::to_string)
         .unwrap_or_default();
 
-    // 只获取 evidence path lock，移除 task_ledger_repo_lock 避免潜在死锁
+
     let resolved_task_id = resolve_evidence_append_task_id(repo_root, task_id_override);
-    let snapshot = load_framework_runtime_view(repo_root, None, resolved_task_id.as_deref());
-    if !continuity_session_ready_for_evidence_append(&snapshot) {
+
+    // Lightweight readiness check: avoid full 9-file snapshot rebuild
+    let current_root = repo_root.join("artifacts/current");
+    let active_pointer_exists = current_root.join(TASK_POINTERS_FILENAME).is_file();
+    let summary_exists = current_root.join(SESSION_SUMMARY_FILENAME).is_file();
+    if !active_pointer_exists && !summary_exists {
         eprintln!(
-            "[router-rs] warning: evidence append skipped — no active continuity session \
+            "[router-rs] warning: evidence append skipped \u{2014} no active continuity session \
              (no active/focus task pointer and no SESSION_SUMMARY at {})",
-            snapshot
-                .current_root
-                .join(SESSION_SUMMARY_FILENAME)
-                .display()
+            current_root.join(SESSION_SUMMARY_FILENAME).display()
         );
         return Ok(());
     }
 
-    let evidence_path = snapshot.current_root.join(EVIDENCE_INDEX_FILENAME);
+    let evidence_path = current_root.join(EVIDENCE_INDEX_FILENAME);
     if let Some(parent) = evidence_path.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
     }
@@ -823,8 +824,25 @@ pub(crate) fn append_evidence_index_merged_row(
         }
 
         if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
-            let drain = rows.len() - MAX_POST_TOOL_EVIDENCE_ARTIFACTS;
-            rows.drain(0..drain);
+        if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
+            // Keep all success=true rows + latest N non-success rows
+            let mut success_rows: Vec<Map<String, Value>> = Vec::new();
+            let mut other_rows: Vec<Map<String, Value>> = Vec::new();
+            for row in rows.drain(..) {
+                if row.get("success").and_then(Value::as_bool) == Some(true) {
+                    success_rows.push(row);
+                } else {
+                    other_rows.push(row);
+                }
+            }
+            let budget = MAX_POST_TOOL_EVIDENCE_ARTIFACTS.saturating_sub(success_rows.len());
+            if other_rows.len() > budget {
+                let drain = other_rows.len() - budget;
+                other_rows.drain(0..drain);
+            }
+            rows = success_rows;
+            rows.extend(other_rows);
+        }
         }
         let payload = json!({
             "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
