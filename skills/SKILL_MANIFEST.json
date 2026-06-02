@@ -14,9 +14,7 @@
     "host_platforms",
     "kind",
     "allowedTools",
-    "model",
-    "disableModelInvocations",
-    "context"
+    "model"
   ],
   "plugin_abi_version": "skill-plugin-abi-v1",
   "schema_version": "skill-manifest-v2",
@@ -53,8 +51,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -89,8 +85,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -136,8 +130,6 @@
         "Bash",
         "Agent"
       ],
-      null,
-      null,
       null
     ],
     [
@@ -164,9 +156,7 @@
       ],
       "framework_command",
       null,
-      "haiku",
-      null,
-      null
+      "haiku"
     ],
     [
       "planx",
@@ -192,9 +182,7 @@
       ],
       "framework_command",
       null,
-      "sonnet",
-      null,
-      null
+      "sonnet"
     ],
     [
       "implementx",
@@ -219,8 +207,6 @@
         "opencode"
       ],
       "framework_command",
-      null,
-      null,
       null,
       null
     ],
@@ -248,8 +234,6 @@
       ],
       "framework_command",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -274,8 +258,6 @@
         "opencode"
       ],
       "framework_command",
-      null,
-      null,
       null,
       null
     ],
@@ -313,8 +295,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -354,8 +334,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -387,8 +365,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -428,8 +404,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -464,8 +438,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -495,8 +467,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -522,8 +492,6 @@
         "opencode"
       ],
       "framework_command",
-      null,
-      null,
       null,
       null
     ],
@@ -565,8 +533,6 @@
       ],
       "cold",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -601,8 +567,6 @@
       ],
       "cold",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -635,8 +599,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -678,8 +640,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -709,8 +669,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -748,8 +706,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -786,8 +742,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -821,8 +775,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -864,8 +816,6 @@
       ],
       "cold",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -905,8 +855,6 @@
         "opencode"
       ],
       "cold",
-      null,
-      null,
       null,
       null
     ],
@@ -967,8 +915,6 @@
         "WebSearch",
         "WebFetch"
       ],
-      null,
-      null,
       null
     ],
     [
@@ -1009,8 +955,6 @@
       ],
       "cold",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -1039,8 +983,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -1076,8 +1018,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -1112,8 +1052,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -1144,8 +1082,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -1185,8 +1121,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -1221,8 +1155,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -1252,8 +1184,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -1295,8 +1225,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -1335,8 +1263,6 @@
         "Edit",
         "Bash"
       ],
-      null,
-      null,
       null
     ],
     [
@@ -1370,8 +1296,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ],
@@ -1412,8 +1336,6 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
@@ -1438,8 +1360,6 @@
         "opencode"
       ],
       "framework_command",
-      null,
-      null,
       null,
       null
     ],
@@ -1476,15 +1396,13 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
       "token-optimization",
       "L3",
       "owner",
-      null,
+      "none",
       "P2",
       "Optimize token usage through prompt caching, output compression, and context window management.\nPreserves task completion quality while reducing token consumption and API costs.",
       "n/a",
@@ -1510,15 +1428,13 @@
       ],
       "skill",
       null,
-      null,
-      null,
       null
     ],
     [
       "mcp-server-management",
       "L3",
       "owner",
-      null,
+      "none",
       "P2",
       "创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。\n覆盖 stdio/SSE/streamable-http 三种传输模式，Python FastMCP 和 Rust 两种主流实现，\n以及 Claude Code / Claude Desktop 集成、MCP Registry 注册、调试故障排查全流程。",
       "n/a",
@@ -1543,8 +1459,6 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       null,
       null
     ]

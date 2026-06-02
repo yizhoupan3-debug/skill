@@ -30,3 +30,6 @@ fs2 = "0.4"
 which = "8.0.0"
 mimalloc = "0.1"
 
+
+[dev-dependencies]
+serial_test = "3"

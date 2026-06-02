@@ -400,6 +400,7 @@ fn describe_host_entrypoint_path(report_root: &Path, target_root: &Path, path: &
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -464,6 +465,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn partial_sync_does_not_overwrite_worktree_text_entrypoints() {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)

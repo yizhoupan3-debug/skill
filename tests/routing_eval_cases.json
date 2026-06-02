@@ -47,16 +47,6 @@
       "first_turn": true
     },
     {
-      "id": "openai-docs-source-gate-case",
-      "category": "should-trigger",
-      "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
-      "focus_skill": "openai-docs",
-      "expected_owner": "openai-docs",
-      "expected_overlay": null,
-      "expected_layer": "L1",
-      "first_turn": true
-    },
-    {
       "id": "plan-mode-cursor-plan-verifiable-todos-case",
       "category": "should-trigger",
       "task": "用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。",
@@ -246,42 +236,6 @@
         "design-md"
       ],
       "first_turn": true
-    },
-    {
-      "id": "systematic-debugging-root-cause-beats-generic-analysis",
-      "category": "wrong-owner-near-miss",
-      "task": "root-cause analysis this flaky failure",
-      "focus_skill": "systematic-debugging",
-      "expected_owner": "systematic-debugging",
-      "expected_overlay": null,
-      "forbidden_owners": [
-        "jupyter-notebook"
-      ],
-      "first_turn": true,
-      "notes": "manifest 回退路由；'root-cause analysis' 触发 systematic-debugging (L0 gate)"
-    },
-    {
-      "id": "systematic-debugging-bug-tdd-regression-case",
-      "category": "should-trigger",
-      "task": "修这个 bug，用 TDD workflow 补回归测试",
-      "focus_skill": "systematic-debugging",
-      "expected_owner": "systematic-debugging",
-      "expected_overlay": null,
-      "first_turn": true,
-      "notes": "manifest 回退路由；systematic-debugging 在 manifest 中 (cold)，route_task_with_manifest_fallback 能命中"
-    },
-    {
-      "id": "systematic-debugging-generic-bug-fix-beats-github-ci",
-      "category": "wrong-owner-near-miss",
-      "task": "fix login bug",
-      "focus_skill": "systematic-debugging",
-      "expected_owner": "systematic-debugging",
-      "expected_overlay": null,
-      "forbidden_owners": [
-        "gh-fix-ci"
-      ],
-      "first_turn": true,
-      "notes": "manifest 回退路由；'fix bug' 触发 systematic-debugging (L0 gate)"
     },
     {
       "id": "gh-fix-ci-shorthand-ci-failure-beats-generic-debugging",
@@ -508,14 +462,6 @@
       "notes": "Explicit /update routes to tracked-codegen refresh workflow (framework command alias)"
     },
     {
-      "id": "route-005-debug-bug",
-      "category": "should-trigger",
-      "task": "修这个 bug，先定位根因再改代码",
-      "expected_owner": "systematic-debugging",
-      "expected_overlay": null,
-      "notes": "Bug fix with root-cause-first should route to systematic-debugging (L0 evidence gate)"
-    },
-    {
       "id": "route-006-ci-fix",
       "category": "should-trigger",
       "task": "GitHub Actions CI 挂了，帮我修一下",
@@ -673,16 +619,6 @@
       "expected_layer": "L4",
       "first_turn": true,
       "notes": "冷表 skill；manifest L4 层路由；AGENTS 要求显式 $python-env-management"
-    },
-    {
-      "id": "openai-docs-cursor-negative",
-      "category": "should-not-trigger",
-      "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
-      "host_id": "cursor",
-      "forbidden_owners": [
-        "openai-docs"
-      ],
-      "notes": "Codex-only openai-docs must not route on cursor after host_platforms fix"
     },
     {
       "id": "discussx-slash-cursor",

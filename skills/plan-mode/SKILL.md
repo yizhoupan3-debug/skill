@@ -4,7 +4,7 @@ description: |
   跨宿主 Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨模块/高风险/用户要求时升级为 audit plan。
   `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: research` 为纯调研计划（只读 todos，末条不含 /gitx plan）。
   `overview` 须按 profile 显式声明实现面边界：`research` 含调研期零实现面改动硬声明（可选窄例外：`overview` **单句**声明允许回写的结论文档 / plan 路径集合；`.cursor/plans/<本文件>.plan.md` 仅为常见示例而非唯一形式），`execution` 标明允许按 todos 修改并由末条完成计划/Git 证据收口。
-  Use at 每轮对话开始 / first-turn / conversation start when the user wants Cursor Plan mode、Plan 模式、策划文档闸门、可验收 todo、
+  Use at 每轮对话开始 / first-turn / conversation start when the user wants Plan 模式、策划文档闸门、可验收 todo、
   或明确要走「计划→实现→验证→对照 git 收口」而不是直接堆代码。
   Aligns execution-item / verification shapes with `skills/SKILL_FRAMEWORK_PROTOCOLS.md`；continuity 分层见 `docs/harness_architecture.md`。
 routing_layer: L1
@@ -17,13 +17,11 @@ disable-model-invocation: false
 risk: low
 source: local
 trigger_hints:
-  - Cursor Plan
   - Plan 模式
   - 策划文档闸门
   - 可验收 todo
   - gitx plan 收口
   - 计划对照实际
-  - CreatePlan
   - 调研计划
   - 纯调研
   - research-only plan
@@ -35,11 +33,11 @@ metadata:
 
 # plan-mode
 
-把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在 **`.cursor/plans/`**（Cursor 默认，须 **Save to workspace**）；My `/planx` 执行真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 仅索引与指针（见 [`docs/plans/README.md`](../../docs/plans/README.md)），**不**再维护过期 stub 镜像。
+把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在宿主工作区（如 `.cursor/plans/`、`docs/plans/` 等）；My `/planx` 执行真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 仅索引与指针（见 [`docs/plans/README.md`](../../docs/plans/README.md)），**不**再维护过期 stub 镜像。
 
 ## When to use
 
-- 用户要在 **Cursor Plan** / **Plan 模式** 下先把范围、风险、验证路径钉死，再允许大规模改动。
+- 用户要在 **Plan 模式** 下先把范围、风险、验证路径钉死，再允许大规模改动。
 - 用户提到 **策划文档闸门**、**可验收 todo**，或明确要求审计级计划。
 - 用户明确要走：**计划获批 → 实现 + 测试通过 → 计划 vs 实际 + Git 状态证据** 的收口；宿主支持时可用 `/gitx plan`（`/gitx plan` 与 `/gitx` 等价，见 [`skills/gitx/SKILL.md`](../gitx/SKILL.md)）。
 - **每轮对话开始 / first-turn / conversation start**：任务看起来像「先出高质量计划/蓝图」且后续实现依赖该计划的验收标准。
@@ -61,13 +59,13 @@ metadata:
 | **execution plan** | 需要落盘、跨文件或需对照实现的任务 | `plan_profile: execution`（或缺省）；todos 写四元组；末条做计划 vs 实际 + Git 状态证据收口。 |
 | **audit plan** | 跨模块、高风险、安全/供应链、用户明确要求审计划/深度 review | execution plan + 可选 review-only findings + 更严格证据门槛；是否启用 subagent 仍受 `AGENTS.md` 执行梯子约束。 |
 
-**与继承面 / CreatePlan**：**轻量**指不强制完整 audit 叙事与继承面占位；若本文件为 **`plan_profile: execution`（或缺省）** 且满足下方 **CreatePlan 输出契约** 硬条款 **第 2 条** 触发条件，仍**须**含 **`## 执行计划继承面`**。AlwaysApply 自检见 [`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) 汇总句 + 本节 CreatePlan 契约第 2 条。
+**与继承面**：**轻量**指不强制完整 audit 叙事与继承面占位；若本文件为 **`plan_profile: execution`（或缺省）** 且满足下方 **宿主集成 → CreatePlan 输出契约** 硬条款 **第 2 条** 触发条件，仍**须**含 **`## 执行计划继承面`**。
 
 与 `name` / `overview` / `todos` **同级**的 frontmatter 字段 **`plan_profile`** 区分计划类型：
 
 | 取值 | 含义 |
 |------|------|
-| **`execution`**（**缺省**） | 标准实现计划：可含改代码、加测试、改配置等 todo；**CreatePlan 末条**须按计划 vs 实际 + **Git 状态证据**收口，宿主支持时使用 **`/gitx plan`**（见 **CreatePlan 输出契约**）。若 todo 触及 Python 依赖/CI/本机 PATH，须引用 **`$python-env-management`**，禁止 operator `pip`。 |
+| **`execution`**（**缺省**） | 标准实现计划：可含改代码、加测试、改配置等 todo；末条须按计划 vs 实际 + **Git 状态证据**收口，宿主支持时使用 **`/gitx plan`**（见 **宿主集成**）。若 todo 触及 Python 依赖/CI/本机 PATH，须引用 **`$python-env-management`**，禁止 operator `pip`。 |
 | **`research`** | **调研专用**：todos **仅**只读调研与结论合成；**禁止**以「实现 / 改行为 / 加测试 / 改 CI」为单条主线；**末条不得**把 **`/gitx plan`** 当作本 profile 的必需验证。 |
 
 若宿主 **CreatePlan** 剥离未知 YAML 键：生成后在本文件 **手动补写** `plan_profile: research`。可选用文件名 **`*.research.plan.md`** 作为人类可读标签；**hook 与契约真源仍以 frontmatter 为准**（本仓库当前 **不**按文件名解析 profile）。

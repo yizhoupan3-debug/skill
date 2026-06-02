@@ -27,8 +27,6 @@ metadata:
 
 **Zone**: execution+ · **profile**: `my-light`
 
-Under **`lifecycle_profile: my-light`**, Cursor **Stop** does **not** emit hard `router-rs AG_FOLLOWUP` (goal continuity is manual: `framework_goal_drive` stdio + `artifacts/current/<task_id>/` boards). **`beforeSubmit` does not arm `goal_required`** (uses `goal_drive_entry_active` for pre-goal only). Closeout / `CLOSEOUT_FOLLOWUP` may still apply when completion is claimed.
-
 ## One-breath all-waves (HARD)
 
 When invoked, run **every wave** in `WAVE_STATE.json` from current `wave_id` through the last wave **without** stopping at wave boundaries to ask the user.
@@ -46,7 +44,8 @@ When invoked, run **every wave** in `WAVE_STATE.json` from current `wave_id` thr
 
 1. Read `WAVE_STATE.json` + `ROADMAP.md`
 2. For each wave (in order): spawn all lanes in `parallel_group` when `execution_mode=parallel`.
-   - **Antigravity 强化约束**：在 `antigravity` 宿主下，若任务包含多文件或跨模块设计（且总体 Delta > 50 行），**必须优先选用并行模式并派生子代理**。主线程严格担任 scheduler 角色。**例外豁免**：(1) 当子代理遭遇并发故障、模型或 Region 不可用时，允许优雅降级为串行主线程；(2) 允许主线程在 Verification 阶段对于简单错误执行 "fix obvious" 自愈，其余实质性代码编写必须分流并发。
+   - 多文件或跨模块设计（Delta > 50 行）时**必须优先选用并行模式并派生子代理**；主线程严格担任 scheduler。
+   - **例外豁免**：(1) 子代理遭遇并发故障或不可用时，允许降级为串行；(2) Verification 阶段对简单错误可执行 "fix obvious" 自愈。
 3. Merge: read `lane-notes/<lane_id>.md` only; chat ≤3 bullets + paths
 4. Update wave `status` → `completed`; `current_wave`++; checkpoint `EVIDENCE_INDEX`
 5. After final wave → suggest `/verifyx` (or auto-chain if user asked full pipeline)
@@ -67,9 +66,7 @@ Target: coordinator visible content ≤35% of turn.
 
 Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allows.
 
-**Model (Cursor)**: omit `Task` `model` (inherit parent session); do not default `claude-*` / `sonnet*`. See `.cursor/rules/subagent-model-inherit.mdc`.
-
-**Model (CLI/Terminal)**: inherit主会话模型，不显式指定。CLI 端积极鼓励并行 lane——≥2 独立子问题时**应** spawn 子代理，通常 3–5 个 `fork_context=false` lane，不因缺少 hook 级子代理事件而退缩为主线程串行。详见 [`docs/hosts/codex-cli.md` § 多代理编排](../../docs/hosts/codex-cli.md)。
+**Model**: 继承主会话模型，不显式指定。
 
 ## Spec-driven 并行构建
 
@@ -103,6 +100,14 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范。
 
 implement 阶段特殊字段：`drive_until_done: true`；无 Stop `GOAL_CONTINUE` hook 注入（2026-05 连续性拔除）。
+
+## 宿主差异
+
+> 以下内容仅在特定宿主环境下生效。通用流程不受影响。
+
+- **`lifecycle_profile: my-light`**：Stop 不注入 hard `AG_FOLLOWUP`（goal continuity 手动管理：`framework_goal_drive` stdio + artifacts boards）。`beforeSubmit` 不 arm `goal_required`。Closeout / `CLOSEOUT_FOLLOWUP` 在 completion claimed 时仍可适用。
+- **Cursor**：omit `Task` `model`（继承父会话）；`.cursor/rules/subagent-model-inherit.mdc` 参考。
+- **CLI/Terminal**：积极鼓励并行 lane（≥2 独立子问题时应 spawn 子代理）；详见 `docs/hosts/` 下对应宿主文档。
 
 ## Next
 

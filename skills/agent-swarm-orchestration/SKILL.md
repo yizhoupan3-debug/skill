@@ -24,7 +24,7 @@ trigger_hints:
   - multi-agent workflow
   - 多 agent 执行
 metadata:
-  version: "1.1.2"
+  version: "2.0.0"
   platforms: [supported]
   tags:
     - agent
@@ -103,6 +103,34 @@ This gate is about **admitting delegation when bounded parallelism beats local e
 
 ## Spawn Admission
 
+### 声明式模式（推荐）
+
+用户描述意图，runtime 自动选择编排模式。无需手动指定 lane 数量或拓扑。
+
+| 用户意图 | 自动选择模式 | 典型 worker 数 |
+|----------|-------------|---------------|
+| "全面审查这个模块" | `review-parallel` | 3-5（按维度分 reviewer） |
+| "调研并实现这个功能" | `research-then-implement` | 2-3（research + implement） |
+| "修复所有 CI 失败" | `fix-parallel` | 按失败数自适应 |
+| "对比多种方案" | `judge-panel` | 3-5（独立方案 + 评委） |
+| "深度审计安全/性能/正确性" | `multi-lens-review` | 3+（每维度独立 reviewer） |
+| "迁移这个旧代码" | `migrate-parallel` | 按模块数自适应 |
+
+**声明式流程**：
+1. 用户描述目标（自然语言，无需指定拓扑）
+2. Gate 识别意图 → 匹配模式 → 自动设定 worker 数和角色
+3. Supervisor 按模式 spawn，无需用户确认 lane 分配
+4. 集成时 compact 呈现（findings-first，非逐 lane 汇报）
+
+**模式选择原则**：
+- 读重任务（review/research/audit）→ 高并行度（3-5 workers）
+- 写重任务（implement/migrate）→ 低并行度（2-3 workers）+ disjoint scope
+- 混合任务（research-then-implement）→ 串行阶段 + 并行 lane
+
+### 命令式模式（高级）
+
+当声明式模式不适用（用户明确要求特定拓扑、角色、lane 数）时，使用以下 admission 规则。
+
 Allow bounded sidecars when at least one condition is true:
 
 - read-heavy exploration can run independently
@@ -126,8 +154,6 @@ Reject spawning with an explicit reason:
 ## Sidecar prompt contract
 
 Sidecars should feel like precise lane workers, not vague assistants.
-
-**Cursor**: omit `Task` `model` so subagents inherit the parent session model; do not default Claude/Sonnet unless the parent already uses Anthropic (see `.cursor/rules/subagent-model-inherit.mdc`).
 
 Use `fork_context=false` by default and pass only:
 
@@ -176,7 +202,7 @@ If the discussion touches current-session execution:
 
 ## Hooks 集成
 
-部分宿主已扩展至 30+ hook 事件类型，以下对 agent 编排最有价值：
+以下 hook 事件对 agent 编排最有价值：
 
 ### 子代理生命周期
 - SubagentStart / SubagentStop：监控子代理启动和终止
@@ -188,8 +214,9 @@ If the discussion touches current-session execution:
 - 对长 session 的 task 连续性至关重要
 
 ### 智能拦截
-- Prompt-based hooks：用 LLM prompt 作为 hook 处理器，实现语义级拦截
+- Prompt-based hooks：用 prompt 作为 hook 处理器，实现语义级拦截
 - Agent-based hooks：用完整 agent 作为 hook 处理器，执行多步验证
+- 注意：这些能力的可用性因宿主而异；跨宿主场景需降级为手动流程
 
 ### 文件监控
 - FileChanged + async hook：文件变更后自动运行测试/lint，不阻塞主流程
