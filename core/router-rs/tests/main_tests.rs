@@ -2648,14 +2648,14 @@ fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
         Some(&runtime_path),
         Some(&manifest_path),
         None,
-        "用 paper-reviewer 逻辑模式审一下 claim evidence",
-        "paper-reviewer-token-case",
+        "用 paper-workbench 逻辑模式审一下 claim evidence",
+        "paper-workbench-token-case",
         true,
         true,
     )
     .expect("route with manifest fallback");
 
-    assert_eq!(decision.selected_skill, "paper-reviewer");
+    assert_eq!(decision.selected_skill, "paper-workbench");
     assert!(
         decision.score >= 95.0,
         "literal framework alias routing should outweigh paper-workbench heuristics: {:?}",
