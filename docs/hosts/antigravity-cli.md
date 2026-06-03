@@ -11,7 +11,7 @@ depends_on:
 ## 能力
 
 - **Hooks**：`SessionStart`、`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（与 Codex CLI 同表；见 `artifacts/.../lane-notes/w0-hook-schema.md`）
-- **Skills / Subagents**：官方 harness；用户技能路径见 w0 矩阵（`~/.gemini/antigravity-cli/skills/` 与 `.agents/skills/`）
+- **Skills / Subagents**：官方 harness；用户技能路径见 w0 矩阵（`~/.gemini/antigravity-cli/skills/`）
 - **门控**：`router-rs host antigravity-cli hook lifecycle-context`；REVIEW 为 Codex 式 PostTool+Stop（**非** Cursor `subagentStart`/`subagentStop`）
 - **关闭 REVIEW 硬门**：`ROUTER_RS_ANTIGRAVITY_CLI_REVIEW_GATE_DISABLE=1`（与 Codex `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` 对称；`my-light` lifecycle 亦 suppress hook 硬拦）
 - **Paper prose L4**：`UserPromptSubmit` 与 Codex 同路径（`lifecycle-context` → `handle_codex_userpromptsubmit`）；`ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK` **默认开**；对抗审稿 `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK=1`

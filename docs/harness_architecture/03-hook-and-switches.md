@@ -97,6 +97,7 @@ depends_on:
 | `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE` | 关 | **仅**当值为 `1`/`true`/`yes`/`on`（大小写不敏感）时关闭 Claude Code `CLAUDE_REVIEW_GATE`（含 UserPromptSubmit review 提示）；unset、空串与其它任意值均保持启用（与 `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 对称）。可选：在项目根 `.claude/router-rs-hook.env` 写 `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1`（由安装的 Claude hook command 包装自动加载；重装/合并 hook 后以 `core/router-rs` 的 Claude settings 投影为准） |
 | `ROUTER_RS_CLAUDE_SESSION_NAMESPACE` | unset | **仅 Claude** session 状态：当 stdin 缺少会话 id、`cwd` 类字段又不足以分流时，同仓多会话可能共用 `.claude/review_gate_*.json` / `hook_state_*.json`；设非空串可为并行会话隔离状态文件名组件（语义对齐 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`；见 [`claude_hooks.rs`](../../core/router-rs/src/hosts/claude_hooks.rs) `claude_session_key`） |
 | `ROUTER_RS_TASK_LEDGER_FLOCK` | 开 | **仅** `0`/`false`/`off`/`no`（与 `ROUTER_RS_OPERATOR_INJECT` 同类 default-true 语义）关闭 `artifacts/current/.router-rs.task-ledger.lock` 的 `flock`；关闭后多进程并行写账本为 best-effort（见 §3.1 证据流下 Task ledger 段） |
+| `ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD` | 关 | **仅** `1`/`true`/`yes`/`on`：跳过 Claude PreToolUse 的全部路径保护拦截（deny + warn 均跳过；开发/调试模式）；见 [`router_env_flags.rs`](../../core/router-rs/src/router_env_flags.rs) `router_rs_skip_pre_tool_use_guard` |
 | `ROUTER_RS_CLIPBOARD_PATH` | unset（可选） | CLI/read_clipboard：自定义剪贴板文件路径（[`runtime_ops.inc`](../../core/router-rs/src/cli/runtime_ops.inc)） |
 | `ROUTER_RS_STORAGE_ROOT` | unset（可选） | `runtime_storage` 持久根重写 |
 | `ROUTER_RS_BIN` | unset（可选） | host_integration：`router-rs` 可执行路径提示 |
