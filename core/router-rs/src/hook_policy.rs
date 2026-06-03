@@ -735,8 +735,6 @@ mod tests {
             Some("generated_host_entrypoint")
         );
     }
-}
-
     #[test]
     fn mcp_tool_safety_blocks_session_launch_with_rce_prompt() {
         let request = HookPolicyEvaluateRequest {
@@ -919,5 +917,4 @@ mod tests {
         assert!(details.get("arg_risk_coverage").is_some());
         assert!(details.get("shell_injection_in_args").is_some());
     }
-
-
+}
