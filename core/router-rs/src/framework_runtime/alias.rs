@@ -672,8 +672,58 @@ pub(super) fn render_framework_alias_prompt_parts(entry_contract: &Value) -> (St
 pub(super) fn estimate_token_count(text: &str) -> usize {
     let trimmed = text.trim();
     if trimmed.is_empty() {
-        0
-    } else {
-        (trimmed.chars().count() / 4).max(1)
+        return 0;
+    }
+    // CJK 汉字通常 1 字符 ≈ 1-2 tokens，ASCII 约 4 字符 ≈ 1 token
+    let mut units = 0usize;
+    for ch in trimmed.chars() {
+        units += if ch.is_ascii() {
+            1
+        } else {
+            let cp = ch as u32;
+            // CJK Unified Ideographs 常用区 + 扩展 A/B
+            if (0x4E00..=0x9FFF).contains(&cp)
+                || (0x3400..=0x4DBF).contains(&cp)
+                || (0x20000..=0x2A6DF).contains(&cp)
+            {
+                2 // ~2 units per token → 相当于 1 CJK char = 2 ASCII units
+            } else {
+                1 // 其他非 ASCII（标点、假名等）
+            }
+        };
+    }
+    (units / 4).max(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::estimate_token_count;
+
+    #[test]
+    fn ascii_text_uses_original_heuristic() {
+        // "hello" = 5 ASCII chars → 5 units / 4 = 1
+        assert_eq!(estimate_token_count("hello"), 1);
+        // 16 ASCII chars → 16 / 4 = 4
+        assert_eq!(estimate_token_count("abcdefghijklmnop"), 4);
+    }
+
+    #[test]
+    fn cjk_text_estimates_higher() {
+        // 4 CJK chars = 8 units → 8 / 4 = 2 (旧逻辑会返回 1)
+        assert_eq!(estimate_token_count("你好世界"), 2);
+        // 10 CJK chars = 20 units → 20 / 4 = 5 (旧逻辑会返回 2)
+        assert_eq!(estimate_token_count("这是一个测试用例文本"), 5);
+    }
+
+    #[test]
+    fn mixed_ascii_cjk() {
+        // "hi你好" = 2 ASCII(2) + 2 CJK(4) = 6 units → 6 / 4 = 1
+        assert_eq!(estimate_token_count("hi你好"), 1);
+    }
+
+    #[test]
+    fn empty_and_whitespace() {
+        assert_eq!(estimate_token_count(""), 0);
+        assert_eq!(estimate_token_count("   "), 0);
     }
 }

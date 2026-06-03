@@ -531,11 +531,8 @@
       3,
       "skills/python-env-management/SKILL.md",
       [
-        "antigravity",
         "claude-desktop",
-        "claude-code",
-        "cursor",
-        "opencode"
+        "cursor"
       ],
       "skill",
       null,

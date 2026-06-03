@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "browser-mcp": {
+      "args": [
+        "browser",
+        "mcp-stdio",
+        "--repo-root",
+        "${REPO_ROOT}"
+      ],
+      "command": "${ROUTER_RS_BIN}",
+      "description": "Browser MCP for external web research (browser_open, browser_get_text, …)",
+      "env": {
+        "SKILL_FRAMEWORK_ROOT": "${REPO_ROOT}"
+      },
+      "type": "stdio"
+    },
+    "router-rs-framework": {
+      "args": [
+        "claude-desktop",
+        "agent",
+        "--repo-root",
+        "${REPO_ROOT}"
+      ],
+      "command": "${ROUTER_RS_BIN}",
+      "description": "Framework snapshot, skill routing, goal/closeout gating (MCP hard block for non-my-light)",
+      "env": {
+        "SKILL_FRAMEWORK_ROOT": "${REPO_ROOT}"
+      },
+      "type": "stdio"
+    }
+  }
+}
