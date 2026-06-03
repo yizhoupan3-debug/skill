@@ -7,14 +7,30 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
-/// Print diagnostics to stdout (plain text, not JSON).
-pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
+use serde::Serialize;
+
+/// Structured result for `router-rs framework doctor`.
+#[derive(Debug, Serialize)]
+pub struct DoctorResult {
+    /// true if no warnings detected.
+    pub ok: bool,
+    /// Number of warnings found.
+    pub warn_count: usize,
+    /// Collected warning messages.
+    pub warns: Vec<String>,
+}
+
+/// Run framework diagnostics. Returns structured `DoctorResult` (JSON printed to stdout).
+/// If `warn_count > 0`, the caller should exit with code 1.
+pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     println!("router-rs framework doctor");
     println!("repo_root: {}", repo_root.display());
     match std::env::current_exe() {
         Ok(p) => println!("router_rs_current_exe: {}", p.display()),
         Err(e) => println!("router_rs_current_exe: <unavailable: {e}>"),
     }
+
+    let mut warns: Vec<String> = Vec::new();
 
     println!("\n--- auto self-healing: cleaning broken symlinks ---");
     let _ = auto_clean_broken_symlinks(repo_root);
@@ -45,7 +61,11 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
     println!("\n--- path checks ---");
     match crate::runtime_registry::check_review_gate_registry_snapshot(repo_root) {
         Ok(()) => println!("RUNTIME_REGISTRY review_gate snapshot: ok"),
-        Err(e) => println!("WARN: RUNTIME_REGISTRY review_gate snapshot failed: {e}"),
+        Err(e) => {
+            let msg = format!("RUNTIME_REGISTRY review_gate snapshot failed: {e}");
+            println!("WARN: {msg}");
+            warns.push(msg);
+        }
     }
     let review_mode = match crate::review_gate_engine::cursor_review_gate_mode() {
         crate::review_gate_engine::CursorReviewGateMode::Lite => "lite",
@@ -107,10 +127,12 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
             .join("hooks")
             .join("router-rs-hook.sh");
         if deprecated_shim.is_file() {
-            println!(
-                "WARN: deprecated shim still present at {} — prefer .claude/settings.json hooks (see docs/hosts/claude.md)",
+            let msg = format!(
+                "deprecated shim still present at {} — prefer .claude/settings.json hooks (see docs/hosts/claude.md)",
                 deprecated_shim.display()
             );
+            println!("WARN: {msg}");
+            warns.push(msg);
         }
     }
 
@@ -150,6 +172,8 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
     println!("\n--- Codex hooks duplication (operator) ---");
     for line in super::codex_hooks_duplicate::collect_codex_hooks_duplicate_warnings(repo_root) {
         println!("{line}");
+        // Lines from this helper are warnings by convention.
+        warns.push(line);
     }
 
     println!("\n--- generated artifacts (manifest drift) ---");
@@ -170,21 +194,24 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
                 }
             }
             if !ok {
-                println!("  fix: cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot");
+                let msg = "generated-artifacts-status: DRIFT or FAIL (fix: cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint update-one-shot)".to_string();
+                warns.push(msg);
             }
         }
-        Err(e) => println!("generated-artifacts-status: error ({e})"),
+        Err(e) => {
+            let msg = format!("generated-artifacts-status: error ({e})");
+            println!("{msg}");
+            warns.push(msg);
+        }
     }
 
     println!("\n--- continuity ledger ---");
     if router_rs_task_ledger_flock_enabled() {
         println!("ROUTER_RS_TASK_LEDGER_FLOCK: enabled (default) — cross-process GOAL/RFV/EVIDENCE writes serialize under artifacts/current/.router-rs.task-ledger.lock.");
     } else {
-        println!("WARN: ROUTER_RS_TASK_LEDGER_FLOCK is disabled.");
-        println!("      Parallel hook subprocesses may interleave writes to artifacts/current/**;");
-        println!(
-            "      treat TASK_STATE.json and rollups as best-effort until flock is re-enabled."
-        );
+        let msg = "ROUTER_RS_TASK_LEDGER_FLOCK is disabled — parallel hook subprocesses may interleave writes to artifacts/current/**; treat TASK_STATE.json and rollups as best-effort until flock is re-enabled.".to_string();
+        println!("WARN: {msg}");
+        warns.push(msg);
     }
 
     println!("\n--- control plane (supervisor / pointers) ---");
@@ -212,12 +239,27 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<(), String> {
                 );
             for reason in reasons.filter_map(Value::as_str).filter(|s| !s.is_empty()) {
                 println!("WARN: {reason}");
+                warns.push(reason.to_string());
             }
         }
-        Err(e) => println!("WARN: runtime snapshot unavailable: {e}"),
+        Err(e) => {
+            let msg = format!("runtime snapshot unavailable: {e}");
+            println!("WARN: {msg}");
+            warns.push(msg);
+        }
     }
 
-    Ok(())
+    let warn_count = warns.len();
+    let result = DoctorResult {
+        ok: warn_count == 0,
+        warn_count,
+        warns,
+    };
+    println!(
+        "\n--- doctor result (JSON) ---\n{}",
+        serde_json::to_string_pretty(&result).unwrap_or_default()
+    );
+    Ok(result)
 }
 
 /// Continuity audit: check task pointers, registry consistency, and orphan directories.

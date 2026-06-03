@@ -131,7 +131,11 @@ fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
         }
         FrameworkCommand::Doctor(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            run_framework_doctor(&repo_root)
+            let result = run_framework_doctor(&repo_root)?;
+            if result.warn_count > 0 {
+                std::process::exit(1);
+            }
+            Ok(())
         }
         FrameworkCommand::SyncEntrypoints(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
