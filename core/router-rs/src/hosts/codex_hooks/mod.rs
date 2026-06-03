@@ -53,12 +53,16 @@ pub(crate) const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
 pub(crate) const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub(crate) const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
 pub(crate) const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [CODEX_HOOKS_PATH];
-const PROTECTED_GENERATED_PATHS: [&str; 5] = [
+const PROTECTED_GENERATED_PATHS: [&str; 9] = [
     CODEX_AGENT_POLICY_PATH,
     "AGENTS.md",
+    "AGENTS_ANTIGRAVITY.md",
+    "AGENTS_CURSOR.md",
     CODEX_HOOKS_PATH,
     CODEX_HOOKS_README_PATH,
     HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
+    ".antigravitycli/hooks.json",
+    ".antigravitycli/.router-rs-install.manifest.json",
 ];
 const PROTECTED_GENERATED_PREFIXES: [&str; 3] = [
     "skills/SKILL_",

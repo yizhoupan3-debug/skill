@@ -18,6 +18,7 @@
 //! - `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE`：Stop 软收尾提示（`SESSION_CLOSE_STYLE`）；`0`/`false`/`off`/`no` 关闭（见 `frag_01_continuity_intent.rs`）
 //! - `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`（未在本文件展开 helper；见 `codex_hooks/mod.rs`）
 //! - `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE`（未在本文件展开 helper；见 `codex_hooks/mod.rs`）
+//! - `ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD` → [`router_rs_skip_pre_tool_use_guard`]
 //!
 //! **散落直读（仅索引）**：`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE`、`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT`、`ROUTER_RS_CLOSEOUT_ENFORCEMENT`、`ROUTER_RS_CURSOR_*`（review gate disable、**`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** → [`router_rs_cursor_review_gate_stop_max_nudges_cap`]、pre-goal max nudges、open subagent cap/stale、session namespace、workspace root、terminal kill）、`ROUTER_RS_CODEX_*`（含 review gate disable、stable session key、Stop hook active bypass、SessionStart context max）、`ROUTER_RS_CLAUDE_*`、`ROUTER_RS_CLIPBOARD_PATH`、`ROUTER_RS_STORAGE_ROOT`、`ROUTER_RS_BIN`、`ROUTER_RS_GENERATOR_TIMEOUT_SECONDS`、`ROUTER_RS_SHARED_TARGET`、`ROUTER_RS_UPDATE_*` — 见 harness §5 与各模块 `std::env::var`。
 //!
@@ -61,6 +62,7 @@ const ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
     "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
 const ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV: &str =
     "ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX";
+const ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD_ENV: &str = "ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD";
 
 /// My implement **pre-goal** nudge（legacy env 名 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）仍保持显式 opt-in。
 pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
@@ -553,5 +555,5 @@ pub fn router_rs_rfv_max_rounds_cap() -> u64 {
 /// `ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD=1`：跳过 PreToolUse 的路径保护拦截（开发模式）。
 /// 默认关闭；设为 `1`/`true`/`yes`/`on` 时，PreToolUse 不再 deny 受保护路径的读写。
 pub fn router_rs_skip_pre_tool_use_guard() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD")
+    router_rs_env_enabled_default_false(ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD_ENV)
 }
