@@ -13,32 +13,22 @@
 
 ```markdown
 ---
-slug: my-new-skill
-layer: L3
-owner: none
-gate: none
-priority: P2
-description: 一句话描述技能做什么
+name: my-new-skill
+description: |
+  一句话描述技能做什么。可多行。
+routing_layer: L3
+routing_owner: none
+routing_gate: none
+routing_priority: P2
 session_start: preferred
+user-invocable: true
+disable-model-invocation: false
+risk: low
+source: local
 trigger_hints:
   - 中文触发词
   - english trigger phrase
   - /slash-command
-source: project
-source_position: null
-skill_path: skills/my-new-skill/SKILL.md
-host_platforms:
-  - antigravity
-  - claude-desktop
-  - claude-code
-  - cursor
-  - opencode
-kind: skill
-allowedTools:
-  - Bash
-  - Read
-  - Write
-invocation: auto
 ---
 
 # my-new-skill
@@ -60,18 +50,20 @@ Claude 执行的具体步骤。
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `slug` | 是 | kebab-case 唯一标识符 |
-| `layer` | 是 | L0/L1/L2/L3/L4 |
-| `owner` | 是 | gate/none/evidence/artifact/delegation/source |
-| `gate` | 是 | 门控类型（delegation/source/artifact/evidence/none） |
-| `priority` | L0 必填 | P1/P2 |
-| `description` | 是 | 一句话触发条件描述 |
+| `name` | 是 | kebab-case 唯一标识符（原 `slug`） |
+| `description` | 是 | 多行描述技能功能和触发语义 |
+| `routing_layer` | 是 | L0/L1/L2/L3/L4（原 `layer`） |
+| `routing_owner` | 是 | gate/none/evidence/artifact/delegation/source |
+| `routing_gate` | 是 | 门控类型（delegation/source/artifact/evidence/none） |
+| `routing_gate_evidence` | 否 | 门控所需的证据描述 |
+| `routing_priority` | L0 必填 | P1/P2 |
 | `session_start` | 是 | required/preferred/n/a |
-| `trigger_hints` | 是 | 中英文触发词列表 |
-| `host_platforms` | 是 | 支持的宿主平台（5 个全集） |
-| `kind` | 是 | skill/cold |
-| `allowedTools` | 推荐 | 预授权工具列表（减少运行时弹窗） |
-| `invocation` | 推荐 | auto/manual（Claude 自动判断 vs 仅用户手动） |
+| `user-invocable` | 是 | true/false — 用户是否可手动调用 |
+| `disable-model-invocation` | 是 | true/false — 禁止模型自动调用 |
+| `risk` | 否 | low/medium/high — skill 风险等级 |
+| `source` | 否 | local/external — skill 来源 |
+| `trigger_hints` | 是 | 中英文触发词 + /slash-command 列表 |
+| `metadata` | 否 | 扩展 JSON 块（键值对） |
 
 ## 分层规范
 
@@ -140,6 +132,6 @@ skills/my-skill/
 ## 注意事项
 
 - `SKILL_PLUGIN_CATALOG.json` 由 `router-rs` 自动生成，**不要手动编辑**
-- `host_platforms` 必须包含全部 5 个平台（antigravity, claude-desktop, claude-code, cursor, opencode）
+- `host_platforms` 在 JSON 配置层管理（SKILL_MANIFEST.json / SKILL_ROUTING_RUNTIME.json），不在 SKILL.md frontmatter 中
 - trigger_hints 中英文都要包含
 - SKILL.md 正文控制在 15KB 以内，超出部分下沉到 references/
