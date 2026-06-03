@@ -38,6 +38,11 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint
 
 - 跨宿主语言规范见 [`AGENTS.md`](AGENTS.md) § Language；Codex 宿主强制继承，不得豁免。
 
+
+## Worktree 隔离
+
+- 跨宿主 worktree 隔离硬约束见 [`AGENTS.md`](AGENTS.md) § Git；本宿主强制继承，未经用户当轮显式批准不得在 worktree 中运行或修改。
+
 ## Knowledge Hygiene
 
 - 本文件是 Codex 地图；跨宿主正文在 [`AGENTS.md`](AGENTS.md)。
@@ -76,5 +81,5 @@ Codex 宿主缺少 Claude Desktop 的 MCP 工具，以下为等效替代：
 | `goal_state_manage` (MCP) | `framework_goal_drive` stdio 二进制 | goal 生命周期管理 |
 | `session_checkpoint` (MCP) | Stop hook 自动检查 | checkpoint 由 hook 注入 |
 | `web_fetch` (MCP) | agent 自行 `curl` / 浏览器工具 | 无框架层 HTTP 代理 |
-| `rfv_loop_manage` (MCP) | `framework_rfv_drive` stdio 二进制 | RFV 循环管理 |
+| `rfv_loop_manage` (MCP) | `framework_rfv_loop` stdio 二进制 | RFV 循环管理 |
 | `record_evidence` (MCP) | PostToolUse hook 自动记录 | evidence 由 hook 追加 |
