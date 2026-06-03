@@ -11,5 +11,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 include!("common.inc");

@@ -40,4 +40,4 @@ Claude Code 内置 Auto memory 机制——agent 从用户纠正中自动学习�
 ## 参考
 
 - Claude Code memory 文档: https://code.claude.com/docs/en/memory
-- 本框架连续性架构: docs/harness_architecture.md
+- 本框架连续性架构: docs/harness_architecture/index.md

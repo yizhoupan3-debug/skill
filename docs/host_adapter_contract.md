@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture.md
+  - harness_architecture/index.md
   - rust_contracts.md
 ---
 
@@ -13,11 +13,11 @@ depends_on:
 
 **历史字段**：`host_targets.entrypoint_files` 已从注册表移除；宿主策略入口与 sync manifest 入口集合以 `host_targets.metadata.<host>.host_entrypoints` 为唯一权威（`framework_host_targets::host_entrypoints_value_for_id`）。
 
-**相关契约**：[`rust_contracts.md`](rust_contracts.md) · [`harness_architecture.md`](harness_architecture.md)。
+**相关契约**：[`rust_contracts.md`](rust_contracts.md) · [`harness_architecture/`](harness_architecture/index.md)。
 
 ## 快速路径（我要接新宿主）
 
-- **先读**：[`harness_architecture.md`](harness_architecture.md) **§5–§6**，再读本文件 **§0** 与 **[§3.1](#31-可复制执行清单工程顺序)**。
+- **先读**：[`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) **§5** 与 [`harness_architecture/04-closeout-and-depth.md`](harness_architecture/04-closeout-and-depth.md) **§6**，再读本文件 **§0** 与 **[§3.1](#31-可复制执行清单工程顺序)**。
 - **再改**：`RUNTIME_REGISTRY` → hooks 模块 → `dispatch` → `host_integration` → L4 → 测试（详见 §3.1）。
 - **跑测**：`cargo test --manifest-path core/router-rs/Cargo.toml`；改动根 [`tests/`](../tests/) 时再 `cargo test`。
 - **入口同步**：`router-rs framework sync-entrypoints --repo-root "$PWD"`（或兼容别名 `router-rs codex sync`）。
@@ -61,7 +61,7 @@ depends_on:
 | Review gate disable env | `ROUTER_RS_CURSOR_*` | `ROUTER_RS_CODEX_*` | `ROUTER_RS_CLAUDE_*` | — | `ROUTER_RS_ANTIGRAVITY_CLI_*` | `my-light` / MCP |
 | Goal/RFV hook 续跑 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
-细节见 [`harness_architecture.md`](harness_architecture.md) §5.0 与各 [`docs/hosts/*.md`](hosts/)。
+细节见 [`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) §5.0 与各 [`docs/hosts/*.md`](hosts/)。
 
 - **Harness hook 面矩阵**：`host_projections.*.harness_capabilities` 须满足 [`RUNTIME_REGISTRY_SCHEMA.json`](../configs/framework/RUNTIME_REGISTRY_SCHEMA.json) 的 `harness_capability_policy`；例外须声明 `harness_capability_exceptions`（`tests/policy_contracts.rs` **`runtime_registry_host_projections_split_harness_capabilities`** 机读校验）。
 - **热路由宿主展开**：`SKILL.md` 缺省 `platforms` 时 `framework skills refresh` 展开为 `host_targets.supported` 全量；与 hook 级 harness 能力矩阵**分工**，勿混读。

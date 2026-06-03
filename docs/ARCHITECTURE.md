@@ -6,7 +6,7 @@ depends_on:
   - architecture/data-flow.md
   - architecture/security.md
   - architecture/host-integration.md
-  - harness_architecture.md
+  - harness_architecture/index.md
   - rust_contracts.md
   - README.md
 redirect_to: architecture/INDEX.md

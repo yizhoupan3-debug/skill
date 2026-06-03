@@ -52,7 +52,7 @@ depends_on:
 
 默认面只保留 `routing / memory / continuity / host_projection` 四轴；research、implementation、audit、framework 和 ops 都必须显式 opt-in。机器可读真源在 `configs/framework/FRAMEWORK_SURFACE_POLICY.json`，`skills/SKILL_TIERS.json` 仅作为可再生成的调试报告，不参与热路由或宿主必需门禁。
 
-相关控制面 JSON（非 profile 字段，但 install/门禁消费）：`configs/framework/RUNTIME_REGISTRY.json`（含 `review_gate`）、`configs/framework/host_projection_narrative.json`（My lifecycle / review 安装文案）、`configs/framework/GENERATED_ARTIFACTS.json`（生成物 drift manifest）。叙述见 [`harness_architecture.md`](harness_architecture.md) §2.3。
+相关控制面 JSON（非 profile 字段，但 install/门禁消费）：`configs/framework/RUNTIME_REGISTRY.json`（含 `review_gate`）、`configs/framework/host_projection_narrative.json`（My lifecycle / review 安装文案）、`configs/framework/GENERATED_ARTIFACTS.json`（生成物 drift manifest）。叙述见 [`harness_architecture/02-data-flows.md`](harness_architecture/02-data-flows.md) §2.3。
 
 这里的“默认面”不是 `SKILL_ROUTING_RUNTIME.json` 的 hot routing index。默认面只统计 `session_start: required` 的 source/artifact/evidence gate；hot routing index 还会包含少量 `session_start: preferred` owner 和显式 `$` framework command alias，用于首轮路由发现。完整 specialist 只能通过 `SKILL_MANIFEST.json` fallback 被选中，不能被解释成默认加载或恢复旧入口。
 

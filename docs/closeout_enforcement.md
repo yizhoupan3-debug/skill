@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture.md
+  - harness_architecture/index.md
 ---
 
 # Closeout Enforcement
@@ -218,7 +218,7 @@ closeouts is intentionally low.
 - **Cursor Stop** — 同源评估（`stop_hard_closeout_followup_for_assistant_response` → `closeout_followup_for_completion_claim`；task id 与 hydration 指针一致）；硬 tier 注入 `followup_message`；本地 solo 默认**软** tier（unset 且非 CI 可不附 record）。
 - **Session write** — `write_framework_session_artifacts` 在硬 tier 下可拒写（`enforce_closeout_for_session_payload`）。
 
-CLI / stdio `closeout evaluate` 仍为裁判真源；hook 为投影，见 [`harness_architecture.md`](harness_architecture.md) §3.2。
+CLI / stdio `closeout evaluate` 仍为裁判真源；hook 为投影，见 [`harness_architecture/02-data-flows.md`](harness_architecture/02-data-flows.md) §3.2。
 
 ## Tests
 

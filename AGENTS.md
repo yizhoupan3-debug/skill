@@ -13,7 +13,7 @@
 | 宿主投影 lifecycle/review 文案 | `configs/framework/host_projection_narrative.json` |
 | hook 行为 | 各宿主 `hooks.json` + `router-rs` |
 
-**文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/rust_contracts.md`](docs/rust_contracts.md) · [`docs/README.md`](docs/README.md)
+**文档地图**：[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/rust_contracts.md`](docs/rust_contracts.md) · [`docs/README.md`](docs/README.md)
 
 ## Language
 
@@ -36,7 +36,7 @@
 - **Python 环境（macOS）**：长期治理须显式使用项目统一的 Python 环境（uv-only、默认 3.12、每仓库 `uv.lock`）；禁止使用全局 `pip`。环境类请求勿只靠泛化路由。由于 macOS 采用统一内存设计，在运行中长周期或重度 Python/ML 任务时，必须以更高频度进行主动的内存回收（如循环内调用 `gc.collect()` 或释放 `torch.mps.empty_cache()`），从源头上规避 swap 膨胀并降低运行期与静态的内存开销。
 - **路由**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`；冷表见 `skills/SKILL_MANIFEST.json`。
 - **可选 env / 注入 / closeout**：[`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)（勿在本文重复全表）。
-- **连续性摘要**：[`docs/harness_architecture.md`](docs/harness_architecture.md) §2–§3。
+- **连续性摘要**：[`docs/harness_architecture/02-data-flows.md`](docs/harness_architecture/02-data-flows.md) §2–§3。
 
 ## Skill Routing
 
@@ -46,7 +46,7 @@
 
 ## Continuity artifacts（手动画板 only）
 
-- 真源：`artifacts/current/<task_id>/`（见 [`docs/harness_architecture.md`](docs/harness_architecture.md)）；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
+- 真源：`artifacts/current/<task_id>/`（见 [`docs/harness_architecture/02-data-flows.md`](docs/harness_architecture/02-data-flows.md)）；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
 - 历史 env 名见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)。
 
@@ -78,7 +78,7 @@
 
 ## Goal drive
 
-- `/implementx`、`/verifyx` + `framework_goal_drive` stdio → `artifacts/current/<task_id>/GOAL_STATE.json`；**无** hook 续跑注入；env 与手动画板见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)、[`docs/harness_architecture.md`](docs/harness_architecture.md)。
+- `/implementx`、`/verifyx` + `framework_goal_drive` stdio → `artifacts/current/<task_id>/GOAL_STATE.json`；**无** hook 续跑注入；env 与手动画板见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)、[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md)。
 - 执行 wave / 验证：[`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`skills/verifyx/SKILL.md`](skills/verifyx/SKILL.md)（verify 后 purge `artifacts/current/<task_id>/`，见 verifyx § Post-verify task-dir purge）。
 
 ## Manuscript / LaTeX file writes

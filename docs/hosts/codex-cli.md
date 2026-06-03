@@ -2,7 +2,7 @@
 last_verified: "2026-06-02"
 depends_on:
   - ../host_adapter_contract.md
-  - ../harness_architecture.md
+  - ../harness_architecture/index.md
 ---
 
 # Codex CLI 宿主操作手册
@@ -32,7 +32,7 @@ depends_on:
 
 ## Hook 事件矩阵
 
-细则见 [`harness_architecture.md`](../harness_architecture.md) §3、「主数据流」与 `.codex/hooks.json`。
+细则见 [`harness_architecture/02-data-flows.md`](../harness_architecture/02-data-flows.md) §3、「主数据流」与 `.codex/hooks.json`。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|

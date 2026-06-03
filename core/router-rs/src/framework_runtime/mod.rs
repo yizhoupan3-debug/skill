@@ -439,6 +439,7 @@ fn workspace_name_from_root(repo_root: &Path) -> String {
 }
 
 fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, String> {
+    crate::path_guard::reject_unsafe_path(path)?;
     let existing = read_text_if_exists(path);
     if existing == content {
         return Ok(false);

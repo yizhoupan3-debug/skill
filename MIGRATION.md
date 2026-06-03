@@ -194,7 +194,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时 stdio/任务视图可能拒载错误 focus；用 `framework task-state-resolve` 或修正 `active_task.json`（**无** hook `GOAL_CONTINUE`） |
 | Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后 `followup_message` 降频；细节进 `additional_context`（**无** goal/RFV hook 续跑可合并） |
 | `SKILL_ROUTING_RUNTIME.scope` | `hot_skill_count`/`full_skill_count` = 热表行数；`manifest_skill_count` = 全 manifest 行数 |
-| 文档真源 | 硬化叙述见 [`docs/harness_architecture.md`](docs/harness_architecture.md) §2.3、[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)、[`docs/rust_contracts.md`](docs/rust_contracts.md) |
+| 文档真源 | 硬化叙述见 [`docs/harness_architecture/02-data-flows.md`](docs/harness_architecture/02-data-flows.md) §2.3、[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)、[`docs/rust_contracts.md`](docs/rust_contracts.md) |
 
 ## 文档与计划卫生（2026-05-20）
 

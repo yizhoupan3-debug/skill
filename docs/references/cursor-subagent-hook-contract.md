@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - ../harness_architecture.md
+  - ../harness_architecture/index.md
 ---
 
 # Cursor subagent hook contract (v1)
@@ -58,4 +58,4 @@ Implementation: `review_subagent_evidence_satisfied` in `cursor_hooks/handlers.r
 
 ## Stale recovery
 
-When open subagent count drops to zero, pending keys older than **`ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS`** may be pruned (see JSON `stale_recovery` and [`docs/harness_architecture.md`](../harness_architecture.md) env 表). Set `0`/`false`/`off`/`no` to disable auto stale hygiene.
+When open subagent count drops to zero, pending keys older than **`ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS`** may be pruned (see JSON `stale_recovery` and [`docs/harness_architecture/03-hook-and-switches.md`](../harness_architecture/03-hook-and-switches.md) env 表). Set `0`/`false`/`off`/`no` to disable auto stale hygiene.

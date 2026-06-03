@@ -12,7 +12,7 @@
 | Claude Code hook 行为 | `.claude/settings.json` + `router-rs claude hook` |
 | Claude Desktop MCP 行为 | `.claude/mcp.json` 或 `claude_desktop_config.json` + MCP tools |
 
-**文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/hosts/claude.md`](docs/hosts/claude.md) · [`docs/hosts/claude-desktop.md`](docs/hosts/claude-desktop.md)
+**文档地图**：[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md) · [`docs/hosts/claude.md`](docs/hosts/claude.md) · [`docs/hosts/claude-desktop.md`](docs/hosts/claude-desktop.md)
 
 ## Language
 

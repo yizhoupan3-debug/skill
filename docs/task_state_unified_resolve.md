@@ -1,14 +1,14 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture.md
+  - harness_architecture/index.md
 ---
 
 # Task state — unified read model (`ResolvedTaskView`)
 
 **状态**：已落地 **只读** 聚合（`task_state`）、**阶段 1**（Cursor continuity frame）、**阶段 2**（`task_write_lock` 串行化 GOAL / RFV / session 批量写 / `EVIDENCE_INDEX` 追加）、**阶段 2.5**（`task_command`：命名 envelope 分发 + `framework task-ledger-dispatch` + stdio `task_ledger_dispatch`）与 **阶段 3**（可选投影 `TASK_STATE.json` + `framework task-state-aggregate-sync`，`ResolvedTaskView` 对外 schema 仍以分文件为准）。
 
-**与 `docs/harness_architecture.md` 的关系**：该文定义 L1–L5 分层；本文定义 **L2→L3 之间的读模型真源**：如何把多份磁盘账本解析成**单一结构**，供 hook / refresh / 调试共用，避免「每个调用点自己拼路径、自己猜优先级」。
+**与 `docs/harness_architecture/` 的关系**：该目录定义 L1–L5 分层（见 [`index.md`](harness_architecture/index.md)）；本文定义 **L2→L3 之间的读模型真源**：如何把多份磁盘账本解析成**单一结构**，供 hook / refresh / 调试共用，避免「每个调用点自己拼路径、自己猜优先级」。
 
 **文档索引**：[`README.md`](README.md)。
 

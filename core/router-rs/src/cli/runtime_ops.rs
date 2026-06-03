@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use hex;
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -17,6 +18,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use super::args::*;
 use super::common::{
     append_text_with_process_lock, manifest_fallback_path, route_task_with_manifest_fallback,
+    validate_write_path,
 };
 
 use crate::autopilot_goal;

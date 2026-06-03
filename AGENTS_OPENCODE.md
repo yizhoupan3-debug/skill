@@ -13,7 +13,7 @@
 | MCP 行为 | `opencode.json` 的 `mcpServers` |
 | opencode 配置 | `opencode.json` + `~/.config/opencode/opencode.json` |
 
-**文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md)
+**文档地图**：[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md)
 
 ## Language
 

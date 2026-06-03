@@ -2,7 +2,7 @@
 last_verified: "2026-06-02"
 depends_on:
   - rust_contracts.md
-  - harness_architecture.md
+  - harness_architecture/index.md
 ---
 
 # 运行期核心行为与沙箱统一规约 (Runtime Unified Specification)

@@ -53,6 +53,44 @@ pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<Path
     Ok(root.join(tail))
 }
 
+/// Reject writes to paths that contain `..` traversal segments or are symlinks.
+///
+/// This is the validation-only counterpart to `validate_write_path` (in `cli/common.inc`).
+/// It performs the two cheapest safety checks **without** creating parent directories or
+/// checking root containment, making it suitable for use inside shared write helpers
+/// (`write_text_if_changed` / `write_json_if_changed`) that manage directory creation
+/// themselves.
+pub fn reject_unsafe_path(path: &Path) -> Result<(), String> {
+    // 1. Reject path traversal via `..` components.
+    if path
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err(format!(
+            "write path {} must not contain '..' traversal segments",
+            path.display()
+        ));
+    }
+    // 2. Reject symlink at the target path itself.
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_symlink() => {
+            return Err(format!(
+                "write path {} must not be a symlink",
+                path.display()
+            ));
+        }
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(format!(
+                "stat write path {} failed: {err}",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// True when `path` resolves under `repo_root` (canonical when possible, else lexical `strip_prefix`).
 pub fn path_is_within_repo_root(repo_root: &Path, path: &Path) -> bool {
     match (fs::canonicalize(repo_root), fs::canonicalize(path)) {

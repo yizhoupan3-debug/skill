@@ -6,7 +6,7 @@ description: |
   `overview` 须按 profile 显式声明实现面边界：`research` 含调研期零实现面改动硬声明（可选窄例外：`overview` **单句**声明允许回写的结论文档 / plan 路径集合；`<host-plans-dir>/<本文件>.plan.md` 仅为常见示例而非唯一形式），`execution` 标明允许按 todos 修改并由末条完成计划/Git 证据收口。
   Use at 每轮对话开始 / first-turn / conversation start when the user wants Plan 模式、策划文档闸门、可验收 todo、
   或明确要走「计划→实现→验证→对照 git 收口」而不是直接堆代码。
-  Aligns execution-item / verification shapes with `skills/SKILL_FRAMEWORK_PROTOCOLS.md`；continuity 分层见 `docs/harness_architecture.md`。
+  Aligns execution-item / verification shapes with `skills/SKILL_FRAMEWORK_PROTOCOLS.md`；continuity 分层见 `docs/harness_architecture/`（见 [`index.md`](../../docs/harness_architecture/index.md)）。
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
@@ -135,7 +135,7 @@ Non-goals: <可选>
 
 ## Continuity 与工件
 
-分层与 hook 以 `docs/harness_architecture.md` 为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式 **`/implementx`** 启动。
+分层与 hook 以 `docs/harness_architecture/`（见 [`index.md`](../../docs/harness_architecture/index.md)）为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式 **`/implementx`** 启动。
 
 ## 宿主差异
 

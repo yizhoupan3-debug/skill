@@ -1056,6 +1056,34 @@ pub(crate) fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
     }
 }
 
+/// Core hook events required for all Claude Code projections.
+/// These events are always installed regardless of host version.
+const CORE_HOOK_EVENTS: &[&str] = &[
+    "PreToolUse",
+    "UserPromptSubmit",
+    "PostToolUse",
+    "Stop",
+];
+
+/// Optional hook events that may not be supported by all Claude Desktop versions.
+/// Installation continues gracefully if these are absent from the host.
+const OPTIONAL_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "SubagentStart",
+    "SubagentStop",
+];
+
+/// All hook events (core + optional), in canonical order.
+const ALL_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "PreToolUse",
+    "UserPromptSubmit",
+    "PostToolUse",
+    "Stop",
+    "SubagentStart",
+    "SubagentStop",
+];
+
 pub(crate) fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value, String> {
     let mut root = match existing {
         Some(Value::Object(map)) => map,
@@ -1067,7 +1095,7 @@ pub(crate) fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Val
         Some(_) => return Err("Claude settings `hooks` must be a JSON object".to_string()),
         None => Map::new(),
     };
-    for event in ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"] {
+    for &event in ALL_HOOK_EVENTS {
         let mut entries = hooks
             .remove(event)
             .and_then(|value| value.as_array().cloned())
@@ -1137,7 +1165,7 @@ pub(crate) fn install_claude_projection(
             "managed": true,
             "path": settings_path.to_string_lossy(),
             "changed": hooks_changed,
-            "events": ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"],
+            "events": ALL_HOOK_EVENTS.to_vec(),
         },
         "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
     }))
@@ -1258,7 +1286,7 @@ pub(crate) fn remove_claude_settings_hooks(
     };
 
     let mut removed_events = Vec::new();
-    for event in ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"] {
+    for &event in ALL_HOOK_EVENTS {
         let Some(value) = hooks.remove(event) else {
             continue;
         };
@@ -1386,15 +1414,9 @@ pub(crate) fn write_claude_projection_manifest(
                 projection_manifest_file_ref(roots, settings_path),
             ],
             "settings": {
-                "managed_key_paths": [
-                    "hooks.SessionStart",
-                    "hooks.PreToolUse",
-                    "hooks.UserPromptSubmit",
-                    "hooks.PostToolUse",
-                    "hooks.Stop",
-                    "hooks.SubagentStart",
-                    "hooks.SubagentStop"
-                ],
+                "managed_key_paths": ALL_HOOK_EVENTS.iter()
+                    .map(|e| format!("hooks.{}", e))
+                    .collect::<Vec<_>>(),
             }
         }),
     )
@@ -1405,22 +1427,29 @@ pub(crate) fn claude_settings_hook_status(path: &Path) -> Result<Value, String> 
     let mut managed_events = Vec::new();
     if let Some(Value::Object(root)) = payload.as_ref() {
         if let Some(Value::Object(hooks)) = root.get("hooks") {
-            for event in ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"] {
+            for event in ALL_HOOK_EVENTS {
                 if hooks
-                    .get(event)
+                    .get(*event)
                     .map(value_contains_router_rs_claude_hook)
                     .unwrap_or(false)
                 {
-                    managed_events.push(event);
+                    managed_events.push(*event);
                 }
             }
         }
     }
+    // Core events are mandatory; optional events are advisory.
+    // At minimum all core events must be present for "managed" status.
+    let managed_set: std::collections::HashSet<&str> = managed_events.iter().copied().collect();
+    let all_core_present = CORE_HOOK_EVENTS.iter().all(|e| managed_set.contains(e));
+    let all_optional_present = OPTIONAL_HOOK_EVENTS.iter().all(|e| managed_set.contains(e));
     Ok(json!({
         "path": path.to_string_lossy(),
         "exists": path.exists(),
-        "managed": managed_events.len() == 7,
+        "managed": all_core_present,
         "managed_events": managed_events,
+        "core_complete": all_core_present,
+        "optional_complete": all_optional_present,
     }))
 }
 
@@ -4508,6 +4537,7 @@ pub(crate) fn read_text_if_exists(path: &Path) -> Result<Option<String>, String>
 }
 
 pub(crate) fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
+    crate::path_guard::reject_unsafe_path(path)?;
     let existing = read_text_if_exists(path)?;
     if existing.as_deref() == Some(content) {
         return Ok(false);

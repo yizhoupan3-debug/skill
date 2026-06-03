@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - ../harness_architecture.md
+  - ../harness_architecture/index.md
   - ../../AGENTS.md
 ---
 
@@ -98,7 +98,7 @@ cargo run --manifest-path core/router-rs/Cargo.toml -- schema-drift check --repo
 
 ## 深度硬门禁（opt-in）
 
-`GOAL_STATE.completion_gates`、`RFV_LOOP_STATE.close_gates` 默认关闭。见 `docs/references/rfv-loop/reasoning-depth-contract.md`、`docs/harness_architecture.md` §4/§8（`ROUTER_RS_DEPTH_SCORE_MODE`）。
+`GOAL_STATE.completion_gates`、`RFV_LOOP_STATE.close_gates` 默认关闭。见 `docs/references/rfv-loop/reasoning-depth-contract.md`、`docs/harness_architecture/03-hook-and-switches.md` §4（hook 文案策略）与 `docs/harness_architecture/01-five-layer-model.md` §8（文件映射，`ROUTER_RS_DEPTH_SCORE_MODE`）。
 
 ## 总闸与 nudge
 
@@ -107,4 +107,4 @@ cargo run --manifest-path core/router-rs/Cargo.toml -- schema-drift check --repo
 | `ROUTER_RS_OPERATOR_INJECT=0` | SessionStart advisory 等（见 harness §2.1） |
 | `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` | 关闭 `HARNESS_OPERATOR_NUDGES.json` 文案 |
 
-完整矩阵：`docs/harness_architecture.md` §5、`docs/operator_profiles.md`。
+完整矩阵：`docs/harness_architecture/03-hook-and-switches.md` §5、`docs/operator_profiles.md`。
