@@ -348,19 +348,6 @@
       "first_turn": true
     },
     {
-      "id": "hatch-pet-custom-codex-pet-package",
-      "category": "gate-vs-owner-conflict",
-      "task": "帮我做一个 Codex custom animated pet，输出 pet.json 和 spritesheet.webp",
-      "focus_skill": "hatch-pet",
-      "expected_owner": "hatch-pet",
-      "expected_overlay": null,
-      "forbidden_owners": [
-        "image-generated",
-        "visual-review"
-      ],
-      "first_turn": true
-    },
-    {
       "id": "team-alias-natural-language-falls-back-to-delegation-gate",
       "category": "framework-alias",
       "task": "帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent",

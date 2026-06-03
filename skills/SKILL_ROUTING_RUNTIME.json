@@ -1,4 +1,7 @@
 {
+  "_auto_generated": true,
+  "_source": "SKILL_MANIFEST.json",
+  "_note": "此文件由 MANIFEST 派生，请勿手动编辑。未来将由 router-rs 构建时自动生成。",
   "keys": [
     "slug",
     "layer",
@@ -852,11 +855,8 @@
       "P2",
       "skills/python-env-management/SKILL.md",
       [
-        "antigravity",
-        "claude-code",
         "claude-desktop",
-        "cursor",
-        "opencode"
+        "cursor"
       ],
       "skill",
       null

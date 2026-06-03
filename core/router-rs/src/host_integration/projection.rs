@@ -1067,7 +1067,7 @@ pub(crate) fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Val
         Some(_) => return Err("Claude settings `hooks` must be a JSON object".to_string()),
         None => Map::new(),
     };
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+    for event in ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"] {
         let mut entries = hooks
             .remove(event)
             .and_then(|value| value.as_array().cloned())
@@ -1137,7 +1137,7 @@ pub(crate) fn install_claude_projection(
             "managed": true,
             "path": settings_path.to_string_lossy(),
             "changed": hooks_changed,
-            "events": ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"],
+            "events": ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"],
         },
         "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
     }))
@@ -1258,7 +1258,7 @@ pub(crate) fn remove_claude_settings_hooks(
     };
 
     let mut removed_events = Vec::new();
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+    for event in ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"] {
         let Some(value) = hooks.remove(event) else {
             continue;
         };
@@ -1387,10 +1387,13 @@ pub(crate) fn write_claude_projection_manifest(
             ],
             "settings": {
                 "managed_key_paths": [
+                    "hooks.SessionStart",
                     "hooks.PreToolUse",
                     "hooks.UserPromptSubmit",
                     "hooks.PostToolUse",
-                    "hooks.Stop"
+                    "hooks.Stop",
+                    "hooks.SubagentStart",
+                    "hooks.SubagentStop"
                 ],
             }
         }),
@@ -1402,7 +1405,7 @@ pub(crate) fn claude_settings_hook_status(path: &Path) -> Result<Value, String> 
     let mut managed_events = Vec::new();
     if let Some(Value::Object(root)) = payload.as_ref() {
         if let Some(Value::Object(hooks)) = root.get("hooks") {
-            for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
+            for event in ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"] {
                 if hooks
                     .get(event)
                     .map(value_contains_router_rs_claude_hook)
@@ -1416,7 +1419,7 @@ pub(crate) fn claude_settings_hook_status(path: &Path) -> Result<Value, String> 
     Ok(json!({
         "path": path.to_string_lossy(),
         "exists": path.exists(),
-        "managed": managed_events.len() == 4,
+        "managed": managed_events.len() == 7,
         "managed_events": managed_events,
     }))
 }

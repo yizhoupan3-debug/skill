@@ -18,6 +18,11 @@
 
 - 跨宿主语言规范见 [`AGENTS.md`](AGENTS.md) § Language；Claude 宿主强制继承，不得豁免。
 
+
+## Worktree 隔离
+
+- 跨宿主 worktree 隔离硬约束见 [`AGENTS.md`](AGENTS.md) § Git；本宿主强制继承，未经用户当轮显式批准不得在 worktree 中运行或修改。
+
 ## Claude 宿主特异性门控
 
 ```mermaid

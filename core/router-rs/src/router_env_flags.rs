@@ -1,6 +1,6 @@
 //! `ROUTER_RS_*` 连续性/续跑类开关：保留真正改变行为边界的少量闸门。
 //!
-//! **清单真源**：宿主可见语义与默认值以仓库根 [`docs/harness_architecture.md`](../../docs/harness_architecture.md) **§5 开关面**表格为准；下列为本模块 **提供读取 helper** 或在注释中高频交叉引用的子集。其余变量（连续性 PostTool、Codex checkpoint、Cursor review/subagent cap、CLI/host_integration/runtime_storage/maint 等）在对应源文件中直读 `std::env::var`，仍以 harness §5 表为准。
+//! **清单真源**：宿主可见语义与默认值以仓库根 [`docs/harness_architecture/03-hook-and-switches.md`](../../docs/harness_architecture/03-hook-and-switches.md) **开关面**表格为准；下列为本模块 **提供读取 helper** 或在注释中高频交叉引用的子集。其余变量（连续性 PostTool、Codex checkpoint、Cursor review/subagent cap、CLI/host_integration/runtime_storage/maint 等）在对应源文件中直读 `std::env::var`，仍以 harness 开关面表为准。
 //!
 //! Helper 映射：
 //! - `ROUTER_RS_OPERATOR_INJECT`

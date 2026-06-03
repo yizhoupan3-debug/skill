@@ -2648,14 +2648,14 @@ fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
         Some(&runtime_path),
         Some(&manifest_path),
         None,
-        "用 paper-reviewer 逻辑模式审一下 claim evidence",
-        "paper-reviewer-token-case",
+        "用 paper-workbench 逻辑模式审一下 claim evidence",
+        "paper-workbench-token-case",
         true,
         true,
     )
     .expect("route with manifest fallback");
 
-    assert_eq!(decision.selected_skill, "paper-reviewer");
+    assert_eq!(decision.selected_skill, "paper-workbench");
     assert!(
         decision.score >= 95.0,
         "literal framework alias routing should outweigh paper-workbench heuristics: {:?}",
@@ -6210,6 +6210,57 @@ fn write_text_payload_uses_unique_temp_paths_under_concurrency() {
     assert_eq!(tmp_entries, 0);
 
     fs::remove_file(&output_path).expect("cleanup concurrent write output");
+}
+
+#[test]
+fn write_text_payload_rejects_path_traversal_with_dotdot() {
+    let traversal_path = Path::new("/tmp/legitimate/../../../etc/evil.conf");
+    let result = write_text_payload(traversal_path, "malicious content");
+    assert!(result.is_err(), "write_text_payload must reject '..' path traversal");
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("must not contain '..' traversal segments"),
+        "error should mention traversal rejection, got: {err}"
+    );
+}
+
+#[test]
+fn write_text_payload_rejects_relative_dotdot_traversal() {
+    let traversal_path = Path::new("artifacts/../../../escape.txt");
+    let result = write_text_payload(traversal_path, "escaped");
+    assert!(result.is_err(), "write_text_payload must reject relative '..' traversal");
+}
+
+#[test]
+fn write_text_payload_rejects_symlink_write_target() {
+    let dir = temp_dir_path("symlink-reject");
+    fs::create_dir_all(&dir).expect("create test dir");
+    let real_path = dir.join("real-target.txt");
+    let symlink_path = dir.join("symlink-alias.txt");
+    fs::write(&real_path, "original").expect("write real file");
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&real_path, &symlink_path).expect("create symlink");
+        let result = write_text_payload(&symlink_path, "via symlink");
+        assert!(result.is_err(), "write_text_payload must reject symlink targets");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("must not be a symlink"),
+            "error should mention symlink rejection, got: {err}"
+        );
+    }
+    fs::remove_dir_all(&dir).expect("cleanup symlink test dir");
+}
+
+#[test]
+fn write_text_payload_allows_valid_paths() {
+    let output_path = temp_json_path("valid-path-write");
+    let payload = "safe content\n";
+    let bytes = write_text_payload(&output_path, payload).expect("valid path should succeed");
+    assert_eq!(bytes, payload.len());
+    let persisted = fs::read_to_string(&output_path).expect("read back");
+    assert_eq!(persisted, payload);
+    fs::remove_file(&output_path).expect("cleanup");
 }
 
 #[test]

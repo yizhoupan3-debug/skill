@@ -43,7 +43,9 @@ pub use constants::{
     FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
     FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
 };
-pub use framework_doctor::{run_continuity_audit, run_framework_doctor};
+// DoctorResult is re-exported for external consumers; not referenced within this module.
+#[allow(unused_imports)]
+pub use framework_doctor::{run_continuity_audit, run_framework_doctor, DoctorResult};
 pub use prompt_compression::build_framework_prompt_compression_envelope;
 pub use repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,

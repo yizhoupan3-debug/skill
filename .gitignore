@@ -21,6 +21,7 @@ htmlcov/
 lcov.info
 *.bak_codex_*
 *.bak
+*.test-output.txt
 hooks.json.bak
 configs/codex/sub_accounts.state.json
 .pytest_cache/
@@ -117,6 +118,9 @@ templates/
 
 # Personal MCP config
 .mcp.json
+
+# Personal Claude Desktop MCP config
+.claude/mcp.json
 
 # Personal Claude Code config
 .claude/statusline-command.sh

@@ -480,17 +480,6 @@ fn write_session_artifact_set(
     Ok(())
 }
 
-#[allow(dead_code)]
-fn write_json_artifact_if_changed(
-    path: &Path,
-    payload: &Value,
-    changed_paths: &mut Vec<String>,
-) -> Result<(), String> {
-    if write_json_if_changed(path, payload)? {
-        changed_paths.push(path.display().to_string());
-    }
-    Ok(())
-}
 
 fn session_artifact_payloads(payload: &Value) -> (Vec<String>, Vec<Value>) {
     let next_actions = payload
@@ -736,14 +725,6 @@ fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
-#[allow(dead_code)]
-fn sha256_json(value: &Value) -> String {
-    sha256_hex(
-        serde_json::to_string(value)
-            .unwrap_or_else(|_| "null".to_string())
-            .as_bytes(),
-    )
-}
 
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();

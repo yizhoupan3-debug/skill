@@ -4,18 +4,6 @@
   "pre_framework_alias_rules": [
     {
       "when": {
-        "signal": "is_meta_routing_task"
-      },
-      "action": {
-        "type": "suppress",
-        "reason": "Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."
-      },
-      "record": {
-        "slug": "systematic-debugging"
-      }
-    },
-    {
-      "when": {
         "not": {
           "signal": "should_route_to_gh_fix_ci"
         }
@@ -57,30 +45,6 @@
       },
       "record": {
         "slug": "agent-swarm-orchestration"
-      }
-    },
-    {
-      "when": {
-        "all": [
-          {
-            "signal": "has_scientific_figure_plotting_context"
-          },
-          {
-            "not": {
-              "signal": "has_rendered_visual_evidence_context"
-            }
-          }
-        ]
-      },
-      "action": {
-        "type": "suppress",
-        "reason": "Suppressed: code-generated scientific figure work should route to scientific-figure-plotting before visual or raster-image lanes."
-      },
-      "record": {
-        "slugs": [
-          "visual-review",
-          "image-generated"
-        ]
       }
     },
     {
@@ -137,19 +101,6 @@
     },
     {
       "when": {
-        "signal": "has_systematic_debug_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 60.0,
-        "reason": "Systematic-debugging boost applied: explicit bug, root-cause, failure, or regression-test diagnostic wording detected."
-      },
-      "record": {
-        "slug": "systematic-debugging"
-      }
-    },
-    {
-      "when": {
         "all": [
           {
             "signal": "has_systematic_debug_context"
@@ -184,32 +135,6 @@
     },
     {
       "when": {
-        "signal": "has_skill_creator_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 70.0,
-        "reason": "Skill-creator boost applied: concrete skill authoring or SKILL.md revision wording detected."
-      },
-      "record": {
-        "slug": "skill-creator"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_skill_installer_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 70.0,
-        "reason": "Skill-installer boost applied: skill installation or import wording detected."
-      },
-      "record": {
-        "slug": "skill-installer"
-      }
-    },
-    {
-      "when": {
         "signal": "has_skill_framework_maintenance_context"
       },
       "action": {
@@ -223,46 +148,6 @@
     },
     {
       "when": {
-        "all": [
-          {
-            "signal": "has_prose_naturalization_context"
-          },
-          {
-            "not": {
-              "signal": "has_paper_context"
-            }
-          },
-          {
-            "not": {
-              "signal": "has_paper_prose_edit_context"
-            }
-          }
-        ]
-      },
-      "action": {
-        "type": "boost",
-        "delta": 52.0,
-        "reason": "Documentation-engineering polish boost applied: prose naturalization or sentence-level AI-flavor audit detected."
-      },
-      "record": {
-        "slug": "documentation-engineering"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_copywriting_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 56.0,
-        "reason": "Copywriting boost applied: conversion-oriented UX or marketing copy wording detected."
-      },
-      "record": {
-        "slug": "copywriting"
-      }
-    },
-    {
-      "when": {
         "signal": "has_diagramming_context"
       },
       "action": {
@@ -272,32 +157,6 @@
       },
       "record": {
         "slug": "diagramming"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_beamer_slide_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 86.0,
-        "reason": "Ppt-beamer boost applied: explicit LaTeX Beamer slide-source wording detected."
-      },
-      "record": {
-        "slug": "ppt-beamer"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_source_slide_format_context"
-      },
-      "action": {
-        "type": "boost",
-        "delta": 86.0,
-        "reason": "Source-slide-formats boost applied: explicit Markdown/Slidev/Marp/HTML slide-source wording detected."
-      },
-      "record": {
-        "slug": "source-slide-formats"
       }
     }
   ],
@@ -386,18 +245,6 @@
       },
       "record": {
         "slug": "design-md"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_copywriting_context"
-      },
-      "action": {
-        "type": "suppress",
-        "reason": "Suppressed: UX marketing or microcopy wording belongs to copywriting, not native-app debugging."
-      },
-      "record": {
-        "slug": "native-app-debugging"
       }
     },
     {
@@ -596,18 +443,6 @@
       },
       "record": {
         "slug": "paper-workbench"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_paper_prose_edit_context"
-      },
-      "action": {
-        "type": "suppress",
-        "reason": "Suppressed: paper-writing is inline overlay after workbench prose intake."
-      },
-      "record": {
-        "slug": "paper-writing"
       }
     },
     {
