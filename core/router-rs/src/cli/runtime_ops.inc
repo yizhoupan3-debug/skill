@@ -2178,6 +2178,37 @@ fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, Str
 }
 
 pub(crate) fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
+    // SECURITY: Reject path traversal via `..` components.
+    // Paths originate from untrusted JSON payloads (transport_binding, checkpoint
+    // resume manifest, etc.) and must not escape the intended directory boundary.
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(format!(
+            "write path {} must not contain '..' traversal segments",
+            path.display()
+        ));
+    }
+    // SECURITY: Reject symlink write targets (consistent with runtime_storage.rs
+    // `filesystem_reject_symlink_write_target` policy). A symlink at the target
+    // path or any ancestor could redirect the write outside the expected boundary.
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_symlink() => {
+            return Err(format!(
+                "write path {} must not be a symlink",
+                path.display()
+            ));
+        }
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(format!(
+                "stat write path {} failed: {err}",
+                path.display()
+            ));
+        }
+    }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(

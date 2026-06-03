@@ -148,6 +148,8 @@ pub fn append_transaction_assuming_l1_held(
 
         writeln!(file, "{}", serialized)
             .map_err(|err| format!("failed to write transaction: {err}"))?;
+        file.sync_all()
+            .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
     } else {
         // File does not exist yet — first entry, seq = 0.
         let mut final_tx = tx;
@@ -164,6 +166,8 @@ pub fn append_transaction_assuming_l1_held(
 
         writeln!(file, "{}", serialized)
             .map_err(|err| format!("failed to write transaction: {err}"))?;
+        file.sync_all()
+            .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
     }
 
     // Auto-compact when the file grows past 100 lines.

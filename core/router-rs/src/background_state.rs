@@ -1408,7 +1408,16 @@ fn write_persisted_state(
                     .map(|value| format!("{}.tmp", value.to_string_lossy()))
                     .unwrap_or_else(|| "tmp".to_string()),
             );
-            fs::write(&tmp_path, payload).map_err(|err| err.to_string())?;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&tmp_path)
+                .map_err(|err| err.to_string())?;
+            use std::io::Write;
+            file.write_all(payload.as_bytes())
+                .map_err(|err| err.to_string())?;
+            file.sync_all().map_err(|err| err.to_string())?;
             fs::rename(&tmp_path, state_path).map_err(|err| err.to_string())?;
             Ok(())
         }
