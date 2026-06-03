@@ -91,6 +91,7 @@
 ## Git
 
 - 未经用户明确要求不得创建分支/worktree；只读检查现有状态。
+- **Worktree 隔离（硬约束）**：未经用户当轮显式批准，**禁止**在 git worktree 隔离环境中运行或修改任何文件。包括但不限于：`Agent(isolation="worktree")`、`EnterWorktree`、`git worktree add` 以及任何等效隔离机制。涉及文件写入或执行的操作必须在主工作目录中进行，除非用户在当前会话中明确指定了 worktree。
 
 ## Scientific Coding Standards (科研代码与实验规范)
 
