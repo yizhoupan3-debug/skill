@@ -41,7 +41,7 @@ impl ReviewGateFacts {
 ///
 /// Accepts JSON **boolean**, string spellings：`true`/`1`/`yes`/`y` vs `false`/`0`/`no`/`n`（trim + ASCII 小写），
 /// or JSON **integer** `0` / `1` only as `false` / `true` for host interop (other numeric types / values → `None`).
-/// See `docs/harness_architecture.md` §5.0.
+/// See `docs/harness_architecture/03-hook-and-switches.md` §5.0.
 fn fork_context_value_as_bool(v: &Value) -> Option<bool> {
     match v {
         Value::Bool(b) => Some(*b),

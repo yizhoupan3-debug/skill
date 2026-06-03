@@ -13,7 +13,7 @@
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
 | hook 行为 | `.cursor/hooks.json` + `router-rs` |
 
-**文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/hosts/cursor.md`](docs/hosts/cursor.md)
+**文档地图**：[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/hosts/cursor.md`](docs/hosts/cursor.md)
 
 ## Root
 

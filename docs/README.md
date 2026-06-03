@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture.md
+  - harness_architecture/index.md
   - rust_contracts.md
   - framework_operator_primer.md
   - host_adapter_contract.md

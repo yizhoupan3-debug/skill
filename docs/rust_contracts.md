@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture.md
+  - harness_architecture/index.md
   - host_adapter_contract.md
   - README.md
 redirect_to: rust_contracts/index.md

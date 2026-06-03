@@ -2,7 +2,7 @@
 last_verified: "2026-06-02"
 depends_on:
   - ../host_adapter_contract.md
-  - ../harness_architecture.md
+  - ../harness_architecture/index.md
 ---
 
 # Cursor 宿主操作手册
@@ -83,7 +83,7 @@ depends_on:
   - **Review / execution gate 规则**：**Project**，路径为 `<repo>/.cursor/rules/*.mdc`。
   - **My lifecycle commands / agents**：**Project**，路径为 `<repo>/.cursor/commands/*.md`、`.cursor/agents/deep-reviewer.md`。
   - **Hook state**：**Project**，路径为 `<repo>/.cursor/hook-state/`。
-  - **说明**：上述 project L4 面 **不在** `GENERATED_ARTIFACTS` drift-gate 内（手维护）；`framework host-integration install --to cursor` **不**托管 hooks。完整清单见 [`harness_architecture.md`](../harness_architecture.md) §2.3。
+  - **说明**：上述 project L4 面 **不在** `GENERATED_ARTIFACTS` drift-gate 内（手维护）；`framework host-integration install --to cursor` **不**托管 hooks。完整清单见 [`harness_architecture/02-data-flows.md`](../harness_architecture/02-data-flows.md) §2.3。
 - **环境安装命令**：
   ```bash
   cargo run --release --manifest-path core/router-rs/Cargo.toml -- \

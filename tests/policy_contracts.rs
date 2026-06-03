@@ -750,7 +750,7 @@ fn framework_naming_conventions_has_no_router_rs_default_value_table() {
         );
     }
     assert!(
-        text.contains("harness_architecture.md"),
+        text.contains("harness_architecture/"),
         "framework_naming_conventions must link harness §5 for env defaults"
     );
 }

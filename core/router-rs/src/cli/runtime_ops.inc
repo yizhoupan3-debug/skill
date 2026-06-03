@@ -2178,45 +2178,14 @@ fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, Str
 }
 
 pub(crate) fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
-    // SECURITY: Reject path traversal via `..` components.
-    // Paths originate from untrusted JSON payloads (transport_binding, checkpoint
-    // resume manifest, etc.) and must not escape the intended directory boundary.
-    if path
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        return Err(format!(
-            "write path {} must not contain '..' traversal segments",
+    validate_write_path(path, None)?;
+
+    let parent = path.parent().ok_or_else(|| {
+        format!(
+            "write path {} has no parent directory",
             path.display()
-        ));
-    }
-    // SECURITY: Reject symlink write targets (consistent with runtime_storage.rs
-    // `filesystem_reject_symlink_write_target` policy). A symlink at the target
-    // path or any ancestor could redirect the write outside the expected boundary.
-    match fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_symlink() => {
-            return Err(format!(
-                "write path {} must not be a symlink",
-                path.display()
-            ));
-        }
-        Ok(_) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => {
-            return Err(format!(
-                "stat write path {} failed: {err}",
-                path.display()
-            ));
-        }
-    }
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create parent directory for {} failed: {err}",
-                path.display()
-            )
-        })?;
-    }
+        )
+    })?;
     let file_name = path
         .file_name()
         .and_then(|value| value.to_str())
@@ -2225,20 +2194,60 @@ pub(crate) fn write_text_payload(path: &Path, payload: &str) -> Result<usize, St
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let sequence = WRITE_TEXT_PAYLOAD_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
     let thread_id = format!("{:?}", std::thread::current().id())
         .chars()
         .filter(|character| character.is_ascii_alphanumeric())
         .collect::<String>();
-    let tmp_path = path.with_file_name(format!(
-        "{file_name}.{}.{}.{}.{}.tmp",
-        std::process::id(),
-        thread_id,
-        nonce,
-        sequence
-    ));
-    fs::write(&tmp_path, payload.as_bytes())
-        .map_err(|err| format!("write temp payload {} failed: {err}", tmp_path.display()))?;
+
+    // Atomic write: create temp with create_new (fails if name already exists,
+    // preventing TOCTOU races), fsync, then rename over the target.
+    // Follows the pattern in runtime_storage.rs filesystem_write_text_inner.
+    const MAX_TEMP_ATTEMPTS: u32 = 128;
+    let (tmp_path, mut file) = {
+        let mut chosen: Option<(PathBuf, fs::File)> = None;
+        for attempt in 0u32..MAX_TEMP_ATTEMPTS {
+            let sequence = WRITE_TEXT_PAYLOAD_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let candidate = path.with_file_name(format!(
+                "{file_name}.{pid}.{thread_id}.{nonce}.{sequence}.tmp"
+            ));
+            match fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&candidate)
+            {
+                Ok(file) => {
+                    chosen = Some((candidate, file));
+                    break;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(err) => {
+                    return Err(format!(
+                        "create temp payload {} failed: {err}",
+                        candidate.display()
+                    ));
+                }
+            }
+        }
+        chosen.ok_or_else(|| {
+            "exhausted temp file create attempts (unexpected collision load)".to_string()
+        })?
+    };
+    let write_result = file
+        .write_all(payload.as_bytes())
+        .and_then(|_| file.sync_all())
+        .map_err(|err| {
+            format!(
+                "write/sync temp payload {} failed: {err}",
+                tmp_path.display()
+            )
+        });
+    if let Err(err) = write_result {
+        drop(file);
+        let _ = fs::remove_file(&tmp_path);
+        return Err(err);
+    }
+    drop(file);
     fs::rename(&tmp_path, path).map_err(|err| {
         let _ = fs::remove_file(&tmp_path);
         format!("replace payload {} failed: {err}", path.display())
@@ -5323,16 +5332,55 @@ pub(crate) fn write_trace_metadata(
             std::iter::once(payload.output_path.clone()).chain(payload.mirror_paths.clone());
         for output in outputs {
             let path = PathBuf::from(&output);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).map_err(|err| {
+            validate_write_path(&path, None)?;
+            // write + fsync + rename for durability (consistent with
+            // write_text_payload and runtime_storage.rs patterns).
+            let file_name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("trace-metadata");
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let tmp_path = path.with_file_name(format!(
+                "{}.{}.{}.tmp",
+                file_name,
+                std::process::id(),
+                nonce
+            ));
+            let mut file = fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&tmp_path)
+                .map_err(|err| {
                     format!(
-                        "create trace metadata parent failed for {}: {err}",
-                        parent.display()
+                        "create trace metadata temp file {} failed: {err}",
+                        tmp_path.display()
                     )
                 })?;
+            use std::io::Write;
+            let write_result = file
+                .write_all(serialized.as_bytes())
+                .and_then(|_| file.sync_all())
+                .map_err(|err| {
+                    format!(
+                        "write/sync trace metadata temp {} failed: {err}",
+                        tmp_path.display()
+                    )
+                });
+            if let Err(err) = write_result {
+                drop(file);
+                let _ = fs::remove_file(&tmp_path);
+                return Err(err);
             }
-            fs::write(&path, &serialized).map_err(|err| {
-                format!("write trace metadata failed for {}: {err}", path.display())
+            drop(file);
+            fs::rename(&tmp_path, &path).map_err(|err| {
+                let _ = fs::remove_file(&tmp_path);
+                format!(
+                    "replace trace metadata {} failed: {err}",
+                    path.display()
+                )
             })?;
         }
     }

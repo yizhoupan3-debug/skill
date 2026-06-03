@@ -2,7 +2,7 @@
 last_verified: "2026-06-02"
 depends_on:
   - ../host_adapter_contract.md
-  - ../harness_architecture.md
+  - ../harness_architecture/index.md
 ---
 
 # Claude Code 宿主操作手册

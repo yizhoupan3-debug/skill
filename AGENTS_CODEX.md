@@ -13,7 +13,7 @@
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
 | hook 行为 | `.codex/hooks.json` + `router-rs` |
 
-**文档地图**：[`docs/harness_architecture.md`](docs/harness_architecture.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/hosts/codex-cli.md`](docs/hosts/codex-cli.md)
+**文档地图**：[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/hosts/codex-cli.md`](docs/hosts/codex-cli.md)
 
 ## Codex 构建快照与同步逻辑（策略 A）
 

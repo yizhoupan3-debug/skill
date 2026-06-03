@@ -66,7 +66,7 @@
     "env": "ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS",
     "prune_pending_when_no_open": true,
     "disable_values": ["0", "false", "off", "no"],
-    "details": "docs/harness_architecture.md §5 env table; framework_operator_primer.md REVIEW_GATE"
+    "details": "docs/harness_architecture/03-hook-and-switches.md §5 env table; framework_operator_primer.md REVIEW_GATE"
   },
   "wave2_requires_live_evidence": {
     "excludes": "phase>=2 alone; compact bump requires live subagent evidence; Stop needs phase>=3 and empty pending vecs"

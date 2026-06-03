@@ -549,3 +549,9 @@ pub fn router_rs_rfv_max_rounds_cap() -> u64 {
         .map(|n| n.min(MAX_CAP))
         .unwrap_or(DEFAULT)
 }
+
+/// `ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD=1`：跳过 PreToolUse 的路径保护拦截（开发模式）。
+/// 默认关闭；设为 `1`/`true`/`yes`/`on` 时，PreToolUse 不再 deny 受保护路径的读写。
+pub fn router_rs_skip_pre_tool_use_guard() -> bool {
+    router_rs_env_enabled_default_false("ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD")
+}

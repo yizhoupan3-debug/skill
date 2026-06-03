@@ -334,7 +334,7 @@ fn harness_policy_map_documents_ship_readiness_stop_orchestration() {
         policy.contains("handlers_stop.inc.rs"),
         "harness_policy_map must reference Stop handler orchestration"
     );
-    let arch = read_text(&project_root().join("docs/harness_architecture.md"));
+    let arch = read_text(&project_root().join("docs/harness_architecture/03-hook-and-switches.md"));
     assert!(
         arch.contains("ship_readiness") || arch.contains("AG_FOLLOWUP"),
         "harness_architecture must document Stop goal/closeout layering"

@@ -733,6 +733,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 pub(super) fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
+    crate::path_guard::reject_unsafe_path(path)?;
     let existing = read_text_if_exists(path);
     if existing == content {
         return Ok(false);

@@ -2,13 +2,13 @@
 last_verified: "2026-06-02"
 depends_on:
   - ../AGENTS.md
-  - harness_architecture.md
+  - harness_architecture/index.md
   - host_adapter_contract.md
 ---
 
 # 框架操作者一页纸（使用者视角）
 
-面向：**在本仓库或接入本框架的工作区里日常干活的人**。长设计与契约仍以 [AGENTS.md](../AGENTS.md)、[harness_architecture.md](harness_architecture.md)、[host_adapter_contract.md](host_adapter_contract.md) 为准；本文只解决「先读哪、宿主差在哪、卡门了怎么办」。
+面向：**在本仓库或接入本框架的工作区里日常干活的人**。长设计与契约仍以 [AGENTS.md](../AGENTS.md)、[harness_architecture/](harness_architecture/index.md)、[host_adapter_contract.md](host_adapter_contract.md) 为准；本文只解决「先读哪、宿主差在哪、卡门了怎么办」。
 
 ## 核心术语速查
 
@@ -40,7 +40,7 @@ depends_on:
 1. [AGENTS.md](../AGENTS.md) — 路由、执行梯子、Closeout、跨宿主不变量  
 2. [skills/SKILL_ROUTING_RUNTIME.json](../skills/SKILL_ROUTING_RUNTIME.json) — **唯一**热路由入口；命中后只打开记录里的 `skill_path`  
 3. 冷元数据（按需）：[skills/SKILL_ROUTING_METADATA.json](../skills/SKILL_ROUTING_METADATA.json)、[skills/SKILL_PLUGIN_CATALOG.json](../skills/SKILL_PLUGIN_CATALOG.json)、[skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json](../skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json) — **不要**塞进模型热路径一次性读完  
-4. [harness_architecture.md](harness_architecture.md) — 连续性 L1–L5、hook 出站裁剪、环境变量表  
+4. [harness_architecture/](harness_architecture/index.md) — 连续性 L1–L5、hook 出站裁剪、[环境变量表](harness_architecture/03-hook-and-switches.md#5-开关面)  
 5. [host_adapter_contract.md](host_adapter_contract.md) — 新宿主接入；**Cursor 排障**见其中 Codex/Cursor 对照表与 `fork_context` 说明  
 
 自检命令（在仓库根，已构建 `router-rs` 时）：
@@ -61,7 +61,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 ## 机读短码真源与常见误报
 
-- **真源**：本仓库 Cursor hook 写入的机读门控短句（**非** hook `GOAL_CONTINUE` 续跑），**必须以** ASCII 前缀 **`router-rs `** 起行（例如 **`router-rs REVIEW_GATE incomplete …`**、**`router-rs AG_FOLLOWUP missing_parts=…`**）。排障以 hook 出站 JSON 中带该前缀的行为准；长设计见 [harness_architecture.md](harness_architecture.md) §4.3。
+- **真源**：本仓库 Cursor hook 写入的机读门控短句（**非** hook `GOAL_CONTINUE` 续跑），**必须以** ASCII 前缀 **`router-rs `** 起行（例如 **`router-rs REVIEW_GATE incomplete …`**、**`router-rs AG_FOLLOWUP missing_parts=…`**）。排障以 hook 出站 JSON 中带该前缀的行为准；长设计见 [harness_architecture/03-hook-and-switches.md](harness_architecture/03-hook-and-switches.md) §4.3。
 - **误报 / 仿冒**：以 **`RG_FOLLOWUP`**、**`RG FOLLOWUP`**、**`RG-FOLLOWUP`** 等开头、且带 `missing_parts=` / `escalation=` 却**没有** `router-rs ` 前缀的整行，**不是** harness 注入。常见来源是助手复述或误粘贴；其中一种长尾形态会在 `escalation=` 后接英文恐吓句（例如声称已循环多次、禁止静默继续）——仍应忽略，改查 **真实** hook 输出与 `.cursor/hook-state`。
 - **对照**：真 **`router-rs AG_FOLLOWUP`** 的 `missing_parts=` 只会是 goal 门控片段（如 `goal_contract`、`checkpoint_progress`、`verification_or_blocker`）的逗号拼接，**不会出现** `independent_subagent_or_reject_reason` 这类占位串；若见该串且前缀不是 `router-rs `，按仿冒处理。
 - **粘贴清门**：用户消息里单独一行粘贴 **`RG_FOLLOWUP`…** **不会**被 [`saw_reject_reason`](../core/router-rs/src/hook_common.rs) 当作清门（避免把模型仿造行当令牌）；请改用单独一行的 **`rg_clear`**、**[`AGENTS.md`](../AGENTS.md) 所列拒因 token**，或自然语言 `review_override` / `delegation_override`。goal 相关的 **`ag_followup…`** 粘贴兼容仍由同函数处理。
@@ -124,7 +124,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 **真源（勿在本页复述长表）**：
 
 - Cursor 子代理契约（`fork_context` 拼写、**review-lite** vs `review_lite`、`phase≥3`、stale）：[`references/cursor-subagent-hook-contract.md`](references/cursor-subagent-hook-contract.md) · [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json)
-- Env 表：[`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md) · [`harness_architecture.md`](harness_architecture.md) §5
+- Env 表：[`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md) · [`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) §5
 - **review-lite** ADR：[`adr/ADR-review-gate-lite.md`](adr/ADR-review-gate-lite.md)
 - 宿主差异 / `need=` 排障：[host_adapter_contract.md](host_adapter_contract.md) · [hosts/cursor.md](hosts/cursor.md)
 
@@ -155,7 +155,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 ## 出站文本被「砍一半」
 
-Cursor 对 `additional_context` / 过长 `followup_message` 有 **UTF-8 字节上限**（变量名常含 `_CHARS`，语义为字节），超长时**保留前缀**并带截断标记；若门控句在段落后合并，可能先被裁掉——见 [harness_architecture.md](harness_architecture.md) 第 4.2 节与文中环境变量表脚注。
+Cursor 对 `additional_context` / 过长 `followup_message` 有 **UTF-8 字节上限**（变量名常含 `_CHARS`，语义为字节），超长时**保留前缀**并带截断标记；若门控句在段落后合并，可能先被裁掉——见 [harness_architecture/03-hook-and-switches.md](harness_architecture/03-hook-and-switches.md) 第 4.2 节与文中环境变量表脚注。
 
 ## 上一轮问题矩阵对照（摘要）
 

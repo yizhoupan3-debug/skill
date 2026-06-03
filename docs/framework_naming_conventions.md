@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture.md
+  - harness_architecture/index.md
 ---
 
 # Framework Naming Conventions
@@ -33,7 +33,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Antigravity CLI | `ROUTER_RS_ANTIGRAVITY_CLI_*` | Gemini CLI 继任，hooks 传输 |
 | Antigravity App | - | MCP stdio，无 shell hook env |
 
-**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`harness_architecture.md`](harness_architecture.md) **§5 开关面**（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
+**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) **§5 开关面**（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
 
 场景子集与 closeout 分层见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)；可复制 profile 见 [`operator_profiles.md`](operator_profiles.md)。
 
@@ -87,7 +87,7 @@ skills/
 - **metadata-only** — `--skip-generator-run` or `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1`; default for `framework doctor`
 - **drift-gate** — full regeneration in a temp root; required for `framework maint update-one-shot`
 
-See [`harness_architecture.md`](harness_architecture.md) §2.3.
+See [`harness_architecture/02-data-flows.md`](harness_architecture/02-data-flows.md) §2.3.
 
 **Generator sources:**
 - `core/router-rs/Cargo.toml` — Rust router runtime (`framework skills validate|refresh`, `host-integration install`, `sync-entrypoints`)
