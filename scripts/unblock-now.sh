@@ -14,9 +14,15 @@ count=0
 for f in "$STATE_DIR"/hook_state_*.json; do
   [[ -f "$f" ]] || continue
   python3 -c "
-import json, sys
+import json, sys, os
 p = sys.argv[1]
-d = json.load(open(p))
+try:
+    with open(p, 'r') as f:
+        d = json.load(f)
+except Exception:
+    os.remove(p)
+    print(f'  deleted corrupted: {p}')
+    sys.exit(0)
 changed = False
 if d.get('settings') and not d.get('settings_validated'):
     d['settings_validated'] = True

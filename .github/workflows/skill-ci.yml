@@ -9,6 +9,7 @@ on:
       - 'core/**'
       - 'rust_tools/**'
       - 'tests/**'
+      - '.claude/**'
       - '.cursor/**'
       - '.github/workflows/**'
       - 'AGENTS.md'
@@ -25,6 +26,7 @@ on:
       - 'core/**'
       - 'rust_tools/**'
       - 'tests/**'
+      - '.claude/**'
       - '.cursor/**'
       - '.github/workflows/**'
       - 'AGENTS.md'
@@ -39,6 +41,7 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -60,8 +63,17 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: /tmp/skill-cargo-target
+
       - name: Build router-rs
         run: cargo build --release --manifest-path core/router-rs/Cargo.toml
+
+      - name: cargo deny check
+        run: |
+          cargo install cargo-deny --locked
+          cargo deny check
 
       - name: Build antigravity crates
         run: |
@@ -100,11 +112,14 @@ jobs:
       - name: Run router-rs crate tests
         run: cargo test --manifest-path core/router-rs/Cargo.toml
 
+      - name: Routing regression gate (route_accuracy >= 0.95)
+        run: bash scripts/ci/check-routing-regression.sh
+
       - name: Verify Cursor hooks wiring
         run: cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
 
       - name: Run Codex hook installer tests
-        run: uv run python .cursor/hook-tests/test_install_codex_cli_hooks.py
+        run: uv run python .cursor/hook-tests/test_install_codex_hooks.py
 
       - name: Check generated artifact drift
         run: |
@@ -126,3 +141,30 @@ jobs:
               sys.exit(1)
           print("generated-artifacts-status: ok")
           PY
+
+  cross-platform:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: /tmp/skill-cargo-target
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Run antigravity crate tests
+        run: cargo test --manifest-path core/antigravity/Cargo.toml
+
+      - name: Run router-rs crate tests
+        run: cargo test --manifest-path core/router-rs/Cargo.toml
+
+      - name: Run Rust policy tests
+        run: cargo test --test policy_contracts
+
+      - name: Routing regression gate (route_accuracy >= 0.95)
+        run: bash scripts/ci/check-routing-regression.sh

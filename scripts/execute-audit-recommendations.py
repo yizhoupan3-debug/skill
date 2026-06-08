@@ -11,8 +11,30 @@ import shutil
 import sys
 from pathlib import Path
 
-ROOT = Path("/Users/joe/Developer/skill")
+def get_project_root():
+    import subprocess
+    import os
+    if "CLAUDE_PROJECT_ROOT" in os.environ:
+        return Path(os.environ["CLAUDE_PROJECT_ROOT"])
+    try:
+        root = subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], stderr=subprocess.DEVNULL).decode('utf-8').strip()
+        return Path(root)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return Path(__file__).resolve().parent.parent
+
+ROOT = get_project_root()
 os.chdir(ROOT)
+
+def safe_json_load(path: Path):
+    try:
+        text = path.read_text().strip()
+        if not text:
+            return {}
+        return json.loads(text)
+    except json.JSONDecodeError:
+        print(f"Warning: Failed to parse JSON from {path}, returning empty dict.", file=sys.stderr)
+        return {}
+
 
 # ═══════════════════════════════════════════════════
 # P0-2 + P0-6: Remove 6 expired + 1 to-archive from MANIFEST
@@ -29,7 +51,7 @@ REMOVE_SLUGS = {
 
 def patch_manifest():
     path = ROOT / "skills/SKILL_MANIFEST.json"
-    data = json.loads(path.read_text())
+    data = safe_json_load(path)
     keys = data["keys"]
     slug_idx = keys.index("slug")
 
@@ -154,7 +176,7 @@ def fix_surface_policy():
     if not path.exists():
         print("[P0-5] FRAMEWORK_SURFACE_POLICY.json not found, skipping")
         return
-    data = json.loads(path.read_text())
+    data = safe_json_load(path)
     orig = json.dumps(data)
     if "hot_first_turn_owners" in data:
         before = len(data["hot_first_turn_owners"])
@@ -277,7 +299,7 @@ def remove_empty_configs():
     for rel_path in empty_files:
         path = ROOT / rel_path
         if path.exists():
-            data = json.loads(path.read_text())
+            data = safe_json_load(path)
             # Check if it's effectively empty
             values = [v for k, v in data.items() if k not in ("schema_version", "source_of_truth", "generated_at")]
             if all(not v or v == {} for v in values):
@@ -376,7 +398,7 @@ def mark_superseded():
 # ═══════════════════════════════════════════════════
 def fix_trigger_governance():
     path = ROOT / "skills/SKILL_MANIFEST.json"
-    data = json.loads(path.read_text())
+    data = safe_json_load(path)
     keys = data["keys"]
     slug_idx = keys.index("slug")
     trigger_idx = keys.index("trigger_hints")

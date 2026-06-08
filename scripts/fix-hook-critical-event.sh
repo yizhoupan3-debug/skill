@@ -23,26 +23,24 @@ p = pathlib.Path(sys.argv[1])
 lines = p.read_text().splitlines(keepends=True)
 
 # 要删除的行特征
-kill_patterns = [
-    'if critical_event "$HOOK_EVENT"; then',
-    '"decision":"block"',
-    '    exit 1',
-    '  fi',
-]
-
 out = []
-skip_fi = False  # 匹配到 if critical_event 后，跳过直到对应的 fi
+skip_depth = 0
 for line in lines:
     stripped = line.strip()
-    if 'if critical_event "$HOOK_EVENT"' in stripped:
-        skip_fi = True
+    
+    if skip_depth == 0:
+        if stripped.startswith('if ') and 'critical_event "$HOOK_EVENT"' in stripped:
+            skip_depth = 1
+            continue
+        out.append(line)
+    else:
+        # We are inside the if-block to remove
+        if stripped.startswith('if '):
+            skip_depth += 1
+        elif stripped == 'fi' or stripped.startswith('fi '):
+            skip_depth -= 1
         continue
-    if skip_fi and stripped == 'fi':
-        skip_fi = False
-        continue
-    if skip_fi:
-        continue
-    out.append(line)
+
 
 p.write_text(''.join(out))
 print(f"✓ removed critical_event block ({len(lines) - len(out)} lines)")

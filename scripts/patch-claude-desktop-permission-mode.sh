@@ -12,9 +12,18 @@ if [[ -z "${CLAUDE_DESKTOP_ACCOUNT_ID:-}" ]]; then
   exit 1
 fi
 ACCOUNT_ID="${CLAUDE_DESKTOP_ACCOUNT_ID}"
-CONFIG_3P="${CLAUDE_3P_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude-3p/claude_desktop_config.json}"
-LEVELDB_3P="$HOME/Library/Application Support/Claude-3p/Local Storage/leveldb"
-LEVELDB_STD="$HOME/Library/Application Support/Claude/Local Storage/leveldb"
+if [[ "$(uname)" == "Darwin" ]]; then
+  APPDATA_DIR="$HOME/Library/Application Support"
+elif [[ -n "${APPDATA:-}" ]]; then
+  APPDATA_DIR="$APPDATA"
+else
+  APPDATA_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+fi
+
+CONFIG_3P="${CLAUDE_3P_DESKTOP_CONFIG:-$APPDATA_DIR/Claude-3p/claude_desktop_config.json}"
+LEVELDB_3P="$APPDATA_DIR/Claude-3p/Local Storage/leveldb"
+LEVELDB_STD="$APPDATA_DIR/Claude/Local Storage/leveldb"
+
 COWORK_FILES="${COWORK_USER_FILES:-$HOME/Claude}"
 
 usage() {
@@ -123,13 +132,14 @@ patch_leveldb() {
     echo "warn: node not found; skipping LevelDB patch for $db_path" >&2
     return 0
   fi
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' RETURN
+  local tmpdir="/tmp/claude-desktop-leveldb-patch-env"
+  mkdir -p "$tmpdir"
   (
     cd "$tmpdir"
-    npm init -y >/dev/null 2>&1
-    npm install "classic-level@1.2.0" --ignore-scripts --no-audit --no-fund >/dev/null 2>&1
+    if [[ ! -d "node_modules/classic-level" ]]; then
+      npm init -y >/dev/null 2>&1
+      npm install "classic-level@1.2.0" --ignore-scripts --no-audit --no-fund >/dev/null 2>&1
+    fi
     local cfg_for_db="$CONFIG_3P"
     [[ -f "$cfg_for_db" ]] || cfg_for_db=""
     node - "$db_path" "$MODE" "$cfg_for_db" <<'NODE'
@@ -242,7 +252,7 @@ NODE
 echo "==> Desktop config (3P)"
 patch_desktop_config "$CONFIG_3P"
 
-STD_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+STD_CONFIG="$APPDATA_DIR/Claude/claude_desktop_config.json"
 if [[ -f "$STD_CONFIG" ]]; then
   echo "==> Desktop config (standard Claude/)"
   patch_desktop_config "$STD_CONFIG"
