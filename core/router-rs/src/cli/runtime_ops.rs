@@ -1,78 +1,64 @@
-//! Live execute、沙箱/后台控制面、trace 传输 helpers、stdio 分发。
+//! Runtime I/O 薄壳：`write_*` 载荷与 `framework_runtime/` 再导出。
 
-use chrono::Utc;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
-use hex;
-use std::collections::HashSet;
+use serde_json::Value;
 use std::fs;
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
-use std::sync::OnceLock;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::args::*;
-use super::common::{
-    append_text_with_process_lock, manifest_fallback_path, route_task_with_manifest_fallback,
-    validate_write_path,
-};
-
-use crate::autopilot_goal;
-use crate::background_state::handle_background_state_operation;
-use crate::closeout_enforcement::{
-    closeout_enforcement_contract, evaluate_closeout_record_value,
-    evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
-};
-use crate::eval_route::{eval_route_contract, run_eval_route};
-use crate::execution_contract::{
-    build_execution_contract_bundle, build_execution_kernel_contracts_by_mode,
-    build_execution_kernel_metadata_contract, build_steady_state_execution_kernel_metadata,
-    decode_execution_response_value, normalize_execution_kernel_contract_value,
-    normalize_execution_kernel_metadata_contract_value,
-    validate_execution_kernel_steady_state_metadata_value, EXECUTION_AUTHORITY,
-    EXECUTION_MODEL_ID_SOURCE, EXECUTION_RESPONSE_SHAPE_DRY_RUN,
-    EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
-};
-use crate::framework_profile::{
-    build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
-    load_framework_profile,
-};
-use crate::framework_runtime::{
-    self, build_framework_alias_envelope, build_framework_contract_summary_envelope,
-    build_framework_prompt_compression_envelope, build_framework_runtime_snapshot_envelope,
-    framework_hook_evidence_append, resolve_repo_root_arg, write_framework_session_artifacts,
-    FrameworkAliasBuildOptions,
-};
-use crate::hook_policy::evaluate_hook_policy_value;
-use crate::rfv_loop;
-use crate::route::{
-    build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
-    build_search_results_payload, filter_records_for_host, load_inline_records,
-    load_records_cached_for_stdio, load_records_from_manifest, route_task, search_skills,
-    RouteDecision, RouteDecisionSnapshotPayload, RouteSnapshotEnvelopePayload,
-    RouteSnapshotRequestPayload, SkillRecord, ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
-};
-use crate::runtime_envelope_ids::*;
-use crate::runtime_storage::{
-    build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
-    runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
-    runtime_storage_operation, storage_artifact_exists, storage_read_text, ResolvedStorageBackend,
-    RuntimeStorageRequestPayload,
-};
-use crate::session_supervisor::handle_session_supervisor_operation;
-use crate::stdio_transport::runtime_concurrency_defaults_payload;
-use crate::stdio_transport::{StdioJsonRequestPayload, StdioJsonResponsePayload};
-use crate::task_command;
-use crate::trace_runtime::{
-    compact_trace_stream, record_trace_event, TraceCompactRequestPayload,
-    TraceRecordEventRequestPayload,
+use super::common::validate_write_path;
+use crate::runtime_envelope_ids::{
+    CHECKPOINT_MANIFEST_WRITE_AUTHORITY, CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION,
+    TRANSPORT_BINDING_WRITE_AUTHORITY, TRANSPORT_BINDING_WRITE_SCHEMA_VERSION,
+    WRITE_TEXT_PAYLOAD_TEMP_COUNTER,
 };
 
+#[cfg(test)]
+pub(crate) use crate::framework_runtime::{
+    attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
+    inspect_trace_stream, replay_trace_stream, sha256_hex, subscribe_attached_runtime_events,
+    write_trace_compaction_delta, write_trace_metadata,
+};
+pub(crate) use crate::framework_runtime::json_payload::{
+    optional_non_empty_string, required_non_empty_string,
+};
+use crate::framework_runtime::trace_transport::{
+    build_checkpoint_resume_manifest, build_trace_transport_payload,
+};
 include!("runtime_ops.inc");
+
+pub(crate) use crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload;
+#[cfg(test)]
+pub(crate) use crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request;
+#[cfg(test)]
+pub(crate) use crate::framework_runtime::stdio_op_registry::{
+    classify_stdio_op, is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op,
+    is_trace_stdio_op, StdioOpDomain,
+};
+
+#[cfg(test)]
+pub(crate) use crate::framework_runtime::live_execute::{
+    build_live_execute_prompt, build_live_execute_response, execute_request,
+    extract_chat_completion_content, live_execute_http_client,
+    normalize_chat_completions_endpoint, perform_live_execute, perform_live_execute_with_sender,
+    validate_live_execute_aggregator_base_url, LiveExecuteResult,
+    DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
+};
+#[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use crate::framework_runtime::live_execute::payload_text_signals_deep_research;
+
+pub(crate) use crate::framework_runtime::{
+    build_runtime_control_plane_payload, build_runtime_integrator_payload,
+    build_runtime_metric_record, build_runtime_observability_exporter_descriptor,
+    build_runtime_observability_metric_catalog_payload, runtime_observability_dashboard_schema,
+};
+#[cfg(test)]
+pub(crate) use crate::framework_runtime::{
+    build_background_control_response, build_runtime_observability_health_snapshot,
+    build_sandbox_control_response,
+};
 
 // Merged from `cli_modes.rs` (must follow `include!` so builder fns exist; avoids import cycle).
 struct RuntimeOutputMode {

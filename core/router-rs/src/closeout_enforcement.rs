@@ -85,6 +85,14 @@ pub struct CloseoutViolation {
     pub detail: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PredictionVerificationReport {
+    pub matched: bool,
+    pub rule: String,
+    pub detail: String,
+    pub severity: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CloseoutEnforcementResponse {
     pub schema_version: String,
@@ -95,6 +103,8 @@ pub struct CloseoutEnforcementResponse {
     pub violations: Vec<CloseoutViolation>,
     pub missing_evidence: Vec<String>,
     pub verification_status: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub prediction_verification: Vec<PredictionVerificationReport>,
 }
 
 pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
@@ -116,6 +126,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
             violations: Vec::new(),
             missing_evidence: Vec::new(),
             verification_status: String::new(),
+            prediction_verification: Vec::new(),
         };
         append_closeout_violations(&mut response, raw_shape_violations);
         return serde_json::to_value(response)
@@ -142,6 +153,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
                 violations: Vec::new(),
                 missing_evidence: Vec::new(),
                 verification_status: String::new(),
+                prediction_verification: Vec::new(),
             };
             append_closeout_violations(&mut response, raw_shape_violations);
             response.violations.push(CloseoutViolation {
@@ -359,6 +371,7 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         violations,
         missing_evidence: missing,
         verification_status: status_lower,
+        prediction_verification: Vec::new(),
     }
 }
 
@@ -385,7 +398,15 @@ pub fn closeout_enforcement_contract() -> Value {
             "claimed_done_with_failed_verification",
             "claimed_passed_without_evidence",
             "claimed_passed_without_evidence_index_rows",
+            "prediction_verification_status_mismatch",
+            "prediction_hypothesis_not_reflected",
             "parse_error"
+        ],
+        "prediction_verification_rules": [
+            "prediction_verification_status_match",
+            "prediction_verification_status_mismatch",
+            "prediction_hypothesis_reflected",
+            "prediction_hypothesis_not_reflected"
         ]
     })
 }
@@ -405,6 +426,8 @@ pub struct CloseoutEvidenceContext {
     /// Whether the task's `EVIDENCE_INDEX.json` has at least one row with
     /// `success==true` or `exit_code==0`.
     pub has_successful_verification: bool,
+    /// Optional `GOAL_STATE.extra.prediction` for EV-6 dry-run verification.
+    pub goal_prediction: Option<core_state::goal_prediction::GoalStatePrediction>,
 }
 
 /// Like [`evaluate_closeout_record`] but also runs R8 against an external evidence rollup.
@@ -453,7 +476,51 @@ pub fn evaluate_closeout_record_with_context(
             .push("evidence_index_successful_row".to_string());
         response.closeout_allowed = false;
     }
+    if let Some(prediction) = ctx.goal_prediction.as_ref() {
+        append_prediction_verification(
+            &mut response,
+            prediction,
+            &record.verification_status,
+            &record.summary,
+        );
+    }
     response
+}
+
+fn append_prediction_verification(
+    response: &mut CloseoutEnforcementResponse,
+    prediction: &core_state::goal_prediction::GoalStatePrediction,
+    verification_status: &str,
+    summary: &str,
+) {
+    let checks = core_state::goal_prediction::verify_prediction_against_closeout(
+        prediction,
+        verification_status,
+        summary,
+    );
+    for check in &checks {
+        if check.severity == "warn" {
+            response.violations.push(CloseoutViolation {
+                rule: check.rule.clone(),
+                severity: check.severity.clone(),
+                detail: check.detail.clone(),
+            });
+        }
+        response.prediction_verification.push(PredictionVerificationReport {
+            matched: check.matched,
+            rule: check.rule.clone(),
+            detail: check.detail.clone(),
+            severity: check.severity.clone(),
+        });
+    }
+    if !checks.is_empty() {
+        crate::telemetry_emit::emit_prediction_outcome(
+            &response.task_id,
+            prediction,
+            verification_status,
+            &checks,
+        );
+    }
 }
 
 /// Convenience JSON wrapper mirroring [`evaluate_closeout_record_value`] but with context.
@@ -478,6 +545,7 @@ pub fn evaluate_closeout_record_value_with_context(
             violations: Vec::new(),
             missing_evidence: Vec::new(),
             verification_status: String::new(),
+            prediction_verification: Vec::new(),
         };
         append_closeout_violations(&mut response, raw_shape_violations);
         return serde_json::to_value(response)
@@ -504,6 +572,7 @@ pub fn evaluate_closeout_record_value_with_context(
                 violations: Vec::new(),
                 missing_evidence: Vec::new(),
                 verification_status: String::new(),
+                prediction_verification: Vec::new(),
             };
             append_closeout_violations(&mut response, raw_shape_violations);
             response.violations.push(CloseoutViolation {
@@ -795,6 +864,7 @@ mod tests {
             task_id: Some("expected-task".to_string()),
             evidence_rows_non_empty: true,
             has_successful_verification: true,
+            ..Default::default()
         };
         let response = evaluate_closeout_record_value_with_context(
             json!({
@@ -876,6 +946,7 @@ mod tests {
             task_id: Some(record.task_id.clone()),
             evidence_rows_non_empty: false,
             has_successful_verification: false,
+            ..Default::default()
         };
         let resp = evaluate_closeout_record_with_context(&record, &ctx);
         assert!(!resp.closeout_allowed, "violations: {:?}", resp.violations);
@@ -883,6 +954,38 @@ mod tests {
             &resp,
             "claimed_passed_without_evidence_index_rows"
         ));
+    }
+
+    #[test]
+    fn prediction_mismatch_is_warn_not_block() {
+        use core_state::goal_prediction::GoalStatePrediction;
+        let mut record = record_with("已完成 router-rs green", "failed");
+        record.commands_run.push(CloseoutCommandRecord {
+            command: "cargo test -p router-rs".to_string(),
+            exit_code: 1,
+            ..Default::default()
+        });
+        record
+            .risks
+            .push("tests failed unexpectedly".to_string());
+        let ctx = CloseoutEvidenceContext {
+            goal_prediction: Some(GoalStatePrediction {
+                expected_verification_status: Some("passed".to_string()),
+                hypothesis: Some("router-rs green".to_string()),
+            }),
+            ..Default::default()
+        };
+        let resp = evaluate_closeout_record_with_context(&record, &ctx);
+        assert!(
+            resp.closeout_allowed,
+            "prediction dry-run must not block closeout: {:?}",
+            resp.violations
+        );
+        assert!(has_rule(&resp, "prediction_verification_status_mismatch"));
+        assert!(resp
+            .prediction_verification
+            .iter()
+            .any(|p| p.rule == "prediction_hypothesis_reflected"));
     }
 
     /// R8 silent when EVIDENCE rollup has at least one successful row.
@@ -896,6 +999,7 @@ mod tests {
             task_id: Some(record.task_id.clone()),
             evidence_rows_non_empty: true,
             has_successful_verification: true,
+            ..Default::default()
         };
         let resp = evaluate_closeout_record_with_context(&record, &ctx);
         assert!(resp.closeout_allowed, "violations: {:?}", resp.violations);

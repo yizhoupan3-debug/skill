@@ -374,15 +374,6 @@ pub(crate) fn host_account_home_from_roots(roots: &ResolvedProjectionRoots) -> P
     roots.account_home_root.clone()
 }
 
-pub(crate) fn ensure_claude_desktop_mcp_binary(roots: &ResolvedProjectionRoots) -> Result<PathBuf, String> {
-    let path =
-        crate::router_self::install_router_rs_for_desktop_mcp_at(&host_account_home_from_roots(
-            roots,
-        ))?;
-    crate::router_self::validate_router_rs_binary_runnable(&path)?;
-    Ok(path)
-}
-
 pub(crate) fn resolve_stable_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     match resolve_mcp_router_rs_command(framework_root) {
         McpRouterRsCommand::OnPath => which::which("router-rs").ok(),
@@ -405,6 +396,99 @@ pub(crate) fn router_rs_cargo_bootstrap_args(framework_root: &Path, host_args: &
         args.push(arg.to_string());
     }
     args
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum McpCodegraphCommand {
+    OnPath,
+    Absolute(PathBuf),
+    CargoBootstrap,
+}
+
+pub(crate) fn workspace_mcp_codegraph_release_binary(framework_root: &Path) -> Option<PathBuf> {
+    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
+        let candidate = PathBuf::from(td).join("release/mcp-codegraph");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    let manifest = framework_root.join("Cargo.toml");
+    if !manifest.is_file() {
+        return None;
+    }
+    let output = std::process::Command::new("cargo")
+        .current_dir(framework_root)
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(&manifest)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let td = meta.get("target_directory")?.as_str()?;
+    let candidate = PathBuf::from(td).join("release/mcp-codegraph");
+    if candidate.is_file() {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn resolve_mcp_codegraph_command(framework_root: &Path) -> McpCodegraphCommand {
+    if let Ok(raw) = std::env::var("CODEGRAPH_MCP_BIN") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty()
+            && Path::new(trimmed).is_file()
+            && !is_ephemeral_executable_path(trimmed)
+        {
+            return McpCodegraphCommand::Absolute(PathBuf::from(trimmed));
+        }
+    }
+    if let Ok(exe) = which::which("mcp-codegraph") {
+        let path_text = exe.to_string_lossy();
+        if !is_ephemeral_executable_path(&path_text) {
+            return McpCodegraphCommand::OnPath;
+        }
+    }
+    if let Some(path) = workspace_mcp_codegraph_release_binary(framework_root) {
+        return McpCodegraphCommand::Absolute(path);
+    }
+    McpCodegraphCommand::CargoBootstrap
+}
+
+pub(crate) fn mcp_codegraph_command_value(command: &McpCodegraphCommand) -> Value {
+    match command {
+        McpCodegraphCommand::OnPath => json!("mcp-codegraph"),
+        McpCodegraphCommand::Absolute(path) => json!(path.to_string_lossy()),
+        McpCodegraphCommand::CargoBootstrap => json!("cargo"),
+    }
+}
+
+pub(crate) fn codegraph_mcp_cargo_bootstrap_args(
+    framework_root: &Path,
+    repo_root: &str,
+) -> Vec<String> {
+    vec![
+        "run".to_string(),
+        "--release".to_string(),
+        "--quiet".to_string(),
+        "-p".to_string(),
+        "codegraph-rs".to_string(),
+        "--bin".to_string(),
+        "mcp-codegraph".to_string(),
+        "--manifest-path".to_string(),
+        framework_root.join("Cargo.toml").to_string_lossy().into_owned(),
+        "--".to_string(),
+        "--repo-root".to_string(),
+        repo_root.to_string(),
+    ]
 }
 
 pub(crate) fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> Result<(), String> {

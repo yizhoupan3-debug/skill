@@ -1,5 +1,7 @@
 mod common;
 
+use std::fs;
+
 use common::{project_root, read_text};
 use regex::Regex;
 use serde_json::Value;
@@ -320,7 +322,21 @@ fn runtime_compaction_contract() -> String {
 }
 
 fn rust_contracts_doc() -> String {
-    read_text(&project_root().join("docs/rust_contracts.md"))
+    let redirect = project_root().join("docs/rust_contracts.md");
+    let dir = project_root().join("docs/rust_contracts");
+    let mut parts = vec![read_text(&redirect)];
+    if dir.is_dir() {
+        let mut files: Vec<_> = fs::read_dir(&dir)
+            .expect("read rust_contracts dir")
+            .filter_map(|ent| ent.ok().map(|e| e.path()))
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("md"))
+            .collect();
+        files.sort();
+        for path in files {
+            parts.push(read_text(&path));
+        }
+    }
+    parts.join("\n")
 }
 
 #[test]

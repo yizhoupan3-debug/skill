@@ -19,7 +19,14 @@ trigger_hints:
 metadata:
   version: "0.1.0"
   platforms: [supported]
-  tags: [my-lifecycle, plan, waves]
+  tags: [my-lifecycle, plan, waves, codegraph]
+allowed_tools:
+  - mcp__mcp-codegraph__codegraph_search
+  - mcp__mcp-codegraph__codegraph_callers
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_impact
+  - mcp__mcp-codegraph__codegraph_node
+  - mcp__mcp-codegraph__codegraph_status
 ---
 
 # planx
@@ -106,6 +113,19 @@ Topology fields (schema id **`my-wave-state-v1`**; field manifest [`configs/fram
 | `parallel_group` | Lanes in same wave that may run together |
 | `execution_mode` | `parallel` \| `serial` |
 | `lanes[].scope_paths` | Disjoint write scopes per lane |
+
+## CodeGraph MCP（可选 · CG-5）
+
+宿主已注册独立 `mcp-codegraph` 进程（`configs/framework/RUNTIME_REGISTRY.json` → `managed_mcp_servers.mcp-codegraph`）。划 wave / 分配 `lanes[].scope_paths` 前，**语义定位 owner 与影响面**优先走 MCP，再 fallback 到 `Grep` / `SemanticSearch`。
+
+| 阶段 | 何时用 | 首选工具 |
+|------|--------|----------|
+| 需求→计划 | 从符号/模块反查 owner、入口 | `codegraph_search` |
+| wave 切分 | 确认 blast radius、串行依赖 | `codegraph_impact` |
+| lane 范围 | 核对调用链边界（只读） | `codegraph_callers` / `codegraph_callees` |
+| 计划收口 | 索引是否可用（非阻塞） | `codegraph_status` |
+
+**Fallback**：MCP 未安装或 `codegraph_status` 报错时，用只读 `Grep` / `Read`；勿阻塞 ROADMAP / WAVE_STATE 落盘。
 
 ## Optional review
 

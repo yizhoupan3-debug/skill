@@ -1,11 +1,12 @@
 //! Normalize `SKILL.md` `metadata.platforms` tokens to the closed host ids in
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`
-//! (`codex-cli`, `codex-app`, `cursor`, `claude-code`, `claude-desktop`,
-//! `antigravity-cli`, `antigravity-app`, `antigravity`).
+//! (`codex`, `claude-code`, `antigravity`, `cursor`, `opencode`).
 //!
 //! Legacy tokens:
-//! - `codex` → both `codex-cli` and `codex-app`
-//! - `claude` → `claude-code` AND `claude-desktop`
+//! - `claude` → `claude-code`
+//! - `antigravity-app` → `antigravity` (deprecated alias)
+//! - `codex-cli` → `codex` (deprecated alias)
+//! - `codex-app` → retired (rejected)
 //! - `supported` / `all-hosts` → every supported host id
 
 use std::collections::BTreeSet;
@@ -32,25 +33,28 @@ pub fn normalize_skill_host_platforms(
                 }
             }
             "codex" => {
-                out.insert("codex-cli".to_string());
-                out.insert("codex-app".to_string());
+                out.insert("codex".to_string());
+            }
+            "codex-cli" => {
+                out.insert("codex".to_string());
+            }
+            "codex-app" => {
+                return Err(format!(
+                    "retired host platform token `{t}` (closed-set ids: codex, cursor, claude-code, antigravity, opencode)"
+                ));
             }
             "claude" => {
-                // "claude" maps to both claude-code and claude-desktop
                 out.insert("claude-code".to_string());
-                out.insert("claude-desktop".to_string());
             }
-            "codex-cli" | "codex-app" | "cursor" | "claude-code" | "claude-desktop"
-            | "antigravity-cli" | "antigravity-app" => {
+            "cursor" | "claude-code" | "antigravity" | "opencode" => {
                 out.insert(t);
             }
-            "antigravity" => {
-                out.insert("antigravity-app".to_string());
+            "antigravity-app" => {
                 out.insert("antigravity".to_string());
             }
             other => {
                 return Err(format!(
-                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, codex-app, cursor, claude, claude-code, claude-desktop, antigravity-cli, antigravity-app, antigravity)"
+                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, claude-code, antigravity, antigravity-app, opencode)"
                 ));
             }
         }

@@ -29,7 +29,14 @@ trigger_hints:
 metadata:
   version: "2.0.0"
   platforms: [supported]
-  tags: [code-review, security, correctness, delegation, adversarial-review]
+  tags: [code-review, security, correctness, delegation, adversarial-review, codegraph]
+allowed_tools:
+  - mcp__mcp-codegraph__codegraph_search
+  - mcp__mcp-codegraph__codegraph_callers
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_impact
+  - mcp__mcp-codegraph__codegraph_node
+  - mcp__mcp-codegraph__codegraph_status
 framework_roles:
   - detector
   - planner
@@ -79,7 +86,7 @@ Then: preamble (Scope / Lenses / Omitted), verdict, findings grouped by lens, te
 
 ### Spawn-first pairing
 
-For broad/deep/PR-level review, spawn **at least one** parallel read-only reviewer (`fork_context=false`, lane in `deep_gate_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts, prefer **>=2** lanes split by disjoint lens bundles, before main-thread compact synthesis.
+For broad/deep/PR-level review, spawn **at least one** parallel read-only reviewer (`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts, prefer **>=2** lanes split by disjoint lens bundles, before main-thread compact synthesis.
 
 **Narrow scope** (single-file, `small_task`, or explicit「不用子代理」): no multi-lane requirement; hosts skip arming `review_required`.
 
@@ -87,13 +94,35 @@ For broad/deep/PR-level review, spawn **at least one** parallel read-only review
 
 ### REVIEW_GATE clearance
 
-**Cursor**: countable reviewer evidence per wave-2 (`start_count>=1`, multiset drained, no compact-alone forgery). `lifecycle_profile: my-light` does **not** hard-block Stop.
+**单一清门规则（Claude canonical · 2026-06）**
 
-**Claude Code**: `PostToolUse` observes `claude_reviewer_lanes` (registry `review_gate.claude_reviewer_lanes`) with `fork_context` parsed as logical `false`. Stop hard-blocks before `independent_reviewer_seen`. `my-light` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` disables hard-block.
+| 条件 | 行为 |
+|------|------|
+| Armed | review 信号且非 My 执行区入口，且未 narrow-skip / override |
+| 清门 | `independent_reviewer_seen`（registry `reviewer_lanes` + explicit `fork_context=false` via PostTool/subagent）**或** `review_override` |
+| Stop 出站 | **advisory-only**——hook 可 nudge，**不**硬拦 Stop；`my-light` / `ROUTER_RS_REVIEW_GATE_DISABLE` suppress nudge 链 |
+| 非清门条件 | phase≥3、compact-only bump、Cursor multiset unsettled、Codex `subagent_start_count` — **遥测/提示 only** |
 
-**Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.deep_gate_lanes`. `explore`, `ci-investigator`, `cursor-guide`, and custom lane names **do not count** on Cursor — even with `fork_context=false`.
+**Hook hosts**：Claude Code 为参考实现；Cursor/Codex 仅 transport 差异（nudge 文案前缀、`rg_clear`/`reject_reason` 粘贴面、multiset/`subagent_start_count` 遥测）。实现：`core-policy::review_gate_satisfied`；见 [`docs/host_adapter_contract.md`](../../docs/host_adapter_contract.md) §0.1。
+
+**MCP hosts（Antigravity / OpenCode）**：review 缺口经 MCP **advisory**（`ADVISORY`）；`closeout_gate` / `goal_state_manage complete` 可在证据未满足时 **hard-block**（与 review 分层）。见 [`host_adapter_contract.md`](../../docs/host_adapter_contract.md) §0.1、`ROUTER_RS_CLOSEOUT_ENFORCEMENT`。
+
+**Host countable evidence**: subagent lane（normalize 后）须在 `RUNTIME_REGISTRY.json` → `review_gate.reviewer_lanes`。`explore`、`ci-investigator`、`cursor-guide` 与自定义 lane **不计**——即使 `fork_context=false`。
 
 Lane outputs must cite **locations** (paths + anchors / symbols).
+
+## CodeGraph MCP（可选 · CG-5）
+
+宿主已注册独立 `mcp-codegraph` 进程（`configs/framework/RUNTIME_REGISTRY.json` → `managed_mcp_servers.mcp-codegraph`）。**只读**核对传播范围与调用链，再写 findings；review-only  posture 不变。
+
+| 审稿场景 | 何时用 | 首选工具 |
+|----------|--------|----------|
+| 变更集 / PR | findings 前 blast radius | `codegraph_impact` |
+| 单点缺陷 | 符号定义与引用锚点 | `codegraph_node` |
+| 安全 lens | 可达调用链、横向传播 | `codegraph_callers` / `codegraph_callees` |
+| 广度审稿 | 模块入口与 owner | `codegraph_search` |
+
+**Fallback**：MCP 不可用时 reviewer lane 用 `Grep` / `Read`；在首条 finding 或 `Caveat:` 注明索引未校验。**禁止**因 codegraph 失败转入 implement / 改代码。
 
 ## External / network research lane
 

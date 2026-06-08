@@ -1,7 +1,7 @@
 ---
 name: agent-swarm-orchestration
 description: |
-  Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.
+  Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration.
   Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundaries, or supervisor logic. 适用于“多 agent 协作”“agent 编排”“swarm”“orchestrator”“router”“planner-coder-reviewer”“共享记忆”这类请求.
 risk: medium
 source: community-adapted
@@ -61,7 +61,7 @@ metadata:
 - review / verification 可以和主线程实现并行，且不会阻塞下一步
 - 深度 / 全面 / 全仓 / 跨模块 review 明显包含多个独立审查维度时，先进入 subagent admission；适合则开启 reviewer sidecars
 - 写入范围完全 disjoint，worker 只产出 lane-local delta
-- 用户要构建 multi-agent system、agent team、swarm、orchestration layer
+- 用户要构建 multi-agent system、swarm、workflow orchestration layer
 - 用户要做 planner / coder / reviewer / tester 这类协作链
 - 用户要做任务路由、agent handoff、shared memory、consensus、quality gate
 - 用户要做 research swarm、support router、自动审查流水线
@@ -92,14 +92,14 @@ metadata:
 
 ## Primary operating principle
 
-This gate is about **admitting delegation when bounded parallelism beats local execution**, not automatically turning the current session into a full team.
+This gate is about **admitting delegation when bounded parallelism beats local execution**, not automatically escalating to full workflow orchestration.
 
 1. spawn bounded sidecars by default when read-heavy, review, verification, or independent implementation lanes are clear
 2. prefer read-only sidecars before write-capable workers
 3. allow write delegation only for disjoint, lane-local scopes
 4. for broad reviews, split independent reviewer lanes when the lane boundaries are clear
 5. fall back to local-supervisor queue when spawning is blocked or not worth it
-6. **code / diff 「深度审稿」宿主可见收口**：并入主线程时**默认用 findings 优先级呈现**（与 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) compact 一致）：全局 severity 排序、少叠床架屋；按需再引用各 sidecar 的 lane 标签，不要为了「看起来专业」复述多段 Lens 前言。
+6. **code / diff 「深度审稿」宿主可见收口**：并入主线程时**默认用 findings 优先级呈现**（与 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) compact 一致）：全局 severity 排序、少叠床架屋；按需再引用各 sidecar 的 lane 标签，不要为了「看起来专业」复述多段 Lens 前言。宿主 Stop：`REVIEW_GATE` **advisory-only**（Claude canonical 清门）；Cursor pending multiset **仅遥测**。
 
 ## Spawn Admission
 
@@ -195,7 +195,7 @@ If the discussion touches current-session execution:
 - never delegate the immediate blocker on the critical path
 
 ## Hard Constraints
-- Do not create a new agent role, mailbox, graph, or state artifact unless an existing `team` / lane contract cannot express the need.
+- Do not create a new agent role, mailbox, graph, or state artifact unless an existing workflow / lane contract cannot express the need.
 - Do not let workers write outside their assigned lane-local scope.
 - Supervisor owns integration and final verification.
 - **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).

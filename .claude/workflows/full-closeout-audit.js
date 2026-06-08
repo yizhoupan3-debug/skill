@@ -179,7 +179,7 @@ await agent(
 
 await agent(
   `面向用户的可见输出使用简体中文。
-审计hook系统: hook_common/(mod.rs, timing.rs, observation.rs, outbound.rs, path_guard.rs), hook_policy/(mod.rs, mcp_safety.rs, bash_guard.rs), hosts/claude_hooks/(pre,post,stop,user_prompt,session).rs, hosts/cursor_hooks/全部, hosts/codex_hooks/全部, hosts/opencode_agent.rs, hosts/hook_state_common.rs。检查: PreToolUse/PostToolUse/Stop/UserPromptSubmit全覆盖、advisory模式不阻断、guard逻辑、保护列表完整。`,
+审计hook系统: hook_common/(mod.rs, timing.rs, observation.rs, outbound.rs, path_guard.rs), hook_policy/(mod.rs, mcp_safety.rs, bash_guard.rs), hosts/claude_code_hooks.rs(pre,post,stop,user_prompt,session).rs, hosts/cursor_hooks/全部, hosts/codex_hooks/全部, hosts/opencode_agent.rs, hosts/hook_state_common.rs。检查: PreToolUse/PostToolUse/Stop/UserPromptSubmit全覆盖、advisory模式不阻断、guard逻辑、保护列表完整。`,
   { label: 'harness:Hook系统', phase: 'Phase2-HarnessAudit', schema: FINDING }
 )
 
@@ -256,7 +256,7 @@ await agent(
 
 await agent(
   `面向用户的可见输出使用简体中文。
-审计docs/主要真源(docs/README.md, docs/harness_architecture/index.md, docs/harness_architecture/03-hook-and-switches.md, docs/harness_policy_map.md, docs/host_adapter_contract.md, docs/runtime_unified_spec.md, docs/framework_profile_contract.md, docs/references/AGENTS_OPERATOR_SURFACE.md, docs/closeout_enforcement.md, docs/framework_naming_conventions.md, docs/framework_operator_primer.md, docs/maintenance/ops-runbook.md, docs/rfv_loop_harness.md, docs/rust_contracts.md, docs/task_state_unified_resolve.md, docs/architecture/security.md, docs/plans/README.md, README.md)。逐文件检查内容与代码一致性、过期设计、路径引用、重复内容。`,
+审计docs/主要真源(docs/README.md, docs/harness_architecture/index.md, docs/harness_architecture/03-hook-and-switches.md, docs/harness_policy_map.md, docs/host_adapter_contract.md, docs/runtime_unified_spec.md, docs/framework_profile_contract.md, docs/references/AGENTS_OPERATOR_SURFACE.md, docs/closeout_enforcement.md, docs/framework_naming_conventions.md, docs/framework_operator_primer.md, docs/operations/index.md, docs/rfv_loop_harness.md, docs/rust_contracts.md, docs/task_state_unified_resolve.md, docs/architecture/security.md, docs/plans/README.md, README.md)。逐文件检查内容与代码一致性、过期设计、路径引用、重复内容。`,
   { label: 'doc:docs目录', phase: 'Phase3-DocAudit', schema: FINDING }
 )
 
@@ -464,7 +464,7 @@ await agent(
 
 await agent(
   `面向用户的可见输出使用简体中文。
-GIT hygiene过期: 检查docs/maintenance/ops-runbook.md、.github/配置、.githooks/内容是否与当前实践一致。`,
+GIT hygiene过期: 检查docs/operations/index.md、.github/配置、.githooks/内容是否与当前实践一致。`,
   { label: 'expired:Git规范', phase: 'Phase5-ExpiredDesign', schema: FINDING }
 )
 
@@ -659,7 +659,7 @@ await agent(
 
 await agent(
   `面向用户的可见输出使用简体中文。
-日常运维文档: docs/maintenance/ops-runbook.md 完整？运维checklist？技能更新流程？框架升级流程？备份策略？`,
+日常运维文档: docs/operations/index.md 完整？运维checklist？技能更新流程？框架升级流程？备份策略？`,
   { label: 'ops:日常运维', phase: 'Phase8-OpsDoc', schema: FINDING }
 )
 

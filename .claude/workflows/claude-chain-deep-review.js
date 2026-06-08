@@ -63,7 +63,7 @@ const scanResults = await parallel([
 你是一个严格的代码正确性审查员。深度审查以下文件中的逻辑 bug、边界条件、错误处理缺陷：
 
 **文件列表**：
-- core/router-rs/src/hosts/claude_hooks.rs（Claude Code 四事件 hook）
+- core/router-rs/src/hosts/claude_code_hooks.rs（Claude Code 四事件 hook）
 - core/router-rs/src/hosts/claude_desktop_hooks.rs（Claude Desktop MCP hook）
 - core/router-rs/src/host_integration/mod.rs（host 集成安装逻辑）
 
@@ -90,7 +90,7 @@ ${READ_INSTRUCTION}
 你是一个安全审查专家。深度审查 Claude 全链路的安全问题：
 
 **文件列表**：
-- core/router-rs/src/hosts/claude_hooks.rs
+- core/router-rs/src/hosts/claude_code_hooks.rs
 - core/router-rs/src/hosts/claude_desktop_hooks.rs
 - core/router-rs/src/host_integration/mod.rs
 - core/router-rs/src/web_fetch_guard.rs
@@ -160,7 +160,7 @@ ${READ_INSTRUCTION}
 你是一个代码清理审查员。审查 Claude 全链路中的死代码、过时引用和遗留注释：
 
 **审查范围**：
-- core/router-rs/src/hosts/claude_hooks.rs
+- core/router-rs/src/hosts/claude_code_hooks.rs
 - core/router-rs/src/hosts/claude_desktop_hooks.rs
 - core/router-rs/src/host_integration/mod.rs
 - scripts/install-claude.sh
@@ -202,7 +202,7 @@ ${READ_INSTRUCTION}
 - tests/policy_contracts.rs
 
 **被测代码**：
-- core/router-rs/src/hosts/claude_hooks.rs
+- core/router-rs/src/hosts/claude_code_hooks.rs
 - core/router-rs/src/hosts/claude_desktop_hooks.rs
 - core/router-rs/src/host_integration/mod.rs
 

@@ -10,9 +10,17 @@ The native PPTX lane runtime path is the Rust `ppt` binary from this repository:
 cargo run --manifest-path rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
 ```
 
-For faster repeated use, build the Rust tools and put the resulting binary on `PATH` as `ppt`.
+安装（推荐）：
 
-There is no skill-local package install step. The only runtime entry is the Rust
+```bash
+bash ${SKILL_FRAMEWORK_ROOT}/scripts/install-ppt-tool.sh
+# 或：just install-ppt
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+安装脚本经 `cargo metadata` 解析 workspace `target-dir`（见根 `.cargo/config.toml`）。开发探测仍可用 `cargo run … --bin ppt`。
+
+There is no skill-local package install step beyond the Rust `ppt` binary. The only runtime entry is the Rust
 CLI; `ppt init` writes `ppt.commands.json` into each deck workspace as a command
 cheat sheet, not a package manifest.
 

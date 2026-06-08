@@ -4,6 +4,8 @@
 
 **使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)。
 
+**近期变更（2026-06）**：闭集宿主收敛为 **五宿主**（`codex`、`claude-code`、`antigravity`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli`、`antigravity-app`、`antigravity-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md) §闭集宿主收敛（2026-06）。
+
 **近期变更（2026-05）**：`/autopilot` 已退役（用 `/implementx`）；Cursor hooks 默认 **7 事件**减法闭集；`docs/plans/` 与 `docs/history/` 过期 stub 已移除（索引见 [`docs/plans/README.md`](docs/plans/README.md)）；控制面硬化（registry 磁盘 loader、`host_projection_narrative.json`、生成物 metadata-only doctor）见 [`MIGRATION.md`](MIGRATION.md) 与 [`docs/harness_architecture/02-data-flows.md`](docs/harness_architecture/02-data-flows.md) §2.3。文档地图：[`docs/README.md`](docs/README.md)。
 
 ## 我该怎么入门（两条路径）
@@ -17,6 +19,8 @@
   **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**。  
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
   `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
+
+**Office 文档阅读（PDF / DOCX / XLSX / PPTX）**：skill 路由默认 Rust-first，但 CLI **需单独安装**到 `~/.local/bin`（不随 `router-rs` 下发）。在仓库根执行 `bash scripts/install-pdf-tool.sh` 等，或 `just install-office-tools`；详见 [`docs/references/office-document-clis.md`](docs/references/office-document-clis.md)。
 
 ## 这套系统包含什么
 
@@ -173,11 +177,11 @@ codex
 - **`router-rs framework …` 维护命令**：在目标仓库目录执行时，若当前目录不是框架检出根，需设置 **`SKILL_FRAMEWORK_ROOT`**（或传 `--framework-root`），否则会报无法解析 `framework_root`（实现会尝试从已安装二进制路径、`CURSOR_WORKSPACE_ROOT` 等推断，不可靠时以环境变量为准）。
 - Hook 减法与内存：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)「Hook 减法闭集」；恢复已删 Cursor 事件见 [`MIGRATION.md`](MIGRATION.md)。
 
-### Claude Code / Desktop（项目级 + 用户级）
+### Claude Code（项目级 + 用户级）
 
 - **My 生命周期**（与 Cursor 一致）：`/discussx` → `/planx` → `/implementx` → `/verifyx`；全局叙事在 **`~/.claude/rules/framework.md`**（对齐 `~/.cursor/rules/framework.mdc`）。
 - Hooks：`.claude/settings.json` 合并 **4 事件** → [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)。
-- **安装（推荐）**：`./scripts/install-claude.sh`（Code + Desktop，project + user）；Desktop 亦可 `./scripts/install-claude-desktop.sh`。详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)、[`docs/hosts/claude-desktop.md`](docs/hosts/claude-desktop.md)。
+- **安装（推荐）**：`./scripts/install-claude.sh`（project + user）。详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)。
 - **其它仓库**：`./scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`，再 `install-claude.sh --scope user`。
 
 **别的目录验收清单（Cursor 工作区 = 目标项目根）**

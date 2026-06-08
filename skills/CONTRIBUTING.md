@@ -43,7 +43,7 @@ Claude 执行的具体步骤。
 明确列出不应使用此 skill 的场景。
 
 ## References
-- [参考文档](references/guide.md)
+- [参考文档](../docs/README.md)
 ```
 
 ## Frontmatter 字段说明
@@ -127,7 +127,7 @@ skills/my-skill/
     checklist.md    # 检查清单
 ```
 
-主文件通过 `[references/guide.md](references/guide.md)` 引用，Claude 仅在需要时读取。
+主文件通过 `[../docs/README.md](../docs/README.md)` 引用，Claude 仅在需要时读取。
 
 ## 注意事项
 

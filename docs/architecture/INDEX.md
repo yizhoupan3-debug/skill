@@ -36,4 +36,5 @@ depends_on:
 - `docs/rust_contracts/` — Rust 实现契约（已拆分为 3 个文件）
 - `docs/host_adapter_contract.md` — 多宿主适配契约
 - `docs/framework_operator_primer.md` — 使用者一页纸
+- `docs/operations/index.md` — 模块化运维手册（B0–B11）
 - `docs/README.md` — 文档总索引

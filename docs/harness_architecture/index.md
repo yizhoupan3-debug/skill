@@ -26,6 +26,6 @@ depends_on:
 | 主题 | 文件 |
 |------|------|
 | 五层模型 + 扩展规则 + 文件映射（本文件） | [index.md](index.md)（当前） |
-| 热路径真源 + 证据流 + 续跑门控 | [data-flows.md](data-flows.md) |
-| Hook 文案策略 + 环境变量表 | [hook-and-switches.md](hook-and-switches.md) |
-| Closeout + 深度调研对齐 | [closeout-and-depth.md](closeout-and-depth.md) |
+| 热路径真源 + 证据流 + 续跑门控 | [02-data-flows.md](02-data-flows.md) |
+| Hook 文案策略 + 环境变量表 | [03-hook-and-switches.md](03-hook-and-switches.md) |
+| Closeout + 深度调研对齐 | [04-closeout-and-depth.md](04-closeout-and-depth.md) |

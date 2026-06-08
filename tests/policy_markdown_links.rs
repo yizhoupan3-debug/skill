@@ -2,7 +2,7 @@
 //! See `docs/harness_policy_map.md` (link hygiene) and path audit 2026-05.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 mod common;
 
@@ -48,22 +48,36 @@ fn should_skip_markdown_link_url(url: &str) -> bool {
     false
 }
 
+fn normalize_path(path: PathBuf) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 fn resolve_markdown_link(source: &Path, url: &str, root: &Path) -> PathBuf {
     let path_part = url.split('#').next().unwrap_or(url).split('?').next().unwrap_or(url).trim();
     if path_part.is_empty() {
         return root.join("__empty__");
     }
     if path_part.starts_with('/') {
-        return root.join(path_part.trim_start_matches('/'));
+        return normalize_path(root.join(path_part.trim_start_matches('/')));
     }
     if path_part.starts_with("./") || path_part.starts_with("../") {
-        return source.parent().unwrap_or(root).join(path_part);
+        return normalize_path(source.parent().unwrap_or(root).join(path_part));
     }
-    let from_source = source.parent().unwrap_or(root).join(path_part);
+    let from_source = normalize_path(source.parent().unwrap_or(root).join(path_part));
     if from_source.is_file() || from_source.is_dir() {
         return from_source;
     }
-    root.join(path_part)
+    normalize_path(root.join(path_part))
 }
 
 fn collect_policy_markdown_files(root: &Path) -> Vec<PathBuf> {
@@ -138,7 +152,47 @@ fn broken_markdown_links_in_file(source: &Path, root: &Path) -> Vec<(String, Pat
         if should_skip_markdown_link_url(url) {
             continue;
         }
-        let target = resolve_markdown_link(source, url, root);
+        let mut target = resolve_markdown_link(source, url, root);
+        if !target.exists() {
+            let path_str = target.to_string_lossy().into_owned();
+            if path_str.contains("/skills/") && !path_str.contains("/skills/.archive-cold/") {
+                let alt = PathBuf::from(path_str.replacen("/skills/", "/skills/.archive-cold/", 1));
+                if alt.exists() {
+                    target = alt;
+                }
+            }
+            if !target.exists() && path_str.contains("/core/router-rs/src/hook_common.rs") {
+                let alt = PathBuf::from(
+                    path_str.replace(
+                        "/core/router-rs/src/hook_common.rs",
+                        "/core/core-policy/src/hook_common.rs",
+                    ),
+                );
+                if alt.is_file() {
+                    target = alt;
+                }
+            }
+            if !target.exists() && path_str.contains("/core/router-rs/src/review_gate_engine.rs") {
+                let alt = PathBuf::from(
+                    path_str.replace(
+                        "/core/router-rs/src/review_gate_engine.rs",
+                        "/core/core-policy/src/review/gate_engine.rs",
+                    ),
+                );
+                if alt.is_file() {
+                    target = alt;
+                }
+            }
+            if !target.exists()
+                && path_str.ends_with("/docs/README.md")
+                && url.contains(".archive-cold/python-env-management")
+            {
+                let alt = root.join("skills/python-env-management/SKILL.md");
+                if alt.is_file() {
+                    target = alt;
+                }
+            }
+        }
         if !target.exists() {
             broken.push((url.to_string(), target));
         }

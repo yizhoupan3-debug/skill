@@ -22,8 +22,8 @@ Cursor 官方说明：计划默认保存在**用户目录**，需**「Save to wo
 
 - 权威草稿与链接建议存放于 **`.cursor/plans/`**（宿主工作区路径）。
 - 仓库协作或审计需要的摘要可复制或同步到 **`docs/plans/`**，与仓库内其它计划文档同一叙事。
-- `docs/plans/` 仅索引与指针（见 [`docs/plans/README.md`](../../docs/plans/README.md)），不再维护过期 stub 镜像。
-- 内部 todo 与文件不同步等宿主/社区讨论，参见 [`docs/plans/README.md`](../../docs/plans/README.md)。
+- `docs/plans/` 仅索引与指针（见 [`docs/plans/README.md`](../../../docs/plans/README.md)），不再维护过期 stub 镜像。
+- 内部 todo 与文件不同步等宿主/社区讨论，参见 [`docs/plans/README.md`](../../../docs/plans/README.md)。
 
 ---
 
@@ -89,7 +89,7 @@ Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由
 
 ## 6. `.cursor/rules/session-close-summary.mdc` 引用
 
-计划执行完成后的用户可见聊天收尾，语气与「几句带过」见 [`.cursor/rules/session-close-summary.mdc`](../../.cursor/rules/session-close-summary.mdc)；与仓库根 **`AGENTS.md`** 的 Closeout 「证据优先落工件、聊天不默认堆证据」一致。
+计划执行完成后的用户可见聊天收尾，语气与「几句带过」见 [`.cursor/rules/session-close-summary.mdc`](../../../.cursor/rules/session-close-summary.mdc)；与仓库根 **`AGENTS.md`** 的 Closeout 「证据优先落工件、聊天不默认堆证据」一致。
 
 ---
 
@@ -98,5 +98,5 @@ Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由
 - `skills/plan-mode/SKILL.md` — 跨宿主通用 plan-mode 规范（四元组、profile、继承面完整定义）。
 - `.cursor/rules/cursor-plan-output.mdc` — Cursor alwaysApply 下对 CreatePlan 产出的硬自检清单。
 - `.cursor/rules/session-close-summary.mdc` — Cursor 收尾回复风格约束。
-- [`docs/plans/README.md`](../../docs/plans/README.md) — plans 索引与 My `/planx` 真源指针。
-- [`skills/gitx/SKILL.md`](../gitx/SKILL.md) — `/gitx` / `/gitx plan` 收口契约。
+- [`docs/plans/README.md`](../../../docs/plans/README.md) — plans 索引与 My `/planx` 真源指针。
+- [`skills/gitx/SKILL.md`](../../../skills/gitx/SKILL.md) — `/gitx` / `/gitx plan` 收口契约。

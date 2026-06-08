@@ -36,7 +36,6 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
         RouterCommand::Host { command } => dispatch_host_command(command),
         RouterCommand::Antigravity { command } => dispatch_antigravity_command(command),
         RouterCommand::AntigravityApp { command } => dispatch_antigravity_command(command),
-        RouterCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
         RouterCommand::Browser { command } => dispatch_browser_command(command),
@@ -186,15 +185,13 @@ fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String> {
     }
 }
 
-/// Unified host command dispatcher (merged: codex, cursor, claude, claude-desktop)
+/// Unified host command dispatcher (merged: codex, cursor, claude, antigravity, opencode)
 fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
     match command {
         HostCommand::Codex { command } => dispatch_codex_command(command),
         HostCommand::Cursor { command } => dispatch_cursor_command(command),
         HostCommand::Claude { command } => dispatch_claude_command(command),
-        HostCommand::ClaudeDesktop { command } => dispatch_claude_desktop_command(command),
         HostCommand::Antigravity { command } => dispatch_antigravity_command(command),
-        HostCommand::AntigravityCli { command } => dispatch_antigravity_cli_command(command),
         HostCommand::AntigravityAppHost { command } => dispatch_antigravity_command(command),
         HostCommand::Opencode { command } => dispatch_opencode_command(command),
     }
@@ -267,19 +264,11 @@ fn dispatch_claude_command(command: ClaudeSubcommand) -> Result<(), String> {
     }
 }
 
-fn dispatch_claude_desktop_command(command: ClaudeDesktopSubcommand) -> Result<(), String> {
-    match command {
-        ClaudeDesktopSubcommand::Agent(command) => {
-            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            run_claude_desktop_mcp_loop(Some(&root))
-        }
-    }
-}
 fn dispatch_antigravity_command(command: AntigravitySubcommand) -> Result<(), String> {
     match command {
         AntigravitySubcommand::Agent(command) => {
             eprintln!(
-                "[router-rs] deprecate: `antigravity agent` → use `host antigravity-app agent` or `antigravity-app agent`"
+                "[router-rs] deprecate: bare `antigravity agent` → prefer `host antigravity agent` (antigravity-app alias accepted)"
             );
             let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             run_antigravity_mcp_loop(Some(&root))
@@ -292,31 +281,6 @@ fn dispatch_opencode_command(command: OpenCodeSubcommand) -> Result<(), String> 
         OpenCodeSubcommand::Agent(command) => {
             let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             crate::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
-        }
-    }
-}
-
-fn dispatch_antigravity_cli_command(command: AntigravityCliSubcommand) -> Result<(), String> {
-    match command {
-        AntigravityCliSubcommand::Hook(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let payload = run_antigravity_cli_hook(&command.name, &repo_root)?;
-            print_json_value(&codex_hook_stdout_payload(payload))?;
-            Ok(())
-        }
-        AntigravityCliSubcommand::InstallHooks(command) => {
-            let resolved_home =
-                resolve_antigravity_cli_home(command.antigravity_cli_home.as_deref())?;
-            let mode = if command.check {
-                InstallMode::Check
-            } else {
-                InstallMode::Apply
-            };
-            let repo_root = command
-                .repo_root
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or(PathBuf::from(".")));
-            let payload = install_antigravity_cli_hooks(&resolved_home, &repo_root, mode)?;
-            print_json_value(&payload)
         }
     }
 }

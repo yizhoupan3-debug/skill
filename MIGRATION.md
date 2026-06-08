@@ -1,5 +1,20 @@
 # Skill 真源迁移（2026-05-19）
 
+## 闭集宿主收敛（2026-06）
+
+**权威闭集**（仅此 5 个 id）：`codex`、`claude-code`、`antigravity`、`cursor`、`opencode` — `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。
+
+| 退役 id | 替代 / 说明 |
+|---------|-------------|
+| `codex-cli`、`codex-app` | **`codex`**（`install --to codex`） |
+| `claude-desktop` | **`claude-code`**（`install --to claude-code` / `./scripts/install-claude.sh`）；勿再 `install-claude-desktop.sh` |
+| `antigravity-app` | **`antigravity`**（`install --to antigravity`）；CLI 或仍接受 `antigravity-app` 为 deprecated 别名 |
+| `antigravity-cli` | 已移除；`.antigravitycli/` 为历史残留 |
+
+**文档**：宿主手册见 [`docs/hosts/`](docs/hosts/)（Antigravity 单页 [`antigravity.md`](docs/hosts/antigravity.md)）；退役页为 stub（`claude-desktop.md`、`codex-cli.md`、`antigravity-cli.md`、`antigravity-app.md`）。运维见 [`docs/operations/index.md`](docs/operations/index.md)（按功能模块 B0–B11）；历史路径 [`docs/maintenance/claude-desktop-runbook.md`](docs/maintenance/claude-desktop-runbook.md) 为重定向 stub。
+
+**操作**：升级后对各仍用宿主重跑 `framework host-integration install --to <id>`；`just doctor` 确认 `host_targets.supported` 与本地投影一致。
+
 ## Rust crate 路径（2026-05-28）
 
 | 旧路径 | 新路径 |
@@ -42,17 +57,15 @@ just doctor
 
 ### Claude Code / Antigravity（framework 源码仓）
 
-- **`.claude/settings.json`** 由 `install --to claude-code` 材料化（四事件 hook）；**`claude-desktop`** 另 merge project/user **research sandbox** `settings.json`（无 PreToolUse hook）。
-- **Antigravity 已拆分**（2026-05-28）：
-  - **`antigravity-cli`** → `.antigravitycli/hooks.json`（`install --to antigravity-cli`）
-  - **`antigravity-app`** → `.gemini/*` MCP（`install --to antigravity-app`）
-  - **`antigravity`** / `router-rs antigravity agent` = **app 别名**（deprecated；stderr 提示）
+- **`.claude/settings.json`** 由 `install --to claude-code` 材料化（四事件 hook）。
+- **Antigravity**：`install --to antigravity` → `.gemini/*` MCP；退役面见上文 **§闭集宿主收敛（2026-06）**。
+- **Claude / Codex 退役面**：`claude-desktop`、`codex-app` 已移除；Codex 用 **`codex`**，Claude 用 **`claude-code`**。
 - 勿再依赖 **`.claude/hooks/router-rs-hook.sh`**（deprecated shim）；真源为 `configs/framework/claude-router-rs-hook.sh` + settings hooks。
 
 ## 默认工作流（全宿主）
 
-- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；`lifecycle_profile: my-light` 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge。
-- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish`（已刷新 Cursor user `framework.mdc` 与 Claude user/project `.claude/*`）；**重启 Cursor**；Claude Desktop **Cmd+Q 重开**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**。
+- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；全宿主 Stop 上 `REVIEW_GATE` 为 advisory-only（见 [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1）；`lifecycle_profile: my-light` 另 suppress review nudge 与 spawn-first。
+- **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish`（已刷新 Cursor user `framework.mdc` 与 Claude user/project `.claude/*`）；**重启 Cursor**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**。
 - **legacy-gsd / `/gsd-*`**：**已删除**（非冷表、非 CI stub）；hook 与 registry **不再识别**。个人入口仅 My 四命令（下表）。
 - `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
 
@@ -76,10 +89,10 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   --artifact-root "$PWD/artifacts" --scope user --to cursor
 ```
 
-## Claude Code / Desktop：与 Cursor 对齐 My 生命周期（2026-05-29）
+## Claude Code：与 Cursor 对齐 My 生命周期（2026-05-29）
 
 - **症状**：`~/.claude/rules/framework.md` 仍写 `/gsd-*` 或 `GOAL_CONTINUE` → 与 Cursor `framework.mdc` 的 `/discussx`→`/verifyx` 不一致；路由仍走仓库 `skills/SKILL_ROUTING_RUNTIME.json`，但**入口叙事过时**。
-- **真源**：`configs/framework/host_projection_narrative.json` + `install --to claude` / `claude-desktop`。
+- **真源**：`configs/framework/host_projection_narrative.json` + `install --to claude-code`。
 - **推荐一键**（framework 仓或业务仓）：
 
 ```bash
@@ -89,7 +102,7 @@ cd "$SKILL_FRAMEWORK_ROOT"
 ./scripts/install-claude.sh --scope user
 ```
 
-- **`just publish`** / `update-one-shot` 现已对 **claude**、**claude-desktop** 执行 **project + user** 双 scope（与 Cursor user-only 不同：Claude Code 仍需项目级 `.claude/settings.json` hooks）。
+- **`just publish`** / `update-one-shot` 对 **claude-code** 执行 **project + user** 双 scope（与 Cursor user-only 不同：Claude Code 仍需项目级 `.claude/settings.json` hooks）。
 - **其它仓库接入**：`scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`（symlink `skills/`、`AGENTS.md` + project 投影）；全局规则再跑 `install-claude.sh --scope user`。
 - **业务仓注意**：在 framework 仓执行 `just publish` **不会**自动更新其它项目目录下的 `.claude/*`；每个消费仓库须在本机重跑 `install-claude.sh --project-root <业务仓根>`（或先 `claude-bootstrap-framework.sh`）。
 
@@ -112,7 +125,7 @@ cd /path/to/project
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | **Claude 专用**；默认 **关闭**（缺失 `fork_context` 不清 `REVIEW_GATE`）。**勿**与 Cursor 同名 env 混用。 |
 | **Review pending cap** | 达 `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` 时 `subagentStart` 返回 `permission: deny`。 |
 | **Claude review_gate** | `.claude/hook-state/review_gate_*.json` 写入使用 `flock`（与 Codex 对齐）。 |
-| **Codex stable session + Stop review**（2026-05 wave-1） | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` **默认 on**；legacy `=0`。无稳定键时 hook-state 用确定性 fallback（非 per-invocation 随机）。Stop 在 review 已武装且无独立子代理证据时 block，**含**无 hook-state 文件；Stop 载荷 review 措辞 alone 不能清门。 |
+| **Codex stable session + Stop review**（2026-05 wave-1） | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` **默认 on**；legacy `=0`。无稳定键时 hook-state 用确定性 fallback（非 per-invocation 随机）。Stop 在 review 已武装且无独立子代理证据时注入 **advisory nudge**（**不** `decision:block`）；**含**无 hook-state 文件路径；Stop 载荷 review 措辞 alone 不能清门。 |
 | **Codex wave-2 P1-4..P1-7**（2026-05） | PostTool hook-state 锁失败 **fail-closed**（与 UserPromptSubmit 同形）。`stop_hook_active` 默认仍执行 review/closeout；仅 `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 跳过门控。Stop closeout：`closeout_stop_followup_for_completion_text`。Codex fork 推断用 **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（**不**读 Cursor env）。 |
 
 手动画板分歧：用 `router-rs framework session-artifact-write` 或 Desktop MCP `session_checkpoint` 显式对齐 `artifacts/current/<task_id>/`。
@@ -133,11 +146,16 @@ cd /path/to/project
 
 | 主题 | 行为 |
 |------|------|
-| **主线程 compact 清门（Cursor）** | 无可数 `deep_gate_lanes` + `fork_context=false` 子代理证据时，**不得**仅凭 compact findings 清 `REVIEW_GATE`（默认无 `afterAgentResponse`；须 `subagent_start_count` / pending multiset / qualifying stop 后再与 `Stop` tail 配合；**裸** v1 `phase≥2` alone 不足）。 |
-| **`fork_context` 缺省推断** | Cursor：**默认开**（`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`，unset=on）。Codex：**`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（默认 on；**不**读 Cursor env）。Claude：**`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**，默认**关**。 |
-| **hook-state fail-closed** | Cursor review 武装路径与 Codex PostTool（wave-2 P1-4..）在锁不可用时 deny / Stop 硬门控。 |
-| **Codex Stop 清门** | **无** Cursor 式 subagent multiset / pending cycle；可用 bounded **`rg_clear`** / reject token 或 PostTool 可数深度 lane + Stop compact findings（见 [`docs/hosts/codex-cli.md`](docs/hosts/codex-cli.md)）。 |
-| **细则** | [`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)、[`docs/hosts/codex-cli.md`](docs/hosts/codex-cli.md) |
+| **主线程 compact 清门（Cursor）** | 无可数 `reviewer_lanes` + `fork_context=false` 子代理证据时，**不得**仅凭 compact findings 清 `REVIEW_GATE`（须 qualifying PostTool/subagentStart 后再与 compact bump 配合）。Stop 满足走 **`independent_reviewer_seen`**（与 Claude 对齐）。 |
+| **`fork_context` 缺省推断** | 统一 **`ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（unset=**关**）；legacy 宿主 env 仅显式 enable 时生效。 |
+| **hook-state fail-closed** | Cursor review 武装路径与 Codex PostTool（wave-2 P1-4..）在锁不可用时 deny / `continue:false`；**非** review gate Stop 硬拦（review 缺口仍为 advisory nudge）。 |
+| **Codex Stop 清门** | 与 Claude 对齐：`independent_reviewer_seen` 或 bounded **`rg_clear`** / reject token（**无** phase≥3 硬要求）。 |
+
+## REVIEW_GATE 核心去宿主化（2026-06）
+
+`review_gate.deep_gate_lanes` / `claude_reviewer_lanes` 已合并为单一 **`reviewer_lanes`**（Claude Code canonical 闭集）。lane 判定、fork 证据、Stop 满足规则统一在 **`core-policy`**（`review_gate_engine.rs`、`hook_common::is_reviewer_lane_normalized`）；各宿主 hook 仅保留 transport 差异（Stop **advisory** nudge、PostTool/subagentStart 观测路径；**不**硬拦 Stop）。维护：只改 `RUNTIME_REGISTRY.json` → `review_gate.reviewer_lanes`。
+
+**细则**：[`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)、[`docs/hosts/codex.md`](docs/hosts/codex.md)
 
 ## Cursor：hooks 减法闭集（2026-05-20）
 

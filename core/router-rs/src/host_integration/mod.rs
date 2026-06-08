@@ -68,11 +68,12 @@ const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
 ];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
     ["active_task.json", "focus_task.json", "task_registry.json"];
-const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 5] = [
+const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [
     "SESSION_SUMMARY.md",
     "NEXT_ACTIONS.json",
     "EVIDENCE_INDEX.json",
     "TRACE_METADATA.json",
+    "CONTINUITY_JOURNAL.json",
     ".supervisor_state.json",
 ];
 
@@ -332,7 +333,7 @@ mod tests {
         );
         assert!(
             !cmd.contains("grep -Eq"),
-            "Cursor stdin prefilter must not short-circuit before router-rs (see claude_hooks payload_looks_like_cursor_hook_stdin): {cmd}"
+            "Cursor stdin prefilter must not short-circuit before router-rs (see claude_code_hooks payload_looks_like_cursor_hook_stdin): {cmd}"
         );
     }
 
@@ -340,16 +341,19 @@ mod tests {
     fn canonical_tool_name_reports_registry_supported_tools_and_aliases() {
         let root = repo_root();
 
-        assert_eq!(canonical_tool_name("codex-cli", &root).unwrap(), "codex");
         assert_eq!(canonical_tool_name("claude-code", &root).unwrap(), "claude");
+        assert_eq!(
+            canonical_tool_name("antigravity-app", &root).unwrap(),
+            "antigravity"
+        );
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
-        assert!(
-            err.contains("Supported tools: codex, cursor, claude, claude-desktop, antigravity-cli, antigravity, opencode, codex-app"),
-            "{err}"
-        );
-        assert!(err.contains("codex-cli"), "{err}");
+        for tool in ["cursor", "claude", "opencode", "antigravity", "codex"] {
+            assert!(err.contains(tool), "expected supported tool {tool} in error: {err}");
+        }
+        assert!(err.contains("antigravity-app"), "{err}");
         assert!(err.contains("claude-code"), "{err}");
+        assert!(err.contains("codex-cli"), "{err}");
     }
 
     #[test]
@@ -360,13 +364,11 @@ mod tests {
         assert_eq!(
             registry_projection_tools(&root).unwrap(),
             vec![
-                "codex".to_string(),
                 "cursor".to_string(),
                 "claude".to_string(),
-                "claude-desktop".to_string(),
-                "antigravity-cli".to_string(),
-                "antigravity".to_string(),
                 "opencode".to_string(),
+                "antigravity".to_string(),
+                "codex".to_string(),
             ]
         );
     }
@@ -690,6 +692,108 @@ mod tests {
         } else {
             std::env::remove_var("CLAUDE_HOME");
         }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ensure_codex_research_mcp_toml_writes_paperplain_section() {
+        let root = unique_test_root("codex-research-mcp");
+        let home = root.join("home");
+        let framework_root = root.join("framework");
+        let project_root = root.join("project");
+        fs::create_dir_all(&framework_root).unwrap();
+        fs::create_dir_all(&project_root).unwrap();
+        write_test_file(
+            &framework_root.join("core/router-rs/Cargo.toml"),
+            "[package]\nname = \"router-rs\"\n",
+        );
+
+        let roots = ResolvedProjectionRoots {
+            framework_root: framework_root.clone(),
+            project_root: project_root.clone(),
+            artifact_root: project_root.join("artifacts"),
+            account_home_root: home.clone(),
+            codex_home_root: home.join(".codex"),
+            cursor_home_root: home.join(".cursor"),
+            claude_home_root: home.join(".claude"),
+            antigravity_home_root: home.join(".gemini"),
+            antigravity_cli_home_root: home.join(".antigravitycli"),
+            opencode_home_root: home.join(".opencode"),
+        };
+
+        let changed =
+            super::projection::ensure_codex_research_mcp_toml(&roots).expect("codex mcp toml");
+        assert!(changed);
+        let text = fs::read_to_string(project_root.join(".codex/config.toml")).unwrap();
+        assert!(text.contains("[mcp_servers.paperplain]"));
+        assert!(text.contains("paperplain-mcp"));
+        assert!(text.contains("[mcp_servers.mcp-codegraph]"));
+        assert!(
+            text.contains("--repo-root"),
+            "codegraph MCP section must pass repo root: {text}"
+        );
+
+        let changed_again =
+            super::projection::ensure_codex_research_mcp_toml(&roots).expect("idempotent");
+        assert!(!changed_again);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ensure_project_research_mcp_json_registers_mcp_codegraph() {
+        let root = unique_test_root("project-research-mcp");
+        let home = root.join("home");
+        let framework_root = root.join("framework");
+        let project_root = root.join("project");
+        fs::create_dir_all(&framework_root).unwrap();
+        fs::create_dir_all(&project_root).unwrap();
+        write_test_file(
+            &framework_root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"core/codegraph-rs\"]\n",
+        );
+
+        let roots = ResolvedProjectionRoots {
+            framework_root: framework_root.clone(),
+            project_root: project_root.clone(),
+            artifact_root: project_root.join("artifacts"),
+            account_home_root: home.clone(),
+            codex_home_root: home.join(".codex"),
+            cursor_home_root: home.join(".cursor"),
+            claude_home_root: home.join(".claude"),
+            antigravity_home_root: home.join(".gemini"),
+            antigravity_cli_home_root: home.join(".antigravitycli"),
+            opencode_home_root: home.join(".opencode"),
+        };
+
+        let changed =
+            super::projection::ensure_project_research_mcp_json(&roots).expect("project mcp json");
+        assert!(changed);
+
+        let payload: Value =
+            serde_json::from_str(&fs::read_to_string(project_root.join(".mcp.json")).unwrap())
+                .unwrap();
+        let servers = payload
+            .get("mcpServers")
+            .and_then(Value::as_object)
+            .expect("mcpServers object");
+        let codegraph = servers
+            .get("mcp-codegraph")
+            .expect("mcp-codegraph entry");
+        assert_eq!(codegraph.get("type").and_then(Value::as_str), Some("stdio"));
+        assert!(
+            codegraph.get("command").is_some(),
+            "codegraph payload must include command: {codegraph}"
+        );
+        let args = codegraph
+            .get("args")
+            .and_then(Value::as_array)
+            .expect("args array");
+        assert!(
+            args.iter().any(|v| v.as_str() == Some("--repo-root")),
+            "args must include --repo-root: {args:?}"
+        );
+
         let _ = fs::remove_dir_all(root);
     }
 }

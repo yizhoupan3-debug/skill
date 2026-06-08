@@ -4,6 +4,7 @@ use common::{project_root, read_text, run_ok};
 use std::process::Command;
 
 #[test]
+#[ignore = "codex-aggregator crate removed from workspace (roadmap v5 host consolidation)"]
 fn codex_aggregator_removed_legacy_python_and_shell_entrypoints() {
     let root = project_root().join("codex-aggregator");
     assert!(!root.join("health_monitor.py").exists());
@@ -15,6 +16,7 @@ fn codex_aggregator_removed_legacy_python_and_shell_entrypoints() {
 }
 
 #[test]
+#[ignore = "codex-aggregator crate removed from workspace (roadmap v5 host consolidation)"]
 fn codex_aggregator_docker_dashboard_uses_rust_binary() {
     let root = project_root().join("codex-aggregator");
     let dockerfile = read_text(&root.join("dashboard/Dockerfile"));
@@ -29,6 +31,7 @@ fn codex_aggregator_docker_dashboard_uses_rust_binary() {
 }
 
 #[test]
+#[ignore = "codex-aggregator crate removed from workspace (roadmap v5 host consolidation)"]
 fn codex_aggregator_rust_manifest_checks() {
     run_ok({
         let mut command = Command::new("cargo");
@@ -41,6 +44,7 @@ fn codex_aggregator_rust_manifest_checks() {
 }
 
 #[test]
+#[ignore = "codex-aggregator crate removed from workspace (roadmap v5 host consolidation)"]
 fn codex_extract_tokens_supports_non_secret_smoke_run() {
     let output = run_ok({
         let mut command = Command::new("cargo");

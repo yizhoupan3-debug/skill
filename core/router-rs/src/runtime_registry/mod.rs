@@ -1,21 +1,14 @@
 //! Disk-primary [`RUNTIME_REGISTRY.json`](../../../configs/framework/RUNTIME_REGISTRY.json) loader.
 //! Unified entry for hook hot paths, host targets, and host integration (ADR-005).
 
-use crate::lane_normalize::normalize_subagent_lane;
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
 
 pub(crate) const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 pub(crate) const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
 pub(crate) const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/host_adapter_contract.md";
-
-const DEFAULT_SPAWN_FIRST_NUDGE: &str = "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md";
-const DEFAULT_SUBAGENT_MODEL_INHERIT_NUDGE: &str =
-    "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions";
 
 // ---------------------------------------------------------------------------
 // Typed registry subset (host integration)
@@ -129,377 +122,158 @@ pub(crate) fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry,
     serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| err.to_string())
 }
 
-// ---------------------------------------------------------------------------
-// Review gate snapshot (hook hot paths)
-// ---------------------------------------------------------------------------
-
-#[derive(Clone)]
-struct ReviewGateSnapshot {
-    deep_gate_lanes: HashSet<String>,
-    claude_reviewer_lanes: HashSet<String>,
-    spawn_first_enabled: bool,
-    spawn_first_nudge: String,
-    spawn_first_nudge_by_host: HashMap<String, String>,
-    subagent_model_inherit_nudge: String,
-    subagent_model_inherit_nudge_by_host: HashMap<String, String>,
-    spawn_first_includes_model_inherit_by_host: HashMap<String, bool>,
-}
-
-static CACHE: OnceLock<Mutex<HashMap<PathBuf, ReviewGateSnapshot>>> = OnceLock::new();
-
-thread_local! {
-    static HOOK_REGISTRY_REPO_ROOT: std::cell::RefCell<Option<PathBuf>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-/// Set the repo root for the current hook dispatch (Cursor/Codex/Claude stdin handlers).
-pub fn set_hook_registry_repo_root(repo_root: &Path) {
-    HOOK_REGISTRY_REPO_ROOT.with(|c| *c.borrow_mut() = Some(repo_root.to_path_buf()));
-}
-
-/// Clear after hook dispatch completes (best-effort; avoids leaking across tests on same thread).
-pub fn clear_hook_registry_repo_root() {
-    HOOK_REGISTRY_REPO_ROOT.with(|c| *c.borrow_mut() = None);
-}
-
-/// RAII: binds disk registry lookup to this repo for the current thread.
-pub struct HookRegistryRepoGuard;
-
-impl HookRegistryRepoGuard {
-    pub fn new(repo_root: &Path) -> Self {
-        set_hook_registry_repo_root(repo_root);
-        Self
+/// Map MCP stdio host spellings to `host_projections` keys (avoid `hosts` import cycle).
+fn registry_projection_host_key(host_id: &str) -> &str {
+    match host_id.trim() {
+        "antigravity-app" | "antigravity-cli" => "antigravity",
+        "claude-desktop" => {
+            static WARNED: std::sync::Once = std::sync::Once::new();
+            WARNED.call_once(|| {
+                eprintln!(
+                    "[router-rs] deprecate: host_id claude-desktop retired 2026-06; resolving projection as claude-code (use hooks, not MCP agent)"
+                );
+            });
+            "claude-code"
+        }
+        other => other.trim(),
     }
 }
 
-impl Drop for HookRegistryRepoGuard {
-    fn drop(&mut self) {
-        clear_hook_registry_repo_root();
-    }
+pub(crate) fn host_projection_object<'a>(
+    registry: &'a Value,
+    host_id: &str,
+) -> Option<&'a serde_json::Map<String, Value>> {
+    let key = registry_projection_host_key(host_id);
+    registry
+        .get("host_projections")
+        .and_then(|v| v.get(key))
+        .and_then(Value::as_object)
 }
 
-fn cache() -> &'static Mutex<HashMap<PathBuf, ReviewGateSnapshot>> {
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn default_registry_json_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../configs/framework/RUNTIME_REGISTRY.json")
-}
-
-fn registry_json_path(repo_root: Option<&Path>) -> PathBuf {
-    if let Some(root) = repo_root {
-        return root.join(RUNTIME_REGISTRY_PATH);
-    }
-    if let Some(root) = HOOK_REGISTRY_REPO_ROOT.with(|c| c.borrow().clone()) {
-        return root.join(RUNTIME_REGISTRY_PATH);
-    }
-    default_registry_json_path()
-}
-
-fn repo_cache_key(registry_path: &Path) -> PathBuf {
-    registry_path
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| registry_path.to_path_buf())
-}
-
-fn lane_set(root: &Value, field: &str) -> Result<HashSet<String>, String> {
-    let lanes = root
-        .get("review_gate")
-        .and_then(|v| v.get(field))
+pub(crate) fn harness_capability_exception_entry<'a>(
+    projection: &'a serde_json::Map<String, Value>,
+    cap: &str,
+) -> Option<&'a Value> {
+    projection
+        .get("harness_capability_exceptions")
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("RUNTIME_REGISTRY.review_gate.{field} must be a non-empty array"))?;
-    let mut out = HashSet::new();
-    for item in lanes {
-        let s = item
-            .as_str()
-            .ok_or_else(|| format!("review_gate.{field} entry must be string"))?;
-        out.insert(normalize_subagent_lane(s));
-    }
-    if out.is_empty() {
-        return Err(format!(
-            "RUNTIME_REGISTRY.review_gate.{field} must not be empty"
-        ));
-    }
-    Ok(out)
+        .and_then(|rows| {
+            rows.iter()
+                .find(|row| row.get("cap").and_then(Value::as_str) == Some(cap))
+        })
 }
 
-fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, String> {
-    let raw =
-        fs::read_to_string(registry_path).map_err(|e| format!("read registry: {e}"))?;
-    let root: Value =
-        serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))?;
-    let review_gate = root
-        .get("review_gate")
-        .ok_or_else(|| "RUNTIME_REGISTRY.review_gate missing".to_string())?;
-    let spawn_first_enabled = review_gate
-        .get("spawn_first_enabled")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let spawn_first_nudge = review_gate
-        .get("spawn_first_nudge")
+pub(crate) fn harness_capability_exception_rationale(
+    repo_root: &Path,
+    host_id: &str,
+    cap: &str,
+) -> Option<String> {
+    let registry = load_runtime_registry_payload(repo_root).ok()?;
+    let projection = host_projection_object(&registry, host_id)?;
+    let entry = harness_capability_exception_entry(projection, cap)?;
+    entry
+        .get("rationale")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_SPAWN_FIRST_NUDGE)
-        .to_string();
-    let mut spawn_first_nudge_by_host = HashMap::new();
-    if let Some(by_host) = review_gate.get("spawn_first_nudge_by_host").and_then(Value::as_object)
-    {
-        for (host_id, line) in by_host {
-            if let Some(s) = line.as_str().map(str::trim).filter(|s| !s.is_empty()) {
-                spawn_first_nudge_by_host.insert(host_id.clone(), s.to_string());
-            }
+        .map(str::to_string)
+}
+
+/// Resolve a bare MCP tool name (e.g. `codegraph_search`) to a managed server id.
+pub(crate) fn managed_mcp_server_for_tool(registry: &Value, tool_name: &str) -> Option<String> {
+    let normalized = tool_name.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+    let managed = registry.get("managed_mcp_servers")?.as_object()?;
+    for (server_id, entry) in managed {
+        let tools = entry.get("tools").and_then(Value::as_array)?;
+        if tools
+            .iter()
+            .any(|tool| tool.as_str() == Some(normalized))
+        {
+            return Some(server_id.clone());
         }
     }
-    let subagent_model_inherit_nudge = review_gate
-        .get("subagent_model_inherit_nudge")
+    None
+}
+
+/// Parse Cursor-style MCP tool FQN: `mcp__{server_id}__{tool_name}`.
+pub(crate) fn parse_host_mcp_tool_fqn(fqn: &str) -> Option<(String, String)> {
+    let rest = fqn.strip_prefix("mcp__")?;
+    let (server_id, tool_name) = rest.rsplit_once("__")?;
+    if server_id.is_empty() || tool_name.is_empty() {
+        return None;
+    }
+    Some((server_id.to_string(), tool_name.to_string()))
+}
+
+/// True when `tool_name` or host FQN resolves to a registry-managed MCP server.
+pub(crate) fn resolves_managed_mcp_tool(registry: &Value, tool_name_or_fqn: &str) -> bool {
+    let raw = tool_name_or_fqn.trim();
+    if raw.is_empty() {
+        return false;
+    }
+    if let Some((server_id, tool_name)) = parse_host_mcp_tool_fqn(raw) {
+        return managed_mcp_server_for_tool(registry, &tool_name).as_deref() == Some(server_id.as_str());
+    }
+    managed_mcp_server_for_tool(registry, raw).is_some()
+}
+
+pub(crate) fn closeout_evidence_hooks_unsupported_on_host(
+    repo_root: &Path,
+    host_id: &str,
+) -> bool {
+    let Ok(registry) = load_runtime_registry_payload(repo_root) else {
+        return false;
+    };
+    let Some(projection) = host_projection_object(&registry, host_id) else {
+        return false;
+    };
+    harness_capability_exception_entry(projection, "closeout_evidence_hooks")
+        .and_then(|row| row.get("status"))
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_SUBAGENT_MODEL_INHERIT_NUDGE)
-        .to_string();
-    let mut subagent_model_inherit_nudge_by_host = HashMap::new();
-    if let Some(by_host) = review_gate
-        .get("subagent_model_inherit_nudge_by_host")
-        .and_then(Value::as_object)
-    {
-        for (host_id, line) in by_host {
-            if let Some(s) = line.as_str().map(str::trim).filter(|s| !s.is_empty()) {
-                subagent_model_inherit_nudge_by_host.insert(host_id.clone(), s.to_string());
-            }
-        }
-    }
-    let mut spawn_first_includes_model_inherit_by_host = HashMap::new();
-    if let Some(by_host) = review_gate
-        .get("spawn_first_includes_model_inherit_by_host")
-        .and_then(Value::as_object)
-    {
-        for (host_id, flag) in by_host {
-            if let Some(v) = flag.as_bool() {
-                spawn_first_includes_model_inherit_by_host.insert(host_id.clone(), v);
-            }
-        }
-    }
-    Ok(ReviewGateSnapshot {
-        deep_gate_lanes: lane_set(&root, "deep_gate_lanes")?,
-        claude_reviewer_lanes: lane_set(&root, "claude_reviewer_lanes")?,
-        spawn_first_enabled,
-        spawn_first_nudge,
-        spawn_first_nudge_by_host,
-        subagent_model_inherit_nudge,
-        subagent_model_inherit_nudge_by_host,
-        spawn_first_includes_model_inherit_by_host,
-    })
-}
-
-fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
-    let path = registry_json_path(repo_root);
-    let key = repo_cache_key(&path);
-    let mut guard = cache()
-        .lock()
-        .map_err(|e| { eprintln!("[router-rs] registry cache lock poisoned: {e}"); format!("registry cache lock poisoned: {e}") })?;
-    if let Some(hit) = guard.get(&key) {
-        return Ok(hit.clone());
-    }
-    let loaded = load_snapshot_from_disk(&path)?;
-    guard.insert(key, loaded.clone());
-    Ok(loaded)
-}
-
-/// Fail-closed: registry unreadable → lane is **not** treated as a deep gate lane.
-pub(crate) fn is_deep_review_gate_lane_from_registry(lane: &str, repo_root: Option<&Path>) -> bool {
-    let key = normalize_subagent_lane(lane);
-    snapshot(repo_root)
-        .map(|s| s.deep_gate_lanes.contains(&key))
-        .unwrap_or(false)
-}
-
-pub(crate) fn is_claude_reviewer_lane_from_registry(lane: &str, repo_root: Option<&Path>) -> bool {
-    let key = normalize_subagent_lane(lane);
-    snapshot(repo_root)
-        .map(|s| s.claude_reviewer_lanes.contains(&key))
-        .unwrap_or(false)
-}
-
-/// Sorted lane spellings from `review_gate.claude_reviewer_lanes` for MCP prompts/docs.
-pub(crate) fn claude_reviewer_lanes_sorted(repo_root: Option<&Path>) -> Vec<String> {
-    snapshot(repo_root)
-        .map(|s| {
-            let mut lanes: Vec<String> = s.claude_reviewer_lanes.iter().cloned().collect();
-            lanes.sort();
-            lanes
-        })
-        .unwrap_or_default()
-}
-
-/// Operator/doctor probe: returns `Err` when disk registry cannot be loaded for hook lane sets.
-pub fn check_review_gate_registry_snapshot(repo_root: &Path) -> Result<(), String> {
-    let path = registry_json_path(Some(repo_root));
-    load_snapshot_from_disk(&path).map(|_| ())
-}
-
-/// Spawn-first pairing reviewer nudge enabled (registry default true).
-pub fn review_spawn_first_enabled(repo_root: Option<&Path>) -> bool {
-    snapshot(repo_root)
-        .map(|s| s.spawn_first_enabled)
-        .unwrap_or(true)
-}
-
-/// One-line spawn-first nudge for hook `additional_context` (registry-backed).
-pub fn review_spawn_first_nudge_line(repo_root: Option<&Path>, host_id: &str) -> String {
-    snapshot(repo_root)
-        .ok()
-        .and_then(|s| {
-            s.spawn_first_nudge_by_host
-                .get(host_id)
-                .cloned()
-                .or(Some(s.spawn_first_nudge.clone()))
-        })
-        .unwrap_or_else(|| DEFAULT_SPAWN_FIRST_NUDGE.to_string())
-}
-
-/// One-line subagent model inherit nudge for hook `additional_context` (registry-backed).
-pub fn review_subagent_model_inherit_nudge_line(repo_root: Option<&Path>, host_id: &str) -> String {
-    snapshot(repo_root)
-        .ok()
-        .and_then(|s| {
-            s.subagent_model_inherit_nudge_by_host
-                .get(host_id)
-                .cloned()
-                .or(Some(s.subagent_model_inherit_nudge.clone()))
-        })
-        .unwrap_or_else(|| DEFAULT_SUBAGENT_MODEL_INHERIT_NUDGE.to_string())
-}
-
-/// Registry-backed: spawn-first line for this host already carries model-inherit guidance.
-pub fn spawn_first_includes_model_inherit_for_host(repo_root: Option<&Path>, host_id: &str) -> bool {
-    snapshot(repo_root)
-        .ok()
-        .and_then(|s| {
-            s.spawn_first_includes_model_inherit_by_host
-                .get(host_id)
-                .copied()
-        })
-        .unwrap_or(false)
-}
-
-fn load_registry_root(repo_root: Option<&Path>) -> Result<Value, String> {
-    let path = registry_json_path(repo_root);
-    let raw = fs::read_to_string(&path).map_err(|e| format!("read registry: {e}"))?;
-    serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))
-}
-
-/// `lifecycle_profiles.<name>.disable_spawn_first_nudge` (default false if missing).
-pub fn lifecycle_profile_disables_spawn_first_nudge(
-    repo_root: Option<&Path>,
-    profile: &str,
-) -> Result<bool, String> {
-    let root = load_registry_root(repo_root)?;
-    Ok(root
-        .get("lifecycle_profiles")
-        .and_then(|p| p.get(profile))
-        .and_then(|p| p.get("disable_spawn_first_nudge"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false))
-}
-
-#[cfg(test)]
-pub(crate) fn assert_spawn_first_registry_fields(repo_root: Option<&Path>) {
-    assert!(review_spawn_first_enabled(repo_root));
-    let line = review_spawn_first_nudge_line(repo_root, "cursor");
-    assert!(line.contains("fork_context"));
-    assert!(line.contains("code-review-deep") || line.contains("配对审稿"));
-    assert!(
-        spawn_first_includes_model_inherit_for_host(repo_root, "cursor"),
-        "cursor spawn_first_includes_model_inherit_by_host must be true"
-    );
-}
-
-#[cfg(test)]
-pub(crate) fn assert_subagent_model_inherit_registry_fields(repo_root: Option<&Path>) {
-    let line = review_subagent_model_inherit_nudge_line(repo_root, "cursor");
-    assert!(
-        line.contains("子代理模型（Cursor）") || line.contains("继承主会话"),
-        "cursor by_host line: {line}"
-    );
-    assert!(line.contains("sonnet") || line.contains("claude"));
-}
-
-/// Smoke matrix for tests (uses disk registry at `repo_root` or crate-relative default).
-#[cfg(test)]
-pub(crate) fn assert_deep_review_gate_lane_matrix(repo_root: Option<&Path>) {
-    assert!(is_deep_review_gate_lane_from_registry("general-purpose", repo_root));
-    assert!(is_deep_review_gate_lane_from_registry("generalpurpose", repo_root));
-    assert!(is_deep_review_gate_lane_from_registry("best-of-n-runner", repo_root));
-    assert!(is_deep_review_gate_lane_from_registry("bestofnrunner", repo_root));
-    assert!(is_deep_review_gate_lane_from_registry("deep-reviewer", repo_root));
-    assert!(is_deep_review_gate_lane_from_registry("deepreviewer", repo_root));
-    assert!(!is_deep_review_gate_lane_from_registry("explore", repo_root));
-    assert!(!is_deep_review_gate_lane_from_registry("ci-investigator", repo_root));
-    assert!(!is_deep_review_gate_lane_from_registry("review", repo_root));
-    assert!(!is_deep_review_gate_lane_from_registry("reviewer", repo_root));
-    assert!(!is_deep_review_gate_lane_from_registry("critic", repo_root));
-    assert!(!is_deep_review_gate_lane_from_registry("code-review", repo_root));
-    assert!(is_deep_review_gate_lane_from_registry("General_Purpose", repo_root));
-    assert!(is_deep_review_gate_lane_from_registry("Best_Of_N_Runner", repo_root));
-}
-
-#[cfg(test)]
-pub(crate) fn assert_claude_reviewer_lane_matrix(repo_root: Option<&Path>) {
-    assert_deep_review_gate_lane_matrix(repo_root);
-    assert!(is_claude_reviewer_lane_from_registry("review", repo_root));
-    assert!(is_claude_reviewer_lane_from_registry("reviewer", repo_root));
-    assert!(is_claude_reviewer_lane_from_registry("critic", repo_root));
-    assert!(is_claude_reviewer_lane_from_registry("code-review", repo_root));
-    assert!(!is_claude_reviewer_lane_from_registry("explore", repo_root));
+        == Some("unsupported")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
-    fn deep_review_gate_lane_matrix_disk_default() {
-        assert_deep_review_gate_lane_matrix(None);
+    fn claude_desktop_projection_maps_to_claude_code_not_antigravity() {
+        assert_eq!(registry_projection_host_key("claude-desktop"), "claude-code");
+        assert_eq!(registry_projection_host_key("antigravity"), "antigravity");
+        assert_eq!(registry_projection_host_key("antigravity-app"), "antigravity");
     }
 
     #[test]
-    fn claude_reviewer_lane_matrix_disk_default() {
-        assert_claude_reviewer_lane_matrix(None);
-    }
-
-    #[test]
-    fn spawn_first_registry_fields_disk_default() {
-        assert_spawn_first_registry_fields(None);
-    }
-
-    #[test]
-    fn subagent_model_inherit_registry_fields_disk_default() {
-        assert_subagent_model_inherit_registry_fields(None);
-    }
-
-    #[test]
-    fn loader_picks_up_runtime_edit_without_rebuild() {
-        let suffix = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-reg-loader-{suffix}"));
-        let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(repo.join("configs/framework")).unwrap();
-        let registry = repo.join(RUNTIME_REGISTRY_PATH);
-        fs::write(
+    fn managed_mcp_tool_semantic_dispatch_resolves_codegraph_tools() {
+        let registry = json!({
+            "managed_mcp_servers": {
+                "mcp-codegraph": {
+                    "tools": ["codegraph_search", "codegraph_status"]
+                }
+            }
+        });
+        assert_eq!(
+            managed_mcp_server_for_tool(&registry, "codegraph_search").as_deref(),
+            Some("mcp-codegraph")
+        );
+        assert!(resolves_managed_mcp_tool(
             &registry,
-            r#"{"review_gate":{"deep_gate_lanes":["probe-lane-only"],"claude_reviewer_lanes":["probe-lane-only","review"]}}"#,
-        )
-        .unwrap();
-        let key = repo_cache_key(&registry);
-        cache().lock().unwrap().remove(&key);
-        assert!(is_deep_review_gate_lane_from_registry("probe-lane-only", Some(&repo)));
-        assert!(!is_deep_review_gate_lane_from_registry("general-purpose", Some(&repo)));
-        let _ = fs::remove_dir_all(&repo);
+            "mcp__mcp-codegraph__codegraph_status"
+        ));
+        assert!(!resolves_managed_mcp_tool(&registry, "grep"));
     }
 }
+
+// Review gate: canonical loader in core-policy (ADR-005); re-export only.
+pub use core_policy::registry_review_gate::{
+    check_review_gate_registry_snapshot, clear_hook_registry_repo_root,
+    is_reviewer_lane_from_registry, lifecycle_profile_disables_spawn_first_nudge,
+    review_spawn_first_enabled, review_spawn_first_nudge_line,
+    review_subagent_model_inherit_nudge_line, reviewer_lanes_prompt_lines, reviewer_lanes_sorted,
+    set_hook_registry_repo_root, spawn_first_includes_model_inherit_for_host, HookRegistryRepoGuard,
+};

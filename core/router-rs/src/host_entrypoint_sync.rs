@@ -417,7 +417,7 @@ mod tests {
         let registry_json = registry_dir.join("RUNTIME_REGISTRY.json");
         fs::write(
             &registry_json,
-            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_CODEX.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS_CODEX.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CURSOR.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex","cursor","claude-code"],"metadata":{"codex":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_CODEX.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CURSOR.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
         )
         .unwrap();
         assert!(
@@ -496,7 +496,7 @@ mod tests {
         fs::create_dir_all(&registry_dir).unwrap();
         fs::write(
             registry_dir.join("RUNTIME_REGISTRY.json"),
-            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex-cli","codex-app","cursor","claude-code"],"metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_CODEX.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS_CODEX.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CURSOR.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v1","host_targets":{"supported":["codex","cursor","claude-code"],"metadata":{"codex":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_CODEX.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CURSOR.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/rules/framework.md",".claude/settings.json"]}}}}"#,
         )
         .unwrap();
         fs::write(

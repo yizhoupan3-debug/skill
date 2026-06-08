@@ -22,9 +22,6 @@ pub(crate) enum PaperProseHookHost {
     Cursor,
     Codex,
     Claude,
-    AntigravityCli,
-#[allow(dead_code)]
-    ClaudeDesktop,
 }
 
 impl PaperProseHookHost {
@@ -33,16 +30,11 @@ impl PaperProseHookHost {
             Self::Cursor => "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
             Self::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
-            Self::AntigravityCli => "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
-            Self::ClaudeDesktop => "ROUTER_RS_CLAUDE_DESKTOP_PAPER_PROSE_HOOK",
         }
     }
 
-    pub(crate) fn from_codex_lifecycle_state_dir(state_dir_leaf: &str) -> Self {
-        match state_dir_leaf {
-            ".antigravitycli" => Self::AntigravityCli,
-            _ => Self::Codex,
-        }
+    pub(crate) fn from_codex_lifecycle_state_dir(_state_dir_leaf: &str) -> Self {
+        Self::Codex
     }
 }
 

@@ -14,16 +14,18 @@ pub(crate) use std::time::Duration;
 pub(crate) use crate::background_state::handle_background_state_operation;
 pub(crate) use crate::cli::common::resolve_runtime_declared_manifest_fallback;
 pub(crate) use crate::cli::runtime_ops::{
-    attach_runtime_event_transport, build_background_control_response, build_live_execute_prompt,
-    build_live_execute_response, build_runtime_control_plane_payload, build_runtime_metric_record,
+    build_background_control_response, build_live_execute_prompt, build_live_execute_response,
+    build_runtime_control_plane_payload, build_runtime_metric_record,
     build_runtime_observability_exporter_descriptor, build_runtime_observability_health_snapshot,
     build_runtime_observability_metric_catalog_payload, build_sandbox_control_response,
-    execute_request, extract_chat_completion_content, inspect_trace_stream,
-    live_execute_http_client, normalize_chat_completions_endpoint,
-    perform_live_execute_with_sender, replay_trace_stream, runtime_observability_dashboard_schema,
-    sha256_hex, subscribe_attached_runtime_events, validate_live_execute_aggregator_base_url,
-    write_text_payload, write_trace_compaction_delta, write_trace_metadata,
-    DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
+    execute_request, extract_chat_completion_content, live_execute_http_client,
+    normalize_chat_completions_endpoint, perform_live_execute_with_sender,
+    runtime_observability_dashboard_schema, validate_live_execute_aggregator_base_url,
+    write_text_payload, DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
+};
+pub(crate) use crate::framework_runtime::{
+    attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream, sha256_hex,
+    subscribe_attached_runtime_events, write_trace_compaction_delta, write_trace_metadata,
 };
 pub(crate) use crate::execution_contract::{
     build_execution_kernel_contracts_by_mode, build_execution_kernel_metadata_contract,

@@ -162,15 +162,7 @@ pub(super) fn codex_stable_session_raw(event: &Value) -> Option<String> {
             return Some(s);
         }
     }
-    let env_keys: &[&str] = match lifecycle_host() {
-        CodexLifecycleHostKind::ANTIGRAVITY_CLI => &[
-            "ANTIGRAVITY_CLI_SESSION_ID",
-            "ANTIGRAVITY_CLI_CONVERSATION_ID",
-            "CODEX_SESSION_ID",
-            "CODEX_CONVERSATION_ID",
-        ],
-        _ => &["CODEX_SESSION_ID", "CODEX_CONVERSATION_ID"],
-    };
+    let env_keys: &[&str] = &["CODEX_SESSION_ID", "CODEX_CONVERSATION_ID"];
     for env_key in env_keys {
         if let Ok(v) = env::var(env_key) {
             if let Some(s) = trimmed_nonempty(&v) {
@@ -237,8 +229,9 @@ pub(super) fn codex_session_key(repo_root: &Path, event: &Value) -> String {
 }
 
 pub(super) fn codex_state_path(repo_root: &Path, event: &Value) -> PathBuf {
-    codex_state_dir(repo_root)
-        .join(format!("review-subagent-{}.json", codex_session_key(repo_root, event)))
+    codex_state_dir(repo_root).join(core_policy::hook_review_subagent_state_basename(
+        &codex_session_key(repo_root, event),
+    ))
 }
 
 pub(super) fn parse_lock_metadata(text: &str) -> (Option<u32>, Option<u64>) {
@@ -471,8 +464,9 @@ pub(super) fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLife
             obj.entry("seq".to_string()).or_insert(json!(1));
         }
     }
-    serde_json::from_value::<CodexLifecycleContextState>(value)
+    serde_json::from_value::<CodexLifecycleContextState>(value.clone())
         .map(|mut parsed| {
+            parsed.review_gate = core_policy::hook_review_disk_core_from_value(&value);
             codex_merge_legacy_subagent_gate_evidence(&mut parsed);
             Some(parsed)
         })
@@ -491,7 +485,8 @@ pub(super) fn codex_load_state(
     codex_load_state_from_path(&codex_state_path(repo_root, event))
 }
 
-pub(super) fn codex_save_state_to_path(state_path: &Path, state: &CodexLifecycleContextState) -> bool {
+pub(super) fn codex_save_state_to_path(state_path: &Path, state: &mut CodexLifecycleContextState) -> bool {
+    state.review_gate.bump_version_for_save();
     let directory = state_path
         .parent()
         .map(Path::to_path_buf)
@@ -640,8 +635,8 @@ where
     let _guard = acquire_codex_state_lock(&state_path)?;
     let loaded = codex_load_state_from_path(&state_path)?;
     let (next_state, output) = f(loaded)?;
-    if let Some(state) = next_state {
-        if !codex_save_state_to_path(&state_path, &state) {
+    if let Some(mut state) = next_state {
+        if !codex_save_state_to_path(&state_path, &mut state) {
             return Err(CodexHookError::StateWriteFailed);
         }
     }

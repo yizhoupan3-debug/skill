@@ -920,7 +920,7 @@ pub(crate) fn dispatch_cursor_hook_event(
         }
     }
 
-    // my-light suppresses REVIEW_GATE hard block inside handlers; do not skip beforeSubmit
+    // my-light suppresses REVIEW_GATE Stop nudge inside handlers; do not skip beforeSubmit
     // entirely — goal drive / pre-goal / MY_* nudges still run for /implementx|verifyx.
 
     if subtraction::should_noop_subtracted_event(repo_root, lowered) {

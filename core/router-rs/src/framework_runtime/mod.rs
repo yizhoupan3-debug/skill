@@ -12,10 +12,23 @@ use std::path::{Path, PathBuf};
 
 mod alias;
 mod codex_hooks_duplicate;
+pub(crate) mod evolution_observer;
 mod constants;
 mod framework_doctor;
+mod orchestration_controller;
+pub(crate) mod route_manifest_fallback;
+pub(crate) mod router_command_dispatch;
+mod sandbox_control;
 mod json_io;
+pub(crate) mod json_payload;
+pub(crate) mod live_execute;
 mod json_value;
+pub(crate) mod stdio_dispatch;
+pub(crate) mod stdio_op_registry;
+pub(crate) mod trace_attach;
+pub(crate) mod trace_stream_io;
+pub(crate) mod trace_transport;
+mod pre_tool_use_guard;
 mod prompt_compression;
 mod repo_roots;
 mod runtime_view;
@@ -46,6 +59,13 @@ pub use constants::{
 // DoctorResult is re-exported for external consumers; not referenced within this module.
 #[allow(unused_imports)]
 pub use framework_doctor::{run_continuity_audit, run_framework_doctor, DoctorResult};
+#[allow(unused_imports)]
+pub use pre_tool_use_guard::{
+    evaluate_pre_tool_use_guard, evaluate_pre_tool_use_guard_value,
+    host_requires_strict_pre_tool_fallback, pre_tool_use_guard_contract,
+    PreToolUseGuardRequest, PreToolUseGuardResponse, PreToolUseGuardVerdict,
+    PRE_TOOL_USE_GUARD_SCHEMA_VERSION, PRE_TOOL_USE_GUARD_STDIO_OP,
+};
 pub use prompt_compression::build_framework_prompt_compression_envelope;
 pub use repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
@@ -53,6 +73,34 @@ pub use repo_roots::{
 pub use session_artifacts::write_framework_session_artifacts;
 pub use statusline::build_framework_statusline;
 pub use types::FrameworkAliasBuildOptions;
+pub(crate) use orchestration_controller::{
+    build_background_control_response, build_runtime_control_plane_payload,
+    build_runtime_integrator_payload, build_runtime_metric_record,
+    build_runtime_observability_exporter_descriptor,
+    build_runtime_observability_health_snapshot,
+    build_runtime_observability_metric_catalog_payload,
+    runtime_observability_dashboard_schema,
+};
+pub(crate) use route_manifest_fallback::{
+    manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
+    route_task_with_manifest_fallback,
+};
+pub(crate) use sandbox_control::build_sandbox_control_response;
+pub use crate::stdio_payload_types::*;
+pub(crate) use stdio_dispatch::{dispatch_stdio_json_request, dispatch_stdio_json_request_payload};
+pub(crate) use stdio_op_registry::{classify_stdio_op, StdioOpDomain};
+pub(crate) use trace_attach::{
+    attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
+    subscribe_attached_runtime_events,
+};
+pub(crate) use trace_stream_io::{
+    inspect_trace_stream, replay_trace_stream, sha256_hex, write_trace_compaction_delta,
+    write_trace_metadata,
+};
+#[cfg(test)]
+pub(crate) use stdio_op_registry::{
+    is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op, is_trace_stdio_op,
+};
 
 use constants::{
     CLOSEOUT_COMPLETION_STATUSES, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
@@ -720,6 +768,79 @@ fn coerce_exit_code_value(value: Option<&Value>) -> Option<i64> {
     None
 }
 
+fn coerce_duration_ms_value(value: Option<&Value>) -> Option<u64> {
+    let value = value?;
+    if let Some(n) = value.as_u64() {
+        return Some(n);
+    }
+    if let Some(n) = value.as_i64() {
+        return n.try_into().ok();
+    }
+    if let Some(n) = value.as_f64() {
+        return Some(n.round() as u64);
+    }
+    if let Some(text) = value.as_str() {
+        return text.trim().parse::<u64>().ok();
+    }
+    None
+}
+
+/// PostToolUse journal: tool execution duration when the host payload carries it.
+pub(crate) fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
+    let candidates: Vec<Option<&Value>> = vec![
+        event.get("duration_ms"),
+        event.get("durationMs"),
+        event.get("tool_duration_ms"),
+        event.get("toolDurationMs"),
+        event.get("execution_time_ms"),
+        event.get("executionTimeMs"),
+        event.get("tool_output").and_then(|v| v.get("duration_ms")),
+        event.get("tool_output").and_then(|v| v.get("durationMs")),
+        event
+            .get("tool_output")
+            .and_then(|v| v.get("metadata"))
+            .and_then(|m| m.get("duration_ms")),
+        event.get("result").and_then(|v| v.get("duration_ms")),
+    ];
+    if let Some(to) = event.get("tool_output") {
+        if let Some(text) = to.as_str() {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
+                    return Some(ms);
+                }
+                if let Some(ms) = coerce_duration_ms_value(parsed.get("durationMs")) {
+                    return Some(ms);
+                }
+            }
+        }
+    }
+    for candidate in candidates {
+        if let Some(ms) = coerce_duration_ms_value(candidate) {
+            return Some(ms);
+        }
+    }
+    None
+}
+
+/// PostToolUse journal: infer success from exit code / error flags when present.
+pub(crate) fn post_tool_call_succeeded(event: &Value) -> bool {
+    if event
+        .get("is_error")
+        .and_then(Value::as_bool)
+        .is_some_and(|v| v)
+    {
+        return false;
+    }
+    if event.get("error").is_some_and(|v| !v.is_null()) {
+        return false;
+    }
+    match extract_codex_tool_exit_hint(event) {
+        Some(0) => true,
+        Some(_) => false,
+        None => true,
+    }
+}
+
 /// 从 Codex `PostToolUse` 载荷中提取退出码（兼容嵌套 `tool_output` / JSON 字符串）。
 fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
     let candidates: Vec<Option<&Value>> = vec![
@@ -909,6 +1030,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
 
     let cursor_hook = source.trim().to_ascii_lowercase().starts_with("cursor_");
     if !cursor_hook && !shell_command_looks_like_verification(preview_trim) {
+        crate::telemetry_emit::emit_hook_fired("hook_evidence_append", "skip");
         return Ok(json!({
             "ok": true,
             "skipped": true,
@@ -938,6 +1060,11 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
         entry.insert("success".to_string(), json!(artifact_ok));
     }
     append_evidence_index_merged_row(&repo_root, task_id.as_deref(), entry)?;
+    let success = exit_code.map(|ec| ec == 0).unwrap_or(true) && artifact_ok;
+    crate::telemetry_emit::emit_hook_fired(
+        "hook_evidence_append",
+        if success { "append:ok" } else { "append:warn" },
+    );
     Ok(json!({
         "ok": true,
         "skipped": false,
@@ -1343,10 +1470,17 @@ pub fn evaluate_closeout_record_file_for_task(
     })?;
     let (rows_non_empty, has_success) =
         crate::autopilot_goal::task_evidence_artifacts_summary_for_task(repo_root, tid);
+    let goal_state = crate::autopilot_goal::read_goal_state(repo_root, Some(tid))
+        .ok()
+        .flatten();
+    let goal_prediction = goal_state
+        .as_ref()
+        .and_then(core_state::goal_prediction::read_goal_prediction);
     let ctx = CloseoutEvidenceContext {
         task_id: Some(tid.to_string()),
         evidence_rows_non_empty: rows_non_empty,
         has_successful_verification: has_success,
+        goal_prediction,
     };
     evaluate_closeout_record_value_with_context(record, &ctx)
         .map_err(|err| format!("closeout record evaluation failed: {err}"))
@@ -1432,10 +1566,18 @@ fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>
                 &repo_root,
                 &task_id_str,
             );
+        let goal_state =
+            crate::autopilot_goal::read_goal_state(&repo_root, Some(&task_id_str))
+                .ok()
+                .flatten();
+        let goal_prediction = goal_state
+            .as_ref()
+            .and_then(core_state::goal_prediction::read_goal_prediction);
         let ctx = CloseoutEvidenceContext {
             task_id: Some(task_id_str.trim().to_string()),
             evidence_rows_non_empty: rows_non_empty,
             has_successful_verification: has_success,
+            goal_prediction,
         };
         evaluate_closeout_record_value_with_context(closeout_record, &ctx)
             .map_err(|err| format!("closeout enforcement failed: {err}"))?
@@ -1496,6 +1638,45 @@ fn is_terminal(value: &str, terminal_values: &[&str]) -> bool {
     terminal_values
         .iter()
         .any(|candidate| lowered == *candidate)
+}
+
+#[cfg(test)]
+mod post_tool_duration_tests {
+    use super::{extract_post_tool_duration_ms, post_tool_call_succeeded};
+    use serde_json::json;
+
+    #[test]
+    fn extract_post_tool_duration_ms_reads_top_level_and_nested_fields() {
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({"duration_ms": 42})),
+            Some(42)
+        );
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({"durationMs": "99"})),
+            Some(99)
+        );
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({
+                "tool_output": { "duration_ms": 7 }
+            })),
+            Some(7)
+        );
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({
+                "tool_output": "{\"durationMs\": 15}"
+            })),
+            Some(15)
+        );
+        assert_eq!(extract_post_tool_duration_ms(&json!({})), None);
+    }
+
+    #[test]
+    fn post_tool_call_succeeded_honors_error_and_exit_code() {
+        assert!(!post_tool_call_succeeded(&json!({"is_error": true})));
+        assert!(!post_tool_call_succeeded(&json!({"exit_code": 1})));
+        assert!(post_tool_call_succeeded(&json!({"exit_code": 0})));
+        assert!(post_tool_call_succeeded(&json!({"tool_name": "Read"})));
+    }
 }
 
 #[cfg(test)]

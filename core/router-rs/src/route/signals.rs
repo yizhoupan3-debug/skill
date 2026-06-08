@@ -512,18 +512,22 @@ pub(crate) fn has_token_budget_pressure(query_text: &str, query_token_list: &[St
     })
 }
 
-pub(crate) fn has_team_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
+pub(crate) fn has_workflow_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
     [
-        "不要 team",
-        "不要进入 team",
-        "不进 team",
-        "不用 team",
-        "无需 team",
-        "not team",
-        "without team",
-        "不要 team orchestration",
+        "不要 workflow",
+        "不要进入 workflow",
+        "不进 workflow",
+        "不用 workflow",
+        "无需 workflow",
+        "not workflow",
+        "without workflow",
+        "不要 workflow orchestration",
+        "不要 workflow 编排",
         "只是 sidecar",
         "only sidecar",
+        "tdd workflow",
+        "用 tdd workflow",
+        "test driven development",
     ]
     .iter()
     .any(|marker| {
@@ -532,15 +536,19 @@ pub(crate) fn has_team_negation_context(query_text: &str, query_token_list: &[St
     })
 }
 
-pub(crate) fn has_team_orchestration_context(
+pub(crate) fn has_workflow_orchestration_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
     [
-        "team orchestration",
-        "team workflow",
-        "team mode",
-        "team supervisor",
+        "workflow orchestration",
+        "workflow supervisor",
+        "workflow mode",
+        "workflow 编排",
+        "用 workflow",
+        ".claude/workflows",
+        "/workflow",
+        "ultracode",
         "worker lifecycle",
         "worker orchestration",
         "multi-worker",
@@ -560,7 +568,7 @@ pub(crate) fn has_team_orchestration_context(
         "lane-local delta",
         "worker write scope",
         "worker write scopes",
-        "team 协作",
+        "workflow 协作",
         "团队编排",
         "多 worker",
         "worker 生命周期",
@@ -784,7 +792,6 @@ pub(crate) fn has_math_review_context(query_text: &str, query_token_list: &[Stri
 pub(crate) fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool {
     query_text.contains(&normalize_text("github"))
         || text_matches_phrase(query_token_list, "github")
-        || query_text.contains(&normalize_text("gh"))
         || text_matches_phrase(query_token_list, "gh")
         || query_text.contains(&normalize_text("pull request"))
         || text_matches_phrase(query_token_list, "pull request")
@@ -896,8 +903,7 @@ pub(crate) fn has_paper_review_revision_intent(
     ];
     let revise_markers = ["改论文", "修改论文", "改稿", "修改稿", "进入修改", "直接改"];
     review_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
+        paper_route_marker_matches(query_text, query_token_list, marker)
     }) && revise_markers.iter().any(|marker| {
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
@@ -1659,7 +1665,7 @@ pub(crate) fn build_route_context(
         query_text.contains(marker.as_str()) || text_matches_phrase(query_token_list, marker)
     });
     let delegation_candidate = has_bounded_subagent_context(query_text, query_token_list)
-        || has_team_orchestration_context(query_text, query_token_list)
+        || has_workflow_orchestration_context(query_text, query_token_list)
         || has_parallel_review_candidate_context(query_text, query_token_list)
         || has_parallel_execution_context(query_text, query_token_list);
     let audit_requested = [
@@ -1676,7 +1682,12 @@ pub(crate) fn build_route_context(
         "diagnose",
     ]
     .iter()
-    .any(|marker| query_text.contains(*marker) || text_matches_phrase(query_token_list, marker));
+    .any(|marker| {
+        if matches!(*marker, "review") {
+            return text_matches_phrase(query_token_list, marker);
+        }
+        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
+    });
     let implementation_requested = [
         "实现",
         "修复",

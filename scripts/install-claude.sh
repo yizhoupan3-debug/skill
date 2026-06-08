@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install / refresh Claude Code + Claude Desktop framework projections (align with Cursor My lifecycle).
+# Install / refresh Claude Code (claude-code) framework projections (align with Cursor My lifecycle).
 # Re-run after: git pull on skill framework, router-rs rebuild, or stale ~/.claude/rules/framework.md (GSD text).
 set -euo pipefail
 
@@ -7,22 +7,22 @@ usage() {
   cat <<'EOF'
 Usage: install-claude.sh [options]
 
-Installs harness projections for Claude Code (hooks + framework rule) and Claude Desktop (MCP).
+Installs harness projections for Claude Code (claude-code host; hooks + framework rule).
 
 Writes:
-  claude-code project  → .claude/rules/framework.md, .claude/settings.json, .claude/.framework-projection.json
+  claude-code project  → .claude/rules/framework.md, .claude/CLAUDE.md, .claude/settings.json, .claude/.framework-projection.json
   claude-code user     → ~/.claude/rules/framework.md, ~/.claude/settings.json (global My lifecycle + hooks)
-  claude-desktop project → .claude/mcp.json, .claude/CLAUDE.md, .claude/settings.json (research sandbox)
-  claude-desktop user    → claude_desktop_config.json (macOS) + ~/.claude/CLAUDE.md
 
 Options:
   --framework-root DIR   Framework repo (default: $SKILL_FRAMEWORK_ROOT or script ../..)
   --project-root DIR     Project root (default: $PWD)
   --scope SCOPE          project | user | both (default: both — matches Cursor publish parity)
-  --code-only            Skip claude-desktop MCP install
-  --desktop-only         Skip claude-code hooks/rules install
+  --code-only            Deprecated no-op (2026-06; claude-desktop retired)
+  --desktop-only         Deprecated; exits with error — use install-claude.sh without flags for claude-code
   --skip-build           Do not run cargo build --release when router-rs missing
   -h, --help             Show help
+
+Note: claude-desktop host retired 2026-06. Do not use install-claude-desktop.sh.
 
 Example (framework repo):
   ./scripts/install-claude.sh
@@ -148,8 +148,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$CODE_ONLY" -eq 1 && "$DESKTOP_ONLY" -eq 1 ]]; then
-  echo "error: --code-only and --desktop-only are mutually exclusive" >&2
+if [[ "$DESKTOP_ONLY" -eq 1 ]]; then
+  echo "error: --desktop-only retired 2026-06; claude-desktop removed from closed set. Use install-claude.sh for claude-code." >&2
   exit 1
 fi
 
@@ -172,12 +172,7 @@ case "$SCOPE" in
 esac
 
 for scope in "${scopes[@]}"; do
-  if [[ "$DESKTOP_ONLY" -eq 0 ]]; then
-    install_host claude "$scope"
-  fi
-  if [[ "$CODE_ONLY" -eq 0 ]]; then
-    install_host claude-desktop "$scope"
-  fi
+  install_host claude "$scope"
 done
 
 echo "==> status" >&2
@@ -186,14 +181,7 @@ echo "==> status" >&2
   --project-root "$PROJECT_ROOT" \
   --artifact-root "$PROJECT_ROOT/artifacts"
 
-PATCH_EGRESS="${FRAMEWORK_ROOT}/scripts/patch-claude-desktop-3p-cowork-egress.sh"
-if [[ "$CODE_ONLY" -eq 0 && -x "$PATCH_EGRESS" ]]; then
-  echo "==> 3P Cowork egress (coworkEgressAllowedHosts)" >&2
-  "$PATCH_EGRESS" --allow-all || echo 'warn: 3P egress patch failed' >&2
-fi
-
 echo "" >&2
 echo "Done. Claude Code: confirm ~/.claude/rules/framework.md mentions /discussx (not /gsd-*)." >&2
-echo "Claude Desktop: Cmd+Q restart, then Connectors → router-rs-framework + browser-mcp." >&2
 echo "Re-run after framework updates:" >&2
 echo "  $FRAMEWORK_ROOT/scripts/install-claude.sh" >&2

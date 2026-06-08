@@ -115,11 +115,22 @@ pub fn build_framework_alias_envelope(
     }))
 }
 
+fn canonical_framework_host_id(host_id: &str) -> &str {
+    match host_id {
+        "codex-cli" | "codex-app" => "codex",
+        "claude-desktop" => "claude-code",
+        "antigravity-app" | "antigravity-cli" => "antigravity",
+        _ => host_id,
+    }
+}
+
 fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) -> String {
-    let requested_host = host_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("codex-cli");
+    let requested_host = canonical_framework_host_id(
+        host_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("codex"),
+    );
     let host_entrypoints =
         alias_value_at_path(alias_record, &["host_entrypoints"]).and_then(Value::as_object);
     if let Some(entrypoint) = host_entrypoints
@@ -128,7 +139,7 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
     {
         return entrypoint.to_string();
     }
-    for fallback_host in ["codex-cli", "cursor"] {
+    for fallback_host in ["codex", "cursor"] {
         if let Some(entrypoint) = host_entrypoints
             .and_then(|entrypoints| entrypoints.get(fallback_host))
             .and_then(Value::as_str)

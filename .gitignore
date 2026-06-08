@@ -7,6 +7,7 @@ node_modules/
 **/target/
 skills/tao-ci/
 target/
+target-router-rs-subagent/
 .supervisor_state.json
 SESSION_SUMMARY.md
 NEXT_ACTIONS.json

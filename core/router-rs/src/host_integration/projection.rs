@@ -304,16 +304,6 @@ pub(crate) struct HostProjectionAdapter {
 
 const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
     HostProjectionAdapter {
-        tool: "codex",
-        host_id: "codex-cli",
-        aliases: &["codex-cli"],
-        install: install_codex_projection,
-        status: codex_projection_status,
-        remove: remove_codex_projection,
-        home_root: codex_home_root_string,
-        explicit_home: codex_home_explicit,
-    },
-    HostProjectionAdapter {
         tool: "cursor",
         host_id: "cursor",
         aliases: &[],
@@ -334,29 +324,9 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
         explicit_home: claude_home_explicit,
     },
     HostProjectionAdapter {
-        tool: "claude-desktop",
-        host_id: "claude-desktop",
-        aliases: &[],
-        install: install_claude_desktop_projection,
-        status: claude_desktop_projection_status,
-        remove: remove_claude_desktop_projection,
-        home_root: claude_home_root_string,
-        explicit_home: claude_home_explicit,
-    },
-    HostProjectionAdapter {
-        tool: "antigravity-cli",
-        host_id: "antigravity-cli",
-        aliases: &[],
-        install: install_antigravity_cli_projection,
-        status: antigravity_cli_projection_status,
-        remove: remove_antigravity_cli_projection,
-        home_root: antigravity_cli_home_root_string,
-        explicit_home: antigravity_cli_home_explicit,
-    },
-    HostProjectionAdapter {
         tool: "antigravity",
-        host_id: "antigravity-app",
-        aliases: &["antigravity-app", "antigravity"],
+        host_id: "antigravity",
+        aliases: &["antigravity-app"],
         install: install_antigravity_projection,
         status: antigravity_projection_status,
         remove: remove_antigravity_projection,
@@ -372,6 +342,16 @@ const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
         remove: remove_opencode_projection,
         home_root: opencode_home_root_string,
         explicit_home: opencode_home_explicit,
+    },
+    HostProjectionAdapter {
+        tool: "codex",
+        host_id: "codex",
+        aliases: &["codex-cli", "codex-app"],
+        install: install_codex_projection,
+        status: codex_projection_status,
+        remove: remove_codex_projection,
+        home_root: codex_home_root_string,
+        explicit_home: codex_home_explicit,
     },
 ];
 
@@ -426,9 +406,12 @@ pub(crate) fn install_opencode_projection(
     let entries = mcp_servers.as_object_mut()
         .ok_or_else(|| "mcpServers must be an object".to_string())?;
     let framework_payload = opencode_mcp_server_payload(roots);
-    let changed = entries.get("router-rs-framework") != Some(&framework_payload);
+    let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
     entries.insert("router-rs-framework".to_string(), framework_payload);
+    let paperplain_changed = merge_paperplain_into_mcp_servers_map(entries, "paperplain");
+    let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
     write_json_if_changed(&config_path, &payload)?;
+    let changed = framework_changed || paperplain_changed || codegraph_changed;
 
     let manifest_dir = opencode_projection_config_dir(roots, scope);
     std::fs::create_dir_all(&manifest_dir)
@@ -443,7 +426,11 @@ pub(crate) fn install_opencode_projection(
             "scope": scope,
             "files": [projection_manifest_file_ref(roots, &config_path)],
             "settings": {
-                "managed_key_paths": ["mcpServers.router-rs-framework"],
+                "managed_key_paths": [
+                    "mcpServers.router-rs-framework",
+                    "mcpServers.paperplain",
+                    "mcpServers.mcp-codegraph",
+                ],
             }
         }),
     )?;
@@ -494,10 +481,31 @@ pub(crate) fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Res
     if let Some(payload) = mcp_command.as_ref() {
         if let Some(cmd) = payload.get("command").and_then(Value::as_str) {
             match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
-                Ok(()) => match crate::router_self::validate_router_rs_binary_runnable(Path::new(cmd)) {
-                    Ok(()) => binary_valid = true,
-                    Err(err) => status_error = Some(err),
-                },
+                Ok(()) => {
+                    if cmd == "cargo" {
+                        binary_valid = true;
+                    } else {
+                        let resolved = if cmd == "router-rs" {
+                            resolve_stable_router_rs_executable(&roots.framework_root)
+                        } else {
+                            Some(PathBuf::from(cmd))
+                        };
+                        match resolved {
+                            Some(path) => {
+                                match crate::router_self::validate_router_rs_binary_runnable(&path) {
+                                    Ok(()) => binary_valid = true,
+                                    Err(err) => status_error = Some(err),
+                                }
+                            }
+                            None => {
+                                status_error = Some(
+                                    "router-rs is not found on system PATH; run `router-rs self install`"
+                                        .to_string(),
+                                );
+                            }
+                        }
+                    }
+                }
                 Err(err) => status_error = Some(err),
             }
         }
@@ -599,6 +607,8 @@ pub(crate) fn registry_projection_tools(framework_root: &Path) -> Result<Vec<Str
         }
     }
     validate_projection_adapters_against_registry(framework_root)?;
+    let registry = crate::runtime_registry::load_runtime_registry_json(framework_root)?;
+    crate::framework_host_targets::validate_host_providers_against_registry(&registry)?;
     Ok(tools)
 }
 
@@ -657,18 +667,27 @@ pub(crate) fn install_projection_tool(
     if tool.contains("..") || tool.contains('/') || tool.contains('\\') {
         return Err(format!("Invalid tool name: {}", tool));
     }
-    if tool == "codex-app" {
-        return Ok(non_installable_projection_result("codex-app", scope));
-    }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    (adapter.install)(roots, effective_scope)
+    let mut out = (adapter.install)(roots, effective_scope)?;
+    let research_mcp_changed = ensure_research_mcp_five_host_surfaces(roots)?;
+    if let Some(obj) = out.as_object_mut() {
+        let prior = obj.get("changed").and_then(Value::as_bool).unwrap_or(false);
+        obj.insert("changed".to_string(), json!(prior || research_mcp_changed));
+        obj.insert(
+            "research_mcp".to_string(),
+            json!({
+                "project_dot_mcp_json": roots.project_root.join(".mcp.json").to_string_lossy(),
+                "paperplain": "installed",
+                "mcp-codegraph": "installed",
+                "changed": research_mcp_changed,
+            }),
+        );
+    }
+    Ok(out)
 }
 
 pub(crate) fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
-    if tool == "codex-app" {
-        return Ok(non_installable_projection_result("codex-app", "status"));
-    }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     (adapter.status)(roots)
 }
@@ -679,9 +698,6 @@ pub(crate) fn remove_projection_tool(
     scope: &str,
     dry_run: bool,
 ) -> Result<Value, String> {
-    if tool == "codex-app" {
-        return Ok(non_installable_projection_result("codex-app", scope));
-    }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     let effective_scope = projection_scope_for_tool(tool, scope)?;
     (adapter.remove)(roots, effective_scope, dry_run)
@@ -730,16 +746,6 @@ pub(crate) fn antigravity_home_explicit(command: &ProjectionCommand) -> bool {
     command.antigravity_home.is_some() || std::env::var_os("ANTIGRAVITY_HOME").is_some()
 }
 
-pub(crate) fn antigravity_cli_home_root_string(roots: &ResolvedProjectionRoots) -> String {
-    roots
-        .antigravity_cli_home_root
-        .to_string_lossy()
-        .into_owned()
-}
-
-pub(crate) fn antigravity_cli_home_explicit(command: &ProjectionCommand) -> bool {
-    std::env::var_os("ANTIGRAVITY_CLI_HOME").is_some()
-}
 
 pub(crate) fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
     let target = codex_entrypoint_target(roots, scope);
@@ -782,8 +788,8 @@ pub(crate) fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result
             }
         },
         "manifest": {
-            "project": projection_manifest_status(&projection_manifest_path(roots, "codex-cli", "project"))?,
-            "user": projection_manifest_status(&projection_manifest_path(roots, "codex-cli", "user"))?,
+            "project": projection_manifest_status(&projection_manifest_path(roots, "codex", "project"))?,
+            "user": projection_manifest_status(&projection_manifest_path(roots, "codex", "user"))?,
         },
         "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
     }))
@@ -813,6 +819,7 @@ pub(crate) fn install_cursor_projection(
         if mcp_install.managed {
             managed_files.push(mcp_path.to_string_lossy().to_string());
             managed_key_paths.push(cursor_mcp_server_key_path().to_string());
+            managed_key_paths.push(cursor_codegraph_mcp_server_key_path().to_string());
         }
         mcp = json!({
             "managed": mcp_install.managed,
@@ -905,9 +912,9 @@ pub(crate) fn remove_codex_projection(
     dry_run: bool,
 ) -> Result<Value, String> {
     let target = codex_entrypoint_target(roots, scope);
-    let manifest_path = projection_manifest_path(roots, "codex-cli", scope);
+    let manifest_path = projection_manifest_path(roots, "codex", scope);
     let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "codex-cli", scope, &target)?;
+        projection_manifest_ownership(&manifest_path, "codex", scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
         fs::remove_file(&target).map_err(|err| err.to_string())?;
@@ -1019,6 +1026,10 @@ pub(crate) fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &
             .join("rules")
             .join("framework.md")
     }
+}
+
+pub(crate) fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf {
+    roots.project_root.join(".claude").join("CLAUDE.md")
 }
 
 pub(crate) fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
@@ -1149,12 +1160,20 @@ pub(crate) fn install_claude_projection(
     let settings_path = claude_settings_target(roots, scope);
     let changed =
         write_text_if_changed(&target, &render_claude_framework_entrypoint(roots, scope))?;
+    let narrative_changed = if scope == "project" {
+        write_text_if_changed(
+            &claude_project_narrative_path(roots),
+            &render_claude_project_narrative(roots),
+        )?
+    } else {
+        false
+    };
     let hooks_changed = install_claude_settings_hooks(&settings_path)?;
     let env_changed = install_claude_hook_env_if_absent(roots)?;
     let manifest_changed = write_claude_projection_manifest(roots, scope, &target, &settings_path)?;
     Ok(json!({
         "status": "installed",
-        "changed": changed || hooks_changed || env_changed || manifest_changed,
+        "changed": changed || narrative_changed || hooks_changed || env_changed || manifest_changed,
         "scope": scope,
         "prompts": {
             "framework": {
@@ -1351,13 +1370,13 @@ pub(crate) fn lifecycle_paragraph_for_host(narrative: &HostProjectionNarrative, 
         .get(host_projection)
         .cloned()
         .or_else(|| {
-            if host_projection == "codex-app" {
-                narrative
-                    .lifecycle_by_host
-                    .get("codex-cli")
-                    .cloned()
-            } else {
-                None
+            match host_projection {
+                "codex-cli" | "codex-app" => narrative.lifecycle_by_host.get("codex").cloned(),
+                "claude-desktop" => narrative.lifecycle_by_host.get("claude-code").cloned(),
+                "antigravity-app" | "antigravity-cli" => {
+                    narrative.lifecycle_by_host.get("antigravity").cloned()
+                }
+                _ => None,
             }
         })
         .unwrap_or_else(|| narrative.default_lifecycle_paragraph.clone())
@@ -1380,16 +1399,74 @@ pub(crate) fn load_host_projection_narrative(framework_root: &Path) -> Result<Ho
     Ok(narrative)
 }
 
-pub(crate) fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
-    let narrative = load_host_projection_narrative(&roots.framework_root)
-        .expect("host projection narrative must load before rendering claude entrypoint");
-    let runtime_rel = skills_source_rel(&roots.framework_root)
+fn skills_runtime_rel_path(framework_root: &Path) -> String {
+    skills_source_rel(framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
-        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
+        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string())
+}
+
+fn framework_entrypoint_render_context(
+    roots: &ResolvedProjectionRoots,
+    host_label: &str,
+) -> (HostProjectionNarrative, String) {
+    let narrative = load_host_projection_narrative(&roots.framework_root).unwrap_or_else(|err| {
+        panic!("host projection narrative must load before rendering {host_label} entrypoint: {err}")
+    });
+    let runtime_rel = skills_runtime_rel_path(&roots.framework_root);
+    (narrative, runtime_rel)
+}
+
+fn framework_entrypoint_common_footer(runtime_rel: &str, agents_delta_file: &str) -> String {
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `AGENTS_CLAUDE.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
+        "1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `{agents_delta_file}`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n"
+    )
+}
+
+pub(crate) fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> String {
+    let narrative = load_host_projection_narrative(&roots.framework_root)
+        .expect("host projection narrative must load before rendering claude project narrative");
+    format!(
+        r#"<!-- managed_by: skill-framework · claude-code · keep ≤48 lines -->
+<!-- projection_id: claude-code-project-narrative -->
+<!-- host_projection: claude-code -->
+<!-- install_scope: project -->
+
+# Claude Code（本项目）
+
+跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_CLAUDE.md`**；手册 **`docs/hosts/claude.md`**。
+
+## 语言（硬约束）
+
+- **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外）；自然学术中文，避免翻译腔。
+- 仅当用户**当轮明确要求英文**时可切换。
+- **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」。
+
+{gsd}
+
+## Hook 集成（非 MCP）
+
+- 四事件：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（`.claude/settings.json` + `router-rs claude hook`）。
+- Goal/RFV：`framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/`。
+- 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory，suppress review Stop nudge；非 my-light 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/host_adapter_contract.md` §0.1）。
+- 检查点：`session_checkpoint`（非自动）。
+
+## MCP（可选）
+
+项目 `.claude/mcp.json` 可注册 `browser-mcp` 等；历史 Desktop 配置见 **`mcp.README.md`**（`claude-desktop` 已退役，勿作真源）。
+
+路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。
+"#,
+        gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
+    )
+}
+
+pub(crate) fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
+    let (narrative, runtime_rel) = framework_entrypoint_render_context(roots, "claude");
+    format!(
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
         gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
         review = narrative.review_findings_only_paragraph,
+        footer = framework_entrypoint_common_footer(&runtime_rel, "AGENTS_CLAUDE.md"),
     )
 }
 
@@ -1405,6 +1482,16 @@ pub(crate) fn write_claude_projection_manifest(
     command_path: &Path,
     settings_path: &Path,
 ) -> Result<bool, String> {
+    let mut files = vec![
+        projection_manifest_file_ref(roots, command_path),
+        projection_manifest_file_ref(roots, settings_path),
+    ];
+    if scope == "project" {
+        files.push(projection_manifest_file_ref(
+            roots,
+            &claude_project_narrative_path(roots),
+        ));
+    }
     write_json_if_changed(
         &projection_manifest_path(roots, "claude-code", scope),
         &json!({
@@ -1412,10 +1499,7 @@ pub(crate) fn write_claude_projection_manifest(
             "managed_by": "skill-framework",
             "host_projection": "claude-code",
             "scope": scope,
-            "files": [
-                projection_manifest_file_ref(roots, command_path),
-                projection_manifest_file_ref(roots, settings_path),
-            ],
+            "files": files,
             "settings": {
                 "managed_key_paths": ALL_HOOK_EVENTS.iter()
                     .map(|e| format!("hooks.{}", e))
@@ -1457,371 +1541,182 @@ pub(crate) fn claude_settings_hook_status(path: &Path) -> Result<Value, String> 
 }
 
 pub(crate) fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
-    let content = read_text_if_exists(path)?;
-    let marker_managed = content
-        .as_deref()
-        .map(is_managed_projection_content)
-        .unwrap_or(false);
-    let verified = marker_managed
-        && content
-            .as_deref()
-            .map(|content| content.contains("host_projection: claude-code"))
-            .unwrap_or(false);
-    Ok(json!({
-        "path": path.to_string_lossy(),
-        "exists": path.exists(),
-        "managed": verified,
-        "verification": if verified { "verified" } else if marker_managed { "unknown" } else { "unmanaged" },
-        "marker_managed": marker_managed,
-    }))
+    projection_file_status(path, "claude-code")
 }
 
-pub(crate) fn install_claude_desktop_projection(
+
+/// Shared paperplain MCP entry (five-host research harness).
+pub(crate) fn paperplain_mcp_server_payload() -> Value {
+    json!({
+        "command": "npx",
+        "args": ["-y", "paperplain-mcp"],
+        "type": "stdio",
+        "description": "Academic paper metadata fetch/search (paperplain-mcp)"
+    })
+}
+
+/// Independent `mcp-codegraph` stdio server (Roadmap v5 §2.8 W3 / CG-3).
+pub(crate) fn codegraph_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+    let repo_root = roots.project_root.to_string_lossy();
+    match crate::host_integration::roots::resolve_mcp_codegraph_command(&roots.framework_root) {
+        crate::host_integration::roots::McpCodegraphCommand::CargoBootstrap => json!({
+            "command": "cargo",
+            "args": crate::host_integration::roots::codegraph_mcp_cargo_bootstrap_args(
+                &roots.framework_root,
+                &repo_root,
+            ),
+            "type": "stdio",
+            "description": "Code knowledge graph (search, callers, callees, impact) via mcp-codegraph",
+        }),
+        command => json!({
+            "command": crate::host_integration::roots::mcp_codegraph_command_value(&command),
+            "args": ["--repo-root", repo_root.as_ref()],
+            "type": "stdio",
+            "description": "Code knowledge graph (search, callers, callees, impact) via mcp-codegraph",
+        }),
+    }
+}
+
+/// Project `.mcp.json` + Codex `.codex/config.toml` research MCP (paperplain + mcp-codegraph).
+pub(crate) fn ensure_research_mcp_five_host_surfaces(
     roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<Value, String> {
-    let stable_bin = ensure_claude_desktop_mcp_binary(roots)?;
-    validate_mcp_command_binary(
-        &stable_bin.to_string_lossy(),
-        Some(&roots.framework_root),
-    )?;
-    // Claude Desktop uses MCP protocol (via mcp.json), not shell hooks.
-    let claude_md_target = claude_desktop_claude_md_target(roots, scope);
-    let (mcp_targets, mcp_changed) = if scope == "user" {
-        let mut changed = false;
-        let mut targets = Vec::new();
-        for path in claude_desktop_user_mcp_config_paths(roots) {
-            changed |= write_claude_desktop_mcp_json(&path, roots)?;
-            targets.push(path);
-        }
-        (targets, changed)
-    } else {
-        let mcp_target = claude_desktop_mcp_target(roots, scope);
-        let changed = write_claude_desktop_mcp_json(&mcp_target, roots)?;
-        (vec![mcp_target], changed)
-    };
-    let md_changed = write_claude_desktop_claude_md(&claude_md_target, roots, scope)?;
-    let settings_changed = install_claude_desktop_research_settings(&claude_desktop_research_settings_target(
-        roots,
-        scope,
-    ))?;
-    let primary_mcp = mcp_targets
-        .first()
-        .cloned()
-        .unwrap_or_else(|| claude_desktop_mcp_target(roots, scope));
-    let manifest_changed = write_claude_desktop_projection_manifest(
-        roots,
-        scope,
-        &mcp_targets,
-        &claude_md_target,
-        true,
-    )?;
-    let research_settings_path =
-        claude_desktop_research_settings_target(roots, scope).to_string_lossy().into_owned();
-    let mcp_paths: Vec<String> = mcp_targets
+) -> Result<bool, String> {
+    let mut changed = ensure_project_research_mcp_json(roots)?;
+    changed |= ensure_codex_research_mcp_toml(roots)?;
+    Ok(changed)
+}
+
+/// Project-root `.mcp.json` with paperplain (gitignored; materialized on host install).
+pub(crate) fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+    let path = roots.project_root.join(".mcp.json");
+    let mut payload = read_json_if_exists(&path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    let root = payload
+        .as_object_mut()
+        .ok_or_else(|| "project .mcp.json root must be an object".to_string())?;
+    let servers = root
+        .entry("mcpServers".to_string())
+        .or_insert_with(|| json!({}));
+    if !servers.is_object() {
+        *servers = json!({});
+    }
+    let entries = servers
+        .as_object_mut()
+        .ok_or_else(|| "project .mcp.json mcpServers must be an object".to_string())?;
+    let plain = paperplain_mcp_server_payload();
+    let paperplain_changed = entries.get("paperplain") != Some(&plain);
+    entries.insert("paperplain".to_string(), plain);
+    let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
+    write_json_if_changed(&path, &payload)
+        .map(|file_changed| paperplain_changed || codegraph_changed || file_changed)
+}
+
+fn merge_codegraph_into_mcp_servers_map(
+    servers: &mut Map<String, Value>,
+    roots: &ResolvedProjectionRoots,
+    existing_key: &str,
+) -> bool {
+    let payload = codegraph_mcp_server_payload(roots);
+    let changed = servers.get(existing_key) != Some(&payload);
+    servers.insert(existing_key.to_string(), payload);
+    changed
+}
+
+fn merge_paperplain_into_mcp_servers_map(
+    servers: &mut Map<String, Value>,
+    existing_key: &str,
+) -> bool {
+    let plain = paperplain_mcp_server_payload();
+    let changed = servers.get(existing_key) != Some(&plain);
+    servers.insert(existing_key.to_string(), plain);
+    changed
+}
+
+fn codex_mcp_managed_marker(server_id: &str) -> String {
+    format!("# managed_by: skill-framework · mcp_servers.{server_id}")
+}
+
+fn render_codex_mcp_toml_section(server_id: &str, command: &str, args: &[&str]) -> String {
+    let escaped_cmd = command.replace('\\', "\\\\").replace('"', "\\\"");
+    let args_toml = args
         .iter()
-        .map(|path| path.to_string_lossy().into_owned())
-        .collect();
-    Ok(json!({
-        "status": "installed",
-        "changed": mcp_changed || md_changed || settings_changed || manifest_changed,
-        "scope": scope,
-        "mcp_binary": {
-            "path": stable_bin.to_string_lossy(),
-            "smoke_test": "ok",
-        },
-        "mcp_config": {
-            "scope": scope,
-            "path": primary_mcp.to_string_lossy(),
-            "paths": mcp_paths,
-            "changed": mcp_changed,
-        },
-        "claude_md": {
-            "scope": scope,
-            "path": claude_md_target.to_string_lossy(),
-            "changed": md_changed,
-        },
-        "research_settings": {
-            "scope": scope,
-            "installed": settings_changed || research_settings_path.ends_with("settings.json"),
-            "path": research_settings_path,
-            "changed": settings_changed,
-        },
-    }))
-}
-
-pub(crate) fn claude_desktop_research_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.claude_home_root.join("settings.json")
-    } else {
-        roots.project_root.join(".claude/settings.json")
-    }
-}
-
-pub(crate) fn claude_desktop_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_mcp_path = roots.project_root.join(".claude/mcp.json");
-    let project_claude_md_path = roots.project_root.join(".claude/CLAUDE.md");
-    let user_mcp_paths = claude_desktop_user_mcp_config_paths(roots);
-    let user_claude_md_path = roots.claude_home_root.join("CLAUDE.md");
-    let user_mcp_exists = user_mcp_paths.iter().any(|path| path.is_file());
-    let account_home = host_account_home_from_roots(roots);
-    let user_3p_mcp_path = claude_desktop_3p_mcp_config_path_for_home(&account_home);
-    let mcp_command = read_json_if_exists(&project_mcp_path)
-        .ok()
-        .flatten()
-        .and_then(|payload| claude_desktop_router_rs_framework_payload(&payload))
-        .or_else(|| {
-            user_mcp_paths.iter().find_map(|path| {
-                read_json_if_exists(path)
-                    .ok()
-                    .flatten()
-                    .and_then(|payload| claude_desktop_router_rs_framework_payload(&payload))
-            })
-        });
-
-    let mut binary_valid = false;
-    let mut status_error = None;
-    if let Some(payload) = mcp_command.as_ref() {
-        if let Some(cmd) = payload.get("command").and_then(Value::as_str) {
-            match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
-                Ok(()) => match crate::router_self::validate_router_rs_binary_runnable(Path::new(cmd))
-                {
-                    Ok(()) => binary_valid = true,
-                    Err(err) => status_error = Some(err),
-                },
-                Err(err) => status_error = Some(err),
-            }
-        }
-    } else if project_mcp_path.exists() || user_mcp_exists {
-        status_error =
-            Some("Invalid or incomplete mcpServers.router-rs-framework payload".to_string());
-    }
-
-    Ok(json!({
-        "ready": (project_mcp_path.exists() || user_mcp_exists) && binary_valid,
-        "status": "projection-status",
-        "error": status_error,
-        "mcp_config": {
-            "project_scope": project_mcp_path.exists(),
-            "user_scope": user_mcp_exists,
-            "user_scope_path": user_mcp_paths.first().map(|path| path.to_string_lossy()),
-            "user_scope_3p_path": user_3p_mcp_path.to_string_lossy(),
-            "user_scope_3p": user_3p_mcp_path.is_file(),
-            "binary_valid": binary_valid,
-            "router_rs_framework": mcp_command,
-        },
-        "claude_md": {
-            "project_scope": project_claude_md_path.exists(),
-            "user_scope": user_claude_md_path.exists(),
-        },
-    }))
-}
-
-pub(crate) fn claude_desktop_router_rs_framework_payload(root: &Value) -> Option<Value> {
-    root.get("mcpServers")
-        .and_then(|servers| servers.get("router-rs-framework"))
-        .cloned()
-}
-
-pub(crate) fn remove_claude_desktop_projection(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    dry_run: bool,
-) -> Result<Value, String> {
-    let mcp_targets: Vec<PathBuf> = if scope == "user" {
-        claude_desktop_user_mcp_config_paths(roots)
-    } else {
-        vec![claude_desktop_mcp_target(roots, scope)]
-    };
-    let claude_md_target = claude_desktop_claude_md_target(roots, scope);
-    let manifest_path = projection_manifest_path(roots, "claude-desktop", scope);
-
-    let mut changed = false;
-    let mut would_change = false;
-    let mut removed_paths = Vec::new();
-    let mut would_remove_paths = Vec::new();
-
-    for mcp_target in &mcp_targets {
-        let managed = projection_manifest_ownership(
-            &manifest_path,
-            "claude-desktop",
-            scope,
-            mcp_target,
-        )
-        .map(|o| o.owns_projection_file)
-        .unwrap_or(false);
-        if !mcp_target.exists() || !managed {
-            continue;
-        }
-        if claude_desktop_config_preserves_non_mcp_keys(mcp_target) {
-            if !dry_run {
-                let stripped = strip_claude_desktop_framework_mcp_servers(mcp_target)?;
-                if stripped {
-                    removed_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config", "mode": "strip-servers"}));
-                }
-            } else {
-                would_remove_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config", "mode": "strip-servers"}));
-            }
-            changed = true;
-            would_change = true;
-            continue;
-        }
-        if !dry_run {
-            let _ = std::fs::remove_file(mcp_target);
-            removed_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config"}));
-        } else {
-            would_remove_paths.push(json!({"path": mcp_target.to_string_lossy(), "type": "mcp_config"}));
-        }
-        changed = true;
-        would_change = true;
-    }
-
-    let managed =
-        projection_manifest_ownership(&manifest_path, "claude-desktop", scope, &claude_md_target)
-            .map(|o| o.owns_projection_file)
-            .unwrap_or(false);
-    if claude_md_target.exists() && managed {
-        if !dry_run {
-            let _ = std::fs::remove_file(&claude_md_target);
-            removed_paths.push(json!({"path": claude_md_target.to_string_lossy(), "type": "claude_md"}));
-        } else {
-            would_remove_paths.push(json!({"path": claude_md_target.to_string_lossy(), "type": "claude_md"}));
-        }
-        changed = true;
-        would_change = true;
-    }
-
-    let settings_path = claude_desktop_research_settings_target(roots, scope);
-    let settings_managed = projection_manifest_ownership(
-        &manifest_path,
-        "claude-desktop",
-        scope,
-        &settings_path,
+        .map(|arg| format!("\"{}\"", arg.replace('\\', "\\\\").replace('"', "\\\"")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "[mcp_servers.{server_id}]\ncommand = \"{escaped_cmd}\"\nargs = [{args_toml}]\nenabled = true\n"
     )
-    .map(|o| o.owns_projection_file || o.managed)
-    .unwrap_or(false);
-    if settings_path.is_file() && settings_managed {
-        if !dry_run {
-            if strip_claude_desktop_research_settings(&settings_path)? {
-                removed_paths.push(json!({"path": settings_path.to_string_lossy(), "type": "research_settings", "mode": "strip"}));
-                changed = true;
+}
+
+fn upsert_codex_mcp_toml_section(
+    path: &Path,
+    server_id: &str,
+    command: &str,
+    args: &[&str],
+) -> Result<bool, String> {
+    let marker = codex_mcp_managed_marker(server_id);
+    let block = format!("{marker}\n{}", render_codex_mcp_toml_section(server_id, command, args));
+    let existing = read_text_if_exists(path)?.unwrap_or_default();
+    let new_text = if let Some(start) = existing.find(&marker) {
+        let after_marker = start + marker.len();
+        let end = existing[after_marker..]
+            .find("\n# managed_by: skill-framework · mcp_servers.")
+            .map(|idx| after_marker + idx)
+            .unwrap_or(existing.len());
+        let mut merged = String::new();
+        merged.push_str(&existing[..start]);
+        merged.push_str(&block);
+        if end < existing.len() {
+            if !merged.ends_with('\n') {
+                merged.push('\n');
             }
-        } else {
-            would_remove_paths.push(json!({"path": settings_path.to_string_lossy(), "type": "research_settings", "mode": "strip"}));
-            would_change = true;
+            merged.push_str(&existing[end..]);
         }
-    }
-
-    let manifest_managed =
-        projection_manifest_ownership(&manifest_path, "claude-desktop", scope, mcp_targets.first().unwrap_or(&claude_md_target))
-            .map(|o| o.managed)
-            .unwrap_or(false);
-    if manifest_managed {
-        if !dry_run {
-            let _ = std::fs::remove_file(&manifest_path);
-        }
-        changed = true;
-    }
-
-    Ok(json!({
-        "status": if dry_run && would_change { "would-remove" } else if changed { "removed" } else { "not-installed-or-user-owned" },
-        "changed": changed,
-        "dry_run": dry_run,
-        "scope": scope,
-        "removed_paths": removed_paths,
-        "would_remove_paths": would_remove_paths,
-    }))
-}
-
-pub(crate) fn claude_desktop_official_mcp_config_path_for_home(home: &Path) -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        return home.join("Library/Application Support/Claude/claude_desktop_config.json");
-    }
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            return PathBuf::from(appdata).join("Claude/claude_desktop_config.json");
-        }
-        return home.join("Claude/claude_desktop_config.json");
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        home.join(".config/Claude/claude_desktop_config.json")
-    }
-}
-
-#[cfg(target_os = "macos")]
-pub(crate) fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
-    home.join("Library/Application Support/Claude-3p/claude_desktop_config.json")
-}
-
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn claude_desktop_3p_mcp_config_path_for_home(home: &Path) -> PathBuf {
-    claude_desktop_official_mcp_config_path_for_home(home)
-}
-
-pub(crate) fn claude_desktop_user_mcp_config_paths(roots: &ResolvedProjectionRoots) -> Vec<PathBuf> {
-    let home = host_account_home_from_roots(roots);
-    let mut paths = vec![claude_desktop_official_mcp_config_path_for_home(&home)];
-    #[cfg(target_os = "macos")]
-    {
-        let three_p = claude_desktop_3p_mcp_config_path_for_home(&home);
-        if !paths.iter().any(|existing| existing == &three_p) {
-            paths.push(three_p);
-        }
-    }
-    paths
-}
-
-pub(crate) fn claude_desktop_config_preserves_non_mcp_keys(path: &Path) -> bool {
-    read_json_if_exists(path)
-        .ok()
-        .flatten()
-        .and_then(|payload| payload.as_object().map(|obj| obj.keys().any(|key| key != "mcpServers")))
-        .unwrap_or(false)
-}
-
-pub(crate) fn strip_claude_desktop_framework_mcp_servers(path: &Path) -> Result<bool, String> {
-    let Some(mut payload) = read_json_if_exists(path)? else {
-        return Ok(false);
-    };
-    let Some(root) = payload.as_object_mut() else {
-        return Ok(false);
-    };
-    let Some(servers) = root.get_mut("mcpServers").and_then(Value::as_object_mut) else {
-        return Ok(false);
-    };
-    let before = servers.len();
-    servers.remove("router-rs-framework");
-    servers.remove("browser-mcp");
-    if servers.len() == before {
-        return Ok(false);
-    }
-    if servers.is_empty() {
-        root.remove("mcpServers");
-    }
-    if root.is_empty() {
-        fs::remove_file(path).map_err(|err| err.to_string())?;
-        return Ok(true);
-    }
-    write_json_if_changed(path, &payload).map(|_| true)
-}
-
-pub(crate) fn claude_desktop_mcp_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        claude_desktop_official_mcp_config_path_for_home(&host_account_home_from_roots(roots))
+        merged
     } else {
-        roots.project_root.join(".claude/mcp.json")
-    }
+        let mut merged = existing;
+        if !merged.is_empty() && !merged.ends_with('\n') {
+            merged.push('\n');
+        }
+        if !merged.is_empty() {
+            merged.push('\n');
+        }
+        merged.push_str(&block);
+        merged
+    };
+    let normalized = format!("{}\n", new_text.trim_end());
+    write_text_if_changed(path, &normalized)
 }
 
-pub(crate) fn claude_desktop_claude_md_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.claude_home_root.join("CLAUDE.md")
-    } else {
-        roots.project_root.join(".claude/CLAUDE.md")
+/// Codex reads MCP from project `.codex/config.toml` (`mcp_servers.*` sections).
+pub(crate) fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+    let path = roots.project_root.join(".codex/config.toml");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    let mut changed = false;
+    changed |= upsert_codex_mcp_toml_section(&path, "paperplain", "npx", &["-y", "paperplain-mcp"])?;
+    let codegraph = codegraph_mcp_server_payload(roots);
+    let command = codegraph
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or("mcp-codegraph");
+    let args: Vec<String> = codegraph
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    changed |= upsert_codex_mcp_toml_section(&path, "mcp-codegraph", command, &arg_refs)?;
+    Ok(changed)
 }
 
 pub(crate) fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
@@ -1860,646 +1755,6 @@ pub(crate) fn make_mcp_server_payload_with_env(
     payload
 }
 
-pub(crate) fn claude_desktop_mcp_env(roots: &ResolvedProjectionRoots) -> Value {
-    let mut env = Map::new();
-    env.insert(
-        "SKILL_FRAMEWORK_ROOT".to_string(),
-        json!(roots.framework_root.to_string_lossy()),
-    );
-    for key in [
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "ALL_PROXY",
-        "NO_PROXY",
-        "http_proxy",
-        "https_proxy",
-    ] {
-        if let Ok(value) = std::env::var(key) {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                env.insert(key.to_string(), json!(trimmed));
-            }
-        }
-    }
-    Value::Object(env)
-}
-
-#[allow(dead_code)]
-pub(crate) fn workspace_router_rs_release_binary(framework_root: &Path) -> Option<PathBuf> {
-    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
-        let candidate = PathBuf::from(td).join("release/router-rs");
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    let manifest = framework_root.join("core/router-rs/Cargo.toml");
-    if manifest.is_file() {
-        let output = std::process::Command::new("cargo")
-            .current_dir(framework_root)
-            .args([
-                "metadata",
-                "--no-deps",
-                "--format-version",
-                "1",
-                "--manifest-path",
-            ])
-            .arg(&manifest)
-            .output()
-            .ok()?;
-        if output.status.success() {
-            if let Ok(meta) = serde_json::from_slice::<Value>(&output.stdout) {
-                if let Some(td) = meta.get("target_directory").and_then(Value::as_str) {
-                    let candidate = PathBuf::from(td).join("release/router-rs");
-                    if candidate.is_file() {
-                        return Some(candidate);
-                    }
-                }
-            }
-        }
-    }
-    let config = framework_root.join(".cargo/config.toml");
-    if let Ok(text) = fs::read_to_string(config) {
-        for raw in text.lines() {
-            let line = raw.split('#').next().unwrap_or("").trim();
-            if let Some(rest) = line.strip_prefix("target-dir") {
-                let mut rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == '=');
-                rest = rest.trim();
-                let val = rest
-                    .strip_prefix('"')
-                    .and_then(|s| s.strip_suffix('"'))
-                    .or_else(|| rest.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
-                    .unwrap_or(rest);
-                let base = PathBuf::from(val);
-                let candidate = if base.is_absolute() {
-                    base.join("release/router-rs")
-                } else {
-                    framework_root.join(base).join("release/router-rs")
-                };
-                if candidate.is_file() {
-                    return Some(candidate);
-                }
-            }
-        }
-    }
-    None
-}
-
-pub(crate) fn claude_desktop_mcp_router_command(roots: &ResolvedProjectionRoots) -> Value {
-    if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty()
-            && Path::new(trimmed).is_file()
-            && !is_ephemeral_executable_path(trimmed)
-        {
-            if let Err(err) =
-                validate_mcp_command_binary(trimmed, Some(&roots.framework_root))
-            {
-                eprintln!(
-                    "warning: ROUTER_RS_BIN ignored for Claude Desktop MCP ({err}); using stable install path"
-                );
-            } else {
-                return json!(trimmed);
-            }
-        }
-    }
-    let desktop =
-        crate::router_self::router_rs_desktop_mcp_path_for_home(&host_account_home_from_roots(roots));
-    if desktop.is_file() {
-        return json!(desktop.to_string_lossy());
-    }
-    let local = crate::router_self::default_router_rs_install_path();
-    if local.is_file() && !is_ephemeral_executable_path(&local.to_string_lossy()) {
-        return json!(local.to_string_lossy());
-    }
-    match resolve_mcp_router_rs_command(&roots.framework_root) {
-        McpRouterRsCommand::OnPath => {
-            if let Ok(path) = which::which("router-rs") {
-                json!(path.to_string_lossy())
-            } else {
-                json!("router-rs")
-            }
-        }
-        McpRouterRsCommand::Absolute(path) => json!(path.to_string_lossy()),
-        McpRouterRsCommand::CargoBootstrap => json!("cargo"),
-    }
-}
-
-pub(crate) fn claude_desktop_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
-    let mut payload = make_mcp_server_payload_with_env(
-        roots,
-        &["claude-desktop", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
-        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory)",
-        Some(claude_desktop_mcp_env(roots)),
-    );
-    if let Some(obj) = payload.as_object_mut() {
-        obj.insert(
-            "command".to_string(),
-            claude_desktop_mcp_router_command(roots),
-        );
-    }
-    payload
-}
-
-pub(crate) fn claude_desktop_browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
-    let mut payload = make_mcp_server_payload_with_env(
-        roots,
-        &[
-            "browser",
-            "mcp-stdio",
-            "--repo-root",
-            roots.project_root.to_string_lossy().as_ref(),
-        ],
-        "Browser MCP for external web research (browser_open, browser_get_text, …)",
-        Some(claude_desktop_mcp_env(roots)),
-    );
-    if let Some(obj) = payload.as_object_mut() {
-        obj.insert(
-            "command".to_string(),
-            claude_desktop_mcp_router_command(roots),
-        );
-    }
-    payload
-}
-
-const CLAUDE_DESKTOP_RESEARCH_PERMISSION_ALLOW: &[&str] = &[
-    "WebFetch(domain:*)",
-    "WebSearch",
-    "Bash(curl *)",
-    "Bash(wget *)",
-    "Bash(git fetch *)",
-    "Bash(git clone *)",
-];
-
-const CLAUDE_DESKTOP_RESEARCH_SANDBOX_DOMAINS: &[&str] = &[
-    "github.com",
-    "*.githubusercontent.com",
-    "gitlab.com",
-    "*.npmjs.org",
-    "registry.yarnpkg.com",
-    "pypi.org",
-    "*.pythonhosted.org",
-    "arxiv.org",
-    "*.arxiv.org",
-    "doi.org",
-    "*.crossref.org",
-    "scholar.google.com",
-    "api.github.com",
-    "raw.githubusercontent.com",
-    "*.wikipedia.org",
-    "stackoverflow.com",
-    "*.stackoverflow.com",
-    "docs.rs",
-    "crates.io",
-    "127.0.0.1",
-    "localhost",
-];
-
-pub(crate) fn merge_json_string_array(existing: &mut Value, additions: &[&str]) {
-    if !existing.is_array() {
-        *existing = json!([]);
-    }
-    let Some(arr) = existing.as_array_mut() else {
-        return;
-    };
-    for item in additions {
-        let value = json!(item);
-        if !arr.iter().any(|entry| entry == &value) {
-            arr.push(value);
-        }
-    }
-}
-
-pub(crate) fn remove_json_string_array_values(value: &mut Value, remove: &[&str]) {
-    let Some(arr) = value.as_array_mut() else {
-        return;
-    };
-    arr.retain(|entry| entry.as_str().is_some_and(|s| !remove.contains(&s)));
-}
-
-pub(crate) fn strip_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
-    let Some(mut root) = read_json_if_exists(settings_path)? else {
-        return Ok(false);
-    };
-    let Some(obj) = root.as_object_mut() else {
-        return Ok(false);
-    };
-    let mut changed = false;
-
-    if let Some(perms) = obj.get_mut("permissions").and_then(Value::as_object_mut) {
-        if let Some(allow) = perms.get_mut("allow") {
-            let before = allow.as_array().map(|a| a.len()).unwrap_or(0);
-            remove_json_string_array_values(allow, CLAUDE_DESKTOP_RESEARCH_PERMISSION_ALLOW);
-            if allow.as_array().map(|a| a.len()).unwrap_or(0) != before {
-                changed = true;
-            }
-        }
-        if perms.get("allow").and_then(Value::as_array).is_some_and(|a| a.is_empty()) {
-            perms.remove("allow");
-            changed = true;
-        }
-        if perms.is_empty() {
-            obj.remove("permissions");
-            changed = true;
-        }
-    }
-
-    if let Some(sandbox) = obj.get_mut("sandbox").and_then(Value::as_object_mut) {
-        if let Some(excluded) = sandbox.get_mut("excludedCommands") {
-            remove_json_string_array_values(excluded, &["curl *", "wget *"]);
-            changed = true;
-        }
-        if let Some(network) = sandbox.get_mut("network").and_then(Value::as_object_mut) {
-            if let Some(allowed) = network.get_mut("allowedDomains") {
-                remove_json_string_array_values(allowed, CLAUDE_DESKTOP_RESEARCH_SANDBOX_DOMAINS);
-                changed = true;
-            }
-            if network.get("allowedDomains").and_then(Value::as_array).is_some_and(|a| a.is_empty()) {
-                network.remove("allowedDomains");
-                changed = true;
-            }
-            if network.len() == 1 && network.contains_key("allowLocalBinding") {
-                sandbox.remove("network");
-                changed = true;
-            }
-        }
-        if sandbox.get("excludedCommands").and_then(Value::as_array).is_some_and(|a| a.is_empty()) {
-            sandbox.remove("excludedCommands");
-            changed = true;
-        }
-        if sandbox.len() <= 2
-            && sandbox.contains_key("enabled")
-            && sandbox.contains_key("autoAllowBashIfSandboxed")
-        {
-            obj.remove("sandbox");
-            changed = true;
-        }
-    }
-
-    if !changed {
-        return Ok(false);
-    }
-    write_json_if_changed(settings_path, &root)
-}
-
-pub(crate) fn merge_claude_desktop_research_settings(existing: Option<Value>) -> Result<Value, String> {
-    let mut root = match existing {
-        Some(Value::Object(map)) => map,
-        Some(_) => {
-            return Err(
-                "Claude Desktop research settings root must be a JSON object".to_string(),
-            );
-        }
-        None => Map::new(),
-    };
-
-    let permissions = root
-        .entry("permissions".to_string())
-        .or_insert_with(|| json!({}));
-    if !permissions.is_object() {
-        *permissions = json!({});
-    }
-    if let Some(perms) = permissions.as_object_mut() {
-        let allow = perms
-            .entry("allow".to_string())
-            .or_insert_with(|| json!([]));
-        merge_json_string_array(allow, CLAUDE_DESKTOP_RESEARCH_PERMISSION_ALLOW);
-    }
-
-    let sandbox = root
-        .entry("sandbox".to_string())
-        .or_insert_with(|| json!({}));
-    if !sandbox.is_object() {
-        *sandbox = json!({});
-    }
-    if let Some(sandbox_obj) = sandbox.as_object_mut() {
-        // 调研面：默认关闭 Bash 沙箱（避免误开 Seatbelt 域名墙）；外网走 MCP web_fetch / browser-mcp。
-        // 若用户已在 /sandbox 显式开启，保留其 enabled 值；仅修复框架曾误写的 enabled:true。
-        match sandbox_obj.get("enabled") {
-            None => {
-                sandbox_obj.insert("enabled".to_string(), json!(false));
-            }
-            Some(Value::Bool(true)) => {
-                sandbox_obj.insert("enabled".to_string(), json!(false));
-            }
-            _ => {}
-        }
-        sandbox_obj
-            .entry("autoAllowBashIfSandboxed".to_string())
-            .or_insert(json!(true));
-        sandbox_obj
-            .entry("allowUnsandboxedCommands".to_string())
-            .or_insert(json!(true));
-        let excluded = sandbox_obj
-            .entry("excludedCommands".to_string())
-            .or_insert_with(|| json!([]));
-        merge_json_string_array(excluded, &["curl *", "wget *"]);
-        let network = sandbox_obj
-            .entry("network".to_string())
-            .or_insert_with(|| json!({}));
-        if !network.is_object() {
-            *network = json!({});
-        }
-        if let Some(network_obj) = network.as_object_mut() {
-            network_obj
-                .entry("allowLocalBinding".to_string())
-                .or_insert(json!(true));
-            let allowed = network_obj
-                .entry("allowedDomains".to_string())
-                .or_insert_with(|| json!([]));
-            merge_json_string_array(allowed, CLAUDE_DESKTOP_RESEARCH_SANDBOX_DOMAINS);
-        }
-    }
-
-    Ok(Value::Object(root))
-}
-
-pub(crate) fn install_claude_desktop_research_settings(settings_path: &Path) -> Result<bool, String> {
-    let existing = read_json_if_exists(settings_path)?;
-    let merged = merge_claude_desktop_research_settings(existing)?;
-    if let Some(parent) = settings_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    write_json_if_changed(settings_path, &merged)
-}
-
-pub(crate) fn write_claude_desktop_mcp_json(
-    path: &Path,
-    roots: &ResolvedProjectionRoots,
-) -> Result<bool, String> {
-    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
-    if !payload.is_object() {
-        payload = json!({});
-    }
-    let servers = payload
-        .as_object_mut()
-        .ok_or_else(|| "mcp.json root must be an object".to_string())?;
-    let mcp_servers = servers
-        .entry("mcpServers".to_string())
-        .or_insert_with(|| json!({}));
-    if !mcp_servers.is_object() {
-        *mcp_servers = json!({});
-    }
-    let entries = mcp_servers
-        .as_object_mut()
-        .ok_or_else(|| "mcpServers must be an object".to_string())?;
-    let framework_payload = claude_desktop_mcp_server_payload(roots);
-    let browser_payload = claude_desktop_browser_mcp_server_payload(roots);
-    let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
-    let browser_changed = entries.get("browser-mcp") != Some(&browser_payload);
-    entries.insert("router-rs-framework".to_string(), framework_payload);
-    entries.insert("browser-mcp".to_string(), browser_payload);
-    write_json_if_changed(path, &payload)
-        .map(|file_changed| file_changed || framework_changed || browser_changed)
-}
-
-pub(crate) fn write_claude_desktop_claude_md(
-    path: &Path,
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<bool, String> {
-    let narrative = load_host_projection_narrative(&roots.framework_root)
-        .expect("host projection narrative must load before rendering claude-desktop CLAUDE.md");
-    let runtime_rel = skills_source_rel(&roots.framework_root)
-        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
-        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
-    let lifecycle = lifecycle_paragraph_for_host(&narrative, "claude-desktop");
-    let content = if scope == "project" {
-        format!(
-            "<!-- managed_by: skill-framework · claude-desktop · keep ≤48 lines -->
-             <!-- projection_id: claude-desktop-self-discipline -->
-             <!-- host_projection: claude-desktop -->
-             <!-- install_scope: project -->
-
-             # Claude Desktop (project)
-
-             通用指令见 user scope（`~/.claude/CLAUDE.md`）。本文件仅含项目级覆盖。
-
-             路由：`{runtime_rel}` · 产物：`artifacts/current/`（与 Claude Code 共用）。
-"
-        )
-    } else {
-        format!(
-            "<!-- managed_by: skill-framework · claude-desktop · keep ≤48 lines -->
-             <!-- projection_id: claude-desktop-self-discipline -->
-             <!-- host_projection: claude-desktop -->
-             <!-- install_scope: {scope} -->
-
-             # Claude Desktop
-
-             MCP **`router-rs-framework`**（框架路由/goal/closeout）；**`browser-mcp`** 外网调研。详 **`docs/hosts/claude-desktop.md`**；跨宿主 **`AGENTS.md`**。
-
-             ## 语言（硬约束）
-
-             - **面向用户的回复必须使用简体中文**（代码/路径/命令/第三方原文除外）；自然学术中文，避免翻译腔。
-             - 仅当用户**当轮明确要求英文**时可切换。
-             - **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」；对用户可见层避免中英混排。
-
-             {lifecycle}
-
-             ## 会话（按序）
-
-             1. `framework_snapshot` — 开头一次
-             2. `skill_route`（**router-rs-framework**）→ 只读 `skill_path`
-             3. `goal_state_manage operation=start`（宏任务）
-             4. 验证后 `record_evidence`
-             5. `closeout_gate` → `goal_state_manage operation=complete`
-             - 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory；非 my-light 时 MCP **硬拦**
-
-             ## 无 CLI hook 硬拦
-
-             - 无 PreToolUse/Stop shell 硬拦；Bash 前自行评估安全；勿声称已被 hook 拦截
-             - 检查点：`session_checkpoint`（非自动）
-
-             ## 联网（按标签页 — 硬约束）
-
-             | 标签 | MCP | 外网顺序 | 勿用 |
-             |------|-----|----------|------|
-             | **Chat** | `router-rs-framework` + `browser-mcp` | `web_fetch` → `browser-mcp` → 宿主 WebFetch | Bash `curl`（CCD 沙箱） |
-             | **Cowork** | **`browser-mcp`**（Connectors 注入 VM） | **`browser-mcp`**（`browser_open` / `browser_get_text`） | `mcp__workspace__web_fetch`（易 reset）、`WebSearch`（gateway 常失败）、Bash 绕过 |
-
-             Cowork 3P 另须 configLibrary 的 coworkEgressAllowedHosts（个人开发可全开）。运维：**`docs/hosts/claude-desktop-networking.md`**。
-
-             路由：`{runtime_rel}` · 产物：`artifacts/current/`（与 Claude Code 共用）。
-"
-        )
-    };
-    write_text_if_changed(path, &content)
-}
-
-pub(crate) fn write_claude_desktop_projection_manifest(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    mcp_paths: &[PathBuf],
-    claude_md_path: &Path,
-    include_research_settings: bool,
-) -> Result<bool, String> {
-    let mut files: Vec<String> = mcp_paths
-        .iter()
-        .map(|path| projection_manifest_file_ref(roots, path))
-        .collect();
-    files.push(projection_manifest_file_ref(roots, claude_md_path));
-    let mut managed_key_paths = vec![
-        "mcpServers.router-rs-framework".to_string(),
-        "mcpServers.browser-mcp".to_string(),
-    ];
-    if include_research_settings {
-        let settings_path = claude_desktop_research_settings_target(roots, scope);
-        files.push(projection_manifest_file_ref(roots, &settings_path));
-        managed_key_paths.push("sandbox.network".to_string());
-        managed_key_paths.push("permissions.allow".to_string());
-    }
-    write_json_if_changed(
-        &projection_manifest_path(roots, "claude-desktop", scope),
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "managed_by": "skill-framework",
-            "host_projection": "claude-desktop",
-            "scope": scope,
-            "files": files,
-            "settings": {
-                "managed_key_paths": managed_key_paths,
-            },
-        }),
-    )
-}
-
-pub(crate) fn install_antigravity_cli_projection(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<Value, String> {
-    use crate::codex_hooks::InstallMode;
-    use crate::hosts::antigravity_cli_hooks::install_antigravity_cli_hooks;
-    let cli_home = antigravity_cli_projection_home(roots, scope);
-    let hooks_path = cli_home.join("hooks.json");
-    let payload =
-        install_antigravity_cli_hooks(&cli_home, &roots.project_root, InstallMode::Apply)?;
-    let manifest_changed =
-        write_antigravity_cli_projection_manifest(roots, scope, &hooks_path)?;
-    let hooks_changed = payload["hooks_json"]["status"]
-        .as_str()
-        .is_some_and(|s| s != "unchanged");
-    Ok(json!({
-        "status": "installed",
-        "changed": hooks_changed || manifest_changed,
-        "scope": scope,
-        "host_id": "antigravity-cli",
-        "hooks": payload,
-    }))
-}
-
-pub(crate) fn antigravity_cli_projection_home(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.antigravity_cli_home_root.clone()
-    } else {
-        roots.project_root.join(".antigravitycli")
-    }
-}
-
-pub(crate) fn write_antigravity_cli_projection_manifest(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    hooks_path: &Path,
-) -> Result<bool, String> {
-    write_json_if_changed(
-        &projection_manifest_path(roots, "antigravity-cli", scope),
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "managed_by": "skill-framework",
-            "host_projection": "antigravity-cli",
-            "scope": scope,
-            "files": [hooks_path.to_string_lossy()],
-        }),
-    )
-}
-
-pub(crate) fn antigravity_cli_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    use crate::hosts::antigravity_cli_hooks::antigravity_cli_hooks_install_status;
-    let project_home = antigravity_cli_projection_home(roots, "project");
-    let user_home = antigravity_cli_projection_home(roots, "user");
-    let project_hooks = project_home.join("hooks.json");
-    let user_hooks = user_home.join("hooks.json");
-    let project_ready =
-        antigravity_cli_hooks_install_status(&project_home)["managed"].as_bool() == Some(true);
-    let user_ready =
-        antigravity_cli_hooks_install_status(&user_home)["managed"].as_bool() == Some(true);
-    Ok(json!({
-        "ready": project_ready || user_ready,
-        "status": "projection-status",
-        "hooks": {
-            "managed": project_ready || user_ready,
-            "project": antigravity_cli_hooks_install_status(&project_home),
-            "user": antigravity_cli_hooks_install_status(&user_home),
-        },
-        "manifest": {
-            "project": projection_manifest_status(&projection_manifest_path(
-                roots,
-                "antigravity-cli",
-                "project",
-            ))?,
-            "user": projection_manifest_status(&projection_manifest_path(
-                roots,
-                "antigravity-cli",
-                "user",
-            ))?,
-        },
-        "paths": {
-            "project_hooks": project_hooks.to_string_lossy(),
-            "user_hooks": user_hooks.to_string_lossy(),
-        },
-    }))
-}
-
-pub(crate) fn remove_antigravity_cli_projection(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    dry_run: bool,
-) -> Result<Value, String> {
-    use crate::hosts::antigravity_cli_hooks::remove_antigravity_cli_router_hooks;
-    let cli_home = antigravity_cli_projection_home(roots, scope);
-    let manifest_path = projection_manifest_path(roots, "antigravity-cli", scope);
-    let hooks_path = cli_home.join("hooks.json");
-    let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "antigravity-cli", scope, &hooks_path)?;
-    let hooks_removal = remove_antigravity_cli_router_hooks(&cli_home, dry_run)?;
-    let would_remove_manifest = manifest_ownership.managed;
-    let manifest_removed = if !dry_run && would_remove_manifest {
-        if manifest_path.is_file() {
-            fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
-            true
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-    let hooks_changed = hooks_removal
-        .get("changed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let any_changed = hooks_changed || manifest_removed;
-    Ok(json!({
-        "status": if dry_run
-            && (hooks_removal.get("status").and_then(Value::as_str) == Some("would-remove")
-                || would_remove_manifest)
-        {
-            "would-remove"
-        } else if any_changed {
-            "removed"
-        } else {
-            "not-installed-or-user-owned"
-        },
-        "changed": any_changed,
-        "dry_run": dry_run,
-        "scope": scope,
-        "hooks": hooks_removal,
-        "removed_paths": removed_projection_paths(
-            hooks_changed,
-            &hooks_path,
-            manifest_removed,
-            &manifest_path,
-        ),
-    }))
-}
 
 pub(crate) fn install_antigravity_projection(
     roots: &ResolvedProjectionRoots,
@@ -2628,7 +1883,7 @@ pub(crate) fn remove_antigravity_projection(
         (&framework_md_target, "framework_md"),
     ] {
         let managed =
-            projection_manifest_ownership(&manifest_path, "antigravity-app", scope, target)
+            projection_manifest_ownership(&manifest_path, "antigravity", scope, target)
                 .map(|o| o.owns_projection_file)
                 .unwrap_or(false);
         if target.exists() && managed {
@@ -2645,7 +1900,7 @@ pub(crate) fn remove_antigravity_projection(
     }
 
     let manifest_managed = manifest_path.exists() &&
-        projection_manifest_ownership(&manifest_path, "antigravity-app", scope, &framework_md_target)
+        projection_manifest_ownership(&manifest_path, "antigravity", scope, &framework_md_target)
             .map(|o| o.managed)
             .unwrap_or(false);
     if manifest_managed {
@@ -2696,7 +1951,7 @@ pub(crate) fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, s
 pub(crate) fn antigravity_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     make_mcp_server_payload(
         roots,
-        &["antigravity-app", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
+        &["antigravity", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
         "Framework runtime snapshot, continuity, skill routing, closeout gating",
     )
 }
@@ -2721,11 +1976,13 @@ pub(crate) fn write_antigravity_mcp_json(
     let entries = mcp_servers
         .as_object_mut()
         .ok_or_else(|| "mcpServers must be an object".to_string())?;
-    entries.insert(
-        "router-rs-framework".to_string(),
-        antigravity_mcp_server_payload(roots),
-    );
+    let framework = antigravity_mcp_server_payload(roots);
+    let framework_changed = entries.get("router-rs-framework") != Some(&framework);
+    entries.insert("router-rs-framework".to_string(), framework);
+    let paperplain_changed = merge_paperplain_into_mcp_servers_map(entries, "paperplain");
+    let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
     write_json_if_changed(path, &payload)
+        .map(|file_changed| file_changed || framework_changed || paperplain_changed || codegraph_changed)
 }
 
 pub(crate) fn write_antigravity_settings_json(
@@ -2751,18 +2008,18 @@ pub(crate) fn write_antigravity_framework_md(
     let content = format!(
         "<!-- managed_by: skill-framework · antigravity · keep ≤40 lines -->\n\
          <!-- projection_id: antigravity-self-discipline -->\n\
-         <!-- host_projection: antigravity-app -->\n\
+         <!-- host_projection: antigravity -->\n\
          <!-- install_scope: {scope} -->\n\n\
          # Antigravity Framework\n\n\
-         Antigravity **App**（Desktop / Planning Mode）**`router-rs-framework`** MCP。协议：**`docs/hosts/antigravity-app.md`**；CLI hooks：**`docs/hosts/antigravity-cli.md`**；跨宿主 **`AGENTS.md`**；**`AGENTS_ANTIGRAVITY.md`**。\n\n\
+         Antigravity（Desktop / Planning Mode）**`router-rs-framework`** MCP。协议：**`docs/hosts/antigravity.md`**；跨宿主 **`AGENTS.md`**；**`AGENTS_ANTIGRAVITY.md`**。\n\n\
          ## 会话操作（按序）\n\n\
          1. `framework_snapshot` — 开头一次\n\
          2. `skill_route` → 只读 `skill_path`\n\
          3. `goal_state_manage operation=start`（宏任务）\n\
          4. 验证后 `record_evidence`\n\
          5. `closeout_gate` → `goal_state_manage operation=complete`\n\n\
-         ## 门控说明（App / MCP）\n\n\
-         - **App 无 shell hook 表**；`goal_state_manage complete` 与 `closeout_gate` 在 MCP 工具层报告 findings（advisory，不阻断）。终端 **Antigravity CLI** 使用 `.antigravitycli/hooks.json`（见 CLI 手册）。\n\n\
+         ## 门控说明（MCP）\n\n\
+         - **无 shell hook 表**；`goal_state_manage complete` 与 `closeout_gate` 在 MCP 工具层报告 findings（advisory，不阻断）。\n\n\
          ## 共享资源\n\n\
          与其它宿主共用 `artifacts/current/` 工作区。路由：`{runtime_rel}`。\n"
     );
@@ -2770,11 +2027,11 @@ pub(crate) fn write_antigravity_framework_md(
 }
 
 pub(crate) fn antigravity_projection_manifest_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    let app = projection_manifest_path(roots, "antigravity-app", scope);
-    if app.exists() {
-        return app;
+    let canonical = projection_manifest_path(roots, "antigravity", scope);
+    if canonical.exists() {
+        return canonical;
     }
-    projection_manifest_path(roots, "antigravity", scope)
+    projection_manifest_path(roots, "antigravity-app", scope)
 }
 
 pub(crate) fn write_antigravity_projection_manifest(
@@ -2789,7 +2046,7 @@ pub(crate) fn write_antigravity_projection_manifest(
         &json!({
             "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
             "managed_by": "skill-framework",
-            "host_projection": "antigravity-app",
+            "host_projection": "antigravity",
             "scope": scope,
             "files": [
                 mcp_path.to_string_lossy(),
@@ -2970,10 +2227,10 @@ pub(crate) fn projection_manifest_path(
     scope: &str,
 ) -> PathBuf {
     match (host_projection, scope) {
-        ("codex-cli", "user") => roots
+        ("codex", "user") => roots
             .codex_home_root
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("codex-cli", _) => roots
+        ("codex", _) => roots
             .project_root
             .join(".codex")
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
@@ -2991,20 +2248,6 @@ pub(crate) fn projection_manifest_path(
             .project_root
             .join(".claude")
             .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("claude-desktop", "user") => roots
-            .claude_home_root
-            .join(FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME),
-        ("claude-desktop", _) => roots
-            .project_root
-            .join(".claude")
-            .join(FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME),
-        ("antigravity-cli", "user") => roots
-            .antigravity_cli_home_root
-            .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
-        ("antigravity-cli", _) => roots
-            .project_root
-            .join(".antigravitycli")
-            .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
         ("antigravity-app" | "antigravity", "user") => roots
             .antigravity_home_root
             .join(FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME),
@@ -3022,11 +2265,11 @@ pub(crate) fn write_codex_projection_manifest(
     command_path: &Path,
 ) -> Result<bool, String> {
     write_json_if_changed(
-        &projection_manifest_path(roots, "codex-cli", scope),
+        &projection_manifest_path(roots, "codex", scope),
         &json!({
             "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
             "managed_by": "skill-framework",
-            "host_projection": "codex-cli",
+            "host_projection": "codex",
             "scope": scope,
             "files": [command_path.to_string_lossy()],
             "settings": {
@@ -3043,8 +2286,8 @@ pub(crate) fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots,
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
     format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex-cli -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `AGENTS_CODEX.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
-        gsd = lifecycle_paragraph_for_host(&narrative, "codex-cli"),
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `AGENTS_CODEX.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
+        gsd = lifecycle_paragraph_for_host(&narrative, "codex"),
         review = narrative.review_findings_only_paragraph,
     )
 }
@@ -3078,6 +2321,10 @@ pub(crate) fn cursor_mcp_server_key_path() -> &'static str {
     "mcp_servers.browser-mcp"
 }
 
+pub(crate) fn cursor_codegraph_mcp_server_key_path() -> &'static str {
+    "mcp_servers.mcp-codegraph"
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct CursorMcpInstallOutcome {
     pub(crate) managed: bool,
@@ -3090,7 +2337,8 @@ pub(crate) fn install_cursor_mcp_server(
     roots: &ResolvedProjectionRoots,
     path: &Path,
 ) -> Result<CursorMcpInstallOutcome, String> {
-    let server = cursor_mcp_server_payload(roots);
+    let browser_server = cursor_mcp_server_payload(roots);
+    let codegraph_server = codegraph_mcp_server_payload(roots);
     if let Some(payload) = read_json_if_exists(path)? {
         if let Some(existing) = payload
             .get("mcp_servers")
@@ -3098,10 +2346,35 @@ pub(crate) fn install_cursor_mcp_server(
             .and_then(|servers| servers.get("browser-mcp"))
         {
             if cursor_mcp_server_semantically_matches_framework(existing, roots) {
+                let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+                if !payload.is_object() {
+                    payload = json!({});
+                }
+                let root = payload
+                    .as_object_mut()
+                    .ok_or_else(|| "cursor mcp config payload must be an object".to_string())?;
+                let mcp_servers = root
+                    .entry("mcp_servers".to_string())
+                    .or_insert_with(|| json!({}));
+                if !mcp_servers.is_object() {
+                    *mcp_servers = json!({});
+                }
+                let servers = mcp_servers
+                    .as_object_mut()
+                    .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
+                let paperplain_changed = merge_paperplain_into_mcp_servers_map(servers, "paperplain");
+                let codegraph_changed =
+                    merge_codegraph_into_mcp_servers_map(servers, roots, "mcp-codegraph");
+                let file_changed = write_json_if_changed(path, &payload)?;
+                let changed = paperplain_changed || codegraph_changed || file_changed;
                 return Ok(CursorMcpInstallOutcome {
                     managed: true,
-                    changed: false,
-                    reason: "already-managed-equivalent",
+                    changed,
+                    reason: if changed {
+                        "installed"
+                    } else {
+                        "already-managed-equivalent"
+                    },
                     skipped_user_owned: false,
                 });
             }
@@ -3132,11 +2405,14 @@ pub(crate) fn install_cursor_mcp_server(
     let servers = mcp_servers
         .as_object_mut()
         .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
-    let changed = servers.get("browser-mcp") != Some(&server);
-    if changed {
-        servers.insert("browser-mcp".to_string(), server);
+    let browser_changed = servers.get("browser-mcp") != Some(&browser_server);
+    if browser_changed {
+        servers.insert("browser-mcp".to_string(), browser_server);
     }
+    let codegraph_changed = merge_codegraph_into_mcp_servers_map(servers, roots, "mcp-codegraph");
+    let paperplain_changed = merge_paperplain_into_mcp_servers_map(servers, "paperplain");
     let file_changed = write_json_if_changed(path, &payload)?;
+    let changed = browser_changed || codegraph_changed || paperplain_changed;
     Ok(CursorMcpInstallOutcome {
         managed: true,
         changed: changed || file_changed,
@@ -3380,35 +2656,24 @@ pub(crate) fn managed_projection_file_exists(path: &Path) -> Result<bool, String
 }
 
 pub(crate) fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
-    let content = read_text_if_exists(path)?;
-    let marker_managed = content
-        .as_deref()
-        .map(is_managed_projection_content)
-        .unwrap_or(false);
-    let verified = marker_managed
-        && content
-            .as_deref()
-            .map(|content| content.contains("host_projection: codex-cli"))
-            .unwrap_or(false);
-    Ok(json!({
-        "path": path.to_string_lossy(),
-        "exists": path.exists(),
-        "managed": verified,
-        "verification": if verified { "verified" } else if marker_managed { "unknown" } else { "unmanaged" },
-        "marker_managed": marker_managed,
-    }))
+    projection_file_status(path, "codex")
 }
 
 pub(crate) fn cursor_projection_file_status(path: &Path) -> Result<Value, String> {
+    projection_file_status(path, "cursor")
+}
+
+fn projection_file_status(path: &Path, host_projection: &str) -> Result<Value, String> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
         .map(is_managed_projection_content)
         .unwrap_or(false);
+    let host_marker = format!("host_projection: {host_projection}");
     let verified = marker_managed
         && content
             .as_deref()
-            .map(|content| content.contains("host_projection: cursor"))
+            .map(|content| content.contains(&host_marker))
             .unwrap_or(false);
     Ok(json!({
         "path": path.to_string_lossy(),
@@ -3450,15 +2715,6 @@ pub(crate) fn install_skills_projection_tools(command: &str, tools: &[String], t
 
 pub(crate) fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
     let normalized = raw.trim().to_lowercase();
-    if normalized == "codex-app" {
-        let registry = crate::runtime_registry::load_runtime_registry_json(framework_root)?;
-        if crate::framework_host_targets::host_targets_supported_host_ids(&registry)?
-            .iter()
-            .any(|host_id| host_id == "codex-app")
-        {
-            return Ok("codex-app".to_string());
-        }
-    }
     if let Some(adapter) = projection_adapter_for_raw(raw) {
         return Ok(adapter.tool.to_string());
     }
@@ -3475,14 +2731,12 @@ pub(crate) fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<St
 pub(crate) fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
     let mut tools = registry_projection_tools(framework_root).unwrap_or_else(|_| {
         vec![
-            "codex".to_string(),
             "cursor".to_string(),
             "claude".to_string(),
+            "antigravity".to_string(),
+            "opencode".to_string(),
         ]
     });
-    if !tools.iter().any(|tool| tool == "codex-app") {
-        tools.push("codex-app".to_string());
-    }
     tools
 }
 
@@ -3790,7 +3044,7 @@ pub(crate) fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Re
     let host_entrypoints = command.get("host_entrypoints").and_then(Value::as_object);
     let default_host_entrypoint = format!("/{slug}");
     let host_entrypoint = host_entrypoints
-        .and_then(|entrypoints| entrypoints.get("codex-cli"))
+        .and_then(|entrypoints| entrypoints.get("codex"))
         .and_then(Value::as_str)
         .map(str::to_string)
         .unwrap_or_else(|| default_host_entrypoint.clone());
@@ -3807,7 +3061,7 @@ pub(crate) fn render_framework_command_skill(repo_root: &Path, slug: &str) -> Re
                 .join(", ")
         })
         .filter(|summary| !summary.is_empty())
-        .unwrap_or_else(|| format!("codex-cli={0}", default_host_entrypoint));
+        .unwrap_or_else(|| format!("codex={0}", default_host_entrypoint));
     let explicit_entrypoints = command
         .get("interaction_invariants")
         .and_then(|invariants| invariants.get("explicit_entrypoints"))

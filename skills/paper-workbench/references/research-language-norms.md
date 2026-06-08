@@ -1,6 +1,6 @@
 # 科研写作用语长期规范（跨 lane 真源）
 
-本文档是 **`$paper-workbench` / `$paper-writing` / `$paper-reviewer`** 共用的**长期运行**约束：降低「术语堆砌、自造概念、同义反复」导致的拗口稿与不稳定「精准修改」。**写作质量传感器与全链路**见 [`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md) 与 [`prose-chain-contract.md`](prose-chain-contract.md)。多轮会话中默认遵守，除非用户显式豁免。
+本文档是 **`$paper-workbench` / `$paper-writing` / `$paper-reviewer`** 共用的**长期运行**约束：降低「术语堆砌、自造概念、同义反复」导致的拗口稿与不稳定「精准修改」。**写作质量传感器与全链路**见 [`prose-quality-gate.md`](prose-quality-gate.md) 与 [`prose-chain-contract.md`](prose-chain-contract.md)。多轮会话中默认遵守，除非用户显式豁免。
 
 ## 目标
 
@@ -80,7 +80,7 @@
 Exhaustive 查稿时的逐句/结构 checklist 见
 [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md) §Language（本节仍为长期写作规范真源）。
 
-发现问题时，按严重程度归入现有 A/B/C/**Warning** 类（见 [`../../paper-reviewer/references/severity-spec.md`](../../paper-reviewer/references/severity-spec.md)），但结论须**可操作**：删重复、换标准术语、合并定义、或升格为方法段一次定义。
+发现问题时，按严重程度归入现有 A/B/C/**Warning** 类（见 [`severity-spec.md`](severity-spec.md)），但结论须**可操作**：删重复、换标准术语、合并定义、或升格为方法段一次定义。
 
 ## 7. 与用户豁免
 

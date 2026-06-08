@@ -1,0 +1,16 @@
+[package]
+name = "core-policy"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+dev-exempt = []
+test-sync = []
+
+[dependencies]
+core-state = { path = "../../core/antigravity" }
+framework-kernel = { path = "../framework-kernel" }
+regex = "1.11.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"

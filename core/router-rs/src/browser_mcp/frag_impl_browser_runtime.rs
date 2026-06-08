@@ -21,6 +21,7 @@ impl BrowserRuntime {
 
     fn skill_route(&self, input: &Value) -> Result<Value, Value> {
         let query = required_string_arg(input, "query")?;
+        let host_id = optional_string(input, "hostId");
         let session_id =
             optional_string(input, "sessionId").unwrap_or_else(|| "cowork-mcp".to_string());
         let allow_overlay = optional_bool(input, "allowOverlay").unwrap_or(true);
@@ -36,11 +37,19 @@ impl BrowserRuntime {
                 ),
             ));
         }
-        let records = load_records(Some(&runtime_path), Some(&manifest_path))
+        let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
             .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
-        let decision = route_with_full_manifest_fallback(
-            &records,
-            &manifest_path,
+        let host_indices = filter_record_indices_for_host(records.as_ref(), host_id.as_deref())
+            .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
+        let filtered: Vec<_> = host_indices
+            .iter()
+            .map(|&idx| records[idx].clone())
+            .collect();
+        let decision = route_task_with_manifest_fallback(
+            &filtered,
+            Some(&runtime_path),
+            Some(&manifest_path),
+            host_id.as_deref(),
             &query,
             &session_id,
             allow_overlay,
@@ -82,20 +91,25 @@ impl BrowserRuntime {
 
     fn skill_search(&self, input: &Value) -> Result<Value, Value> {
         let query = required_string_arg(input, "query")?;
+        let host_id = optional_string(input, "hostId");
         let limit = optional_u64(input, "limit")?.unwrap_or(10).clamp(1, 50) as usize;
+        let runtime_path = skill_runtime_path(&self.repo_root);
         let manifest_path = skill_manifest_path(&self.repo_root);
-        if !manifest_path.is_file() {
+        if !runtime_path.is_file() && !manifest_path.is_file() {
             return Err(skill_error(
-                "SKILL_MANIFEST_MISSING",
+                "SKILL_RUNTIME_MISSING",
                 &format!(
-                    "Missing repository skill manifest: {}",
+                    "Missing repository skill runtime ({}) and manifest ({})",
+                    runtime_path.display(),
                     manifest_path.display()
                 ),
             ));
         }
-        let records = load_records_from_manifest(&manifest_path)
+        let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
             .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err))?;
-        let rows = search_skills(&records, &query, limit);
+        let host_indices = filter_record_indices_for_host(records.as_ref(), host_id.as_deref())
+            .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err))?;
+        let rows = search_skills_subset(records.as_ref(), Some(&host_indices), &query, limit);
         let results = build_search_results_payload(&query, rows);
         serde_json::to_value(results)
             .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err.to_string()))
@@ -226,12 +240,6 @@ impl BrowserRuntime {
         }
         if let Some(resume_mode) = optional_string(input, "resumeMode") {
             payload["resume_mode"] = Value::String(resume_mode);
-        }
-        if let Some(tmux_session) = optional_string(input, "tmuxSession") {
-            payload["tmux_session"] = Value::String(tmux_session);
-        }
-        if let Some(native_tmux) = optional_bool(input, "nativeTmux") {
-            payload["native_tmux"] = Value::Bool(native_tmux);
         }
         if let Some(evidence_text) = optional_string(input, "evidenceText") {
             payload["evidence_text"] = Value::String(evidence_text);

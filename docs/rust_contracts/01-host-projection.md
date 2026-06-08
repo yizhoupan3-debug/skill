@@ -13,7 +13,7 @@ depends_on:
 
 - The shared framework core is the profile authority; host projections are closed-set and explicit.
 - Supported hosts are **exactly** the ids enumerated under **`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`**. `host_projections` is a narrower generated payload/projection set and must not be read as a second closed-set host registry.
-- **Profile bundle vs host registry:** `build_profile_bundle` (`core/router-rs/src/framework_profile.rs`) derives `host_payloads` from `RUNTIME_REGISTRY.host_projections` while preserving legacy `codex_profile` / `full_codex_profile` artifacts for Codex consumers. `codex-app` may be present in `host_targets.supported` and skill `host_support.platforms` without a separate `host_projections` payload or framework-command entrypoint; that is a projection-family distinction, not a second host registry.
+- **Profile bundle vs host registry:** `build_profile_bundle` (`core/router-rs/src/framework_profile.rs`) derives `host_payloads` from `RUNTIME_REGISTRY.host_projections` while preserving legacy `codex_profile` / `full_codex_profile` artifacts for Codex consumers. Retired ids（`codex-cli`、`codex-app`、`claude-desktop`、`antigravity-cli`）不得再出现在 `host_targets.supported`。
 - `codex_profile` is the Codex projection artifact and may carry Codex-private payload fields.
 - Generated host projections are disposable install targets and must remain thin bootstrap pointers to the Rust core.
 - `framework host-integration remove` removes only framework-owned projection files and manifest-recorded settings keys; user-authored files and unrelated settings are preserved.

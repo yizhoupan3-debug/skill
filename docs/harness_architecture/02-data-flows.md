@@ -35,7 +35,7 @@ depends_on:
 
 | 真源 | 用途 |
 |------|------|
-| [`configs/framework/RUNTIME_REGISTRY.json`](../../configs/framework/RUNTIME_REGISTRY.json) | 闭集宿主、`review_gate.deep_gate_lanes`、profile 投影；**运行时**经 [`runtime_registry/mod.rs`](../../core/router-rs/src/runtime_registry/mod.rs) 从磁盘读取（`` 仅为 re-export shim；**非** `include_str!` 嵌入）。读盘失败时 lane 判定 **fail-closed**（不计入深度 lane）；`framework doctor` 探测 snapshot。改 lane 后重启 hook 子进程即可，**无需** `cargo build`。 |
+| [`configs/framework/RUNTIME_REGISTRY.json`](../../configs/framework/RUNTIME_REGISTRY.json) | 闭集宿主、`review_gate.reviewer_lanes`、profile 投影；**lane 缓存**经 [`core-policy/registry_review_gate.rs`](../../core/core-policy/src/registry_review_gate.rs)（`runtime_registry` re-export + nudge 文案）。读盘失败时 lane 判定 **fail-closed**；`framework doctor` 探测 snapshot。改 lane 后重启 hook 子进程即可，**无需** `cargo build`。 |
 | [`configs/framework/host_projection_narrative.json`](../../configs/framework/host_projection_narrative.json) | 各宿主 framework 投影内的 **My lifecycle 默认链** 与 **review findings-only** 英文段落；`framework host-integration install` 渲染时读取。叙事政策仍以 [`AGENTS.md`](../../AGENTS.md) 为跨宿主真源，本 JSON 仅为安装产物文案真源。 |
 | [`configs/framework/GENERATED_ARTIFACTS.json`](../../configs/framework/GENERATED_ARTIFACTS.json) | 声明须纳入版本库的生成物路径、generator 命令与 `compare` 模式（`byte-for-byte` / `normalized-text`）。 |
 
@@ -55,7 +55,7 @@ depends_on:
 | `.cursor/hooks.json` | 7 事件闭集；parity 见 `scripts/ci/check-cursor-hooks-parity.sh` |
 | `.cursor/router-rs-hook.env` | hook 子进程 env |
 | `.cursor/rules/*.mdc` | gate/plan alwaysApply rules |
-| `.cursor/commands/*.md` | My lifecycle slash stubs（4 文件） |
+| `.cursor/commands/*.md` | Framework slash stubs（7 文件：`discussx` / `planx` / `implementx` / `verifyx` / `gitx` / `update` / `deepinterview`） |
 | `.cursor/agents/deep-reviewer.md` | 深度 review lane 定义 |
 | `configs/framework/cursor-router-rs-hook.sh` | launcher（repo 根相对路径经 hooks.json command 引用） |
 

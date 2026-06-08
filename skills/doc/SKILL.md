@@ -56,6 +56,10 @@ network_access: conditional
 artifact_outputs:
   - docx_review.md
   - EVIDENCE_INDEX.json
+  - ooxml-batch/catalog.json
+  - ooxml-batch/results.jsonl
+  - ooxml-batch/index.md
+  - ooxml-batch/text/*.txt
 
 ---
 
@@ -79,15 +83,37 @@ In that case:
 
 ## Rust CLI quick path
 
-Use these as the default inspection and verification commands:
+安装（一次性，对齐 `pdf` / `router-rs self install` 模式）：
 
 ```bash
-cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx>
-cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx> --json
-cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --output-dir <dir>
+bash ${SKILL_FRAMEWORK_ROOT}/scripts/install-ooxml-tool.sh
+# 或：just install-ooxml
 ```
 
-`docx` reports paragraphs, heading outline, tables, sections, page size, images, hyperlinks, footnotes, endnotes, and comments. `render-docx` converts the document to PNG pages for layout review.
+单文件阅读与结构 QA：
+
+```bash
+ooxml read-docx <docx>
+ooxml read-docx <docx> --json --compact
+ooxml docx <docx> --json
+ooxml render-docx <docx> --output-dir <dir>
+```
+
+开发探测仍可用 `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml --bin ooxml -- read-docx <docx>`。
+
+多文件批量阅读（**必须用已安装的 `ooxml` 二进制，禁止 `cargo run` batch**）：
+
+```bash
+ooxml batch --manifest <paths.json> --out-dir artifacts/current/<task_id>/ooxml-batch
+ooxml batch --stdin-paths --out-dir artifacts/current/<task_id>/ooxml-batch <<'EOF'
+/path/to/a.docx
+/path/to/b.xlsx
+EOF
+```
+
+`batch` 常用选项：`--jobs auto|N`（默认 `auto`；可设 `OOXML_BATCH_JOBS`）、`--resume`、`--fail-fast`、`--max-chars`、`--max-rows`（xlsx 默认 10000）。
+
+`read-docx` emits linear text: headings, paragraphs, markdown tables, images, and footnote/comment text when present. `docx` reports structure counts and metadata. `render-docx` converts the document to PNG pages for layout review. Batch 产物：`catalog.json`、`results.jsonl`、`checkpoint.json`、`index.md`、`text/<sha256>.txt`。
 
 ## When to use
 

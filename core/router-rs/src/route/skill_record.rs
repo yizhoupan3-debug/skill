@@ -5,8 +5,7 @@ use super::text::{common_route_stop_tokens, normalize_text, tokenize_query};
 use super::types::{RawSkillRecord, SkillRecord};
 use std::collections::HashSet;
 
-impl SkillRecord {
-    pub(crate) fn from_raw(raw: RawSkillRecord) -> Self {
+pub(crate) fn skill_record_from_raw(raw: RawSkillRecord) -> SkillRecord {
         let RawSkillRecord {
             slug,
             skill_path,
@@ -51,7 +50,7 @@ impl SkillRecord {
         })
         .collect::<HashSet<_>>();
 
-        Self {
+        SkillRecord {
             slug,
             skill_path,
             layer,
@@ -77,7 +76,6 @@ impl SkillRecord {
             primary_allowed: true,
             fallback_policy_mode: "eligible-in-runtime".to_string(),
         }
-    }
 }
 
 pub(crate) fn negative_trigger_tokens<'a>(

@@ -185,6 +185,66 @@ fn browser_mcp_exposes_repo_skill_routing_tools_when_runtime_exists() {
 }
 
 #[test]
+fn browser_mcp_skill_search_respects_host_id_filter() {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("canonical repo root");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+
+    let codex_search = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "deep research", "hostId": "codex", "limit": 20}}}),
+        &mut runtime,
+    )
+    .expect("codex search");
+    assert_eq!(codex_search["result"]["isError"], false);
+    let codex_names: Vec<&str> = codex_search["result"]["structuredContent"]["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["record"]["name"].as_str())
+        .collect();
+    assert!(
+        codex_names.iter().any(|name| *name == "deep-research"),
+        "codex host search should surface deep-research: {codex_names:?}"
+    );
+
+    let cursor_search = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "deep research", "hostId": "cursor", "limit": 20}}}),
+        &mut runtime,
+    )
+    .expect("cursor search");
+    assert_eq!(cursor_search["result"]["isError"], false);
+    let cursor_names: Vec<&str> = cursor_search["result"]["structuredContent"]["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["record"]["name"].as_str())
+        .collect();
+    assert!(
+        cursor_names.iter().any(|name| *name == "deep-research"),
+        "cursor host search should surface deep-research: {cursor_names:?}"
+    );
+
+    let legacy = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "deep research", "hostId": "codex-cli", "limit": 20}}}),
+        &mut runtime,
+    )
+    .expect("legacy codex-cli search");
+    assert_eq!(legacy["result"]["isError"], false);
+    let legacy_names: Vec<&str> = legacy["result"]["structuredContent"]["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["record"]["name"].as_str())
+        .collect();
+    assert!(
+        legacy_names.iter().any(|name| *name == "deep-research"),
+        "codex-cli alias should map to codex host filter: {legacy_names:?}"
+    );
+}
+
+#[test]
 fn browser_mcp_invalid_tool_input_is_recoverable() {
     let repo_root = temp_root("invalid-input");
     let mut runtime = BrowserRuntime::new(repo_root.clone());
@@ -317,6 +377,43 @@ fn browser_mcp_auto_discovers_newest_attach_manifest() {
         runtime.auto_discover_runtime_attach_artifact(),
         Some(newer.to_string_lossy().into_owned())
     );
+
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_session_tools_expose_pid_log_path_schema() {
+    let repo_root = temp_root("session-schema");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let list_response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}),
+        &mut runtime,
+    )
+    .expect("list response");
+    let tools = list_response["result"]["tools"]
+        .as_array()
+        .expect("tools array");
+    let launch = tools
+        .iter()
+        .find(|tool| tool["name"] == "session_launch")
+        .expect("session_launch tool");
+    let output_schema = launch["outputSchema"].clone();
+    assert!(output_schema["properties"]["worker"]["properties"]["pid"].is_object());
+    assert!(output_schema["properties"]["worker"]["properties"]["log_path"].is_object());
+
+    let session_list_response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "session_list", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("session list response");
+    assert_eq!(session_list_response["result"]["isError"], false);
+    let workers = session_list_response["result"]["structuredContent"]["workers"]
+        .as_array()
+        .expect("workers array");
+    for worker in workers {
+        assert!(worker.get("pid").is_some());
+        assert!(worker.get("log_path").is_some());
+    }
 
     fs::remove_dir_all(repo_root).expect("cleanup");
 }

@@ -35,6 +35,8 @@ source: local
 This skill provides a deep research harness that fans out across multiple web searches,
 fetches source documents, adversarially verifies claims, and synthesizes a cited report.
 
+**五宿主统一**：NL 热路由与本 skill 相同；非手稿科研总地图见 [`../research-workbench/references/RESEARCH_HARNESS_UNIFIED.md`](../research-workbench/references/RESEARCH_HARNESS_UNIFIED.md)。Claude Code 另可用 native workflow：`.claude/workflows/deep-research.js`；Cursor 等宿主按 [`../agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../agent-swarm-orchestration/references/workflow-supervisor-protocol.md) 手调度。
+
 ## Input
 
 The user provides a topic or question to research.

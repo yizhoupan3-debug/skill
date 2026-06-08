@@ -6,6 +6,8 @@ pub const EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION: &str =
     "router-rs-execution-kernel-metadata-contract-v1";
 pub const EXECUTION_CONTRACT_BUNDLE_SCHEMA_VERSION: &str =
     "router-rs-execution-kernel-contract-bundle-v1";
+pub const PRE_TOOL_USE_GUARD_CONTRACT_SCHEMA_VERSION: &str =
+    "router-rs-pre-tool-use-guard-contract-v1";
 pub const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
 pub const EXECUTION_KERNEL_KIND: &str = "rust-execution-kernel-slice";
 pub const EXECUTION_KERNEL_AUTHORITY: &str = "rust-execution-kernel-authority";
@@ -547,6 +549,17 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
     payload
 }
 
+pub fn build_pre_tool_use_guard_execution_contract() -> Value {
+    let mut guard = crate::framework_runtime::pre_tool_use_guard_contract();
+    if let Some(obj) = guard.as_object_mut() {
+        obj.insert(
+            "bundle_schema_version".to_string(),
+            Value::String(PRE_TOOL_USE_GUARD_CONTRACT_SCHEMA_VERSION.to_string()),
+        );
+    }
+    guard
+}
+
 pub fn build_execution_contract_bundle() -> Map<String, Value> {
     let mut payload = Map::new();
     payload.insert(
@@ -556,6 +569,10 @@ pub fn build_execution_contract_bundle() -> Map<String, Value> {
     payload.insert(
         "authority".to_string(),
         Value::String(EXECUTION_KERNEL_AUTHORITY.to_string()),
+    );
+    payload.insert(
+        "pre_tool_use_guard_contract".to_string(),
+        build_pre_tool_use_guard_execution_contract(),
     );
     payload.insert(
         "metadata_contract".to_string(),

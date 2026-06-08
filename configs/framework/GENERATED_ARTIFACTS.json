@@ -3,7 +3,7 @@
   "generated_artifacts": [
     {
       "path": ".codex/prompts/framework.md",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to codex-cli",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to codex",
       "compare": "normalized-text"
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "path": ".claude/settings.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code && cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-code",
       "compare": "normalized-text"
     },
     {
@@ -37,33 +37,18 @@
       "compare": "byte-for-byte"
     },
     {
-      "path": ".claude/CLAUDE.md",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
-      "compare": "normalized-text"
-    },
-    {
-      "path": ".claude/mcp.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
-      "compare": "normalized-text"
-    },
-    {
-      "path": ".claude/.framework-projection-desktop.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to claude-desktop",
-      "compare": "byte-for-byte"
-    },
-    {
       "path": ".gemini/antigravity/rules/framework.md",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity-app",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
       "compare": "normalized-text"
     },
     {
       "path": ".gemini/settings.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity-app",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
       "compare": "normalized-text"
     },
     {
       "path": ".gemini/mcp.json",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity-app",
+      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --framework-root \"$PWD\" --project-root \"$PWD\" --artifact-root \"$SKILL_ARTIFACT_ROOT\" --scope project --to antigravity",
       "compare": "normalized-text"
     },
     {

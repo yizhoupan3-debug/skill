@@ -247,6 +247,7 @@ fn full_loop_records_scientific_sense_fields() {
 }
 
 #[test]
+#[ignore = "requires live arxiv.org network access"]
 fn can_record_external_research_from_arxiv() {
     let tmp = temp_base("external-research");
     run_ctl(vec![
@@ -292,6 +293,7 @@ fn can_record_external_research_from_arxiv() {
 }
 
 #[test]
+#[ignore = "requires live arxiv.org network access"]
 fn batch_research_and_gate_recommendation() {
     let tmp = temp_base("batch-research");
     run_ctl(vec![

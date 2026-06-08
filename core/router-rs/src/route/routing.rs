@@ -18,7 +18,7 @@ use super::types::{
 };
 use rayon::prelude::*;
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{BinaryHeap, HashSet};
 
 pub(crate) fn build_search_results_payload(
     query: &str,
@@ -46,7 +46,114 @@ pub(crate) fn build_search_results_payload(
     }
 }
 
-pub(crate) fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<MatchRow> {
+#[derive(Eq, PartialEq)]
+struct SearchRankKey {
+    score_bits: u64,
+    matched_terms: usize,
+    slug: String,
+}
+
+impl Ord for SearchRankKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.score_bits
+            .cmp(&other.score_bits)
+            .then_with(|| self.matched_terms.cmp(&other.matched_terms))
+            .then_with(|| self.slug.cmp(&other.slug))
+    }
+}
+
+impl PartialOrd for SearchRankKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+struct SearchHeapEntry {
+    key: SearchRankKey,
+    idx: usize,
+}
+
+impl Eq for SearchHeapEntry {}
+
+impl PartialEq for SearchHeapEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Ord for SearchHeapEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key.cmp(&other.key)
+    }
+}
+
+impl PartialOrd for SearchHeapEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn search_rank_key(row: &MatchRow) -> SearchRankKey {
+    SearchRankKey {
+        score_bits: row.score.to_bits(),
+        matched_terms: row.matched_terms,
+        slug: row.slug.clone(),
+    }
+}
+
+fn cmp_match_rows(left: &MatchRow, right: &MatchRow) -> Ordering {
+    right
+        .score
+        .partial_cmp(&left.score)
+        .unwrap_or(Ordering::Equal)
+        .then_with(|| right.matched_terms.cmp(&left.matched_terms))
+        .then_with(|| left.slug.cmp(&right.slug))
+}
+
+fn finalize_search_rows(mut rows: Vec<MatchRow>, limit: usize) -> Vec<MatchRow> {
+    if rows.len() <= limit {
+        rows.sort_unstable_by(cmp_match_rows);
+        return rows;
+    }
+    // Top-k heap when many positives: avoid sorting the full match set.
+    let mut heap: BinaryHeap<SearchHeapEntry> = BinaryHeap::with_capacity(limit);
+    for (idx, row) in rows.iter().enumerate() {
+        let key = search_rank_key(row);
+        if heap.len() < limit {
+            heap.push(SearchHeapEntry { key, idx });
+            continue;
+        }
+        if let Some(worst) = heap.peek() {
+            if key > worst.key {
+                heap.pop();
+                heap.push(SearchHeapEntry { key, idx });
+            }
+        }
+    }
+    let mut out = heap
+        .into_iter()
+        .map(|entry| rows[entry.idx].clone())
+        .collect::<Vec<_>>();
+    out.sort_unstable_by(cmp_match_rows);
+    out
+}
+
+/// Score and rank skills for a query. When `indices` is `Some`, only those
+/// record positions are considered (avoids cloning records for host filtering).
+pub(crate) fn search_skills(
+    records: &[SkillRecord],
+    query: &str,
+    limit: usize,
+) -> Vec<MatchRow> {
+    search_skills_subset(records, None, query, limit)
+}
+
+pub(crate) fn search_skills_subset(
+    records: &[SkillRecord],
+    indices: Option<&[usize]>,
+    query: &str,
+    limit: usize,
+) -> Vec<MatchRow> {
     if limit == 0 {
         return Vec::new();
     }
@@ -61,8 +168,9 @@ pub(crate) fn search_skills(records: &[SkillRecord], query: &str, limit: usize) 
         return Vec::new();
     }
 
+    let scan_len = indices.map(|idxs| idxs.len()).unwrap_or(records.len());
+    let w = scoring_weights();
     let score_record = |record: &SkillRecord| {
-        let w = scoring_weights();
         let candidate = score_route_candidate(
             record,
             &normalized_query,
@@ -85,56 +193,65 @@ pub(crate) fn search_skills(records: &[SkillRecord], query: &str, limit: usize) 
             total_terms: query_tokens.len().max(query_token_list.len()),
         })
     };
-    let mut rows = if records.len() < PARALLEL_RECORD_SCAN_MIN {
-        records.iter().filter_map(score_record).collect::<Vec<_>>()
+
+    let rows = if scan_len < PARALLEL_RECORD_SCAN_MIN {
+        match indices {
+            Some(idxs) => idxs
+                .iter()
+                .filter_map(|&idx| score_record(&records[idx]))
+                .collect::<Vec<_>>(),
+            None => records
+                .iter()
+                .filter_map(score_record)
+                .collect::<Vec<_>>(),
+        }
     } else {
-        records
-            .par_iter()
-            .filter_map(score_record)
-            .collect::<Vec<_>>()
+        match indices {
+            Some(idxs) => idxs
+                .par_iter()
+                .filter_map(|&idx| score_record(&records[idx]))
+                .collect::<Vec<_>>(),
+            None => records
+                .par_iter()
+                .filter_map(score_record)
+                .collect::<Vec<_>>(),
+        }
     };
 
-    rows.sort_unstable_by(|left, right| {
-        right
-            .score
-            .partial_cmp(&left.score)
-            .unwrap_or(Ordering::Equal)
-            .then_with(|| right.matched_terms.cmp(&left.matched_terms))
-            .then_with(|| left.slug.cmp(&right.slug))
-    });
-    rows.truncate(limit);
-    rows
+    finalize_search_rows(rows, limit)
 }
 
-pub(crate) fn filter_records_for_host(
-    records: impl AsRef<[SkillRecord]>,
+
+pub(crate) fn filter_record_indices_for_host(
+    records: &[SkillRecord],
     host_id: Option<&str>,
-) -> Result<Vec<SkillRecord>, String> {
+) -> Result<Vec<usize>, String> {
     let Some(host_id) = host_id.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(records.as_ref().to_vec());
+        return Ok((0..records.len()).collect());
     };
     let host_id = host_id.to_ascii_lowercase();
-    let original_len = records.as_ref().len();
+    let aliases = crate::hosts::host_provider_routing_aliases(&host_id);
+    let original_len = records.len();
     let mut saw_host = false;
-    let filtered: Vec<SkillRecord> = records
-        .as_ref()
-        .iter()
-        .filter(|record| {
-            if record.record_kind == "framework_command" {
-                return true;
-            };
-            let allowed = record
-                .host_platforms
+    let mut indices = Vec::new();
+    for (idx, record) in records.iter().enumerate() {
+        if record.record_kind == "framework_command" {
+            saw_host = true;
+            indices.push(idx);
+            continue;
+        }
+        let allowed = record.host_platforms.iter().any(|platform| {
+            aliases
                 .iter()
-                .any(|platform| platform.eq_ignore_ascii_case(&host_id));
-            saw_host |= allowed;
-            allowed
-        })
-        .cloned()
-        .collect();
+                .any(|alias| platform.eq_ignore_ascii_case(alias))
+        });
+        saw_host |= allowed;
+        if allowed {
+            indices.push(idx);
+        }
+    }
 
-    // 当所有记录都被过滤掉时，记录警告
-    if filtered.is_empty() && original_len > 0 {
+    if indices.is_empty() && original_len > 0 {
         eprintln!(
             "[router-rs warning] host_id={} filtered all {} records (saw_host={})",
             host_id, original_len, saw_host
@@ -146,7 +263,19 @@ pub(crate) fn filter_records_for_host(
             "host-aware routing has no skill records for host_id `{host_id}`; host_platforms metadata is missing or the host id is unsupported"
         ));
     }
-    Ok(filtered)
+    Ok(indices)
+}
+
+pub(crate) fn filter_records_for_host(
+    records: impl AsRef<[SkillRecord]>,
+    host_id: Option<&str>,
+) -> Result<Vec<SkillRecord>, String> {
+    let records = records.as_ref();
+    let indices = filter_record_indices_for_host(records, host_id)?;
+    Ok(indices
+        .into_iter()
+        .map(|idx| records[idx].clone())
+        .collect())
 }
 
 pub(crate) fn route_task(
@@ -156,17 +285,56 @@ pub(crate) fn route_task(
     allow_overlay: bool,
     first_turn: bool,
 ) -> Result<RouteDecision, String> {
+    crate::touch_test_kernel_bootstrap();
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
     if records.is_empty() {
         return Err("No skill records available for route decision.".to_string());
     }
-    let normalized_query = normalize_text(query);
-    let query_token_list = tokenize_route_text(query);
+    if super::aliases::query_invokes_retired_framework_slash_command(query) {
+        let route_context = build_route_context(
+            &normalize_text(query),
+            &tokenize_route_text(query),
+        );
+        let fallback_reasons = compact_route_reasons(&[
+            "Retired framework slash command; native runtime should proceed without loading a skill."
+                .to_string(),
+        ]);
+        return Ok(RouteDecision {
+            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+            authority: ROUTE_AUTHORITY.to_string(),
+            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+            task: query.to_string(),
+            session_id: session_id.to_string(),
+            selected_skill: NO_SKILL_SELECTED.to_string(),
+            selected_skill_path: None,
+            overlay_skill: None,
+            route_context,
+            layer: "runtime".to_string(),
+            score: 0.0,
+            reasons: fallback_reasons.clone(),
+            matched_token_count: 0,
+            fuzzy_match: false,
+            route_snapshot: build_route_snapshot(
+                "rust",
+                NO_SKILL_SELECTED,
+                None,
+                "runtime",
+                0.0,
+                &fallback_reasons,
+            ),
+        });
+    }
+    let primary_query = primary_owner_query_text(query, records, allow_overlay);
+    let normalized_query = normalize_text(&primary_query);
+    let query_token_list = tokenize_route_text(&primary_query);
     let query_tokens = query_token_list
         .iter()
         .filter(|token| !common_route_stop_tokens().contains(&token.as_str()))
         .cloned()
         .collect::<HashSet<String>>();
     let route_context = build_route_context(&normalized_query, &query_token_list);
+    let overlay_normalized_query = normalize_text(query);
+    let overlay_query_tokens = tokenize_route_text(query);
 
     if let Some(record) = records
         .iter()
@@ -227,43 +395,20 @@ pub(crate) fn route_task(
 
     if viable.is_empty() {
         // --- Fuzzy fallback: try trigram similarity against all records ---
-        let fuzzy_result = records
-            .iter()
-            .map(|record| (record, fuzzy_fallback_score(query, record)))
-            .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-        if let Some((record, sim)) = fuzzy_result {
-            eprintln!(
-                "[router-rs route] FUZZY RESCUE: query=\"{}\" skill=\"{}\" sim={:.3}",
-                query, record.slug, sim
-            );
-            let fuzzy_reasons = compact_route_reasons(&[
-                format!("Fuzzy trigram fallback rescued match (similarity={sim:.3})."),
-            ]);
-            return Ok(RouteDecision {
-                decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-                authority: ROUTE_AUTHORITY.to_string(),
-                compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-                task: query.to_string(),
-                session_id: session_id.to_string(),
-                selected_skill: record.slug.clone(),
-                selected_skill_path: record.skill_path.clone(),
-                overlay_skill: None,
+        if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
+            return Ok(build_fuzzy_rescue_decision(
+                records,
+                record,
+                sim,
+                query,
+                &overlay_normalized_query,
+                &overlay_query_tokens,
+                session_id,
                 route_context,
-                layer: record.layer.clone(),
-                score: round2(sim * 100.0),
-                reasons: fuzzy_reasons.clone(),
-                matched_token_count: 0,
-                fuzzy_match: true,
-                route_snapshot: build_route_snapshot(
-                    "rust",
-                    &record.slug,
-                    None,
-                    &record.layer,
-                    round2(sim * 100.0),
-                    &fuzzy_reasons,
-                ),
-            });
+                allow_overlay,
+                &format!("Fuzzy trigram fallback rescued match (similarity={sim:.3})."),
+                None,
+            ));
         }
         eprintln!(
             "[router-rs route] NO SKILL HIT: query=\"{}\" session_id=\"{}\"",
@@ -344,43 +489,23 @@ pub(crate) fn route_task(
     let selected = pick_owner(viable, &normalized_query, &query_token_list, scoring_weights());
     if selected.score < scoring_weights().layer_threshold(&selected.record.layer) {
         // --- Fuzzy fallback: try trigram similarity before giving up ---
-        let fuzzy_result = records
-            .iter()
-            .map(|record| (record, fuzzy_fallback_score(query, record)))
-            .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-        if let Some((record, sim)) = fuzzy_result {
-            eprintln!(
-                "[router-rs route] FUZZY RESCUE (below-threshold): query=\"{}\" skill=\"{}\" sim={:.3} exact_score={:.2}",
-                query, record.slug, sim, selected.score
-            );
-            let fuzzy_reasons = compact_route_reasons(&[
-                format!("Fuzzy trigram fallback rescued below-threshold match (similarity={sim:.3}, exact_score={:.2}).", selected.score),
-            ]);
-            return Ok(RouteDecision {
-                decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-                authority: ROUTE_AUTHORITY.to_string(),
-                compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-                task: query.to_string(),
-                session_id: session_id.to_string(),
-                selected_skill: record.slug.clone(),
-                selected_skill_path: record.skill_path.clone(),
-                overlay_skill: None,
+        if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
+            return Ok(build_fuzzy_rescue_decision(
+                records,
+                record,
+                sim,
+                query,
+                &overlay_normalized_query,
+                &overlay_query_tokens,
+                session_id,
                 route_context,
-                layer: record.layer.clone(),
-                score: round2(sim * 100.0),
-                reasons: fuzzy_reasons.clone(),
-                matched_token_count: 0,
-                fuzzy_match: true,
-                route_snapshot: build_route_snapshot(
-                    "rust",
-                    &record.slug,
-                    None,
-                    &record.layer,
-                    round2(sim * 100.0),
-                    &fuzzy_reasons,
+                allow_overlay,
+                &format!(
+                    "Fuzzy trigram fallback rescued below-threshold match (similarity={sim:.3}, exact_score={:.2}).",
+                    selected.score
                 ),
-            });
+                Some(selected.score),
+            ));
         }
         eprintln!(
             "[router-rs route] BELOW THRESHOLD: query=\"{}\" selected={} score={:.2} threshold={:.2}",
@@ -421,8 +546,8 @@ pub(crate) fn route_task(
     let overlay = if allow_overlay {
         pick_overlay(
             records,
-            &normalized_query,
-            &query_token_list,
+            &overlay_normalized_query,
+            &overlay_query_tokens,
             selected.record,
         )
     } else {
@@ -461,6 +586,110 @@ pub(crate) fn route_task(
         matched_token_count: selected.matched_token_count,
         fuzzy_match: false,
     })
+}
+
+fn primary_owner_query_text(query: &str, records: &[SkillRecord], allow_overlay: bool) -> String {
+    if !allow_overlay {
+        return query.to_string();
+    }
+    let mut text = query.to_string();
+    for record in records.iter().filter(|record| is_overlay_record(record)) {
+        for hint in &record.trigger_hints {
+            if hint.chars().count() > 3 {
+                text = text.replace(hint, " ");
+            }
+        }
+        let slug_spaced = record.slug.replace('-', " ");
+        for token in [record.slug.as_str(), slug_spaced.as_str()] {
+            if token.chars().count() > 3 {
+                text = text.replace(token, " ");
+            }
+        }
+    }
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn fuzzy_rescue_best_match<'a>(
+    records: impl Iterator<Item = &'a SkillRecord>,
+    query: &str,
+) -> Option<(&'a SkillRecord, f64)> {
+    records
+        .map(|record| (record, fuzzy_fallback_score(query, record)))
+        .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+        .map(|(record, sim)| (record, sim))
+}
+
+fn fuzzy_rescue_primary_record<'a>(
+    records: &'a [SkillRecord],
+    query: &str,
+) -> Option<(&'a SkillRecord, f64)> {
+    fuzzy_rescue_best_match(
+        records.iter().filter(|record| !is_overlay_record(record)),
+        query,
+    )
+}
+
+fn build_fuzzy_rescue_decision(
+    records: &[SkillRecord],
+    record: &SkillRecord,
+    sim: f64,
+    query: &str,
+    normalized_query: &str,
+    query_token_list: &[String],
+    session_id: &str,
+    route_context: RouteContextPayload,
+    allow_overlay: bool,
+    reason_line: &str,
+    exact_score: Option<f64>,
+) -> RouteDecision {
+    if let Some(exact) = exact_score {
+        eprintln!(
+            "[router-rs route] FUZZY RESCUE (below-threshold): query=\"{}\" skill=\"{}\" sim={:.3} exact_score={:.2}",
+            query, record.slug, sim, exact
+        );
+    } else {
+        eprintln!(
+            "[router-rs route] FUZZY RESCUE: query=\"{}\" skill=\"{}\" sim={:.3}",
+            query, record.slug, sim
+        );
+    }
+    let overlay = if allow_overlay {
+        pick_overlay(records, normalized_query, query_token_list, record)
+    } else {
+        None
+    };
+    let filtered_overlay = overlay
+        .as_ref()
+        .filter(|item| *item != &record.slug)
+        .cloned();
+    let fuzzy_reasons = compact_route_reasons(&[reason_line.to_string()]);
+    RouteDecision {
+        decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
+        compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+        task: query.to_string(),
+        session_id: session_id.to_string(),
+        selected_skill: record.slug.clone(),
+        selected_skill_path: record.skill_path.clone(),
+        overlay_skill: filtered_overlay,
+        route_context,
+        layer: record.layer.clone(),
+        score: round2(sim * 100.0),
+        reasons: fuzzy_reasons.clone(),
+        matched_token_count: 0,
+        fuzzy_match: true,
+        route_snapshot: build_route_snapshot(
+            "rust",
+            &record.slug,
+            overlay
+                .as_deref()
+                .filter(|item| *item != record.slug.as_str()),
+            &record.layer,
+            round2(sim * 100.0),
+            &fuzzy_reasons,
+        ),
+    }
 }
 
 pub(crate) fn literal_framework_alias_decision(

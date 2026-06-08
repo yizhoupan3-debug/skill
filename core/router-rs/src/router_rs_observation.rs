@@ -11,13 +11,8 @@ pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-obse
 pub enum HookObservationHost {
     Cursor,
     Codex,
-    /// Antigravity CLI lifecycle hooks (Codex-shaped JSON).
-    AntigravityCli,
     /// Claude Code hook JSON (`router-rs claude hook`).
     ClaudeCode,
-    /// Claude Desktop MCP transport.
-#[allow(dead_code)]
-    ClaudeDesktop,
 }
 
 fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<GateClassified> {
@@ -42,7 +37,7 @@ fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String
                 .and_then(Value::as_str)
                 .map(|s| s.to_string()),
         ),
-        HookObservationHost::Codex | HookObservationHost::AntigravityCli => {
+        HookObservationHost::Codex => {
             let followup = output
                 .get("followup_message")
                 .and_then(Value::as_str)
@@ -53,7 +48,7 @@ fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String
                 .map(|s| s.to_string());
             (followup, additional)
         }
-        HookObservationHost::ClaudeCode | HookObservationHost::ClaudeDesktop => {
+        HookObservationHost::ClaudeCode => {
             let followup = output
                 .get("stopReason")
                 .or_else(|| output.get("systemMessage"))
@@ -189,9 +184,7 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
     let host_str = match host {
         HookObservationHost::Cursor => "cursor",
         HookObservationHost::Codex => "codex",
-        HookObservationHost::AntigravityCli => "antigravity-cli",
         HookObservationHost::ClaudeCode => "claude-code",
-        HookObservationHost::ClaudeDesktop => "claude-desktop",
     };
 
     if output.get("contract_guard").is_some()
@@ -209,17 +202,11 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
         );
     }
 
-    let lifecycle_input_block = match host {
-        HookObservationHost::Codex => output
-            .pointer("/hookSpecificOutput/hookEventName")
-            .and_then(Value::as_str)
-            == Some("CodexLifecycleContext"),
-        HookObservationHost::AntigravityCli => output
-            .pointer("/hookSpecificOutput/hookEventName")
-            .and_then(Value::as_str)
-            == Some("AntigravityCliLifecycleContext"),
-        _ => false,
-    };
+    let lifecycle_input_block = output
+        .pointer("/hookSpecificOutput/hookEventName")
+        .and_then(Value::as_str)
+        == Some("CodexLifecycleContext")
+        && matches!(host, HookObservationHost::Codex);
     if lifecycle_input_block && output.get("decision").and_then(Value::as_str) == Some("block") {
         let msg = output
             .get("message")

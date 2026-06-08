@@ -2,7 +2,8 @@
 name: implementx
 description: |
   Personal lifecycle — execute ALL waves in one breath. Main thread schedules lanes only; subagents write compact lane-notes.
-  Sets drive_until_done true. No hard block; advisory mode under lifecycle_profile my-light.
+  Sets drive_until_done true. REVIEW_GATE Stop advisory-only (all hosts; Claude canonical clearance).
+  lifecycle_profile my-light: closeout/complete advisory; suppresses review nudge and spawn-first.
   Use for /implementx after /planx.
 routing_layer: L0
 routing_owner: owner
@@ -20,7 +21,14 @@ trigger_hints:
 metadata:
   version: "0.1.0"
   platforms: [supported]
-  tags: [my-lifecycle, implement, multi-agent, one-breath]
+  tags: [my-lifecycle, implement, multi-agent, one-breath, codegraph]
+allowed_tools:
+  - mcp__mcp-codegraph__codegraph_search
+  - mcp__mcp-codegraph__codegraph_callers
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_impact
+  - mcp__mcp-codegraph__codegraph_node
+  - mcp__mcp-codegraph__codegraph_status
 ---
 
 # implementx
@@ -94,6 +102,19 @@ Prefer `fork_context=false`, disjoint paths, 3–5 parallel lanes when plan allo
 - 子模块之间强耦合
 - 需要共享状态或增量修改
 - 只有 1-2 个子任务
+
+## CodeGraph MCP（可选 · CG-5）
+
+宿主已注册独立 `mcp-codegraph` 进程（`configs/framework/RUNTIME_REGISTRY.json` → `managed_mcp_servers.mcp-codegraph`）。跨 my lifecycle 的**语义索引**优先走 MCP，再 fallback 到 `Grep` / `SemanticSearch`。
+
+| 生命周期 | 何时用 | 首选工具 |
+|----------|--------|----------|
+| **planx** | 划 wave 前定位 owner / 影响面 | `codegraph_search` → `codegraph_impact` |
+| **implementx** | lane 开工前确认调用链与 blast radius | `codegraph_callers` / `codegraph_callees` → 改后再 `codegraph_impact` |
+| **review**（`code-review-deep`） | findings 前核对传播范围 | `codegraph_impact` + `codegraph_node` |
+| **verifyx** | 验证前确认索引新鲜度 | `codegraph_status` |
+
+**Fallback**：MCP 未安装或 `codegraph_status` 报错时，子代理用只读 `Grep` / `Read`；勿阻塞 wave 执行。
 
 ## GOAL_STATE writes (HARD)
 

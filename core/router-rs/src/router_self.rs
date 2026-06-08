@@ -258,6 +258,39 @@ pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), String> {
     ))
 }
 
+/// Resolve the `router-rs` binary for subprocess e2e tests (never falls back to the test harness exe).
+#[cfg(test)]
+pub fn resolve_router_rs_test_bin() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_router-rs") {
+        return PathBuf::from(path);
+    }
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_router-rs") {
+        return PathBuf::from(path);
+    }
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for candidate in [
+        manifest.join("../../target/debug/router-rs"),
+        manifest.join("../target/debug/router-rs"),
+        PathBuf::from("/tmp/skill-cargo-target/debug/router-rs"),
+        manifest.join("../../target/release/router-rs"),
+        manifest.join("../target/release/router-rs"),
+        PathBuf::from("/tmp/skill-cargo-target/release/router-rs"),
+    ] {
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    if let Ok(target) = std::env::var("CARGO_TARGET_DIR") {
+        let candidate = PathBuf::from(target).join("debug/router-rs");
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    panic!(
+        "router-rs test binary not found; run `cargo test -p router-rs` so CARGO_BIN_EXE_router-rs is available"
+    );
+}
+
 pub fn is_ephemeral_router_rs_path(path: &str) -> bool {
     path.contains("cursor-sandbox-cache")
         || path.contains("/tmp/skill-cargo-target")
@@ -319,4 +352,207 @@ fn remove_dir_if_exists(path: &Path) -> Result<(), String> {
         eprintln!("removed {}", path.display());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_install_paths_use_home_local_bin() {
+        let dir = default_router_rs_install_dir();
+        assert!(dir.ends_with(".local/bin"));
+        assert_eq!(
+            default_router_rs_install_path(),
+            dir.join("router-rs")
+        );
+    }
+
+    #[test]
+    fn ephemeral_paths_detect_sandbox_and_tmp_targets() {
+        assert!(is_ephemeral_router_rs_path(
+            "/tmp/skill-cargo-target/debug/router-rs"
+        ));
+        assert!(is_ephemeral_router_rs_path(
+            "/var/folders/xx/cursor-sandbox-cache/yy/router-rs"
+        ));
+        assert!(!is_ephemeral_router_rs_path(
+            "/Users/joe/.local/bin/router-rs"
+        ));
+    }
+
+    #[test]
+    fn repo_build_paths_match_framework_target_layout() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let framework_root = manifest_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("framework root");
+        let debug = framework_root.join("target/debug/router-rs");
+        assert!(is_repo_build_router_rs_path(
+            &debug.to_string_lossy(),
+            &framework_root
+        ));
+        assert!(!is_repo_build_router_rs_path(
+            "/other/repo/target/debug/router-rs",
+            &framework_root
+        ));
+    }
+
+    #[test]
+    fn file_sha256_is_stable_for_known_content() {
+        let dir = std::env::temp_dir().join(format!(
+            "router-self-sha-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("probe.bin");
+        fs::write(&path, b"router-rs-self").unwrap();
+        let digest = file_sha256(&path).expect("sha256");
+        assert_eq!(digest.len(), 32);
+        assert_eq!(digest, file_sha256(&path).expect("repeat"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn desktop_mcp_paths_under_skill_framework_share() {
+        let home = Path::new("/tmp/test-home");
+        let dir = router_rs_desktop_mcp_dir_for_home(home);
+        assert!(dir.ends_with(".local/share/skill-framework/bin"));
+        assert_eq!(
+            router_rs_desktop_mcp_path_for_home(home),
+            dir.join("router-rs")
+        );
+    }
+
+    #[test]
+    fn repo_build_paths_include_release_target() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let framework_root = manifest_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("framework root");
+        let release = framework_root.join("target/release/router-rs");
+        assert!(is_repo_build_router_rs_path(
+            &release.to_string_lossy(),
+            &framework_root
+        ));
+    }
+
+    fn try_resolve_router_rs_test_bin() -> Option<PathBuf> {
+        if let Some(path) = option_env!("CARGO_BIN_EXE_router-rs") {
+            return Some(PathBuf::from(path));
+        }
+        if let Ok(path) = std::env::var("CARGO_BIN_EXE_router-rs") {
+            return Some(PathBuf::from(path));
+        }
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        for candidate in [
+            manifest.join("../../target/debug/router-rs"),
+            manifest.join("../target/debug/router-rs"),
+            PathBuf::from("/tmp/skill-cargo-target/debug/router-rs"),
+            manifest.join("../../target/release/router-rs"),
+            manifest.join("../target/release/router-rs"),
+            PathBuf::from("/tmp/skill-cargo-target/release/router-rs"),
+        ] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        if let Ok(target) = std::env::var("CARGO_TARGET_DIR") {
+            let candidate = PathBuf::from(target).join("debug/router-rs");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn validate_router_rs_binary_runnable_smoke() {
+        let Some(bin) = try_resolve_router_rs_test_bin() else {
+            eprintln!("skip: router-rs binary not built (per-crate test run)");
+            return;
+        };
+        validate_router_rs_binary_runnable(&bin).expect("router-rs --help smoke");
+    }
+
+    #[test]
+    fn validate_router_rs_binary_runnable_rejects_missing_file() {
+        let missing = std::env::temp_dir().join("router-rs-missing-binary-smoke");
+        let err = validate_router_rs_binary_runnable(&missing).unwrap_err();
+        assert!(
+            err.contains("missing"),
+            "expected missing-file error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn is_ephemeral_bare_tmp_prefix_paths() {
+        assert!(is_ephemeral_router_rs_path("/tmp/router-rs"));
+        assert!(is_ephemeral_router_rs_path("/tmp/foo/bar/router-rs"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_router_rs_to_bin_dir_copies_current_exe() {
+        let dir = std::env::temp_dir().join(format!(
+            "router-self-install-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let dest = install_router_rs_to_bin_dir(Some(dir.clone())).expect("install");
+        assert!(dest.is_file());
+        assert_eq!(dest, dir.join("router-rs"));
+        let src = std::env::current_exe().expect("current_exe");
+        assert_eq!(
+            fs::metadata(&dest).expect("dest meta").len(),
+            fs::metadata(&src).expect("src meta").len()
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn repo_build_paths_include_crate_local_target() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let framework_root = manifest_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("framework root");
+        let crate_target = manifest_dir.join("target/debug/router-rs");
+        assert!(is_repo_build_router_rs_path(
+            &crate_target.to_string_lossy(),
+            &framework_root
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_router_rs_for_desktop_mcp_at_copies_into_skill_framework_bin() {
+        let home = std::env::temp_dir().join(format!(
+            "router-self-desktop-mcp-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let dest = install_router_rs_for_desktop_mcp_at(&home).expect("desktop mcp install");
+        assert_eq!(
+            dest,
+            router_rs_desktop_mcp_path_for_home(&home)
+        );
+        assert!(dest.is_file());
+        assert!(
+            dest.to_string_lossy()
+                .contains(".local/share/skill-framework/bin/router-rs")
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
 }

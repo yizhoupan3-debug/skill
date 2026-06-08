@@ -9,6 +9,7 @@ use regex::Regex;
 use roxmltree::{Document, Node};
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -43,6 +44,7 @@ enum Commands {
     Outline(OutlineArgs),
     Render(RenderArgs),
     ExtractStructure(ExtractStructureArgs),
+    ReadFull(ReadFullArgs),
     EnsureRasterImage(EnsureRasterImageArgs),
     CreateMontage(CreateMontageArgs),
     SlidesTest(SlidesTestArgs),
@@ -128,6 +130,23 @@ struct ExtractStructureArgs {
     image_dir: String,
     #[arg(long, default_value_t = true)]
     pretty: bool,
+}
+
+#[derive(Args)]
+struct ReadFullArgs {
+    input: String,
+    /// Linear text output (default).
+    #[arg(long, default_value_t = true, conflicts_with = "json")]
+    text: bool,
+    /// JSON structure output (same schema as extract-structure).
+    #[arg(long, default_value_t = false)]
+    json: bool,
+    /// Compact JSON (no pretty-print); only applies with --json.
+    #[arg(long, default_value_t = false)]
+    compact: bool,
+    /// 1-based slide filter, e.g. `1-10` or `3`.
+    #[arg(long)]
+    slides: Option<String>,
 }
 
 #[derive(Args)]
@@ -350,9 +369,11 @@ struct OutlineSummary {
     qa: Option<Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ZipBundle {
-    files: HashMap<String, Vec<u8>>,
+    archive: RefCell<ZipArchive<File>>,
+    index_by_name: HashMap<String, usize>,
+    cache: RefCell<HashMap<String, Vec<u8>>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -499,6 +520,7 @@ fn main() -> Result<()> {
         Commands::Outline(args) => outline_command(args)?,
         Commands::Render(args) => render_command(args)?,
         Commands::ExtractStructure(args) => extract_structure_command(args)?,
+        Commands::ReadFull(args) => read_full_command(args)?,
         Commands::EnsureRasterImage(args) => ensure_raster_image_command(args)?,
         Commands::CreateMontage(args) => create_montage_command(args)?,
         Commands::SlidesTest(args) => slides_test_command(args)?,
@@ -2902,6 +2924,218 @@ fn extract_structure_command(args: ExtractStructureArgs) -> Result<()> {
     Ok(())
 }
 
+fn read_full_command(args: ReadFullArgs) -> Result<()> {
+    let input = expand_path(&args.input);
+    let bundle = ZipBundle::from_path(&input)?;
+    let mut structure = extract_pptx_structure(&bundle, &input, false, None)?;
+    if let Some(spec) = &args.slides {
+        let slide_count = structure
+            .get("slide_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let selected = parse_slide_range(spec, slide_count)?;
+        structure = filter_structure_slides(structure, &selected)?;
+    }
+    if args.json {
+        let json_str = if args.compact {
+            serde_json::to_string(&structure)?
+        } else {
+            serde_json::to_string_pretty(&structure)?
+        };
+        println!("{}", json_str);
+    } else {
+        print!("{}", format_read_full_text(&structure));
+    }
+    Ok(())
+}
+
+fn parse_slide_range(spec: &str, max: usize) -> Result<Vec<usize>> {
+    let spec = spec.trim();
+    if max == 0 {
+        bail!("presentation contains no slides");
+    }
+    if spec.contains('-') {
+        let parts: Vec<&str> = spec.splitn(2, '-').collect();
+        let start: usize = parts[0]
+            .trim()
+            .parse()
+            .with_context(|| format!("invalid slide range start in {spec}"))?;
+        let end: usize = parts[1]
+            .trim()
+            .parse()
+            .with_context(|| format!("invalid slide range end in {spec}"))?;
+        if start == 0 || end == 0 || start > end || end > max {
+            bail!("slide range {spec} out of bounds (1-{max})");
+        }
+        Ok((start..=end).collect())
+    } else {
+        let slide_no: usize = spec
+            .parse()
+            .with_context(|| format!("invalid slide number in {spec}"))?;
+        if slide_no == 0 || slide_no > max {
+            bail!("slide {slide_no} out of bounds (1-{max})");
+        }
+        Ok(vec![slide_no])
+    }
+}
+
+fn filter_structure_slides(structure: Value, selected: &[usize]) -> Result<Value> {
+    let slides = structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing slides in structure"))?;
+    let selected_set: BTreeSet<usize> = selected.iter().copied().collect();
+    let filtered = slides
+        .iter()
+        .filter(|slide| {
+            slide
+                .get("index")
+                .and_then(Value::as_u64)
+                .map(|idx| selected_set.contains(&(idx as usize + 1)))
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut out = structure;
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert("slide_count".to_string(), json!(filtered.len()));
+        obj.insert("slides".to_string(), json!(filtered));
+    }
+    Ok(out)
+}
+
+fn format_read_full_text(structure: &Value) -> String {
+    let file = structure
+        .get("file")
+        .and_then(Value::as_str)
+        .unwrap_or("deck.pptx");
+    let slide_count = structure
+        .get("slide_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let mut out = format!("FILE: {file}\nSLIDES: {slide_count}\n\n");
+    let Some(slides) = structure.get("slides").and_then(Value::as_array) else {
+        return out;
+    };
+    for slide in slides {
+        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let slide_no = index + 1;
+        out.push_str(&format!("=== Slide {slide_no} ===\n"));
+        if let Some(layout) = slide.get("layout").and_then(Value::as_str) {
+            if !layout.is_empty() {
+                out.push_str(&format!("LAYOUT: {layout}\n"));
+            }
+        }
+        let mut title_lines = Vec::new();
+        let mut body_lines = Vec::new();
+        let mut warnings = Vec::new();
+        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
+            collect_read_full_elements(elements, &mut title_lines, &mut body_lines, &mut warnings);
+        }
+        out.push_str("TITLE:\n");
+        if title_lines.is_empty() {
+            out.push_str("(none)\n");
+        } else {
+            for line in &title_lines {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out.push_str("\nBODY:\n");
+        if body_lines.is_empty() {
+            out.push_str("(none)\n");
+        } else {
+            for line in &body_lines {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out.push_str("\nNOTES:\n");
+        match slide.get("notes").and_then(Value::as_str) {
+            Some(notes) if !notes.trim().is_empty() => {
+                out.push_str(notes.trim());
+                out.push('\n');
+            }
+            _ => out.push_str("(none)\n"),
+        }
+        out.push_str("\nWARNINGS:\n");
+        if warnings.is_empty() {
+            out.push_str("(none)\n");
+        } else {
+            for warning in &warnings {
+                out.push_str("- ");
+                out.push_str(warning);
+                out.push('\n');
+            }
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn collect_read_full_elements(
+    elements: &[Value],
+    title_lines: &mut Vec<String>,
+    body_lines: &mut Vec<String>,
+    warnings: &mut Vec<String>,
+) {
+    for element in elements {
+        let name = element
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("shape");
+        let element_type = element
+            .get("type")
+            .or_else(|| element.get("element_type"))
+            .and_then(Value::as_str)
+            .unwrap_or("shape");
+        if let Some(text) = element.get("text").and_then(|t| t.get("fullText")).and_then(Value::as_str)
+        {
+            if !text.trim().is_empty() {
+                let lower = name.to_lowercase();
+                if lower.contains("title") || lower.contains("subtitle") {
+                    title_lines.push(text.trim().to_string());
+                } else {
+                    body_lines.push(text.trim().to_string());
+                }
+            }
+        }
+        if let Some(table) = element.get("table") {
+            if let Some(data) = table.get("data").and_then(Value::as_array) {
+                let rows = table.get("rows").and_then(Value::as_u64).unwrap_or(0);
+                let cols = table.get("cols").and_then(Value::as_u64).unwrap_or(0);
+                body_lines.push(format!("TABLE ({rows}x{cols}):"));
+                for row in data {
+                    if let Some(cells) = row.as_array() {
+                        let line = cells
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" | ");
+                        if !line.is_empty() {
+                            body_lines.push(line);
+                        }
+                    }
+                }
+            }
+        }
+        if element_type == "image" {
+            warnings.push(format!("image \"{name}\" (no extractable text)"));
+        } else if element_type == "chart" {
+            let chart_type = element
+                .get("chart")
+                .and_then(|c| c.get("chart_type"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            warnings.push(format!("chart \"{name}\" (type: {chart_type})"));
+        } else if element_type == "group" {
+            if let Some(children) = element.get("children").and_then(Value::as_array) {
+                collect_read_full_elements(children, title_lines, body_lines, warnings);
+            }
+        }
+    }
+}
+
 fn ensure_raster_image_command(args: EnsureRasterImageArgs) -> Result<()> {
     let paths = resolve_input_paths(&args.input_files, args.input_dir.as_deref())?;
     let out_dir = args.output_dir.as_deref().map(expand_path);
@@ -3238,32 +3472,51 @@ impl ZipBundle {
         let file =
             File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
         let mut archive = ZipArchive::new(file).context("failed to read zip archive")?;
-        let mut files = HashMap::new();
+        let mut index_by_name = HashMap::new();
         for idx in 0..archive.len() {
-            let mut entry = archive.by_index(idx)?;
-            let mut buf = Vec::new();
-            entry.read_to_end(&mut buf)?;
-            files.insert(normalize_zip_path(entry.name()), buf);
+            let entry = archive.by_index(idx)?;
+            index_by_name.insert(normalize_zip_path(entry.name()), idx);
         }
-        Ok(Self { files })
+        Ok(Self {
+            archive: RefCell::new(archive),
+            index_by_name,
+            cache: RefCell::new(HashMap::new()),
+        })
+    }
+
+    fn contains(&self, path: &str) -> bool {
+        self.index_by_name.contains_key(&normalize_zip_path(path))
+    }
+
+    fn read_bytes(&self, path: &str) -> Result<Vec<u8>> {
+        let key = normalize_zip_path(path);
+        if let Some(cached) = self.cache.borrow().get(&key) {
+            return Ok(cached.clone());
+        }
+        let idx = self
+            .index_by_name
+            .get(&key)
+            .copied()
+            .ok_or_else(|| anyhow!("missing zip entry {}", path))?;
+        let mut archive = self.archive.borrow_mut();
+        let mut entry = archive.by_index(idx)?;
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf)?;
+        self.cache.borrow_mut().insert(key, buf.clone());
+        Ok(buf)
     }
 
     fn text(&self, path: &str) -> Result<String> {
-        let data = self
-            .files
-            .get(&normalize_zip_path(path))
-            .ok_or_else(|| anyhow!("missing zip entry {}", path))?;
-        String::from_utf8(data.clone()).with_context(|| format!("{} is not valid utf-8 xml", path))
+        let data = self.read_bytes(path)?;
+        String::from_utf8(data).with_context(|| format!("{} is not valid utf-8 xml", path))
     }
 
-    fn bytes(&self, path: &str) -> Option<&[u8]> {
-        self.files
-            .get(&normalize_zip_path(path))
-            .map(|value| value.as_slice())
+    fn bytes(&self, path: &str) -> Result<Vec<u8>> {
+        self.read_bytes(path)
     }
 
     fn names(&self) -> impl Iterator<Item = &String> {
-        self.files.keys()
+        self.index_by_name.keys()
     }
 }
 
@@ -3802,9 +4055,8 @@ pub(crate) fn extract_pptx_structure(
         let slide_doc = Document::parse(&slide_xml)?;
         let rel_path = slide_rel_path(&slide_path);
         let slide_rels = bundle
-            .bytes(&rel_path)
-            .map(|bytes| String::from_utf8(bytes.to_vec()))
-            .transpose()?
+            .text(&rel_path)
+            .ok()
             .map(|text| parse_relationships(&text))
             .transpose()?
             .unwrap_or_default();
@@ -4097,8 +4349,8 @@ fn extract_image_info(
     let media_path = resolve_target("ppt/slides/slide.xml", target);
     let bytes = bundle
         .bytes(&media_path)
-        .ok_or_else(|| anyhow!("missing media {}", media_path))?;
-    let image = image::load_from_memory(bytes).ok();
+        .with_context(|| format!("missing media {}", media_path))?;
+    let image = image::load_from_memory(&bytes).ok();
     let content_type = media_path
         .rsplit('.')
         .next()
@@ -4882,6 +5134,42 @@ fn join_display_list(value: Option<&Vec<Value>>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_slide_range_single_and_span() {
+        assert_eq!(parse_slide_range("3", 10).unwrap(), vec![3]);
+        assert_eq!(
+            parse_slide_range("1-3", 10).unwrap(),
+            vec![1, 2, 3]
+        );
+        assert!(parse_slide_range("0", 5).is_err());
+        assert!(parse_slide_range("11", 10).is_err());
+        assert!(parse_slide_range("3-2", 10).is_err());
+    }
+
+    #[test]
+    fn format_read_full_text_linear_sections() {
+        let structure = json!({
+            "file": "demo.pptx",
+            "slide_count": 1,
+            "slides": [{
+                "index": 0,
+                "layout": "Title Slide",
+                "elements": [
+                    {"name": "Title 1", "type": "shape", "text": {"fullText": "Hello Deck"}},
+                    {"name": "Content 1", "type": "shape", "text": {"fullText": "Point A"}},
+                    {"name": "Picture 1", "type": "image"}
+                ],
+                "notes": "Remember to pause"
+            }]
+        });
+        let text = format_read_full_text(&structure);
+        assert!(text.contains("=== Slide 1 ==="));
+        assert!(text.contains("TITLE:\nHello Deck"));
+        assert!(text.contains("BODY:\nPoint A"));
+        assert!(text.contains("NOTES:\nRemember to pause"));
+        assert!(text.contains("image \"Picture 1\" (no extractable text)"));
+    }
 
     #[test]
     fn parse_pdf_page_size_points() {

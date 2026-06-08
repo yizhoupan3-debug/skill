@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-08"
 depends_on:
   - harness_architecture/index.md
 ---
@@ -27,13 +27,14 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Host | Env Var Prefix | Notes |
 |------|---------------|-------|
 | Claude Code | `ROUTER_RS_CLAUDE_*` | Shell hook integration |
-| Claude Desktop | `ROUTER_RS_DESKTOP_*` | MCP stdio agent (`claude-desktop agent`) |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
-| Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
-| Antigravity CLI | `ROUTER_RS_ANTIGRAVITY_CLI_*` | Gemini CLI 继任，hooks 传输 |
-| Antigravity App | - | MCP stdio，无 shell hook env |
+| Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex（canonical id：`codex`；`codex-cli` 已退役） |
+| Antigravity | — | MCP stdio，无 shell hook env（canonical id：`antigravity`） |
+| OpenCode | — | MCP stdio，无 shell hook env |
 
 **默认值与语义**：`ROUTER_RS_*` 的完整表见 [`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) **§5 开关面**（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
+
+**已退役 env 前缀（2026-06，勿在新集成使用）**：`ROUTER_RS_DESKTOP_*`（原 Claude Desktop MCP）、`ROUTER_RS_ANTIGRAVITY_CLI_*`（原 `antigravity-cli` hook）。见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)。
 
 场景子集与 closeout 分层见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)；可复制 profile 见 [`operator_profiles.md`](operator_profiles.md)。
 
@@ -101,10 +102,13 @@ See [`harness_architecture/02-data-flows.md`](harness_architecture/02-data-flows
 When renaming env vars, maintain legacy aliases with deprecation warnings:
 
 ```rust
-pub fn router_rs_claude_review_gate_disabled() -> bool {
-    // New name takes precedence
-    router_rs_env_enabled_default_false("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE")
-        || router_rs_env_enabled_default_false("ROUTER_RS_REVIEW_GATE_DISABLE") // legacy
+pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
+    // Canonical cross-host name first
+    if env_enabled_default_false("ROUTER_RS_REVIEW_GATE_DISABLE") {
+        return true;
+    }
+    // Legacy per-host alias still honored
+    env_enabled_default_false("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") // e.g. claude-code
 }
 ```
 

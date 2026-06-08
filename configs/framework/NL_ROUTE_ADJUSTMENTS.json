@@ -29,7 +29,7 @@
                   "signal": "has_parallel_execution_context"
                 },
                 {
-                  "signal": "has_team_orchestration_context"
+                  "signal": "has_workflow_orchestration_context"
                 },
                 {
                   "signal": "has_bounded_subagent_context"

@@ -128,7 +128,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     )?;
 
     let installable_tools = installable_projection_tools(&fw)?;
-    // claude-code and claude-desktop use separate projection manifests under `.claude/`.
+    // claude-code uses projection manifests under `.claude/`.
     let projection_tools: Vec<String> = installable_tools
         .iter()
         .filter(|tool| tool.as_str() != "codex")
@@ -163,7 +163,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     verify_installable_projections(&fw, &installable_tools)?;
     verify_claude_user_projection(&fw)?;
     eprintln!(
-        "ok: refreshed installable host projections (cursor=user; claude/claude-desktop=project+user; others=project): {}",
+        "ok: refreshed installable host projections (cursor=user; claude-code=project+user; others=project): {}",
         installable_tools.join(", ")
     );
     Ok(())
@@ -178,13 +178,6 @@ fn projection_install_scopes_for_tool(tool: &str) -> Vec<&'static str> {
     match tool {
         "cursor" => vec!["user"],
         "claude" => {
-            if maint_skip_user_projection() {
-                vec!["project"]
-            } else {
-                vec!["project", "user"]
-            }
-        }
-        "claude-desktop" => {
             if maint_skip_user_projection() {
                 vec!["project"]
             } else {
@@ -214,9 +207,8 @@ fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<
             "codex" => verify_codex_hooks(repo_root.to_path_buf())?,
             "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
             "claude" => verify_claude_code_projection(repo_root)?,
-            "claude-desktop" => verify_claude_desktop_projection(repo_root)?,
             "antigravity" => verify_antigravity_projection(repo_root)?,
-            "antigravity-cli" => verify_antigravity_cli_projection(repo_root)?,
+            "opencode" => verify_opencode_projection(repo_root)?,
             other => {
                 return Err(format!(
                     "installable projection tool `{other}` has no maint verifier"
@@ -459,147 +451,6 @@ fn verify_claude_user_projection(framework_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn verify_claude_desktop_projection(repo_root: &Path) -> Result<(), String> {
-    let roots = crate::host_integration::resolve_projection_roots(
-        None,
-        Some(repo_root),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )?;
-
-    verify_claude_desktop_projection_scope(&roots, "project").map_err(|e| {
-        format!("verify_claude_desktop_projection: project scope failed: {e}")
-    })?;
-    eprintln!("verify_claude_desktop_projection: ok (scope=project)");
-
-    match verify_claude_desktop_projection_scope(&roots, "user") {
-        Ok(()) => eprintln!("verify_claude_desktop_projection: ok (scope=user)"),
-        Err(e) => {
-            let user_installed = roots
-                .claude_home_root
-                .join(".framework-projection-desktop.json")
-                .is_file()
-                || crate::host_integration::claude_desktop_user_mcp_config_paths(&roots)
-                    .iter()
-                    .any(|path| path.is_file());
-            if user_installed {
-                return Err(format!("verify_claude_desktop_projection: user scope failed: {e}"));
-            }
-            eprintln!(
-                "verify_claude_desktop_projection: user scope skipped (not installed): {e}"
-            );
-        }
-    }
-    Ok(())
-}
-
-fn verify_claude_desktop_projection_scope(
-    roots: &crate::host_integration::ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<(), String> {
-    if scope == "project" {
-        let mcp = roots.project_root.join(".claude/mcp.json");
-        let claude_md = roots.project_root.join(".claude/CLAUDE.md");
-        let manifest = roots
-            .project_root
-            .join(".claude")
-            .join(".framework-projection-desktop.json");
-        for path in [&mcp, &claude_md, &manifest] {
-            if !path.is_file() {
-                return Err(format!(
-                    "verify_claude_desktop_projection: missing {} in scope project",
-                    path.display()
-                ));
-            }
-        }
-        let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
-        let manifest_json: Value =
-            serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-        if manifest_json.get("host_projection").and_then(Value::as_str) != Some("claude-desktop") {
-            return Err(
-                "verify_claude_desktop_projection: manifest must declare claude-desktop in scope project"
-                    .to_string(),
-            );
-        }
-        let mcp_text = fs::read_to_string(&mcp).map_err(|e| e.to_string())?;
-        if !mcp_text.contains("router-rs-framework") {
-            return Err(
-                "verify_claude_desktop_projection: .claude/mcp.json must register router-rs-framework in scope project"
-                    .to_string(),
-            );
-        }
-        if mcp_text.contains("closeout advisory") {
-            return Err(
-                "verify_claude_desktop_projection: .claude/mcp.json must not use stale 'closeout advisory' description"
-                    .to_string(),
-            );
-        }
-        let md_text = fs::read_to_string(&claude_md).map_err(|e| e.to_string())?;
-        if !md_text.contains("claude-desktop") {
-            return Err(
-                "verify_claude_desktop_projection: .claude/CLAUDE.md must reference claude-desktop in scope project"
-                    .to_string(),
-            );
-        }
-        if !md_text.contains("/discussx") && !md_text.contains("Default lifecycle: My") {
-            return Err(
-                "verify_claude_desktop_projection: .claude/CLAUDE.md must include My lifecycle in scope project (re-run install-claude.sh)"
-                    .to_string(),
-            );
-        }
-        return Ok(());
-    }
-
-    let user_mcp_paths = crate::host_integration::claude_desktop_user_mcp_config_paths(roots);
-    let mcp_with_framework = user_mcp_paths.iter().find(|path| {
-        path.is_file()
-            && fs::read_to_string(path)
-                .ok()
-                .is_some_and(|text| text.contains("router-rs-framework"))
-    });
-    if mcp_with_framework.is_none() {
-        return Err(format!(
-            "verify_claude_desktop_projection: no user-scope Claude Desktop config with router-rs-framework (checked: {})",
-            user_mcp_paths
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    }
-    let manifest = roots
-        .claude_home_root
-        .join(".framework-projection-desktop.json");
-    if manifest.is_file() {
-        let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
-        let manifest_json: Value =
-            serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-        if manifest_json.get("host_projection").and_then(Value::as_str) != Some("claude-desktop") {
-            return Err(
-                "verify_claude_desktop_projection: user manifest must declare claude-desktop"
-                    .to_string(),
-            );
-        }
-    }
-    let claude_md = roots.claude_home_root.join("CLAUDE.md");
-    if claude_md.is_file() {
-        let md_text = fs::read_to_string(&claude_md).map_err(|e| e.to_string())?;
-        if !md_text.contains("/discussx") && !md_text.contains("Default lifecycle: My") {
-            return Err(format!(
-                "verify_claude_desktop_projection: {} must include My lifecycle (re-run install-claude.sh --scope user)",
-                claude_md.display()
-            ));
-        }
-    }
-    Ok(())
-}
-
 fn verify_antigravity_projection(repo_root: &Path) -> Result<(), String> {
     let roots = crate::host_integration::resolve_projection_roots(
         None,
@@ -671,9 +522,9 @@ fn verify_antigravity_projection_scope(
         .get("host_projection")
         .and_then(Value::as_str)
         .unwrap_or("");
-    if host_projection != "antigravity-app" && host_projection != "antigravity" {
+    if host_projection != "antigravity" {
         return Err(format!(
-            "verify_antigravity_projection: manifest must declare antigravity-app (or legacy antigravity) in scope {}",
+            "verify_antigravity_projection: manifest must declare antigravity in scope {} (retired antigravity-app rejected)",
             scope
         ));
     }
@@ -694,34 +545,90 @@ fn verify_antigravity_projection_scope(
     Ok(())
 }
 
-fn verify_antigravity_cli_projection(repo_root: &Path) -> Result<(), String> {
-    let hooks = repo_root.join(".antigravitycli/hooks.json");
-    let manifest = repo_root
-        .join(".antigravitycli/.framework-projection-antigravity.json");
-    for path in [&hooks, &manifest] {
+fn verify_opencode_projection(repo_root: &Path) -> Result<(), String> {
+    let roots = crate::host_integration::resolve_projection_roots(
+        None,
+        Some(repo_root),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )?;
+
+    let mut last_error = None;
+    for scope in ["project", "user"] {
+        match verify_opencode_projection_scope(&roots, scope) {
+            Ok(()) => {
+                eprintln!("verify_opencode_projection: ok");
+                return Ok(());
+            }
+            Err(e) => {
+                last_error = Some(e);
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+        "verify_opencode_projection: failed to resolve projection roots".to_string()
+    }))
+}
+
+fn verify_opencode_projection_scope(
+    roots: &crate::host_integration::ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<(), String> {
+    let config = if scope == "user" {
+        roots
+            .account_home_root
+            .join(".config/opencode/opencode.json")
+    } else {
+        roots.project_root.join(".opencode/opencode.json")
+    };
+    let manifest = if scope == "user" {
+        roots
+            .account_home_root
+            .join(".config/opencode/.framework-projection.json")
+    } else {
+        roots
+            .project_root
+            .join(".opencode/.framework-projection.json")
+    };
+
+    for path in [&config, &manifest] {
         if !path.is_file() {
             return Err(format!(
-                "verify_antigravity_cli_projection: missing {}",
-                path.display()
+                "verify_opencode_projection: missing {} in scope {}",
+                path.display(),
+                scope
             ));
         }
     }
-    let hooks_text = fs::read_to_string(&hooks).map_err(|e| e.to_string())?;
-    let hooks_json: Value = serde_json::from_str(&hooks_text).map_err(|e| e.to_string())?;
-    for event in ["SessionStart", "PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-        let has_event = hooks_json
-            .get("hooks")
-            .and_then(Value::as_object)
-            .and_then(|root| root.get(event))
-            .and_then(Value::as_array)
-            .is_some_and(|entries| !entries.is_empty());
-        if !has_event {
-            return Err(format!(
-                "verify_antigravity_cli_projection: hooks.json missing managed event {event}"
-            ));
-        }
+
+    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
+    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
+    let host_projection = manifest_json
+        .get("host_projection")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if host_projection != "opencode" {
+        return Err(format!(
+            "verify_opencode_projection: manifest must declare opencode in scope {}",
+            scope
+        ));
     }
-    eprintln!("verify_antigravity_cli_projection: ok");
+
+    let config_text = fs::read_to_string(&config).map_err(|e| e.to_string())?;
+    if !config_text.contains("router-rs-framework") {
+        return Err(format!(
+            "verify_opencode_projection: opencode.json must register router-rs-framework in scope {}",
+            scope
+        ));
+    }
+
     Ok(())
 }
 
@@ -1189,7 +1096,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
                 "install",
             ],
         )?;
-        for tool in ["claude", "claude-desktop"] {
+        for tool in ["claude"] {
             for scope in projection_install_scopes_for_tool(tool) {
                 run_router(
                     &fw,
@@ -1637,7 +1544,7 @@ fn install_codex_user_hooks(args: InstallCodexUserHooksArgs) -> Result<(), Strin
         return Err(format!("codex install-hooks failed: {status}"));
     }
     eprintln!(
-        "Installed codex-cli hooks into {}\n- {}\n- {}",
+        "Installed codex hooks into {}\n- {}\n- {}",
         codex_home.display(),
         codex_home.join("config.toml").display(),
         codex_home.join("hooks.json").display()

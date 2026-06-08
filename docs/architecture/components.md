@@ -83,9 +83,8 @@ core/router-rs/src/
   hosts/
     codex_hooks/       # Codex CLI hook 处理
     cursor_hooks/      # Cursor hook 处理（handlers.rs + handlers_parts/）
-    claude_hooks.rs    # Claude Code hook 处理
-    claude_desktop_hooks.rs  # Claude Desktop hook 处理
-    antigravity_cli_hooks/   # Antigravity CLI hook 处理
+    claude_code_hooks.rs    # Claude Code hook 处理
+    mcp_stdio_harness.rs  # MCP stdio harness（Antigravity / Opencode）
   route/               # 路由引擎（records.rs、routing.rs、scoring.rs、signals.rs）
   framework_runtime/   # 框架运行时视图
   runtime_registry/    # 宿主 registry 磁盘 loader
@@ -95,7 +94,7 @@ core/router-rs/src/
 
 ### 2.3 CLI 入口
 
-`router-rs` 二进制通过 `main.rs` 接收命令行参数。当第一个参数是宿主名（`codex`/`claude`/`cursor`/`antigravity-cli`/`antigravity-app`）时，自动插入 `host` 子命令前缀。
+`router-rs` 二进制通过 `main.rs` 接收命令行参数。当第一个参数是闭集宿主名（`codex`/`claude-code`/`cursor`/`antigravity`/`opencode` 等）时，自动插入 `host` 子命令前缀。
 
 主要命令组：
 
@@ -104,7 +103,7 @@ core/router-rs/src/
 | `router-rs host codex hook` | Codex hook 分发 |
 | `router-rs host cursor hook` | Cursor hook 分发 |
 | `router-rs host claude hook` | Claude Code hook 分发 |
-| `router-rs host claude-desktop hook` | Claude Desktop hook 分发 |
+| `router-rs host opencode agent` | OpenCode MCP agent |
 | `router-rs framework skills validate` | 校验 skill 路由产物一致性 |
 | `router-rs framework skills refresh` | 刷新 skill 路由产物 |
 | `router-rs framework host-integration install` | 安装宿主 hook 配置 |
@@ -116,9 +115,9 @@ core/router-rs/src/
 
 ### 2.4 关键机制
 
-**Review Gate**：当深度审稿 lane（代码、安全、架构等）的 review 未完成时，Stop 事件会被阻断（Codex `decision:block`）或附加续跑提示（Cursor `followup_message`）。lane 闭集定义在 `RUNTIME_REGISTRY.json` 的 `review_gate.deep_gate_lanes`。
+**Review Gate（Stop advisory-only）**：独立 reviewer 证据未满足时，Stop 仅注入 advisory nudge（`followup_message` 等；全宿主不 `permission: deny` / `decision:block`）。清门真源：`independent_reviewer_seen` 或 override（`core-policy::review_gate_satisfied`）。lane 闭集定义在 `RUNTIME_REGISTRY.json` 的 `review_gate.reviewer_lanes`。
 
-**Closeout 门控**：closeout 需要证据（`EVIDENCE_INDEX.json`）、diff、产物和明确 blocker。本地默认软门禁，CI 硬门禁。
+**Closeout 门控（与 review 分层）**：closeout 需要证据（`EVIDENCE_INDEX.json`）、diff、产物和明确 blocker；`ROUTER_RS_CLOSEOUT_ENFORCEMENT` 等可 fail-closed，与 review advisory 无关。本地默认软门禁，CI 硬门禁。
 
 **Task ledger flock**：`artifacts/current/.router-rs.task-ledger.lock` 上的 `flock(2)` 保证多宿主 hook 子进程对 `GOAL_STATE.json`、`RFV_LOOP_STATE.json`、`STEP_LEDGER.jsonl` 的写入互斥。
 

@@ -1,7 +1,7 @@
-//! 路由 manifest 回退、并行线程池与带锁追加写。
-use crate::route::{
-    literal_framework_alias_decision, load_records_from_manifest, read_json, route_task,
-    should_accept_manifest_fallback, should_retry_with_manifest, RouteDecision, SkillRecord,
+//! CLI I/O 助手、并行线程池与带锁追加写（manifest 回退已下沉至 `framework_runtime`）。
+pub(crate) use crate::framework_runtime::{
+    manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
+    route_task_with_manifest_fallback,
 };
 use crate::runtime_envelope_ids::MAX_COMPUTE_THREADS;
 use rayon::ThreadPoolBuilder;

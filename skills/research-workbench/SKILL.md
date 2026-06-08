@@ -28,9 +28,19 @@ trigger_hints:
   - 研究路线设计
   - ablation 方案
   - benchmark 方案
+  - 系统综述
+  - PRISMA
+  - meta-analysis 检索
+  - 基金标书
+  - 写标书
+  - grant proposal
+  - NSF NIH 标书
+  - 国自然
+  - 本地文献问答
+  - ref corpus
   - 非手稿科研
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   platforms: [supported]
   tags:
     - research
@@ -79,6 +89,9 @@ Start by classifying the task into one or more lanes:
 - `research_question`: research objective, novelty claim, and decision the work must support.
 - `experiment_design`: variables, controls, ablations, baselines, metrics, sample size, and failure criteria.
 - `external_research`: literature, standards, datasets, repositories, or prior-art lookup when allowed or necessary. Use [`references/academic-sources.md`](references/academic-sources.md) for the five verified-open retrieval sources (arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ); fan out across sources for thorough coverage.
+- `ref_corpus_qa`: local PDF/ref corpus Q&A with page anchors (Paper RAG essence). See [`references/ref-corpus-qa.md`](references/ref-corpus-qa.md).
+- `systematic_review`: PRISMA-style review protocol, screening, extraction (Survey Builder essence). See [`references/systematic-review-workflow.md`](references/systematic-review-workflow.md).
+- `grant_proposal`: grant / 标书 / Specific Aims (Grant Writer essence). See [`references/grant-proposal-workflow.md`](references/grant-proposal-workflow.md).
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
 - `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
@@ -136,6 +149,7 @@ result "verified", "严审通过", or "research-grade" on prose alone.
 
 ## Cross-references
 
+- **五宿主统一地图**: [`references/RESEARCH_HARNESS_UNIFIED.md`](references/RESEARCH_HARNESS_UNIFIED.md)
 - **Academic sources (verified-open retrieval scaffolding)**: [`references/academic-sources.md`](references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates and fan-out patterns for `external_research` lane.
 - RFV research harness: `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
 - External research harness: `references/rfv-loop/external-research-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`

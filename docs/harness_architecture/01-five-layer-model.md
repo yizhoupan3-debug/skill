@@ -37,7 +37,7 @@ L1  Executable verification and exit codes
 | 概念 | 主要落地 |
 |------|----------|
 | L4 hooks | `.cursor/hooks.json`、`.codex/hooks.json`、各宿主 hook 配置 |
-| L3 control plane | `core/router-rs/src/`：`hosts/codex_hooks/mod.rs`、`claude_hooks.rs`、`cursor_hooks/mod.rs`（`handlers.rs` + `handlers_parts/*.inc.rs`）、`autopilot_goal.rs`、`rfv_loop.rs`、`framework_runtime/mod.rs`、`task_state.rs`、`host_integration/mod.rs` |
+| L3 control plane | `core/router-rs/src/`：`hosts/codex_hooks/mod.rs`、`claude_code_hooks.rs`、`cursor_hooks/mod.rs`（`handlers.rs` + `handlers_parts/*.inc.rs`）、`autopilot_goal.rs`、`rfv_loop.rs`、`framework_runtime/mod.rs`、`task_state.rs`、`host_integration/mod.rs` |
 | L2 continuity | `artifacts/current/`、`TRACE_EVENTS.jsonl`、`STEP_LEDGER.jsonl`、`configs/framework/*SCHEMA*` |
 | Skill 热路由（router-rs hot path） | `skills/SKILL_ROUTING_RUNTIME.json` |
 | Skill 伴生元数据（**非**每 prompt 热路径；`SKILL_PLUGIN_CATALOG` / `SKILL_ROUTING_RUNTIME_EXPLAIN` 由 refresh / policy / CI 消费；**`SKILL_ROUTING_METADATA.json` 在 `load_records_from_runtime` 时 merge**，见 `route/records.rs` `merge_sidecar_route_metadata_from_runtime`） | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`（EXPLAIN：CI/companion/人读，router route 模块不读） |

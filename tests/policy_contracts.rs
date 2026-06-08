@@ -2,8 +2,9 @@ mod common;
 mod host_platforms;
 
 use common::{
-    assert_success, cargo_manifest_command, json_from_output, project_root, read_json, read_text,
-    router_rs_json, run, seed_framework_markers,
+    assert_canonical_closed_set_host_ids, assert_success, cargo_manifest_command,
+    json_from_output, project_root, read_json, read_text, router_rs_json, run,
+    seed_framework_markers, CANONICAL_HOST_IDS, RETIRED_HOST_IDS,
 };
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -343,30 +344,12 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
-        manifest["shared_system"]["supported_hosts"],
-        serde_json::json!([
-            "codex-cli",
-            "codex-app",
-            "cursor",
-            "claude-code",
-            "claude-desktop",
-            "antigravity-cli",
-            "antigravity-app",
-            "antigravity",
-            "opencode"
-        ])
-    );
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["codex-cli"],
-        "AGENTS_CODEX.md"
+        manifest["shared_system"]["host_entrypoints"]["codex"],
+        serde_json::json!("AGENTS_CODEX.md")
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["cursor"],
         serde_json::json!(["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"])
-    );
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["codex-app"],
-        "AGENTS_CODEX.md"
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["claude-code"],
@@ -377,27 +360,23 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         ])
     );
     assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["claude-desktop"],
-        serde_json::json!(["AGENTS_CLAUDE.md", ".claude/CLAUDE.md"])
-    );
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["antigravity-cli"],
-        "AGENTS_ANTIGRAVITY.md"
-    );
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["antigravity-app"],
-        serde_json::json!([
-            "AGENTS_ANTIGRAVITY.md",
-            ".gemini/antigravity/rules/framework.md"
-        ])
-    );
-    assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["antigravity"],
         serde_json::json!([
             "AGENTS_ANTIGRAVITY.md",
             ".gemini/antigravity/rules/framework.md"
         ])
     );
+    assert_eq!(
+        manifest["shared_system"]["host_entrypoints"]["opencode"],
+        ".opencode/opencode.json"
+    );
+    let synced_hosts: Vec<&str> = manifest["shared_system"]["supported_hosts"]
+        .as_array()
+        .expect("supported_hosts")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert_canonical_closed_set_host_ids(&synced_hosts);
     assert_eq!(
         manifest["shared_system"]["policy"],
         "host-specific-agent-policy-v1"
@@ -606,6 +585,8 @@ fn doc_and_xlsx_skill_docs_point_to_rust_tooling() {
     }
     for marker in [
         "ooxml_parser_rs",
+        "read-docx",
+        "read-xlsx",
         "render-docx",
         "render-xlsx",
         " -- docx <docx>",
@@ -633,9 +614,13 @@ fn ooxml_rust_cli_owns_docx_and_xlsx_render_commands() {
     let source = read_text(&project_root().join("rust_tools/ooxml_parser_rs/src/main.rs"));
     for marker in [
         "Docx { input, json }",
+        "ReadDocx {",
+        "ReadXlsx {",
         "RenderXlsx(RenderXlsxArgs)",
         "RenderDocx(RenderDocxArgs)",
         "fn inspect_docx(",
+        "fn read_docx(",
+        "fn read_xlsx(",
         "fn render_xlsx(",
         "fn render_docx(",
     ] {
@@ -651,8 +636,65 @@ fn ooxml_cli_help_lists_docx_and_xlsx_render_commands() {
     ));
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("docx"));
+    assert!(stdout.contains("read-docx"));
+    assert!(stdout.contains("read-xlsx"));
     assert!(stdout.contains("render-docx"));
     assert!(stdout.contains("render-xlsx"));
+    assert!(stdout.contains("batch"));
+}
+
+#[test]
+fn ooxml_rust_cli_owns_batch_subcommands() {
+    let manifest_path = project_root().join("rust_tools/ooxml_parser_rs/Cargo.toml");
+    let manifest = read_text(&manifest_path);
+    assert!(manifest.contains("name = \"ooxml\""));
+
+    let batch = read_text(&project_root().join("rust_tools/ooxml_parser_rs/src/batch.rs"));
+    for marker in [
+        "fn run_batch(",
+        "catalog.json",
+        "results.jsonl",
+        "checkpoint.json",
+        "OOXML_BATCH_JOBS",
+        "read_docx_content",
+        "read_xlsx_content",
+    ] {
+        assert!(batch.contains(marker), "batch.rs missing marker: {marker}");
+    }
+
+    let main_path = project_root().join("rust_tools/ooxml_parser_rs/src/main.rs");
+    let source = read_text(&main_path);
+    for marker in ["Batch {", "stdin_paths", "print_catalog_summary"] {
+        assert!(source.contains(marker), "main.rs missing marker: {marker}");
+    }
+}
+
+#[test]
+fn ooxml_install_script_exists() {
+    let script = project_root().join("scripts/install-ooxml-tool.sh");
+    assert!(script.exists(), "missing install-ooxml-tool.sh");
+    let text = read_text(&script);
+    assert!(text.contains("ooxml_parser_rs"));
+    assert!(text.contains("rust-release-bin.sh"));
+    let helper = read_text(&project_root().join("scripts/rust-release-bin.sh"));
+    assert!(helper.contains("target_directory"));
+}
+
+#[test]
+fn ppt_install_script_exists() {
+    let script = project_root().join("scripts/install-ppt-tool.sh");
+    assert!(script.exists(), "missing install-ppt-tool.sh");
+    let text = read_text(&script);
+    assert!(text.contains("pptx_tool_rs"));
+    assert!(text.contains("/ppt"));
+}
+
+#[test]
+fn doc_skill_declares_ooxml_batch_artifacts() {
+    let skill = read_text(&project_root().join("skills/doc/SKILL.md"));
+    assert!(skill.contains("ooxml-batch/catalog.json"));
+    assert!(skill.contains("install-ooxml-tool.sh"));
+    assert!(skill.contains("禁止") && skill.contains("cargo run"));
 }
 
 #[test]
@@ -858,14 +900,14 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "gh-fix-ci",
         "citation-management",
         "paper-workbench",
-        "paper-writing",
+        "research-workbench",
+        "deep-research",
         "plan-mode",
         "code-review-deep",
         "statistical-analysis",
         "experiment-reproducibility",
         "math-derivation",
         "scientific-figure-plotting",
-        "openai-docs",
         "pdf",
         "skill-framework-developer",
         "visual-review",
@@ -1026,14 +1068,11 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
 
     let normalized = host_platforms::normalize_skill_host_platforms(
         &[
-            "codex".to_string(),
             "cursor".to_string(),
             "claude".to_string(),
-            "claude-desktop".to_string(),
-            "antigravity-cli".to_string(),
             "antigravity-app".to_string(),
-            "antigravity".to_string(),
             "opencode".to_string(),
+            "codex-cli".to_string(),
         ],
         &supported,
     )
@@ -1430,7 +1469,11 @@ fn runtime_provider_registry_declares_component_plugin_lanes() {
         "declared"
     );
     assert_eq!(
-        registry["host_projection_providers"]["codex-cli"]["status"],
+        registry["host_projection_providers"]["codex"]["status"],
+        "implemented"
+    );
+    assert_eq!(
+        registry["host_projection_providers"]["cursor"]["status"],
         "implemented"
     );
     assert_eq!(
@@ -1742,6 +1785,69 @@ fn nl_route_adjustments_json_schema_version() {
 }
 
 #[test]
+fn runtime_registry_on_disk_closed_set_is_canonical_five_hosts() {
+    let runtime = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
+    let supported: Vec<&str> = runtime["host_targets"]["supported"]
+        .as_array()
+        .expect("host_targets.supported")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert_canonical_closed_set_host_ids(&supported);
+
+    let metadata = runtime["host_targets"]["metadata"]
+        .as_object()
+        .expect("host_targets.metadata");
+    for id in CANONICAL_HOST_IDS {
+        assert!(
+            metadata.contains_key(*id),
+            "canonical host `{id}` missing from RUNTIME_REGISTRY metadata"
+        );
+    }
+    for retired in RETIRED_HOST_IDS {
+        assert!(
+            !metadata.contains_key(*retired),
+            "retired host `{retired}` must not appear in RUNTIME_REGISTRY metadata"
+        );
+    }
+
+    let projections = runtime["host_projections"]
+        .as_object()
+        .expect("host_projections");
+    for id in CANONICAL_HOST_IDS {
+        assert!(
+            projections.contains_key(*id),
+            "canonical host `{id}` missing from RUNTIME_REGISTRY host_projections"
+        );
+    }
+
+    for host_doc in [
+        "docs/hosts/codex.md",
+        "docs/hosts/cursor.md",
+        "docs/hosts/claude.md",
+        "docs/hosts/antigravity.md",
+        "docs/hosts/opencode.md",
+    ] {
+        assert!(
+            project_root().join(host_doc).is_file(),
+            "missing canonical host manual: {host_doc}"
+        );
+    }
+    for agents_doc in [
+        "AGENTS_CODEX.md",
+        "AGENTS_CURSOR.md",
+        "AGENTS_CLAUDE.md",
+        "AGENTS_ANTIGRAVITY.md",
+        "AGENTS_OPENCODE.md",
+    ] {
+        assert!(
+            project_root().join(agents_doc).is_file(),
+            "missing host agent policy: {agents_doc}"
+        );
+    }
+}
+
+#[test]
 fn document_only_provider_lanes_do_not_become_installable_hosts() {
     let registry =
         read_json(&project_root().join("configs/framework/RUNTIME_PROVIDER_REGISTRY.json"));
@@ -1768,10 +1874,18 @@ fn document_only_provider_lanes_do_not_become_installable_hosts() {
         }
     }
 
-    assert_eq!(
-        host_metadata["codex-app"]["installable"], false,
-        "codex-app remains runtime-supported but non-installable"
-    );
+    for id in CANONICAL_HOST_IDS {
+        assert!(
+            host_metadata.contains_key(*id),
+            "canonical host `{id}` must appear in RUNTIME_REGISTRY metadata"
+        );
+    }
+    for retired in RETIRED_HOST_IDS {
+        assert!(
+            !host_metadata.contains_key(*retired),
+            "retired host `{retired}` must not appear in RUNTIME_REGISTRY metadata"
+        );
+    }
 }
 
 #[test]
@@ -1991,9 +2105,9 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
         registry["framework_commands"].get("autopilot").is_none(),
         "autopilot framework_command must be removed"
     );
-    assert_eq!(
-        registry["framework_commands"]["team"]["canonical_owner"], "agent-swarm-orchestration",
-        "team must remain a framework alias backed by agent-swarm-orchestration"
+    assert!(
+        registry["framework_commands"].get("team").is_none(),
+        "retired framework_commands.team must be removed (fail-closed; use workflow NL routing)"
     );
 
     let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
@@ -2005,19 +2119,33 @@ fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
         .collect::<Vec<_>>();
     assert!(
         !runtime_slugs.contains(&"team"),
-        "team alias must not be a hot runtime skill"
+        "retired team slug must not be a hot runtime skill"
+    );
+    assert!(
+        !runtime_slugs.contains(&"workflow"),
+        "workflow orchestration is NL-routed to agent-swarm-orchestration, not a hot runtime slug"
     );
 
     let plugin_catalog = read_json(&root.join("skills/SKILL_PLUGIN_CATALOG.json"));
     assert!(
         plugin_catalog["skills"].get("team").is_none(),
-        "team alias must not be a plugin skill record"
+        "retired team slug must not be a plugin skill record"
+    );
+    assert!(
+        plugin_catalog["skills"].get("workflow").is_none(),
+        "workflow orchestration must not be a plugin skill record"
     );
     assert!(
         !root
             .join("artifacts/codex-skill-surface/skills/team/SKILL.md")
             .exists(),
-        "team alias must not be a generated Codex skill surface"
+        "retired team slug must not be a generated Codex skill surface"
+    );
+    assert!(
+        !root
+            .join("artifacts/codex-skill-surface/skills/workflow/SKILL.md")
+            .exists(),
+        "workflow orchestration must not be a generated Codex skill surface"
     );
 }
 
@@ -2356,6 +2484,101 @@ fn slides_native_pptx_docs_are_not_runtime_contract() {
             "forbidden token present: {forbidden}"
         );
     }
+}
+
+#[test]
+fn pdf_tool_rs_is_workspace_member() {
+    let root_manifest = read_text(&project_root().join("Cargo.toml"));
+    let tools_manifest = read_text(&project_root().join("rust_tools/Cargo.toml"));
+    for marker in [r#""rust_tools/pdf_tool_rs""#, r#""pdf_tool_rs""#] {
+        assert!(
+            root_manifest.contains(marker) || tools_manifest.contains(marker),
+            "missing workspace member marker: {marker}"
+        );
+    }
+    assert!(project_root()
+        .join("rust_tools/pdf_tool_rs/Cargo.toml")
+        .exists());
+}
+
+#[test]
+fn pdf_rust_cli_owns_batch_subcommands() {
+    let manifest_path = project_root().join("rust_tools/pdf_tool_rs/Cargo.toml");
+    let manifest = read_text(&manifest_path);
+    assert!(manifest.contains("name = \"pdf\""));
+    assert!(manifest.contains(r#"name = "pdf_tool_rs""#));
+
+    let main_path = project_root().join("rust_tools/pdf_tool_rs/src/main.rs");
+    if main_path.exists() {
+        let source = read_text(&main_path);
+        for marker in [
+            "Read {",
+            "Info {",
+            "Batch {",
+            "stdin_paths",
+            "run_batch",
+            "print_catalog_summary",
+        ] {
+            assert!(source.contains(marker), "main.rs missing marker: {marker}");
+        }
+    } else {
+        let batch = read_text(&project_root().join("rust_tools/pdf_tool_rs/src/batch.rs"));
+        for marker in ["fn run_batch(", "catalog.json", "results.jsonl", "checkpoint.json"] {
+            assert!(batch.contains(marker), "batch.rs missing marker: {marker}");
+        }
+    }
+}
+
+#[test]
+fn pdf_batch_skip_scanned_documented() {
+    let guide = read_text(&project_root().join("skills/pdf/references/detailed-guide.md"));
+    for marker in [
+        "--skip-scanned",
+        "skip_scanned",
+        "content_class",
+        "PDF_BENCH=1",
+        "batch_bench",
+    ] {
+        assert!(
+            guide.contains(marker),
+            "detailed-guide.md missing pdf batch marker: {marker}"
+        );
+    }
+
+    let read_rs = read_text(&project_root().join("rust_tools/pdf_tool_rs/src/read.rs"));
+    for marker in ["shallow_scan_classify", "SHALLOW_SAMPLE_PAGES", "classify_content"] {
+        assert!(
+            read_rs.contains(marker),
+            "read.rs missing skip-scanned implementation marker: {marker}"
+        );
+    }
+
+    let batch_rs = read_text(&project_root().join("rust_tools/pdf_tool_rs/src/batch.rs"));
+    assert!(
+        batch_rs.contains("skip_scanned"),
+        "batch.rs must wire --skip-scanned"
+    );
+
+    let bench = read_text(
+        &project_root()
+            .join("rust_tools/pdf_tool_rs/benches/batch_bench.rs"),
+    );
+    assert!(
+        bench.contains("PDF_BENCH"),
+        "batch_bench.rs must gate on PDF_BENCH"
+    );
+}
+
+#[test]
+fn pdf_skill_frontmatter_declares_rust_runtime() {
+    let skill = read_text(&project_root().join("skills/pdf/SKILL.md"));
+    assert!(skill.contains("allowed_tools:"));
+    assert!(skill.contains("- rust"));
+    assert!(skill.contains("runtime_requirements:"));
+    assert!(skill.contains("- pdf"));
+    assert!(skill.contains("${SKILL_FRAMEWORK_ROOT}"));
+    assert!(skill.contains("pdf-batch/catalog.json"));
+    assert!(skill.contains("禁止") && skill.contains("cargo run"));
 }
 
 #[test]
@@ -3172,7 +3395,7 @@ fn cursor_subagent_hook_contract_consumer_subset() {
 fn harness_skill_contract_lint_cli_reports_protocol_shape() {
     let payload = serde_json::json!({
         "skills_root": project_root().join("skills").to_string_lossy(),
-        "slugs": ["skill-framework-developer", "plan-mode", "agent-swarm-orchestration", "research-workbench", "openai-docs"]
+        "slugs": ["skill-framework-developer", "agent-swarm-orchestration", "research-workbench", "gh-fix-ci"]
     });
     let response = router_rs_json(&[
         "eval",
@@ -3189,7 +3412,7 @@ fn harness_skill_contract_lint_cli_reports_protocol_shape() {
             .as_array()
             .expect("skills scanned")
             .len(),
-        5
+        4
     );
     assert!(response["findings"].is_array());
     assert!(response["execution_items"].is_array());
@@ -3332,7 +3555,6 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
         "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
         "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
         "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
-        "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
     ] {
         assert!(
             paper_prose_hook_rs.contains(env),

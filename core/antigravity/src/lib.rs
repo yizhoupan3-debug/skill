@@ -1,5 +1,6 @@
 pub fn init() {}
 
+pub mod goal_prediction;
 pub mod state_manager;
 pub mod step_ledger;
 pub mod task_ledger;

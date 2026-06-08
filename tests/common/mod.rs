@@ -4,7 +4,7 @@ mod review_gate_lanes;
 
 #[allow(unused_imports)]
 pub use review_gate_lanes::{
-    assert_review_gate_lane_sets_closed, review_gate_lane_sets_from_registry,
+    assert_reviewer_lanes_closed, reviewer_lanes_from_registry,
 };
 
 use serde_json::{json, Value};
@@ -97,6 +97,47 @@ pub fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+/// Closed-set host ids (2026-06). Order matches `RUNTIME_REGISTRY.json` → `host_targets.supported`.
+pub const CANONICAL_HOST_IDS: &[&str] = &[
+    "codex",
+    "claude-code",
+    "antigravity",
+    "cursor",
+    "opencode",
+];
+
+/// Retired host ids that must not appear in registry `supported` or `metadata`.
+pub const RETIRED_HOST_IDS: &[&str] = &[
+    "codex-app",
+    "codex-cli",
+    "claude-desktop",
+    "antigravity-cli",
+    "antigravity-app",
+];
+
+/// Assert `supported` is exactly the five canonical host ids (set equality).
+pub fn assert_canonical_closed_set_host_ids(supported: &[&str]) {
+    assert_eq!(
+        supported.len(),
+        CANONICAL_HOST_IDS.len(),
+        "host_targets.supported must list exactly {} ids, got {}: {supported:?}",
+        CANONICAL_HOST_IDS.len(),
+        supported.len()
+    );
+    for id in CANONICAL_HOST_IDS {
+        assert!(
+            supported.contains(id),
+            "host_targets.supported missing canonical id `{id}`: {supported:?}"
+        );
+    }
+    for retired in RETIRED_HOST_IDS {
+        assert!(
+            !supported.contains(retired),
+            "retired host `{retired}` must not be in host_targets.supported"
+        );
+    }
+}
+
 pub fn write_text(path: &Path, content: &str) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap_or_else(|err| {
@@ -111,11 +152,11 @@ pub fn write_text(path: &Path, content: &str) {
 pub fn seed_framework_markers(root: &Path) {
     write_text(
         &root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_core":{"authority":"rust","source":"framework-root-native","host_policy":"closed-set-explicit-projections"},"host_targets":{"policy":"shared-rust-core-explicit-host-projections","supported":["codex-cli","codex-app","cursor","claude-code","claude-desktop","antigravity-cli","antigravity-app","antigravity","opencode"],"shared_system_source":"skills","metadata":{"codex-cli":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_CODEX.md"},"codex-app":{"install_tool":"codex","projection_status":"implemented","installable":false,"host_entrypoints":"AGENTS_CODEX.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CURSOR.md",".cursor/rules/*.mdc"]},"claude-code":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/rules/framework.md",".claude/settings.json"]},"claude-desktop":{"install_tool":"claude-desktop","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/CLAUDE.md"]},"antigravity-cli":{"install_tool":"antigravity-cli","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_ANTIGRAVITY.md"},"antigravity-app":{"install_tool":"antigravity","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_ANTIGRAVITY.md",".gemini/antigravity/rules/framework.md"]},"antigravity":{"install_tool":"antigravity","projection_status":"implemented","installable":true,"deprecated_alias_of":"antigravity-app","host_entrypoints":["AGENTS_ANTIGRAVITY.md",".gemini/antigravity/rules/framework.md"]},"opencode":{"install_tool":"opencode","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_OPENCODE.md"}}},"host_projections":{"codex-cli":{"profile_id":"codex_profile","host_id":"codex-cli","transport":"native-codex","capabilities":["external_session_supervisor"],"session_supervisor_driver":"codex_driver","session_supervisor_status":{"supported":true}},"codex-app":{"profile_id":"codex_app_profile","host_id":"codex-app","transport":"codex-desktop-app","capabilities":["thread_destination"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"cursor":{"profile_id":"cursor_profile","host_id":"cursor","transport":"cursor-agent","capabilities":[],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"claude-code":{"profile_id":"claude_profile","host_id":"claude-code","transport":"anthropic-claude-code","capabilities":[],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"claude-desktop":{"profile_id":"claude_desktop_profile","host_id":"claude-desktop","transport":"mcp-stdio","capabilities":["artifact_contract","mcp_servers","workspace_bootstrap","interactive_agent_chat","framework_alias_entrypoints"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"antigravity-cli":{"profile_id":"antigravity_cli_profile","host_id":"antigravity-cli","transport":"antigravity-cli","harness_capabilities":["hot_runtime_routing","l2_continuity_contract","closeout_evidence_hooks","review_gate_router_observation"],"capabilities":["hard_gate_hooks"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"antigravity-app":{"profile_id":"antigravity_app_profile","host_id":"antigravity-app","transport":"mcp-stdio","harness_capabilities":["hot_runtime_routing","l2_continuity_contract"],"capabilities":["artifact_contract","mcp_servers"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"antigravity":{"profile_id":"antigravity_profile","host_id":"antigravity","transport":"mcp-stdio","harness_capabilities":["hot_runtime_routing","l2_continuity_contract"],"capabilities":["artifact_contract","mcp_servers"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}},"opencode":{"profile_id":"opencode_profile","host_id":"opencode","transport":"opencode-native","capabilities":["artifact_contract","mcp_servers"],"session_supervisor_driver":"unsupported","session_supervisor_status":{"supported":false}}}}"#,
+        r#"{"schema_version": "framework-runtime-registry-v1", "framework_core": {"authority": "rust", "source": "framework-root-native", "host_policy": "closed-set-explicit-projections"}, "host_targets": {"policy": "shared-rust-core-explicit-host-projections", "supported": ["codex", "claude-code", "antigravity", "cursor", "opencode"], "shared_system_source": "skills", "metadata": {"codex": {"install_tool": "codex", "projection_status": "implemented", "installable": true, "host_entrypoints": "AGENTS_CODEX.md"}, "cursor": {"install_tool": "cursor", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"]}, "claude-code": {"install_tool": "claude", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_CLAUDE.md", ".claude/rules/framework.md", ".claude/settings.json"]}, "antigravity": {"install_tool": "antigravity", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_ANTIGRAVITY.md", ".gemini/antigravity/rules/framework.md"]}, "opencode": {"install_tool": "opencode", "projection_status": "implemented", "installable": true, "host_entrypoints": ".opencode/opencode.json"}}}, "host_projections": {"codex": {"profile_id": "codex_profile", "host_id": "codex", "transport": "native-codex", "session_supervisor_driver": "codex_driver", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "batch_execution", "cron_execution", "ci_runner", "non_interactive_entrypoint", "external_session_supervisor", "rate_limit_auto_resume", "host_resume_entrypoint", "host_tmux_worker_management", "framework_alias_entrypoints"]}, "cursor": {"profile_id": "cursor_profile", "host_id": "cursor", "transport": "cursor-agent", "session_supervisor_driver": "unsupported", "session_supervisor_status": {"supported": false, "rationale": "Cursor host does not expose external tmux session management or auto-resume."}, "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "host_resume_entrypoint", "framework_alias_entrypoints"]}, "claude-code": {"profile_id": "claude_code_profile", "host_id": "claude-code", "transport": "anthropic-claude-code", "session_supervisor_driver": "unsupported", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints", "hard_gate_hooks"]}, "opencode": {"profile_id": "opencode_profile", "host_id": "opencode", "transport": "opencode-cli", "session_supervisor_driver": "unsupported", "session_supervisor_status": {"supported": false, "rationale": "Opencode host does not expose external tmux session management or auto-resume."}, "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints"]}, "antigravity": {"profile_id": "antigravity_profile", "host_id": "antigravity", "transport": "mcp-stdio", "session_supervisor_driver": "unsupported", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints"]}}}"#,
     );
     write_text(
         &root.join("configs/framework/host_projection_narrative.json"),
-        r#"{"schema_version":"framework-host-projection-narrative-v2","gsd_default_lifecycle_paragraph":"My lifecycle (test seed).","gsd_lifecycle_by_host":{"cursor":"My cursor (test).","codex-cli":"My codex (test)."},"review_findings_only_paragraph":"Review findings-only (test seed)."}"#,
+        r#"{"schema_version":"framework-host-projection-narrative-v2","gsd_default_lifecycle_paragraph":"My lifecycle (test seed).","gsd_lifecycle_by_host":{"cursor":"My cursor (test).","claude-code":"My claude-code (test)."},"review_findings_only_paragraph":"Review findings-only (test seed)."}"#,
     );
     write_text(
         &root.join("core/router-rs/Cargo.toml"),
@@ -152,6 +193,22 @@ pub fn read_text(path: &Path) -> String {
                 return fs::read_to_string(&alternative).unwrap_or_else(|err| {
                     panic!(
                         "failed to read (codex_hooks fallback) {}: {err}",
+                        alternative.display()
+                    );
+                });
+            }
+        }
+        if path_str.contains("/core/router-rs/src/hook_common.rs") {
+            let alternative = PathBuf::from(
+                path_str.replace(
+                    "/core/router-rs/src/hook_common.rs",
+                    "/core/core-policy/src/hook_common.rs",
+                ),
+            );
+            if alternative.is_file() {
+                return fs::read_to_string(&alternative).unwrap_or_else(|err| {
+                    panic!(
+                        "failed to read (hook_common fallback) {}: {err}",
                         alternative.display()
                     );
                 });

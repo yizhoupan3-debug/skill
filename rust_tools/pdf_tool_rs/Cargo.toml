@@ -1,0 +1,32 @@
+[package]
+name = "pdf_tool_rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pdf_tool_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pdf"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+hex = "0.4"
+lopdf = "0.38"
+pdf-extract = "0.10"
+rayon = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+lopdf = "0.38"
+tempfile = "3.15"
+
+[[bench]]
+name = "batch_bench"
+harness = false

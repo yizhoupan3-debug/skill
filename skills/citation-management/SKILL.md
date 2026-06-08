@@ -69,6 +69,15 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 
 ## Tools
 
+**确定性 CLI（五宿主，fail-closed 可选）**：仓库 `rust_tools/citation_tool_rs`
+
+```bash
+cargo run -p citation_tool_rs -- audit --bib path/to/refs.bib --fail-on blocking
+cargo run -p citation_tool_rs -- claim-lint --input path/to/manuscript.md --fail-on-findings
+```
+
+用于 `PAPER_GATE` G5 或大批量 `.bib` 卫生；MCP 不可用时优先 CLI，再 fallback 手工 API。
+
 **首选：paperplain MCP**（论文元数据验证与发现）
 
 | 场景 | 工具 | 说明 |

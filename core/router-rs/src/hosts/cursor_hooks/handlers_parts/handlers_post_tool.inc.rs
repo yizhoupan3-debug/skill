@@ -1,5 +1,10 @@
 fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let name = normalize_tool_name(Some(&tool_name_of(event)));
+    crate::telemetry_emit::emit_tool_call(
+        &name,
+        crate::framework_runtime::extract_post_tool_duration_ms(event).unwrap_or(0),
+        crate::framework_runtime::post_tool_call_succeeded(event),
+    );
     let review_armed_peek = peek_review_hard_armed(repo_root, event);
 
     if review_armed_peek {
@@ -55,9 +60,9 @@ fn handle_post_tool_use_with_lock(
     let fork = cursor_fork_context_from_tool(event, &tool_input, &sub_type, &agent_type);
     let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
     let independent_fork_review =
-        crate::review_gate_engine::cursor_review_independent_fork(fork, review_kind);
+        crate::review_gate_engine::review_independent_fork(fork, review_kind);
     let independent_fork_pre_goal =
-        crate::review_gate_engine::cursor_review_independent_fork(fork, pre_goal_kind);
+        crate::review_gate_engine::review_independent_fork(fork, pre_goal_kind);
     let mut mutated = false;
     if tool_name_matches_subagent_lane(&name)
         && pre_goal_kind

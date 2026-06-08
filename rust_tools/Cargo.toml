@@ -4,10 +4,13 @@ members = [
   "image_gen_rs",
   "image_process_rs",
   "ooxml_parser_rs",
+  "pdf_tool_rs",
+  "ref_corpus_tool_rs",
   "financial_data_rs",
   "gh_source_gate_rs",
   "pptx_tool_rs",
-  "screenshot_rs", "pubmed_tool_rs",
+  "screenshot_rs",
+  "pubmed_tool_rs",
 ]
 resolver = "2"
 

@@ -11,34 +11,47 @@ fn runtime_registry_review_gate_spawn_first_fields() {
         !nudge.contains("claude_reviewer_lanes"),
         "global spawn_first_nudge must not mention Claude-only lanes"
     );
+    let template = rg["spawn_first_nudge_template"]
+        .as_str()
+        .expect("spawn_first_nudge_template str");
+    assert!(template.contains("{host_label}"));
+    let labels = rg["spawn_first_nudge_host_labels"]
+        .as_object()
+        .expect("spawn_first_nudge_host_labels object");
+    assert!(labels.contains_key("claude-code"));
     let by_host = rg["spawn_first_nudge_by_host"]
         .as_object()
         .expect("spawn_first_nudge_by_host object");
-    for host in ["cursor", "codex-cli"] {
-        let line = by_host[host].as_str().expect("host nudge str");
-        assert!(
-            !line.contains("claude_reviewer_lanes"),
-            "{host} spawn nudge must not mention Claude-only lanes"
-        );
-    }
-    let claude_line = by_host["claude-code"].as_str().expect("claude-code nudge");
+    assert!(by_host.contains_key("cursor"));
+    assert!(by_host.contains_key("opencode"));
+    assert!(
+        !by_host.contains_key("codex"),
+        "codex uses template+label, not per-host override"
+    );
+    let cursor_line = by_host["cursor"].as_str().expect("cursor nudge str");
+    assert!(
+        !cursor_line.contains("claude_reviewer_lanes"),
+        "cursor spawn nudge must not mention Claude-only lanes"
+    );
+    let claude_label = labels["claude-code"].as_str().expect("claude-code label");
+    let claude_line = template.replace("{host_label}", claude_label);
     assert!(
         claude_line.contains("review") || claude_line.contains("Claude"),
-        "claude-code nudge should mention Claude reviewer lanes"
+        "claude-code template nudge should mention Claude"
     );
 }
 
 #[test]
-fn codex_cli_docs_document_review_gate_env_and_session() {
+fn codex_docs_document_review_gate_env_and_session() {
     let root = project_root();
-    let codex_doc = read_text(&root.join("docs/hosts/codex-cli.md"));
+    let codex_doc = read_text(&root.join("docs/hosts/codex.md"));
     assert!(
         codex_doc.contains("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
-        "codex-cli must document Codex fork infer env"
+        "codex.md must document Codex fork infer env"
     );
     assert!(
         codex_doc.contains("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY"),
-        "codex-cli must document stable session key"
+        "codex.md must document stable session key"
     );
     let operator = read_text(&root.join("docs/references/AGENTS_OPERATOR_SURFACE.md"));
     assert!(
@@ -47,9 +60,9 @@ fn codex_cli_docs_document_review_gate_env_and_session() {
     );
     let primer = read_text(&root.join("docs/framework_operator_primer.md"));
     assert!(
-        primer.contains("codex_review_independent_fork")
-            && primer.contains("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
-        "D9 must document Codex fork helper + env, not Cursor env for Codex"
+        primer.contains("review_independent_fork")
+            && primer.contains("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+        "D9 must document canonical fork helper + env"
     );
     assert!(
         !primer.contains("Codex PostTool/Stop 独立审稿证据走 `cursor_review_independent_fork`"),
@@ -61,11 +74,11 @@ fn codex_cli_docs_document_review_gate_env_and_session() {
     );
     assert!(
         codex_doc.contains("ROUTER_RS_CODEX_HOOK_STATE_SALT"),
-        "codex-cli must document hook-state salt"
+        "codex.md must document hook-state salt"
     );
     assert!(
         codex_doc.contains("re-arm") || codex_doc.contains("rearm") || codex_doc.contains("重新武装"),
-        "codex-cli must document UPS re-arm behavior"
+        "codex.md must document UPS re-arm behavior"
     );
 }
 
@@ -207,22 +220,22 @@ fn runtime_registry_host_projections_split_harness_capabilities() {
 }
 
 #[test]
-fn runtime_registry_review_gate_deep_lanes_non_empty() {
+fn runtime_registry_review_gate_reviewer_lanes_non_empty() {
     let v = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
-    let lanes = v["review_gate"]["deep_gate_lanes"]
+    let lanes = v["review_gate"]["reviewer_lanes"]
         .as_array()
-        .expect("review_gate.deep_gate_lanes must be array");
+        .expect("review_gate.reviewer_lanes must be array");
     assert!(
         !lanes.is_empty(),
-        "review_gate.deep_gate_lanes must list Cursor/Codex countable review lanes"
+        "review_gate.reviewer_lanes must list cross-host countable review lanes"
     );
 }
 
 #[test]
 fn runtime_registry_review_gate_lane_sets_closed() {
     let v = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
-    let (deep, claude) = common::review_gate_lane_sets_from_registry(&v);
-    common::assert_review_gate_lane_sets_closed(&deep, &claude);
+    let lanes = common::reviewer_lanes_from_registry(&v);
+    common::assert_reviewer_lanes_closed(&lanes);
 }
 
 #[test]

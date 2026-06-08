@@ -87,8 +87,8 @@ writing_handoff: surgical | refactor  # 若需多段/全节骨架重组
 
 ## 写作门控（执行真源）
 
-- 门控：[`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md)
-- 范例：[`../../paper-writing/references/prose-exemplars.md`](../../paper-writing/references/prose-exemplars.md)
+- 门控：[`prose-quality-gate.md`](prose-quality-gate.md)
+- 范例：[`prose-exemplars.md`](prose-exemplars.md)
 - 姿态/术语：[`research-language-norms.md`](research-language-norms.md)
 
 **硬规则**：未 `ladder_passed: L1–L4` 不得交付长段 Stage B；`prose_qc` 与 `tone_audit` 不得合并省略。
@@ -107,14 +107,14 @@ writing_handoff: surgical | refactor  # 若需多段/全节骨架重组
 
 ## L4 宿主短码（per-host）
 
-**L3 skill + NL 路由跨宿主**；**L4 短码**仅在具备 `UserPromptSubmit` / `beforeSubmit` 的宿主注入（Cursor、Claude Code）。`claude-desktop`、`claude-code` 无 UPS hook —— 仅 skill/NL。
+**L3 skill + NL 路由跨宿主**；**L4 短码**仅在具备 `UserPromptSubmit` / `beforeSubmit` 的宿主注入（`cursor`、`codex`、`claude-code`）。MCP 宿主（`antigravity`、`opencode`）无 UPS hook —— 仅 skill/NL。
 
 | 文件 | 环境变量（prose **默认开**） | 注入事件 |
 | --- | --- | --- |
 | `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt` | `ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` | Cursor `beforeSubmit` |
-| 同上 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` [legacy: CODEX] | Claude Code / Legacy Codex CLI `UserPromptSubmit` |
-| 同上 | `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK` | Antigravity CLI `UserPromptSubmit` |
-| `configs/framework/PAPER_ADVERSARIAL_HOOK.txt` | `ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1`（四宿主对称；**默认关**） | 同上 |
+| 同上 | `ROUTER_RS_CODEX_PAPER_PROSE_HOOK` | Codex `UserPromptSubmit` |
+| 同上 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` | Claude Code `UserPromptSubmit` |
+| `configs/framework/PAPER_ADVERSARIAL_HOOK.txt` | `ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1`（hook 宿主对称；**默认关**） | 同上 |
 
 触发单真源：`has_paper_prose_edit_context`（hook 与 NL 共用）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束；出站截断保留 `PAPER_*` 前缀行。实现：`core/router-rs/src/paper_prose_hook.rs`、`hook_outbound_protect.rs`。
 

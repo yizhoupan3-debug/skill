@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-09"
 depends_on:
   - ../host_adapter_contract.md
   - ../harness_architecture/index.md
@@ -8,6 +8,8 @@ depends_on:
 # Claude Code 宿主操作手册
 
 **闭集 id**：`claude-code` · **传输**：claude-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.claude-code`
+
+**策略注入（双文件）**：[`AGENTS.md`](../../AGENTS.md)（内核）+ [`AGENTS_CLAUDE.md`](../../AGENTS_CLAUDE.md)（Claude Code transport delta only）；**Review gate canonical** 清门语义以本宿主 hook 为参考实现（[`host_adapter_contract.md`](../host_adapter_contract.md) §0.1），Stop **advisory-only**。
 
 ## 代理身份与画风 (Agent Identity & Style)
 
@@ -22,12 +24,13 @@ depends_on:
 
 - **Harness 核心入口**：
   - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
-  - **任务状态治理**：`framework_goal_drive` stdio + `artifacts/current/<task_id>/GOAL_STATE.json`（Desktop 侧可用 MCP `goal_state_manage`，见 [`claude-desktop.md`](claude-desktop.md)）。
+  - **任务状态治理**：`framework_goal_drive` stdio + `artifacts/current/<task_id>/GOAL_STATE.json`。
 - **工作区及状态产物**：
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
   - 拥有 `PreToolUse`、`UserPromptSubmit`、`PostToolUse` 和 `Stop` 等 4 个核心集成钩子事件。
+  - **Review gate canonical**：清门语义以本宿主为准（[`host_adapter_contract.md`](../host_adapter_contract.md) §0.1）；Stop **advisory-only** `CLAUDE_REVIEW_GATE` nudge。
   - 深度 Review：**默认 `lifecycle_profile: my-light` 不注入 spawn-first**；非 my-light 时 spawn-first 配对审稿，见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
 
 ## Hook 事件矩阵
@@ -36,12 +39,14 @@ depends_on:
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../core/router-rs/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
-| **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_code_hooks.rs`](../../core/router-rs/src/hosts/claude_code_hooks.rs) | `.claude/hook-state/review-subagent-*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_code_hooks::run_stop` | `hook-state/review-subagent-*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
 | 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/router-rs/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`）；`ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
+
+**Review gate 磁盘（canonical）**：`.claude/hook-state/review-subagent-<session_key>.json`（basename 真源 [`hook_review_subagent_state_basename`](../../core/core-policy/src/hook_review_disk_state.rs)）。**Legacy 自动迁移**（读时升 canonical、写后删旧文件）：`.claude/hook-state/review_gate_<key>.json`（phase-3 前）、`.claude/review_gate_<key>.json`（扁平遗留）。PreToolUse **deny** 对上述路径的写操作。并行会话分流：`ROUTER_RS_CLAUDE_SESSION_NAMESPACE`（对齐 Cursor `SESSION_NAMESPACE`）。
 
 ## 安装与文件分布 (Installation & Scope)
 
@@ -49,7 +54,7 @@ depends_on:
   - **Hooks 行为配置文件**：路径为 `.claude/settings.json`，绑定脚本为 [`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh)。
   - **项目环境变量文件**：路径为 [`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)。
   - **Framework 规则文件**：路径为 `.claude/rules/framework.md`。
-  - **项目叙事文件**：路径为 `.claude/CLAUDE.md`。
+  - **项目叙事文件**：路径为 `.claude/CLAUDE.md`（项目叙事；跨宿主 policy 仍以根目录双文件 `AGENTS.md` + `AGENTS_CLAUDE.md` 为准）。
 - **环境安装命令**（与 Cursor 对齐 My 生命周期；**须含 user scope** 刷新 `~/.claude/rules/framework.md`）：
   ```bash
   ./scripts/install-claude.sh
@@ -74,8 +79,10 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
 2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](../../skills/planx/SKILL.md)），明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
-   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`。在此配置下将关闭 `REVIEW_GATE` 硬拦截和 spawn-first nudge，采用 findings-only 机制，保持极佳的轻量化流畅体验。
+   - **执行 Profile 调优**：默认 `lifecycle_profile: my-light`（suppress Stop 上 review **advisory** nudge 与 spawn-first；findings-only 仍可用）。Review gate 清门语义为本宿主 **canonical**，见 [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
+
+显式辅助命令（五宿主同路径）：`/deepinterview`、`/gitx`、`/update`。
 
 ## Python 环境治理 (Python Environment)
 

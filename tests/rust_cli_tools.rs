@@ -50,7 +50,7 @@ fn image_generated_skill_docs_point_to_rust_cli_only() {
 
 #[test]
 fn update_audit_cli_contract_is_registered() {
-    let args = read_text(&project_root().join("core/router-rs/src/cli/args.inc"));
+    let args = read_text(&project_root().join("core/router-rs/src/cli/args.rs"));
     let maint = read_text(&project_root().join("core/router-rs/src/framework_maint.rs"));
     assert!(args.contains("UpdateAudit(UpdateAuditArgs)"));
     assert!(args.contains("repo_root: Option<PathBuf>"));
@@ -74,15 +74,14 @@ fn update_audit_cli_contract_is_registered() {
 }
 
 #[test]
-fn refresh_host_projections_keeps_claude_projection_explicit() {
-    let args = read_text(&project_root().join("core/router-rs/src/cli/args.inc"));
+fn refresh_host_projections_keeps_claude_code_projection_explicit() {
+    let args = read_text(&project_root().join("core/router-rs/src/cli/args.rs"));
     let maint = read_text(&project_root().join("core/router-rs/src/framework_maint.rs"));
     assert!(args.contains("non-Codex framework installs"));
     assert!(maint.contains("let installable_tools = installable_projection_tools(&fw)?"));
     assert!(maint.contains("verify_installable_projections(&fw, &installable_tools)?"));
     assert!(maint.contains("for tool in &projection_tools"));
     assert!(maint.contains("verify_claude_code_projection"));
-    assert!(maint.contains("verify_claude_desktop_projection"));
     assert!(maint.contains(".claude/rules/framework.md"));
     assert!(maint.contains(".claude/.framework-projection.json"));
     assert!(maint.contains("host_projection: claude-code"));

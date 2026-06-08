@@ -362,7 +362,7 @@ mod route_metadata_tests {
 #[ignore]
     fn host_filter_uses_record_platforms_and_fails_closed() {
         let records = vec![
-            SkillRecord::from_raw(RawSkillRecord {
+            crate::route::skill_record::skill_record_from_raw(RawSkillRecord {
                 slug: "codex-only".to_string(),
                 skill_path: Some("skills/codex-only/SKILL.md".to_string()),
                 layer: "L1".to_string(),
@@ -376,10 +376,10 @@ mod route_metadata_tests {
                 do_not_use: String::new(),
                 tags: Vec::new(),
                 trigger_hints: vec!["codex only".to_string()],
-                host_platforms: vec!["codex-cli".to_string()],
+                host_platforms: vec!["codex".to_string()],
                 record_kind: "skill".to_string(),
             }),
-            SkillRecord::from_raw(RawSkillRecord {
+            crate::route::skill_record::skill_record_from_raw(RawSkillRecord {
                 slug: "all-command".to_string(),
                 skill_path: Some("skills/all-command/SKILL.md".to_string()),
                 layer: "L0".to_string(),
@@ -399,7 +399,7 @@ mod route_metadata_tests {
         ];
 
         let filtered =
-            filter_records_for_host(records.clone(), Some("codex-cli")).expect("codex filter");
+            filter_records_for_host(records.clone(), Some("codex")).expect("codex filter");
         assert!(filtered.iter().any(|record| record.slug == "codex-only"));
         assert!(filtered.iter().any(|record| record.slug == "all-command"));
 
@@ -620,7 +620,7 @@ mod route_metadata_tests {
     #[test]
 #[ignore]
     fn paper_stack_plain_slug_counts_as_explicit_framework_alias_when_hint_has_sigil() {
-        let record = SkillRecord::from_raw(RawSkillRecord {
+        let record = crate::route::skill_record::skill_record_from_raw(RawSkillRecord {
             slug: "paper-reviewer".to_string(),
             skill_path: Some("skills/paper-reviewer/SKILL.md".to_string()),
             layer: "L2".to_string(),
@@ -634,7 +634,7 @@ mod route_metadata_tests {
             do_not_use: String::new(),
             tags: Vec::new(),
             trigger_hints: vec!["$paper-reviewer".to_string(), "/paper-reviewer".to_string()],
-            host_platforms: vec!["codex-cli".to_string()],
+            host_platforms: vec!["codex".to_string()],
             record_kind: "skill".to_string(),
         });
         assert!(!record.framework_alias_entrypoints.is_empty());

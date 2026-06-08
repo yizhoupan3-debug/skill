@@ -30,14 +30,42 @@ verification protocol when layout or pagination correctness matters.
 
 ## Required workflow
 
-1. Identify whether the task is read, generate, edit, or audit.
+1. Identify whether the task is read, generate, edit, audit, or **batch read**.
 2. Prefer structured `.docx` edits that preserve existing styles, headings, tables, numbering, and sections.
-3. Use the Rust OOXML CLI for structure and render-aware checks:
-   - `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx>`
-   - `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx> --json`
-   - `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --output-dir <dir>`
-   - `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --width 1600 --height 2000`
-   - `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --dpi 180`
+3. Use the Rust OOXML CLI (`ooxml`) for structure and render-aware checks.
+
+### Install
+
+```bash
+bash ${SKILL_FRAMEWORK_ROOT}/scripts/install-ooxml-tool.sh
+# 或：just install-ooxml
+```
+
+### Single-file read / inspect
+
+```bash
+ooxml read-docx <docx>
+ooxml read-docx <docx> --json --compact
+ooxml docx <docx> --json
+ooxml  -- docx <docx>
+ooxml render-docx <docx> --output-dir <dir>
+```
+
+开发探测可用 `cargo run --manifest-path ${SKILL_FRAMEWORK_ROOT}/rust_tools/ooxml_parser_rs/Cargo.toml --bin ooxml -- read-docx <docx>`。
+
+### Batch read（多 docx/xlsx）
+
+**必须用已安装的 `ooxml` 二进制；禁止对 batch 使用 `cargo run`。**
+
+```bash
+ooxml batch --manifest <paths.json> --out-dir artifacts/current/<task_id>/ooxml-batch
+ooxml batch --stdin-paths --out-dir artifacts/current/<task_id>/ooxml-batch
+```
+
+常用选项：`--jobs auto|N`（`OOXML_BATCH_JOBS`）、`--resume`、`--fail-fast`、`--max-chars`、`--max-rows`。
+
+产物：`catalog.json`、`results.jsonl`、`checkpoint.json`、`index.md`、`text/<sha256>.txt`。
+
 4. Recheck every meaningful document change visually when layout matters.
 5. Deliver both content/result status and layout status.
 

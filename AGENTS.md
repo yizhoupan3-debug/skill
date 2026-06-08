@@ -2,6 +2,10 @@
 
 跨宿主叙述性协议真源。宿主差异见 `AGENTS_CURSOR.md`、`AGENTS_CODEX.md`、`AGENTS_CLAUDE.md`、`AGENTS_ANTIGRAVITY.md`、`AGENTS_OPENCODE.md`。
 
+**双文件注入（硬约束）**：各闭集宿主须**同时**注入仓库根 **`AGENTS.md`**（跨宿主内核）与 **`AGENTS_<HOST>.md`**（transport delta）；**禁止**合并为单文件。Codex 为编译期 concat embed；其余宿主为仓库根双文件 + 各宿主投影（framework rule / MCP / hook）。路径见各 delta 与 [`docs/hosts/`](docs/hosts/)。
+
+**闭集宿主（2026-06）**：`codex`、`claude-code`、`antigravity`、`cursor`、`opencode` — 真源 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。已退役 id（勿再 `install --to` 或写入 registry）：`claude-desktop`、`codex-app`、`codex-cli`、`antigravity-app`、`antigravity-cli`。迁移见 [`MIGRATION.md`](MIGRATION.md) §闭集宿主收敛（2026-06）。
+
 ## 权威分层（改哪里才生效）
 
 | 类别 | 权威落点 |
@@ -11,7 +15,7 @@
 | skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
 | 宿主投影 lifecycle/review 文案 | `configs/framework/host_projection_narrative.json` |
-| hook 行为 | 各宿主 `hooks.json` + `router-rs` |
+| hook 行为 | 各宿主 `hooks.json` + `router-rs`；review gate **Claude Code canonical**（[`host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1） |
 
 **文档地图**：[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md) · [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) · [`docs/rust_contracts.md`](docs/rust_contracts.md) · [`docs/README.md`](docs/README.md)
 
@@ -41,7 +45,7 @@
 ## Skill Routing
 
 - **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` 一口气跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。
-- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light` 由 **My 入口斜杠**或磁盘 `GOAL_STATE.lifecycle_profile` 触发；`framework_goal_drive` stdio）。my-light 关闭 `REVIEW_GATE` 硬拦与 spawn-first nudge（亦含 pre-execution `/discussx|/planx` 与磁盘 profile；hook 层全 suppress，skill 层 findings-only 仍适用）。
+- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light` 由 **My 入口斜杠**或磁盘 `GOAL_STATE.lifecycle_profile` 触发；`framework_goal_drive` stdio）。Hook review：**Claude Code canonical** 清门（`independent_reviewer_seen` 或 override）；**全宿主** Stop 上 `REVIEW_GATE` **advisory-only**（不硬拦 Stop；见 [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1）。`my-light` 另 **suppress** review nudge 与 spawn-first（亦含 pre-execution `/discussx|/planx` 与磁盘 profile；hook 层全 suppress，skill 层 findings-only 仍适用）。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
 ## Continuity artifacts（手动画板 only）
@@ -68,8 +72,8 @@
 ## Execution Ladder
 
 - 完整规则：[`docs/references/EXECUTION_LADDER.md`](docs/references/EXECUTION_LADDER.md)。
-- **Review findings-only**：[`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)（compact 信封、透镜、默认只读 findings）；深度可数 lane 见 [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1。
-- 宿主 hook 硬差异见各 `AGENTS_<HOST>.md` 与 `.cursor/rules/*-gate.mdc`（仅 Cursor）。
+- **Review findings-only**：[`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)（compact 信封、透镜、默认只读 findings）；深度可数 lane 与 Stop **advisory-only** `REVIEW_GATE`（Claude canonical 清门）见 [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1（closeout 硬门禁分层见 Closeout 节）。
+- 宿主 hook **transport** 差异见各 `AGENTS_<HOST>.md` 与 `.cursor/rules/*-gate.mdc`（仅 Cursor 有 gate 规则文件）；清门语义不分宿主。
 
 ## Closeout
 

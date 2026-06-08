@@ -14,24 +14,26 @@ depends_on:
 | 宿主 | Hook 入口 | 配置文件 | 文档 |
 |------|-----------|----------|------|
 | Cursor | `.cursor/hooks.json` (7 事件) | `.cursor/hooks.json` + `.cursor/router-rs-hook.env` | `docs/hosts/cursor.md` |
-| Codex CLI | `~/.codex/hooks.json` | `~/.codex/config.toml` | `docs/hosts/codex-cli.md` |
+| Codex | `~/.codex/hooks.json` | `~/.codex/config.toml` | `docs/hosts/codex.md` |
 | Claude Code | `.claude/settings.json` (4 事件) | `.claude/settings.json` + `.claude/router-rs-hook.env` | `docs/hosts/claude.md` |
-| Claude Desktop | Claude Desktop MCP | `.claude-desktop/` | `docs/hosts/claude-desktop.md` |
-| Antigravity | Antigravity CLI hooks | `.antigravitycli/hooks.json` | `docs/hosts/antigravity-cli.md` |
+| Antigravity | MCP stdio | `.gemini/` | `docs/hosts/antigravity.md` |
+| OpenCode | MCP stdio | `.opencode/` | `docs/hosts/opencode.md` |
 
 ## 2. Hook 事件与行为差异
 
-| 事件 | Cursor | Codex | Claude Code |
-|------|--------|-------|-------------|
-| SessionStart | 轻量 `Repo:` 行 | 轻量 `source:` 行 | 类似 Cursor |
-| UserPromptSubmit | pre-goal nudge | session key 硬前置 | review 提示 |
-| PostToolUse | 证据采集 | 证据采集 | 证据采集 |
-| Stop | review gate + closeout + SESSION_CLOSE_STYLE | review gate + closeout (可 `decision:block`) | review gate + closeout |
-| beforeSubmit | paper adversarial/prose hook, subagent model inherit nudge | N/A | N/A |
-| SessionEnd | hook-state 清理 | N/A | N/A |
-| subagentStart | subagent 计数 | N/A | N/A |
+闭集五宿主中，**hook 宿主**（`cursor`、`codex`、`claude-code`）走 shell launcher → `router-rs`；**MCP 宿主**（`antigravity`、`opencode`）无 shell hook，门控在 MCP 工具层。各宿主细则见 [`docs/hosts/`](../hosts/) **Hook 事件矩阵**（hook 宿主）或 MCP 配置节（MCP 宿主）。
 
-关键差异：Codex 的 Stop 可以 `decision:block` 硬阻断；Cursor 的 Stop 是 `followup_message` 软提示。
+| 事件 | Cursor | Codex | Claude Code | Antigravity | OpenCode |
+|------|--------|-------|-------------|-------------|----------|
+| SessionStart | 轻量 `Repo:` 行 | 轻量 `source:` 行 | 类似 Cursor | —（MCP） | —（MCP） |
+| UserPromptSubmit | pre-goal nudge | session key 硬前置 + re-arm | review 提示 | —（MCP advisory） | —（MCP advisory） |
+| PostToolUse | 证据采集 | 证据采集 | 证据采集 | —（MCP） | —（MCP） |
+| Stop | review gate + closeout + SESSION_CLOSE_STYLE | review gate（advisory nudge）+ closeout（可 `decision:block`） | review gate + closeout | —（MCP） | —（MCP） |
+| beforeSubmit | paper / subagent model inherit nudge | — | — | — | — |
+| SessionEnd | hook-state 清理 | — | — | — | — |
+| subagentStart / Stop | subagent 计数 | — | — | — | — |
+
+关键差异：**全宿主** Stop 上 `REVIEW_GATE` 均为 **advisory-only**（nudge / `followup_message`，不硬拦 Stop）；**closeout** 与 review 分层，Codex closeout 仍可 `decision:block`。**Antigravity / OpenCode** 无 hook 面，见 [`codex.md`](../hosts/codex.md)、[`antigravity.md`](../hosts/antigravity.md)、[`opencode.md`](../hosts/opencode.md)。
 
 ## 3. Shell launcher
 

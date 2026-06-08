@@ -1,5 +1,9 @@
 use chrono::{DateTime, Duration, Utc};
 use clap::{Parser, Subcommand};
+use evolution_rs::{
+    default_config_path, default_evolution_output_dir, default_telemetry_journal_path, load_config,
+    run_analyze, run_health_score, EvolutionConfig,
+};
 use fs2::FileExt;
 use memmap2::Mmap;
 use rayon::prelude::*;
@@ -64,6 +68,10 @@ struct LegacyEntry {
 #[command(name = "evolution-rs")]
 #[command(about = "High performance skill evolution core", long_about = None)]
 struct Cli {
+    /// TOML threshold config (defaults when omitted).
+    #[arg(long, global = true)]
+    config: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -130,6 +138,22 @@ enum Commands {
         skills_root: PathBuf,
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Analyze telemetry journal and write artifacts/evolution/analysis.json
+    Analyze {
+        #[arg(short, long, default_value = default_telemetry_journal_path())]
+        journal: PathBuf,
+        #[arg(short, long, default_value = default_evolution_output_dir())]
+        output_dir: PathBuf,
+        #[arg(short, long, default_value_t = 30)]
+        days: i64,
+    },
+    /// Compute per-skill health scores from telemetry journal
+    HealthScore {
+        #[arg(short, long, default_value = default_telemetry_journal_path())]
+        journal: PathBuf,
+        #[arg(short, long, default_value = default_evolution_output_dir())]
+        output_dir: PathBuf,
     },
 }
 
@@ -248,6 +272,7 @@ fn audit_journal(
     days: i64,
     json: bool,
     manifest_path: Option<PathBuf>,
+    cfg: &EvolutionConfig,
 ) -> anyhow::Result<()> {
     let entries = load_entries_parallel(&path)?;
     let cutoff = Utc::now() - Duration::days(days);
@@ -296,7 +321,9 @@ fn audit_journal(
                     .filter(|c| c.is_alphanumeric())
                     .collect::<String>()
             })
-            .filter(|w| w.len() > 3 && !stop_words.contains(w.as_str()))
+            .filter(|w| {
+                w.len() >= cfg.thresholds.min_word_length && !stop_words.contains(w.as_str())
+            })
             .map(|w| stem(&w))
             .collect();
 
@@ -310,8 +337,8 @@ fn audit_journal(
     common.sort_by(|a, b| b.1.cmp(&a.1));
 
     let mut new_skill_candidates = Vec::new();
-    for (phrase, count) in common.iter().take(10) {
-        if *count >= 2 {
+    for (phrase, count) in common.iter().take(cfg.audit.top_ngram_candidates) {
+        if *count >= cfg.evolution.min_candidate_frequency {
             new_skill_candidates.push(serde_json::json!({
                 "phrase": phrase,
                 "count": count,
@@ -322,7 +349,7 @@ fn audit_journal(
     }
 
     if json {
-        let collisions = detect_boundary_collisions(manifest_path.clone())?;
+        let collisions = detect_boundary_collisions(manifest_path.clone(), cfg)?;
         let mut repair_suggestions = Vec::new();
         for col in &collisions {
             repair_suggestions.push(format!("Boundary conflict: {}", col));
@@ -338,50 +365,55 @@ fn audit_journal(
             }
         }
         for ((from, to), count) in correlations {
-            if count >= 2 {
+            if count >= cfg.thresholds.min_correlation_count {
                 repair_suggestions.push(format!("High correlation: `{}` frequently reroutes to `{}` ({}x). Consider merging or adjusting triggers.", from, to, count));
             }
         }
 
         // R31-33: Advanced Refactoring Suggestions
-        if let Some(path) = manifest_path
-            && let Ok(content) = std::fs::read_to_string(path)
-            && let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content)
-            && let Some((skills, idx_slug, idx_trigger_hints)) =
-                manifest_skill_columns(&manifest)
-        {
-            let active_skills: HashSet<_> =
-                filtered.iter().map(|e| e.final_skill.as_str()).collect();
+        if let Some(path) = manifest_path {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some((skills, idx_slug, idx_trigger_hints)) =
+                        manifest_skill_columns(&manifest)
+                    {
+                        let active_skills: HashSet<_> =
+                            filtered.iter().map(|e| e.final_skill.as_str()).collect();
 
-            for s in skills {
-                let Some(name) = s.get(idx_slug).and_then(|value| value.as_str()) else {
-                    continue;
-                };
-                let triggers = row_text(&s[idx_trigger_hints]);
+                        for s in skills {
+                            let Some(name) = s.get(idx_slug).and_then(|value| value.as_str()) else {
+                                continue;
+                            };
+                            let triggers = row_text(&s[idx_trigger_hints]);
 
-                // R33: Pruning Suggestion (Zero usage)
-                if !active_skills.contains(name) && total > 5 {
-                    repair_suggestions.push(format!("Pruning: Skill `{}` has zero usage in last {} days. Consider deleting.", name, days));
-                }
+                            // R33: Pruning Suggestion (Zero usage)
+                            if !active_skills.contains(name)
+                                && total >= cfg.thresholds.min_usage_for_pruning_hint
+                            {
+                                repair_suggestions.push(format!("Pruning: Skill `{}` has zero usage in last {} days. Consider deleting.", name, days));
+                            }
 
-                for e in filtered
-                    .iter()
-                    .filter(|e| e.init == "none" || e.init == "general")
-                {
-                    let score = calculate_jaccard(&e.task, &triggers);
-                    if score > 0.25 {
-                        repair_suggestions.push(format!("Near-miss: Task '{}' likely belongs to `{}`, but trigger missed (Jaccard={:.2})", e.task, name, score));
-                        let task_lower = e.task.to_lowercase();
-                        let triggers_lower = triggers.to_lowercase();
-                        let keywords: Vec<_> = task_lower
-                            .split_whitespace()
-                            .filter(|w| w.len() > 4 && !triggers_lower.contains(w))
-                            .collect();
-                        if !keywords.is_empty() {
-                            repair_suggestions.push(format!(
-                                "Learning: Consider adding triggers {:?} to `{}`",
-                                keywords, name
-                            ));
+                            for e in filtered
+                                .iter()
+                                .filter(|e| e.init == "none" || e.init == "general")
+                            {
+                                let score = calculate_jaccard(&e.task, &triggers);
+                                if score > cfg.thresholds.jaccard_near_match {
+                                    repair_suggestions.push(format!("Near-miss: Task '{}' likely belongs to `{}`, but trigger missed (Jaccard={:.2})", e.task, name, score));
+                                    let task_lower = e.task.to_lowercase();
+                                    let triggers_lower = triggers.to_lowercase();
+                                    let keywords: Vec<_> = task_lower
+                                        .split_whitespace()
+                                        .filter(|w| w.len() > 4 && !triggers_lower.contains(w))
+                                        .collect();
+                                    if !keywords.is_empty() {
+                                        repair_suggestions.push(format!(
+                                            "Learning: Consider adding triggers {:?} to `{}`",
+                                            keywords, name
+                                        ));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -451,51 +483,56 @@ fn generate_manifest(
     scores_json: Option<PathBuf>,
     manifest_path: Option<PathBuf>,
     days: i64,
+    cfg: &EvolutionConfig,
 ) -> anyhow::Result<()> {
     let entries = load_entries_parallel(&journal)?;
     let cutoff = Utc::now() - Duration::days(days);
 
     let mut static_scores: HashMap<String, f32> = HashMap::new();
-    if let Some(path) = scores_json
-        && let Ok(content) = std::fs::read_to_string(path)
-        && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content)
-    {
-        if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
-            for entry in skills {
-                if let (Some(name), Some(total)) =
-                    (entry["name"].as_str(), entry["total"].as_f64())
+    if let Some(path) = scores_json {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
+                    for entry in skills {
+                        if let (Some(name), Some(total)) =
+                            (entry["name"].as_str(), entry["total"].as_f64())
+                        {
+                            static_scores.insert(name.to_string(), total as f32);
+                        }
+                    }
+                } else if let Some(skills) = payload.get("skills").and_then(|value| value.as_object())
                 {
-                    static_scores.insert(name.to_string(), total as f32);
-                }
-            }
-        } else if let Some(skills) = payload.get("skills").and_then(|value| value.as_object()) {
-            for (name, entry) in skills {
-                if let Some(score) = entry
-                    .get("static_score")
-                    .or_else(|| entry.get("dynamic_score"))
-                    .and_then(|value| value.as_f64())
-                {
-                    static_scores.insert(name.clone(), score as f32);
-                }
-            }
-        } else if let Some(obj) = payload.as_object() {
-            for (name, value) in obj {
-                if let Some(score) = value.as_f64() {
-                    static_scores.insert(name.clone(), score as f32);
+                    for (name, entry) in skills {
+                        if let Some(score) = entry
+                            .get("static_score")
+                            .or_else(|| entry.get("dynamic_score"))
+                            .and_then(|value| value.as_f64())
+                        {
+                            static_scores.insert(name.clone(), score as f32);
+                        }
+                    }
+                } else if let Some(obj) = payload.as_object() {
+                    for (name, value) in obj {
+                        if let Some(score) = value.as_f64() {
+                            static_scores.insert(name.clone(), score as f32);
+                        }
+                    }
                 }
             }
         }
     }
 
     let mut all_skills = HashSet::new();
-    if let Some(path) = manifest_path
-        && let Ok(content) = std::fs::read_to_string(path)
-        && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content)
-        && let Some(skills) = payload.get("skills").and_then(|value| value.as_array())
-    {
-        for row in skills {
-            if let Some(name) = row.get(0).and_then(|value| value.as_str()) {
-                all_skills.insert(name.to_string());
+    if let Some(path) = manifest_path {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
+                    for row in skills {
+                        if let Some(name) = row.get(0).and_then(|value| value.as_str()) {
+                            all_skills.insert(name.to_string());
+                        }
+                    }
+                }
             }
         }
     }
@@ -530,17 +567,23 @@ fn generate_manifest(
         } else {
             100.0
         };
-        let static_score = *static_scores.get(&skill).unwrap_or(&85.0);
-        let blended = (((dynamic_base * 0.6) + (static_score * 0.4)) * 10.0).round() / 10.0;
+        let static_score = *static_scores
+            .get(&skill)
+            .unwrap_or(&cfg.thresholds.default_static_score);
+        let blended = (((dynamic_base * cfg.weights.dynamic_blend)
+            + (static_score * cfg.weights.static_blend))
+            * 10.0)
+            .round()
+            / 10.0;
 
-        let status = if blended >= 85.0 {
+        let status = if blended >= cfg.thresholds.healthy_score {
             "Healthy"
-        } else if blended >= 60.0 {
+        } else if blended >= cfg.thresholds.stable_score {
             "Stable"
         } else {
             "Critical"
         };
-        if blended < 60.0 {
+        if blended < cfg.thresholds.stable_score {
             critical_outliers.push(skill.clone());
         }
         blended_scores.push(blended);
@@ -602,7 +645,10 @@ fn dump_skill(journal: PathBuf, skill: String) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn detect_boundary_collisions(manifest_path: Option<PathBuf>) -> anyhow::Result<Vec<String>> {
+fn detect_boundary_collisions(
+    manifest_path: Option<PathBuf>,
+    cfg: &EvolutionConfig,
+) -> anyhow::Result<Vec<String>> {
     let mut collisions = Vec::new();
     if let Some(path) = manifest_path {
         let content = std::fs::read_to_string(path)?;
@@ -627,7 +673,7 @@ fn detect_boundary_collisions(manifest_path: Option<PathBuf>) -> anyhow::Result<
                     let t1: HashSet<_> = row_terms(s1_hints);
                     let t2: HashSet<_> = row_terms(s2_hints);
                     let intersection: HashSet<_> = t1.intersection(&t2).cloned().collect();
-                    if intersection.len() > 3 {
+                    if intersection.len() >= cfg.thresholds.boundary_collision_min_overlap {
                         collisions.push(format!(
                             "`{}` & `{}` overlap: {:?}",
                             s1_slug, s2_slug, intersection
@@ -737,8 +783,25 @@ fn row_terms(value: &serde_json::Value) -> HashSet<&str> {
     }
 }
 
+fn resolve_config(cli: &Cli) -> anyhow::Result<EvolutionConfig> {
+    let path = cli
+        .config
+        .clone()
+        .or_else(|| std::env::var("EVOLUTION_RS_CONFIG").ok().map(PathBuf::from))
+        .or_else(|| {
+            let default = PathBuf::from(default_config_path());
+            if default.is_file() {
+                Some(default)
+            } else {
+                None
+            }
+        });
+    load_config(path.as_deref())
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let cfg = resolve_config(&cli)?;
     let start = Instant::now();
 
     match cli.command {
@@ -747,13 +810,27 @@ fn main() -> anyhow::Result<()> {
             journal,
             json,
             manifest,
-        } => audit_journal(journal, days, json, manifest)?,
+        } => {
+            let window = if days == 30 {
+                cfg.evolution.audit_window_days
+            } else {
+                days
+            };
+            audit_journal(journal, window, json, manifest, &cfg)?;
+        }
         Commands::Manifest {
             journal,
             scores,
             manifest,
             days,
-        } => generate_manifest(journal, scores, manifest, days)?,
+        } => {
+            let window = if days == 30 {
+                cfg.evolution.audit_window_days
+            } else {
+                days
+            };
+            generate_manifest(journal, scores, manifest, window, &cfg)?;
+        }
         Commands::Dump { journal, skill } => dump_skill(journal, skill)?,
         Commands::Sync {
             journal,
@@ -770,7 +847,27 @@ fn main() -> anyhow::Result<()> {
             manifest,
             skills_root,
             dry_run,
-        } => heal_skills(journal, manifest, skills_root, dry_run)?,
+        } => heal_skills(journal, manifest, skills_root, dry_run, &cfg)?,
+        Commands::Analyze {
+            journal,
+            output_dir,
+            days,
+        } => {
+            let window = if days == 30 {
+                cfg.evolution.audit_window_days
+            } else {
+                days
+            };
+            let out = run_analyze(&journal, &output_dir, window, &cfg)?;
+            println!("Wrote {}", out.display());
+        }
+        Commands::HealthScore {
+            journal,
+            output_dir,
+        } => {
+            let out = run_health_score(&journal, &output_dir, &cfg)?;
+            println!("Wrote {}", out.display());
+        }
     }
 
     eprintln!("Execution completed in {:.2?}", start.elapsed());
@@ -782,6 +879,7 @@ fn heal_skills(
     manifest: PathBuf,
     skills_root: PathBuf,
     dry_run: bool,
+    cfg: &EvolutionConfig,
 ) -> anyhow::Result<()> {
     let entries = load_entries_parallel(&journal)?;
     let active_skills: HashSet<&str> = entries.iter().map(|e| e.final_skill.as_str()).collect();
@@ -795,7 +893,7 @@ fn heal_skills(
                 continue;
             };
             // R46: Automatic Pruning of Zero-usage skills
-            if !active_skills.contains(name) && entries.len() > 10 {
+            if !active_skills.contains(name) && entries.len() >= cfg.thresholds.min_entries_for_heal {
                 let skill_path = skills_root.join(name);
                 if skill_path.exists() {
                     if dry_run {

@@ -1,0 +1,319 @@
+//! Incremental index sync + filesystem watcher (Roadmap v5 §2.8 W3/W4).
+
+use crate::db::index_ops::{delete_file_index, ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IngestStmts};
+use crate::parser::{self, parse_file, ParsedFile};
+use crate::CodeGraphIndex;
+use anyhow::Context;
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use rayon::prelude::*;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant, SystemTime};
+
+const WATCHER_DEBOUNCE: Duration = Duration::from_millis(400);
+
+const SKIP_DIRS: &[&str] = &[
+    ".git",
+    "target",
+    "node_modules",
+    "artifacts",
+    ".cursor",
+    "dist",
+    "build",
+];
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyncReport {
+    pub files_scanned: u64,
+    pub files_updated: u64,
+    pub files_removed: u64,
+    pub nodes_added: u64,
+    pub edges_added: u64,
+}
+
+pub fn build_full_index(index: &CodeGraphIndex, repo_root: &Path) -> anyhow::Result<SyncReport> {
+    incremental_sync(index, repo_root, true)
+}
+
+pub fn incremental_sync(
+    index: &CodeGraphIndex,
+    repo_root: &Path,
+    force_all: bool,
+) -> anyhow::Result<SyncReport> {
+    let repo_root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
+    let mut report = SyncReport::default();
+    let mut seen = HashSet::new();
+    let indexed: HashMap<String, i64> = list_indexed_files(index.connection())?
+        .into_iter()
+        .collect();
+
+    let mut pending: Vec<FileWorkItem> = Vec::new();
+    for path in discover_source_files(&repo_root)? {
+        report.files_scanned += 1;
+        let rel = relative_path(&repo_root, &path);
+        seen.insert(rel.clone());
+        let mtime_ns = file_mtime_ns(&path)?;
+        if !force_all && file_is_current(&indexed, &rel, mtime_ns) {
+            continue;
+        }
+        pending.push(FileWorkItem {
+            path,
+            rel,
+            mtime_ns,
+        });
+    }
+
+    let parsed: Vec<ParsedFile> = pending
+        .par_iter()
+        .filter_map(|item| parse_work_item(item).ok().flatten())
+        .collect();
+
+    let conn = index.connection();
+    let mut ingest_stmts = IngestStmts::prepare(conn)?;
+    for parsed in parsed {
+        let (nodes, edges) = ingest_parsed_file_with_stmts(conn, &mut ingest_stmts, &parsed)?;
+        report.files_updated += 1;
+        report.nodes_added += nodes;
+        report.edges_added += edges;
+    }
+
+    for (path, _) in &indexed {
+        if !seen.contains(path) {
+            delete_file_index(conn, path)?;
+            report.files_removed += 1;
+        }
+    }
+
+    let indexed_at = chrono::Local::now().to_rfc3339();
+    set_meta(conn, "indexed_at", &indexed_at)?;
+    Ok(report)
+}
+
+#[derive(Debug, Clone)]
+struct FileWorkItem {
+    path: PathBuf,
+    rel: String,
+    mtime_ns: i64,
+}
+
+fn parse_work_item(item: &FileWorkItem) -> anyhow::Result<Option<ParsedFile>> {
+    let contents = fs::read_to_string(&item.path)
+        .with_context(|| format!("read source file {}", item.path.display()))?;
+    let Some(mut parsed) = parse_file(Path::new(&item.rel), &contents, item.mtime_ns) else {
+        return Ok(None);
+    };
+    parsed.path = item.rel.clone();
+    Ok(Some(parsed))
+}
+
+fn file_is_current(indexed: &HashMap<String, i64>, rel_path: &str, mtime_ns: i64) -> bool {
+    indexed
+        .get(rel_path)
+        .is_some_and(|stored| *stored == mtime_ns)
+}
+
+fn discover_source_files(repo_root: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    walk_sources(repo_root, &mut out)?;
+    out.sort();
+    Ok(out)
+}
+
+fn walk_sources(dir: &Path, out: &mut Vec<PathBuf>) -> anyhow::Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if path.is_dir() {
+            if SKIP_DIRS.iter().any(|skip| name == *skip) {
+                continue;
+            }
+            walk_sources(&path, out)?;
+            continue;
+        }
+        if parser::common::detect_language(&path.to_string_lossy()).is_some() {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn relative_path(repo_root: &Path, path: &Path) -> String {
+    path.strip_prefix(repo_root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn file_mtime_ns(path: &Path) -> anyhow::Result<i64> {
+    let meta = fs::metadata(path)?;
+    let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+    let duration = modified
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    Ok(duration.as_nanos() as i64)
+}
+
+pub struct IndexWatcher {
+    _watcher: RecommendedWatcher,
+    _handle: Option<JoinHandle<()>>,
+}
+
+impl IndexWatcher {
+    pub fn spawn(repo_root: PathBuf) -> anyhow::Result<Self> {
+        let (tx, rx) = mpsc::channel();
+        let mut watcher = RecommendedWatcher::new(tx, Config::default())
+            .context("create filesystem watcher")?;
+        watcher
+            .watch(&repo_root, RecursiveMode::Recursive)
+            .with_context(|| format!("watch {}", repo_root.display()))?;
+
+        let handle = thread::spawn(move || {
+            let mut pending = false;
+            let mut last_event = Instant::now();
+            loop {
+                let timeout = if pending {
+                    WATCHER_DEBOUNCE.saturating_sub(last_event.elapsed())
+                } else {
+                    Duration::from_secs(3600)
+                };
+                match rx.recv_timeout(timeout) {
+                    Ok(Ok(event)) => {
+                        let relevant = matches!(
+                            event.kind,
+                            EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                        );
+                        if relevant {
+                            pending = true;
+                            last_event = Instant::now();
+                        }
+                    }
+                    Ok(Err(_)) => continue,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        if !pending {
+                            continue;
+                        }
+                        pending = false;
+                        if let Ok(index) = CodeGraphIndex::open(&repo_root) {
+                            let _ = incremental_sync(&index, &repo_root, false);
+                        }
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+        });
+
+        Ok(Self {
+            _watcher: watcher,
+            _handle: Some(handle),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_full_index, incremental_sync};
+    use crate::CodeGraphIndex;
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEMP_REPO_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_repo() -> (std::path::PathBuf, CodeGraphIndex) {
+        let suffix = format!(
+            "{}-{}-{}",
+            std::process::id(),
+            TEMP_REPO_COUNTER.fetch_add(1, Ordering::Relaxed),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(format!("codegraph-sync-{suffix}"));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("lib.rs"),
+            "fn alpha() {}\nfn beta() { alpha(); }\n",
+        )
+        .unwrap();
+        let index = CodeGraphIndex::open(&root).unwrap();
+        (root, index)
+    }
+
+    #[test]
+    fn incremental_sync_indexes_rust_sources() {
+        let (root, index) = temp_repo();
+        let report = build_full_index(&index, &root).unwrap();
+        assert!(report.files_updated >= 1);
+        assert!(report.nodes_added >= 2);
+        let stats = index.index_stats().unwrap();
+        assert!(stats.node_count >= 2);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn second_sync_skips_unchanged_files() {
+        let (root, index) = temp_repo();
+        build_full_index(&index, &root).unwrap();
+        let report = incremental_sync(&index, &root, false).unwrap();
+        assert_eq!(report.files_updated, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sync_removes_deleted_files_from_index() {
+        let (root, index) = temp_repo();
+        build_full_index(&index, &root).unwrap();
+        let lib_rs = root.join("lib.rs");
+        assert!(
+            lib_rs.is_file(),
+            "expected lib.rs before delete sync test: {}",
+            lib_rs.display()
+        );
+        fs::remove_file(&lib_rs).unwrap();
+        let report = incremental_sync(&index, &root, false).unwrap();
+        assert!(report.files_removed >= 1);
+        let stats = index.index_stats().unwrap();
+        assert_eq!(stats.node_count, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn parallel_sync_indexes_multiple_files() {
+        let (root, index) = temp_repo();
+        for i in 0..8 {
+            fs::write(
+                root.join(format!("module_{i}.rs")),
+                format!("fn sym_{i}() {{}}\n"),
+            )
+            .unwrap();
+        }
+        let report = build_full_index(&index, &root).unwrap();
+        assert!(report.files_updated >= 9, "expected parallel ingest of all modules");
+        let stats = index.index_stats().unwrap();
+        assert!(stats.node_count >= 10);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn watcher_spawns_without_error() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codegraph-watch-{suffix}"));
+        fs::create_dir_all(&root).unwrap();
+        let index = CodeGraphIndex::open(&root).unwrap();
+        let _watcher = super::IndexWatcher::spawn(root.clone()).unwrap();
+        let _ = fs::remove_dir_all(root);
+        let _ = index;
+    }
+}

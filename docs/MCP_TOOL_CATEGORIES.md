@@ -5,7 +5,7 @@ depends_on: []
 
 # MCP 工具分类标签文档
 
-> 基于当前会话暴露的全部 MCP 工具，按功能域分类并标注风险等级。MCP 协议跨宿主可用，但具体可用工具集因宿主而异（Claude Desktop / Cursor / OpenCode 等均有各自的 MCP 配置），参见各宿主手册。
+> 基于当前会话暴露的全部 MCP 工具，按功能域分类并标注风险等级。MCP 协议跨宿主可用，但具体可用工具集因宿主而异（闭集宿主 **codex / claude-code / antigravity / cursor / opencode** 各有 MCP 或 hook 投影面），参见 [`docs/hosts/`](hosts/) 各手册。
 
 ## MCP Server 来源
 
@@ -15,7 +15,7 @@ depends_on: []
 | `Claude_in_Chrome` | 宿主侧（Chrome Extension） | Chrome 原生自动化 |
 | `Claude_Preview` | 宿主侧（Preview Server） | Dev server 预览与调试 |
 | `router-rs-framework` | 宿主侧（用户级 MCP） | 框架路由 / Goal / Closeout |
-| `paperplain` | 项目 `.mcp.json` | 学术论文检索 |
+| `paperplain` | 项目 `.mcp.json` + cursor / antigravity / opencode 宿主 MCP（`host-integration install` 合并） | 学术论文元数据检索（`npx -y paperplain-mcp`） |
 | `scheduled-tasks` | 宿主侧（用户级 MCP） | 定时任务管理 |
 | `ccd_directory` | 宿主侧（CCD） | 目录访问授权 |
 | `ccd_session` | 宿主侧（CCD） | 会话章节 / 任务分离 |
@@ -110,7 +110,7 @@ browser-mcp 的长时间运行 Worker 生命周期管理。
 
 | 工具名 | 分类 | 简要说明 | 风险等级 |
 |--------|------|----------|----------|
-| `session_launch` | session-mgmt | 启动长时间运行 worker（支持 tmux / resume） | 高 |
+| `session_launch` | session-mgmt | 启动长时间运行 worker（纯 Rust 进程 + resume） | 高 |
 | `session_list` | session-mgmt | 列出所有 worker 及刷新其运行时状态 | 低 |
 | `session_inspect` | session-mgmt | 检查单个 worker 的详细状态 | 低 |
 | `session_terminate` | session-mgmt | 终止指定 worker | 高 |
@@ -238,7 +238,10 @@ CCD 会话辅助、学术检索和定时任务管理。
 
 | 文件 | 内容 | 适用宿主 |
 |------|------|----------|
-| `.mcp.json` | `paperplain`（npx paperplain-mcp）—— 唯一项目级 MCP server | 全宿主 |
-| `.claude/settings.json` | hooks（PreToolUse / PostToolUse / Stop / UserPromptSubmit）+ Bash/WebFetch 权限白名单 + 沙箱策略 | Claude Code |
+| `.mcp.json` | `paperplain`（npx paperplain-mcp）—— 唯一项目级 MCP server | 全宿主（闭集五宿主） |
+| `~/.codex/config.toml` + `.codex/hooks.json` | `[features] hooks = true`；hook 绑定 PreToolUse / UserPromptSubmit / PostToolUse / Stop | **Codex**（`codex`） |
+| `.claude/settings.json` | hooks（PreToolUse / PostToolUse / Stop / UserPromptSubmit）+ Bash/WebFetch 权限白名单 + 沙箱策略 | **Claude Code**（`claude-code`） |
 | `.claude/settings.local.json` | 本地 cargo 权限扩展 | Claude Code |
-| 宿主侧 | `router-rs-framework`、`browser-mcp`、`Claude_in_Chrome`、`Claude_Preview`、`ccd_*`、`scheduled-tasks` 由用户级 MCP 配置注入 | Claude Desktop |
+| `~/.cursor/mcp.json`（user） | 托管 `browser-mcp`、`router-rs-framework`（见 `framework host-integration install --to cursor --scope user`） | **Cursor**（`cursor`） |
+| `.gemini/mcp.json` | `router-rs-framework`（MCP stdio；无 shell hook） | **Antigravity**（`antigravity`） |
+| `.opencode/opencode.json` | `mcpServers.router-rs-framework`（MCP stdio；无 shell hook） | **OpenCode**（`opencode`） |

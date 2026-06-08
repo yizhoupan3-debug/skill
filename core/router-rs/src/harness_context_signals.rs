@@ -6,8 +6,6 @@
 //! (theorem/lemma/…) do not fire; toolchain hits still fire earlier. Narrow overrides:
 //! `formal proof` / `mathematical proof` still fire inside PoC (e.g. rigorous PoC writeups).
 
-#![allow(dead_code)]
-// TODO: integrate — 整体模块级 dead_code 豁免，待新 hook 接口接入后收紧
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;

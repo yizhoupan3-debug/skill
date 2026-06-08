@@ -3,6 +3,7 @@ name = "router-rs"
 version = "0.1.0"
 edition = "2021"
 autotests = false
+build = "build.rs"
 
 [lib]
 name = "router_rs"
@@ -13,7 +14,11 @@ name = "router-rs"
 path = "src/main.rs"
 
 [dependencies]
-antigravity-core = { path = "../../core/antigravity" }
+core-state = { path = "../../core/antigravity" }
+framework-kernel = { path = "../framework-kernel" }
+core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
+core-math = { path = "../core-math" }
+routing-engine = { path = "../routing-engine" }
 libc = "0.2"
 chrono.workspace = true
 clap = { version = "4.5.38", features = ["derive"] }
@@ -29,7 +34,32 @@ tungstenite = "0.24.0"
 fs2 = "0.4"
 which = "8.0.0"
 mimalloc = "0.1"
+codegraph-rs = { path = "../codegraph-rs", optional = true }
 
+[features]
+# Default host features must mirror RUNTIME_REGISTRY.json → host_targets.host_providers.*.cargo_feature
+default = [
+    "host-cursor",
+    "host-claude-code",
+    "host-opencode",
+    "host-antigravity",
+    "host-codex",
+]
+host-cursor = []
+host-claude-code = []
+host-opencode = []
+host-antigravity = []
+host-codex = []
+codegraph = ["dep:codegraph-rs"]
+
+[build-dependencies]
+serde_json = "1.0.140"
 
 [dev-dependencies]
 serial_test = "3"
+ctor = "0.2"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "search_bench"
+harness = false

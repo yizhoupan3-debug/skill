@@ -1,0 +1,24 @@
+# evolution-rs 阈值真源（Roadmap v5 §2.9 EV-3）
+# CLI: evolution-rs audit --config configs/evolution/evolution.toml
+
+[evolution]
+audit_window_days = 30
+min_candidate_frequency = 2
+
+[thresholds]
+jaccard_near_match = 0.25
+healthy_score = 85.0
+stable_score = 60.0
+default_static_score = 85.0
+boundary_collision_min_overlap = 4
+min_correlation_count = 2
+min_usage_for_pruning_hint = 6
+min_entries_for_heal = 11
+min_word_length = 4
+
+[weights]
+dynamic_blend = 0.6
+static_blend = 0.4
+
+[audit]
+top_ngram_candidates = 10

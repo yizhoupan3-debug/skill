@@ -8,7 +8,7 @@ use std::sync::{Arc, OnceLock, RwLock};
 use std::time::SystemTime;
 
 use super::constants::{PARALLEL_RECORD_SCAN_MIN, RECORDS_CACHE_MAX_KEYS};
-use super::skill_record::negative_trigger_tokens;
+use super::skill_record::{negative_trigger_tokens, skill_record_from_raw};
 use super::text::{read_json, value_to_string, value_to_string_list};
 use super::types::{
     InlineSkillRecordPayload, RawSkillRecord, RecordRowIndexes, RecordsCacheEntry, RecordsCacheKey,
@@ -55,7 +55,7 @@ pub(crate) fn load_inline_records(payload: &Value) -> Result<Vec<SkillRecord>, S
 fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
     let skill = serde_json::from_value::<InlineSkillRecordPayload>(row.clone())
         .map_err(|err| format!("parse inline skill payload failed: {err}"))?;
-    Ok(SkillRecord::from_raw(RawSkillRecord {
+    Ok(skill_record_from_raw(RawSkillRecord {
         slug: skill.name,
         skill_path: None,
         layer: skill.routing_layer,
@@ -75,7 +75,7 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
 }
 
 fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes) -> SkillRecord {
-    SkillRecord::from_raw(RawSkillRecord {
+    skill_record_from_raw(RawSkillRecord {
         slug: value_to_string(&row[indexes.slug]),
         skill_path: indexes
             .skill_path

@@ -1,14 +1,14 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
 use crate::background_state::handle_background_state_operation;
 use crate::cli::args::{TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload};
-use crate::cli::runtime_ops::{
+use crate::framework_runtime::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
 };
 use crate::framework_runtime::resolve_repo_root_arg;
+use crate::cli::common::route_task_with_manifest_fallback;
 use crate::route::{
-    build_search_results_payload, load_records, load_records_from_manifest, route_task,
-    search_skills, should_accept_manifest_fallback, should_retry_with_manifest, RouteDecision,
-    SkillRecord,
+    build_search_results_payload, filter_record_indices_for_host, load_records_cached_for_stdio,
+    search_skills_subset,
 };
 use crate::session_supervisor::handle_session_supervisor_operation;
 use chrono::{Local, SecondsFormat};
@@ -420,29 +420,29 @@ fn tool_definitions(repo_root: &Path) -> Vec<Value> {
             "session_launch",
             "Launch Session Worker",
             "Launch one long-running worker session through the Rust session supervisor.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "tmuxSession": {"type": "string"}, "nativeTmux": {"type": "boolean"}, "dryRun": {"type": "boolean"}, "worktreeName": {"type": "string", "description": "git worktree branch name; supervisor creates the worktree before launching"}, "worktreePath": {"type": "string", "description": "explicit worktree directory path (overrides worktreeName)"}}, "required": ["host", "cwd"]}),
-            empty_output.clone(),
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "dryRun": {"type": "boolean"}, "worktreeName": {"type": "string", "description": "git worktree branch name; supervisor creates the worktree before launching"}, "worktreePath": {"type": "string", "description": "explicit worktree directory path (overrides worktreeName)"}}, "required": ["host", "cwd"]}),
+            session_supervisor_worker_output_schema(),
         ),
         tool_definition(
             "session_list",
             "List Session Workers",
             "List current session supervisor workers and refresh their runtime state.",
             json!({"type": "object", "properties": {"statePath": {"type": "string"}}}),
-            empty_output.clone(),
+            session_supervisor_workers_output_schema(),
         ),
         tool_definition(
             "session_inspect",
             "Inspect Session Worker",
             "Inspect one session supervisor worker by worker id.",
             json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}}, "required": ["workerId"]}),
-            empty_output.clone(),
+            session_supervisor_worker_output_schema(),
         ),
         tool_definition(
             "session_terminate",
             "Terminate Session Worker",
             "Terminate one session supervisor worker by worker id.",
             json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}, "dryRun": {"type": "boolean"}}, "required": ["workerId"]}),
-            empty_output.clone(),
+            session_supervisor_worker_output_schema(),
         ),
         tool_definition(
             "session_mark_blocked",
@@ -515,14 +515,14 @@ fn skill_tool_definitions(empty_output: Value) -> Vec<Value> {
             "skill_route",
             "Route Skill Request",
             "Route a user request through this repository's skills/SKILL_ROUTING_RUNTIME.json, with SKILL_MANIFEST.json fallback, and return the selected skill plus the exact SKILL.md path to read.",
-            json!({"type": "object", "properties": {"query": {"type": "string"}, "sessionId": {"type": "string"}, "allowOverlay": {"type": "boolean"}, "firstTurn": {"type": "boolean"}}, "required": ["query"]}),
+            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, antigravity, opencode); legacy aliases accepted at filter boundary."}, "sessionId": {"type": "string"}, "allowOverlay": {"type": "boolean"}, "firstTurn": {"type": "boolean"}}, "required": ["query"]}),
             empty_output.clone(),
         ),
         tool_definition(
             "skill_search",
             "Search Repository Skills",
-            "Search this repository's full skills/SKILL_MANIFEST.json catalog and return the best matching skill records.",
-            json!({"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, "required": ["query"]}),
+            "Search this repository's SKILL_ROUTING_RUNTIME.json catalog (with SKILL_MANIFEST.json fallback) and return the best matching skill records.",
+            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, antigravity, opencode); legacy aliases accepted at filter boundary."}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, "required": ["query"]}),
             empty_output.clone(),
         ),
         tool_definition(
@@ -533,6 +533,44 @@ fn skill_tool_definitions(empty_output: Value) -> Vec<Value> {
             empty_output,
         ),
     ]
+}
+
+fn session_supervisor_worker_fields_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "worker_id": {"type": "string"},
+            "host": {"type": "string"},
+            "status": {"type": "string"},
+            "pid": {"type": ["integer", "null"], "description": "OS process id when the worker is running"},
+            "log_path": {"type": ["string", "null"], "description": "Worker stdout/stderr log file path"},
+        },
+        "additionalProperties": true
+    })
+}
+
+fn session_supervisor_worker_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "schema_version": {"type": "string"},
+            "operation": {"type": "string"},
+            "worker": session_supervisor_worker_fields_schema(),
+        },
+        "additionalProperties": true
+    })
+}
+
+fn session_supervisor_workers_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "schema_version": {"type": "string"},
+            "operation": {"type": "string"},
+            "workers": {"type": "array", "items": session_supervisor_worker_fields_schema()},
+        },
+        "additionalProperties": true
+    })
 }
 
 fn tool_definition(

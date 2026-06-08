@@ -38,11 +38,11 @@ depends_on:
 - `execution_protocol_contract`
 - `execution_controller_contract` (debug contract view only)
 - `delegation_contract`
-- `supervisor_state_contract`（legacy optional；Codex tmux supervisor 专用，非 My 手动画板续跑真源）
+- `supervisor_state_contract`（legacy optional；Codex `session_supervisor` 专用，非 My 手动画板续跑真源）
 
 ## Hard Rules
 
-1. `core_capabilities` 必须覆盖 `runtime / artifact / orchestration`，且 framework core 只允许 closed-set host projection：`codex-cli` 与 `cursor`。
+1. `core_capabilities` 必须覆盖 `runtime / artifact / orchestration`，且 framework core 只允许 closed-set host projection：`codex` 与 `cursor`。
 2. `router-rs` 是 profile、shared contract、codex profile、workspace bootstrap 和 session normalization 的编译真源；不要新增第二套 helper、emitter 或默认值。
 3. `codex_profile` 只能投影 `framework_profile`：`transport`、`context_files`、`mcp_config_paths`、`settings_paths` 等宿主私有字段只能留在 host projection payload 中。
 4. `workspace_bootstrap.resources` 是唯一默认 skill resource 来源；不要平行维护第二份投影表。

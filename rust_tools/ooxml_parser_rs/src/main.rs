@@ -1,17 +1,28 @@
+mod batch;
+mod schema;
+
 use anyhow::{anyhow, bail, Context, Result};
+use calamine::{open_workbook, Data, Reader as CalamineReader, Xlsx};
 use clap::{Parser, Subcommand};
 use quick_xml::events::{BytesStart, Event};
-use quick_xml::Reader;
+use quick_xml::Reader as XmlReader;
 use serde::Serialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{self, canonicalize, File};
+use std::fmt::Write as _;
 use std::io::{BufWriter, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tempfile::TempDir;
 use zip::result::ZipError;
 use zip::ZipArchive;
+
+pub(crate) fn file_sha256(path: &Path) -> Result<String> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    Ok(hex::encode(Sha256::digest(&bytes)))
+}
 
 const TWIPS_PER_INCH: f64 = 1440.0;
 const POINTS_PER_INCH: f64 = 72.0;
@@ -37,6 +48,30 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// Read DOCX body content as linear text or JSON
+    ReadDocx {
+        input: String,
+        #[arg(long, default_value_t = true)]
+        text: bool,
+        #[arg(long, conflicts_with = "text")]
+        json: bool,
+        #[arg(long, requires = "json")]
+        compact: bool,
+    },
+    /// Read XLSX sheet cell values as markdown tables or JSON
+    ReadXlsx {
+        input: String,
+        #[arg(long, default_value_t = 10000)]
+        max_rows: usize,
+        #[arg(long = "sheets")]
+        sheets: Vec<String>,
+        #[arg(long, default_value_t = true)]
+        text: bool,
+        #[arg(long, conflicts_with = "text")]
+        json: bool,
+        #[arg(long, requires = "json")]
+        compact: bool,
+    },
     /// Render an XLSX workbook to PDF and optional PNG pages
     RenderXlsx(RenderXlsxArgs),
     /// Render a DOCX-like document to PNG pages
@@ -48,6 +83,25 @@ enum Commands {
         output: Option<String>,
         #[arg(long)]
         extract_images: bool,
+    },
+    /// Batch-read multiple .docx / .xlsx files into a catalog directory
+    Batch {
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+        #[arg(long)]
+        stdin_paths: bool,
+        #[arg(long)]
+        out_dir: PathBuf,
+        #[arg(long, default_value = "auto")]
+        jobs: String,
+        #[arg(long)]
+        resume: bool,
+        #[arg(long, default_value = "false")]
+        fail_fast: bool,
+        #[arg(long, default_value_t = 8000)]
+        max_chars: usize,
+        #[arg(long, default_value_t = 10000)]
+        max_rows: usize,
     },
 }
 
@@ -269,7 +323,7 @@ fn read_zip_entry_optional<R: Read + Seek>(
 }
 
 fn parse_relationships(xml: &str) -> Result<Vec<Relationship>> {
-    let mut reader = Reader::from_str(xml);
+    let mut reader = XmlReader::from_str(xml);
     reader.trim_text(true);
     let mut buf = Vec::new();
     let mut relationships = Vec::new();
@@ -306,7 +360,7 @@ fn parse_workbook_metadata(workbook_xml: &str) -> Result<WorkbookMetadata> {
         value: String,
     }
 
-    let mut reader = Reader::from_str(workbook_xml);
+    let mut reader = XmlReader::from_str(workbook_xml);
     reader.trim_text(false);
     let mut buf = Vec::new();
     let mut sheets = Vec::new();
@@ -389,7 +443,7 @@ fn parse_table_summary<R: Read + Seek>(
     part_path: &str,
 ) -> Result<TableSummary> {
     let xml = read_zip_entry(archive, part_path)?;
-    let mut reader = Reader::from_str(&xml);
+    let mut reader = XmlReader::from_str(&xml);
     reader.trim_text(true);
     let mut buf = Vec::new();
 
@@ -564,7 +618,7 @@ fn parse_sheet_data<R: Read + Seek>(
         .map(|relationship| (relationship.id.clone(), relationship.target.clone()))
         .collect();
 
-    let mut reader = Reader::from_str(&sheet_xml);
+    let mut reader = XmlReader::from_str(&sheet_xml);
     reader.trim_text(true);
     let mut buf = Vec::new();
     let mut dimension = None;
@@ -878,7 +932,7 @@ fn inspect_docx_summary(path: &Path) -> Result<DocxSummary> {
         .transpose()?
         .unwrap_or_default();
 
-    let mut reader = Reader::from_str(&document_xml);
+    let mut reader = XmlReader::from_str(&document_xml);
     reader.trim_text(false);
     let mut buf = Vec::new();
     let mut paragraph_count = 0usize;
@@ -1048,7 +1102,7 @@ fn count_docx_comment_items(xml: &str) -> Result<usize> {
 }
 
 fn count_xml_elements(xml: &str, element_name: &[u8]) -> Result<usize> {
-    let mut reader = Reader::from_str(xml);
+    let mut reader = XmlReader::from_str(xml);
     reader.trim_text(true);
     let mut buf = Vec::new();
     let mut count = 0usize;
@@ -1104,6 +1158,441 @@ fn inspect_docx(input: &str, as_json: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&summary)?);
     } else {
         print_docx_text(&summary);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub(crate) enum DocxBlock {
+    Paragraph {
+        text: String,
+        heading_level: Option<u8>,
+    },
+    Table {
+        rows: Vec<Vec<String>>,
+    },
+    Image,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct DocxNote {
+    id: String,
+    text: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct DocxReadOutput {
+    path: String,
+    blocks: Vec<DocxBlock>,
+    footnotes: Vec<DocxNote>,
+    endnotes: Vec<DocxNote>,
+    comments: Vec<DocxNote>,
+}
+
+fn parse_docx_notes(xml: &str, element_name: &[u8]) -> Result<Vec<DocxNote>> {
+    let mut reader = XmlReader::from_str(xml);
+    reader.trim_text(false);
+    let mut buf = Vec::new();
+    let mut notes = Vec::new();
+    let mut current: Option<(String, String)> = None;
+    let mut in_text = false;
+
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(event) => {
+                if local_name(event.name().as_ref()) == element_name {
+                    if let Some(id) = attr_value(&event, b"id") {
+                        current = Some((id, String::new()));
+                    }
+                } else if local_name(event.name().as_ref()) == b"t" && current.is_some() {
+                    in_text = true;
+                }
+            }
+            Event::Empty(event) if local_name(event.name().as_ref()) == element_name => {
+                if let Some(id) = attr_value(&event, b"id") {
+                    notes.push(DocxNote {
+                        id,
+                        text: String::new(),
+                    });
+                }
+            }
+            Event::Text(text) if in_text => {
+                if let Some((_, ref mut text_buf)) = current {
+                    text_buf.push_str(&text.unescape()?);
+                }
+            }
+            Event::CData(text) if in_text => {
+                if let Some((_, ref mut text_buf)) = current {
+                    text_buf.push_str(&String::from_utf8_lossy(text.as_ref()));
+                }
+            }
+            Event::End(event) => match local_name(event.name().as_ref()) {
+                b"t" => in_text = false,
+                name if name == element_name => {
+                    if let Some((id, text)) = current.take() {
+                        notes.push(DocxNote {
+                            id,
+                            text: text.trim().to_string(),
+                        });
+                    }
+                }
+                _ => {}
+            },
+            Event::Eof => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    notes.retain(|note| note.id != "-1" && !note.text.is_empty());
+    Ok(notes)
+}
+
+pub(crate) fn read_docx_content(path: &Path) -> Result<DocxReadOutput> {
+    let file = File::open(path)?;
+    let mut archive = ZipArchive::new(file).context("failed to read docx zip archive")?;
+    let document_xml = read_zip_entry(&mut archive, "word/document.xml")?;
+
+    let mut reader = XmlReader::from_str(&document_xml);
+    reader.trim_text(false);
+    let mut buf = Vec::new();
+    let mut blocks = Vec::new();
+
+    let mut in_paragraph = false;
+    let mut in_text = false;
+    let mut in_table = false;
+    let mut in_row = false;
+    let mut in_cell = false;
+    let mut current_paragraph_style: Option<String> = None;
+    let mut current_paragraph_text = String::new();
+    let mut current_table_rows: Vec<Vec<String>> = Vec::new();
+    let mut current_row: Vec<String> = Vec::new();
+    let mut current_cell_text = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(event) => match local_name(event.name().as_ref()) {
+                b"p" if !in_table => {
+                    in_paragraph = true;
+                    current_paragraph_style = None;
+                    current_paragraph_text.clear();
+                }
+                b"tbl" => {
+                    in_table = true;
+                    current_table_rows.clear();
+                }
+                b"tr" if in_table => {
+                    in_row = true;
+                    current_row.clear();
+                }
+                b"tc" if in_table => {
+                    in_cell = true;
+                    current_cell_text.clear();
+                }
+                b"pStyle" if in_paragraph && !in_cell => {
+                    current_paragraph_style = attr_value(&event, b"val");
+                }
+                b"t" if (in_paragraph && !in_table) || in_cell => in_text = true,
+                b"drawing" | b"pict" if in_paragraph && !in_table => {
+                    blocks.push(DocxBlock::Image);
+                }
+                _ => {}
+            },
+            Event::Empty(event) => match local_name(event.name().as_ref()) {
+                b"pStyle" if in_paragraph && !in_cell => {
+                    current_paragraph_style = attr_value(&event, b"val");
+                }
+                b"drawing" | b"pict" if in_paragraph && !in_table => {
+                    blocks.push(DocxBlock::Image);
+                }
+                _ => {}
+            },
+            Event::Text(text) if in_text => {
+                let chunk = text.unescape()?;
+                if in_cell {
+                    current_cell_text.push_str(&chunk);
+                } else {
+                    current_paragraph_text.push_str(&chunk);
+                }
+            }
+            Event::CData(text) if in_text => {
+                let chunk = String::from_utf8_lossy(text.as_ref());
+                if in_cell {
+                    current_cell_text.push_str(&chunk);
+                } else {
+                    current_paragraph_text.push_str(&chunk);
+                }
+            }
+            Event::End(event) => match local_name(event.name().as_ref()) {
+                b"t" => in_text = false,
+                b"p" if in_paragraph && !in_table => {
+                    let text = current_paragraph_text.trim().to_string();
+                    if !text.is_empty() {
+                        let heading_level = current_paragraph_style
+                            .as_deref()
+                            .and_then(parse_docx_heading_level);
+                        blocks.push(DocxBlock::Paragraph {
+                            text,
+                            heading_level,
+                        });
+                    }
+                    in_paragraph = false;
+                    in_text = false;
+                    current_paragraph_style = None;
+                    current_paragraph_text.clear();
+                }
+                b"tc" if in_cell => {
+                    current_row.push(current_cell_text.trim().to_string());
+                    current_cell_text.clear();
+                    in_cell = false;
+                }
+                b"tr" if in_row => {
+                    if !current_row.is_empty() {
+                        current_table_rows.push(std::mem::take(&mut current_row));
+                    }
+                    in_row = false;
+                }
+                b"tbl" if in_table => {
+                    if !current_table_rows.is_empty() {
+                        blocks.push(DocxBlock::Table {
+                            rows: std::mem::take(&mut current_table_rows),
+                        });
+                    }
+                    in_table = false;
+                }
+                _ => {}
+            },
+            Event::Eof => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    let footnotes = read_zip_entry_optional(&mut archive, "word/footnotes.xml")?
+        .as_deref()
+        .map(|xml| parse_docx_notes(xml, b"footnote"))
+        .transpose()?
+        .unwrap_or_default();
+    let endnotes = read_zip_entry_optional(&mut archive, "word/endnotes.xml")?
+        .as_deref()
+        .map(|xml| parse_docx_notes(xml, b"endnote"))
+        .transpose()?
+        .unwrap_or_default();
+    let comments = read_zip_entry_optional(&mut archive, "word/comments.xml")?
+        .as_deref()
+        .map(|xml| parse_docx_notes(xml, b"comment"))
+        .transpose()?
+        .unwrap_or_default();
+
+    Ok(DocxReadOutput {
+        path: canonicalize(path)?.to_string_lossy().into_owned(),
+        blocks,
+        footnotes,
+        endnotes,
+        comments,
+    })
+}
+
+fn escape_markdown_cell(value: &str) -> String {
+    value.replace('|', "\\|").replace('\n', " ")
+}
+
+fn format_markdown_table(rows: &[Vec<String>]) -> String {
+    if rows.is_empty() {
+        return String::new();
+    }
+    let col_count = rows.iter().map(|row| row.len()).max().unwrap_or(0);
+    if col_count == 0 {
+        return String::new();
+    }
+    let mut lines = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
+        let mut cells = row
+            .iter()
+            .map(|cell| escape_markdown_cell(cell))
+            .collect::<Vec<_>>();
+        cells.resize(col_count, String::new());
+        lines.push(format!("| {} |", cells.join(" | ")));
+        if index == 0 {
+            lines.push(format!("|{}|", " --- |".repeat(col_count)));
+        }
+    }
+    lines.join("\n")
+}
+
+pub(crate) fn docx_read_text_string(output: &DocxReadOutput) -> String {
+    let mut out = String::new();
+    for block in &output.blocks {
+        match block {
+            DocxBlock::Paragraph {
+                text,
+                heading_level,
+            } => {
+                if let Some(level) = heading_level {
+                    let hashes = "#".repeat(*level as usize);
+                    writeln!(out, "{hashes} {text}").ok();
+                } else {
+                    writeln!(out, "{text}").ok();
+                }
+                writeln!(out).ok();
+            }
+            DocxBlock::Table { rows } => {
+                writeln!(out, "{}", format_markdown_table(rows)).ok();
+                writeln!(out).ok();
+            }
+            DocxBlock::Image => {
+                writeln!(out, "[image]").ok();
+                writeln!(out).ok();
+            }
+        }
+    }
+    if !output.footnotes.is_empty() {
+        writeln!(out, "## Footnotes").ok();
+        for note in &output.footnotes {
+            if !note.text.is_empty() {
+                writeln!(out, "[^{}]: {}", note.id, note.text).ok();
+            }
+        }
+        writeln!(out).ok();
+    }
+    if !output.endnotes.is_empty() {
+        writeln!(out, "## Endnotes").ok();
+        for note in &output.endnotes {
+            if !note.text.is_empty() {
+                writeln!(out, "[^{}]: {}", note.id, note.text).ok();
+            }
+        }
+        writeln!(out).ok();
+    }
+    if !output.comments.is_empty() {
+        writeln!(out, "## Comments").ok();
+        for note in &output.comments {
+            if !note.text.is_empty() {
+                writeln!(out, "- [{}] {}", note.id, note.text).ok();
+            }
+        }
+    }
+    out
+}
+
+fn print_docx_read_text(output: &DocxReadOutput) {
+    print!("{}", docx_read_text_string(output));
+}
+
+fn read_docx(input: &str, as_json: bool, compact: bool) -> Result<()> {
+    let output = read_docx_content(Path::new(input))?;
+    if as_json {
+        let payload = if compact {
+            serde_json::to_string(&output)?
+        } else {
+            serde_json::to_string_pretty(&output)?
+        };
+        println!("{payload}");
+    } else {
+        print_docx_read_text(&output);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct XlsxSheetRead {
+    name: String,
+    rows: Vec<Vec<String>>,
+    truncated: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct XlsxReadOutput {
+    path: String,
+    sheets: Vec<XlsxSheetRead>,
+}
+
+fn cell_to_string(cell: &Data) -> String {
+    match cell {
+        Data::Empty => String::new(),
+        Data::String(value) => value.clone(),
+        Data::Float(value) => value.to_string(),
+        Data::Int(value) => value.to_string(),
+        Data::Bool(value) => value.to_string(),
+        Data::DateTime(value) => value.to_string(),
+        Data::DateTimeIso(value) => value.clone(),
+        Data::DurationIso(value) => value.clone(),
+        Data::Error(value) => format!("#{value:?}"),
+    }
+}
+
+pub(crate) fn read_xlsx_content(
+    path: &Path,
+    max_rows: usize,
+    sheet_filter: &[String],
+) -> Result<XlsxReadOutput> {
+    let mut workbook: Xlsx<_> = open_workbook(path).context("failed to open xlsx workbook")?;
+    let sheet_names = workbook.sheet_names().to_vec();
+    let mut sheets = Vec::new();
+
+    for sheet_name in sheet_names {
+        if !sheet_filter.is_empty() && !sheet_filter.iter().any(|name| name == &sheet_name) {
+            continue;
+        }
+        let range = workbook
+            .worksheet_range(&sheet_name)
+            .with_context(|| format!("failed to read sheet {sheet_name}"))?;
+        let mut rows = Vec::new();
+        let mut truncated = false;
+        for (index, row) in range.rows().enumerate() {
+            if index >= max_rows {
+                truncated = true;
+                break;
+            }
+            rows.push(row.iter().map(cell_to_string).collect());
+        }
+        sheets.push(XlsxSheetRead {
+            name: sheet_name,
+            rows,
+            truncated,
+        });
+    }
+
+    Ok(XlsxReadOutput {
+        path: canonicalize(path)?.to_string_lossy().into_owned(),
+        sheets,
+    })
+}
+
+pub(crate) fn xlsx_read_text_string(output: &XlsxReadOutput) -> String {
+    let mut out = String::new();
+    for sheet in &output.sheets {
+        writeln!(out, "## {}", sheet.name).ok();
+        if sheet.rows.is_empty() {
+            writeln!(out).ok();
+            continue;
+        }
+        writeln!(out, "{}", format_markdown_table(&sheet.rows)).ok();
+        if sheet.truncated {
+            writeln!(out).ok();
+            writeln!(out, "(truncated)").ok();
+        }
+        writeln!(out).ok();
+    }
+    out
+}
+
+fn print_xlsx_read_text(output: &XlsxReadOutput) {
+    print!("{}", xlsx_read_text_string(output));
+}
+
+fn read_xlsx(input: &str, max_rows: usize, sheets: &[String], as_json: bool, compact: bool) -> Result<()> {
+    let output = read_xlsx_content(Path::new(input), max_rows, sheets)?;
+    if as_json {
+        let payload = if compact {
+            serde_json::to_string(&output)?
+        } else {
+            serde_json::to_string_pretty(&output)?
+        };
+        println!("{payload}");
+    } else {
+        print_xlsx_read_text(&output);
     }
     Ok(())
 }
@@ -1306,7 +1795,7 @@ fn docx_page_size(input: &Path) -> Result<(f64, f64)> {
     let file = File::open(input).with_context(|| format!("failed to open {}", input.display()))?;
     let mut archive = ZipArchive::new(file).context("failed to read docx zip archive")?;
     let xml = read_zip_entry(&mut archive, "word/document.xml")?;
-    let mut reader = Reader::from_str(&xml);
+    let mut reader = XmlReader::from_str(&xml);
     reader.trim_text(true);
     let mut buf = Vec::new();
     let mut in_section = false;
@@ -1484,6 +1973,20 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Xlsx { input, json } => inspect_xlsx(&input, json)?,
         Commands::Docx { input, json } => inspect_docx(&input, json)?,
+        Commands::ReadDocx {
+            input,
+            text: _,
+            json,
+            compact,
+        } => read_docx(&input, json, compact)?,
+        Commands::ReadXlsx {
+            input,
+            max_rows,
+            sheets,
+            text: _,
+            json,
+            compact,
+        } => read_xlsx(&input, max_rows, &sheets, json, compact)?,
         Commands::RenderXlsx(args) => render_xlsx(args)?,
         Commands::RenderDocx(args) => render_docx(args)?,
         Commands::Pptx {
@@ -1491,6 +1994,29 @@ fn main() -> Result<()> {
             output,
             extract_images: _,
         } => extract_pptx(&input, output)?,
+        Commands::Batch {
+            manifest,
+            stdin_paths,
+            out_dir,
+            jobs,
+            resume,
+            fail_fast,
+            max_chars,
+            max_rows,
+        } => {
+            let paths = batch::load_paths(manifest.as_deref(), stdin_paths)?;
+            let jobs = batch::resolve_jobs(&jobs, &paths);
+            let opts = batch::BatchOptions {
+                out_dir,
+                jobs,
+                resume,
+                fail_fast,
+                max_chars,
+                max_rows,
+            };
+            let summary = batch::run_batch(paths, &opts)?;
+            batch::print_catalog_summary(&summary)?;
+        }
     }
 
     Ok(())
@@ -1789,6 +2315,42 @@ mod tests {
         let page_size = summary.page_size.unwrap();
         assert_eq!(page_size.width_inches, 8.5);
         assert_eq!(page_size.height_inches, 11.0);
+    }
+
+    #[test]
+    fn read_docx_emits_linear_body_content() {
+        let path = temp_docx_path("ooxml_parser_rs_read_docx_fixture");
+        build_test_document(&path);
+
+        let output = read_docx_content(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+
+        assert!(output
+            .blocks
+            .iter()
+            .any(|block| matches!(block, DocxBlock::Paragraph { text, heading_level: Some(1) } if text == "Executive Summary")));
+        assert!(output.blocks.iter().any(
+            |block| matches!(block, DocxBlock::Paragraph { text, heading_level: None } if text == "Body text")
+        ));
+        assert!(output
+            .blocks
+            .iter()
+            .any(|block| matches!(block, DocxBlock::Table { rows } if rows[0][0] == "Cell")));
+        assert!(output.blocks.iter().any(|block| matches!(block, DocxBlock::Image)));
+    }
+
+    #[test]
+    fn read_xlsx_emits_sheet_rows() {
+        let path = temp_xlsx_path("ooxml_parser_rs_read_xlsx_fixture");
+        build_test_workbook(&path);
+
+        let output = read_xlsx_content(&path, 10_000, &["Visible".to_string()]).unwrap();
+        std::fs::remove_file(&path).unwrap();
+
+        assert_eq!(output.sheets.len(), 1);
+        assert_eq!(output.sheets[0].name, "Visible");
+        assert!(!output.sheets[0].rows.is_empty());
+        assert_eq!(output.sheets[0].rows[0][0], "Name");
     }
 
     #[test]

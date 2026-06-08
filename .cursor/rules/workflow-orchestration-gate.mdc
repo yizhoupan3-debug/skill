@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Workflow Orchestration Gate（Cursor）
 
-跨宿主基线见 [AGENTS.md](../../AGENTS.md)、[spec.md](../../docs/spec.md)；编排细则见 [agent-swarm-orchestration/SKILL.md](../../skills/agent-swarm-orchestration/SKILL.md)、[orchestration-mode.md](../../skills/agent-swarm-orchestration/references/orchestration-mode.md)。
+跨宿主基线见 [AGENTS.md](../../AGENTS.md) + [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（双文件注入）、[harness_architecture.md](../../docs/harness_architecture/index.md)、[harness_policy_map.md](../../docs/harness_policy_map.md)、[runtime_unified_spec.md](../../docs/runtime_unified_spec.md)；编排细则见 [agent-swarm-orchestration/SKILL.md](../../skills/agent-swarm-orchestration/SKILL.md)、[workflow-supervisor-protocol.md](../../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md)。
 
 ## 何时生效（当前用户消息）
 
@@ -17,7 +17,7 @@ alwaysApply: true
 2. 首行输出机读：`orchestration: { mode, trigger, reason }`。
 3. **Cursor** 上 `mode` 必须为 **`workflow_supervisor`**（无 `import 'workflow'` 运行时）；按 [workflow-supervisor-protocol.md](../../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md) 执行，编排真源为 `.claude/workflows/*.js` 的 `meta.phases`。
 4. 主线程**仅调度**；每 phase 写 `artifacts/current/<task_id>/lane-notes/phase-<slug>.json`；禁止在聊天粘贴子 agent 全文。
-5. 显式入口：**`/workflow`**（框架别名，首选）或 `/team`；二者均须 **Read** `skills/agent-swarm-orchestration/SKILL.md`（或先读 `skills/workflow/SKILL.md` 再跳转）。
+5. 显式入口：**`/workflow`**（编排意图入口；NL 路由至 `agent-swarm-orchestration`）。**Read** `skills/agent-swarm-orchestration/SKILL.md`（Orchestration mode / Workflow triggers / Main-thread contract）。`/team` 已退役（fail-closed），勿作入口。
 
 ## 非 workflow 轮次
 

@@ -284,7 +284,7 @@ pub fn rust_office_validate_value(file: &str) -> Result<Value> {
     ];
     let mut errors = Vec::new();
     for path in required {
-        if !bundle.files.contains_key(path) {
+        if !bundle.contains(path) {
             errors.push(format!("missing {path}"));
         }
     }

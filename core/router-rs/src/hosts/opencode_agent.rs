@@ -6,7 +6,7 @@
 //! 非 my-light 时 closeout_gate / goal_state_manage 在 MCP 工具层阻拦。
 
 use crate::framework_runtime::resolve_repo_root_arg;
-use crate::claude_desktop_hooks::run_mcp_stdio;
+use crate::mcp_stdio_harness::run_mcp_stdio;
 use std::io;
 use std::path::Path;
 

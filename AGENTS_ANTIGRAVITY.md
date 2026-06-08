@@ -1,49 +1,11 @@
-# Antigravity 宿主专用策略
+# Antigravity Agent Policy
 
-跨宿主协议见 [`AGENTS.md`](AGENTS.md)。本文仅 Antigravity **双宿主面** 差异。
+跨宿主协议见 [`AGENTS.md`](AGENTS.md)。**双文件注入**：须与 `AGENTS.md` 同时生效，勿单独使用本文件。本文仅 **Antigravity**（`antigravity`）transport delta。产品面为 Desktop agent hub；本仓库经 `.gemini/` MCP 投影。手册 [`docs/hosts/antigravity.md`](docs/hosts/antigravity.md) · [`host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1。
 
-## 双宿主（必读）
+## Transport 要点
 
-| 宿主 id | 面 | 手册 | 安装 |
-|---------|-----|------|------|
-| **`antigravity-cli`** | 终端 JSON **hooks**（`.antigravitycli/`） | [`docs/hosts/antigravity-cli.md`](docs/hosts/antigravity-cli.md) | `install --to antigravity-cli` |
-| **`antigravity-app`** | Desktop / **MCP**（`.gemini/`） | [`docs/hosts/antigravity-app.md`](docs/hosts/antigravity-app.md) | `install --to antigravity-app` |
-| `antigravity`（别名） | 等同 **app** | 同上 | deprecated，见 [`MIGRATION.md`](MIGRATION.md) |
-
-## Language
-
-- 跨宿主语言规范见 [`AGENTS.md`](AGENTS.md) § Language；Antigravity 宿主强制继承，不得豁免。
-
-
-## Worktree 隔离
-
-- 跨宿主 worktree 隔离硬约束见 [`AGENTS.md`](AGENTS.md) § Git；本宿主强制继承，未经用户当轮显式批准不得在 worktree 中运行或修改。
-
-## 宿主集成与诊断
-
-```bash
-# CLI hooks
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
-  framework host-integration install --to antigravity-cli --repo-root "$PWD"
-
-# App MCP
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
-  framework host-integration install --to antigravity-app --repo-root "$PWD"
-
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration status
-```
-
-## 并行子代理与 review
-
-- **`my-light`**：两宿主均关闭 hook 硬 `REVIEW_GATE`（CLI 仍可有 Codex 式门控 env）。
-- **CLI**：大规模任务优先 `invoke_subagent`；review 证据 PostTool+Stop（见 `code-review-deep` Antigravity CLI 段）。注册 7 个 lifecycle 事件：SessionStart、PreToolUse、UserPromptSubmit、PostToolUse、Stop、SubagentStart、SubagentStop。
-- **App**：无 shell hooks；review 靠 `review-lanes/*.md` + MCP Hard Block（非 my-light）。
-
-## 连续性
-
-- 真源：`artifacts/current/<task_id>/`；`framework_goal_drive` / `framework_rfv_loop` stdio。
-- CLI 与 App **共用** L2 工件；传输不同。
-
-## Knowledge Hygiene
-
-- 索引：[`docs/hosts/antigravity.md`](docs/hosts/antigravity.md)；跨宿主正文 [`AGENTS.md`](AGENTS.md)。
+- **安装**：`framework host-integration install --to antigravity --repo-root "$PWD"`（canonical id `antigravity`；`antigravity-app` deprecated）。
+- **MCP**：`router-rs-framework` via `.gemini/mcp.json`；**无 shell hook**。
+- **Review**：清门 **Claude canonical**；`review-lanes/*.md` + skill spawn-first；Stop review **advisory-only**（MCP `ADVISORY`）。
+- **Closeout**：非 my-light 且 closeout 未满足时 MCP `goal_state_manage complete` / `closeout_gate` 可 hard-block（与 review 分层）。
+- **连续性**：`framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/`。

@@ -370,6 +370,7 @@ fn apply_optional_goal_fields_from_payload(obj: &mut Map<String, Value>, payload
     {
         obj.insert("status".to_string(), json!(st));
     }
+    crate::goal_prediction::merge_prediction_from_payload(obj, payload);
 }
 
 pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
@@ -423,10 +424,12 @@ pub fn select_goal_state_from_pointer_ids(
         if goal_state_requests_continuation(&goal) {
             return Ok(Some((goal, tid)));
         }
-        if let Some((ref fgoal, ref ftid)) = focus_pair {
-            if goal_state_requests_continuation(fgoal) {
-                return Ok(Some((fgoal.clone(), ftid.clone())));
+        if let Some((fgoal, ftid)) = focus_pair {
+            if goal_state_requests_continuation(&fgoal) {
+                return Ok(Some((fgoal, ftid)));
             }
+            // Active readable but not driving: prefer focus GOAL when present (completed active + running focus).
+            return Ok(Some((fgoal, ftid)));
         }
         return Ok(Some((goal, tid)));
     }
@@ -896,6 +899,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             arr.push(json!({"at": now_iso(), "note": note}));
             if let Some(o) = state.as_object_mut() {
                 o.insert("updated_at".to_string(), json!(now_iso()));
+                crate::goal_prediction::merge_prediction_from_payload(o, &payload);
             }
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction {
@@ -1345,6 +1349,7 @@ mod tests {
         framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
+            "task_id": "my-task",
         }))
         .expect("complete");
         assert!(!repo.join("artifacts/current/active_task.json").is_file());
@@ -1450,6 +1455,7 @@ mod tests {
         let out = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "clear",
+            "task_id": "cl-task",
         }))
         .expect("clear");
         assert_eq!(out["ok"], json!(true));
@@ -1487,6 +1493,7 @@ mod tests {
         framework_goal_drive(json!({
             "repo_root": rr.clone(),
             "operation": "pause",
+            "task_id": "rs-task",
         }))
         .expect("pause");
         let paused = read_goal_state(&repo, None).expect("read").expect("some");
@@ -1495,6 +1502,7 @@ mod tests {
         framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "resume",
+            "task_id": "rs-task",
         }))
         .expect("resume");
         let running = read_goal_state(&repo, None).expect("read2").expect("some2");
@@ -1537,11 +1545,13 @@ mod tests {
         framework_goal_drive(json!({
             "repo_root": rr.clone(),
             "operation": "pause",
+            "task_id": "rs-off",
         }))
         .expect("pause");
         framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "resume",
+            "task_id": "rs-off",
             "drive_until_done": false,
         }))
         .expect("resume");
@@ -1606,6 +1616,7 @@ mod tests {
         let err = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
+            "task_id": "noev",
         }))
         .expect_err("complete should require evidence");
         assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
@@ -1645,11 +1656,13 @@ mod tests {
         framework_goal_drive(json!({
             "repo_root": rr.clone(),
             "operation": "pause",
+            "task_id": "paused",
         }))
         .expect("pause");
         let err = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
+            "task_id": "paused",
         }))
         .expect_err("paused drive goal still requires evidence");
         assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
@@ -1683,6 +1696,7 @@ mod tests {
         let err = framework_goal_drive(json!({
             "repo_root": repo.display().to_string(),
             "operation": "complete",
+            "task_id": "legacy",
         }))
         .expect_err("legacy validation contract requires evidence");
         assert!(err.contains("EVIDENCE_INDEX"), "err={err}");
@@ -1720,6 +1734,7 @@ mod tests {
         framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
+            "task_id": "nogate",
         }))
         .expect("complete without evidence");
         let st = read_goal_state(&repo, Some("nogate"))
@@ -2015,6 +2030,7 @@ mod tests {
         let err = framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
+            "task_id": "ggate",
         }))
         .expect_err("gate should reject");
         assert!(
@@ -2069,12 +2085,143 @@ mod tests {
         framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
+            "task_id": "gok",
         }))
         .expect("complete ok");
         let st = read_goal_state(&repo, Some("gok"))
             .expect("read")
             .expect("state");
         assert_eq!(st["status"], json!("completed"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn task_pointers_consolidated_json_round_trip() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("core-state-pointers-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+
+        write_active_task_pointer(&repo, "ptr-task").expect("active");
+        sync_task_pointers_after_goal_drive(
+            &repo,
+            "ptr-task",
+            "label",
+            &json!({"set_focus": true}),
+        )
+        .expect("sync");
+
+        let (active, focus) = read_task_pointer_pair(&repo);
+        assert_eq!(active.as_deref(), Some("ptr-task"));
+        assert_eq!(focus.as_deref(), Some("ptr-task"));
+        assert_eq!(read_primary_task_id(&repo).as_deref(), Some("ptr-task"));
+
+        neutralize_task_pointers_for_task(&repo, "ptr-task").expect("neutralize");
+        let (active, focus) = read_task_pointer_pair(&repo);
+        assert!(active.is_none());
+        assert!(focus.is_none());
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn sync_task_pointers_respects_set_focus_false() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("core-state-focus-skip-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+
+        write_active_task_pointer(&repo, "only-active").expect("active");
+        sync_task_pointers_after_goal_drive(
+            &repo,
+            "only-active",
+            "ignored",
+            &json!({"set_focus": false}),
+        )
+        .expect("sync without focus");
+        assert_eq!(read_active_task_id(&repo).as_deref(), Some("only-active"));
+        assert!(read_focus_task_id(&repo).is_none());
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn read_rfv_loop_state_honors_override_and_active_pointer() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("core-state-rfv-read-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/rfv-task")).expect("mkdir");
+
+        let path = rfv_loop_state_path(&repo, "rfv-task").expect("path");
+        let state = json!({
+            "schema_version": "router-rs-rfv-loop-v1",
+            "loop_status": "active",
+            "goal": "g",
+        });
+        write_atomic_json(&path, &state).expect("write rfv");
+
+        let read = read_rfv_loop_state(&repo, Some("rfv-task"))
+            .expect("read")
+            .expect("some");
+        assert_eq!(read["loop_status"], json!("active"));
+
+        write_active_task_pointer(&repo, "rfv-task").expect("pointer");
+        let via_active = read_rfv_loop_state(&repo, None)
+            .expect("read active")
+            .expect("some");
+        assert_eq!(via_active["goal"], json!("g"));
+
+        assert!(read_rfv_loop_state(&repo, Some("missing-task"))
+            .expect("read missing")
+            .is_none());
+
+        let err = read_rfv_loop_state(&repo, Some("   "))
+            .expect_err("empty override");
+        assert!(err.contains("empty"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn deactivate_goal_for_conflict_with_rfv_marks_superseded() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("core-state-goal-rfv-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/g-rfv")).expect("mkdir");
+        let goal_path = repo.join("artifacts/current/g-rfv/GOAL_STATE.json");
+        write_atomic_json(
+            &goal_path,
+            &json!({
+                "schema_version": GOAL_STATE_SCHEMA_VERSION,
+                "status": "running",
+                "goal": "ship",
+            }),
+        )
+        .expect("goal");
+
+        let changed = deactivate_goal_for_conflict_with_rfv(&repo, "g-rfv").expect("deactivate");
+        assert!(changed);
+        let st = read_goal_state(&repo, Some("g-rfv"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("superseded"));
+        assert_eq!(
+            st["metadata"]["superseded_by"],
+            json!("rfv_loop")
+        );
+
         let _ = fs::remove_dir_all(&repo);
     }
 }

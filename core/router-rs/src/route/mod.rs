@@ -5,7 +5,10 @@ mod aliases;
 mod constants;
 #[cfg(test)]
 mod eval;
-mod fuzzy;
+pub(crate) use routing_engine::fuzzy;
+pub(crate) use routing_engine::scoring_config;
+pub(crate) use routing_engine::text;
+pub(crate) use routing_engine::types;
 mod gate_hints;
 #[cfg(test)]
 mod metadata_tests;
@@ -13,14 +16,14 @@ mod nl_route_adjustments;
 mod policy;
 mod records;
 mod routing;
+#[cfg(test)]
+mod search_regression_tests;
 mod scoring;
-mod scoring_config;
 pub(crate) use scoring_config::scoring_weights;
+mod signal_cache;
 mod signals;
 mod skill_record;
-mod text;
 pub(crate) use fuzzy::{fuzzy_fallback_score, trigram_similarity, FUZZY_FALLBACK_THRESHOLD, FUZZY_MIN_SIMILARITY};
-mod types;
 
 pub(crate) use constants::{
     PROFILE_COMPILE_AUTHORITY, ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION,
@@ -36,15 +39,13 @@ pub(crate) use records::{
     load_records, load_records_cached_for_stdio, load_records_from_manifest,
 };
 pub(crate) use routing::{
-    build_route_snapshot, build_search_results_payload, filter_records_for_host,
-    literal_framework_alias_decision, route_task, search_skills, should_accept_manifest_fallback,
-    should_retry_with_manifest,
+    build_route_snapshot, build_search_results_payload, filter_record_indices_for_host,
+    filter_records_for_host, literal_framework_alias_decision, route_task, search_skills,
+    search_skills_subset, should_accept_manifest_fallback, should_retry_with_manifest,
 };
-#[cfg(test)]
-pub(crate) use signals::has_parallel_review_candidate_context;
 pub(crate) use signals::{
-    has_github_pr_context, has_paper_context, has_paper_prose_edit_context, has_paper_writing_context,
-    looks_like_pasted_manuscript_prose,
+    has_github_pr_context, has_parallel_review_candidate_context, has_paper_context,
+    has_paper_prose_edit_context, has_paper_writing_context, looks_like_pasted_manuscript_prose,
 };
 pub(crate) use text::{read_json, tokenize_query, tokenize_route_text, value_to_string};
 pub(crate) use types::{
@@ -55,8 +56,8 @@ pub(crate) use types::{
 };
 #[cfg(test)]
 pub(crate) use types::{
-    RoutingEvalCasesPayload, RoutingEvalMetricsPayload, RoutingEvalReportPayload,
-    RoutingEvalResultPayload,
+    EvaluatedRoutingCase, RoutingEvalCasePayload, RoutingEvalCasesPayload,
+    RoutingEvalMetricsPayload, RoutingEvalReportPayload, RoutingEvalResultPayload,
 };
 
 #[cfg(test)]

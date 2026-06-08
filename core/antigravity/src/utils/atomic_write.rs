@@ -92,6 +92,68 @@ pub fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     write_atomic_text_to_temp(path, content, &tmp_path)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_json_path(label: &str) -> std::path::PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("core-state-atomic-{label}-{suffix}.json"))
+    }
+
+    #[test]
+    fn write_atomic_text_creates_final_without_tmp_sidecar() {
+        let path = temp_json_path("text");
+        let _ = std::fs::remove_file(&path);
+        write_atomic_text(&path, "hello").expect("write");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
+        let parent = path.parent().expect("parent");
+        let leftovers: Vec<_> = std::fs::read_dir(parent)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "tmp sidecar should be removed");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn write_atomic_json_round_trips_value() {
+        let path = temp_json_path("json");
+        let _ = std::fs::remove_file(&path);
+        let value = json!({"task_id": "t1", "n": 2});
+        write_atomic_json(&path, &value).expect("write json");
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let parsed: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed, value);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn write_atomic_text_to_temp_creates_nested_parent_dirs() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("core-state-atomic-nested-{suffix}"));
+        let final_path = base.join("nested/out.txt");
+        let tmp_path = base.join("nested/out.txt.part");
+        let _ = std::fs::remove_dir_all(&base);
+        write_atomic_text_to_temp(&final_path, "nested payload", &tmp_path).expect("write");
+        assert_eq!(
+            std::fs::read_to_string(&final_path).unwrap(),
+            "nested payload"
+        );
+        assert!(!tmp_path.exists());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
 pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NONCE: AtomicU64 = AtomicU64::new(0);

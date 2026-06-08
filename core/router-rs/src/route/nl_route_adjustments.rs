@@ -1,6 +1,7 @@
 //! Data-driven NL hot-route suppress/boost rules from embedded
 //! [`NL_ROUTE_ADJUSTMENTS.json`](../../../configs/framework/NL_ROUTE_ADJUSTMENTS.json).
 
+use super::signal_cache::cached_signal;
 use super::signals::*;
 use super::types::{RouteCandidate, SkillRecord};
 use serde_json::Value;
@@ -41,7 +42,9 @@ macro_rules! nl_signals {
             query_token_list: &[String],
             _query_tokens: &HashSet<String>,
         ) -> bool {
-            $inner(query_text, query_token_list)
+            cached_signal(stringify!($inner), query_text, query_token_list, || {
+                $inner(query_text, query_token_list)
+            })
         }
     };
     (@adapter qt: $wrapper:ident, $inner:ident) => {
@@ -124,7 +127,7 @@ nl_signals! {
     "has_skill_installer_context"                  => qt_ql: nl_sig_has_skill_installer_context                  => has_skill_installer_context,
     "has_source_slide_format_context"              => qt_ql: nl_sig_has_source_slide_format_context              => has_source_slide_format_context,
     "has_systematic_debug_context"                 => qt_ql: nl_sig_has_systematic_debug_context                 => has_systematic_debug_context,
-    "has_team_orchestration_context"               => qt_ql: nl_sig_has_team_orchestration_context               => has_team_orchestration_context,
+    "has_workflow_orchestration_context"           => qt_ql: nl_sig_has_workflow_orchestration_context           => has_workflow_orchestration_context,
     "is_meta_routing_task"                         => qt:    nl_sig_is_meta_routing_task                         => is_meta_routing_task,
     "paper_skill_requires_context"                 => slug:  nl_sig_paper_skill_requires_context                 => paper_skill_requires_context,
     "should_defer_to_artifact_gate"                => rec_qt_ql: nl_sig_should_defer_to_artifact_gate            => should_defer_to_artifact_gate,

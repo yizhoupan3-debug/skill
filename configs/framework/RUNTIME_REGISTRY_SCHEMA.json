@@ -2,14 +2,11 @@
   "schema_version": "framework-runtime-registry-schema-v1",
   "scope": "execution-critical-fields-only",
   "host_ids": [
-    "codex-cli",
-    "codex-app",
     "cursor",
     "claude-code",
-    "claude-desktop",
-    "antigravity-cli",
-    "antigravity-app",
-    "antigravity"
+    "opencode",
+    "antigravity",
+    "codex"
   ],
   "projection_status_values": [
     "implemented",
@@ -24,12 +21,11 @@
     "host_entrypoints"
   ],
   "install_tools": [
-    "codex",
     "cursor",
     "claude",
-    "claude-desktop",
+    "opencode",
     "antigravity",
-    "antigravity-cli"
+    "codex"
   ],
   "framework_command_required_fields": [
     "canonical_owner",
@@ -49,8 +45,7 @@
     "unsupported"
   ],
   "required_review_gate_fields": [
-    "deep_gate_lanes",
-    "claude_reviewer_lanes"
+    "reviewer_lanes"
   ],
-  "registry_review_gate_notes": "RUNTIME_REGISTRY.json must include review_gate.deep_gate_lanes (non-empty string array) for Cursor/Codex REVIEW_GATE countable lanes (general-purpose / best-of-n-runner / deep-reviewer and normalized equivalents), and review_gate.claude_reviewer_lanes (non-empty string array) for Claude Code reviewer lane admission (superset of deep_gate_lanes)."
+  "registry_review_gate_notes": "RUNTIME_REGISTRY.json must include review_gate.reviewer_lanes (non-empty string array): the single cross-host countable independent reviewer lane closed-set (Claude Code canonical). Legacy deep_gate_lanes / claude_reviewer_lanes are removed; all hook and MCP hosts read reviewer_lanes only."
 }

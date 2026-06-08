@@ -1,6 +1,6 @@
 //! Review-Fix-Verify 多轮闭环：Rust 真源 `RFV_LOOP_STATE.json` + stdio，支撑长任务轮次账本与宿主并行 lane 之后的 supervisor 合并落盘。
 
-pub use antigravity_core::state_manager::read_rfv_loop_state;
+pub use core_state::state_manager::read_rfv_loop_state;
 
 use crate::atomic_write::write_atomic_json;
 use crate::autopilot_goal::{
@@ -16,19 +16,19 @@ use std::path::{Path, PathBuf};
 pub const RFV_LOOP_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
 pub const RFV_LOOP_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
 /// Repo-relative path; keep in sync with `cursor_hooks` merge logic that surfaces this substring.
-// TODO: integrate
+// TODO(RFV-external-research): integrate strict validation path
 #[allow(dead_code)]
 pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
 /// `retrieval_trace` prose fields must be at least this many **trimmed** chars under strict mode.
-// TODO: integrate
+// TODO(RFV-external-research): integrate strict validation path
 #[allow(dead_code)]
 pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
 /// Allowed `verify_result` enum (uppercase); see `reasoning-depth-contract.md`.
 /// `append_round` rejects values outside this set so PASS/FAIL is auditable, not free-form.
 pub const ALLOWED_VERIFY_RESULTS: &[&str] = &["PASS", "FAIL", "SKIPPED", "UNKNOWN"];
 
-// TODO: integrate
+// TODO(RFV-external-research): integrate strict validation path
 #[allow(dead_code)]
 fn nonempty_trimmed_string_at(value: &Value, ctx: &str, key: &str) -> Result<(), String> {
     let Some(t) = value.as_str() else {
@@ -40,7 +40,7 @@ fn nonempty_trimmed_string_at(value: &Value, ctx: &str, key: &str) -> Result<(),
     Ok(())
 }
 
-// TODO: integrate
+// TODO(RFV-external-research): integrate strict validation path
 #[allow(dead_code)]
 fn validate_nonempty_string_items(arr: &[Value], ctx: &str, arr_name: &str) -> Result<(), String> {
     if arr.is_empty() {
@@ -54,7 +54,7 @@ fn validate_nonempty_string_items(arr: &[Value], ctx: &str, arr_name: &str) -> R
 }
 
 /// Heuristic: source string looks like a machine-checkable external pointer (URL, DOI, arXiv, …).
-// TODO: integrate
+// TODO(RFV-external-research): integrate strict validation path
 #[allow(dead_code)]
 pub fn source_traceable_heuristic(s: &str) -> bool {
     let t = s.trim();
@@ -90,7 +90,7 @@ pub fn source_traceable_heuristic(s: &str) -> bool {
     false
 }
 
-// TODO: integrate
+// TODO(RFV-external-research): integrate strict validation path
 #[allow(dead_code)]
 fn validate_source_list_traceable(
     sources: &[Value],
@@ -460,6 +460,31 @@ fn resolve_framework_rfv_loop_repo(payload: &Value) -> Result<PathBuf, String> {
     resolve_repo_root_arg(Some(repo_root.as_path()))
 }
 
+/// Attach JSON-backed operator nudge reference lines for stdio callers (non-hook path).
+fn merge_operator_nudge_refs(resp: &mut Value, repo_root: &Path, state: Option<&Value>) {
+    let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
+    let mut refs = Map::new();
+    if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
+        refs.insert(
+            "rfv_loop_continue_reasoning_depth".to_string(),
+            json!(nudges.rfv_loop_continue_reasoning_depth),
+        );
+    }
+    if state.is_some_and(crate::harness_context_signals::rfv_state_signals_math)
+        && !nudges.math_reasoning_harness_line.is_empty()
+    {
+        refs.insert(
+            "math_reasoning_harness_line".to_string(),
+            json!(nudges.math_reasoning_harness_line),
+        );
+    }
+    if !refs.is_empty() {
+        resp.as_object_mut()
+            .expect("rfv response must be object")
+            .insert("operator_nudge_refs".to_string(), Value::Object(refs));
+    }
+}
+
 /// stdio：`framework_rfv_loop`
 pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
     let operation = payload
@@ -517,13 +542,17 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             } else {
                 rfv_loop_state_path(&repo_root, &tid).unwrap_or_else(|_| PathBuf::new())
             };
-            Ok(json!({
+            let mut resp = json!({
                 "ok": true,
                 "operation": "status",
                 "task_id": tid,
                 "rfv_loop_state_path": path.display().to_string(),
-                "rfv_loop_state": state,
-            }))
+                "rfv_loop_state": state.clone(),
+            });
+            if let Some(ref st) = state {
+                merge_operator_nudge_refs(&mut resp, &repo_root, Some(st));
+            }
+            Ok(resp)
         }
         "start" | "upsert" => {
             let task_id = task_id_override
@@ -651,12 +680,12 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
-            Ok(json!({
+            let mut resp = json!({
                 "ok": true,
                 "operation": "start",
                 "task_id": task_id,
                 "rfv_loop_state_path": path.display().to_string(),
-                "rfv_loop_state": value,
+                "rfv_loop_state": value.clone(),
                 "goal_state_cleared": goal_state_cleared,
                 "warning": if capped {
                     Some(format!(
@@ -666,7 +695,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 } else {
                     None
                 },
-            }))
+            });
+            merge_operator_nudge_refs(&mut resp, &repo_root, Some(&value));
+            Ok(resp)
         }
         "append_round" => {
             let task_id = task_id_override
@@ -891,6 +922,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             if let Some(w) = round_cap_warning {
                 resp["warning"] = json!(w);
             }
+            merge_operator_nudge_refs(&mut resp, &repo_root, Some(&state));
+            crate::telemetry_emit::emit_rfv_round(round_n as u32, &verify_result);
             Ok(resp)
         }
         _ => Err(format!(

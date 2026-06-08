@@ -145,9 +145,9 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
     let host_specs = load_host_profile_specs()?;
     let codex_spec = host_specs
         .iter()
-        .find(|spec| spec.host_key == "codex-cli")
+        .find(|spec| spec.host_key == "codex")
         .ok_or_else(|| {
-            "RUNTIME_REGISTRY host_projections must include codex-cli for legacy codex_profile"
+            "RUNTIME_REGISTRY host_projections must include codex for legacy codex_profile"
                 .to_string()
         })?;
     let codex_host_payload = codex_spec.build_payload();
@@ -663,7 +663,7 @@ impl HostProfileSpec {
             "framework_alias_entrypoints".to_string(),
             build_host_alias_entrypoints(&self.host_key),
         );
-        if self.host_key == "codex-cli" {
+        if self.host_key == "codex" {
             host_fields.insert(
                 "gpt_model_path_contract".to_string(),
                 json!({
@@ -823,7 +823,7 @@ fn build_host_profile(
             ("payload", Value::Object(host_payload.clone())),
         ]),
     );
-    if host_spec.host_key == "codex-cli" {
+    if host_spec.host_key == "codex" {
         payload.insert(
             "codex_host_payload".to_string(),
             Value::Object(host_payload.clone()),
@@ -1079,13 +1079,14 @@ fn build_delegation_contract() -> Map<String, Value> {
         Value::Bool(true),
     );
 
-    let mut team_contract = Map::new();
-    team_contract.insert("supervisor_owned_continuity".to_string(), Value::Bool(true));
-    team_contract.insert(
+    let mut workflow_orchestration_contract = Map::new();
+    workflow_orchestration_contract
+        .insert("supervisor_owned_continuity".to_string(), Value::Bool(true));
+    workflow_orchestration_contract.insert(
         "integration_and_qa_stay_supervisor_led".to_string(),
         Value::Bool(true),
     );
-    team_contract.insert(
+    workflow_orchestration_contract.insert(
         "resume_and_recovery_are_first_class".to_string(),
         Value::Bool(true),
     );
@@ -1125,7 +1126,7 @@ fn build_delegation_contract() -> Map<String, Value> {
                 "search, audit, implementation, or verification can run as lane-local outputs",
                 "integration and final judgment should still stay local"
             ],
-            "team_when": [
+            "workflow_when": [
                 "supervisor-led worker lifecycle management is part of the task",
                 "integration, qa, cleanup, or resume/recovery are first-class workflow phases",
                 "shared continuity must remain supervisor-owned while multiple lanes stay active"
@@ -1170,7 +1171,10 @@ fn build_delegation_contract() -> Map<String, Value> {
         "sidecar_contract".to_string(),
         Value::Object(sidecar_contract),
     );
-    payload.insert("team_contract".to_string(), Value::Object(team_contract));
+    payload.insert(
+        "workflow_orchestration_contract".to_string(),
+        Value::Object(workflow_orchestration_contract),
+    );
     payload.insert(
         "non_goals".to_string(),
         json!([
@@ -1239,7 +1243,7 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
         json!(["verification_status", "last_verification_summary"]),
     );
     schema_expectations.insert(
-        "team_state_fields".to_string(),
+        "workflow_state_fields".to_string(),
         json!([
             "delegation_planned",
             "spawn_pending",
@@ -1435,7 +1439,7 @@ mod tests {
         assert!(bundle.codex_profile["metadata"].get("adapter_id").is_none());
         assert_eq!(
             bundle.codex_profile["execution_surface"]["entrypoint_kind"],
-            Value::String("codex-cli".to_string())
+            Value::String("codex".to_string())
         );
         assert_eq!(
             bundle.codex_profile["execution_surface"]["controller_is_cli"],
@@ -1443,7 +1447,7 @@ mod tests {
         );
         assert_eq!(
             bundle.codex_profile["codex_host_payload"]["host_cli"],
-            Value::String("codex-cli".to_string())
+            Value::String("codex".to_string())
         );
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
         assert!(serialized.get("execution_controller_contract").is_none());
@@ -1493,7 +1497,7 @@ mod tests {
         );
         assert_eq!(
             bundle.codex_profile["runtime_surface"]["host_projection"]["payload"]["host_cli"],
-            json!("codex-cli")
+            json!("codex")
         );
         assert!(bundle.codex_profile.get("bridge_contract").is_none());
         assert!(bundle.codex_profile.get("source_contract").is_none());
@@ -1506,7 +1510,7 @@ mod tests {
             "default": {
                 "required_host_capabilities": ["artifact_contract"]
             },
-            "codex-cli": {
+            "codex": {
                 "required_host_capabilities": ["batch_execution"]
             }
         }))
@@ -1520,7 +1524,7 @@ mod tests {
                 "default": {
                     "required_host_capabilities": ["artifact_contract"]
                 },
-                "codex-cli": {
+                "codex": {
                     "required_host_capabilities": ["batch_execution"]
                 }
             })
@@ -1546,7 +1550,7 @@ mod tests {
         );
         assert!(serialized.get("codex_profile").is_some());
         assert!(serialized.get("full_codex_profile").is_some());
-        assert!(serialized["host_payloads"].get("codex-cli").is_some());
+        assert!(serialized["host_payloads"].get("codex").is_some());
         assert!(serialized["host_payloads"].get("cursor").is_some());
         assert!(serialized["host_payloads"].get("claude-code").is_some());
         assert!(serialized.get("host_entrypoint_outputs").is_none());
@@ -1557,7 +1561,7 @@ mod tests {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
 
         assert_eq!(
-            bundle.host_payloads["codex-cli"]["session_supervisor_driver"],
+            bundle.host_payloads["codex"]["session_supervisor_driver"],
             json!("codex_driver")
         );
         assert_eq!(

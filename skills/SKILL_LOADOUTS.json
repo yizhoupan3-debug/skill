@@ -1,0 +1,66 @@
+{
+  "schema_version": "skill-loadouts-v1",
+  "source": "framework-surface-policy",
+  "loadouts": {
+    "default_surface_loadout": {
+      "description": "Default hot routing surface (routing, memory, continuity, host projection).",
+      "tier_activation": "default",
+      "hot_first_turn_owners_from_policy": true
+    },
+    "research_loadout": {
+      "description": "Explicit opt-in research harness: non-manuscript + manuscript + citation + stats + repro + deep research.",
+      "tier_activation": "explicit_opt_in",
+      "skill_slugs": [
+        "research-workbench",
+        "paper-workbench",
+        "citation-management",
+        "statistical-analysis",
+        "experiment-reproducibility",
+        "math-derivation",
+        "scientific-figure-plotting",
+        "deep-research",
+        "pdf",
+        "plan-mode"
+      ],
+      "entry_map": "skills/research-workbench/references/RESEARCH_HARNESS_UNIFIED.md"
+    },
+    "implementation_loadout": {
+      "description": "My execution stack: implementx, verifyx, code-review-deep, gitx.",
+      "tier_activation": "explicit_opt_in",
+      "skill_slugs": [
+        "implementx",
+        "verifyx",
+        "code-review-deep",
+        "gitx",
+        "plan-mode"
+      ]
+    },
+    "audit_loadout": {
+      "description": "Read-only audit and deep review lanes.",
+      "tier_activation": "explicit_opt_in",
+      "skill_slugs": [
+        "code-review-deep",
+        "deepinterview",
+        "plan-mode"
+      ]
+    },
+    "framework_loadout": {
+      "description": "Framework maintainer surface.",
+      "tier_activation": "explicit_opt_in",
+      "skill_slugs": [
+        "skill-framework-developer",
+        "update",
+        "agent-swarm-orchestration"
+      ]
+    },
+    "ops_loadout": {
+      "description": "CI, Sentry, GitHub ops gates.",
+      "tier_activation": "explicit_opt_in",
+      "skill_slugs": [
+        "gh-fix-ci",
+        "gh-address-comments",
+        "sentry"
+      ]
+    }
+  }
+}

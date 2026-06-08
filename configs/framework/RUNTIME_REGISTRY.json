@@ -8,25 +8,14 @@
   "host_targets": {
     "policy": "shared-rust-core-explicit-host-projections",
     "supported": [
-      "codex-cli",
-      "codex-app",
       "cursor",
       "claude-code",
-      "claude-desktop",
-      "antigravity-cli",
-      "antigravity-app",
+      "opencode",
       "antigravity",
-      "opencode"
+      "codex"
     ],
     "shared_system_source": "skills",
     "metadata": {
-      "codex-cli": {
-        "install_tool": "codex",
-        "projection_status": "implemented",
-        "installable": true,
-        "default_framework_command": "implementx",
-        "host_entrypoints": "AGENTS_CODEX.md"
-      },
       "cursor": {
         "install_tool": "cursor",
         "projection_status": "implemented",
@@ -36,13 +25,6 @@
           "AGENTS_CURSOR.md",
           ".cursor/rules/*.mdc"
         ]
-      },
-      "codex-app": {
-        "install_tool": "codex",
-        "projection_status": "implemented",
-        "installable": false,
-        "unsupported_reason": "Codex app is runtime-supported through the desktop thread host; it does not install file projections.",
-        "host_entrypoints": "AGENTS_CODEX.md"
       },
       "claude-code": {
         "install_tool": "claude",
@@ -55,39 +37,11 @@
           ".claude/settings.json"
         ]
       },
-      "claude-desktop": {
-        "install_tool": "claude-desktop",
-        "projection_status": "implemented",
-        "installable": true,
-        "default_framework_command": "implementx",
-        "host_entrypoints": [
-          "AGENTS_CLAUDE.md",
-          ".claude/CLAUDE.md"
-        ]
-      },
-      "antigravity-cli": {
-        "install_tool": "antigravity-cli",
-        "projection_status": "implemented",
-        "installable": true,
-        "default_framework_command": "implementx",
-        "host_entrypoints": "AGENTS_ANTIGRAVITY.md"
-      },
-      "antigravity-app": {
-        "install_tool": "antigravity",
-        "projection_status": "implemented",
-        "installable": true,
-        "default_framework_command": "implementx",
-        "host_entrypoints": [
-          "AGENTS_ANTIGRAVITY.md",
-          ".gemini/antigravity/rules/framework.md"
-        ]
-      },
       "antigravity": {
         "install_tool": "antigravity",
         "projection_status": "implemented",
         "installable": true,
         "default_framework_command": "implementx",
-        "deprecated_alias_of": "antigravity-app",
         "host_entrypoints": [
           "AGENTS_ANTIGRAVITY.md",
           ".gemini/antigravity/rules/framework.md"
@@ -99,6 +53,54 @@
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": ".opencode/opencode.json"
+      },
+      "codex": {
+        "install_tool": "codex",
+        "projection_status": "implemented",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": "AGENTS_CODEX.md"
+      }
+    },
+    "host_providers": {
+      "cursor": {
+        "cargo_feature": "host-cursor",
+        "provider_module": "cursor_provider",
+        "provider_type": "CursorHostProvider",
+        "hooks_module": "cursor_hooks",
+        "cli_hook_subcommand": "hook",
+        "dispatch_fn": "dispatch_cursor_command"
+      },
+      "claude-code": {
+        "cargo_feature": "host-claude-code",
+        "provider_module": "claude_provider",
+        "provider_type": "ClaudeHostProvider",
+        "hooks_module": "claude_code_hooks",
+        "cli_hook_subcommand": "hook",
+        "dispatch_fn": "dispatch_claude_command"
+      },
+      "opencode": {
+        "cargo_feature": "host-opencode",
+        "provider_module": "opencode_provider",
+        "provider_type": "OpencodeHostProvider",
+        "hooks_module": "opencode_agent",
+        "cli_agent_subcommand": "agent",
+        "dispatch_fn": "dispatch_opencode_command"
+      },
+      "antigravity": {
+        "cargo_feature": "host-antigravity",
+        "provider_module": "antigravity_provider",
+        "provider_type": "AntigravityHostProvider",
+        "cli_agent_subcommand": "agent",
+        "dispatch_fn": "dispatch_antigravity_command"
+      },
+      "codex": {
+        "cargo_feature": "host-codex",
+        "provider_module": "codex_provider",
+        "provider_type": "CodexHostProvider",
+        "hooks_module": "codex_hooks",
+        "cli_hook_subcommand": "hook",
+        "dispatch_fn": "dispatch_codex_command"
       }
     }
   },
@@ -112,33 +114,25 @@
   },
   "review_gate": {
     "spawn_first_enabled": true,
-    "spawn_first_nudge": "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+    "spawn_first_nudge": "配对审稿：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
     "subagent_model_inherit_nudge": "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions",
     "subagent_model_inherit_nudge_by_host": {
       "cursor": "子代理模型（Cursor）：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions"
     },
+    "spawn_first_nudge_template": "配对审稿（{host_label}）：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+    "spawn_first_nudge_host_labels": {
+      "claude-code": "Claude Code",
+      "antigravity": "Antigravity",
+      "codex": "Codex"
+    },
     "spawn_first_nudge_by_host": {
-      "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据；Task 省略 model、继承主会话，禁止默认 claude/sonnet。细则 skills/code-review-deep/SKILL.md",
-      "codex-cli": "配对审稿（Codex）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "claude-code": "配对审稿（Claude Code）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner 或 review/reviewer/critic/code-review，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "antigravity-cli": "配对审稿（Antigravity CLI）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "antigravity-app": "配对审稿（Antigravity App）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "antigravity": "配对审稿（Antigravity）：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
-      "claude-desktop": "配对审稿（Claude Desktop）：无 hook 注入；须主动 spawn 只读 reviewer 并写 review-lanes/*.md。非 my-light 时 closeout/complete 在 MCP 工具层硬拦；my-light 下 review/closeout 为 advisory。细则 skills/code-review-deep/SKILL.md",
-      "opencode": "配对审稿（Opencode）：无 hook 注入；须主动 spawn 只读 reviewer 并写 review-lanes/*.md。closeout/complete 在 MCP 工具层行为同 Claude Desktop。细则 skills/code-review-deep/SKILL.md"
+      "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据；Task 省略 model、继承主会话，禁止默认 claude/sonnet。细则 skills/code-review-deep/SKILL.md",
+      "opencode": "配对审稿（Opencode）：无 hook 注入；须主动 spawn 只读 reviewer（reviewer_lanes）并写 review-lanes/*.md。closeout/complete 在 MCP 工具层同 Claude Code。细则 skills/code-review-deep/SKILL.md"
     },
     "spawn_first_includes_model_inherit_by_host": {
       "cursor": true
     },
-    "deep_gate_lanes": [
-      "general-purpose",
-      "generalpurpose",
-      "best-of-n-runner",
-      "bestofnrunner",
-      "deep-reviewer",
-      "deepreviewer"
-    ],
-    "claude_reviewer_lanes": [
+    "reviewer_lanes": [
       "general-purpose",
       "generalpurpose",
       "best-of-n-runner",
@@ -161,14 +155,11 @@
       "canonical_owner": "discussx",
       "skill_path": "skills/discussx/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/discussx",
         "cursor": "/discussx",
         "claude-code": "/discussx",
-        "claude-desktop": "/discussx",
-        "antigravity-cli": "/discussx",
-        "antigravity-app": "/discussx",
         "antigravity": "/discussx",
-        "opencode": "/discussx"
+        "opencode": "/discussx",
+        "codex": "/discussx"
       },
       "lineage": {
         "source": "repo-native",
@@ -179,28 +170,22 @@
       "canonical_owner": "planx",
       "skill_path": "skills/planx/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/planx",
         "cursor": "/planx",
         "claude-code": "/planx",
-        "claude-desktop": "/planx",
-        "antigravity-cli": "/planx",
-        "antigravity-app": "/planx",
         "antigravity": "/planx",
-        "opencode": "/planx"
+        "opencode": "/planx",
+        "codex": "/planx"
       }
     },
     "implementx": {
       "canonical_owner": "implementx",
       "skill_path": "skills/implementx/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/implementx",
         "cursor": "/implementx",
         "claude-code": "/implementx",
-        "claude-desktop": "/implementx",
-        "antigravity-cli": "/implementx",
-        "antigravity-app": "/implementx",
         "antigravity": "/implementx",
-        "opencode": "/implementx"
+        "opencode": "/implementx",
+        "codex": "/implementx"
       },
       "implementation_bar": [
         "one-breath-all-waves",
@@ -221,40 +206,11 @@
       "canonical_owner": "verifyx",
       "skill_path": "skills/verifyx/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/verifyx",
         "cursor": "/verifyx",
         "claude-code": "/verifyx",
-        "claude-desktop": "/verifyx",
-        "antigravity-cli": "/verifyx",
-        "antigravity-app": "/verifyx",
         "antigravity": "/verifyx",
-        "opencode": "/verifyx"
-      }
-    },
-    "team": {
-      "canonical_owner": "agent-swarm-orchestration",
-      "skill_path": "skills/agent-swarm-orchestration/SKILL.md",
-      "host_entrypoints": {
-        "codex-cli": "/team",
-        "cursor": "/team",
-        "claude-code": "/team",
-        "claude-desktop": "/team",
-        "antigravity-cli": "/team",
-        "antigravity-app": "/team",
-        "antigravity": "/team",
-        "opencode": "/team"
-      },
-      "interaction_invariants": {
-        "requires_explicit_entrypoint": true,
-        "explicit_entrypoints": [
-          "/team",
-          "$team"
-        ],
-        "implicit_route_policy": "never"
-      },
-      "lineage": {
-        "source": "framework-alias",
-        "description": "Framework alias for explicit team orchestration entry only; not a visible skill or natural-language owner."
+        "opencode": "/verifyx",
+        "codex": "/verifyx"
       }
     },
     "deepinterview": {
@@ -287,14 +243,11 @@
         "sentry"
       ],
       "host_entrypoints": {
-        "codex-cli": "/deepinterview",
         "cursor": "/deepinterview",
         "claude-code": "/deepinterview",
-        "claude-desktop": "/deepinterview",
-        "antigravity-cli": "/deepinterview",
-        "antigravity-app": "/deepinterview",
         "antigravity": "/deepinterview",
-        "opencode": "/deepinterview"
+        "opencode": "/deepinterview",
+        "codex": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -312,14 +265,11 @@
       "canonical_owner": "gitx",
       "skill_path": "skills/gitx/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/gitx",
         "cursor": "/gitx",
         "claude-code": "/gitx",
-        "claude-desktop": "/gitx",
-        "antigravity-cli": "/gitx",
-        "antigravity-app": "/gitx",
         "antigravity": "/gitx",
-        "opencode": "/gitx"
+        "opencode": "/gitx",
+        "codex": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -338,14 +288,11 @@
       "canonical_owner": "update",
       "skill_path": "skills/update/SKILL.md",
       "host_entrypoints": {
-        "codex-cli": "/update",
         "cursor": "/update",
         "claude-code": "/update",
-        "claude-desktop": "/update",
-        "antigravity-cli": "/update",
-        "antigravity-app": "/update",
         "antigravity": "/update",
-        "opencode": "/update"
+        "opencode": "/update",
+        "codex": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -370,97 +317,58 @@
       ]
     }
   },
-  "host_projections": {
-    "codex-cli": {
-      "profile_id": "codex_profile",
-      "host_id": "codex-cli",
-      "transport": "native-codex",
-      "context_files": [
-        "AGENTS_CODEX.md"
+  "managed_mcp_servers": {
+    "mcp-codegraph": {
+      "server_id": "mcp-codegraph",
+      "process": "independent",
+      "binary": "mcp-codegraph",
+      "crate": "codegraph-rs",
+      "tools": [
+        "codegraph_search",
+        "codegraph_callers",
+        "codegraph_callees",
+        "codegraph_impact",
+        "codegraph_node",
+        "codegraph_status"
       ],
-      "settings_paths": [
-        {
-          "scope": "user",
-          "host_root": "codex",
-          "relative": "config.toml"
-        },
-        {
-          "scope": "project",
-          "relative": ".codex/config.toml"
-        }
-      ],
-      "mcp_config_paths": [
-        {
-          "scope": "project",
-          "relative": ".codex/config.toml"
-        }
-      ],
-      "session_supervisor_driver": "codex_driver",
-      "resume_command_examples": [
-        "codex resume --last",
-        "codex resume <session_id>"
-      ],
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract",
-        "closeout_evidence_hooks",
-        "review_gate_router_observation"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "batch_execution",
-        "cron_execution",
-        "ci_runner",
-        "non_interactive_entrypoint",
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
-        "host_resume_entrypoint",
-        "host_tmux_worker_management",
-        "framework_alias_entrypoints"
-      ]
-    },
-    "codex-app": {
-      "profile_id": "codex_app_profile",
-      "host_id": "codex-app",
-      "transport": "codex-desktop-app",
-      "harness_capability_exceptions": [
-        {
-          "cap": "closeout_evidence_hooks",
-          "status": "unsupported",
-          "rationale": "Codex desktop app thread host does not install the same file-projected hook bundle as codex-cli; closeout/evidence hooks are not materialized on this transport."
-        },
-        {
-          "cap": "review_gate_router_observation",
-          "status": "unsupported",
-          "rationale": "Review gate router observation is not projected for codex-app; use codex-cli for hook-level REVIEW_GATE-style semantics."
-        }
-      ],
-      "context_files": [
-        "AGENTS_CODEX.md"
-      ],
-      "settings_paths": [],
-      "session_supervisor_driver": "unsupported",
-      "session_supervisor_status": {
-        "supported": false,
-        "rationale": "Codex app thread execution is managed by the desktop host rather than external router-rs tmux supervision."
+      "host_config_keys": {
+        "cursor": "mcp_servers.mcp-codegraph",
+        "claude-code": "mcpServers.mcp-codegraph",
+        "opencode": "mcpServers.mcp-codegraph",
+        "antigravity": "mcpServers.mcp-codegraph",
+        "codex": "mcpServers.mcp-codegraph"
       },
-      "resume_command_examples": [
-        "Continue in the same Codex app thread"
-      ],
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "thread_destination",
-        "automation_hooks",
-        "non_technical_ui",
-        "framework_alias_entrypoints"
-      ]
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "claude-code": "project .mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "antigravity": "mcp.json mcpServers",
+        "codex": "project .mcp.json"
+      }
     },
+    "paperplain": {
+      "server_id": "paperplain",
+      "process": "external",
+      "command": "npx",
+      "args": ["-y", "paperplain-mcp"],
+      "tools": ["paper_metadata", "paper_search"],
+      "host_config_keys": {
+        "cursor": "mcp_servers.paperplain",
+        "claude-code": "mcpServers.paperplain",
+        "opencode": "mcpServers.paperplain",
+        "antigravity": "mcpServers.paperplain",
+        "codex": "mcp_servers.paperplain"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "claude-code": "project .mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "antigravity": "mcp.json mcpServers",
+        "codex": "project .codex/config.toml"
+      }
+    }
+  },
+  "host_projections": {
     "cursor": {
       "profile_id": "cursor_profile",
       "host_id": "cursor",
@@ -508,6 +416,9 @@
         "interactive_agent_chat",
         "host_resume_entrypoint",
         "framework_alias_entrypoints"
+      ],
+      "managed_mcp_server_ids": [
+        "mcp-codegraph"
       ]
     },
     "claude-code": {
@@ -539,53 +450,9 @@
         "interactive_agent_chat",
         "framework_alias_entrypoints",
         "hard_gate_hooks"
-      ]
-    },
-    "claude-desktop": {
-      "profile_id": "claude_desktop_profile",
-      "host_id": "claude-desktop",
-      "transport": "mcp-stdio",
-      "context_files": [
-        "AGENTS_CLAUDE.md"
       ],
-      "mcp_config_paths": [
-        {
-          "scope": "project",
-          "relative": ".claude/mcp.json"
-        },
-        {
-          "scope": "user",
-          "host_root": "claude-desktop",
-          "relative": "claude_desktop_config.json",
-          "notes": "macOS: ~/Library/Application Support/Claude/claude_desktop_config.json"
-        }
-      ],
-      "session_supervisor_driver": "unsupported",
-      "resume_command_examples": [
-        "Continue in the same Claude Desktop thread"
-      ],
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "interactive_agent_chat",
-        "framework_alias_entrypoints"
-      ],
-      "harness_capability_exceptions": [
-        {
-          "cap": "closeout_evidence_hooks",
-          "status": "unsupported",
-          "rationale": "Claude Desktop MCP transport cannot install PreToolUse hard gates; closeout for non-my-light is hard-blocked at MCP tool level (goal_state_manage complete / closeout_gate); my-light remains advisory."
-        },
-        {
-          "cap": "review_gate_router_observation",
-          "status": "unsupported",
-          "rationale": "Desktop MCP has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
-        }
+      "managed_mcp_server_ids": [
+        "mcp-codegraph"
       ]
     },
     "opencode": {
@@ -605,6 +472,12 @@
         {
           "scope": "project",
           "relative": ".opencode/opencode.json"
+        },
+        {
+          "scope": "user",
+          "host_root": "opencode",
+          "relative": "opencode.json",
+          "notes": "Default: ~/.config/opencode/opencode.json"
         }
       ],
       "session_supervisor_driver": "unsupported",
@@ -626,109 +499,19 @@
         "interactive_agent_chat",
         "framework_alias_entrypoints"
       ],
-      "harness_capability_exceptions": [
-        {
-          "cap": "closeout_evidence_hooks",
-          "status": "unsupported",
-          "rationale": "Opencode MCP transport cannot install CLI-level PreToolUse hard gates; closeout for non-my-light is hard-blocked at MCP tool level (goal_state_manage complete / closeout_gate); my-light remains advisory."
-        },
-        {
-          "cap": "review_gate_router_observation",
-          "status": "unsupported",
-          "rationale": "Opencode has no subagent Start/Stop hook surface equivalent to Claude Code; use claude-code for hook-level REVIEW_GATE semantics."
-        }
-      ]
-    },
-    "antigravity-cli": {
-      "profile_id": "antigravity_cli_profile",
-      "host_id": "antigravity-cli",
-      "transport": "antigravity-cli",
-      "context_files": [
-        "AGENTS_ANTIGRAVITY.md"
-      ],
-      "settings_paths": [
-        {
-          "scope": "project",
-          "relative": ".antigravitycli/hooks.json"
-        },
-        {
-          "scope": "user",
-          "host_root": "antigravity-cli",
-          "relative": "hooks.json"
-        }
-      ],
-      "session_supervisor_driver": "unsupported",
-      "resume_command_examples": [
-        "Continue in the same Antigravity CLI session"
-      ],
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract",
-        "closeout_evidence_hooks",
-        "review_gate_router_observation"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "workspace_bootstrap",
-        "interactive_agent_chat",
-        "framework_alias_entrypoints",
-        "hard_gate_hooks"
-      ]
-    },
-    "antigravity-app": {
-      "profile_id": "antigravity_app_profile",
-      "host_id": "antigravity-app",
-      "transport": "mcp-stdio",
-      "context_files": [
-        "AGENTS_ANTIGRAVITY.md"
-      ],
-      "settings_paths": [
-        {
-          "scope": "project",
-          "relative": ".gemini/settings.json"
-        },
-        {
-          "scope": "user",
-          "host_root": "antigravity-app",
-          "relative": "settings.json"
-        }
-      ],
-      "mcp_config_paths": [
-        {
-          "scope": "project",
-          "relative": ".gemini/mcp.json"
-        },
-        {
-          "scope": "user",
-          "host_root": "antigravity-app",
-          "relative": "mcp.json"
-        }
-      ],
-      "session_supervisor_driver": "unsupported",
-      "resume_command_examples": [
-        "Continue in the same Antigravity app thread"
-      ],
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "interactive_agent_chat",
-        "framework_alias_entrypoints"
+      "managed_mcp_server_ids": [
+        "mcp-codegraph"
       ],
       "harness_capability_exceptions": [
         {
           "cap": "closeout_evidence_hooks",
           "status": "unsupported",
-          "rationale": "Antigravity app MCP transport cannot install CLI-level PreToolUse hard gates; closeout verification is hard-blocked at the MCP tool execution level (goal_state_manage complete & closeout_gate)."
+          "rationale": "Opencode MCP transport cannot install CLI-level PreToolUse hard gates; non-my-light closeout evidence may hard-block at MCP tool level (goal_state_manage complete / closeout_gate) when closeout unsatisfied—separate from review gate; my-light remains advisory."
         },
         {
           "cap": "review_gate_router_observation",
           "status": "unsupported",
-          "rationale": "Antigravity app has no subagent Start/Stop hook surface equivalent to Claude Code; use antigravity-cli for hook-level REVIEW_GATE semantics."
+          "rationale": "Opencode has no subagent Start/Stop hook surface; REVIEW_GATE router observation is unsupported—pairing review is skill-layer spawn-first (reviewer_lanes); Stop/session-end review is advisory-only via MCP closeout_gate / goal_state_manage (no REVIEW_GATE hard block on any host)."
         }
       ]
     },
@@ -776,17 +559,73 @@
         "interactive_agent_chat",
         "framework_alias_entrypoints"
       ],
+      "managed_mcp_server_ids": [
+        "mcp-codegraph"
+      ],
       "harness_capability_exceptions": [
         {
           "cap": "closeout_evidence_hooks",
           "status": "unsupported",
-          "rationale": "Deprecated alias host (antigravity-app): MCP transport cannot install CLI-level PreToolUse hard gates; closeout is hard-blocked at MCP tool execution level."
+          "rationale": "Antigravity MCP transport cannot install CLI-level PreToolUse hard gates; non-my-light closeout evidence may hard-block at MCP tool execution when closeout unsatisfied—separate from review gate advisory."
         },
         {
           "cap": "review_gate_router_observation",
           "status": "unsupported",
-          "rationale": "Deprecated alias host (antigravity-app): no subagent Start/Stop hook surface; use antigravity-cli for hook-level REVIEW_GATE semantics."
+          "rationale": "Antigravity MCP transport: no subagent Start/Stop hook surface; review relies on review-lanes/*.md and skill spawn-first; Stop review is advisory-only (MCP ADVISORY), not hard-blocked."
         }
+      ]
+    },
+    "codex": {
+      "profile_id": "codex_profile",
+      "host_id": "codex",
+      "transport": "native-codex",
+      "context_files": [
+        "AGENTS_CODEX.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "user",
+          "host_root": "codex",
+          "relative": "config.toml"
+        },
+        {
+          "scope": "project",
+          "relative": ".codex/config.toml"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "project",
+          "relative": ".codex/config.toml"
+        }
+      ],
+      "session_supervisor_driver": "codex_driver",
+      "resume_command_examples": [
+        "codex resume --last",
+        "codex resume <session_id>"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "batch_execution",
+        "cron_execution",
+        "ci_runner",
+        "non_interactive_entrypoint",
+        "external_session_supervisor",
+        "rate_limit_auto_resume",
+        "host_resume_entrypoint",
+        "host_tmux_worker_management",
+        "framework_alias_entrypoints"
+      ],
+      "managed_mcp_server_ids": [
+        "mcp-codegraph"
       ]
     }
   }

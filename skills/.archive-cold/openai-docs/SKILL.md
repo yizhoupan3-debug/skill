@@ -16,7 +16,7 @@ trigger_hints:
   - 官方文档
 metadata:
   version: "1.0.0"
-  platforms: [codex-cli, codex-app]
+  platforms: [codex]
   tags:
     - openai
     - documentation

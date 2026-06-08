@@ -11,8 +11,8 @@ fn main() -> Result<(), String> {
             if cmd == "codex"
                 || cmd == "claude"
                 || cmd == "cursor"
-                || cmd == "antigravity-cli"
                 || cmd == "antigravity-app"
+                || cmd == "antigravity"
                 || cmd == "opencode"
             {
                 args.insert(1, std::ffi::OsString::from("host"));

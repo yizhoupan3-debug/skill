@@ -8,7 +8,7 @@ Normative cross-refs (do not redefine here):
 
 - Claim / evidence / R&R: [`claim-evidence-ladder.md`](claim-evidence-ladder.md)
 - Language / tone / terminology: [`research-language-norms.md`](research-language-norms.md)
-- Severity labels: [`../../paper-reviewer/references/severity-spec.md`](../../paper-reviewer/references/severity-spec.md)
+- Severity labels: [`severity-spec.md`](severity-spec.md)
 - Optional rubric matrix: [`rubric-audit-bridge.md`](rubric-audit-bridge.md)
 
 ## Persona
@@ -111,7 +111,7 @@ Do not modify toolchain; witness only.
 
 - Theorem/lemma chain supports surviving claims; assumptions explicit.
 - No decorative math (**overmath**) — see G4 spirit in
-  [`../../paper-reviewer/references/review-rubric-playbook.md`](../../paper-reviewer/references/review-rubric-playbook.md).
+  [`review-rubric-playbook.md`](review-rubric-playbook.md).
 - Proof placement: main text vs appendix serves narrative rhythm (not evasion).
 
 ### Pass2 — symbol / formula sweep
@@ -127,7 +127,7 @@ Do not modify toolchain; witness only.
 ## Language (structure / prose / citations)
 
 Normative detail: [`research-language-norms.md`](research-language-norms.md) + **prose chain**
-[`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md).
+[`prose-quality-gate.md`](prose-quality-gate.md).
 Handoff shape: [`prose-chain-contract.md`](prose-chain-contract.md) §审稿→写作.
 This section is the **audit checklist** only.
 
@@ -157,7 +157,7 @@ When the user supplies assignment text, rubric, or **Bonus** criteria, run
 
 ## Severity and Warning
 
-Use [`severity-spec.md`](../../paper-reviewer/references/severity-spec.md):
+Use [`severity-spec.md`](severity-spec.md):
 
 - **P0 / A / B / C** as today.
 - **`Warning`**: subtle omission, unstated boundary, or likely reader misread — must list

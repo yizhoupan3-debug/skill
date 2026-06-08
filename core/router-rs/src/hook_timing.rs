@@ -43,6 +43,12 @@ pub fn emit_hook_timing_line(event: &str) {
         "hook_timing event={event} duration_ms={duration_ms} lock_wait_ms={lock_wait_ms} cargo_check_ms={cargo_check_ms}"
     );
     let _ = std::io::Write::flush(&mut std::io::stderr());
+    crate::telemetry_emit::emit_hook_timing_telemetry(
+        event,
+        duration_ms,
+        lock_wait_ms,
+        cargo_check_ms,
+    );
     HOOK_STARTED.with(|c| c.set(None));
     LOCK_WAIT_MS.with(|c| c.set(0));
     CARGO_CHECK_MS.with(|c| c.set(0));
@@ -50,6 +56,7 @@ pub fn emit_hook_timing_line(event: &str) {
 
 #[cfg(test)]
 mod tests {
+    use crate::router_self::resolve_router_rs_test_bin;
     use crate::test_env_sync::process_env_lock;
     use std::path::PathBuf;
     use std::process::{Command, Stdio};
@@ -62,14 +69,7 @@ mod tests {
 
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let repo = repo.canonicalize().expect("repo root");
-        let bin = std::env::var("CARGO_BIN_EXE_router-rs").unwrap_or_else(|_| {
-            let target = std::env::var("CARGO_TARGET_DIR")
-                .unwrap_or_else(|_| "/tmp/skill-cargo-target".to_string());
-            PathBuf::from(target)
-                .join("debug/router-rs")
-                .to_string_lossy()
-                .into_owned()
-        });
+        let bin = resolve_router_rs_test_bin();
         let out = Command::new(bin)
             .args([
                 "host",

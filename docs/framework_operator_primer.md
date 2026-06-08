@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-09"
 depends_on:
   - ../AGENTS.md
   - harness_architecture/index.md
@@ -17,7 +17,7 @@ depends_on:
 | **lifecycle_profile** | 生命周期配置档（如 `my` / `my-light`），控制门控强度与 closeout 行为；写于 `GOAL_STATE.json` |
 | **closeout_gate** | 完成前的收口检查门——校验 changed_files / verification / blockers 等项是否齐备；未满足时非 my-light 硬拦 `complete` |
 | **closeout_record** | 收口产物 JSON（`artifacts/closeout/<task_id>.json`），记录摘要、变更文件、风险与验证状态 |
-| **REVIEW_GATE** | Stop 事件上的深度审稿门控；lane 未收尾时 Cursor 输出 `router-rs REVIEW_GATE incomplete` 或 Codex `decision:block` |
+| **REVIEW_GATE** | Stop 事件上的深度审稿 **advisory** 门控；lane 未收尾时 hook 宿主注入 `router-rs REVIEW_GATE` / `CODEX_REVIEW_GATE` / `CLAUDE_REVIEW_GATE` 单行 nudge（**不**硬拦 Stop）；MCP 宿主为 `ADVISORY` 文案 |
 | **AG_FOLLOWUP** | Stop 事件上的 Goal 契约续跑提示；`router-rs AG_FOLLOWUP missing_parts=…` 表示 goal 阶段仍缺片段 |
 | **goal_drive** | 宏目标驱动模式——通过 `framework_goal_drive` stdio 或 MCP `goal_state_manage` 驱动 `/implementx`→`/verifyx` 连续执行 |
 | **goal_state_manage** | MCP 工具，管理 `GOAL_STATE.json` 的 start / checkpoint / pause / resume / complete / clear / block 操作 |
@@ -27,21 +27,38 @@ depends_on:
 | **spawn-first** | 审稿策略：首轮工具调用前先 spawn 可数 reviewer 子代理，减少 Stop 时 `REVIEW_GATE` nag |
 | **fork_context** | Cursor 子代理上下文标识；解析为 `false` 时视为独立 fork，满足深度 review lane 要求 |
 | **compact envelope** | 深度 review 输出的紧凑信封格式（含 lens 透镜），默认 findings-only 只读，详见 `skills/code-review-deep/SKILL.md` |
-| **deep_gate_lanes** | 深度审稿 lane 闭集（代码 / 安全 / 架构等），定义于 `RUNTIME_REGISTRY.json`；所有 lane 收尾方可清 `REVIEW_GATE` |
+| **reviewer_lanes** | 跨宿主可数独立审稿 lane 闭集（Claude Code canonical），定义于 `RUNTIME_REGISTRY.json`；增删 lane 只改此字段 |
 | **hook-state** | 宿主 hook 的持久化状态目录（如 `.cursor/hook-state/`），存储 review 进度、subagent 计数等；持久化失败时默认 fail-closed |
-| **projection** | 宿主投影——同一策略在不同宿主（Codex / Cursor / Claude Desktop）上的渲染文案与行为差异；配置于 `host_projection_narrative.json` |
-| **host_adapter** | 宿主适配层；将框架统一协议翻译为各宿主 hook 语义（Stop 硬拦 vs followup_message），契约见 `host_adapter_contract.md` |
+| **projection** | 宿主投影——同一策略在五闭集宿主（Codex / Cursor / Claude Code / Antigravity / OpenCode）上的渲染文案与行为差异；配置于 `host_projection_narrative.json` |
+| **host_adapter** | 宿主适配层；将框架统一协议翻译为各宿主 transport（Stop **advisory** nudge vs closeout 等可 fail-closed 路径），契约见 `host_adapter_contract.md` |
 | **skill_routing** | 技能热路由——`SKILL_ROUTING_RUNTIME.json` 为唯一入口，命中后只读对应 `skill_path`，不一次加载全量元数据 |
 | **framework_snapshot** | MCP 工具 / CLI，返回当前仓库的框架运行时快照（含连续性视图、MCP 工具可用性、lifecycle 状态） |
 | **session_checkpoint** | MCP 工具，写入 `SESSION_SUMMARY` 与 `NEXT_ACTIONS` 到 task 产物目录；2026-05 起 Stop hook 不自动写，需显式调用 |
 
+## Framework 斜杠命令（五宿主闭集）
+
+真源：`configs/framework/RUNTIME_REGISTRY.json` → `framework_commands.*.host_entrypoints`。五宿主（`codex`、`cursor`、`claude-code`、`antigravity`、`opencode`）上路径**相同**：
+
+| 命令 | 路径 | 用途 |
+|------|------|------|
+| `discussx` | `/discussx` | 需求对齐（仅文档） |
+| `planx` | `/planx` | ROADMAP / WAVE_STATE 规划（仅文档） |
+| `implementx` | `/implementx` | 一口气执行全部 wave |
+| `verifyx` | `/verifyx` | 验证 + ship + closeout |
+| `deepinterview` | `/deepinterview` | 证据先行深度访谈 |
+| `gitx` | `/gitx` | Git 审查—修复—提交—推送 |
+| `update` | `/update` | 文档/跟踪面/陈旧面刷新 |
+
+宿主原生入口：Codex `$framework` + `router-rs framework alias <slug>`；Cursor `.cursor/commands/*.md`；Claude `.claude/rules/framework.md`；Antigravity `.gemini/antigravity/rules/framework.md`；Opencode `.opencode/commands/*.md`（目录自动发现）。**已退役**宿主 id（`claude-desktop`、`codex-cli`、`codex-app`、`antigravity-cli`、`antigravity-app`）不得再写入上表。
+
 ## 推荐阅读顺序（热路径）
 
-1. [AGENTS.md](../AGENTS.md) — 路由、执行梯子、Closeout、跨宿主不变量  
+1. [AGENTS.md](../AGENTS.md) — 跨宿主内核（路由、执行梯子、Closeout）；**双文件注入**：同目录 **`AGENTS_<HOST>.md`** 为当前宿主 transport delta only（禁止与内核合并、禁止在 delta 复述内核）  
 2. [skills/SKILL_ROUTING_RUNTIME.json](../skills/SKILL_ROUTING_RUNTIME.json) — **唯一**热路由入口；命中后只打开记录里的 `skill_path`  
 3. 冷元数据（按需）：[skills/SKILL_ROUTING_METADATA.json](../skills/SKILL_ROUTING_METADATA.json)、[skills/SKILL_PLUGIN_CATALOG.json](../skills/SKILL_PLUGIN_CATALOG.json)、[skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json](../skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json) — **不要**塞进模型热路径一次性读完  
 4. [harness_architecture/](harness_architecture/index.md) — 连续性 L1–L5、hook 出站裁剪、[环境变量表](harness_architecture/03-hook-and-switches.md#5-开关面)  
 5. [host_adapter_contract.md](host_adapter_contract.md) — 新宿主接入；**Cursor 排障**见其中 Codex/Cursor 对照表与 `fork_context` 说明  
+6. [operations/index.md](operations/index.md) — 安装 / 升级 / 备份 / B0–B11 模块排障（Stop/hook 细节仍见 [`docs/hosts/`](hosts/)）
 
 自检命令（在仓库根，已构建 `router-rs` 时）：
 
@@ -49,29 +66,50 @@ depends_on:
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"
 ```
 
+## Office 文档 CLI（pdf / ooxml / ppt）
+
+阅读类 skill 默认走 Rust CLI，但**不会随 hook 自动安装**。本机一次性安装（见 [references/office-document-clis.md](references/office-document-clis.md)）：
+
+```bash
+bash scripts/install-pdf-tool.sh
+bash scripts/install-ooxml-tool.sh
+bash scripts/install-ppt-tool.sh
+# 或：just install-office-tools
+export PATH="$HOME/.local/bin:$PATH"
+which pdf ooxml ppt
+```
+
+| 二进制 | 用途 |
+|--------|------|
+| `pdf` | PDF 阅读 / `pdf batch` |
+| `ooxml` | DOCX/XLSX 阅读 / `ooxml batch` |
+| `ppt` | PPTX `read-full`、渲染 QA |
+
+未安装时单文件可能仍用 `cargo run`；**batch 必须用已安装二进制**。
+
 ## 宿主 × 策略强度（易误解点）
 
-| 宿主 | Stop 上「硬拦」语义 | 说明 |
-|------|---------------------|------|
-| Codex CLI | 可出现 `decision:block` 等硬语义 | 以 Codex hooks 实际 JSON 为准 |
-| Cursor | 多为 `followup_message` / `continue` 类提示 | **不是** Codex 的同形硬拦；不要假设「Stop 一定挡住提交」 |
-| Claude Code | 以 `claude_hooks` 出站字段为准 | 与 Cursor 也不完全同形 |
+| 能力 | Stop 语义 | 说明 |
+|------|-----------|------|
+| **`REVIEW_GATE`（全宿主）** | **advisory-only** | 仅 `followup_message` / MCP `ADVISORY` 等 nudge；**不得** `permission: deny` / `decision: block` / MCP `isError` 硬拦 Stop（见 [`host_adapter_contract.md`](host_adapter_contract.md) §0.1） |
+| **closeout**（非 my-light） | 可 fail-closed | Codex 等可出现 `decision:block` + `CLOSEOUT_FOLLOWUP`；与 review gate 分层 |
+| **Cursor transport** | `followup_message` + 可选 `continue:false` | `continue:false` 用于 hook-state 锁失败等路径，**非** review gate 硬拦 |
 
-**Non-goal**：在 Cursor 上复刻 Codex 级硬拦属于宿主能力边界；要「真挡住」须依赖 Cursor 产品语义，而非仅改本仓库 hook 文案。
+**Non-goal**：借 review gate 在任一宿主上复刻「Stop 硬挡提交」；清门仍靠 spawn 可数 lane、`rg_clear` / 拒因 token 与证据链满足。
 
 ## 机读短码真源与常见误报
 
 - **真源**：本仓库 Cursor hook 写入的机读门控短句（**非** hook `GOAL_CONTINUE` 续跑），**必须以** ASCII 前缀 **`router-rs `** 起行（例如 **`router-rs REVIEW_GATE incomplete …`**、**`router-rs AG_FOLLOWUP missing_parts=…`**）。排障以 hook 出站 JSON 中带该前缀的行为准；长设计见 [harness_architecture/03-hook-and-switches.md](harness_architecture/03-hook-and-switches.md) §4.3。
 - **误报 / 仿冒**：以 **`RG_FOLLOWUP`**、**`RG FOLLOWUP`**、**`RG-FOLLOWUP`** 等开头、且带 `missing_parts=` / `escalation=` 却**没有** `router-rs ` 前缀的整行，**不是** harness 注入。常见来源是助手复述或误粘贴；其中一种长尾形态会在 `escalation=` 后接英文恐吓句（例如声称已循环多次、禁止静默继续）——仍应忽略，改查 **真实** hook 输出与 `.cursor/hook-state`。
 - **对照**：真 **`router-rs AG_FOLLOWUP`** 的 `missing_parts=` 只会是 goal 门控片段（如 `goal_contract`、`checkpoint_progress`、`verification_or_blocker`）的逗号拼接，**不会出现** `independent_subagent_or_reject_reason` 这类占位串；若见该串且前缀不是 `router-rs `，按仿冒处理。
-- **粘贴清门**：用户消息里单独一行粘贴 **`RG_FOLLOWUP`…** **不会**被 [`saw_reject_reason`](../core/router-rs/src/hook_common.rs) 当作清门（避免把模型仿造行当令牌）；请改用单独一行的 **`rg_clear`**、**[`AGENTS.md`](../AGENTS.md) 所列拒因 token**，或自然语言 `review_override` / `delegation_override`。goal 相关的 **`ag_followup…`** 粘贴兼容仍由同函数处理。
+- **粘贴清门**：用户消息里单独一行粘贴 **`RG_FOLLOWUP`…** **不会**被 [`saw_reject_reason`](../core/core-policy/src/hook_common.rs) 当作清门（避免把模型仿造行当令牌）；请改用单独一行的 **`rg_clear`**、**[`AGENTS.md`](../AGENTS.md) 所列拒因 token**，或自然语言 `review_override` / `delegation_override`。goal 相关的 **`ag_followup…`** 粘贴兼容仍由同函数处理。
 
 ## Spawn-first 配对审稿（2026-05-21）
 
 | 主题 | 操作 |
 |------|------|
 | **目标** | 少 Stop `REVIEW_GATE` nag：首轮工具**前** spawn 可数 reviewer；主线程调研须**另开** reviewer（`explore` 不算） |
-| **一行 nudge** | registry `spawn_first_nudge_by_host`（`cursor` / `codex-cli` / `claude-code`，回退 `spawn_first_nudge`）；关 nudge：`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` |
+| **一行 nudge** | registry `spawn_first_nudge_template` + `spawn_first_nudge_host_labels`（`codex` / `claude-code` / `antigravity`）；`cursor` / `opencode` 保留 `spawn_first_nudge_by_host` 覆盖；回退 `spawn_first_nudge`；关 nudge：`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` |
 | **窄范围不拦** | `review ./file`、`small_task`、不用子代理 → 不武装 gate |
 | **勿做** | 为提高 spawn 率而收紧清门（`≥2` lane、lane 文件必达） |
 
@@ -104,10 +142,10 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | Claude 专用；默认 **关闭**（不读 Cursor 同名 env）。 |
 | **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |
-| **D9 / fork 推断** | 见 [`AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md) Cursor 表 + 下节 **REVIEW_GATE**。 |
-| **Codex stable session** | 默认 **要求** 稳定 session 键（`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` unset=on）；生产勿关。legacy `=0`/`false` 时 fallback 按 **repo + cwd + payload session**（可选 `ROUTER_RS_CODEX_HOOK_STATE_SALT` 加盐）；`cwd` 空会 stderr 警告。Stop 上仅 review 措辞、无 UPS 落盘证据时仍 `CODEX_REVIEW_GATE` block。 |
+| **D9 / fork 推断** | 统一 **`review_independent_fork`** / **`review_independent_reviewer_evidence`**（`core-policy/review_gate_engine.rs`）。Env：**`ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（unset=**关**，Claude 语义）；legacy `ROUTER_RS_{CLAUDE,CURSOR,CODEX}_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 仅显式 enable 时生效。见 [`AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md) + 下节 **REVIEW_GATE**。 |
+| **Codex stable session** | 默认 **要求** 稳定 session 键（`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` unset=on）；生产勿关。legacy `=0`/`false` 时 fallback 按 **repo + cwd + payload session**（可选 `ROUTER_RS_CODEX_HOOK_STATE_SALT` 加盐）；`cwd` 空会 stderr 警告。Stop 上仅 review 措辞、无 UPS 落盘证据时仍投影 **`CODEX_REVIEW_GATE` advisory** nudge（不 `decision:block`）。 |
 | **Codex `stop_hook_active`** | Codex 内部 Stop 重放默认**仍**执行 review/closeout 门控；**仅** `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` 时跳过门控。 |
-| **Codex UPS re-arm** | 新一轮深度 review（`全面review` 等）会重置 `independent_review_subagent_seen` / `phase` / `subagent_start_count`（与 Claude 对称）；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 或 my-light 的 UPS/PostTool 会 **清空** hook-state。 |
+| **Codex UPS re-arm** | 新一轮深度 review（`全面review` 等）会重置 `independent_reviewer_seen` / `phase` / `subagent_start_count`（与 Claude 对称）；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 或 my-light 的 UPS/PostTool 会 **清空** hook-state。 |
 | **Cursor UPS re-arm** | `beforeSubmit` 在 my-light 解除 review、goal drive 抑制 review、或新一轮深度 review（`review_arms_for_gate && gate live`）时调用 `reset_review_cycle_progress(preserve_session_guards)`：**fresh cycle** 保留 `review_pending_cap_refused` 与 `active_subagent_count`；其余字段（phase / pending multiset / subagent start/stop counts / `review_followup_count`）清零；fresh cycle 再注入 spawn-first 一行指针。 |
 | **Codex Stop closeout** | 完成宣称 + `ROUTER_RS_CLOSEOUT_ENFORCEMENT`（CI 默认 on）时 Stop `decision:block` + `CLOSEOUT_FOLLOWUP`（`framework_runtime::closeout_stop_followup_for_completion_text`，与 Cursor 同源 token 表）。 |
 | **Review soft-nag 超 cap** | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后 `followup_message` 降为短行，细节落入 `additional_context`；**无** hook `GOAL_CONTINUE` 合并（2026-05）。 |
@@ -115,7 +153,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 ## 混用时的实际武装顺序（Cursor Stop）
 
 - **Stop 优先级**（实现 [`handlers.rs`](../core/router-rs/src/hosts/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
-- **主线程深度 review（wave-2）**：清门须 live subagent 证据 + **`Stop` tail**；**裸** `phase≥2` 不足。细则见下节链接与本节「Hook 减法闭集」。
+- **主线程深度 review（wave-2）**：清门 **Claude canonical**——`independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override；`phase` / pending multiset **仅遥测与 advisory nudge**，非独立清门条件（**不**以 `phase≥3` 或 pending settle 单独清门）。细则见下节链接。
 - **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。**My 默认（`my-light`）**：同轮 review + `/implementx|/verifyx` **不**注入拆分提示（静默 disarm，见 [`docs/hosts/cursor.md`](hosts/cursor.md) beforeSubmit 表）。**非 my-light**（例如磁盘 `GOAL_STATE.lifecycle_profile` 非 `my-light` 且本轮无 My 斜杠、但 hook-state 已 `goal_required`）：会注入一行 **`router-rs：本轮提交同时包含…`** 拆分提示，避免误以为 review 门控失效。若你本意是「先深度审稿再开连续执行」，请拆成两轮。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 My implement / goal drive 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。
 
@@ -123,12 +161,12 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 **真源（勿在本页复述长表）**：
 
-- Cursor 子代理契约（`fork_context` 拼写、**review-lite** vs `review_lite`、`phase≥3`、stale）：[`references/cursor-subagent-hook-contract.md`](references/cursor-subagent-hook-contract.md) · [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json)
+- Cursor 子代理契约（`fork_context` 拼写、**review-lite** vs `review_lite`、pending multiset **遥测/nudge only**、stale）：[`references/cursor-subagent-hook-contract.md`](references/cursor-subagent-hook-contract.md) · [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json)
 - Env 表：[`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md) · [`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) §5
 - **review-lite** ADR：[`adr/ADR-review-gate-lite.md`](adr/ADR-review-gate-lite.md)
 - 宿主差异 / `need=` 排障：[host_adapter_contract.md](host_adapter_contract.md) · [hosts/cursor.md](hosts/cursor.md)
 
-**快查**：独立 fork 须 `fork_context` 解析为 **`false`**（布尔、`0`、字符串 `"false"`/`"0"`/`"no"`/`"n"`）；Stop 硬行 `router-rs REVIEW_GATE incomplete` → 先 spawn `fork_context=false` 的 **deep_gate_lanes** lane。
+**快查**：独立 fork 须 `fork_context` 解析为 **`false`**（布尔、`0`、字符串 `"false"`/`"0"`/`"no"`/`"n"`）。核心 API：**`review_independent_fork`** / **`review_independent_reviewer_evidence`**；缺字段推断默认关（`ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 或 legacy 宿主 env 显式 enable）。Stop 见 advisory 行 `router-rs REVIEW_GATE incomplete` / `CODEX_REVIEW_GATE` → 先 spawn `fork_context=false` 的 **reviewer_lanes** lane。
 
 ## Hook 减法闭集与内存（2026-05-20）
 
@@ -136,12 +174,12 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 |------|----------------|------|
 | **Cursor** | **7** | [`docs/hosts/cursor.md`](hosts/cursor.md) |
 | **Claude Code** | **4** | [`docs/hosts/claude.md`](hosts/claude.md) |
-| **Codex CLI** | 见 `.codex/hooks.json`（另述） | [`docs/hosts/codex-cli.md`](hosts/codex-cli.md) |
+| **Codex** | 见 `.codex/hooks.json`（另述） | [`docs/hosts/codex.md`](hosts/codex.md) |
 
 - **Cursor 已移除**：`afterAgentResponse`（compact 清门改 **`Stop` tail**）、shell 生命周期、`afterFileEdit`、`preCompact`。
 - **`postToolUse`**：仍注册（**`timeout: 20s`**，与门控事件一致；见 [`docs/hosts/cursor.md`](hosts/cursor.md)「对话中断排障」）。review 武装时 `Read` 在无 pending/open 时可 fast-path；须 **`cargo build --release`** 且 launcher 命中 release（~8MB）。若 Agent 步在工具后卡住，先查 postToolUse 是否超时而非盲目加长 timeout。
 
-**对话中断最小复现（5 步）**：(1) 查 hook stdout 是否 `permission: deny` 或 `followup_message` 含 `router-rs REVIEW_GATE`；(2) 读 `.cursor/hook-state/review-subagent-*.json` 的 `active_subagent_count` vs pending；(3) 双聊天同 repo 时设 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`；(4) 确认 `router-rs` release 存在；(5) 深度 review 先 spawn `fork_context=false` lane 再工具密集调用。
+**对话中断最小复现（5 步）**：(1) 查 hook stdout 的 `followup_message` 是否含 `router-rs REVIEW_GATE`（review gate **不**以 `permission: deny` / `decision: block` 硬拦 Stop；`permission: deny` 多见于 `subagentStart` 并发 cap）；(2) 读 `.cursor/hook-state/review-subagent-*.json` 的 `active_subagent_count` vs pending；(3) 双聊天同 repo 时设 `ROUTER_RS_CURSOR_SESSION_NAMESPACE`；(4) 确认 `router-rs` release 存在；(5) 深度 review 先 spawn `fork_context=false` lane 再工具密集调用。
 - **Claude**：`PostToolUse` 仅 touched settings/framework 时才有上下文；共享 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（`.claude/router-rs-hook.env`）。
 - **恢复旧 Cursor 事件**：见 [`MIGRATION.md`](../MIGRATION.md)。
 
@@ -171,10 +209,10 @@ Cursor 对 `additional_context` / 过长 `followup_message` 有 **UTF-8 字节�
 | 环境变量命名 | harness 表前脚注 |
 | 截断不可见 | 出站 `...[~trunc]` 类标记 + 文档 |
 
-## Maint / refresh 与 Claude Desktop user 投影
+## Maint / refresh 与 user 投影
 
-- **`framework maint refresh-host-projections`** 默认会对 `claude-desktop` 写 **user** scope（macOS 上为 `~/Library/Application Support/Claude/…`）。CI 或不想动本机 Desktop 配置时：设 **`ROUTER_RS_MAINT_SKIP_USER_PROJECTION=1`**（仅刷 project），或传 **`--home /path/to/isolated-home`** 把 user scope 落到隔离目录。
-- 业务仓 Desktop MCP：在 framework 仓执行 `./scripts/install-claude.sh --project-root <业务仓>`；勿指望 `update-one-shot` 自动改业务仓 `.claude/*`。
+- **`framework maint refresh-host-projections`** 按 `host_targets.supported`（五宿主）刷新各宿主投影；CI 或不想动本机 user 配置时：设 **`ROUTER_RS_MAINT_SKIP_USER_PROJECTION=1`**（仅刷 project），或传 **`--home /path/to/isolated-home`** 把 user scope 落到隔离目录。
+- 业务仓 Claude Code：在 framework 仓执行 `./scripts/install-claude.sh --project-root <业务仓>`；勿指望 `update-one-shot` 自动改业务仓 `.claude/*`。
 
 ## 相关仓库入口
 

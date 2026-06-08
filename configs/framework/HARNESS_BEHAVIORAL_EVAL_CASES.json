@@ -42,6 +42,10 @@
         "review_gate_env_matrix",
         "review_gate_lite_mixed_id_lane"
       ]
+    },
+    {
+      "id": "contract_integrity",
+      "case_ids": ["skill_contract_lint_high_impact"]
     }
   ],
   "cases": [
@@ -154,16 +158,10 @@
       "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_cap_refused_at_pending_max"
     },
     {
-      "id": "antigravity_cli_install_remove_roundtrip",
+      "id": "antigravity_app_install_projection",
       "failure_class": "verification_missing",
-      "fixture": "docs/hosts/antigravity-cli.md",
-      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml install_remove_roundtrip_clears_router_hooks"
-    },
-    {
-      "id": "antigravity_cli_remove_manifest_consistency",
-      "failure_class": "verification_missing",
-      "fixture": "docs/hosts/antigravity-cli.md",
-      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml remove_does_not_drop_manifest_when_no_entries_removed"
+      "fixture": "docs/hosts/antigravity-app.md",
+      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml host_integration"
     }
   ]
 }

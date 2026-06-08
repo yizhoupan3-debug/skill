@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-08"
 depends_on:
   - ../harness_architecture/index.md
   - ../../AGENTS.md
@@ -29,14 +29,28 @@ depends_on:
 - **显式控制面**：`framework_goal_drive`、`framework_rfv_loop`（stdio-json）；My 执行区用 `/implementx`、`/verifyx` 驱动，**非**宿主 Stop 自动续跑。
 - SessionStart：**仅** `Repo:` 单行（Cursor）；预算见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` / `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS`。
 
+## 跨宿主 Review gate（canonical env）
+
+与 [`harness_architecture/03-hook-and-switches.md`](../harness_architecture/03-hook-and-switches.md) §5 对齐；reader 真源 [`core-policy/env_flags.rs`](../../core/core-policy/src/env_flags.rs)。
+
+**政策（2026-06）**：**`REVIEW_GATE` 在 Stop 上全局 advisory-only**——hook/MCP 仅注入 nudge 或 `ADVISORY` verdict，**不**硬拦 Stop。下列 env 关闭的是 **nudge / spawn-first / 状态武装链**，不是「解除硬 block」（review 已无 Stop 硬 block）。**Closeout** 硬门禁见本文 §Closeout 分层，与 review 无关。
+
+| 变量 | 默认 | 作用 |
+|------|------|------|
+| `ROUTER_RS_REVIEW_GATE_DISABLE` | 关 | **跨宿主 canonical** 应急关闭 review gate nudge 链；legacy `ROUTER_RS_{CURSOR,CODEX,CLAUDE}_REVIEW_GATE_DISABLE` **同语义**（**仅** `1`/`true`/`yes`/`on`） |
+| `ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES` | **8** | Cursor Stop：advisory `REVIEW_GATE` 未满足时降频；legacy `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`；`0`/`false`/`off`/`no` = 严格不降频 |
+| `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` | 关 | 缺 `fork_context` 可推断 `false`（unset=关）；legacy `ROUTER_RS_{CURSOR,CODEX,CLAUDE}_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`；显式 `fork_context: true` 永不算 |
+| `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE` | 开 | 关闭 spawn-first 配对审稿单行；**仅** `0`/`false`/`off`/`no` |
+| `ROUTER_RS_REVIEW_PENDING_CYCLE_MAX` | 32 | `review_subagent_pending_cycle_keys` multiset 上限（Cursor）；legacy `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` |
+
 ## Codex CLI 专项
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` | 关闭 Codex `CODEX_REVIEW_GATE` 硬拦；UPS/PostTool 亦清 hook-state |
+| `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` | **Legacy 别名**；与 canonical **`ROUTER_RS_REVIEW_GATE_DISABLE`** 同语义——关闭 Codex review Stop nudge 并清 hook-state review 字段（**非** my-light 时 Codex 实现可仅 honor canonical + my-light，见 `codex_review_gate_suppressed`） |
 | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=0` | 允许无 `session_id` 的 legacy payload（默认 **on** = 缺则 lifecycle block） |
 | `ROUTER_RS_CODEX_HOOK_STATE_SALT` | unstable fallback 文件名盐（与 repo+cwd+payload session 组合；生产建议保持 strict session on） |
-| `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 深度 lane 缺 `fork_context` 时不推断 independent 证据 |
+| `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=1` | 开启 Codex 深度 lane 缺 `fork_context` 时的 independent 推断（unset=关） |
 | `ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS=1` | `stop_hook_active` 重放时跳过 review gate |
 | `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 Codex UPS / Claude UserPromptSubmit spawn-first 单行（文案来自 `spawn_first_nudge_by_host.<host>` 或全局回退） |
 | `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` | UPS/SessionStart `additionalContext` UTF-8 字节上限 |
@@ -45,13 +59,13 @@ depends_on:
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | 应急关闭 Cursor REVIEW_GATE 全链 |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1` | **Legacy 别名**；与 **`ROUTER_RS_REVIEW_GATE_DISABLE`** 同语义——关闭 Cursor review nudge / spawn-first 武装链 |
 | `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE=0` | 关闭 Cursor beforeSubmit spawn-first 单行 nudge（**零注入**；清门阈值不变） |
 | `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE=0` | 关闭 Cursor beforeSubmit **model inherit** 单行（默认开；与 REVIEW_GATE / my-light 无关） |
-| `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | Stop REVIEW_GATE 硬行次数上限（默认 8；超 cap 降为 soft_nag） |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` | Stop advisory `REVIEW_GATE` 完整行次数上限（默认 8；超 cap 降为 soft_nag） |
 | `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` | review `pending_cycle_keys` 上限（默认 32） |
-| `ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` | **review-lite**：仅稳定 `id:` 用 `review_lite_pending_cycle_keys`；非 `id:` 回退 strict；Stop 仍须 **phase≥3** 且两 pending 结构皆空（见 [`cursor-subagent-hook-contract.md`](cursor-subagent-hook-contract.md)、[`ADR-review-gate-lite.md`](../adr/ADR-review-gate-lite.md)） |
-| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 关闭 Cursor 深度 lane 在 `fork_context` **缺失**时的 `false` 推断（unset=on）；显式 `true` 永不算 |
+| `ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` | **review-lite**：仅稳定 `id:` 用 `review_lite_pending_cycle_keys`；非 `id:` 回退 strict；清门仍须 `independent_reviewer_seen` 或 override——`review_subagent_pending_cycle_keys` / `review_lite_pending_cycle_keys` **仅** phase bump 与 operator 遥测提示，**非**清门条件（见 [`cursor-subagent-hook-contract.md`](cursor-subagent-hook-contract.md)、[`ADR-review-gate-lite.md`](../adr/ADR-review-gate-lite.md)） |
+| `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=1` | 开启 Cursor 深度 lane 在 `fork_context` **缺失**时的 `false` 推断（unset=关；canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 同语义）；显式 `true` 永不算 |
 | `ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS` | subagent stale 阈值（秒）；`0`/`false`/`off`/`no` 关闭无 open 时的 pending 自动 prune |
 | `ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX` | `SESSION_CALL_TRACKER` `per_tool` 键上限（默认 128） |
 | `ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0` | 关闭 SessionEnd 终端回收 |
@@ -65,20 +79,22 @@ depends_on:
 | `ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` | 手稿写作/润色全链路（**默认开**；`0` 关；文案 `PAPER_PROSE_QUALITY_HOOK.txt`） |
 | `ROUTER_RS_CODEX_PAPER_PROSE_HOOK` | Codex CLI UPS prose hook（**默认开**；`0` 关） |
 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` | Claude Code UPS prose hook（**默认开**；`0` 关） |
-| `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK` | Antigravity CLI UPS prose hook（**默认开**；`0` 关） |
+| `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK` | **已退役**（2026-06，`antigravity-cli` 移除）；历史名保留于代码时无 hook 面 |
 | `ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` | Codex CLI 对抗审稿短码（opt-in） |
 | `ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` | Claude Code 对抗审稿短码（opt-in） |
-| `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK=1` | Antigravity CLI 对抗审稿短码（opt-in） |
+| `ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK=1` | **已退役**（2026-06） |
 | `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 operator 注入总闸（含 paper adversarial / prose） |
 
-## Claude Desktop MCP
+## 已退役：Claude Desktop MCP（2026-06）
 
-| 变量 | 作用 |
+宿主 **`claude-desktop`** 已移除。下列 env **勿在新环境配置**；MCP 类宿主（`antigravity`、`opencode`）使用各自 MCP 工具层，无 `ROUTER_RS_DESKTOP_*` 面。
+
+| 变量 | 状态 |
 |------|------|
-| `ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS` | `framework_snapshot` MCP 缓存 TTL（默认 30） |
-| `ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS` | task view 缓存 TTL（默认 5） |
+| `ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS` | 已退役 |
+| `ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS` | 已退役 |
 
-Desktop **不**消费 `ROUTER_RS_CLAUDE_*`（那些仅 Claude Code hook）。MCP `--repo-root` 支持 `${CLAUDE_PROJECT_DIR:-.}` 与 server 侧 `CLAUDE_PROJECT_DIR` env。
+Claude Code hook 用 `ROUTER_RS_CLAUDE_*`（**不**与上表混用）。
 
 ## Schema drift（verify / CI）
 

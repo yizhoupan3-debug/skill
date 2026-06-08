@@ -37,7 +37,7 @@ depends_on:
 +-- Cargo.toml                         # workspace 根
 +-- Justfile                           # 开发命令
 +-- cli/
-|   +-- antigravity-cli/               # Antigravity CLI（独立二进制）
+|   +-- opencode/                      # OpenCode MCP 宿主
 +-- core/
 |   +-- antigravity/                   # 状态管理纯库（task_state、state_manager、rfv_loop）
 |   +-- router-rs/                     # 核心控制平面二进制（hook、路由、门控、CLI）
@@ -51,8 +51,6 @@ depends_on:
 |   +-- SKILL_MANIFEST.json            # 冷热 manifest
 |   +-- <skill-name>/SKILL.md          # 各 skill 定义
 +-- rust_tools/                        # 独立 Rust 工具 crate（citation、image、pptx 等）
-+-- tools/
-|   +-- browser-mcp/                   # Browser MCP TypeScript 实现
 +-- scripts/
 |   +-- cursor-bootstrap-framework.sh  # 跨仓库接入脚本
 |   +-- ci/                            # CI 脚本

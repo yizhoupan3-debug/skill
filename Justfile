@@ -37,4 +37,22 @@ publish:
 doctor:
     cargo run --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "{{PWD}}"
 
+install-pdf:
+    bash scripts/install-pdf-tool.sh
+
+install-ooxml:
+    bash scripts/install-ooxml-tool.sh
+
+install-ppt:
+    bash scripts/install-ppt-tool.sh
+
+install-office-tools: install-pdf install-ooxml install-ppt
+
+# Remove workspace Rust build trees (/tmp/skill-cargo-target via .cargo/config.toml) and repo-local target dirs.
+clean:
+    cargo clean
+    cargo clean --manifest-path rust_tools/Cargo.toml
+    cargo clean --manifest-path core/router-rs/Cargo.toml
+    rm -rf target target-router-rs-subagent
+
 ci: validate-skills test-all

@@ -120,7 +120,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     }
     if host_install_missing > 0 {
         println!(
-            "hint: router-rs framework host-integration install --to claude-code|claude-desktop|antigravity --scope project"
+            "hint: router-rs framework host-integration install --to claude-code|antigravity|opencode --scope project"
         );
         let deprecated_shim = repo_root
             .join(".claude")

@@ -10,7 +10,7 @@ redirect_to: rust_contracts/index.md
 # Runtime Rust Contracts
 
 > **本文已拆分**。完整内容见 [`rust_contracts/index.md`](rust_contracts/index.md)。
-> 本文件保留以兼容旧链接。
+> 本文件保留以兼容旧链接。运行时只读视图：`router-rs framework snapshot`；宿主同步：`codex sync --repo-root`；stdio `execute` operation 见 index 契约节。
 
 ## 拆分导航
 

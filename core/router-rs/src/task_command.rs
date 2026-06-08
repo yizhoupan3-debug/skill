@@ -54,8 +54,8 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
 /// Dispatch without taking an extra outer lock (`apply_task_ledger_mutation` is invoked inside handlers where needed).
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, String> {
     match cmd {
-        TaskLedgerCommand::AutopilotGoal(p) => crate::autopilot_goal::framework_goal_drive(p),
-        TaskLedgerCommand::RfvLoop(p) => crate::rfv_loop::framework_rfv_loop(p),
+        TaskLedgerCommand::AutopilotGoal(p) => crate::telemetry_emit::framework_goal_drive(p),
+        TaskLedgerCommand::RfvLoop(p) => crate::telemetry_emit::framework_rfv_loop(p),
         TaskLedgerCommand::SessionArtifacts(p) => {
             crate::framework_runtime::write_framework_session_artifacts(p)
         }

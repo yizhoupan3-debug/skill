@@ -31,8 +31,6 @@ fn adversarial_env_for_host(host: PaperProseHookHost) -> &'static str {
         PaperProseHookHost::Cursor => ENV_HOOK_CURSOR,
         PaperProseHookHost::Codex => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
         PaperProseHookHost::Claude => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
-        PaperProseHookHost::AntigravityCli => "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK",
-        PaperProseHookHost::ClaudeDesktop => "ROUTER_RS_CLAUDE_DESKTOP_PAPER_ADVERSARIAL_HOOK",
     }
 }
 

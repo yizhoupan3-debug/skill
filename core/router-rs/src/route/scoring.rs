@@ -1,6 +1,7 @@
 //! Candidate scoring and owner/overlay selection.
 use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framework_alias_call};
 use super::scoring_config::{scoring_weights, ScoringWeights};
+use super::signal_cache::cached_signal;
 use super::signals::*;
 use super::text::{
     common_route_stop_tokens, normalize_text, text_matches_phrase, tokenize_route_text,
@@ -36,14 +37,21 @@ pub(crate) fn score_route_candidate<'a>(
     let _checklist_execution_context = has_checklist_execution_context(query_text);
     let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
     let token_budget_pressure = has_token_budget_pressure(query_text, query_token_list);
-    let team_orchestration_context = has_team_orchestration_context(query_text, query_token_list)
-        && !has_team_negation_context(query_text, query_token_list);
+    let workflow_orchestration_context = cached_signal(
+        "has_workflow_orchestration_context",
+        query_text,
+        query_token_list,
+        || {
+            has_workflow_orchestration_context(query_text, query_token_list)
+                && !has_workflow_negation_context(query_text, query_token_list)
+        },
+    );
     let explicit_framework_alias = framework_alias_requires_explicit_call(record)
         && has_explicit_framework_alias_call(query_text, query_token_list, record);
     let parallel_execution_context = has_parallel_execution_context(query_text, query_token_list);
     if record.slug == "agent-swarm-orchestration"
         && (bounded_subagent_context
-            || team_orchestration_context
+            || workflow_orchestration_context
             || has_parallel_review_candidate_context(query_text, query_token_list)
             || parallel_execution_context)
     {
@@ -443,6 +451,7 @@ pub(crate) fn pick_owner<'a>(
             candidate.record.slug == "agent-swarm-orchestration"
                 && candidate.score >= w.agent_swarm_candidate_threshold
                 && !has_plan_mode_owner_context(query_text, query_token_list)
+                && !has_systematic_debug_context(query_text, query_token_list)
         })
         .cloned()
     {

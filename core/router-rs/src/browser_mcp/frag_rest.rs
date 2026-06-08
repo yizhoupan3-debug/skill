@@ -924,40 +924,6 @@ fn skill_body_path_from_manifest(
     Ok(None)
 }
 
-fn route_with_full_manifest_fallback(
-    runtime_records: &[SkillRecord],
-    manifest_path: &Path,
-    query: &str,
-    session_id: &str,
-    allow_overlay: bool,
-    first_turn: bool,
-) -> Result<RouteDecision, String> {
-    let hot_decision = route_task(
-        runtime_records,
-        query,
-        session_id,
-        allow_overlay,
-        first_turn,
-    )?;
-    if !manifest_path.is_file() {
-        return Ok(hot_decision);
-    }
-    let should_retry = should_retry_with_manifest(&hot_decision);
-    let full_records = load_records_from_manifest(manifest_path)?;
-    let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
-    if should_accept_manifest_fallback(
-        &hot_decision,
-        &full_decision,
-        runtime_records,
-        should_retry,
-        false,
-    ) {
-        Ok(full_decision)
-    } else {
-        Ok(hot_decision)
-    }
-}
-
 fn session_not_found_error() -> Value {
     browser_error(
         "SESSION_NOT_FOUND",

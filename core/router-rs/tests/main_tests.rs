@@ -2928,19 +2928,19 @@ fn framework_command_aliases_require_literal_entrypoints() {
     .expect("route explicit my-implement alias");
     assert_eq!(my_exec.selected_skill, "implementx");
 
-    let team_alias = crate::framework_runtime::build_framework_alias_envelope(
+    let team_alias_err = crate::framework_runtime::build_framework_alias_envelope(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
         "team",
         crate::framework_runtime::FrameworkAliasBuildOptions {
             max_lines: 6,
             compact: true,
-            host_id: Some("codex-cli"),
+            host_id: Some("codex"),
         },
     )
-    .expect("team framework alias must resolve");
-    assert_eq!(
-        team_alias["alias"]["canonical_owner"],
-        "agent-swarm-orchestration"
+    .expect_err("retired team framework alias must fail closed");
+    assert!(
+        team_alias_err.contains("Unknown framework alias `team`"),
+        "unexpected error: {team_alias_err}"
     );
 
     let deepinterview = route_task_with_manifest_fallback(
@@ -2982,19 +2982,19 @@ fn framework_command_aliases_require_literal_entrypoints() {
     .expect("route explicit update alias");
     assert_eq!(update.selected_skill, "update");
 
-    let natural_language_team = route_task_with_manifest_fallback(
+    let natural_language_workflow = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
         None,
         None,
-        "需要 team orchestration 多 agent 执行",
-        "natural-language-team",
+        "需要 workflow orchestration 多 agent 执行",
+        "natural-language-workflow",
         true,
         true,
     )
-    .expect("route natural language team ask");
+    .expect("route natural language workflow ask");
     assert_eq!(
-        natural_language_team.selected_skill,
+        natural_language_workflow.selected_skill,
         "agent-swarm-orchestration"
     );
 

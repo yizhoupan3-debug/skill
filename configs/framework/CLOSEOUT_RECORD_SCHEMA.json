@@ -159,6 +159,16 @@
       "id": "task_id_context_mismatch",
       "description": "Context-aware evaluation found that record.task_id does not match the requested task id.",
       "severity": "block"
+    },
+    {
+      "id": "prediction_verification_status_mismatch",
+      "description": "GOAL_STATE prediction expected a different verification_status than the closeout record (advisory dry-run).",
+      "severity": "warn"
+    },
+    {
+      "id": "prediction_hypothesis_not_reflected",
+      "description": "GOAL_STATE prediction hypothesis is not reflected in the closeout summary (advisory dry-run).",
+      "severity": "warn"
     }
   ],
   "completion_keywords": [

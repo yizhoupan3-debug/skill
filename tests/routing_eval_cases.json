@@ -28,8 +28,8 @@
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "forbidden_owners": [
-        "skill-creator",
-        "skill-installer"
+        "deep-research",
+        "plan-mode"
       ],
       "first_turn": true
     },
@@ -41,8 +41,8 @@
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "forbidden_owners": [
-        "skill-creator",
-        "skill-installer"
+        "deep-research",
+        "plan-mode"
       ],
       "first_turn": true
     },
@@ -102,7 +102,7 @@
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "forbidden_owners": [
-        "openai-docs"
+        "deep-research"
       ],
       "first_turn": true,
       "route_context": {
@@ -151,8 +151,8 @@
       "expected_owner": "agent-swarm-orchestration",
       "expected_overlay": null,
       "forbidden_owners": [
-        "paper-reviser",
-        "paper-reviewer"
+        "plan-mode",
+        "deep-research"
       ],
       "first_turn": true
     },
@@ -245,7 +245,7 @@
       "expected_owner": "gh-fix-ci",
       "expected_overlay": null,
       "forbidden_owners": [
-        "systematic-debugging"
+        "agent-swarm-orchestration"
       ],
       "first_turn": true
     },
@@ -281,7 +281,7 @@
       "expected_owner": "scientific-figure-plotting",
       "expected_overlay": null,
       "forbidden_owners": [
-        "image-generated"
+        "visual-review"
       ],
       "first_turn": true
     },
@@ -293,7 +293,7 @@
       "expected_owner": null,
       "expected_overlay": null,
       "forbidden_owners": [
-        "mac-memory-management"
+        "python-env-management"
       ],
       "first_turn": true
     },
@@ -305,7 +305,7 @@
       "expected_owner": null,
       "expected_overlay": null,
       "forbidden_owners": [
-        "mac-memory-management"
+        "python-env-management"
       ],
       "first_turn": true
     },
@@ -317,7 +317,7 @@
       "expected_owner": null,
       "expected_overlay": null,
       "forbidden_owners": [
-        "mac-memory-management"
+        "python-env-management"
       ],
       "first_turn": true
     },
@@ -329,7 +329,7 @@
       "expected_owner": "skill-framework-developer",
       "expected_overlay": null,
       "forbidden_owners": [
-        "systematic-debugging",
+        "agent-swarm-orchestration",
         "agent-swarm-orchestration"
       ],
       "first_turn": true
@@ -348,7 +348,7 @@
       "first_turn": true
     },
     {
-      "id": "team-alias-natural-language-falls-back-to-delegation-gate",
+      "id": "workflow-orchestration-natural-language-falls-back-to-delegation-gate",
       "category": "framework-alias",
       "task": "帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent",
       "focus_skill": "agent-swarm-orchestration",

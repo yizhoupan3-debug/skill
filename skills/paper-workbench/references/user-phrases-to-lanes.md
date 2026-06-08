@@ -15,7 +15,7 @@
 ## 3) Exhaustive 路径 sidecar lanes（findings + sidecar，非 G 进度模板）
 
 整篇严审（`audit_depth: exhaustive`）默认走
-[`paper-exhaustive-audit.md`](../paper-exhaustive-audit.md) 四维度 findings；
+[`paper-exhaustive-audit.md`](paper-exhaustive-audit.md) 四维度 findings；
 **不要**默认向用户汇报 G0–G14 gate 进度。下列 sidecar 仅在对应维度需要时并行启用，产出 merge 进 `findings_by_dimension`：
 
 - **`citation_verify` → `citation-management`**

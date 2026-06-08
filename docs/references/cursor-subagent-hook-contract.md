@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-09"
 depends_on:
   - ../harness_architecture/index.md
 ---
@@ -24,7 +24,7 @@ Machine-readable source: [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`
 
 ## `fork_context`
 
-Independent reviewer evidence when parsed as logical **`false`** only (`cursor_review_independent_fork` / `fork_context_from_values` in `review_gate_engine.rs`):
+Independent reviewer evidence when parsed as logical **`false`** only ([`review_independent_fork`](../../core/core-policy/src/review_gate_engine.rs) / `fork_context_from_values`):
 
 | Form | Accepted as `false` |
 |------|---------------------|
@@ -32,7 +32,7 @@ Independent reviewer evidence when parsed as logical **`false`** only (`cursor_r
 | JSON integer | `0` |
 | JSON string (trim + ASCII lower) | `"false"`, `"0"`, `"no"`, `"n"` |
 
-**`true` / shared fork** (boolean `true`, integer `1`, strings `"true"` / `"1"` / `"yes"` / `"y"`, or explicit `fork_context: true`) **never** counts. Field **missing** is not `false` in the parser itself; Cursor may infer `false` on deep lanes when `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` is on (unset default).
+**`true` / shared fork** (boolean `true`, integer `1`, strings `"true"` / `"1"` / `"yes"` / `"y"`, or explicit `fork_context: true`) **never** counts. Field **missing** is not `false` in the parser itself; Cursor may infer `false` on deep lanes only when `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` or legacy `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` is **explicitly enabled** (unset = off).
 
 ## Naming: review-lite vs `review_lite`
 
@@ -52,9 +52,13 @@ Fallback: lite + non-`id:` key → strict path (`review_lite_fallback_strict` lo
 
 ## Satisfaction (Stop)
 
-`review_subagent_evidence_satisfied` requires **`phase >= 3`** and **both** pending structures empty (`review_lite_pending_cycle_keys` and `review_subagent_pending_cycle_keys`). Orphan lite pending blocks Stop even after switching back to strict env. **Bare** legacy `phase≥2` without live subagent settle is insufficient (`wave2_requires_live_evidence` in JSON).
+**Claude canonical (2026-06)**: Stop clearance = `review_gate_satisfied` ⇔ `review_override` **or** `independent_reviewer_seen` (`reviewer_lanes` + `fork_context=false` via PostTool/subagentStart). Same rule for Claude Code / Codex / Cursor hook hosts. See [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1.
 
-Implementation: `review_subagent_evidence_satisfied` in `cursor_hooks/handlers.rs`. ADR: [`docs/adr/ADR-review-gate-lite.md`](../adr/ADR-review-gate-lite.md).
+**Advisory-only**: `review_gate_blocks_stop` only decides whether to project **`router-rs REVIEW_GATE incomplete`** nudge; it **does not** hard-block Stop (`permission: deny` / `decision: block`).
+
+**Multiset / review-lite (Cursor telemetry only)**: `review_subagent_pending_cycle_keys` and `review_lite_pending_cycle_keys` track subagent cycle hygiene, phase bump, and operator hints—they are **not** separate Stop clearance conditions. Unsettled pending may still trigger **advisory** nudges for operator visibility; clearance still requires Claude-canonical evidence. Orphan lite pending behavior unchanged for telemetry. **Bare** `phase≥2` without `independent_reviewer_seen` does not clear the gate (`wave2_requires_live_evidence` in JSON).
+
+Implementation: `core-policy::review_gate_engine` (canonical) + `cursor_hooks/handlers.rs` (transport). ADR: [`docs/adr/ADR-review-gate-lite.md`](../adr/ADR-review-gate-lite.md).
 
 ## Stale recovery
 

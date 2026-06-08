@@ -15,7 +15,7 @@
       "L0",
       "gate",
       "delegation",
-      "Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.",
+      "Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration.",
       [
         "多 agent 协作",
         "多 agent 执行",

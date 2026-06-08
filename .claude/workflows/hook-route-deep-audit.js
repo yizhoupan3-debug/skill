@@ -20,10 +20,10 @@ phase('Audit')
 const AUDIT_TARGETS = [
   {
     key: 'claude-hooks',
-    label: 'claude_hooks.rs',
+    label: 'claude_code_hooks.rs',
     prompt:
       '面向用户的可见输出使用简体中文。\n\n' +
-      '深度审计 /Users/joe/Developer/skill/core/router-rs/src/hosts/claude_hooks.rs。\n\n' +
+      '深度审计 /Users/joe/Developer/skill/core/router-rs/src/hosts/claude_code_hooks.rs。\n\n' +
       '重点检查：\n' +
       '1. 上一轮改动后的代码一致性：CROSS_HOST_SURFACES/RETIRED_SURFACES/is_cross_host_or_retired_surface/is_framework_source_path/FRAMEWORK_SOURCE_PREFIXES 的引用是否完整\n' +
       '2. 是否有残留的旧名称引用（RETIRED_SURFACE_PATHS、is_retired_surface）\n' +
@@ -46,7 +46,7 @@ const AUDIT_TARGETS = [
       '2. classify_protected_path 中对 AGENTS_CLAUDE.md 的处理是否需要同步更新\n' +
       '3. 测试 protected_paths_cover_retired_and_codex_surfaces 是否需要更新（不再期望 AGENTS_CLAUDE.md 被保护）\n' +
       '4. save_optimize_guard_respects_protected_paths 测试是否受影响\n' +
-      '5. hook_policy 与 claude_hooks 之间的保护列表一致性\n' +
+      '5. hook_policy 与 claude_code_hooks 之间的保护列表一致性\n' +
       '6. 是否有死代码或过期注释\n\n' +
       '用 bash grep 搜索，给出具体行号和修复建议。',
   },
@@ -71,7 +71,7 @@ const AUDIT_TARGETS = [
       '检查跨宿主保护列表的对称性：\n' +
       '1. /Users/joe/Developer/skill/core/router-rs/src/hosts/codex_hooks/mod.rs — PROTECTED_GENERATED_PATHS 是否包含 AGENTS.md 和 AGENTS_CLAUDE.md\n' +
       '2. /Users/joe/Developer/skill/core/router-rs/src/hosts/cursor_hooks/ — Cursor 侧是否有独立的路径保护\n' +
-      '3. claude_hooks.rs 的 GENERATED_ENTRYPOINT_PATHS_CLAUDE 现在只有 .claude/CLAUDE.md，而 codex_hooks 的 PROTECTED_GENERATED_PATHS 可能仍有 AGENTS.md — 这种不对称是否合理\n' +
+      '3. claude_code_hooks.rs 的 GENERATED_ENTRYPOINT_PATHS_CLAUDE 现在只有 .claude/CLAUDE.md，而 codex_hooks 的 PROTECTED_GENERATED_PATHS 可能仍有 AGENTS.md — 这种不对称是否合理\n' +
       '4. hook_policy.rs 的 CODEX_PROTECTED_GENERATED_PATHS 和 codex_hooks 的 PROTECTED_GENERATED_PATHS 是否一致\n\n' +
       '给出对称性分析和建议。',
   },
@@ -157,7 +157,7 @@ phase('Docs')
 const docsResult = await agent(
   '面向用户的可见输出使用简体中文。\n\n' +
   '更新文档和代码注释，确保与实际行为一致：\n\n' +
-  '1. claude_hooks.rs 中的模块文档注释（//! 开头）是否需要更新\n' +
+  '1. claude_code_hooks.rs 中的模块文档注释（//! 开头）是否需要更新\n' +
   '2. FRAMEWORK_GUARDED_PREFIXES 和 FRAMEWORK_SOURCE_PREFIXES 的注释是否清晰\n' +
   '3. CROSS_HOST_SURFACES 和 RETIRED_SURFACES 的注释是否解释了区别\n' +
   '4. router_env_flags.rs 中 router_rs_skip_pre_tool_use_guard 的文档是否完整\n' +
@@ -212,7 +212,7 @@ const commitResult = await agent(
   '面向用户的可见输出使用简体中文。\n\n' +
   '执行分批 commit 和 push。\n\n' +
   '分批策略：\n' +
-  '1. 第一批：hook guard 优化（claude_hooks.rs + hook_policy.rs 的保护列表调整）\n' +
+  '1. 第一批：hook guard 优化（claude_code_hooks.rs + hook_policy.rs 的保护列表调整）\n' +
   '2. 第二批：env flags + hook 脚本 + 配置文件更新\n' +
   '3. 第三批：文档和注释更新\n' +
   '4. 第四批：编译垃圾清理（如果有 .gitignore 变更）\n\n' +

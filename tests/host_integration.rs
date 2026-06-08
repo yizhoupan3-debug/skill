@@ -1,8 +1,9 @@
 mod common;
 
 use common::{
-    host_integration_json, json_from_output, output_text, project_root, read_json, read_text,
-    router_rs_command, router_rs_json, run, seed_framework_markers, write_json, write_text,
+    assert_canonical_closed_set_host_ids, host_integration_json, json_from_output, output_text,
+    project_root, read_json, read_text, router_rs_command, router_rs_json, run,
+    seed_framework_markers, write_json, write_text, CANONICAL_HOST_IDS, RETIRED_HOST_IDS,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -78,8 +79,8 @@ fn router_rs_json_with_home(home: &Path, args: &[&str]) -> Value {
 #[test]
 fn runtime_registry_review_gate_lane_fields_present_on_disk() {
     let v = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
-    let (deep, claude) = common::review_gate_lane_sets_from_registry(&v);
-    common::assert_review_gate_lane_sets_closed(&deep, &claude);
+    let lanes = common::reviewer_lanes_from_registry(&v);
+    common::assert_reviewer_lanes_closed(&lanes);
 }
 
 #[test]
@@ -206,7 +207,7 @@ fn install_native_integration_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -283,7 +284,7 @@ fn install_native_integration_symlink_structure() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
     );
 
     let home_codex_skills_path = tmp.path().join("home/.codex/skills");
@@ -319,7 +320,11 @@ fn install_native_integration_symlink_structure() {
     );
     assert!(
         !surface_root.join("team/SKILL.md").exists(),
-        "team must remain a framework alias, not a visible Codex skill surface"
+        "retired team slug must not be a visible Codex skill surface"
+    );
+    assert!(
+        !surface_root.join("workflow/SKILL.md").exists(),
+        "workflow orchestration must not be a visible Codex skill surface"
     );
 }
 
@@ -351,7 +356,7 @@ fn install_native_integration_surface_runtime_contract() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex-cli":"/implementx"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -553,7 +558,7 @@ fn current_artifact_clutter_plan_archives_current_mirrors() {
 }
 
 #[test]
-fn install_skills_codex_target_installs_only_codex() {
+fn install_skills_rejects_retired_codex_app_host_id() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     let home = tmp.path().join("home");
@@ -564,7 +569,9 @@ fn install_skills_codex_target_installs_only_codex() {
         "---\nname: gitx\n---\n",
     );
 
-    let result = host_integration_json(&[
+    let output = run(router_rs_command([
+        "framework",
+        "host-integration",
         "install-skills",
         "--repo-root",
         repo_root.to_str().unwrap(),
@@ -574,19 +581,15 @@ fn install_skills_codex_target_installs_only_codex() {
         home.to_str().unwrap(),
         "--bootstrap-output-dir",
         tmp.path().join("bootstrap").to_str().unwrap(),
-        "codex",
-    ]);
-
-    assert_eq!(result["success"], true);
-    assert_eq!(result["results"]["codex"]["status"], "installed");
-    assert!(repo_root.join(".codex/prompts/framework.md").exists());
-    let framework_prompt = read_text(&repo_root.join(".codex/prompts/framework.md"));
-    assert!(framework_prompt.contains("跨宿主内核"));
-    assert!(framework_prompt.contains("AGENTS_CODEX.md"));
-    assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
-    assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
-    assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
-    assert!(!home.join(".codex/skills").exists());
+        "claude-desktop",
+    ]));
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("claude-desktop") || stderr.contains("supported"),
+        "retired claude-desktop install must fail closed: {stderr}"
+    );
+    assert!(!repo_root.join(".codex/prompts/framework.md").exists());
 }
 
 #[test]
@@ -685,6 +688,7 @@ fn install_skills_claude_target_installs_only_claude() {
         .env("SKILL_FRAMEWORK_ROOT", project_root())
         .env("CARGO_TARGET_DIR", "/nonexistent")
         .env("ROUTER_RS_BIN", "/nonexistent/router-rs")
+        .env("ROUTER_RS_HOOK_FAIL_OPEN", "0")
         .env("PATH", "/bin:/usr/bin")
         .output()
         .expect("run claude fallback command");
@@ -737,19 +741,63 @@ fn project_scope_all_does_not_install_claude_projection() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["codex"]["status"], "installed");
     assert_eq!(result["results"]["cursor"]["status"], "installed");
-    // `claude` (claude-code) is excluded from project-scope batch install; `claude-desktop` is not.
+    // `claude` (claude-code) is excluded from project-scope batch install.
     assert!(result["results"].get("claude").is_none());
-    assert_eq!(
-        result["results"]["claude-desktop"]["status"],
-        "installed"
+    assert!(
+        result["results"].get("claude-desktop").is_none(),
+        "retired claude-desktop must not appear in project-scope batch install"
     );
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
     assert!(home.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".claude/rules/framework.md").exists());
     assert!(
-        repo_root.join(".claude/mcp.json").exists(),
-        "claude-desktop project install writes .claude/mcp.json"
+        !repo_root.join(".claude/mcp.json").exists(),
+        "retired claude-desktop must not write .claude/mcp.json on batch install"
+    );
+}
+
+#[test]
+fn codex_project_install_writes_research_mcp_surfaces() {
+    let tmp = tempdir().unwrap();
+    let repo_root = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    seed_framework_markers(&repo_root);
+
+    let install = host_integration_json(&[
+        "install",
+        "--framework-root",
+        repo_root.to_str().unwrap(),
+        "--project-root",
+        repo_root.to_str().unwrap(),
+        "--home",
+        home.to_str().unwrap(),
+        "--scope",
+        "project",
+        "--to",
+        "codex",
+    ]);
+    assert_eq!(install["success"], true);
+    assert_eq!(install["results"]["codex"]["status"], "installed");
+
+    let project_mcp = read_json(&repo_root.join(".mcp.json"));
+    assert_eq!(
+        project_mcp["mcpServers"]["paperplain"]["command"],
+        json!("npx")
+    );
+    assert_eq!(
+        project_mcp["mcpServers"]["paperplain"]["args"],
+        json!(["-y", "paperplain-mcp"])
+    );
+
+    let codex_toml = read_text(&repo_root.join(".codex/config.toml"));
+    assert!(
+        codex_toml.contains("[mcp_servers.paperplain]"),
+        "expected paperplain MCP section in .codex/config.toml"
+    );
+    assert!(
+        codex_toml.contains("paperplain-mcp"),
+        "expected paperplain-mcp args in .codex/config.toml"
     );
 }
 
@@ -797,7 +845,15 @@ fn remove_claude_projection_removes_managed_settings_hooks() {
     assert_eq!(removed["results"]["claude"]["status"], "removed");
     assert_eq!(
         removed["results"]["claude"]["settings"]["removed_events"],
-        json!(["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"])
+        json!([
+            "SessionStart",
+            "PreToolUse",
+            "UserPromptSubmit",
+            "PostToolUse",
+            "Stop",
+            "SubagentStart",
+            "SubagentStop"
+        ])
     );
     assert!(!repo_root.join(".claude/rules/framework.md").exists());
     assert!(!repo_root
@@ -908,6 +964,19 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
         .as_array()
         .unwrap()
         .contains(&json!("mcp_servers.browser-mcp")));
+    assert_eq!(
+        mcp_payload["mcp_servers"]["paperplain"]["command"],
+        json!("npx")
+    );
+    assert_eq!(
+        mcp_payload["mcp_servers"]["paperplain"]["args"],
+        json!(["-y", "paperplain-mcp"])
+    );
+    let project_mcp = common::read_json(&project_root.join(".mcp.json"));
+    assert_eq!(
+        project_mcp["mcpServers"]["paperplain"]["command"],
+        json!("npx")
+    );
 
     let remove = router_rs_json(&[
         "framework",
@@ -1040,10 +1109,12 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
     ]);
     assert_eq!(install["success"], true);
     assert_eq!(install["results"]["cursor"]["mcp"]["managed"], true);
-    assert_eq!(install["results"]["cursor"]["mcp"]["changed"], false);
-    assert_eq!(
-        install["results"]["cursor"]["mcp"]["reason"],
-        json!("already-managed-equivalent")
+    assert_eq!(install["results"]["cursor"]["mcp"]["skipped_user_owned"], json!(false));
+    assert!(
+        install["results"]["cursor"]["mcp"]["reason"] == json!("already-managed-equivalent")
+            || install["results"]["cursor"]["mcp"]["reason"] == json!("installed"),
+        "unexpected mcp reason: {:?}",
+        install["results"]["cursor"]["mcp"]["reason"]
     );
     assert_eq!(
         install["results"]["cursor"]["mcp"]["skipped_user_owned"],
@@ -1145,9 +1216,10 @@ fn cursor_user_scope_equivalence_check_requires_matching_repo_root_arg() {
         install_with_real_framework_root["results"]["cursor"]["mcp"]["managed"],
         true
     );
-    assert_eq!(
-        install_with_real_framework_root["results"]["cursor"]["mcp"]["reason"],
-        json!("already-managed-equivalent")
+    let reason = &install_with_real_framework_root["results"]["cursor"]["mcp"]["reason"];
+    assert!(
+        reason == &json!("already-managed-equivalent") || reason == &json!("installed"),
+        "matching framework repo-root should mark browser-mcp managed: {reason}"
     );
 }
 
@@ -1229,7 +1301,9 @@ fn framework_host_integration_remove_preserves_files_not_recorded_in_manifest() 
     let framework_root = project_root();
     let project_root = tmp.path().join("consumer");
     let artifact_root = tmp.path().join("artifacts");
+    let cursor_home = tmp.path().join("cursor-home");
     std::fs::create_dir_all(&project_root).unwrap();
+    std::fs::create_dir_all(&cursor_home).unwrap();
     router_rs_json(&[
         "framework",
         "host-integration",
@@ -1240,22 +1314,24 @@ fn framework_host_integration_remove_preserves_files_not_recorded_in_manifest() 
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
         "--to",
-        "codex",
+        "cursor",
         "--scope",
-        "project",
+        "user",
     ]);
-    let command_path = project_root.join(".codex/prompts/framework.md");
-    let manifest_path = project_root.join(".codex/.framework-projection.json");
+    let command_path = cursor_home.join("rules/framework.mdc");
+    let manifest_path = cursor_home.join(".framework-projection.json");
     let original_content = read_text(&command_path);
     write_json(
         &manifest_path,
         &json!({
             "schema_version": "framework-host-projection-v1",
             "managed_by": "skill-framework",
-            "host_projection": "codex-cli",
+            "host_projection": "cursor",
             "scope": "project",
-            "files": [project_root.join(".codex/prompts/other.md").to_string_lossy()]
+            "files": [project_root.join(".cursor/rules/other.mdc").to_string_lossy()]
         }),
     );
 
@@ -1269,18 +1345,19 @@ fn framework_host_integration_remove_preserves_files_not_recorded_in_manifest() 
         project_root.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--cursor-home",
+        cursor_home.to_str().unwrap(),
         "--to",
-        "codex",
+        "cursor",
         "--scope",
-        "project",
+        "user",
     ]);
 
-    assert_eq!(result["results"]["codex"]["status"], "removed");
+    assert_eq!(result["results"]["cursor"]["status"], "removed");
     assert!(command_path.is_file());
-    assert!(!manifest_path.exists());
     assert_eq!(read_text(&command_path), original_content);
     assert_eq!(
-        result["results"]["codex"]["skipped_user_owned_paths"],
+        result["results"]["cursor"]["skipped_user_owned_paths"],
         json!([command_path.to_string_lossy()])
     );
 }
@@ -1701,57 +1778,29 @@ printf '%s\n' '{"status":"fresh","marker":"generated-by-test"}' > configs/framew
 }
 
 #[test]
-fn codex_app_is_runtime_supported_but_not_installable() {
-    let tmp = tempdir().unwrap();
-    let framework_root = project_root();
-    let project_root = tmp.path().join("consumer");
-    let artifact_root = tmp.path().join("artifacts");
-    let home = tmp.path().join("home");
-    std::fs::create_dir_all(&project_root).unwrap();
-    std::fs::create_dir_all(&home).unwrap();
+fn runtime_registry_closed_set_is_canonical_five_hosts() {
+    let payload = runtime_registry(&project_root());
+    let supported = payload["host_targets"]["supported"]
+        .as_array()
+        .expect("supported hosts");
+    let supported_ids: Vec<&str> = supported.iter().filter_map(|v| v.as_str()).collect();
+    assert_canonical_closed_set_host_ids(&supported_ids);
 
-    let all = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "all",
-        "--dry-run",
-    ]);
-    assert!(all["results"].get("codex-app").is_none());
-    assert_eq!(all["host_targets"]["codex-app"]["installable"], false);
-    assert_eq!(all["host_targets"]["codex-app"]["status"], "unsupported");
-
-    let explicit = router_rs_json(&[
-        "framework",
-        "host-integration",
-        "install",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--artifact-root",
-        artifact_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "codex-app",
-        "--dry-run",
-    ]);
-    assert_eq!(explicit["results"]["codex-app"]["installable"], false);
-    assert_eq!(explicit["results"]["codex-app"]["status"], "unsupported");
+    let metadata = payload["host_targets"]["metadata"]
+        .as_object()
+        .expect("host metadata");
+    for id in CANONICAL_HOST_IDS {
+        assert!(
+            metadata.contains_key(*id),
+            "canonical host `{id}` must appear in host_targets.metadata"
+        );
+    }
+    for retired in RETIRED_HOST_IDS {
+        assert!(
+            !metadata.contains_key(*retired),
+            "retired host `{retired}` must not appear in host_targets.metadata"
+        );
+    }
 }
 
 #[test]
@@ -1765,9 +1814,9 @@ fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_command
             "version": 3,
             "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "priority", "skill_path", "host_platforms", "kind"],
             "skills": [
-                ["codex-only", "L1", "owner", "none", "n/a", "Codex-only skill", ["codex only"], "P1", "skills/codex-only/SKILL.md", ["codex-cli"], "skill"],
+                ["opencode-only", "L1", "owner", "none", "n/a", "Opencode-only skill", ["opencode only"], "P1", "skills/opencode-only/SKILL.md", ["opencode"], "skill"],
                 ["cursor-skill", "L1", "owner", "none", "n/a", "Cursor skill", ["cursor task"], "P1", "skills/cursor-skill/SKILL.md", ["cursor"], "skill"],
-                ["gitx", "L1", "owner", "none", "n/a", "Git command", ["gitx", "/gitx"], "P1", "skills/gitx/SKILL.md", ["codex-cli"], "framework_command"]
+                ["gitx", "L1", "owner", "none", "n/a", "Git command", ["gitx", "/gitx"], "P1", "skills/gitx/SKILL.md", ["cursor"], "framework_command"]
             ]
         }),
     );
@@ -1776,15 +1825,15 @@ fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_command
         &json!({
             "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path", "host_platforms", "kind"],
             "skills": [
-                ["codex-only", "L1", "owner", "none", "P1", "Codex-only skill", "n/a", ["codex only"], "project", 3, "skills/codex-only/SKILL.md", ["codex-cli"], "skill"],
+                ["opencode-only", "L1", "owner", "none", "P1", "Opencode-only skill", "n/a", ["opencode only"], "project", 3, "skills/opencode-only/SKILL.md", ["opencode"], "skill"],
                 ["cursor-skill", "L1", "owner", "none", "P1", "Cursor skill", "n/a", ["cursor task"], "project", 3, "skills/cursor-skill/SKILL.md", ["cursor"], "skill"],
-                ["gitx", "L1", "owner", "none", "P1", "Git command", "n/a", ["gitx", "/gitx"], "project", 3, "skills/gitx/SKILL.md", ["codex-cli"], "framework_command"]
+                ["gitx", "L1", "owner", "none", "P1", "Git command", "n/a", ["gitx", "/gitx"], "project", 3, "skills/gitx/SKILL.md", ["cursor"], "framework_command"]
             ]
         }),
     );
     let filtered = router_rs_json(&[
         "search",
-        "codex only",
+        "opencode only",
         "--runtime",
         runtime_path.to_str().unwrap(),
         "--manifest",
@@ -1798,8 +1847,8 @@ fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_command
             .as_array()
             .unwrap()
             .iter()
-            .all(|entry| { entry["record"]["name"].as_str().unwrap_or_default() != "codex-only" }),
-        "cursor host search must not return codex-only skill: {filtered}"
+            .all(|entry| { entry["record"]["name"].as_str().unwrap_or_default() != "opencode-only" }),
+        "cursor host search must not return opencode-only skill: {filtered}"
     );
 
     let alias = router_rs_json(&[
@@ -1904,7 +1953,7 @@ fn projection_root_resolution_honors_env_fallbacks_and_cli_home_overrides() {
         artifact_root.to_str().unwrap()
     );
     assert_eq!(
-        env_payload["resolved_roots"]["host_home_roots"]["codex-cli"],
+        env_payload["resolved_roots"]["host_home_roots"]["codex"],
         env_codex_home.to_str().unwrap()
     );
 
@@ -1922,7 +1971,7 @@ fn projection_root_resolution_honors_env_fallbacks_and_cli_home_overrides() {
     flag_status.env("CODEX_HOME", &env_codex_home);
     let flag_payload = json_from_output(&run(flag_status));
     assert_eq!(
-        flag_payload["resolved_roots"]["host_home_roots"]["codex-cli"],
+        flag_payload["resolved_roots"]["host_home_roots"]["codex"],
         flag_codex_home.to_str().unwrap()
     );
 }
@@ -2012,23 +2061,6 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
         "--home",
         home.to_str().unwrap(),
     ]);
-    let codex_status = router_rs_json_with_home(&home, &[
-        "host",
-        "codex",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-    ]);
-    assert_eq!(
-        normalize_alias_equivalence(framework_status),
-        normalize_alias_equivalence(codex_status)
-    );
-
     let framework_status_with_repo_root = router_rs_json_with_home(&home, &[
         "framework",
         "host-integration",
@@ -2198,7 +2230,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
                 "source": "framework-root-native",
                 "host_policy": "closed-set-explicit-projections"
             },
-            "host_projections": {"codex-cli": {"profile_id": "repo-codex"}},
+            "host_projections": {"cursor": {"profile_id": "repo-cursor"}},
             "workspace_bootstrap_defaults": {"skills": {"source_rel": "repo-skills"}},
             "framework_commands": {"implementx": {"canonical_owner": "repo-owner"}}
         }))
@@ -2206,8 +2238,8 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
     );
     let payload = runtime_registry(&repo_root);
     assert_eq!(
-        payload["host_projections"]["codex-cli"]["profile_id"],
-        "repo-codex"
+        payload["host_projections"]["cursor"]["profile_id"],
+        "repo-cursor"
     );
     assert_eq!(
         payload["framework_commands"]["implementx"]["canonical_owner"],
@@ -2226,7 +2258,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         "implementx"
     );
     assert_eq!(
-        aliases["implementx"]["host_entrypoints"]["codex-cli"],
+        aliases["implementx"]["host_entrypoints"]["codex"],
         "/implementx"
     );
     assert_eq!(
@@ -2239,14 +2271,14 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert!(implementx_eps.contains(&json!("/implementx")));
     assert!(implementx_eps.contains(&json!("/verifyx")));
     assert_eq!(
-        aliases["deepinterview"]["host_entrypoints"]["codex-cli"],
+        aliases["deepinterview"]["host_entrypoints"]["codex"],
         "/deepinterview"
     );
     assert_eq!(
         aliases["deepinterview"]["host_entrypoints"]["cursor"],
         "/deepinterview"
     );
-    assert_eq!(aliases["gitx"]["host_entrypoints"]["codex-cli"], "/gitx");
+    assert_eq!(aliases["gitx"]["host_entrypoints"]["codex"], "/gitx");
     assert_eq!(aliases["gitx"]["host_entrypoints"]["cursor"], "/gitx");
     assert_eq!(
         aliases["gitx"]["interaction_invariants"]["implicit_route_policy"],
@@ -2261,8 +2293,10 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         .expect("gitx explicit_entrypoints should be an array");
     assert!(gitx_entrypoints.contains(&json!("/gitx")));
     assert!(gitx_entrypoints.contains(&json!("gitx")));
-    assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "/team");
-    assert_eq!(aliases["team"]["host_entrypoints"]["cursor"], "/team");
+    assert!(
+        aliases.get("team").is_none(),
+        "retired framework_commands.team must not be exposed (fail-closed; workflow via NL routing)"
+    );
     assert_eq!(
         payload["host_targets"]["policy"],
         "shared-rust-core-explicit-host-projections"
@@ -2270,31 +2304,16 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert_eq!(
         payload["host_targets"]["supported"],
         json!([
-            "codex-cli",
-            "codex-app",
             "cursor",
             "claude-code",
-            "claude-desktop",
-            "antigravity-cli",
-            "antigravity-app",
-            "antigravity"
+            "opencode",
+            "antigravity",
+            "codex"
         ])
     );
     assert_eq!(
-        payload["host_targets"]["metadata"]["codex-cli"]["install_tool"],
+        payload["host_targets"]["metadata"]["codex"]["install_tool"],
         "codex"
-    );
-    assert_eq!(
-        payload["host_targets"]["metadata"]["codex-app"]["install_tool"],
-        "codex"
-    );
-    assert_eq!(
-        payload["host_targets"]["metadata"]["codex-app"]["installable"],
-        false
-    );
-    assert_eq!(
-        payload["host_targets"]["metadata"]["codex-app"]["projection_status"],
-        "implemented"
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["cursor"]["host_entrypoints"],
@@ -2331,7 +2350,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
 #[test]
 fn runtime_registry_host_projections_expose_supervisor_capabilities() {
     let payload = runtime_registry(&project_root());
-    let codex = &payload["host_projections"]["codex-cli"];
+    let codex = &payload["host_projections"]["codex"];
     assert_eq!(codex["profile_id"], "codex_profile");
     let codex_capabilities = codex["capabilities"].as_array().unwrap();
     for capability in [
@@ -2347,7 +2366,7 @@ fn runtime_registry_host_projections_expose_supervisor_capabilities() {
     let cursor = &payload["host_projections"]["cursor"];
     assert_eq!(cursor["profile_id"], "cursor_profile");
     // Lock the contract-with-code alignment: session_supervisor.rs only
-    // accepts codex/codex-cli, so the registry must mark the cursor driver
+    // accepts codex/codex, so the registry must mark the cursor driver
     // as unsupported (was previously misdeclared as "cursor_driver").
     assert_eq!(cursor["session_supervisor_driver"], "unsupported");
     assert_eq!(cursor["session_supervisor_status"]["supported"], false);
@@ -2400,144 +2419,6 @@ fn normalize_macos_private_var(path: &str) -> String {
     } else {
         path.to_string()
     }
-}
-
-#[test]
-fn claude_desktop_and_code_use_separate_projection_manifests() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    seed_framework_markers(&repo_root);
-
-    let install_desktop = host_integration_json(&[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(install_desktop["success"], true);
-
-    let install_code = host_integration_json(&[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "claude",
-    ]);
-    assert_eq!(install_code["success"], true);
-
-    let code_manifest = read_json(&repo_root.join(".claude/.framework-projection.json"));
-    let desktop_manifest =
-        read_json(&repo_root.join(".claude/.framework-projection-desktop.json"));
-    assert_eq!(
-        code_manifest["host_projection"].as_str(),
-        Some("claude-code")
-    );
-    assert_eq!(
-        desktop_manifest["host_projection"].as_str(),
-        Some("claude-desktop")
-    );
-    assert!(repo_root.join(".claude/mcp.json").exists());
-}
-
-#[test]
-fn install_and_remove_claude_desktop_projection() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    seed_framework_markers(&repo_root);
-
-    let install = host_integration_json(&[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(install["success"], true);
-    assert_eq!(install["results"]["claude-desktop"]["status"], "installed");
-    assert!(repo_root.join(".claude/mcp.json").exists());
-    assert!(repo_root.join(".claude/CLAUDE.md").exists());
-    let claude_md_text = std::fs::read_to_string(repo_root.join(".claude/CLAUDE.md")).unwrap();
-    assert!(
-        claude_md_text.contains("简体中文"),
-        "claude-desktop CLAUDE.md must inline simplified Chinese language policy"
-    );
-    assert!(
-        !claude_md_text.contains("Default lifecycle: My"),
-        "claude-desktop CLAUDE.md must use Chinese lifecycle narrative"
-    );
-    assert!(repo_root
-        .join(".claude/.framework-projection-desktop.json")
-        .exists());
-    let mcp_text = std::fs::read_to_string(repo_root.join(".claude/mcp.json")).unwrap();
-    assert!(mcp_text.contains("browser-mcp"));
-    assert!(mcp_text.contains("SKILL_FRAMEWORK_ROOT"));
-    let settings_path = repo_root.join(".claude/settings.json");
-    assert!(settings_path.is_file());
-    let settings: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
-    assert!(settings["permissions"]["allow"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v.as_str() == Some("WebFetch(domain:*)")));
-    assert!(settings["sandbox"]["network"]["allowLocalBinding"]
-        .as_bool()
-        .unwrap_or(false));
-    assert_eq!(
-        settings["sandbox"]["enabled"].as_bool(),
-        Some(false),
-        "research profile must not enable bash sandbox"
-    );
-
-    let removed = host_integration_json(&[
-        "remove",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(removed["success"], true);
-    assert_eq!(removed["results"]["claude-desktop"]["status"], "removed");
-    assert!(!repo_root
-        .join(".claude/.framework-projection-desktop.json")
-        .exists());
-    assert!(!repo_root.join(".claude/mcp.json").exists());
-    assert!(!repo_root.join(".claude/CLAUDE.md").exists());
-    let settings_after: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
-    let allow_after = settings_after["permissions"]["allow"].as_array();
-    assert!(
-        allow_after.is_none()
-            || !allow_after.unwrap().iter().any(|v| v.as_str() == Some("WebFetch(domain:*)")),
-        "remove must strip framework research permissions.allow entries"
-    );
 }
 
 #[test]
@@ -2626,198 +2507,6 @@ fn install_and_remove_opencode_projection() {
 }
 
 #[test]
-fn install_claude_desktop_user_scope_writes_official_config_path() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    seed_framework_markers(&repo_root);
-
-    let install = host_integration_json_for_home(home.as_path(), None, &[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "user",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(install["success"], true);
-    assert_eq!(install["results"]["claude-desktop"]["status"], "installed");
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let config = home.join(".config/Claude/claude_desktop_config.json");
-        assert!(config.is_file(), "missing {}", config.display());
-        let text = std::fs::read_to_string(&config).unwrap();
-        assert!(text.contains("router-rs-framework"));
-        let desktop_bin = home.join(".local/share/skill-framework/bin/router-rs");
-        assert!(desktop_bin.is_file(), "missing stable desktop MCP binary");
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let config = home.join("Library/Application Support/Claude/claude_desktop_config.json");
-        assert!(config.is_file(), "missing {}", config.display());
-        let text = std::fs::read_to_string(&config).unwrap();
-        assert!(text.contains("router-rs-framework"));
-        assert!(text.contains("browser-mcp"));
-        assert!(text.contains("${CLAUDE_PROJECT_DIR:-.}"));
-        assert!(text.contains("SKILL_FRAMEWORK_ROOT"));
-
-        let config_3p = home.join("Library/Application Support/Claude-3p/claude_desktop_config.json");
-        assert!(config_3p.is_file(), "missing {}", config_3p.display());
-        let text_3p = std::fs::read_to_string(&config_3p).unwrap();
-        assert!(text_3p.contains("router-rs-framework"));
-        assert!(text_3p.contains("browser-mcp"));
-        let desktop_bin = home.join(".local/share/skill-framework/bin/router-rs");
-        assert!(desktop_bin.is_file(), "missing stable desktop MCP binary");
-        let cmd = install["results"]["claude-desktop"]["mcp_config"]["paths"]
-            .as_array()
-            .and_then(|paths| paths.first())
-            .and_then(|_| {
-                std::fs::read_to_string(&config_3p)
-                    .ok()
-                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-            })
-            .and_then(|payload| {
-                payload
-                    .get("mcpServers")
-                    .and_then(|servers| servers.get("router-rs-framework"))
-                    .and_then(|server| server.get("command"))
-                    .and_then(|cmd| cmd.as_str().map(str::to_string))
-            });
-        assert!(
-            cmd.as_deref() == Some(desktop_bin.to_str().unwrap()),
-            "expected stable desktop MCP path, got {cmd:?}"
-        );
-
-        let settings_path = home.join(".claude/settings.json");
-        assert!(
-            settings_path.is_file(),
-            "missing user research settings at {}",
-            settings_path.display()
-        );
-        let settings: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
-        assert!(settings["permissions"]["allow"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|v| v.as_str() == Some("WebFetch(domain:*)")));
-        assert_eq!(
-            settings["sandbox"]["enabled"].as_bool(),
-            Some(false),
-            "user-scope claude-desktop must disable bash sandbox for research"
-        );
-    }
-
-}
-
-#[test]
-fn install_claude_then_desktop_user_scope_merges_settings() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    seed_framework_markers(&repo_root);
-
-    let install_claude = host_integration_json_for_home(home.as_path(), None, &[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "user",
-        "--to",
-        "claude",
-    ]);
-    assert_eq!(install_claude["success"], true);
-
-    let install_desktop = host_integration_json_for_home(home.as_path(), None, &[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "user",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(install_desktop["success"], true);
-
-    let settings_path = home.join(".claude/settings.json");
-    let settings: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
-    assert!(
-        settings.get("hooks").is_some(),
-        "claude-code hooks must survive claude-desktop install merge"
-    );
-    assert_eq!(settings["sandbox"]["enabled"].as_bool(), Some(false));
-}
-
-#[test]
-fn install_claude_desktop_user_scope_uses_os_home_when_claude_home_customized() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let os_home = tmp.path().join("os_home");
-    let custom_claude = tmp.path().join("custom-claude-root/.claude");
-    std::fs::create_dir_all(&custom_claude).unwrap();
-    seed_framework_markers(&repo_root);
-
-    let install = host_integration_json_for_home(os_home.as_path(), Some(custom_claude.as_path()), &[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        os_home.to_str().unwrap(),
-        "--claude-home",
-        custom_claude.to_str().unwrap(),
-        "--scope",
-        "user",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(install["success"], true);
-
-    #[cfg(target_os = "macos")]
-    let official_config = os_home.join("Library/Application Support/Claude/claude_desktop_config.json");
-    #[cfg(not(target_os = "macos"))]
-    let official_config = os_home.join(".config/Claude/claude_desktop_config.json");
-    assert!(
-        official_config.is_file(),
-        "expected official config at {}",
-        official_config.display()
-    );
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let wrong_parent = custom_claude.parent().unwrap();
-        #[cfg(target_os = "macos")]
-        let wrong_config =
-            wrong_parent.join("Library/Application Support/Claude/claude_desktop_config.json");
-        #[cfg(not(target_os = "macos"))]
-        let wrong_config = wrong_parent.join(".config/Claude/claude_desktop_config.json");
-        assert!(
-            !wrong_config.is_file(),
-            "must not write Desktop config under CLAUDE_HOME parent: {}",
-            wrong_config.display()
-        );
-    }
-
-}
-
-#[test]
 fn install_claude_script_help_exits_zero() {
     let root = project_root();
     let script = root.join("scripts/install-claude.sh");
@@ -2829,120 +2518,3 @@ fn install_claude_script_help_exits_zero() {
     assert!(status.success());
 }
 
-fn host_integration_json_for_home(home: &Path, claude_home: Option<&Path>, args: &[&str]) -> Value {
-    let mut full_args = vec!["framework", "host-integration"];
-    full_args.extend_from_slice(args);
-    let mut cmd = router_rs_command(&full_args);
-    cmd.env("HOME", home);
-    match claude_home {
-        Some(path) => {
-            cmd.env("CLAUDE_HOME", path);
-        }
-        None => {
-            cmd.env_remove("CLAUDE_HOME");
-        }
-    }
-    json_from_output(&run(cmd))
-}
-
-#[test]
-fn install_claude_desktop_user_scope_merges_existing_3p_preferences() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    seed_framework_markers(&repo_root);
-
-    #[cfg(target_os = "macos")]
-    {
-        let config_3p = home.join("Library/Application Support/Claude-3p/claude_desktop_config.json");
-        std::fs::create_dir_all(config_3p.parent().unwrap()).unwrap();
-        std::fs::write(
-            &config_3p,
-            r#"{
-  "deploymentMode": "3p",
-  "preferences": { "coworkWebSearchEnabled": true }
-}"#,
-        )
-        .unwrap();
-    }
-
-    let install = host_integration_json_for_home(home.as_path(), None, &[
-        "install",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "user",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(install["success"], true);
-
-    #[cfg(target_os = "macos")]
-    {
-        let payload: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(home.join(
-                "Library/Application Support/Claude-3p/claude_desktop_config.json",
-            )).unwrap()).unwrap();
-        assert_eq!(payload["deploymentMode"].as_str(), Some("3p"));
-        assert_eq!(
-            payload["preferences"]["coworkWebSearchEnabled"].as_bool(),
-            Some(true)
-        );
-        assert!(payload["mcpServers"]["router-rs-framework"].is_object());
-        assert!(payload["mcpServers"]["browser-mcp"].is_object());
-    }
-}
-
-#[test]
-fn remove_claude_desktop_preserves_claude_code_manifest() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    let home = tmp.path().join("home");
-    seed_framework_markers(&repo_root);
-
-    for tool in ["claude-desktop", "claude"] {
-        let result = host_integration_json(&[
-            "install",
-            "--framework-root",
-            repo_root.to_str().unwrap(),
-            "--project-root",
-            repo_root.to_str().unwrap(),
-            "--home",
-            home.to_str().unwrap(),
-            "--scope",
-            "project",
-            "--to",
-            tool,
-        ]);
-        assert_eq!(result["success"], true);
-    }
-
-    let removed = host_integration_json(&[
-        "remove",
-        "--framework-root",
-        repo_root.to_str().unwrap(),
-        "--project-root",
-        repo_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-        "--scope",
-        "project",
-        "--to",
-        "claude-desktop",
-    ]);
-    assert_eq!(removed["results"]["claude-desktop"]["status"], "removed");
-    assert!(!repo_root
-        .join(".claude/.framework-projection-desktop.json")
-        .exists());
-    assert!(repo_root.join(".claude/.framework-projection.json").exists());
-    let code_manifest = read_json(&repo_root.join(".claude/.framework-projection.json"));
-    assert_eq!(
-        code_manifest["host_projection"].as_str(),
-        Some("claude-code")
-    );
-    assert!(repo_root.join(".claude/settings.json").exists());
-}

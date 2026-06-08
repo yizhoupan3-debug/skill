@@ -1,9 +1,6 @@
 {
   "schema_version": "skill-routing-metadata-v1",
   "skills": {
-    "": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
     "agent-swarm-orchestration": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -12,6 +9,9 @@
     },
     "code-review-deep": {
       "selection_reason": "allowlisted first-turn owner"
+    },
+    "deep-research": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "deepinterview": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"

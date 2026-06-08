@@ -5,16 +5,16 @@ argument-hint: "[framework task...]"
 
 <!-- managed_by: skill-framework -->
 <!-- projection_id: framework-root-entrypoint -->
-<!-- host_projection: codex-cli -->
+<!-- host_projection: codex -->
 <!-- logical_entrypoint: framework -->
 <!-- framework_schema_version: framework-host-projection-v1 -->
 <!-- install_scope: project -->
 
 Use `$framework` semantics via the Rust-owned shared core.
 
-**Default lifecycle: My** (same chain). Goal/RFV via `framework_goal_drive` / `framework_rfv_loop` stdio + manual boards only; no continuity digest or GOAL_CONTINUE/RFV_LOOP_CONTINUE on hooks.
+**Default lifecycle: My** — `/discussx` → `/planx` → `/implementx` → `/verifyx`. Goal/RFV via `framework_goal_drive` / `framework_rfv_loop` stdio + manual boards only; no continuity digest or GOAL_CONTINUE/RFV_LOOP_CONTINUE on hooks.
 
-**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply at skill layer; under `my-light`, Cursor/Codex hooks do not hard-block Stop on REVIEW_GATE or inject spawn-first nudge. See `skills/code-review-deep/SKILL.md`.
+**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply at skill layer; REVIEW_GATE Stop is advisory-only on all hosts; `my-light` suppresses review Stop nudge and spawn-first. See `skills/code-review-deep/SKILL.md`.
 
 **Language**: enforce 简体中文 per `AGENTS.md` § Language; no host-level exemption.
 

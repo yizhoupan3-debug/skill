@@ -32,7 +32,7 @@
 7. 逐页渲染/审查 PDF，使用 `$visual-review` 检查重叠/层次/裁剪问题。
 8. 交付 `.tex`、编译后的 PDF、本地资产和源日志。
 
-详细编译/密度/QA/Mermaid 路径参见原始 skill 的 [references/workflow.md](../../ppt-beamer/references/workflow.md)。
+详细编译/密度/QA/Mermaid 路径参见原始 skill 的 [references/workflow.md](../../.archive-cold/ppt-beamer/references/workflow.md)。
 
 ## 核心规则（摘要）
 
@@ -67,10 +67,10 @@
 
 ## 资源
 
-- [references/workflow.md](../../ppt-beamer/references/workflow.md) — 端到端构建/编译/QA 流程
-- [references/design-system.md](../../ppt-beamer/references/design-system.md) — 主题和视觉系统规则
-- [references/visual-qa.md](../../ppt-beamer/references/visual-qa.md) — 渲染页 QA 指导
-- [references/checklist.md](../../ppt-beamer/references/checklist.md) — 完整签署清单
+- [references/workflow.md](../../.archive-cold/ppt-beamer/references/workflow.md) — 端到端构建/编译/QA 流程
+- [references/design-system.md](../../.archive-cold/ppt-beamer/references/design-system.md) — 主题和视觉系统规则
+- [references/visual-qa.md](../../.archive-cold/ppt-beamer/references/visual-qa.md) — 渲染页 QA 指导
+- [references/checklist.md](../../.archive-cold/ppt-beamer/references/checklist.md) — 完整签署清单
 
 ## 运行时依赖
 

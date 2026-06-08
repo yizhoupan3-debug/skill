@@ -115,6 +115,48 @@ pub(crate) fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -
     })
 }
 
+/// Retired framework slash commands must fail-closed to native runtime (no skill owner).
+const RETIRED_FRAMEWORK_SLASH_COMMANDS: &[&str] = &[
+    "/autopilot",
+    "/autopilot-quick",
+    "/autopilot-deep",
+    "/team",
+];
+
+pub(crate) fn query_invokes_retired_framework_slash_command(query_text: &str) -> bool {
+    let normalized = normalize_text(query_text);
+    RETIRED_FRAMEWORK_SLASH_COMMANDS.iter().any(|cmd| {
+        normalized.split_whitespace().any(|part| {
+            let token = part.trim_matches(|ch: char| {
+                matches!(
+                    ch,
+                    '(' | ')'
+                        | '['
+                        | ']'
+                        | '{'
+                        | '}'
+                        | '<'
+                        | '>'
+                        | ','
+                        | '.'
+                        | '!'
+                        | '?'
+                        | '，'
+                        | '。'
+                        | '：'
+                        | '；'
+                        | '"'
+                        | '\''
+                        | '`'
+                )
+            });
+            token == *cmd
+                || token.starts_with(&format!("{cmd}-"))
+                || token.starts_with(&format!("{cmd} "))
+        })
+    })
+}
+
 pub(crate) fn has_explicit_framework_alias_call(
     query_text: &str,
     query_token_list: &[String],
@@ -147,6 +189,15 @@ fn framework_alias_plain_paper_slug_claims(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retired_slash_team_fail_closed_without_skill_owner() {
+        assert!(query_invokes_retired_framework_slash_command("/team"));
+        assert!(query_invokes_retired_framework_slash_command(
+            "please /team orchestrate this"
+        ));
+        assert!(!query_invokes_retired_framework_slash_command("/workflow"));
+    }
 
     #[test]
     fn hyphenated_slug_rejects_extended_token_with_trailing_hyphen() {

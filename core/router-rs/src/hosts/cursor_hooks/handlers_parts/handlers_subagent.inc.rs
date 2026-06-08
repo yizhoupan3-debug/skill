@@ -20,9 +20,9 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
     let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
     let independent_fork_pre_goal =
-        crate::review_gate_engine::cursor_review_independent_fork(fork, pre_goal_kind);
+        crate::review_gate_engine::review_independent_fork(fork, pre_goal_kind);
     let independent_fork_review =
-        crate::review_gate_engine::cursor_review_independent_fork(fork, review_kind);
+        crate::review_gate_engine::review_independent_fork(fork, review_kind);
     let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
     let lite_stable_id = !stable_subagent_id(event, &tool_input).is_empty();
     let armed = review_hard_armed(&state);

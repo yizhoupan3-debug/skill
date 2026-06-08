@@ -49,7 +49,8 @@ pub fn harness_contract() -> Value {
             "closeout_integrity",
             "skill_contract_quality",
             "subagent_lane_integrity",
-            "review_gate_integrity"
+            "review_gate_integrity",
+            "contract_integrity"
         ],
         "step_recovery": {
             "ledger": "STEP_LEDGER.jsonl",

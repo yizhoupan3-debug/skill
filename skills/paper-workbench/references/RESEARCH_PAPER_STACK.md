@@ -26,12 +26,14 @@
 | **L0** | 每一轮手稿任务 | [`../SKILL.md`](../SKILL.md) 正文 + **Progressive disclosure** |
 | **L1** | 即将改稿 | [`edit-scope-gate.md`](edit-scope-gate.md)（`surgical` 默认） |
 | **L1** | 证据与主张不匹配 | [`claim-evidence-ladder.md`](claim-evidence-ladder.md)（先补证据再缩口径） |
-| **L1** | 落笔 / 语言问题 | [`research-language-norms.md`](research-language-norms.md) + [`../../paper-writing/references/prose-quality-gate.md`](../../paper-writing/references/prose-quality-gate.md)（`language_register` / ladder / `prose_qc`） |
+| **L1** | 落笔 / 语言问题 | [`research-language-norms.md`](research-language-norms.md) + [`prose-quality-gate.md`](prose-quality-gate.md)（`language_register` / ladder / `prose_qc`） |
 | **L1** | 全链路写作（路由→审→改→写→验收） | [`prose-chain-contract.md`](prose-chain-contract.md) |
-| **L1** | 坏→好结构对照 | [`../../paper-writing/references/prose-exemplars.md`](../../paper-writing/references/prose-exemplars.md) |
+| **L1** | Data Availability / FAIR 声明 | [`data-availability-fair.md`](data-availability-fair.md) |
+| **L1** | 坏→好结构对照 | [`prose-exemplars.md`](prose-exemplars.md) |
 | **L2** | 顶刊/顶会栏 | [`top-tier-paper-standard.md`](top-tier-paper-standard.md) |
 | **L2** | 整篇严审 / exhaustive 深链 | [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md) |
-| **L2** | Claim card + 章节 handoff | [`../../paper-writing/references/claim-spine-and-section-contract.md`](../../paper-writing/references/claim-spine-and-section-contract.md) |
+| **L2** | Claim card + 章节 handoff | [`claim-spine-and-section-contract.md`](claim-spine-and-section-contract.md) |
+| **L2** | `.tex` 结构安全改稿 | [`latex-safe-blueprint.md`](latex-safe-blueprint.md) |
 | **L2** | 先学 ref 再写 | [`ref-first-writing-workflow.md`](ref-first-writing-workflow.md) |
 | **L2** | Lane 语义速查 | [`paper-lanes.md`](paper-lanes.md) |
 | **L2** | 用户话术 → lane 最小对照 | [`user-phrases-to-lanes.md`](user-phrases-to-lanes.md) |
@@ -44,7 +46,7 @@
 - **编辑范围**：只信 [`edit-scope-gate.md`](edit-scope-gate.md)。
 - **主张 vs 证据**：只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
 - **用语 / 内部口径 / 防御式堆叠**：只信 [`research-language-norms.md`](research-language-norms.md)。
-- **严重度 / Warning**：只信 [`../../paper-reviewer/references/severity-spec.md`](../../paper-reviewer/references/severity-spec.md)（含 exhaustive 模式 `Warning` 层）。
+- **严重度 / Warning**：只信 [`severity-spec.md`](severity-spec.md)（含 exhaustive 模式 `Warning` 层）。
 - **Exhaustive 查稿步骤与输出信封**：只信 [`paper-exhaustive-audit.md`](paper-exhaustive-audit.md)。
 - **RFV（代码）vs PAPER_GATE（手稿）**：协议首段 —— 勿混 PASS 语义。
 
@@ -59,17 +61,17 @@
 
 - **框架连续性目录**：[`artifacts/current/`](../../../artifacts/current/) 下的 `SESSION_SUMMARY` / `NEXT_ACTIONS` / `EVIDENCE_INDEX`（及同层相关指针）是跨会话接力的机器可读真源；分层与开关以 [`docs/harness_architecture/`](../../../docs/harness_architecture/index.md) 为准。
 - **手稿主张帐本**：`paper_story/CLAIM_LEDGER.md`（与 `EVIDENCE_ANCHOR_MAP` 等）冻结 claim 天花板与证据锚；主张—证据纪律只信 [`claim-evidence-ladder.md`](claim-evidence-ladder.md)。
-- **手稿 prose 轮次账（可选）**：`paper_story/PROSE_QC_LOG.md`（模板 [`references/templates/PROSE_QC_LOG.template.md`](references/templates/PROSE_QC_LOG.template.md)）；全链路见 [`prose-chain-contract.md`](prose-chain-contract.md)。
+- **手稿 prose 轮次账（可选）**：`paper_story/PROSE_QC_LOG.md`（模板 [`templates/PROSE_QC_LOG.template.md`](templates/PROSE_QC_LOG.template.md)）；全链路见 [`prose-chain-contract.md`](prose-chain-contract.md)。
 - **阴性结果**：与阳性结果同等记录（失败条件、为何仍信息量足够、是否影响 claim 收窄）；避免「只写成功路径」造成不可复核的故事线。
 - **计划 vs 实际**：预注册/分析计划与事后偏离须在方法或补充材料中可追踪；执行面契约与验收形状见 [`skills/SKILL_FRAMEWORK_PROTOCOLS.md`](../../SKILL_FRAMEWORK_PROTOCOLS.md)（与 harness 文档互补，不重复第二真源）。
 - **可复现实验最低纪录**：环境、数据标识、软件 pin、主分析 vs 探索性分析的边界，见 [`../../experiment-reproducibility/references/research-record-minimum.md`](../../experiment-reproducibility/references/research-record-minimum.md)。
 
 ## 宿主与专科入口（真源一段）
 
-手稿专科（`paper-workbench` / `paper-writing` / `paper-reviewer` 等）的**叙事与门控 prose 宿主无关**：热路由 owner 以 [`../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（当前仅 `paper-workbench` + `paper-writing` 热表；`paper-reviewer` 内联）；技能安装与宿主投影以 **`router-rs framework host-integration install --to <host>`**（及宿主文档中的 sync 子命令）为准，勿在文档里硬编码单宿主路径当第二真源。扩展规则见 [`../../../docs/host_adapter_contract.md`](../../../docs/host_adapter_contract.md)。
+手稿与科研 harness 的**叙事与门控在五宿主上同构**（差异仅在 hook/MCP 表面）：热路由 owner 以 [`../../../skills/SKILL_ROUTING_RUNTIME.json`](../../../skills/SKILL_ROUTING_RUNTIME.json) 为准（手稿热表仅 **`paper-workbench`**；`paper-writing` / `paper-reviewer` 已归档，契约内联于 workbench references）。非手稿科研地图：[`../../research-workbench/references/RESEARCH_HARNESS_UNIFIED.md`](../../research-workbench/references/RESEARCH_HARNESS_UNIFIED.md)。安装投影：**`router-rs framework host-integration install --to <host>`**（闭集五宿主）。扩展规则见 [`../../../docs/host_adapter_contract.md`](../../../docs/host_adapter_contract.md)。
 
-- **`$paper-workbench`**：在**所有宿主**上均为**用户可显式 invocation 的前门**（`user-invocable`，宿主以各环境 `SKILL.md` / 路由为准）。
-- **`$paper-writing` / `$paper-reviewer`**：保持 **`disable-model-invocation: true`** 与既有元数据语义，表示它们**不是**与 workbench 并列的「第二个用户入口」，而是 workbench **在任一支宿主上内联调用的专科契约**（审稿、润色 lane）。revision 由 workbench 自身 inline 处理（`edit_scope` gate）。这与「只有一个手稿前门」不矛盾：**用户只打 workbench；模型在对话内按 lane 加载专科 SKILL**。
+- **`$paper-workbench`**：在**五宿主**上均为**用户可显式 invocation 的前门**（`user-invocable`）。
+- **`@lane:writer` / `@lane:reviewer`**：内联专科契约（`paper-workbench/references/` + `.archive-cold/` 只读对照），**非**并列热路由入口。revision 由 workbench inline（`edit_scope` gate）。
 
 ## 可选工具
 

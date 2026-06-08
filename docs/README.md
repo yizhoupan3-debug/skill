@@ -1,10 +1,11 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-09"
 depends_on:
   - harness_architecture/index.md
   - rust_contracts.md
   - framework_operator_primer.md
   - host_adapter_contract.md
+  - operations/index.md
 ---
 
 # 文档索引（控制面与契约）
@@ -15,17 +16,20 @@ depends_on:
 
 1. [仓库根 README.md](../README.md) — 分享、安装、Cursor/Codex hook 快速入门  
 2. [framework_operator_primer.md](framework_operator_primer.md) — 使用者一页纸：宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检 `framework doctor`  
-3. [AGENTS.md](../AGENTS.md) — Skill 路由、Continuity、Closeout、Execution Ladder  
-4. [harness_architecture/](harness_architecture/index.md) — 五层模型、证据流、续跑（stdio + 手动画板，非 hook `GOAL_CONTINUE`）、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
-5. [architecture/](architecture/INDEX.md) — 仓库架构总览（已从 `ARCHITECTURE.md` 拆分）、组件详解、数据流、安全模型、宿主集成  
-6. [rust_contracts/](rust_contracts/index.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
-7. [task_state_unified_resolve.md](task_state_unified_resolve.md) — `ResolvedTaskView` / `framework task-state-resolve`  
+3. [operations/index.md](operations/index.md) — 安装 / 升级 / 排障 / B0–B11 模块运维（历史 [`maintenance/claude-desktop-runbook.md`](maintenance/claude-desktop-runbook.md) 为 stub）  
+4. [AGENTS.md](../AGENTS.md) — Skill 路由、Continuity、Closeout、Execution Ladder  
+5. [harness_architecture/](harness_architecture/index.md) — 五层模型、证据流、续跑（stdio + 手动画板，非 hook `GOAL_CONTINUE`）、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
+6. [architecture/](architecture/INDEX.md) — 仓库架构总览（已从 `ARCHITECTURE.md` 拆分）、组件详解、数据流、安全模型、宿主集成  
+7. [rust_contracts/](rust_contracts/index.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
+8. [task_state_unified_resolve.md](task_state_unified_resolve.md) — `ResolvedTaskView` / `framework task-state-resolve`  
 
 ## 按主题
 
 | 主题 | 文档 |
 |------|------|
+| **闭集宿主 id / 退役矩阵（唯一枚举真源）** | [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) → `host_targets.supported`；退役 id 与迁移见 [`MIGRATION.md`](../MIGRATION.md) §闭集宿主收敛。下文与 `AGENTS*.md` **勿重复列举**宿主名单。 |
 | 使用者视角：宿主差异、门控快查、阅读顺序 | [framework_operator_primer.md](framework_operator_primer.md) |
+| PDF / DOCX / XLSX / PPTX Rust CLI 安装与 batch | [references/office-document-clis.md](references/office-document-clis.md) |
 | 可选 env / closeout 详表 | [references/AGENTS_OPERATOR_SURFACE.md](references/AGENTS_OPERATOR_SURFACE.md) |
 | Cursor 子代理 hook 契约（fork_context、review-lite） | [references/cursor-subagent-hook-contract.md](references/cursor-subagent-hook-contract.md) · [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json) |
 | REVIEW_GATE strict vs review-lite ADR | [adr/ADR-review-gate-lite.md](adr/ADR-review-gate-lite.md) |
@@ -41,9 +45,10 @@ depends_on:
 | Cursor Plan / My 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/planx/SKILL.md`](../skills/planx/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
 | Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
 | 运行期核心行为与沙箱统一规约 | [runtime_unified_spec.md](runtime_unified_spec.md) |
-| Python 环境治理（uv-only，冷表显式 `$python-env-management`） | [`skills/.archive-cold/python-env-management/SKILL.md`](../skills/.archive-cold/python-env-management/SKILL.md) |
+| Python 环境治理（uv-only，热路由 `$python-env-management`） | [`skills/python-env-management/SKILL.md`](../skills/python-env-management/SKILL.md) |
 | 历史迁移、减法记录 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
-| 统一运维手册（全 7 宿主：安装 / CC Switch / 联网 / 权限 / 故障恢复 / 安全 / 备份） | [maintenance/claude-desktop-runbook.md](maintenance/claude-desktop-runbook.md) |
+| 运维手册（Roadmap v5 模块 B0–B11） | [operations/index.md](operations/index.md)（历史 URL：[maintenance/claude-desktop-runbook.md](maintenance/claude-desktop-runbook.md) → stub 重定向） |
+| Roadmap v5 执行工件（本地手动画板） | [`artifacts/current/roadmap-v5-exec/`](../artifacts/current/roadmap-v5-exec/PROGRESS.md)；历史扫描/审查 md 索引 [`artifacts/current/INDEX.md`](../artifacts/current/INDEX.md) |
 | Plans 索引（ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
 
 ## 概念与源码映射
@@ -52,6 +57,7 @@ depends_on:
 
 ## 已淘汰叙述（清理边界）
 
+- **勿在文档重复**闭集宿主五元组或退役 id 长表；唯一枚举真源为 `RUNTIME_REGISTRY.json` → `host_targets.supported`（`AGENTS.md` 仅保留一行指针）。
 - **勿假设** `router-rs` 只存在于 `core/router-rs/target/release/`。根目录 `.cargo/config.toml` 可将 `target-dir` 指到 workspace 统一目录；解析以 `cargo metadata` 的 `target_directory` 为准（或 `cargo build` / `cargo run` 的输出路径）。
 - **勿依赖** 旧版 `.cursor/hooks/*.sh` 脚本链：steady-state 以 [`.cursor/hooks.json`](../.cursor/hooks.json) 为准（**默认 7 事件**；见 [`docs/hosts/cursor.md`](hosts/cursor.md)）。Claude Code 为 [`.claude/settings.json`](../.claude/settings.json) **4 事件**（见 [`docs/hosts/claude.md`](hosts/claude.md)）。校验：`framework maint verify-cursor-hooks`；构建 release 见两宿主手册「内存 / release」。
 - **勿将** 已删除的 `docs/history/` 或过期 plan 路径当作当前契约；steady-state 仅认本索引列出的文档与 `configs/framework/*.json`。

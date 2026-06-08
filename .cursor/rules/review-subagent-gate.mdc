@@ -1,16 +1,21 @@
 ---
-description: Cursor-only hard review gate delta
+description: Cursor review gate advisory-only delta
 alwaysApply: true
 ---
 
 # Review Subagent Gate（Cursor）
 
-叙事：[AGENTS.md](../../AGENTS.md) · [harness_architecture.md](../../docs/harness_architecture/index.md) · [code-review-deep/SKILL.md](../../skills/code-review-deep/SKILL.md) · [framework_operator_primer.md](../../docs/framework_operator_primer.md)
+叙事：[AGENTS.md](../../AGENTS.md) + [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（双文件注入）· [harness_architecture.md](../../docs/harness_architecture/index.md) · [harness_policy_map.md](../../docs/harness_policy_map.md) · [host_adapter_contract.md](../../docs/host_adapter_contract.md) §0.1 · [code-review-deep/SKILL.md](../../skills/code-review-deep/SKILL.md)
+
+**清门真源（Claude canonical）**：`core-policy::review_gate_satisfied` — armed 时须 `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override；Cursor **不得**用 multiset pending 单独替代此条件。
 
 **Hook 硬约束**
 
-- **my-light**：不硬拦 `REVIEW_GATE`；不注入 spawn-first（model inherit → [subagent-model-inherit.mdc](subagent-model-inherit.mdc)）
-- **深度 review**：spawn-first 可数 lane（`general-purpose` / `best-of-n-runner` / `deep-reviewer`，registry `deep_gate_lanes`）；`fork_context=false` 须 JSON 显式；`explore` 不计入
+- **`REVIEW_GATE`（全宿主）**：Stop **advisory-only**——仅 `followup_message` 等 nudge，**不** `permission: deny` / 硬拦 Stop
+- **spawn-first**：非 my-light 时 registry `spawn_first_enabled`；`beforeSubmitPrompt` 注入配对审稿 nudge
+- **my-light**：**suppress** `REVIEW_GATE` nudge 与 spawn-first（model inherit → [subagent-model-inherit.mdc](subagent-model-inherit.mdc)）
+- **深度 review**：可数 lane（registry `reviewer_lanes`）；`fork_context=false` JSON 显式（缺字段推断默认关，`ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）；`explore` 不计入
+- **Cursor 遥测**：`review_subagent_pending_cycle_keys` / review-lite vec **仅** phase bump 与 operator 提示，非 Stop 硬条件
 - **窄范围** / 用户禁 subagent：不武装 `review_required`
-- **Stop**：`.cursor/hook-state` + `router-rs REVIEW_GATE` / `AG_FOLLOWUP` 单行短码
+- **Stop**：`.cursor/hook-state` + advisory `router-rs REVIEW_GATE` / `AG_FOLLOWUP`；`rg_clear` / `reject_reason` 为 override 信号（closeout 硬门禁另轨）
 - review lane **只读**；纯 review 禁止默认改代码/提交（除非用户显式要求）

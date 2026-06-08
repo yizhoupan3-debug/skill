@@ -48,6 +48,7 @@ fn emit_cursor_hook_fail_closed_stdout(event: &str) -> Result<(), String> {
 }
 
 pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
     crate::hook_timing::mark_hook_start();
     let result = (|| -> Result<(), String> {
         let payload = match crate::cursor_hooks::read_cursor_hook_stdin_json() {
@@ -70,6 +71,10 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
             crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
         let mut output =
             crate::cursor_hooks::dispatch_cursor_hook_event(&repo_root, event, &payload);
+        crate::telemetry_emit::emit_hook_fired(
+            event,
+            crate::telemetry_emit::hook_action_from_output(&output),
+        );
         crate::autopilot_goal::scrub_followup_fields_in_hook_output(&mut output);
         crate::cursor_hooks::apply_cursor_hook_output_policy(&mut output);
         crate::cursor_hooks::apply_cursor_hook_silent_policy(&mut output);

@@ -1,0 +1,250 @@
+//! Review-gate and cross-host `ROUTER_RS_*` env readers (B0 core-policy subset).
+//!
+//! Canonical env names take precedence; legacy per-host `ROUTER_RS_{CURSOR,CODEX,CLAUDE}_*` aliases
+//! remain honored for explicit opt-in / disable. Operator table: `docs/harness_architecture/03-hook-and-switches.md` §5.
+
+use std::env;
+
+const ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
+const ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
+    "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
+
+const ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
+    "ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
+const ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
+    "ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
+const ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
+    "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
+const ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
+    "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
+
+const ROUTER_RS_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_REVIEW_GATE_DISABLE";
+const ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE";
+const ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE";
+const ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE";
+
+const ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
+const ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str =
+    "ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES";
+
+const ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV: &str = "ROUTER_RS_REVIEW_PENDING_CYCLE_MAX";
+const ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV: &str =
+    "ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX";
+
+/// Shared default-true env parse (`0`/`false`/`off`/`no` disable; unset = on).
+pub fn env_enabled_default_true(var_name: &str) -> bool {
+    match env::var(var_name) {
+        Ok(value) => {
+            let token = value.trim().to_ascii_lowercase();
+            !(token == "0" || token == "false" || token == "off" || token == "no")
+        }
+        Err(_) => true,
+    }
+}
+
+/// Shared default-false env parse (only `1`/`true`/`yes`/`on` enable; unset = off).
+pub fn env_enabled_default_false(var_name: &str) -> bool {
+    match env::var(var_name) {
+        Ok(value) => {
+            let token = value.trim().to_ascii_lowercase();
+            matches!(token.as_str(), "1" | "true" | "yes" | "on")
+        }
+        Err(_) => false,
+    }
+}
+
+fn env_explicitly_enabled(var_name: &str) -> bool {
+    env_enabled_default_false(var_name)
+}
+
+pub fn router_rs_review_spawn_first_nudge_enabled() -> bool {
+    env_enabled_default_true(ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV)
+}
+
+pub fn router_rs_cursor_subagent_model_inherit_nudge_enabled() -> bool {
+    env_enabled_default_true(ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV)
+}
+
+/// Cross-host: missing `fork_context` on a reviewer lane may infer independent fork (`false`).
+/// Canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`; legacy host env honored only when explicitly enabled. **Unset = off** (Claude semantics).
+pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
+    if env_explicitly_enabled(ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV) {
+        return true;
+    }
+    env_explicitly_enabled(ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
+        || env_explicitly_enabled(ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
+        || env_explicitly_enabled(ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
+}
+
+/// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude-code`).
+///
+/// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` applies to all; legacy per-host env still honored.
+pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
+    if env_enabled_default_false(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) {
+        return true;
+    }
+    let host_env = match host_id {
+        "cursor" => ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV,
+        "codex" => ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV,
+        "claude-code" => ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV,
+        _ => return false,
+    };
+    env_enabled_default_false(host_env)
+}
+
+/// Max entries in `review_subagent_pending_cycle_keys` (default **32**).
+pub fn router_rs_review_pending_cycle_max() -> usize {
+    parse_usize_clamped(
+        ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV,
+        ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV,
+        32,
+        1,
+        256,
+    )
+}
+
+/// Stop `REVIEW_GATE` full-line cap before soft_nag downgrade (Cursor Stop today).
+///
+/// - **未设置**（非 test）：默认 **8**。
+/// - `=0` / `false` / `off` / `no`：**关闭**降频（严格、每轮完整硬行）。
+/// - **单测**：未设置变量时返回 **`None`**。
+pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
+    let raw = env::var(ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV)
+        .ok()
+        .or_else(|| env::var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV).ok());
+    parse_review_gate_stop_max_nudges_cap(raw.as_deref())
+}
+
+fn parse_review_gate_stop_max_nudges_cap(raw: Option<&str>) -> Option<u32> {
+    let Some(raw) = raw else {
+        #[cfg(test)]
+        {
+            return None;
+        }
+        #[cfg(not(test))]
+        {
+            return Some(8);
+        }
+    };
+    let t = raw.trim().to_ascii_lowercase();
+    if matches!(t.as_str(), "" | "0" | "false" | "off" | "no") {
+        return None;
+    }
+    if let Some(n) = t.parse::<u32>().ok().filter(|v| *v >= 1) {
+        return Some(n);
+    }
+    eprintln!(
+        "[core-policy] invalid review gate stop max nudges={raw:?}; using default cap 8"
+    );
+    Some(8)
+}
+
+fn parse_usize_clamped(
+    canonical_key: &'static str,
+    legacy_key: &'static str,
+    default_val: usize,
+    min_allowed: usize,
+    max_allowed: usize,
+) -> usize {
+    let raw = env::var(canonical_key)
+        .ok()
+        .or_else(|| env::var(legacy_key).ok());
+    match raw {
+        None => default_val,
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return default_val;
+            }
+            match trimmed.parse::<usize>() {
+                Ok(n) => n.clamp(min_allowed, max_allowed),
+                Err(_) => {
+                    eprintln!(
+                        "[core-policy] invalid {canonical_key} (or legacy {legacy_key})={raw:?}; using default {default_val} (clamp {min_allowed}..{max_allowed})"
+                    );
+                    default_val
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_env_sync::process_env_lock;
+
+    #[test]
+    fn review_gate_disable_canonical_or_legacy_host_env() {
+        let _g = process_env_lock();
+        let keys = [
+            ROUTER_RS_REVIEW_GATE_DISABLE_ENV,
+            ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV,
+            ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV,
+            ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV,
+        ];
+        let prev: Vec<_> = keys.iter().map(|k| (*k, env::var_os(k))).collect();
+        for key in keys {
+            env::remove_var(key);
+        }
+        assert!(!router_rs_review_gate_disabled_for_host("cursor"));
+        env::set_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV, "1");
+        assert!(router_rs_review_gate_disabled_for_host("codex"));
+        env::remove_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV);
+        env::set_var(ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV, "true");
+        assert!(router_rs_review_gate_disabled_for_host("claude-code"));
+        for (key, val) in prev {
+            match val {
+                Some(v) => env::set_var(key, v),
+                None => env::remove_var(key),
+            }
+        }
+    }
+
+    #[test]
+    fn review_pending_cycle_max_canonical_and_legacy() {
+        let _g = process_env_lock();
+        let prev_canon = env::var_os(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV);
+        let prev_legacy = env::var_os(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV);
+        env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV);
+        env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV);
+        assert_eq!(router_rs_review_pending_cycle_max(), 32);
+        env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, "64");
+        assert_eq!(router_rs_review_pending_cycle_max(), 64);
+        env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, "48");
+        assert_eq!(router_rs_review_pending_cycle_max(), 48);
+        match prev_canon {
+            Some(v) => env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, v),
+            None => env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV),
+        }
+        match prev_legacy {
+            Some(v) => env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, v),
+            None => env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV),
+        }
+    }
+
+    #[test]
+    fn review_gate_stop_max_nudges_unset_in_tests_means_strict_none() {
+        let _g = process_env_lock();
+        let keys = [
+            ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV,
+            ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV,
+        ];
+        let prev: Vec<_> = keys.iter().map(|k| (*k, env::var_os(k))).collect();
+        for key in keys {
+            env::remove_var(key);
+        }
+        assert!(router_rs_review_gate_stop_max_nudges_cap().is_none());
+        env::set_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "3");
+        assert_eq!(router_rs_review_gate_stop_max_nudges_cap(), Some(3));
+        env::remove_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV);
+        env::set_var(ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "5");
+        assert_eq!(router_rs_review_gate_stop_max_nudges_cap(), Some(5));
+        for (key, val) in prev {
+            match val {
+                Some(v) => env::set_var(key, v),
+                None => env::remove_var(key),
+            }
+        }
+    }
+}

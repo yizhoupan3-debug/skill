@@ -34,11 +34,11 @@
 
 | 宿主 | 入口方式 | Goal 驱动 | Closeout | 特殊差异 |
 |------|---------|-----------|----------|----------|
+| **codex** | `$framework` / `router-rs framework alias` | `framework_goal_drive` stdio | `CODEX_REVIEW_GATE`（非 my-light） | `.codex/hooks.json`；SubagentStart/Stop（v0.133+） |
 | **claude-code** | 斜杠命令（`/discussx` 等） | `framework_goal_drive` stdio | `closeout_gate` advisory（my-light） | PreToolUse/Stop hook advisory 模式 |
-| **claude-desktop** | 斜杠命令 | MCP `goal_state_manage` | MCP `closeout_gate` advisory | `router-rs-framework` MCP 工具链 |
 | **cursor** | Plan 模式自动触发 `plan-mode` | `framework_goal_drive` stdio | advisory（my-light 下无硬拦） | `.cursor/rules/*-gate.mdc`；hook 不注入 spawn-first nudge |
 | **opencode** | 斜杠命令 | `framework_goal_drive` stdio | advisory | 配置在 `opencode.json` |
-| **antigravity** | 双面：CLI hooks + MCP | CLI 用 stdio；App 用 MCP | advisory | `antigravity-cli`（hooks）vs `antigravity-app`（MCP）|
+| **antigravity** | 斜杠 / MCP | MCP `goal_state_manage` | MCP `closeout_gate` advisory | `router-rs-framework` MCP 工具链 |
 
 **宿主权威分层**：跨宿主协议 → `AGENTS.md`；宿主执行面 → `AGENTS_<HOST>.md`；skill 路由 → `SKILL_ROUTING_RUNTIME.json`；hook 行为 → 各宿主 `hooks.json` + `router-rs`。
 

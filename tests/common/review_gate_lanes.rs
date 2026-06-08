@@ -22,14 +22,11 @@ pub fn review_gate_lane_set(v: &Value, field: &str) -> HashSet<String> {
         .collect()
 }
 
-pub fn review_gate_lane_sets_from_registry(v: &Value) -> (HashSet<String>, HashSet<String>) {
-    (
-        review_gate_lane_set(v, "deep_gate_lanes"),
-        review_gate_lane_set(v, "claude_reviewer_lanes"),
-    )
+pub fn reviewer_lanes_from_registry(v: &Value) -> HashSet<String> {
+    review_gate_lane_set(v, "reviewer_lanes")
 }
 
-pub fn expected_deep_gate_lanes() -> HashSet<String> {
+pub fn expected_reviewer_lanes() -> HashSet<String> {
     [
         "general-purpose",
         "generalpurpose",
@@ -37,47 +34,27 @@ pub fn expected_deep_gate_lanes() -> HashSet<String> {
         "bestofnrunner",
         "deep-reviewer",
         "deepreviewer",
+        "review",
+        "reviewer",
+        "critic",
+        "code-review",
     ]
     .into_iter()
     .map(str::to_string)
     .collect()
 }
 
-pub fn assert_review_gate_lane_sets_closed(deep: &HashSet<String>, claude: &HashSet<String>) {
-    let expected_deep = expected_deep_gate_lanes();
+pub fn assert_reviewer_lanes_closed(lanes: &HashSet<String>) {
+    let expected = expected_reviewer_lanes();
     assert_eq!(
-        *deep, expected_deep,
-        "deep_gate_lanes must be exactly GP/bon spellings for Cursor/Codex"
+        *lanes, expected,
+        "reviewer_lanes must match cross-host canonical closed-set"
     );
 
-    for forbidden in [
-        "review",
-        "reviewer",
-        "critic",
-        "code-review",
-        "explore",
-        "architecture-review",
-    ] {
+    for forbidden in ["explore", "ci-investigator", "architecture-review"] {
         assert!(
-            !deep.contains(forbidden),
-            "deep_gate_lanes must not contain {forbidden}"
-        );
-    }
-
-    assert!(
-        !claude.is_empty(),
-        "claude_reviewer_lanes must be non-empty"
-    );
-    for lane in &expected_deep {
-        assert!(
-            claude.contains(lane),
-            "claude_reviewer_lanes must superset deep_gate_lanes ({lane})"
-        );
-    }
-    for extra in ["review", "reviewer", "critic", "code-review"] {
-        assert!(
-            claude.contains(extra),
-            "claude_reviewer_lanes must include Claude-only lane {extra}"
+            !lanes.contains(forbidden),
+            "reviewer_lanes must not contain {forbidden}"
         );
     }
 }

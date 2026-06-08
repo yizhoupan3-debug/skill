@@ -95,7 +95,7 @@ metadata:
 
 1. **本地证据先进计划**（见 [能力与工件联动表](references/research-scope-and-examples.md)）：在写结构化计划前，完成域内必要的深读、检索或代码定位；计划应收敛已有证据，而不是用计划代替定位结论。
 2. **Todo 必须可验收**：每条 todo 在同一条可见文案里写全 **四元组**（见 **Todo 可执行性**）；宿主工具生成的 `.plan.md` 还须满足宿主工具的产出契约。
-3. **可选 review 只找问题**：仅当用户明确要求 review plan / 审计划 / 深度 review 时，review lane 只读计划与证据，输出 findings / risks / missing tests（**默认 compact**）；不改代码、不自动修复。详见 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)。
+3. **可选 review 只找问题**：仅当用户明确要求 review plan / 审计划 / 深度 review 时，review lane 只读计划与证据，输出 findings / risks / missing tests（**默认 compact**）；只找问题，不改代码、不自动修复。详见 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)。
 4. **收口（依 `plan_profile`）**：
    - **`research`**：完成调研合成与问题矩阵收口（见 [references/research-profile-guide.md](references/research-profile-guide.md)）；**不**把 `/gitx plan` 作为本 profile 的必需验证。
    - **`execution`**：获批且实现与测试通过后做计划 vs 实际逐项对照并记录 Git 状态证据。宿主支持时可用 `/gitx plan`。

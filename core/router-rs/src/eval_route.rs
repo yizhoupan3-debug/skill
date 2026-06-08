@@ -315,7 +315,7 @@ mod tests {
             do_not_use_tokens: HashSet::new(),
             framework_alias_entrypoints: vec![],
             metadata_positive_triggers: Vec::new(),
-            host_platforms: vec!["codex-cli".to_string()],
+            host_platforms: vec!["codex".to_string()],
             record_kind: "skill".to_string(),
             primary_allowed: true,
             fallback_policy_mode: "eligible-in-runtime".to_string(),
