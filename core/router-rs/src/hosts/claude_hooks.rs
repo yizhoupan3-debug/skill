@@ -191,7 +191,7 @@ fn repo_relative_slash_path(repo_root: &Path, raw: &str) -> Option<String> {
         if let Ok(rel) = abs_lex.strip_prefix(&repo_lex) {
             return Some(rel.to_string_lossy().replace('\\', "/"));
         }
-        return None;
+        return Some(abs_lex.to_string_lossy().replace('\\', "/"));
     }
 
     let rel_only = compact_repo_relative_segments(raw)?;
@@ -199,7 +199,7 @@ fn repo_relative_slash_path(repo_root: &Path, raw: &str) -> Option<String> {
     if let Ok(rel) = joined.strip_prefix(&repo_lex) {
         return Some(rel.to_string_lossy().replace('\\', "/"));
     }
-    None
+    Some(joined.to_string_lossy().replace('\\', "/"))
 }
 
 const FRAMEWORK_CHANGED_CONTEXT: &str =

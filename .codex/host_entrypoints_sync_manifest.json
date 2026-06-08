@@ -28,34 +28,38 @@
         "AGENTS_ANTIGRAVITY.md",
         ".gemini/antigravity/rules/framework.md"
       ],
-      "antigravity-cli": "AGENTS_ANTIGRAVITY.md",
       "claude-code": [
         "AGENTS_CLAUDE.md",
         ".claude/rules/framework.md",
         ".claude/settings.json"
       ],
+      "codex": "AGENTS_CODEX.md",
+      "cursor": [
+        "AGENTS_CURSOR.md",
+        ".cursor/rules/*.mdc"
+      ],
+      "opencode": "AGENTS_OPENCODE.md",
+      "antigravity-cli": "AGENTS_ANTIGRAVITY.md",
       "claude-desktop": [
         "AGENTS_CLAUDE.md",
         ".claude/CLAUDE.md"
       ],
       "codex-app": "AGENTS_CODEX.md",
-      "codex-cli": "AGENTS_CODEX.md",
-      "cursor": [
-        "AGENTS_CURSOR.md",
-        ".cursor/rules/*.mdc"
-      ]
+      "codex-cli": "AGENTS_CODEX.md"
     },
     "policy": "host-specific-agent-policy-v1",
     "routing_source_of_truth": "skills/",
     "supported_hosts": [
-      "codex-cli",
-      "codex-app",
+      "codex",
       "cursor",
       "claude-code",
-      "claude-desktop",
-      "antigravity-cli",
       "antigravity-app",
-      "antigravity"
+      "antigravity",
+      "opencode",
+      "codex-cli",
+      "codex-app",
+      "claude-desktop",
+      "antigravity-cli"
     ]
   }
 }

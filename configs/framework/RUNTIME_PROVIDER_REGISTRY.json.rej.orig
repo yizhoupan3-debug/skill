@@ -1,0 +1,15 @@
+@@ -60,6 +60,14 @@
+         "context_files",
+         "mcp_config_paths"
+       ]
++    },
++    "opencode": {
++      "status": "implemented",
++      "projection": "mcp_capability_profile",
++      "capabilities": [
++        "context_files",
++        "mcp_config_paths"
++      ]
+     }
+   }
+ }

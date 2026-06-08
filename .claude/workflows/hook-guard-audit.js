@@ -1,3 +1,4 @@
+import { agent, parallel, pipeline, phase, log } from "workflow"
 export const meta = {
   name: 'hook-guard-audit',
   description: 'Deep audit of PreToolUse hook path protections — find outdated guards, test, plan optimization',

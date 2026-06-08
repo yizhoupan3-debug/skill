@@ -1,3 +1,4 @@
+import { pipeline } from "workflow"
 export const meta = {
   name: 'claude-code-cli-audit',
   description: '多agent深度并行审计Claude Code CLI全链路使用问题',

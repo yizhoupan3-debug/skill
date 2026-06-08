@@ -1,3 +1,4 @@
+import { agent, parallel, pipeline, phase, log } from "workflow"
 export const meta = {
   name: 'deep-research',
   description: 'Deep research harness — fan-out web searches, fetch sources, adversarially verify claims, synthesize a cited report.',

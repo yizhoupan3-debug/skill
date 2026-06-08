@@ -61,7 +61,8 @@ fn completion_claimed_in_text(text: &str) -> bool {
     if text.trim().is_empty() {
         return false;
     }
-    let sanitized = strip_quoted_or_codeblock_or_url(text);
+    let unescaped = text.replace("\\", "");
+    let sanitized = strip_quoted_or_codeblock_or_url(&unescaped);
     crate::hook_common::contains_completion_claim_token(&sanitized)
 }
 

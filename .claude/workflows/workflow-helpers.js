@@ -128,3 +128,24 @@ export function conservativeMerge(findings) {
     return best
   })
 }
+
+export const FACTCHECK_VERDICT_SCHEMA = {
+  type: 'object',
+  properties: {
+    is_accurate: { type: 'boolean' },
+    errors: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          quote: { type: 'string' },
+          correction: { type: 'string' },
+          severity: { type: 'string', enum: ['minor', 'major', 'critical'] }
+        },
+        required: ['quote', 'correction', 'severity']
+      }
+    },
+    reasoning: { type: 'string' }
+  },
+  required: ['is_accurate', 'errors', 'reasoning']
+}

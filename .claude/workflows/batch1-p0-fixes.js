@@ -1,3 +1,4 @@
+import { agent, parallel, pipeline, phase, log } from "workflow"
 export const meta = {
   name: 'batch1-p0-security-fixes',
   description: 'Batch 1: P0安全修复 — 路径遍历防护、fsync对齐、死函数删除',

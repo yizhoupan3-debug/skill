@@ -1,6 +1,6 @@
 import { agent, parallel, pipeline, phase, log } from 'workflow'
 import {
-  FINDINGS_SCHEMA, VERDICT_SCHEMA,
+  FINDINGS_SCHEMA, VERDICT_SCHEMA, FACTCHECK_VERDICT_SCHEMA,
   normalizeFile, normalizeLine, lineOverlap, conservativeMerge,
 } from './workflow-helpers.js'
 

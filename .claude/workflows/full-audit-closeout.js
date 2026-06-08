@@ -1,3 +1,4 @@
+import { agent, parallel, pipeline, phase, log } from "workflow"
 export const meta = {
   name: 'full-audit-closeout',
   description: '11维度全面审计：commit审查→harness→文档→死代码→过期设计→测试覆盖→宿主特化→运维文档→对抗测试→验证→修复规划，200+ agent',
