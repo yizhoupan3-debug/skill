@@ -22,7 +22,7 @@
         "/Users/joe/Developer/skill"
       ],
       "command": "/Users/joe/.local/share/skill-framework/bin/router-rs",
-      "description": "Framework snapshot, skill routing, goal/closeout gating (MCP hard block for non-my-light)",
+      "description": "Framework snapshot, skill routing, goal/closeout gating (MCP advisory)",
       "env": {
         "SKILL_FRAMEWORK_ROOT": "/Users/joe/Developer/skill"
       },

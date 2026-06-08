@@ -1,10 +1,16 @@
 {
-  "_auto_generated": true,
-  "_source": "SKILL_MANIFEST.json",
-  "_note": "此文件由 MANIFEST 派生，请勿手动编辑。未来将由 router-rs 构建时自动生成。",
   "derived_from": "skills/SKILL_MANIFEST.json",
   "schema_version": "skill-plugin-catalog-v1",
   "skills": {
+    "": {
+      "host_support": {
+        "platforms": [
+          "supported"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": ""
+    },
     "agent-swarm-orchestration": {
       "host_support": {
         "platforms": [
@@ -255,11 +261,8 @@
     "python-env-management": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-desktop",
-          "claude-code",
-          "cursor",
-          "opencode"
+          "cursor"
         ]
       },
       "kind": "skill",

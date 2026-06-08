@@ -136,6 +136,11 @@
       "severity": "block"
     },
     {
+      "id": "parse_error",
+      "description": "The closeout record could not be parsed as valid JSON.",
+      "severity": "block"
+    },
+    {
       "id": "claimed_done_with_failed_verification",
       "description": "Summary claims completion but verification_status=failed.",
       "severity": "block"
