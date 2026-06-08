@@ -131,3 +131,6 @@ core/router-rs/.claude/
 # Claude framework runtime artifacts
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+
+# Cursor hook backups
+.cursor/hooks.json.orig

@@ -654,7 +654,7 @@ pub(crate) fn install_projection_tool(
     tool: &str,
     scope: &str,
 ) -> Result<Value, String> {
-    if tool.contains("..") || tool.contains("/") || tool.contains("\") {
+    if tool.contains("..") || tool.contains('/') || tool.contains('\\') {
         return Err(format!("Invalid tool name: {}", tool));
     }
     if tool == "codex-app" {
