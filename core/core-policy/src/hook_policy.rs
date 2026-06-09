@@ -399,7 +399,12 @@ fn dangerous_bash_compiled_patterns() -> &'static [(Regex, &'static str)] {
             (r"(^|[;&|]\s*)git(\s+-C\s+\S+)?\s+push\b[^;&|]*(--force|--force-with-lease)", "Blocked force push. Ask the user to explicitly request the exact force-push command."),
         ];
         raw.iter()
-            .filter_map(|(p, r)| Some((Regex::new(&format!("(?i){p}")).ok()?, *r)))
+            .map(|(p, r)| {
+                (
+                    Regex::new(&format!("(?i){p}")).expect("valid dangerous-bash regex"),
+                    *r,
+                )
+            })
             .collect()
     })
 }

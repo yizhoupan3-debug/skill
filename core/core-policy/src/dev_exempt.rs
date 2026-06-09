@@ -48,11 +48,11 @@ fn path_matches_exempt_prefix(canonical: &Path, repo_root: &Path) -> bool {
         Ok(p) => p,
         Err(_) => repo_root.to_path_buf(),
     };
-    let rel = canonical.strip_prefix(&repo).ok();
-    let rel_str = rel
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| canonical.to_string_lossy().to_string());
-    let rel_norm = rel_str.replace('\\', "/");
+    // Paths outside the repo are never exempt.
+    let Some(rel) = canonical.strip_prefix(&repo).ok() else {
+        return false;
+    };
+    let rel_norm = rel.to_string_lossy().replace('\\', "/");
     EXEMPT_PATH_PREFIXES.iter().any(|prefix| {
         rel_norm == *prefix || rel_norm.starts_with(&format!("{prefix}/"))
     })
