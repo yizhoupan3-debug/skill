@@ -92,17 +92,17 @@ pub fn host_requires_strict_pre_tool_fallback(
     repo_root: &Path,
     has_native_hook_override: Option<bool>,
 ) -> Result<bool, String> {
+    let id = host_id.trim();
+    if ANEMIC_MCP_HOST_IDS.contains(&id) {
+        return Ok(true);
+    }
+    if let Some(strict) = crate::hosts::host_provider_strict_pre_tool_fallback_hint(id) {
+        return Ok(strict);
+    }
     if has_native_hook_override == Some(true) {
         return Ok(false);
     }
     if has_native_hook_override == Some(false) {
-        return Ok(true);
-    }
-    let id = host_id.trim();
-    if let Some(strict) = crate::hosts::host_provider_strict_pre_tool_fallback_hint(id) {
-        return Ok(strict);
-    }
-    if ANEMIC_MCP_HOST_IDS.contains(&id) {
         return Ok(true);
     }
     let registry = load_runtime_registry_json(repo_root)?;
@@ -387,6 +387,10 @@ fn is_shell_tool(tool_name: &str) -> bool {
             | "execute_command"
             | "terminal"
             | "functions.exec_command"
+            | "run_command"
+            | "sh"
+            | "exec"
+            | "cmd"
     )
 }
 
@@ -460,7 +464,7 @@ mod tests {
     #[test]
     fn host_provider_override_native_hook_disables_strict_fallback() {
         let root = skill_repo_root();
-        assert!(!host_requires_strict_pre_tool_fallback("opencode", &root, Some(true)).unwrap());
+        assert!(!host_requires_strict_pre_tool_fallback("unknown-host", &root, Some(true)).unwrap());
     }
 
     #[test]

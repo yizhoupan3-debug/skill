@@ -2357,7 +2357,6 @@ fn runtime_registry_host_projections_expose_supervisor_capabilities() {
         "external_session_supervisor",
         "rate_limit_auto_resume",
         "host_resume_entrypoint",
-        "host_tmux_worker_management",
     ] {
         assert!(codex_capabilities.contains(&json!(capability)));
     }

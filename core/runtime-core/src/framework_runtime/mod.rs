@@ -1302,15 +1302,6 @@ mod shell_command_verification_heuristic_tests {
     }
 }
 
-#[allow(dead_code)]
-fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView) -> bool {
-    if snapshot.task_pointers_present {
-        return true;
-    }
-    let summary_path = snapshot.current_root.join(SESSION_SUMMARY_FILENAME);
-    summary_path.is_file()
-}
-
 /// 在宿主 `PostToolUse` 中追加一条「终端类验证命令」到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
 ///
 /// `kind` 用于区分来源（如 `codex_post_tool_verification` / `cursor_post_tool_verification`）。

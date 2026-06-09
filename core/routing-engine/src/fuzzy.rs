@@ -8,11 +8,6 @@ use super::text::normalize_text;
 use super::types::SkillRecord;
 use std::collections::HashSet;
 
-/// Score threshold below which exact-match results are considered
-/// insufficient and fuzzy fallback may activate.
-#[allow(dead_code)]
-pub const FUZZY_FALLBACK_THRESHOLD: f64 = 0.3;
-
 /// Minimum trigram similarity required for a fuzzy match to be accepted.
 pub const FUZZY_MIN_SIMILARITY: f64 = 0.4;
 

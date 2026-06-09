@@ -20,7 +20,7 @@ pub use scoring_config::scoring_weights;
 mod signal_cache;
 mod signals;
 mod skill_record;
-pub use fuzzy::{fuzzy_fallback_score, trigram_similarity, FUZZY_FALLBACK_THRESHOLD, FUZZY_MIN_SIMILARITY};
+pub use fuzzy::{fuzzy_fallback_score, trigram_similarity, FUZZY_MIN_SIMILARITY};
 
 pub use constants::{
     PROFILE_COMPILE_AUTHORITY, ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION,

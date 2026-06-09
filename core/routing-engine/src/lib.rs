@@ -9,7 +9,7 @@ pub mod text;
 pub mod types;
 
 pub use fuzzy::{
-    fuzzy_fallback_score, trigram_similarity, FUZZY_FALLBACK_THRESHOLD, FUZZY_MIN_SIMILARITY,
+    fuzzy_fallback_score, trigram_similarity, FUZZY_MIN_SIMILARITY,
 };
 pub use runtime_watch::{
     default_skill_routing_runtime_path, routing_runtime_watch, RoutingRuntimeWatch,

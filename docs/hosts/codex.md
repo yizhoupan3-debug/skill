@@ -91,7 +91,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 ## 独有长效会话机制 (Session Supervisor)
 
-- **`session_supervisor`**：集成 tmux 长会话管理。
+- **`session_supervisor`**：原生进程生命周期管理（launch / resume / terminate / mark_blocked / resume_due）。
 
 ## 自检诊断与验证 (Self-Test)
 

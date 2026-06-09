@@ -452,7 +452,7 @@ pub trait HostHook {
 **功能**：Worker 生命周期管理（launch/resume/terminate/mark_blocked/resume_due）。
 
 - 驱动：codex/cursor/claude/antigravity（`driver.rs`）
-- 原生进程驱动（P8 de-tmux 已接线 router-rs `session_supervisor/`；`runtime-core` 副本待删）
+- 原生进程驱动（session_supervisor 主实现位于 `runtime-core`；`router-rs` 为 thin facade 门面）
 - 速率限制检测：正则模式匹配
 - 入口：`handle_session_supervisor_operation()`
 

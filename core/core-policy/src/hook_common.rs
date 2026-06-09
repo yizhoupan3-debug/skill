@@ -357,12 +357,6 @@ pub fn is_my_pre_execution_entry_prompt(text: &str) -> bool {
     my_pre_execution_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
-/// Retired: `/autopilot` is not a framework entrypoint. Always false.
-#[allow(dead_code)]
-pub fn is_autopilot_entrypoint_prompt(_text: &str) -> bool {
-    false
-}
-
 /// Framework slash commands that may arm delegation (excludes goal-only entries).
 pub fn is_framework_non_goal_entrypoint_prompt(text: &str) -> bool {
     let sanitized = strip_quoted_or_codeblock_or_url(text);

@@ -23,7 +23,6 @@ pub enum LintSeverity {
 #[derive(Debug, Clone)]
 pub struct LintFinding {
     pub severity: LintSeverity,
-#[allow(dead_code)]
     pub message: String,
 }
 
