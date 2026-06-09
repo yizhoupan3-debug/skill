@@ -57,7 +57,7 @@ B0  → {core-state, core-policy, core-math, framework-kernel}
 | **P0 测试 / smoke** | ✅ done | `mcp_safety` / `hook_policy_contract` / `atomic_write` / `bash_guard` / `router_self` / `rfv_state` / `task_pointers`（含 router 边界）/ `trace_runtime` compaction（11×）/ `codegraph` B1 语义 + graph MCP roundtrip | `codegraph` feature 下 catalog 对照 smoke（可选）；`--lib` 偶发 cursor_hooks 并行 temp 环境 flake |
 | **P10 smoke（§6.4）** | ✅ done · **gap 0** | Batch H 跨宿主 / workflow / isolation / shutdown smoke 全批；`subagent_real_process_spawn_terminate_smoke`（`ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE=1`）；`workflow_state_isolation_smoke`；`subagent_resource_leak_detection` | — |
 | **P7 CLI 薄壳 / B3 下沉** | ✅ done | B7 薄壳预算；`live_execute` / `stdio_op_registry` / `stdio_dispatch` / `json_payload` / `trace_transport` / **`trace_attach` / `trace_stream_io`** 已迁 B3；`runtime_ops.inc` **117L** | — |
-| **P8 de-tmux** | ✅ done | `grep tmux core/` → **0** | — |
+| **P8 de-tmux** | ✅ slice | router-rs native `session_supervisor` 已接线；`runtime-core` 副本待删 | 删 `runtime-core` 重复模块 |
 | **P4 host-projection** | ✅ done | `/team` fail-closed；`host_provider_routing_aliases` | — |
 | **P4 handlers 拆分** | ✅ done · **gap 0** | `handlers/review_gate.rs`（1345L）、`outbound.rs`（150L）、`stop.rs`（314L）；`handlers.rs` **1172L**；孤儿 `handlers_review_gate.inc.rs` 已删 | — |
 | **CG W1–W4** | ✅ done | crate + 六工具 MCP + sync/watcher + rayon/prepared stmt/schema v2 | — |
@@ -70,7 +70,7 @@ B0  → {core-state, core-policy, core-math, framework-kernel}
 | **P2 退役面** | ✅ done | 五宿主闭集验收；antigravity manifest；`ref_corpus_tool_rs` 构建 | 历史投影 stub / 文档注释（有意保留） |
 | **core-policy 物理迁移** | ✅ done | hook/review 模块迁 `core-policy`；`review_gate` CLI 留 router-rs 胶合 | — |
 | **workspace 九 crate** | 🔧 stub 完成 | 13 个独立 crate（9 原有 + 4 新建 stub）已编译通过；DAG 合规测试 7/7 passed | B3/B4/B5/B7 实际源码迁移待后续 wave |
-| **Goal 会话级作用域** | 📋 设计已定 | — | goal state 仅当前 session，不做跨对话持久化；写入 roadmap v5 §4.4 |
+| **Goal 会话级作用域** | ✅ slice | `resolve_cursor_continuity_frame` 默认不扫 orphan；`ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE` legacy opt-in | 指针/session 绑定、跨 session `resume` 全链路 |
 | **Git** | — | — | 未 commit |
 
 ---

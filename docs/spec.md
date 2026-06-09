@@ -300,19 +300,21 @@ spawned → running → draining → completed
 
 ### 6.1 宿主闭集
 
+权威真源：`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`（五 id 闭集）。
+
 | 宿主 ID | install_tool | 运输模式 |
 |---------|-------------|---------|
 | `claude-code` | `claude` | `anthropic-claude-code` |
 | `cursor` | `cursor` | `cursor-agent` |
 | `codex` | `codex` | `native-codex` |
-| `opencode` | `opencode` | `opencode-native` |
-| `antigravity-app` | `antigravity` | `mcp-stdio` |
+| `opencode` | `opencode` | `opencode-cli` |
+| `antigravity` | `antigravity` | `mcp-stdio` |
 
-> 注：`Claude Desktop` 现已**退役**，由 `antigravity-app` 替代作为新的 App 端宿主。
+> **退役 id**（`claude-desktop`、`codex-cli`、`codex-app`、`antigravity-app`、`antigravity-cli` 等）不在闭集内；仅保留 stub 重定向页，见 [`MIGRATION.md`](../MIGRATION.md) 与 [`docs/hosts/`](hosts/) 下 `status: retired` 页（如 [`antigravity-app.md`](hosts/antigravity-app.md)、[`claude-desktop.md`](hosts/claude-desktop.md)）。
 
 ### 6.2 Hook 事件矩阵
 
-| 事件 | claude-code | cursor | codex | opencode | antigravity-app |
+| 事件 | claude-code | cursor | codex | opencode | antigravity |
 |------|:-----------:|:------:|:-----:|:--------:|:---------------:|
 | PreToolUse | ✅ core | — | ✅ | — | — |
 | UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | — | — |

@@ -193,7 +193,8 @@ pub struct CursorContinuityFrame {
 }
 
 /// beforeSubmit / Stop 入口：一次构建指针视图 + hydration 目标对。
-/// Pointer 机制已移除：当 pointer 为空时，回退到 diagnostics scan 查找 GOAL_STATE。
+/// 会话级作用域：默认仅 active/focus 指针 hydration；不扫 orphan。
+/// 遗留 diagnostics scan 仅当 `ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE=1` 显式 opt-in。
 pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFrame {
     let pointers = read_task_pointers(repo_root);
     let pointer_view = resolve_task_view_with_pointers(repo_root, None, pointers.clone());
@@ -204,13 +205,29 @@ pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFram
     )
     .ok()
     .flatten()
-    .or_else(|| {
-        // Pointer 机制已移除：回退到 diagnostics scan
-        crate::state_manager::read_goal_state_for_diagnostics_scan(repo_root).ok().flatten()
-    });
+    .or_else(|| goal_hydration_diagnostics_scan_fallback(repo_root));
     CursorContinuityFrame {
         pointer_view,
         hydration_goal,
+    }
+}
+
+fn goal_hydration_diagnostics_scan_fallback(repo_root: &Path) -> Option<(Value, String)> {
+    if !goal_diagnostics_scan_hydrate_enabled() {
+        return None;
+    }
+    crate::state_manager::read_goal_state_for_diagnostics_scan(repo_root)
+        .ok()
+        .flatten()
+}
+
+fn goal_diagnostics_scan_hydrate_enabled() -> bool {
+    match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
+        Ok(v) => {
+            let t = v.trim().to_lowercase();
+            matches!(t.as_str(), "1" | "true" | "yes" | "on")
+        }
+        Err(_) => false,
     }
 }
 
@@ -1478,7 +1495,7 @@ mod tests {
     }
 
     #[test]
-    fn continuity_frame_hydration_finds_orphan_goal_via_diagnostics_scan() {
+    fn continuity_frame_skips_orphan_goal_without_pointer_or_opt_in() {
         let tmp = unique_repo("orphan-hydr");
         let tid = "t-orph";
         let task_dir = tmp.join("artifacts/current").join(tid);
@@ -1489,11 +1506,14 @@ mod tests {
         )
         .unwrap();
         let frame = resolve_cursor_continuity_frame(&tmp);
-        assert!(frame.pointer_view.task_id.is_none(), "stub pointers → no task_id in pointer_view");
-        // With diagnostics scan fallback, orphan goal IS discovered (useful for single-conversation mode).
-        let (goal_val, goal_tid) = frame.hydration_goal.expect("diagnostics scan should find orphan goal");
-        assert_eq!(goal_val["goal"], json!("orphan"));
-        assert_eq!(goal_tid, tid);
+        assert!(
+            frame.pointer_view.task_id.is_none(),
+            "stub pointers → no task_id in pointer_view"
+        );
+        assert!(
+            frame.hydration_goal.is_none(),
+            "new session without pointer must not auto-hydrate orphan goal"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
