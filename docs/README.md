@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-08"
+last_verified: "2026-06-09"
 depends_on:
   - spec.md
   - framework_operator_primer.md
@@ -7,7 +7,7 @@ depends_on:
 
 # 文档索引（控制面与契约）
 
-**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`spec.md`](spec.md) = 统一控制面、沙箱与接入契约规范；历史迁移叙述见 git 历史与 [`MIGRATION.md`](../MIGRATION.md)。
+**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`spec.md`](spec.md) = 统一控制面、沙箱与接入契约规范（总览 + 索引，延伸子文档见 spec.md `extends` 列表）；历史迁移叙述见 git 历史与 [`MIGRATION.md`](../MIGRATION.md)。
 
 ## 推荐阅读顺序
 
@@ -42,7 +42,7 @@ depends_on:
 | 运行期核心行为与沙箱统一规约 | [spec.md](spec.md) |
 | Python 环境治理（uv-only，热路由 `$python-env-management`） | [`skills/python-env-management/SKILL.md`](../skills/python-env-management/SKILL.md) |
 | 历史迁移、减法记录 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
-| 统一运维手册（安装 / 同步 / 备份 / 故障排查） | [maintenance/ops-runbook.md](maintenance/ops-runbook.md) |
+| 统一运维手册（安装 / 同步 / 备份 / 故障排查） | [operations/index.md](operations/index.md)（唯一真源；旧 `maintenance/ops-runbook.md` 已重定向） |
 | **Host projection schema 校验**（闭集 MCP Key 矩阵 + 写盘前/写盘后自检 + 已知 bug；2026-06-04 opencode 故障的根因档案） | [maintenance/host-projection-schema-validity.md](maintenance/host-projection-schema-validity.md) · 引用 [spec.md](spec.md) · [framework_naming_conventions.md §MCP Key Convention](framework_naming_conventions.md#mcp-key-convention闭集禁从一个-host-抄到另一个) |
 | Plans 索引（ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
 | Workflow supervisor phase 工件 | [`configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json`](../configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json) · [`skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md) |

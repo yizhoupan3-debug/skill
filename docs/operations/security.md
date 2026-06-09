@@ -8,9 +8,14 @@ last_verified: "2026-06-09"
 
 | 工具 | 防护层 | 覆盖 |
 |------|--------|------|
-| `web_fetch`（MCP） | `web_fetch_guard.rs` | HTTP(S)、IP 黑名单、DNS pinning、重定向逐跳校验 |
-| `browser_open`（MCP） | `validate_browser_open_url` | 阻断非 http(s) scheme |
+| `web_fetch`（MCP） | `web_fetch_guard.rs` | HTTP(S)、IP 黑名单（loopback/private/link-local/CGNAT/metadata）、host 后缀黑名单（`.localhost/.local/.internal`）、DNS pinning、重定向逐跳校验 |
+| `browser_open`（MCP） | `validate_browser_open_url` | 阻断非 http(s) scheme（`file://`/`data:`/`javascript:`）、复用 IP/host 黑名单 |
 | Bash `curl`/`wget` | 宿主 `excludedCommands` / 沙箱 | 沙箱开启时不自动放行 |
+
+**browser_open 已知限制**：
+- `browser_click`/`browser_fill` 可绕过 SSRF guard（通过页面内链接导航到内网）
+- CDP `Page.navigate` 后的 3xx 重定向目标未经校验
+- 无 DNS pinning（Chrome 自行解析，存在 TOCTOU 窗口）
 
 回归：`cargo test --manifest-path core/router-rs/Cargo.toml -- web_fetch_guard`
 

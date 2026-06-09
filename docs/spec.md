@@ -1,22 +1,25 @@
 ---
-last_verified: "2026-06-08"
+last_verified: "2026-06-09"
 version: "unified-v5-full"
-supersedes:
-  - docs/runtime_unified_spec.md
-  - docs/host_adapter_contract.md
-  - docs/rust_contracts.md
-  - docs/harness_architecture/
-  - docs/rust_contracts/
-  - docs/framework_profile_contract.md
-  - docs/closeout_enforcement.md
-  - docs/task_state_unified_resolve.md
-  - docs/rfv_loop_harness.md
-  - docs/harness_policy_map.md
+# 以下子文档是 spec.md 的延伸章节（Extension Chapters），各自保留聚焦内容。
+# spec.md 为总览 + 索引 + 全局契约；子文档为子系统详细规约。
+# 两者权威性等同，子文档在各自领域内为真源（详见各文档 frontmatter）。
+extends:
+  - docs/host_adapter_contract.md        # §7 宿主接入详表
+  - docs/rust_contracts.md               # §8 路由与插件、§13 传输与持久化
+  - docs/harness_architecture/           # §2 五层模型、§5 多 Agent 编排、§10 Hook 系统
+  - docs/rust_contracts/                 # Rust 契约拆分详设
+  - docs/framework_profile_contract.md   # §9.6 运维开关组合
+  - docs/closeout_enforcement.md         # §12 Closeout 运维参考
+  - docs/task_state_unified_resolve.md   # §3 Task state 设计
+  - docs/rfv_loop_harness.md             # §12.2 RFV harness
+  - docs/harness_policy_map.md           # 叙事裁判地图
 ---
 
 # 框架统一规约 (Unified Framework Specification)
 
-> 本文件是框架**唯一权威规约**，覆盖全部 crate、模块、运行期行为、宿主适配与测试契约。
+> 本文件是框架**总览规约**，覆盖架构总览、设计原则、crate 拓扑、测试契约与 schema 索引。
+> 各子系统详细规约见下方 `extends` 列表中的延伸文档（各自在其领域内为真源）。
 > 实施路线图见 [`artifacts/current/roadmap-v5-deep-review.md`](../artifacts/current/roadmap-v5-deep-review.md)。
 
 ---
