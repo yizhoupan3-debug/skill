@@ -20,7 +20,7 @@ use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
 
-pub(crate) fn build_search_results_payload(
+pub fn build_search_results_payload(
     query: &str,
     matches: Vec<MatchRow>,
 ) -> SearchResultsPayload {
@@ -148,7 +148,7 @@ pub(crate) fn search_skills(
     search_skills_subset(records, None, query, limit)
 }
 
-pub(crate) fn search_skills_subset(
+pub fn search_skills_subset(
     records: &[SkillRecord],
     indices: Option<&[usize]>,
     query: &str,
@@ -222,7 +222,7 @@ pub(crate) fn search_skills_subset(
 }
 
 
-pub(crate) fn filter_record_indices_for_host(
+pub fn filter_record_indices_for_host(
     records: &[SkillRecord],
     host_id: Option<&str>,
 ) -> Result<Vec<usize>, String> {

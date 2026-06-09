@@ -488,7 +488,7 @@ fn trace_stream_resolution(
     Ok(None)
 }
 
-pub(crate) fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
+pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let normalized_request = normalize_attach_request(&payload)?;
     let binding_artifact_path = normalized_request.binding_artifact_path;
     let handoff_path = normalized_request.handoff_path;

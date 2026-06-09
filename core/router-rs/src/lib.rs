@@ -35,7 +35,7 @@ mod kernel_bootstrap;
 mod framework_host_targets;
 mod framework_maint;
 mod framework_profile;
-mod framework_runtime;
+pub mod framework_runtime;
 mod framework_skills;
 mod harness_context_signals;
 mod harness_contract;
@@ -71,7 +71,7 @@ mod schema_drift;
 mod ship_readiness;
 mod session_call_tracker;
 mod skill_repo;
-mod stdio_payload_types;
+pub mod stdio_payload_types;
 mod stdio_transport;
 mod task_command;
 mod telemetry_emit;
@@ -94,7 +94,7 @@ mod formal_toolchain {
     pub use core_math::ascii_lower_contains_formal_toolchain_tokens;
 }
 
-mod web_fetch_guard;
+pub mod web_fetch_guard;
 
 #[cfg(test)]
 mod mcp_stdio_test_support;

@@ -1,6 +1,6 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
 use router_rs::background_state::handle_background_state_operation;
-use router_rs::cli::args::{TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload};
+use router_rs::stdio_payload_types::{TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload};
 use router_rs::framework_runtime::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
 };

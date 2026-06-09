@@ -662,7 +662,7 @@ fn resolve_trace_source(request: TraceSourceRequest<'_>) -> Result<ResolvedTrace
     })
 }
 
-pub(crate) fn inspect_trace_stream(
+pub fn inspect_trace_stream(
     payload: TraceStreamInspectRequestPayload,
 ) -> Result<TraceStreamInspectResponsePayload, String> {
     let resolved = resolve_trace_source(TraceSourceRequest::from_inspect_payload(&payload))?;
@@ -685,7 +685,7 @@ pub(crate) fn inspect_trace_stream(
     })
 }
 
-pub(crate) fn replay_trace_stream(
+pub fn replay_trace_stream(
     payload: TraceStreamReplayRequestPayload,
 ) -> Result<TraceStreamReplayResponsePayload, String> {
     let resolved = resolve_trace_source(TraceSourceRequest::from_replay_payload(&payload))?;

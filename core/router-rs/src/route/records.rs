@@ -196,7 +196,7 @@ fn effective_runtime_path(runtime_path: Option<&Path>) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-pub(crate) fn load_records_cached_for_stdio_with_default_runtime_path(
+pub fn load_records_cached_for_stdio_with_default_runtime_path(
     default_runtime_path: &Path,
     manifest_path: Option<&Path>,
 ) -> Result<Arc<Vec<SkillRecord>>, String> {
@@ -292,7 +292,7 @@ pub(crate) fn invalidate_records_cache() -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn load_records_cached_for_stdio(
+pub fn load_records_cached_for_stdio(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
 ) -> Result<Arc<Vec<SkillRecord>>, String> {
@@ -301,7 +301,7 @@ pub(crate) fn load_records_cached_for_stdio(
     load_records_cached_for_stdio_resolved(runtime_path, manifest_path)
 }
 
-pub(crate) fn load_records_cached_for_stdio_resolved(
+pub fn load_records_cached_for_stdio_resolved(
     runtime_path: Option<&Path>,
     manifest_path: Option<&Path>,
 ) -> Result<Arc<Vec<SkillRecord>>, String> {

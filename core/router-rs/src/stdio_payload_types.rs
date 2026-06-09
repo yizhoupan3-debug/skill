@@ -172,7 +172,7 @@ pub(crate) struct BackgroundControlResponsePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct TraceStreamReplayRequestPayload {
+pub struct TraceStreamReplayRequestPayload {
     pub(crate) path: Option<String>,
     pub(crate) event_stream_text: Option<String>,
     pub(crate) compaction_manifest_path: Option<String>,
@@ -188,7 +188,7 @@ pub(crate) struct TraceStreamReplayRequestPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct TraceStreamInspectRequestPayload {
+pub struct TraceStreamInspectRequestPayload {
     pub(crate) path: Option<String>,
     pub(crate) event_stream_text: Option<String>,
     pub(crate) compaction_manifest_path: Option<String>,

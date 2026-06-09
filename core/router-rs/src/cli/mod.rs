@@ -1,7 +1,7 @@
 //! CLI 子命令、stdio 与 live execute 控制面（从 `main.rs` 拆分，阶段 1）。
 
 pub mod args;
-pub(crate) mod common;
+pub mod common;
 mod dispatch;
 pub(crate) mod runtime_ops;
 
