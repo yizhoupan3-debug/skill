@@ -31,7 +31,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
 | Antigravity App | - | MCP stdio，无 shell hook env |
 
-**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`spec.md`](spec.md)（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
+**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`spec.md`](spec.md)（唯一裁判）；宿主分层与 closeout 相关 env 见 [`harness_architecture/04-closeout-and-depth.md`](harness_architecture/04-closeout-and-depth.md) §5。本文件只定义命名模式，不维护第二份 env 默认值表。
 
 ### MCP Key Convention（**闭集，禁从一个 host 抄到另一个**）
 
@@ -44,7 +44,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | `cursor` | `~/.cursor/mcp.json` | `mcpServers`（**camel**，**不是** `mcp_servers`） | `"stdio"` | `mcpServers.browser-mcp` |
 | `codex` | `~/.codex/config.toml` | `mcp_servers`（**snake**，**TOML 表**） | 无 `type`（`command` 隐式） | `mcp_servers.router-rs-framework` |
 | `opencode` | `~/.config/opencode/opencode.json` | `mcp`（**唯一不带 `Servers` 后缀**） | `"local"` | `mcp.router-rs-framework` |
-| `antigravity-app` | `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | `"stdio"` | `mcpServers.router-rs-framework` |
+| `antigravity` | 项目 `.gemini/mcp.json`；用户 `~/.gemini/antigravity/mcp.json` | `mcpServers` | `"stdio"` | `mcpServers.router-rs-framework` |
 
 **三个最常踩的坑**：
 

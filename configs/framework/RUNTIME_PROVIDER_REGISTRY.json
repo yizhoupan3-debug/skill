@@ -206,8 +206,13 @@
         "context_files",
         "settings_paths",
         "mcp_config_paths",
-        "resume_command_examples"
-      ]
+        "resume_command_examples",
+        "hook_settings_paths",
+        "external_session_supervisor",
+        "batch_execution",
+        "interactive_agent_chat"
+      ],
+      "notes": "Codex host; session_supervisor_driver codex_driver; hooks via codex sync."
     },
     "cursor": {
       "status": "implemented",
@@ -267,20 +272,6 @@
         "mcp_config_paths"
       ],
       "notes": "OpenCode MCP capability profile."
-    },
-    "codex": {
-      "status": "implemented",
-      "projection": "codex_profile",
-      "capabilities": [
-        "context_files",
-        "settings_paths",
-        "mcp_config_paths",
-        "hook_settings_paths",
-        "external_session_supervisor",
-        "batch_execution",
-        "interactive_agent_chat"
-      ],
-      "notes": "Codex CLI host; session_supervisor_driver codex_driver; hooks via codex sync."
     }
   },
   "governance_eval_loop": {

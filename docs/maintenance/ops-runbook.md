@@ -35,7 +35,7 @@ depends_on:
 | **Cursor** | `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to cursor --scope user` | 同左 |
 | **Codex CLI** | `cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"` | 同左 |
 | **OpenCode** | `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to opencode --repo-root "$PWD"` | 同左 |
-| **Antigravity App** | `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to antigravity-app --repo-root "$PWD"` | 同左 |
+| **Antigravity** | `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to antigravity --repo-root "$PWD"` | 同左 |
 
 
 ---
@@ -50,7 +50,7 @@ depends_on:
 | `cursor` | cursor-hooks | 7 | `.cursor/` + `~/.cursor/` | 否（hook 级集成） |
 | `codex` | codex-hooks | 4 | `.codex/` | 否（hook 级集成） |
 | `opencode` | opencode-native | 0（纯 MCP） | `.opencode/` + `~/.config/opencode/` | 是 |
-| `antigravity-app` | MCP stdio | 0（纯 MCP） | `.gemini/` | 是 |
+| `antigravity` | MCP stdio | 0（纯 MCP） | `.gemini/` | 是 |
 
 ### 共同架构
 
@@ -207,7 +207,7 @@ for path, key in configs:
 |------|------|
 | Stop 后任务未完成 | `/implementx` + `framework_goal_drive` stdio |
 | hook-state 不可读 | `.claude/hook-state/` 文件损坏 -> 删除后重开会话 |
-| REVIEW_GATE 硬拦 | my-light 不触发（advisory）；可用 `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` 完全关闭 |
+| Stop 出现 REVIEW_GATE nudge | 全局 advisory-only（不硬拦 Stop）；my-light suppress；可用 `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` 完全关闭 |
 | Paper prose hook 干扰 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK=0` 关闭 |
 
 ---
@@ -260,7 +260,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 |------|------|
 | Stop 后任务未完成 | `/implementx` + `framework_goal_drive` stdio |
 | hook-state 不可读 | `.codex/hook-state/` 文件损坏 -> 删除后重开 |
-| REVIEW_GATE 硬拦 | `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 |
+| Stop 出现 CODEX_REVIEW_GATE nudge | 全局 advisory-only（不硬拦 Stop）；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 |
 | Paper prose hook 干扰 | `ROUTER_RS_CODEX_PAPER_PROSE_HOOK=0` 关闭 |
 
 ---
@@ -274,15 +274,15 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 - 权限模型：Allow / Ask / Deny（read, write, run, browser）
 - 无 shell hook，门控通过 MCP 工具层实现
 
-### 8.2 Antigravity App
+### 8.2 Antigravity
 
 - 配置根：`.gemini/`（MCP + Planning Mode）
-- 安装：`framework host-integration install --to antigravity-app`
+- 安装：`framework host-integration install --to antigravity --scope project`（全宿主刷新见 `./scripts/install-all-hosts.sh`）
+- Closeout 分层：review 缺口为 MCP **ADVISORY**；**非 my-light** 时 `closeout_gate` / `goal_state_manage(complete)` 可 hard-block（见 [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1）
 
-### 8.3 Antigravity CLI
+### 8.3 已退役：`antigravity-cli`
 
-- 配置根：`.antigravitycli/`（JSON hooks）
-- 5 事件 hook：`SessionStart`、`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`
+> **2026-06**：宿主 id **`antigravity-cli`** 已合并为 canonical **`antigravity`**。勿再 `install --to antigravity-cli`；见 [`MIGRATION.md`](../MIGRATION.md) 与 [`antigravity-cli.md`](../hosts/antigravity-cli.md)。
 
 ---
 
@@ -358,7 +358,7 @@ rm -rf .codex/hooks.json .codex/AGENTS_CODEX.md .codex/README.md .codex/hook-sta
 rm -rf .opencode/
 
 # Antigravity
-rm -rf .gemini/ .antigravitycli/
+rm -rf .gemini/
 
 # 可选：移除稳定二进制
 rm -f ~/.local/share/skill-framework/bin/router-rs
@@ -435,8 +435,7 @@ CARGO_TARGET_DIR="$PWD/core/router-rs/target" cargo build --release --manifest-p
 | Cursor | [`docs/hosts/cursor.md`](../hosts/cursor.md) |
 | Codex CLI | [`docs/hosts/codex.md`](../hosts/codex.md) |
 | OpenCode | [`docs/hosts/opencode.md`](../hosts/opencode.md) |
-| Antigravity App | [`docs/hosts/antigravity.md`](../hosts/antigravity.md) |
-| Antigravity App | [`docs/hosts/antigravity.md`](../hosts/antigravity.md) |
+| Antigravity | [`docs/hosts/antigravity.md`](../hosts/antigravity.md) |
 
 ---
 

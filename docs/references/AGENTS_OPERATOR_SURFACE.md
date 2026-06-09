@@ -33,7 +33,7 @@ depends_on:
 
 | 变量 | 作用 |
 |------|------|
-| `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` | 关闭 Codex `CODEX_REVIEW_GATE` 硬拦；UPS/PostTool 亦清 hook-state |
+| `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` | 关闭 Codex `CODEX_REVIEW_GATE` advisory nudge；UPS/PostTool 亦清 hook-state |
 | `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=0` | 允许无 `session_id` 的 legacy payload（默认 **on** = 缺则 lifecycle block） |
 | `ROUTER_RS_CODEX_HOOK_STATE_SALT` | unstable fallback 文件名盐（与 repo+cwd+payload session 组合；生产建议保持 strict session on） |
 | `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=0` | 深度 lane 缺 `fork_context` 时不推断 independent 证据 |

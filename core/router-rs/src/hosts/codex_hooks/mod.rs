@@ -128,7 +128,7 @@ const CODEX_STRINGS: HostStrings = HostStrings {
     hook_state_salt_env: "ROUTER_RS_CODEX_HOOK_STATE_SALT",
     hook_state_unreadable_tag: "CODEX_HOOK_STATE_UNREADABLE",
     lifecycle_label: "Codex",
-    spawn_first_host_id: "codex-cli",
+    spawn_first_host_id: "codex",
     paper_prose_hook_env: "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
     paper_adversarial_hook_env: "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
 };

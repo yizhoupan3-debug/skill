@@ -23,7 +23,7 @@ depends_on:
 ## opencode.json 配置结构
 
 - 项目级: `./opencode.json`；用户级: `~/.config/opencode/opencode.json`
-- MCP 注册字段: `mcpServers`；Agent 注册字段: `agents`
+- MCP 注册字段: `mcp`；Agent 注册字段: `agents`
 - 目录自动发现: `.opencode/agents/*.md`、`.opencode/commands/*.md`
 
 ## 自定义 Home 目录
@@ -35,7 +35,7 @@ depends_on:
 ## 权限与安全模型
 
 - 三类: Allow / Ask / Deny；权限分类: read, write, run, browser
-- 框架 MCP server 通常注册为 project scope 的 `mcpServers`
+- 框架 MCP server 通常注册为 project scope 的 `mcp`
 
 ## 自定义 Agent 管理
 
