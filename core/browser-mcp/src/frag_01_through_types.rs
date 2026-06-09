@@ -1,16 +1,16 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
-use router_rs::background_state::handle_background_state_operation;
-use router_rs::stdio_payload_types::{TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload};
-use router_rs::framework_runtime::{
+use runtime_core::background_state::handle_background_state_operation;
+use runtime_core::stdio_payload_types::{TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload};
+use runtime_core::framework_runtime::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
 };
-use router_rs::framework_runtime::resolve_repo_root_arg;
-use router_rs::cli::common::route_task_with_manifest_fallback;
-use router_rs::route::{
+use runtime_core::framework_runtime::resolve_repo_root_arg;
+use runtime_core::cli::common::route_task_with_manifest_fallback;
+use runtime_core::route::{
     build_search_results_payload, filter_record_indices_for_host, load_records_cached_for_stdio,
     search_skills_subset,
 };
-use router_rs::session_supervisor::handle_session_supervisor_operation;
+use runtime_core::session_supervisor::handle_session_supervisor_operation;
 use chrono::{Local, SecondsFormat};
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
