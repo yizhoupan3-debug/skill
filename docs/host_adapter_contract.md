@@ -183,7 +183,7 @@ Canonical API（`core-policy`）：`is_reviewer_lane_from_registry`、`review_in
 | `hooks_module` | 否 | L4 hook / MCP agent 模块（`cursor_hooks`、`claude_code_hooks`、`codex_hooks`、`opencode_agent` 等） |
 | `cli_hook_subcommand` | 否 | 有原生 hook 时 CLI 子命令（通常 `hook`）；L4 形如 `router-rs <install_tool> hook` |
 | `cli_agent_subcommand` | 否 | MCP stdio 宿主 CLI 子命令（通常 `agent`） |
-| `dispatch_fn` | 否 | `router_command_dispatch.rs` 中分发函数名（维护者对照；**尚未**代码生成 `dispatch.rs`） |
+| `dispatch_fn` | 否 | `router_command_dispatch.rs` 中分发函数名（维护者对照；基于手动 `mod.rs` + `build.rs` 验证） |
 
 **新增宿主最小手改清单**（registry 行 + 下列实现；`build.rs` / 单测会在 feature、`mod`、registry 三方不一致时 fail-closed）：
 
