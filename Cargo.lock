@@ -508,10 +508,13 @@ dependencies = [
 name = "browser-mcp"
 version = "0.1.0"
 dependencies = [
- "framework-kernel",
- "routing-engine",
+ "chrono",
+ "reqwest",
+ "router-rs",
+ "rusqlite",
  "serde",
  "serde_json",
+ "tungstenite",
 ]
 
 [[package]]
