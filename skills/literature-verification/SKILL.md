@@ -1,0 +1,72 @@
+---
+name: literature-verification
+description: |
+  无状态内部 skill：验证文献引用的可靠性、claim-文献对齐度和覆盖完整性。
+  由 research-discovery、paper-workbench、grant-workbench 内联调用，不由用户直接触发。
+routing_layer: L4
+routing_owner: owner
+routing_gate: none
+routing_priority: P2
+session_start: n/a
+user-invocable: false
+disable-model-invocation: true
+risk: low
+source: local
+metadata:
+  version: "1.0.0"
+  platforms: [supported]
+  tags: [literature, citation, verification, research]
+trigger_hints:
+  - 验证文献引用
+  - 文献覆盖度
+  - contradiction sweep
+  - closest work 识别
+  - DOI 可达性
+---
+
+# Literature Verification
+
+无状态能力 skill：对文献引用进行端到端可靠性验证。不独立编排会话，仅作为前门 skill 的内联验证步骤。
+
+## When to Use
+
+- 前门 skill 需要验证引用 claim 是否被文献支持
+- 需要检查 DOI 可达性与元数据完整性
+- 需要扫描文献集中的未解决矛盾
+- 需要识别 closest prior work 并评估覆盖度
+
+## Input / Output
+
+| 输入 | 输出 |
+|------|------|
+| 文献列表（BibTeX / DOI / 标题） | 每条引用的验证状态（PASS / FAIL / WARN） |
+| claim ledger 或论文主张列表 | claim-文献对齐矩阵 |
+| 覆盖范围关键词 | 覆盖度评分（0-100）及缺口清单 |
+
+## Verification Checklist
+
+> **Note**: verify commands below are pattern templates. Actual commands depend on project setup and available tools.
+
+| # | 检查名 | PASS 条件 | verify command |
+|---|--------|-----------|----------------|
+| 1 | DOI 可达性 | 每条 DOI HTTP 200 或 3xx | `for doi in $DOIS; do curl -sIL -o /dev/null -w '%{http_code}' "https://doi.org/$doi"; done` |
+| 2 | 引用-claim 对齐 | 每条 claim 至少 1 篇引用明确支持 | `grep -c 'UNSUPPORTED' claim_matrix.txt` → exit 0 = 0 条未支持 |
+| 3 | Contradiction sweep | 无未解决的文献间矛盾 | `grep -c 'CONTRADICTION' contradiction_report.txt` → exit 0 = 0 条矛盾 |
+| 4 | Closest work 识别 | 已识别 top-3 相关先验工作 | `test -s closest_work.md && grep -c '^|' closest_work.md` → ≥ 3 行 |
+| 5 | 覆盖度评分 | 覆盖度 ≥ 70 / 100 | `awk -F: '/score/{print $2}' coverage.json` → ≥ 70 |
+
+## References
+
+- citation-management skill：[`../citation-management/SKILL.md`](../citation-management/SKILL.md)（引用元数据验证与格式化）
+- paperplain MCP：`mcp__paperplain__fetch_paper` / `mcp__paperplain__find_paper_by_title` / `mcp__paperplain__search_research`
+- claim-evidence 阶梯：[`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
+
+## Integration
+
+前门 skill 在以下时机内联调用本 skill：
+
+- **research-discovery**：文献综述完成后，验证引用可靠性与覆盖度
+- **paper-workbench**：投稿前对参考文献做完整性审查
+- **grant-workbench**：申请书文献综述章节的引用验证
+
+调用方式：将验证清单逐项执行，结果回写前门 skill 的验证报告区段。

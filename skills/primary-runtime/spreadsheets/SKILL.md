@@ -52,9 +52,6 @@ network_access: conditional
 artifact_outputs:
   - final_workbook.xlsx
   - EVIDENCE_INDEX.json
-  - ooxml-batch/catalog.json
-  - ooxml-batch/results.jsonl
-  - ooxml-batch/text/*.txt
 ---
 
 # spreadsheets
@@ -76,23 +73,6 @@ This skill owns the canonical workbook entry gate. Use it to absorb generic Exce
 - The task is plain data wrangling with no workbook artifact requirement
 - The user only wants narrative analysis without a spreadsheet deliverable
 - The artifact is primarily a document, slide deck, or PDF
-
-## Rust CLI quick path
-
-安装：`bash ${SKILL_FRAMEWORK_ROOT}/scripts/install-ooxml-tool.sh` 或 `just install-ooxml`。
-
-单文件阅读与 workbook QA：
-
-```bash
-ooxml read-xlsx <xlsx>
-ooxml read-xlsx <xlsx> --sheets Sheet1 --max-rows 10000
-ooxml xlsx <xlsx>
-ooxml render-xlsx <xlsx> --outdir rendered --png
-```
-
-多 xlsx/docx 混合批处理见 `$doc` skill 的 `ooxml batch` 契约（输出目录常用 `artifacts/current/<task_id>/ooxml-batch/`）。
-
-`read-xlsx` emits markdown tables per sheet. `xlsx` reports workbook structure, formulas, and metadata. `render-xlsx` renders sheets for visual QA.
 
 ## Core contract
 

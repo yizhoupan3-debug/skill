@@ -17,19 +17,12 @@ trigger_hints:
 metadata:
   version: "0.2.0"
   platforms: [supported]
-  tags: [my-lifecycle, verify, ship, evidence, codegraph]
-allowed_tools:
-  - mcp__mcp-codegraph__codegraph_search
-  - mcp__mcp-codegraph__codegraph_callers
-  - mcp__mcp-codegraph__codegraph_callees
-  - mcp__mcp-codegraph__codegraph_impact
-  - mcp__mcp-codegraph__codegraph_node
-  - mcp__mcp-codegraph__codegraph_status
+  tags: [my-lifecycle, verify, ship, evidence]
 ---
 
 # verifyx
 
-**Zone**: execution+ · **profile**: `my-light` · **no separate ship command**
+（共享 header 见 [`../my-lifecycle-common/header.md`](../my-lifecycle-common/header.md)）
 
 ## CLI flags
 
@@ -46,18 +39,33 @@ allowed_tools:
 
 ## Checklist (single pass)
 
+### 0. 调试证据完整性门控
+Verify 阶段开始前，检查 EVIDENCE_INDEX 中的调试记录是否包含：
+- 症状描述（可观察的错误输出）
+- 证据来源（日志、stack trace、复现命令）
+- 根因（标记为 `[OBSERVED]` 而非 `[INFERRED]`）
+- 修复验证（修改后的命令输出）
+
+如果缺失上述条目：返回 implementx 补充，不进入 verify 阶段。
+
 ### 1. Verify
 
 - Run `GOAL_STATE.validation_commands` and ROADMAP global verification commands
 - Append each run to `EVIDENCE_INDEX.json` `artifacts[]` rows (`command_preview`, `recorded_at`, `exit_code`, `success`, optional `kind` / `lifecycle_command` / `tags`)
 - `VERIFY_REPORT.md` summary on disk
 
+### 1.5 Sync lifecycle state (HARD)
+
+- Read 
+- Set  to 
+- Write back the file
+- This prevents cross-session recovery from seeing a stale  state
+
 ### 2. Ship
 
 - Git clean / intentional uncommitted documented
-- MCP `closeout_record_write`（Claude Desktop）或 CLI `router-rs closeout evaluate --record-path artifacts/closeout/<task_id>.json`（CLI 宿主）→ 写入 closeout record（**embed** evidence rows / verify summary before purge）
-- MCP `goal_state_manage(operation="complete")`（Claude Desktop）或 CLI `framework_goal_drive complete`（CLI 宿主）— 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范
-- **Review vs closeout**：`REVIEW_GATE` Stop **advisory-only**（Claude canonical）；closeout / `complete` 硬门禁与 review 分层见 [`host_adapter_contract.md`](../../docs/host_adapter_contract.md) §0.1
+- CLI `router-rs closeout evaluate --record-path artifacts/closeout/<task_id>.json` → 写入 closeout record（**embed** evidence rows / verify summary before purge）
+- CLI `framework_goal_drive complete` — 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范
 - Closeout `notes` may record purge intent (e.g. `task_artifacts_purged; task_dir_removed`) — **not** separate schema fields; `CLOSEOUT_RECORD_SCHEMA.json` / `CloseoutRecord` use `deny_unknown_fields`
 
 ### 3. Post-verify task-dir purge (**deferred by default**)
@@ -98,18 +106,6 @@ Pointer cleanup：遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-l
 ### 4. Chat
 
 ≤5 lines: PASS/FAIL, closeout path, purge status (purged / deferred-24h / skipped-by-flag). No command dumps.
-
-## CodeGraph MCP（可选 · CG-5）
-
-宿主已注册独立 `mcp-codegraph` 进程（`configs/framework/RUNTIME_REGISTRY.json` → `managed_mcp_servers.mcp-codegraph`）。验证前确认索引与实现范围一致；**不阻塞** closeout / purge。
-
-| 步骤 | 何时用 | 首选工具 |
-|------|--------|----------|
-| Verify 前 | 索引新鲜度、上次 sync | `codegraph_status` |
-| 测试缺口 | 改动符号是否仍有未覆盖调用方 | `codegraph_impact` |
-| 范围核对 | 与 ROADMAP `scope_paths` 交叉验证 | `codegraph_search` → `codegraph_node` |
-
-**Fallback**：MCP 不可用时报 `[P2]` 索引未校验并继续 `validation_commands`；勿因 codegraph  alone 判 FAIL。
 
 ## Pre-conditions
 

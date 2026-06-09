@@ -30,12 +30,12 @@
 | 能力 | 适用 profile | 最小证据 | 指针 |
 |------|----------------|----------|------|
 | 本地代码与配置调研 | `research` / `execution`（起草前） | 路径级 `rg` 命中或 Read 锚点 | 见 **Workflow** 第 1 步 |
-| 连续性 / 框架只读视图 | 按需 | `router-rs framework snapshot` 或文档约定命令输出摘要 | `docs/harness_architecture/`（见 [`index.md`](../../../docs/harness_architecture/index.md)）；勿在 plan 正文发明第二套账本 |
+| 连续性 / 框架只读视图 | 按需 | `router-rs framework snapshot` 或文档约定命令输出摘要 | [`docs/spec.md`](../../../docs/spec.md)；勿在 plan 正文发明 second truth |
 | **可选审 plan** | 仅当用户明确要求 review plan / 审计划 | review-only findings（问题、风险、缺失验证），不改代码 | 可落盘 `docs/plans/<topic>_findings*.md` |
-| 对抗式 / 全切片 **深度代码审** | 用户要 hostile / security / 整 PR 级 review 时 | review-only：默认 **severity 排序的 findings**（P0–P2 符号锚点），verdict 至多一行可选；只找问题，不改代码 | [`skills/code-review-deep/SKILL.md`](../../../skills/code-review-deep/SKILL.md) |
+| 对抗式 / 全切片 **深度代码审** | 用户要 hostile / security / 整 PR 级 review 时 | review-only：默认 **severity 排序的 findings**（P0–P2 符号锚点），verdict 至多一行可选；只找问题，不改代码 | [`skills/code-review-deep/SKILL.md`](../../code-review-deep/SKILL.md) |
 | Cursor **review** 硬路径（宿主） | 深度 review 类任务 | 以仓库根 **`AGENTS.md`** → **Execution Ladder** 与宿主 hook 状态为准；清门只用宿主注入的单行短码 | 不在 plan 正文自拟长段机读块；宿主差异见主文件 **宿主差异** |
 | 调研收口 | `research` | `git status --porcelain` + 正文矩阵对照 | 主文件 **Plan profile** 末条 |
-| Git 计划收口 | `execution`（或下游计划） | 计划 vs 实际 + Git 状态证据；宿主支持时用 **`/gitx plan`**（与 **`/gitx`** 同契约） | [`skills/gitx/SKILL.md`](../../../skills/gitx/SKILL.md) |
+| Git 计划收口 | `execution`（或下游计划） | 计划 vs 实际 + Git 状态证据；宿主支持时用 **`/gitx plan`**（与 **`/gitx`** 同契约） | [`skills/gitx/SKILL.md`](../../gitx/SKILL.md) |
 
 ### 宿主侧计划落盘（与协作）
 
@@ -65,7 +65,7 @@
 
 ### 强例（execution 收口与 gitx 习惯对齐）
 
-末条或关联 closeout 文档中写明 **`git diff --stat`**（或一句「本次无代码 diff」）和 `git status --short --branch`；宿主支持时 `Verify` 可附带 **`/gitx plan`**，与 [`skills/gitx/SKILL.md`](../../../skills/gitx/SKILL.md) 中实质性 diff 记录习惯一致。
+末条或关联 closeout 文档中写明 **`git diff --stat`**（或一句「本次无代码 diff」）和 `git status --short --branch`；宿主支持时 `Verify` 可附带 **`/gitx plan`**，与 [`skills/gitx/SKILL.md`](../../gitx/SKILL.md) 中实质性 diff 记录习惯一致。
 
 ### 强例（可选审 plan 修订可复核）
 

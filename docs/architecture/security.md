@@ -7,7 +7,46 @@ depends_on:
 
 # 安全模型
 
+> **status: aspirational** — 本文件描述了框架的理想安全模型。§0（mcp-tool-safety）已实现于 `hook_policy/`；§1 以下的测试/CI/Schema drift 描述为计划中的完整安全体系。
+
 本文档覆盖框架的测试层次、CI 流水线、schema drift 检测和生成物 drift 检测。
+
+## 0. MCP 工具安全拦截层 (mcp-tool-safety)
+
+`hook_policy/` 实现了三层 MCP 工具安全拦截，作为 PreToolUse 守卫的补充：
+
+### Layer 1: 高风险工具名拦截
+
+无条件拦截以下工具（不依赖参数内容）：
+
+| 工具 | 风险 |
+|------|------|
+| `session_launch` | 可通过 prompt 注入执行任意远程代码 |
+| `session_resume_due` | 可能以陈旧状态重新触发已阻断的 worker |
+
+> 注：`session_launch` 本身是合法工具，仅在参数含危险内容时拦截（见 Layer 2）。
+
+### Layer 2: 参数级风险模式
+
+| 工具 | 参数字段 | 匹配模式 | 风险说明 |
+|------|----------|----------|----------|
+| `browser_get_network` | (any) | `password\|token\|secret\|cookie\|authorization\|api_key` | 可能捕获网络流量中的敏感 header 或 token |
+| `browser_fill` | `value` | `password\|secret\|token\|credential` | 填充凭据类值可能泄露到页面 |
+| `session_launch` | `prompt` | `curl\|wget ... \| sh\|bash` | prompt 含管道到 shell 的远程代码执行 |
+| `session_launch` | `prompt` | `rm -rf` | prompt 含破坏性删除命令 |
+| `session_launch` | `host` | `0.0.0.0\|169.254\|metadata.google` | host 指向云元数据端点，可能泄露凭据 |
+| `session_mark_blocked` | `evidenceText` | `password\|token\|secret\|api_key` | evidenceText 可能将敏感数据持久化到磁盘 |
+
+### Layer 3: Shell 注入模式
+
+对含命令字符串的 MCP 工具参数（如 `browser-mcp` JS eval、session prompt）复用 bash-danger 启发式：
+
+- 远程脚本管道到 shell：`curl|wget ... | sh|bash`
+- 进程替换：`sh <(curl ...)`
+- `git reset --hard`
+- `git push --force`
+
+**实现位置**：`core/router-rs/src/hook_policy/`（`dangerous_mcp_tool_reason` 函数）。
 
 ## 1. 测试层次
 
@@ -24,7 +63,7 @@ depends_on:
 | `tests/tracked_markdown_utf8_contract.rs` | Tracked markdown UTF-8 契约 | `cargo test` |
 | `tests/rust_cli_tools.rs` | Rust CLI 工具集成测试 | `cargo test` |
 | `tests/autoresearch_cli.rs` | Autoresearch CLI 测试 | `cargo test` |
-| `core/router-rs/tests/` | router-rs 单元测试（含 Claude Desktop hooks 测试） | `cargo test --manifest-path core/router-rs/Cargo.toml` |
+| `core/router-rs/tests/` | router-rs 单元测试 | `cargo test --manifest-path core/router-rs/Cargo.toml` |
 
 ## 2. Justfile 命令
 

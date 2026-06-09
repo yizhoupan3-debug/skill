@@ -10,6 +10,7 @@ routing_priority: P1
 session_start: n/a
 user-invocable: true
 disable-model-invocation: true
+drive_until_done: false
 risk: low
 source: local
 trigger_hints:
@@ -23,7 +24,7 @@ metadata:
 
 # discussx
 
-**Zone**: pre-execution · **profile**: `my-light` · **no product code**
+（共享 header 见 [`../my-lifecycle-common/header.md`](../my-lifecycle-common/header.md)）
 
 ## Stay in discuss (HARD)
 
@@ -66,11 +67,9 @@ Visible chat **structure** (adapt depth to turn; omit empty sections):
 | `artifacts/current/<task_id>/REQUIREMENTS.md` | Living requirements — **update every round** |
 | `artifacts/current/<task_id>/DECISIONS.md` | Locked choices only |
 | `artifacts/current/<task_id>/OPEN_QUESTIONS.md` | **Unresolved items only** — separate file (required once discuss starts) |
-| `artifacts/current/<task_id>/GOAL_STATE.json` | Via `goal_state_manage` MCP（Claude Desktop）/ `framework_goal_drive` stdio（CLI 宿主）— 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范 (must set `drive_until_done: false` during pre-execution) |
+| `artifacts/current/<task_id>/GOAL_STATE.json` | Via `goal_state_manage` MCP（Claude Desktop）/ `framework_goal_drive` stdio（CLI 宿主）— 遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范 |
 
-### GOAL_STATE writes
-
-遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) 中的 GOAL_STATE 写入规范。
+（共享 GOAL_STATE writes 段见 [`../my-lifecycle-common/header.md`](../my-lifecycle-common/header.md)）
 
 ### OPEN_QUESTIONS.md (HARD)
 

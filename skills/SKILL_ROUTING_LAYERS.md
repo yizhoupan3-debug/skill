@@ -1,7 +1,7 @@
 # Skill 分层路由详解
 
 > 这是扩展参考，不是默认入口。
-> 默认只看 `SKILL_ROUTING_RUNTIME.json`；不够再看 [SKILL_ROUTING_INDEX.md](SKILL_ROUTING_INDEX.md)。
+> 默认只看 `SKILL_ROUTING_RUNTIME.json`；不够再看 [SKILL_MANIFEST.json](SKILL_MANIFEST.json)。
 > 只有 owner / overlay / reroute 仍有歧义时，才打开本页。
 > 协议细节见 [SKILL_FRAMEWORK_PROTOCOLS.md](SKILL_FRAMEWORK_PROTOCOLS.md)
 > 维护约定见 [SKILL_MAINTENANCE_GUIDE.md](SKILL_MAINTENANCE_GUIDE.md)
@@ -37,7 +37,7 @@
 | Gate | 先检查条件 | 角色 |
 |---|---|---|
 | `runtime delegation gate` | 复杂任务 + 可并行 sidecar + 仓库授权 | 运行时派单决策 |
-| `systematic-debugging` [archived] | bug / 异常 / 失败 + 根因未知 | 先复现定位，再交回 owner |
+| `systematic-debugging` | bug / 异常 / 失败 + 根因未知 | 先复现定位，再交回 owner |
 | `design-md` | 用户需要持久设计 token、参考源、风格映射或验收合同，而不是直接改页面 | design source-grounding gate |
 | `visual-review` | 已有截图 / 渲染图 / 可见证据 | evidence-first visual read |
 | `pdf` / `doc` / `spreadsheets` | 主对象是 artifact 文件 | artifact-native workflow |
@@ -47,18 +47,16 @@
 
 ```text
 L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
-    skill-framework-developer, update
-    [archived: systematic-debugging]
-    (+ hot framework commands: discussx, planx, implementx, verifyx
+    skill-framework-developer, systematic-debugging, update
+    (+ hot framework commands: discussx, planx, implementx, verifyx)
 L1  deepinterview, citation-management, plan-mode
-L2  code-review-deep, gitx, paper-workbench, research-workbench
-    (.archive-cold: documentation-engineering, image-generated)
+    [absorbed: documentation-engineering → implementx/references/ + trigger_hints]
+L2  code-review-deep, gitx, paper-workbench, research-discovery, research-execution
+    (reroute alias: paper-writing → paper-workbench/SKILL.md)
 L3  design-md, diagramming, doc, experiment-reproducibility, infographic,
-    tikz-paper-figure, visual-review
-    (.archive-cold: hatch-pet)
+    tikz-paper-figure, tao-ci, visual-review
 L4  math-derivation, scientific-figure-plotting, statistical-analysis (hot)
-    algo-trading, assignment-compliance, copywriting, email-template,
-    (.archive-cold: all L4 slugs except the three hot rows above)
+    algo-trading (sub-skill: financial-data-fetching), email-template (hot)
 Runtime lanes  planning, execution/code, language/framework, platform/integration,
                verification/review, memory and prompt policy, research workflow
 ```
@@ -71,7 +69,7 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 | 层 | 做主 owner 的条件 | 不要误用 |
 |---|---|---|
 | **L0** | 任务本身是 skill 治理、路由、触发修复、框架自优化，或需要跨文件长周期的内核级指挥 (`runtime execution controller`) | 不要把普通实现问题抬到 L0 |
-| **L1** | 执行方式是核心：计划、TDD、调试、重构、文档 | 根因已知时别默认 debugging（systematic-debugging 已归档） |
+| **L1** | 执行方式是核心：计划、TDD、调试、重构、文档 | 根因已知时别默认 debugging；文档工程方法论已注入 implementx |
 | **L2** | 技术底座或运行时问题 | 语言/框架语义问题走更窄 skill |
 | **L3** | 明确的平台、工具、产物、领域边界 | 不要把 L3 当泛化兜底 |
 | **L4** | 高语义专业任务 | 不要用 L4 替代前置 gate |
@@ -79,8 +77,22 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 ## 易混淆边界
 
 - `skill-framework-developer` vs `skill-creator` [archived] → 框架治理 / miss repair / wording modes vs 实际改一个 skill 包（skill-creator 已合并入 skill-framework-developer）
+- `paper-writing` vs `paper-workbench` → **reroute 别名**：`$paper-writing` 字面触发仍解析到 workbench 前门同 path；用户自然语言默认 owner 仍是 `paper-workbench`（见 [`paper-workbench/references/RESEARCH_PAPER_STACK.md`](paper-workbench/references/RESEARCH_PAPER_STACK.md)）
 - `skill-creator` [archived] vs `skill-installer` [archived] → 本地 authoring vs 新 skill intake / relink（两者均已合并入 skill-framework-developer）
-- `systematic-debugging` [archived] vs 领域 owner → 根因未知 vs 根因已知（systematic-debugging 已归档，在当前上下文中直接做系统化调试）
+- `systematic-debugging` vs `sentry` → sentry 仅在有 Sentry 平台数据时触发（gate=source）；systematic-debugging 处理无 Sentry 的通用调试（gate=evidence）
+- `systematic-debugging` vs `gh-fix-ci` → gh-fix-ci 管 CI 修复（已知是 CI 问题，需 GitHub source）；systematic-debugging 管根因调查（不知是否 CI 问题）
+- `systematic-debugging` vs `code-review-deep` → 根因未知的运行时故障 vs 已知代码的质量审查
+- `systematic-debugging` vs `implementx` → 调查阶段（根因未知）vs 执行阶段（根因已知，动手修）
+- `systematic-debugging` vs `verifyx` → 诊断（找根因）vs 验证（确认修复成功）
+- `infographic` vs `diagramming` → HTML 信息图（浏览器渲染，富视觉）vs Mermaid/Graphviz（文本语法，可粘贴 Markdown）
+- `infographic` vs `scientific-figure-plotting` → 静态信息图/知识卡片（HTML）vs 代码驱动科研图表（matplotlib）
+- `infographic` vs `slides` → 单页信息图 vs 多页演示文稿
+- `tikz-paper-figure` vs `diagramming` → TikZ 矢量图（LaTeX 编译）vs Mermaid/Graphviz 文本图
+- `tikz-paper-figure` vs `structure-verification` → 生成 TikZ 图 vs 验证 LaTeX 编译正确性
+- `email-template` vs `doc` → HTML 邮件（邮件客户端渲染）vs Word 文档（.docx）
+- `tao-ci` vs `email-template` → tao-ci 限教授套磁场景；email-template 管 HTML 邮件技术实现
+- `tao-ci` vs `paper-workbench` → 套磁信（个人化、短文）vs 学术论文（结构化、长文）
+- `algo-trading` vs `statistical-analysis` → 交易策略+数据获取+回测 vs 通用统计方法+假设检验
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
 - `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
 - `slides` native PPTX lane → 通用 PPT / 现有 deck artifact gate / 显式 `deck.plan.json` / Rust PPTX 源码工作流

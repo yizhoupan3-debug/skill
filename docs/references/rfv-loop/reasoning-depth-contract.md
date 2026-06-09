@@ -1,11 +1,14 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-07"
 depends_on:
   - ../../rfv_loop_harness.md
   - lane-templates.md
+  - math-reasoning-harness.md
 ---
 
 # 推理深度契约（非 CoT）
+
+> **status: aspirational** — RFV 多轮 loop 在 `my-light` profile 下很少使用；本文件描述的推理深度契约为计划中的深度验证模式。
 
 ## 原则
 
@@ -69,14 +72,26 @@ depends_on:
 
 ### Depth score formula（参考）
 
-`depth_score` 是 `0..=3` 的整数值，由 `core/core-state/src/task_state.rs` → `depth_compliance_aggregate` 计算：
+`depth_score` 是 `0..=3` 的整数值，由 `core/framework-core/src/task_state.rs` → `depth_compliance_aggregate` 计算：
 
 - **第 1 分**：≥1 轮 RFV `verify_result == "PASS"`
 - **第 2 分**：`EVIDENCE_INDEX` 至少一条成功行（`success==true` 或 `exit_code==0`）
 - **第 3 分**（legacy 默认）：Goal checkpoint > 0 **或** adversarial round > 0 **或** (strict_task && strict 外研轮 > 0)
-- **第 3 分**（`ROUTER_RS_DEPTH_SCORE_MODE=strict`）：以上所有 + falsification_test > 0
+- **第 3 分**（`ROUTER_RS_DEPTH_SCORE_MODE=strict`）：以上任一 legacy 条件 **或** `rfv_falsification_executed_count > 0`
 
 Advisory rollup 由 `DepthCompliance` 结构体持有；`completion_gates` / `close_gates` 的 `min_depth_score` 字段读取同一分值。三个计分路径互不替代。
+
+### 数理 checker advisory 深度（N3/N4/N6，不改 `depth_score`）
+
+`framework_math_verify`（见 [math-reasoning-harness.md](math-reasoning-harness.md) §B.1）产出 **advisory** 计数，供 dashboard / stdio 展示，**不**抬升 `depth_score`：
+
+| 字段 / 函数 | 含义 |
+|-------------|------|
+| `formal_verify_depth_signal` | 单条 `FormalVerifyResult`：SMT pass 且含 `smt_status` → `1`（rollup 用函数重算，忽略 result 内 `depth_signal` 字段） |
+| `step_verify_depth_signal` | 逐步链：formal pass 步数 + 各步 SMT bonus |
+| `DepthCompliance.math_verify_formal_depth_signal` | 汇总 `GOAL_STATE.math_verify_formal_results[]` 的 formal 信号 |
+
+仍须 `EVIDENCE_INDEX` / RFV `verify_result` 满足 hard gate 与 `depth_score` 主公式。
 
 ---
 
@@ -122,8 +137,8 @@ Advisory rollup 由 `DepthCompliance` 结构体持有；`completion_gates` / `cl
 
 **不靠 prose 堆长推导**；靠 **witness 拆分 + 双轨可执行对照 + 符号 checker 的 PASS/FAIL**，与上文「推理深度」同一理念在数学上的落实。
 
-- **契约长文**：[math-reasoning-harness.md](math-reasoning-harness.md)（中间对象、CAS/SMT、依赖图、反事实探针）。
-- **Lane 模板**：[lane-templates.md](lane-templates.md) 中「数理 / STEM 专项」各 lane。
+- **契约长文**：[math-reasoning-harness.md](math-reasoning-harness.md)（中间对象、CAS/SMT、依赖图、反事实探针、**§B.1/H** Rust checker、**§D–G** 探索/建模/数学背景与 closeout）。
+- **Lane 模板**：[lane-templates.md](lane-templates.md)（STEM lane、promotion、External `stem_discovery` / `modeling` / `math_background`、可选 `STEM_MODEL_FORMULATOR` / `STEM_CONJECTURE_EXPLORER`）。
 - **操作员参考短句（非 hook 注入）**：`configs/framework/HARNESS_OPERATOR_NUDGES.json` 中的行供 skill / stdio 操作面对照；**2026-05 起** Stop/SessionStart **不**再注入 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 continuity digest。
   - **`math_reasoning_harness_line`**：`harness_context_signals` 仍用于 PostTool 证据启发式与 stdio 工具；命中「数理 / 形式化 checker」时由操作员在 `/implementx` 或 `framework_rfv_loop` 轮次中自行落实 witness/checker 契约（见 [math-reasoning-harness.md](math-reasoning-harness.md)）。
   - **`rfv_loop_external_struct_hint_line`** / **`retrieval_trace_harness_line`**：外研 strict 时 supervisor 在 `append_round` 前对照 [external-research-harness.md](external-research-harness.md) 与 `RFV_EXTERNAL_RESEARCH.schema.json`；**无** hook 自动追加 struct 提示行。

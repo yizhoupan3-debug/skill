@@ -27,7 +27,6 @@ metadata:
 framework_roles:
   - gate
   - detector
-framework_phase: 2
 framework_contracts:
   emits_findings: true
   consumes_findings: false

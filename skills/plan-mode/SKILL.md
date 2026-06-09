@@ -5,8 +5,8 @@ description: |
   `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: research` 为纯调研计划（只读 todos，末条不含 /gitx plan）。
   `overview` 须按 profile 显式声明实现面边界：`research` 含调研期零实现面改动硬声明（可选窄例外：`overview` **单句**声明允许回写的结论文档 / plan 路径集合；`<host-plans-dir>/<本文件>.plan.md` 仅为常见示例而非唯一形式），`execution` 标明允许按 todos 修改并由末条完成计划/Git 证据收口。
   Use at 每轮对话开始 / first-turn / conversation start when the user wants Plan 模式、策划文档闸门、可验收 todo、
-  或明确要走「计划→实现→验证→对照 git 收口」而不是直接堆代码。
-  Aligns execution-item / verification shapes with `skills/SKILL_FRAMEWORK_PROTOCOLS.md`；continuity 分层见 `docs/harness_architecture/`（见 [`index.md`](../../docs/harness_architecture/index.md)）。
+  或明确要走「计划→实现→验证→对照 git 收口」而不是直接堆代码。**Plan mode 仅产出可验收 todo 与证据收口；只找问题，不改代码**——若需要落盘修改请走 `/implementx`。
+  Aligns execution-item / verification shapes with `skills/SKILL_FRAMEWORK_PROTOCOLS.md`；continuity 分层以 [`docs/spec.md`](../../docs/spec.md) 为准。
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
@@ -95,7 +95,7 @@ metadata:
 
 1. **本地证据先进计划**（见 [能力与工件联动表](references/research-scope-and-examples.md)）：在写结构化计划前，完成域内必要的深读、检索或代码定位；计划应收敛已有证据，而不是用计划代替定位结论。
 2. **Todo 必须可验收**：每条 todo 在同一条可见文案里写全 **四元组**（见 **Todo 可执行性**）；宿主工具生成的 `.plan.md` 还须满足宿主工具的产出契约。
-3. **可选 review 只找问题**：仅当用户明确要求 review plan / 审计划 / 深度 review 时，review lane 只读计划与证据，输出 findings / risks / missing tests（**默认 compact**）；只找问题，不改代码、不自动修复。详见 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)。
+3. **可选 review 只找问题**：仅当用户明确要求 review plan / 审计划 / 深度 review 时，review lane 只读计划与证据，输出 findings / risks / missing tests（**默认 compact**）；不改代码、不自动修复。详见 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)。
 4. **收口（依 `plan_profile`）**：
    - **`research`**：完成调研合成与问题矩阵收口（见 [references/research-profile-guide.md](references/research-profile-guide.md)）；**不**把 `/gitx plan` 作为本 profile 的必需验证。
    - **`execution`**：获批且实现与测试通过后做计划 vs 实际逐项对照并记录 Git 状态证据。宿主支持时可用 `/gitx plan`。
@@ -135,7 +135,7 @@ Non-goals: <可选>
 
 ## Continuity 与工件
 
-分层与 hook 以 `docs/harness_architecture/`（见 [`index.md`](../../docs/harness_architecture/index.md)）为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式 **`/implementx`** 启动。
+分层与 hook 以 [`docs/spec.md`](../../docs/spec.md) 为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式 **`/implementx`** 启动。
 
 ## 宿主差异
 

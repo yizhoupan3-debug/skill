@@ -1,17 +1,13 @@
 ---
-last_verified: "2026-06-09"
+last_verified: "2026-06-02"
 depends_on:
   - ../host_adapter_contract.md
-  - ../harness_architecture/index.md
+  - ../spec.md
 ---
 
-# Codex 宿主操作手册
+# Codex CLI 宿主操作手册
 
 **闭集 id**：`codex` · **传输**：codex-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.codex`
-
-**策略注入（双文件）**：[`AGENTS.md`](../../AGENTS.md)（内核）+ [`AGENTS_CODEX.md`](../../AGENTS_CODEX.md)（Codex transport delta only）；hook 嵌入为编译期 concat，delta 不重复内核。
-
-> **历史别名**：`codex-cli` 已退役，请一律使用 **`codex`**（`install --to codex`）。
 
 ## 代理身份与画风 (Agent Identity & Style)
 
@@ -22,25 +18,30 @@ depends_on:
 
 ## 能力边界与 Harness 入口 (Capabilities & Harness Entrypoints)
 
-在 Codex 环境下，Harness 和任务管理的核心入口与工作区定义如下：
+在 Codex CLI 环境下，Harness 和任务管理的核心入口与工作区定义如下：
 
 - **Harness 核心入口**：
-  - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `goal_state_manage` MCP / `framework_goal_drive` stdio 推进宏任务。
-  - **任务状态治理**：`goal_state_manage` MCP / `framework_goal_drive` stdio + `artifacts/current/<task_id>/GOAL_STATE.json`。
+  - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
+  - **任务状态治理**：`framework_goal_drive` stdio + `artifacts/current/<task_id>/GOAL_STATE.json`。
 - **工作区及状态产物**：
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
-  - **非 my-light** 时，`UserPromptSubmit` 可注入 `spawn_first_nudge` 触发审稿引导；**`lifecycle_profile: my-light`**（默认 My 链）下 **不**注入 spawn-first，Stop 上 **review advisory nudge 关闭**，仍可用 findings-only review。深度 Review 规范见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
-  - **`Stop`**：清门 **Claude canonical**；未清门时 **advisory** 注入 **`router-rs CODEX_REVIEW_GATE incomplete`**（**不** `decision: block`）。PostTool 观测 `reviewer_lanes` + `fork_context=false`；v0.133+ Start/Stop hook **仅遥测**（`subagent_start_count`），不改变清门条件。
+  - **非 my-light** 时，`UserPromptSubmit` 可注入 `spawn_first_nudge` 触发审稿引导；**`lifecycle_profile: my-light`**（默认 My 链）下 **不**注入 spawn-first，Stop 上 **`REVIEW_GATE` 硬拦关闭**，仍可用 findings-only review。深度 Review 规范见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
+  - 通过 `Stop` 钩子处理 `REVIEW_GATE` 阶段判断与收尾验证。
+
+## Fail-open / Fail-closed 设计意图
+
+Codex CLI 采用 **fail-closed** 策略：hook 二进制缺失时，各生命周期事件一律 `decision:block`。`.codex/hooks.json` 解析 `router-rs` 的顺序为：`ROUTER_RS_BIN` → 仓库 `target/{release,debug}` → `command -v router-rs`；解析失败时直接阻断。
+
 
 ## Hook 事件矩阵
 
-细则见 [`harness_architecture/02-data-flows.md`](../harness_architecture/02-data-flows.md) §3、「主数据流」与 `.codex/hooks.json`。
+细则见 [`spec.md`](../spec.md) §13、「主数据流」与 `.codex/hooks.json`。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../core/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；PostTool 观测 `reviewer_lanes` + `fork_context=false` → `independent_reviewer_seen`；Stop **advisory** `CODEX_REVIEW_GATE` nudge（`review_gate_blocks_stop` 判定，不硬拦）；用户 prompt 上 `rg_clear` / reject token 为 override 信号；canonical **`ROUTER_RS_REVIEW_GATE_DISABLE`** 或 legacy `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE` 关闭 nudge 链 |
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../core/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CODEX_PAPER_PROSE_HOOK`）；`ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
@@ -77,10 +78,8 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
 2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`，明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
-   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`（关闭 Stop 上 review advisory nudge 与 UPS spawn-first；findings-only review 仍可用）。
+   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`（关闭 Stop 上 `REVIEW_GATE` 硬拦与 UPS spawn-first nudge；findings-only review 仍可用）。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
-
-显式辅助命令（五宿主同路径，见 `RUNTIME_REGISTRY.json` → `framework_commands`）：`/deepinterview`、`/gitx`、`/update`。Codex 侧可用 `router-rs framework alias <slug>` 或 `$framework` 语义解析。
 
 ## Python 环境治理 (Python Environment)
 
@@ -92,7 +91,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 ## 独有长效会话机制 (Session Supervisor)
 
-- **`session_supervisor`**：纯 Rust PID 进程管理（P8 de-tmux 后无 tmux 依赖）；支持 resume / 退避恢复。
+- **`session_supervisor`**：集成 tmux 长会话管理。
 
 ## 自检诊断与验证 (Self-Test)
 
@@ -107,7 +106,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 ## 多代理编排 (Multi-Agent Orchestration)
 
-Codex **积极鼓励多代理并行执行**。Review gate Stop **全宿主 advisory-only**（Claude canonical 清门）；Codex 无 Cursor 式 gate 规则文件，多代理靠文档契约 + `implementx` skill。
+Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentStart`/`subagentStop` hook 做硬门控不同，Codex 端的多代理行为由文档契约与 agent 自觉驱动。
 
 ### 并行执行指引
 
@@ -131,14 +130,14 @@ Codex **积极鼓励多代理并行执行**。Review gate Stop **全宿主 advis
 | 约束 | 说明 |
 |------|------|
 | 写入 disjoint | 各 lane 仅写 `scope_paths` 内文件，不修改共享 continuity artifact |
-| `fork_context` | 深度 reviewer 须显式 `fork_context: false`；unset=关，仅 `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=1`（或 canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）可推断缺字段 |
+| `fork_context` | 深度 reviewer 必须显式 `fork_context: false`；env `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（默认开）可推断 |
 | review 只读 | 默认 review-only，禁止默认改代码（除非用户显式要求） |
 
 ### 与 Cursor / Claude 的关键差异
 
-| 维度 | Cursor | Claude Code | Codex |
-|------|--------|-------------|-------|
-| 子代理生命周期 hook | `subagentStart` / `subagentStop`（**遥测**） | PostTool（canonical 观测） | PostTool + 可选 Start/Stop **遥测** |
+| 维度 | Cursor | Claude Code | Codex CLI |
+|------|--------|-------------|-----------|
+| 子代理生命周期 hook | `subagentStart` / `subagentStop` | 无（原生 `Task`） | **无**（agent 自觉） |
 | 专用 gate 文件 | `execution-subagent-gate.mdc` + `review-subagent-gate.mdc` | 无 | **无**（本文档为真源） |
 | 模型继承规则 | 禁默认 Sonnet/Claude | N/A | **继承主会话模型**，不显式指定 |
 | 并行 lane 数 | 3–5 | 按需 | **3–5**（同 Cursor） |
@@ -147,12 +146,14 @@ agent 应**同等积极**地使用并行 lane，不因缺少 hook 门控而退�
 
 ## 独有环境变量与参数 (Environment Variables & Parameters)
 
-为确保 Codex 与审稿机制的稳定执行，支持以下独有环境变量：
+为确保 Codex CLI 与审稿机制的稳定执行，支持以下独有环境变量：
 
-- **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**：**默认关闭**（`unset` = 关）。仅 `1`/`true`/`yes`/`on` 时 PostTool 深度 lane 省略 `fork_context` 可计为独立 reviewer 证据；否则须 JSON 显式 `fork_context: false`。
+- **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**：**默认开启**（`unset` = 开）。PostTool 深度 lane 且省略 `fork_context` 时可计为独立 reviewer 证据。设 `0`/`false`/`off`/`no` 则要求 JSON 显式 `fork_context: false`。
 - **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY`**：规定是否在会话交互过程中严格要求稳定的 Session Key，防止非幂等会话串线。
 - **`ROUTER_RS_CODEX_HOOK_STATE_SALT`**：用于设定 Codex hook 的状态盐（salt），用以保障钩子状态存取的安全性。
 
 ## 会话周期与重新武装 (Session Lifecycle & Re-arm)
 
 - **UserPromptSubmit 重新武装 (re-arm) 机制**：在每次用户提问提交（UserPromptSubmit / UPS）后，系统会执行重新武装（re-arm），重置特定拦截门控，允许新一轮的动态指令判断。
+
+

@@ -99,4 +99,4 @@ Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由
 - `.cursor/rules/cursor-plan-output.mdc` — Cursor alwaysApply 下对 CreatePlan 产出的硬自检清单。
 - `.cursor/rules/session-close-summary.mdc` — Cursor 收尾回复风格约束。
 - [`docs/plans/README.md`](../../../docs/plans/README.md) — plans 索引与 My `/planx` 真源指针。
-- [`skills/gitx/SKILL.md`](../../../skills/gitx/SKILL.md) — `/gitx` / `/gitx plan` 收口契约。
+- [`skills/gitx/SKILL.md`](../../gitx/SKILL.md) — `/gitx` / `/gitx plan` 收口契约。

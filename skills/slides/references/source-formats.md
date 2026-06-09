@@ -43,9 +43,6 @@
 
 ## 资源
 
-- [references/workflow.md](../../.archive-cold/source-slide-formats/references/workflow.md)
-- [references/design-system.md](../../.archive-cold/source-slide-formats/references/design-system.md)
-- [references/visual-design-principles.md](../../.archive-cold/source-slide-formats/references/visual-design-principles.md)
 
 ## 运行时依赖
 

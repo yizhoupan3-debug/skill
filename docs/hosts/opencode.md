@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-09"
+last_verified: "2026-06-02"
 depends_on:
   - ../host_adapter_contract.md
 ---
@@ -7,8 +7,6 @@ depends_on:
 # Opencode 宿主操作手册
 
 **闭集 id**: `opencode` · **传输**: opencode-native · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
-
-**策略注入（双文件）**：[`AGENTS.md`](../../AGENTS.md)（内核）+ [`AGENTS_OPENCODE.md`](../../AGENTS_OPENCODE.md)（OpenCode transport delta only）。
 
 ## 代理身份与画风
 
@@ -18,13 +16,13 @@ depends_on:
 
 ## 能力边界与 Harness 入口
 
-- **任务推进**: `/implementx` + `goal_state_manage` MCP / `framework_goal_drive` stdio
+- **任务推进**: `/implementx` + `framework_goal_drive` stdio
 - **任务状态**: `artifacts/current/<task_id>/GOAL_STATE.json`
-- **门控模式**: 无 shell hook；review 清门 **Claude canonical**；MCP `closeout_gate` / `goal_state_manage` 上 review 缺口为 **ADVISORY**（**不**硬拦 Stop）；closeout 硬门禁与 review 分层（非 my-light）
+- **门控模式**: 无 shell hook，框架门控通过 `opencode.json` 的 permission 规则与 MCP 工具层实现
 
 ## opencode.json 配置结构
 
-- 项目级: `.opencode/opencode.json`；用户级: `~/.config/opencode/opencode.json`
+- 项目级: `./opencode.json`；用户级: `~/.config/opencode/opencode.json`
 - MCP 注册字段: `mcpServers`；Agent 注册字段: `agents`
 - 目录自动发现: `.opencode/agents/*.md`、`.opencode/commands/*.md`
 
@@ -33,10 +31,6 @@ depends_on:
 - `OPENCODE_HOME` 环境变量可覆盖默认 `~/.opencode` 路径
 - `--opencode-home` CLI 标志优先级最高（> `--home` 共享参数 > `OPENCODE_HOME` > 默认值）
 - 仅影响框架投影定位，不影响 opencode 自身运行时配置
-
-## Hook 事件矩阵
-
-OpenCode 为 **纯 MCP 宿主**（闭集 id：`opencode`），无 shell hook 面；连续性、review、closeout 经 `mcpServers.router-rs-framework` 工具层实现。对照 hook 宿主矩阵见 [`codex.md`](codex.md)、[`cursor.md`](cursor.md)、[`claude.md`](claude.md)。
 
 ## 权限与安全模型
 
@@ -52,8 +46,6 @@ OpenCode 为 **纯 MCP 宿主**（闭集 id：`opencode`），无 shell hook 面
 ## 默认生命周期
 
 - `/discussx` → `/planx` → `/implementx` → `/verifyx`
-- 显式辅助命令（五宿主同路径）：`/deepinterview`、`/gitx`、`/update`
-- 项目级斜杠 stub：`.opencode/commands/*.md`（与 Cursor `.cursor/commands/` 对齐时可手维护）
 - 默认 `my-light`（advisory closeout）
 
 ## 自检诊断

@@ -1,35 +1,67 @@
-# Workflow supervisor protocol（Cursor / 无 native workflow 宿主）
+# Workflow supervisor 协议（非 Claude Code 宿主）
 
-**真源 phases**：`.claude/workflows/<name>.js` → `export const meta = { phases: [...] }`。
+当 `orchestration.mode = workflow_supervisor` 时，主线程 **不** 运行 `import 'workflow'`，但 **必须** 与目标 JS 脚本的 `meta.phases` 与 `parallel`/`pipeline` 结构 **同构** 执行。
 
-Cursor 等宿主**无** `import "workflow"` 运行时；命中 workflow 编排意图时主线程为 **workflow_supervisor**（见 `.cursor/rules/workflow-orchestration-gate.mdc`）。
+真源脚本：仓库 [`.claude/workflows/`](../../../.claude/workflows/)（优先已有模板；可当场生成后保存）。
 
-## 主线程契约
+## 准备
 
-1. **只调度**：每 phase 写 `artifacts/current/<task_id>/lane-notes/phase-<slug>.json`（机读摘要，非子代理全文）。
-2. **读 `meta.phases`**：按顺序执行；phase 内 `parallel` / `pipeline` / `agent` 语义见 [`workflow-script-conventions.md`](workflow-script-conventions.md)。
-3. **禁止**在聊天粘贴子 agent 全文；findings 用 compact 列表。
-4. **首行机读**（workflow 轮次）：`orchestration: { mode: workflow_supervisor, trigger, reason }`。
+1. 选定脚本（见 [workflow-template-catalog.md](./workflow-template-catalog.md)）或复制 `deep-review-template.js` 改 `LENSES`。
+2. 读取 `export const meta` 与 `LENSES` / 各 `phase('…')` 顺序。
+3. 输出 `orchestration: { mode: workflow_supervisor, trigger, reason }`。
 
-## Phase 笔记 JSON（最小）
+## 按 phase 执行
+
+| JS 构造 | Supervisor 动作 |
+|---------|-----------------|
+| `phase('Scan')` + `parallel([() => agent(...)])` | 并行 spawn **只读** Task（每 thunk 一路）；`fork_context=false`；prompt 首行简体中文；schema 对齐 `FINDINGS_SCHEMA` |
+| `phase('Merge')` | **主线程** 跑 `conservativeMerge` 或等价逻辑（读 lane 输出 JSON），**不** spawn |
+| `phase('Verify')` + `pipeline(items, …)` | **串行** spawn Task，每条 finding 一路；对抗性「反驳」prompt；`.catch` 语义 = 单路失败不中断 |
+| `phase('Synthesize')` | **主线程** 排序、分 confirmed/rejected、写报告路径；findings-first |
+
+## Phase 产物（HARD）
+
+每 phase 结束写入：
+
+`artifacts/current/<task_id>/lane-notes/phase-<slug>.json`
+
+JSON 形状见 [`configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json`](../../../configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json)（`phase`、`agents_run`、`agents_failed`、`findings_count`、`artifact_paths`）。
 
 ```json
 {
-  "phase_id": "search",
-  "status": "done",
-  "summary": "3 queries, 12 URLs retained",
-  "blockers": [],
-  "next": "fetch"
+  "phase": "Scan",
+  "agents_run": 3,
+  "agents_failed": 0,
+  "findings_count": 12,
+  "artifact_paths": ["artifacts/.../scan-raw.json"]
 }
 ```
 
-## 与科研 harness 的衔接
+（≤15 行等价信息即可。）
 
-- **deep-research**：`.claude/workflows/deep-research.js` — plan searches → fetch → verify → synthesize。
-- 科研 NL 路由仍优先 `$research-workbench` / `$deep-research`；workflow 为**显式** `/workflow` 或编排意图加深路径。
-- 五宿主 skill 路由一致；仅 **Claude Code** 可 native 执行 workflow JS，其余宿主用本协议仿真。
+## 主线程禁止
 
-## 失败时
+- 在聊天粘贴子 Task 全文
+- 跳过某 `phase()` 或把 Verify 改为 parallel
+- 在 Merge/Synthesize 阶段 spawn agent（除非脚本明确例外——默认禁止）
 
-- Phase 失败：在 phase 笔记标 `blocker` + 最小复现；不静默跳过。
-- 缺 `meta.phases`：停止并报告 workflow 文件路径，不即兴编排。
+## Cursor 并行度
+
+- 单轮 parallel 块 ≤ 宿主实际并行上限；超出则 **分批** 执行同一 `parallel` 块，仍在同一 phase 内完成后再 Merge。
+- Task **省略 `model`**（继承主会话）。
+
+## 完成
+
+- 最终用户可见：admission 一行 + 各 phase 一行 + **findings-first** 列表（severity 排序）。
+- Audit 默认 **不** 自动 `/implementx`；用户要求修复时再 handoff。
+
+## 自检清单（supervisor 审 JS 脚本时用）
+
+1. 四阶段齐全：Scan、Merge、Verify、Synthesize  
+2. `parallel` 为 thunk **数组**；Scan 每路独立 `lens`  
+3. Merge 主线程；保守去重（file+lens+行重叠）  
+4. Verify 用 `pipeline` + `.catch()`；`is_real` + `reasoning` required  
+5. Synthesize 含 `coverage` 或等价计数  
+6. findings 必含 `evidence`  
+
+详见 [workflow-script-conventions.md](./workflow-script-conventions.md)。

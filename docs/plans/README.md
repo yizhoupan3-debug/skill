@@ -17,3 +17,12 @@ Cursor Plan 模式（`.cursor/plans/*.plan.md`）仅在活跃任务需要时使�
 ## 历史
 
 2026-05 卫生清理已移除本目录下的 stub 镜像与过期 `.cursor/plans` 文件；细节见 git 历史。
+
+### 已归档评估（2026-06 R5 合并）
+
+下列独立 plan 已删；结论摘要保留于此，全文见 git 历史：
+
+| 主题 | 结论摘要 |
+|------|----------|
+| **cache-hit-rate-optimization** | 路由热表与 companion 元数据已整合至 `SKILL_ROUTING_RUNTIME.json`；缓存优化以 routing eval 与 `framework skills refresh` 为准，无单独 plan 真源 |
+| **sqlite-migration-evaluation** | `runtime_storage/` 模块化后端已可用；全量 SQLite 统一仍为可选 RFC，非当前关键路径 |

@@ -15,40 +15,24 @@ user-invocable: false
 disable-model-invocation: true
 short_description: Design and tune cross-host skill routing and framework behavior
 trigger_hints:
-  - skill-framework-developer
-  - skill框架
+  - skill 框架治理
   - 路由系统
-  - skill 边界
-  - framework review
-  - 路由 review
-  - routing framework
+  - skill 路由
+  - owner / gate / overlay
   - 边界重叠
-  - framework 自优化
-  - 不必要抽象
-  - runtime 轻量化
-  - skill 核查
-  - skill 精简
-  - 沉到 runtime
-  - 旧口径清理
-  - contract 清理
-  - 兼容层
-  - 胶水层
-  - skill 维护
-  - sync health checks
-  - registry drift cleanup
-  - skill library maintenance
-  - 写一个 skill
-  - 批量规范 skill
-  - 路由没触发
-  - validate skills
-  - owner gate overlay
-  - skill 不好用
-  - 持续优化 skill
-  - 外部调研优化 skill
+  - 同步状态
+  - 路由表
+  - skill 库维护
+  - 注册表
+  - 框架策略
+  - 路由诊断
+  - skill 边界
+  - 维护规范
+  - 同步健康
+  - 框架自优化
 framework_roles:
   - planner
   - gate
-framework_phase: 0
 framework_contracts:
   emits_findings: true
   consumes_findings: false

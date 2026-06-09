@@ -33,7 +33,6 @@ venue_slot: <目标期刊/会议轨道或体裁：读者默认契约 + 页数/�
 
 ## 与其它真源的衔接
 
-- **LaTeX 源稿结构安全**：[`latex-safe-blueprint.md`](latex-safe-blueprint.md)（label/环境/编译守门）。
 - **故事线与诊断**：[`storytelling-patterns.md`](storytelling-patterns.md)（spine、常见病、ref-guided 流程）。
 - **顶刊六层栏与自检问题**：[`../../paper-workbench/references/top-tier-paper-standard.md`](../../paper-workbench/references/top-tier-paper-standard.md)（贡献 / closest-work / 证据关停先于辞藻）。
 - **主张—证据阶梯与审稿关停**：[`../../paper-workbench/references/claim-evidence-ladder.md`](../../paper-workbench/references/claim-evidence-ladder.md)（含 R&R、代码/数学质疑）。

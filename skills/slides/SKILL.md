@@ -198,16 +198,10 @@ Use diagnostics/audit commands only when that gate fails or when a focused audit
 Existing deck intake:
 
 ```bash
-ppt read-full input.pptx
-ppt read-full input.pptx --slides 1-10
 ppt intake input.pptx --json
 ppt office doctor input.pptx --json
 ppt render input.pptx --output-dir rendered
 ```
-
-Use `ppt read-full` when you need to **understand deck copy and structure**
-(slides, notes, tables) in a linear, agent-friendly text view. QA gates and
-package validation still use `ppt intake` and `ppt office doctor`.
 
 Diagnostics/Audit path (only after gate failure or for focused audit):
 

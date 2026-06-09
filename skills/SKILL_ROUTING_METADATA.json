@@ -10,9 +10,6 @@
     "code-review-deep": {
       "selection_reason": "allowlisted first-turn owner"
     },
-    "deep-research": {
-      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
     "deepinterview": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -52,6 +49,9 @@
     "paper-workbench": {
       "selection_reason": "allowlisted first-turn owner"
     },
+    "paper-writing": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
     "pdf": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -63,9 +63,6 @@
     },
     "python-env-management": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "research-workbench": {
-      "selection_reason": "allowlisted first-turn owner"
     },
     "scientific-figure-plotting": {
       "selection_reason": "allowlisted first-turn owner"
@@ -93,6 +90,12 @@
     },
     "visual-review": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "research-discovery": {
+      "selection_reason": "allowlisted first-turn owner"
+    },
+    "research-execution": {
+      "selection_reason": "allowlisted first-turn owner"
     }
   },
   "source_of_truth": false

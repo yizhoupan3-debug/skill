@@ -51,11 +51,8 @@ cargo clippy
 
 Auto-logged with `kind: "cursor_post_tool_verification"` or `codex_post_tool_verification`.
 
-> **注**：此环境变量在 Claude Desktop 中不适用（无 shell hook）。Claude Desktop 应使用 MCP `record_evidence` 工具手动记录。
-
 **双轨说明**：
 - **Cursor / Codex**（有 shell hook）：环境变量 `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` 启用后，PostToolUse hook 自动捕获验证命令并写入 `EVIDENCE_INDEX.json`。
-- **Claude Desktop**（无 shell hook）：手动调用 MCP `record_evidence` 工具，传入 `command`、`tool_name`、`exit_code`（可选 `output`）即可完成等效记录。
 
 ### Manual Verification
 
@@ -75,8 +72,6 @@ Explicit evidence append via stdio (Cursor / Codex 环境):
 ```bash
 printf '{"id":1,"op":"framework_hook_evidence_append",...}' | router-rs --stdio-json
 ```
-
-**Claude Desktop 等效**：调用 MCP `record_evidence` 工具（`command` + `tool_name` + `exit_code`），效果相同，写入同一份 `EVIDENCE_INDEX.json`。
 
 Logged with `kind: "hook_evidence"`
 

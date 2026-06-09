@@ -1,8 +1,9 @@
 ---
 name: agent-swarm-orchestration
 description: |
-  Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration.
-  Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundaries, or supervisor logic. 适用于“多 agent 协作”“agent 编排”“swarm”“orchestrator”“router”“planner-coder-reviewer”“共享记忆”这类请求.
+  Decide whether work stays local, uses bounded sidecars, or runs a cross-host workflow (JS orchestration).
+  Covers explicit/auto workflow triggers, workflow_native (Claude Code) vs workflow_supervisor (Cursor/Codex/…), and spawn admission. 适用于多 agent、workflow、ultracode、swarm、orchestrator 类请求.
+  **注意**：team 概念已废弃（2026-06-08），仅保留 subagent + workflow 二元模型。
 risk: medium
 source: community-adapted
 routing_layer: L0
@@ -11,7 +12,7 @@ routing_gate: delegation
 routing_priority: P1
 session_start: required
 user-invocable: false
-disable-model-invocation: true
+disable-model-invocation: false
 trigger_hints:
   - 多 agent 协作
   - agent 编排
@@ -23,8 +24,13 @@ trigger_hints:
   - agent supervisor
   - multi-agent workflow
   - 多 agent 执行
+  - dynamic workflow
+  - ultracode
+  - workflow 编排
+  - JS workflow
+  - 多阶段流程
 metadata:
-  version: "2.0.0"
+  version: "3.0.0"
   platforms: [supported]
   tags:
     - agent
@@ -38,7 +44,7 @@ metadata:
 
 ## Overview
 
-这个 skill 是多 agent 的准入门：先判断任务是否应该留在主线程、使用 bounded sidecars，或退回主线程的 local-supervisor queue。
+这个 skill 是多 agent / workflow 的准入门：先选择编排 **模式**（local / sidecar / workflow），再判断 spawn admission 与宿主执行面。
 
 关注点包括：
 - spawn admission
@@ -50,7 +56,86 @@ metadata:
 - 人类监督边界
 
 核心原则：
-**默认先做 spawn admission；当任务存在清晰、独立、可验证的并行 lane 时，优先启动 bounded sidecars。只有边界、验证或关键路径不清晰时才拒绝。**
+**默认保守**：无 workflow 触发时不自动升格 workflow。满足 workflow 触发后，编排真源为 JS（[`.claude/workflows/`](../../.claude/workflows/)）与 [`references/workflow-script-conventions.md`](./references/workflow-script-conventions.md)；否则先做 spawn admission，在清晰并行 lane 时优先 bounded sidecars。
+
+## Orchestration mode selection
+
+Gate **必须先**输出一行机读决策（可附人读半句），再 spawn：
+
+```text
+orchestration: { mode, trigger, reason }
+```
+
+| `mode` | 何时 | 执行面 |
+|--------|------|--------|
+| `local` | 小任务、紧耦合、拒绝规则命中 | 主线程 |
+| `sidecar` | 有清晰并行 lane，**未**触发 workflow | Task / subagent（声明式表） |
+| `workflow_native` | workflow 触发 + **claude-code** + Dynamic Workflows 未禁用 | 运行 `.claude/workflows/*.js`（`import … from 'workflow'`） |
+
+**优先级（HARD）**：`explicit workflow` > `auto_multi_phase` > 声明式 `sidecar` > `local`。见 [`references/orchestration-mode.md`](./references/orchestration-mode.md)。
+
+## Workflow triggers
+
+### Explicit（强制 workflow）
+
+用户当轮出现任一即 `trigger: explicit`（仍受 `small_task` / `token_overhead_dominates` 等拒绝）：
+
+- 斜杠：**`/workflow`**（框架别名，首选显式入口）
+- 关键词：`workflow`、`ultracode`、`用 workflow`、`跑 workflow`
+
+### Auto multi-phase（自动 workflow）
+
+未显式提 workflow，但任务描述满足 **任一** → `trigger: auto_multi_phase`：
+
+- **≥3 个命名阶段**（Phase 1/2/3、第一步/第二步…、或清单式阶段标题）
+- **管道型流程**（含 `→`、Scan→Verify、先…再…再…）
+- **串行 + 并行混合**（例如「多维度并行扫描后逐条验证」）
+
+不满足以上且不满足 explicit → **不得** workflow，走 sidecar 声明式表或 local。
+
+## Main-thread contract (workflow)
+
+当 `mode` 为 `workflow_native` 或 `workflow_supervisor` 时（HARD）：
+
+1. **主线程仅调度**：admission、按 `meta.phases` 推进、异常升级、最终集成；**禁止**在聊天中展开子 agent 全文或大量中间 findings。
+2. **每 phase 结束**：写 `artifacts/current/<task_id>/lane-notes/phase-<slug>.json`（≤15 行：计数、路径、失败 agent 数）。
+3. **Merge / Synthesize**：主线程纯代码（或 `workflow-helpers.js` 逻辑），**不**为 Merge/Synthesize spawn agent。
+4. **可见收口**：findings-first（对齐 [`code-review-deep`](../code-review-deep/SKILL.md) compact）；admission 一行 + 每 phase 一行进度。
+5. **守 JS 拓扑**：不得跳过 `phase()` 或改写 `parallel`/`pipeline` 结构；中间态进脚本变量 / lane-notes / artifact，不进主 context。
+
+Sidecar 模式的压缩契约仍见下文 **Main-thread compression contract**。
+
+## Host capabilities (orchestration)
+
+| host_id | workflow_native | workflow_supervisor |
+|---------|-----------------|---------------------|
+| claude-code | yes | yes（native 优先） |
+| cursor | no | yes（Task 模拟 parallel/pipeline） |
+| codex | no | yes |
+| 其他闭集宿主 | no | yes（诚实降级） |
+
+模板索引：[`references/workflow-template-catalog.md`](./references/workflow-template-catalog.md)。**勿**声称非 Claude Code 宿主可 `import 'workflow'`。
+
+## Boundary: implementx / verifyx
+
+| 入口 | 职责 |
+|------|------|
+| **本 skill** | 模式选择、workflow 触发、spawn admission、workflow/sidecar 编排形态 |
+| **`/implementx`** | `WAVE_STATE.json` 产品交付 wave；主线程调度 **实现** lane |
+| **`/verifyx`** | 证据与 closeout |
+
+Audit 类 workflow 默认 **findings-only**；修复需用户显式 `/implementx` 或「按 findings 改」。Workflow 不替换 implementx wave 调度。
+
+## 深度对抗 review：选型表（HARD）
+
+| 场景 | 推荐入口 | 执行面 | 对抗 Verify |
+|------|----------|--------|-------------|
+| 跨宿主 **多阶段 JS 编排**（Scan→Merge→Verify→Synthesize） | **`/workflow`** + `.claude/workflows/deep-review-template.js` | Claude Code: `workflow_native`；其它: **`workflow_supervisor`**（Task 同构） | JS `pipeline` 逐条反驳 + `VERDICT_SCHEMA` |
+| **Hook 可数**深度 review、PR/全仓、spawn-first gate | **`$code-review-deep`** | `deep-reviewer` / `general-purpose` lane +（非 my-light）REVIEW_GATE | skill 层 findings-only + 多 lens |
+| 窄范围单文件 review | 主线程或 sidecar | 无 workflow | 可选 |
+| 产品交付 wave（实现+验证） | **`/implementx`** | `WAVE_STATE.json` lane | verify_commands，非 audit pipeline |
+
+**勿混用而不合并**：workflow 路径的 Verify 产物在 `lane-notes/phase-*.json`；code-review-deep 产物在 review lane-notes。同一任务只选**一条** audit 主路径，除非用户显式要求两阶段（先 workflow audit 再 implementx 修复）。
 
 ## When to use
 
@@ -61,13 +146,15 @@ metadata:
 - review / verification 可以和主线程实现并行，且不会阻塞下一步
 - 深度 / 全面 / 全仓 / 跨模块 review 明显包含多个独立审查维度时，先进入 subagent admission；适合则开启 reviewer sidecars
 - 写入范围完全 disjoint，worker 只产出 lane-local delta
-- 用户要构建 multi-agent system、swarm、workflow orchestration layer
-- 用户要做 planner / coder / reviewer / tester 这类协作链
+- 用户要构建 multi-agent system、agent **workflow**、swarm、orchestration layer
+- 用户要做 planner / coder / reviewer / tester 这类**子代理协作链**
 - 用户要做任务路由、agent handoff、shared memory、consensus、quality gate
 - 用户要做 research swarm、support router、自动审查流水线
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
-- 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 是否足够；不再新增独立 orchestration owner
-- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板见 harness 参考 [`.archive-cold/adversarial-loop/SKILL.md`](../.archive-cold/adversarial-loop/SKILL.md)（**非热 skill 路由**）；用户侧入口优先 [`.archive-cold/adversarial-loop/SKILL.md`](../.archive-cold/adversarial-loop/SKILL.md)（`$adversarial-loop`）或 My 执行区 `/implementx`（`GOAL_STATE.json`、`goal_state_manage` MCP / `framework_goal_drive` stdio）；本 gate 仍负责 spawn admission 与 reject reason
+- 用户显式要求 **workflow** / **ultracode**，或任务自带 **多阶段审计/审查管道**
+- 需要复用 `.claude/workflows/` 下 JS 编排（Claude Code）或跨宿主 **workflow_supervisor** 同构执行
+- 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 是否足够
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板通过 `framework_rfv_loop` 运行时管理；用户侧入口优先 My 执行区 `/implementx`（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”
@@ -92,14 +179,14 @@ metadata:
 
 ## Primary operating principle
 
-This gate is about **admitting delegation when bounded parallelism beats local execution**, not automatically escalating to full workflow orchestration.
+This gate is about **admitting delegation when bounded parallelism beats local execution**, not automatically turning the current session into a full team.
 
 1. spawn bounded sidecars by default when read-heavy, review, verification, or independent implementation lanes are clear
 2. prefer read-only sidecars before write-capable workers
 3. allow write delegation only for disjoint, lane-local scopes
 4. for broad reviews, split independent reviewer lanes when the lane boundaries are clear
 5. fall back to local-supervisor queue when spawning is blocked or not worth it
-6. **code / diff 「深度审稿」宿主可见收口**：并入主线程时**默认用 findings 优先级呈现**（与 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) compact 一致）：全局 severity 排序、少叠床架屋；按需再引用各 sidecar 的 lane 标签，不要为了「看起来专业」复述多段 Lens 前言。宿主 Stop：`REVIEW_GATE` **advisory-only**（Claude canonical 清门）；Cursor pending multiset **仅遥测**。
+6. **code / diff 「深度审稿」宿主可见收口**：并入主线程时**默认用 findings 优先级呈现**（与 [`skills/code-review-deep/SKILL.md`](../code-review-deep/SKILL.md) compact 一致）：全局 severity 排序、少叠床架屋；按需再引用各 sidecar 的 lane 标签，不要为了「看起来专业」复述多段 Lens 前言。
 
 ## Spawn Admission
 
@@ -195,7 +282,8 @@ If the discussion touches current-session execution:
 - never delegate the immediate blocker on the critical path
 
 ## Hard Constraints
-- Do not create a new agent role, mailbox, graph, or state artifact unless an existing workflow / lane contract cannot express the need.
+- Do not create a new agent role, mailbox, graph, or state artifact unless an existing **subagent/workflow** lane contract cannot express the need.
+- **team 概念已废弃**：所有团队级编排通过 `workflow`（JS 编排脚本）+ `subagent`（bounded worker）组合实现。
 - Do not let workers write outside their assigned lane-local scope.
 - Supervisor owns integration and final verification.
 - **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
@@ -231,4 +319,10 @@ If the discussion touches current-session execution:
 
 ## Reference
 
-For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).
+| 文档 | 用途 |
+|------|------|
+| [references/orchestration-mode.md](./references/orchestration-mode.md) | 模式表、双触发、优先级、拒绝规则 |
+| [references/workflow-supervisor-protocol.md](./references/workflow-supervisor-protocol.md) | 非 Claude 宿主按 JS 阶段派发 |
+| [references/workflow-template-catalog.md](./references/workflow-template-catalog.md) | `.claude/workflows/*.js` 索引 |
+| [references/workflow-script-conventions.md](./references/workflow-script-conventions.md) | JS API、四阶段、Schema（编排真源） |
+| [references/detailed-guide.md](./references/detailed-guide.md) | 拓扑、handoff、spawn 细节 |

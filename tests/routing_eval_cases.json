@@ -527,7 +527,7 @@
       "expected_overlay": null,
       "expected_layer": "L4",
       "first_turn": true,
-      "notes": "纯定理证明/数学推导优先 math-derivation，不与 research-workbench 抢路由"
+      "notes": "纯定理证明/数学推导优先 math-derivation，不与 research-discovery/execution 抢路由"
     },
     {
       "id": "route-014-scientific-figure-plotting",
@@ -541,15 +541,15 @@
       "notes": "代码生成论文级科研图走 scientific-figure-plotting"
     },
     {
-      "id": "route-015-research-workbench-ablation",
+      "id": "route-015-research-execution-ablation",
       "category": "should-trigger",
       "task": "帮我设计实验：两组 ablation 怎么做，baseline 和控制变量怎么定。",
-      "focus_skill": "research-workbench",
-      "expected_owner": "research-workbench",
+      "focus_skill": "research-execution",
+      "expected_owner": "research-execution",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "实验/ablation 编排仍走 research-workbench；与纯数学 do_not_use 不冲突"
+      "notes": "实验/ablation 编排走 research-execution；与纯数学 do_not_use 不冲突"
     },
     {
       "id": "route-016-python-env-management",

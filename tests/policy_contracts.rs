@@ -900,7 +900,8 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         "gh-fix-ci",
         "citation-management",
         "paper-workbench",
-        "research-workbench",
+        "research-discovery",
+        "research-execution",
         "deep-research",
         "plan-mode",
         "code-review-deep",
@@ -3395,7 +3396,7 @@ fn cursor_subagent_hook_contract_consumer_subset() {
 fn harness_skill_contract_lint_cli_reports_protocol_shape() {
     let payload = serde_json::json!({
         "skills_root": project_root().join("skills").to_string_lossy(),
-        "slugs": ["skill-framework-developer", "agent-swarm-orchestration", "research-workbench", "gh-fix-ci"]
+        "slugs": ["skill-framework-developer", "agent-swarm-orchestration", "research-discovery", "gh-fix-ci"]
     });
     let response = router_rs_json(&[
         "eval",

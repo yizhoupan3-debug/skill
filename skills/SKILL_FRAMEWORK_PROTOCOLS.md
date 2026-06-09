@@ -2,7 +2,11 @@
 
 本文件是共享的**最小协议层**；skill 不应在各自 `SKILL.md` 中重复长篇 schema。
 
+> **status: aspirational** — §1-3 的 Finding / Execution / Verification Result Schema 描述了理想的结构化协议，但当前代码中**无对应的序列化/反序列化实现**。Skill 实际以自然语言 Markdown 传递 finding 和 execution item，未走 schema 校验。§4-6 的 Runtime Protocol / Stop Rules / Self-Audit 在各 skill 中有非正式遵守。
+
 ## 1. Finding Schema
+
+> **status: aspirational** — schema 尚未在代码中实现；skill 以自然语言 Markdown 传递 finding。
 
 `finding` 表示一个离散问题。
 
@@ -19,6 +23,8 @@
 
 ## 2. Execution Item Schema
 
+> **status: aspirational** — schema 尚未在代码中实现；skill 以自然语言 Markdown 传递 execution item。
+
 `execution item` 表示一次待执行动作。
 
 | Field | Required | Notes |
@@ -30,6 +36,8 @@
 | `priority` | yes | `P0` / `P1` / `P2` |
 
 ## 3. Verification Result Schema
+
+> **status: aspirational** — schema 尚未在代码中实现；skill 以自然语言 Markdown 传递 verification result。
 
 | Field | Required | Notes |
 |---|---|---|

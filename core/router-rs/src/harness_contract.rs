@@ -237,7 +237,7 @@ fn default_high_impact_skill_slugs() -> Vec<String> {
         "skill-framework-developer",
         "plan-mode",
         "agent-swarm-orchestration",
-        "research-workbench",
+        "research-discovery",
         "openai-docs",
     ]
     .iter()

@@ -4,10 +4,7 @@
 
 | 宿主 | 接口 | 说明 |
 |------|------|------|
-| Claude Desktop | MCP `goal_state_manage` | 通过 MCP 工具层调用，参数：operation / task_id / goal / note |
 | CLI / Cursor / Codex | `framework_goal_drive` stdio | 通过 `router-rs --stdio-json` 调用 |
-
-Claude Desktop 环境下优先使用 MCP `goal_state_manage`。
 
 **适用于**: `discussx` / `planx` / `implementx` / `verifyx` 全阶段。
 **路径**: `artifacts/current/<task_id>/GOAL_STATE.json`
@@ -43,12 +40,6 @@ Claude Desktop 环境下优先使用 MCP `goal_state_manage`。
 - **禁止**手动将指针写为 `{}` 作占位。
 
 ## implementx 启动示例
-
-**MCP（Claude Desktop）**:
-
-```
-goal_state_manage(operation="start", goal="<from GOAL_STATE>", note="drive_until_done=true; status=running; lifecycle_profile=my-light")
-```
 
 **Stdio（CLI / Cursor / Codex）**:
 

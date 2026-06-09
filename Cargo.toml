@@ -16,7 +16,6 @@ tempfile = "3.15"
 [workspace]
 members = [
     ".",
-    "cli/antigravity-cli",
     "core/core-state",
     "core/framework-kernel",
     "core/core-policy",

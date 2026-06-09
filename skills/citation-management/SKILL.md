@@ -44,7 +44,7 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 
 ## Do Not Use
 
-- Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to `$paper-workbench` for manuscripts or `$research-workbench` for non-manuscript research.
+- Searching and synthesizing a topic literature corpus -> keep this skill only for citation truth; broader source synthesis belongs to `$paper-workbench` for manuscripts or `$research-discovery` or `$research-execution` for non-manuscript research.
 - Writing or polishing manuscript prose -> use `@lane:writer`.
 - Checking paper logic beyond citations -> use `@lane:reviewer` logic mode.
 - Formatting non-academic documents without citations.
@@ -69,14 +69,14 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 
 ## Tools
 
-**确定性 CLI（五宿主，fail-closed 可选）**：仓库 `rust_tools/citation_tool_rs`
+**Rust CLI（本仓库真源，无 Python 脚本）**
 
 ```bash
-cargo run -p citation_tool_rs -- audit --bib path/to/refs.bib --fail-on blocking
-cargo run -p citation_tool_rs -- claim-lint --input path/to/manuscript.md --fail-on-findings
+cargo run -p citation_tool_rs --manifest-path rust_tools/citation_tool_rs/Cargo.toml -- audit --bib refs.bib
+cargo run -p citation_tool_rs --manifest-path rust_tools/citation_tool_rs/Cargo.toml -- render --bib refs.bib --style ieee
 ```
 
-用于 `PAPER_GATE` G5 或大批量 `.bib` 卫生；MCP 不可用时优先 CLI，再 fallback 手工 API。
+实现路径：`rust_tools/citation_tool_rs`（`cargo run` / `cargo test -p citation_tool_rs`）。
 
 **首选：paperplain MCP**（论文元数据验证与发现）
 

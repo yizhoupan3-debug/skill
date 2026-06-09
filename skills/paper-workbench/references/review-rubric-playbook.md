@@ -373,7 +373,7 @@ What must be true:
 - tone is not defensive and not promotional
 - **`language_register`**-appropriate slop/套话 cleared; **`prose_qc`**-class checks would pass on rewritten spans
 
-Normative: [`../../paper-workbench/references/prose-chain-contract.md`](../../paper-workbench/references/prose-chain-contract.md), [`prose-quality-gate.md`](prose-quality-gate.md).
+Normative: [`prose-chain-contract.md`](prose-chain-contract.md), [`prose-quality-gate.md`](prose-quality-gate.md).
 
 Failure signals:
 

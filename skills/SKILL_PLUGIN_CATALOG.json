@@ -7,7 +7,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -20,7 +19,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -33,26 +31,12 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
       },
       "kind": "skill",
       "skill_path": "skills/code-review-deep/SKILL.md"
-    },
-    "deep-research": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-code",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/deep-research/SKILL.md"
     },
     "deepinterview": {
       "host_support": {
@@ -72,7 +56,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -85,7 +68,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -111,7 +93,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -124,7 +105,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -137,7 +117,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -150,7 +129,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -189,7 +167,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -202,7 +179,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -215,7 +191,18 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/paper-workbench/SKILL.md"
+    },
+    "paper-writing": {
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "claude-code",
           "cursor",
           "opencode"
         ]
@@ -228,7 +215,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -241,7 +227,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -265,35 +250,17 @@
     "python-env-management": {
       "host_support": {
         "platforms": [
-          "antigravity",
-          "claude-code",
-          "codex",
-          "cursor",
-          "opencode"
+          "cursor"
         ]
       },
       "kind": "skill",
       "skill_path": "skills/python-env-management/SKILL.md"
-    },
-    "research-workbench": {
-      "host_support": {
-        "platforms": [
-          "antigravity",
-          "claude-code",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/research-workbench/SKILL.md"
     },
     "scientific-figure-plotting": {
       "host_support": {
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -306,7 +273,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -319,7 +285,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -332,7 +297,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -345,7 +309,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -358,7 +321,6 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
@@ -397,13 +359,44 @@
         "platforms": [
           "antigravity",
           "claude-code",
-          "codex",
           "cursor",
           "opencode"
         ]
       },
       "kind": "skill",
       "skill_path": "skills/visual-review/SKILL.md"
+    },
+    "research-discovery": {
+      "enabled": true,
+      "source": "local"
+    },
+    "research-execution": {
+      "enabled": true,
+      "source": "local"
+    },
+    "literature-verification": {
+      "enabled": true,
+      "source": "local"
+    },
+    "statistical-verification": {
+      "enabled": true,
+      "source": "local"
+    },
+    "formal-verification": {
+      "enabled": true,
+      "source": "local"
+    },
+    "reproducibility-verification": {
+      "enabled": true,
+      "source": "local"
+    },
+    "prose-verification": {
+      "enabled": true,
+      "source": "local"
+    },
+    "structure-verification": {
+      "enabled": true,
+      "source": "local"
     }
   },
   "source_of_truth": false

@@ -1,7 +1,7 @@
 ---
-last_verified: "2026-06-08"
+last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture/index.md
+  - spec.md
 ---
 
 # Framework Naming Conventions
@@ -28,15 +28,33 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 |------|---------------|-------|
 | Claude Code | `ROUTER_RS_CLAUDE_*` | Shell hook integration |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
-| Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex（canonical id：`codex`；`codex-cli` 已退役） |
-| Antigravity | — | MCP stdio，无 shell hook env（canonical id：`antigravity`） |
-| OpenCode | — | MCP stdio，无 shell hook env |
+| Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
+| Antigravity App | - | MCP stdio，无 shell hook env |
 
-**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) **§5 开关面**（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
+**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`spec.md`](spec.md)（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
 
-**已退役 env 前缀（2026-06，勿在新集成使用）**：`ROUTER_RS_DESKTOP_*`（原 Claude Desktop MCP）、`ROUTER_RS_ANTIGRAVITY_CLI_*`（原 `antigravity-cli` hook）。见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)。
+### MCP Key Convention（**闭集，禁从一个 host 抄到另一个**）
 
-场景子集与 closeout 分层见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)；可复制 profile 见 [`operator_profiles.md`](operator_profiles.md)。
+> 与 `ROUTER_RS_*` env var 命名**正交**：env var 前缀按 host 走；MCP 顶层 key 按该 host **官方文档/源码**实测值走。**两套不能混。**
+>
+> 完整矩阵与官方来源见 [`maintenance/host-projection-schema-validity.md`](maintenance/host-projection-schema-validity.md) §1。本表只做"投影写盘 key 名"速查。
+
+| host_id | MCP 配置文件 | **顶层 key（字面量）** | transport 字面量 | `managed_key_paths` 字面量 |
+|---------|--------------|------------------------|------------------|----------------------------|
+| `cursor` | `~/.cursor/mcp.json` | `mcpServers`（**camel**，**不是** `mcp_servers`） | `"stdio"` | `mcpServers.browser-mcp` |
+| `codex` | `~/.codex/config.toml` | `mcp_servers`（**snake**，**TOML 表**） | 无 `type`（`command` 隐式） | `mcp_servers.router-rs-framework` |
+| `opencode` | `~/.config/opencode/opencode.json` | `mcp`（**唯一不带 `Servers` 后缀**） | `"local"` | `mcp.router-rs-framework` |
+| `antigravity-app` | `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | `"stdio"` | `mcpServers.router-rs-framework` |
+
+**三个最常踩的坑**：
+
+1. **snake_case vs camelCase**：TOML (codex) 用 `mcp_servers`；JSON (cursor / claude / antigravity) 用 `mcpServers`。
+2. **是否带 `Servers` 后缀**：opencode **唯一**用 `mcp`，**无** `Servers`。
+3. **transport 字段**：opencode 用 `"local"`；其余 host 用 `"stdio"`（或隐式）。
+
+**改动任何 host projection 前必读** [`maintenance/host-projection-schema-validity.md`](maintenance/host-projection-schema-validity.md) §3.5 自检机制。
+
+场景子集与 closeout 分层见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)（含 **Operator profiles** 可复制组合）。
 
 ---
 
@@ -68,13 +86,8 @@ Skill-related files are located in `skills/`:
 ```
 skills/
 ├── SKILL_ROUTING_RUNTIME.json        # Hot routing entry point
-├── SKILL_ROUTING_RUNTIME_EXPLAIN.json
-├── SKILL_ROUTING_METADATA.json
-├── SKILL_ROUTING_INDEX.md
 ├── SKILL_MANIFEST.json
-├── SKILL_PLUGIN_CATALOG.json
-├── SKILL_APPROVAL_POLICY.json
-├── SKILL_HEALTH_MANIFEST.json
+├── SKILL_TIERS.json
 ├── SKILL_SOURCE_MANIFEST.json
 └── SKILL_*.md                        # Skill documentation
 ```
@@ -88,7 +101,7 @@ skills/
 - **metadata-only** — `--skip-generator-run` or `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1`; default for `framework doctor`
 - **drift-gate** — full regeneration in a temp root; required for `framework maint update-one-shot`
 
-See [`harness_architecture/02-data-flows.md`](harness_architecture/02-data-flows.md) §2.3.
+See [`spec.md`](spec.md) §13.5.
 
 **Generator sources:**
 - `core/router-rs/Cargo.toml` — Rust router runtime (`framework skills validate|refresh`, `host-integration install`, `sync-entrypoints`)
@@ -102,13 +115,10 @@ See [`harness_architecture/02-data-flows.md`](harness_architecture/02-data-flows
 When renaming env vars, maintain legacy aliases with deprecation warnings:
 
 ```rust
-pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
-    // Canonical cross-host name first
-    if env_enabled_default_false("ROUTER_RS_REVIEW_GATE_DISABLE") {
-        return true;
-    }
-    // Legacy per-host alias still honored
-    env_enabled_default_false("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") // e.g. claude-code
+pub fn router_rs_claude_review_gate_disabled() -> bool {
+    // New name takes precedence
+    router_rs_env_enabled_default_false("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE")
+        || router_rs_env_enabled_default_false("ROUTER_RS_REVIEW_GATE_DISABLE") // legacy
 }
 ```
 
@@ -130,10 +140,4 @@ fn check_legacy_env_vars() {
 
 **Status**: RESOLVED - `GENERATED_ARTIFACTS.json` updated to remove 10 entries referencing deleted `scripts/skill-compiler-rs/Cargo.toml`. Deprecated entries moved to `_deprecated_entries` array for audit trail.
 
-`skill-compiler-rs` 删除后，**手维护热路由**为 `skills/SKILL_ROUTING_RUNTIME.json` 与 `skills/SKILL_MANIFEST.json`（见 [`SKILL_MAINTENANCE_GUIDE.md`](../skills/SKILL_MAINTENANCE_GUIDE.md)）。下列 companion / 生成物由 [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) 登记，通常用 `framework skills refresh --write-companions` 再生，**勿**与热表混淆：
-
-- `skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`、`SKILL_ROUTING_METADATA.json`、`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json` 等（见 manifest 全文）
-- `skills/SKILL_ROUTING_INDEX.md`（索引；与 REGISTRY 合并后单文件维护）
-- `configs/framework/FRAMEWORK_SURFACE_POLICY.json`
-
-`SKILL_ROUTING_METADATA.json` 在路由加载时由 `merge_sidecar_route_metadata_from_runtime` 合并进记录（非每 prompt 全量扫描，但影响 route 记录）。
+`skill-compiler-rs` 删除后，**手维护热路由**为 `skills/SKILL_ROUTING_RUNTIME.json` 与 `skills/SKILL_MANIFEST.json`（见 [`SKILL_MAINTENANCE_GUIDE.md`](../skills/SKILL_MAINTENANCE_GUIDE.md)）。2026-06 已清理的空壳 companion（`SKILL_ROUTING_RUNTIME_EXPLAIN.json`、`SKILL_ROUTING_METADATA.json`、`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json`、`SKILL_ROUTING_INDEX.md` 等）**勿**再手改或恢复；路由 metadata 真源为 `SKILL_ROUTING_RUNTIME.json` 顶层 `default_host_platforms` 与各 skill 行。其余生成物见 [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（如 `FRAMEWORK_SURFACE_POLICY.json`）。

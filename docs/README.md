@@ -1,63 +1,58 @@
 ---
-last_verified: "2026-06-09"
+last_verified: "2026-06-08"
 depends_on:
-  - harness_architecture/index.md
-  - rust_contracts.md
+  - spec.md
   - framework_operator_primer.md
-  - host_adapter_contract.md
-  - operations/index.md
 ---
 
 # 文档索引（控制面与契约）
 
-**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`harness_architecture/`](harness_architecture/index.md) = 连续性 **L1–L5 控制面**上层真源（已按主题拆分）；[`rust_contracts/`](rust_contracts/index.md)（英文）= `router-rs` 实现侧契约长文（已按主题拆分）；历史迁移叙述见 git 历史与 [`MIGRATION.md`](../MIGRATION.md)。
+**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`spec.md`](spec.md) = 统一控制面、沙箱与接入契约规范；历史迁移叙述见 git 历史与 [`MIGRATION.md`](../MIGRATION.md)。
 
 ## 推荐阅读顺序
 
-1. [仓库根 README.md](../README.md) — 分享、安装、Cursor/Codex hook 快速入门  
-2. [framework_operator_primer.md](framework_operator_primer.md) — 使用者一页纸：宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检 `framework doctor`  
-3. [operations/index.md](operations/index.md) — 安装 / 升级 / 排障 / B0–B11 模块运维（历史 [`maintenance/claude-desktop-runbook.md`](maintenance/claude-desktop-runbook.md) 为 stub）  
-4. [AGENTS.md](../AGENTS.md) — Skill 路由、Continuity、Closeout、Execution Ladder  
-5. [harness_architecture/](harness_architecture/index.md) — 五层模型、证据流、续跑（stdio + 手动画板，非 hook `GOAL_CONTINUE`）、扩展规则（含 `HARNESS_OPERATOR_NUDGES`）  
-6. [architecture/](architecture/INDEX.md) — 仓库架构总览（已从 `ARCHITECTURE.md` 拆分）、组件详解、数据流、安全模型、宿主集成  
-7. [rust_contracts/](rust_contracts/index.md) — 路由、profile、宿主集成、EVIDENCE_INDEX 等 Rust 业主  
-8. [task_state_unified_resolve.md](task_state_unified_resolve.md) — `ResolvedTaskView` / `framework task-state-resolve`  
+1. [仓库根 README.md](../README.md) — 项目简介、快速开始、宿主支持
+2. [ONBOARDING.md](ONBOARDING.md) — 详细安装教程、宿主配置、日常更新、FAQ
+3. [framework_operator_primer.md](framework_operator_primer.md) — 使用者一页纸：宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检 `framework doctor`
+4. [AGENTS.md](../AGENTS.md) — Skill 路由、Continuity、Closeout、Execution Ladder、MCP 工具安全拦截
+5. [spec.md](spec.md) — 统一规约：架构、五层模型、运行期沙箱、编排、跨宿主矩阵、接入契约、路由、Closeout、测试契约等
+6. [architecture/security.md](architecture/security.md) — MCP 工具安全拦截（§0 已实现于 `hook_policy/`）；§1+ 为计划中的完整安全体系（**status: aspirational**）
 
 ## 按主题
 
 | 主题 | 文档 |
 |------|------|
-| **闭集宿主 id / 退役矩阵（唯一枚举真源）** | [`configs/framework/RUNTIME_REGISTRY.json`](../configs/framework/RUNTIME_REGISTRY.json) → `host_targets.supported`；退役 id 与迁移见 [`MIGRATION.md`](../MIGRATION.md) §闭集宿主收敛。下文与 `AGENTS*.md` **勿重复列举**宿主名单。 |
 | 使用者视角：宿主差异、门控快查、阅读顺序 | [framework_operator_primer.md](framework_operator_primer.md) |
-| PDF / DOCX / XLSX / PPTX Rust CLI 安装与 batch | [references/office-document-clis.md](references/office-document-clis.md) |
+| 安装教程、日常更新、FAQ | [ONBOARDING.md](ONBOARDING.md) |
+| MCP 工具安全拦截（mcp-tool-safety） | [architecture/security.md §0](architecture/security.md#0-mcp-工具安全拦截层-mcp-tool-safety)、`AGENTS.md` § MCP 工具安全拦截 |
 | 可选 env / closeout 详表 | [references/AGENTS_OPERATOR_SURFACE.md](references/AGENTS_OPERATOR_SURFACE.md) |
 | Cursor 子代理 hook 契约（fork_context、review-lite） | [references/cursor-subagent-hook-contract.md](references/cursor-subagent-hook-contract.md) · [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`](../configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json) |
 | REVIEW_GATE strict vs review-lite ADR | [adr/ADR-review-gate-lite.md](adr/ADR-review-gate-lite.md) |
 | Env 命名模式（非第二份默认值表） | [framework_naming_conventions.md](framework_naming_conventions.md) |
-| 政策分层地图（operator profiles 依赖） | [harness_policy_map.md](harness_policy_map.md) |
-| RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [rfv_loop_harness.md](rfv_loop_harness.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
+| 政策分层地图（operator profiles 依赖） | [spec.md](spec.md) |
+| RFV 多轮账本（`framework_rfv_loop`）契约与 lane 模板；数理推理强度 | [spec.md](spec.md)，[references/rfv-loop/](references/rfv-loop/)（含 [math-reasoning-harness.md](references/rfv-loop/math-reasoning-harness.md)） |
 | 弱模型 / 上下文预算、Token 注入路径与 harness 合成交付 | 任务 ROADMAP：`artifacts/current/<task_id>/ROADMAP.md`；见 [plans/README.md](plans/README.md) |
-| Closeout 程序化门禁与 schema | [closeout_enforcement.md](closeout_enforcement.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
-| `framework_profile` 与默认面 | [framework_profile_contract.md](framework_profile_contract.md) |
-| 新宿主接入 / 多宿主适配 | [§3.1 工程清单](host_adapter_contract.md#31-可复制执行清单工程顺序)（文首 **快速路径** 同文件）；`RUNTIME_REGISTRY`、`runtime_registry`、`host_projection_narrative`、`GENERATED_ARTIFACTS` 见 [harness_architecture/02-data-flows.md §2.3](harness_architecture/02-data-flows.md#23-控制面配置与生成物2026-05-20-硬化)；多宿主 harness 契约见唯一真源 [host_adapter_contract.md](host_adapter_contract.md) |
-| 生成物 drift / doctor 快探针 | [harness_architecture/02-data-flows.md §2.3](harness_architecture/02-data-flows.md#23-控制面配置与生成物2026-05-20-硬化)；`framework host-integration generated-artifacts-status [--skip-generator-run]` |
+| Closeout 程序化门禁与 schema | [spec.md](spec.md)，`configs/framework/CLOSEOUT_RECORD_SCHEMA.json` |
+| `framework_profile` 与默认面 | [spec.md](spec.md) |
+| 新宿主接入 / 多宿主适配 | [spec.md](spec.md) |
+| 生成物 drift / doctor 快探针 | [spec.md](spec.md)；`framework host-integration generated-artifacts-status [--skip-generator-run]` |
 | 任务级 schema drift（hooks 7 事件闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题） | `router-rs schema-drift contract` / `baseline` / `check`（[`schema_drift.rs`](../core/router-rs/src/schema_drift.rs)）；验收见 [`skills/verifyx/SKILL.md`](../skills/verifyx/SKILL.md)、[`configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md`](../configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md) |
 | Cursor Plan / My 可验收 todo | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md)、[`skills/planx/SKILL.md`](../skills/planx/SKILL.md)；[`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc)；索引 [plans/README.md](plans/README.md) |
-| Codex 宿主投影边界 | [host_adapter_contract.md](host_adapter_contract.md)，[.codex/README.md](../.codex/README.md) |
-| 运行期核心行为与沙箱统一规约 | [runtime_unified_spec.md](runtime_unified_spec.md) |
+| Codex 宿主投影边界 | [spec.md](spec.md)，[.codex/README.md](../.codex/README.md) |
+| 运行期核心行为与沙箱统一规约 | [spec.md](spec.md) |
 | Python 环境治理（uv-only，热路由 `$python-env-management`） | [`skills/python-env-management/SKILL.md`](../skills/python-env-management/SKILL.md) |
 | 历史迁移、减法记录 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
-| 运维手册（Roadmap v5 模块 B0–B11） | [operations/index.md](operations/index.md)（历史 URL：[maintenance/claude-desktop-runbook.md](maintenance/claude-desktop-runbook.md) → stub 重定向） |
-| Roadmap v5 执行工件（本地手动画板） | [`artifacts/current/roadmap-v5-exec/`](../artifacts/current/roadmap-v5-exec/PROGRESS.md)；历史扫描/审查 md 索引 [`artifacts/current/INDEX.md`](../artifacts/current/INDEX.md) |
+| 统一运维手册（安装 / 同步 / 备份 / 故障排查） | [maintenance/ops-runbook.md](maintenance/ops-runbook.md) |
+| **Host projection schema 校验**（闭集 MCP Key 矩阵 + 写盘前/写盘后自检 + 已知 bug；2026-06-04 opencode 故障的根因档案） | [maintenance/host-projection-schema-validity.md](maintenance/host-projection-schema-validity.md) · 引用 [spec.md](spec.md) · [framework_naming_conventions.md §MCP Key Convention](framework_naming_conventions.md#mcp-key-convention闭集禁从一个-host-抄到另一个) |
 | Plans 索引（ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
+| Workflow supervisor phase 工件 | [`configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json`](../configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json) · [`skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md) |
 
 ## 概念与源码映射
 
-见 [harness_architecture/01-five-layer-model.md §8](harness_architecture/01-five-layer-model.md#8-文件映射)。
+见 [spec.md §2](spec.md#2-五层模型)。
 
 ## 已淘汰叙述（清理边界）
 
-- **勿在文档重复**闭集宿主五元组或退役 id 长表；唯一枚举真源为 `RUNTIME_REGISTRY.json` → `host_targets.supported`（`AGENTS.md` 仅保留一行指针）。
 - **勿假设** `router-rs` 只存在于 `core/router-rs/target/release/`。根目录 `.cargo/config.toml` 可将 `target-dir` 指到 workspace 统一目录；解析以 `cargo metadata` 的 `target_directory` 为准（或 `cargo build` / `cargo run` 的输出路径）。
 - **勿依赖** 旧版 `.cursor/hooks/*.sh` 脚本链：steady-state 以 [`.cursor/hooks.json`](../.cursor/hooks.json) 为准（**默认 7 事件**；见 [`docs/hosts/cursor.md`](hosts/cursor.md)）。Claude Code 为 [`.claude/settings.json`](../.claude/settings.json) **4 事件**（见 [`docs/hosts/claude.md`](hosts/claude.md)）。校验：`framework maint verify-cursor-hooks`；构建 release 见两宿主手册「内存 / release」。
 - **勿将** 已删除的 `docs/history/` 或过期 plan 路径当作当前契约；steady-state 仅认本索引列出的文档与 `configs/framework/*.json`。

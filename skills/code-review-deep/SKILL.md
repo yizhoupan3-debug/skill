@@ -27,21 +27,13 @@ trigger_hints:
   - CVE 审查
   - 供应链安全
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   platforms: [supported]
-  tags: [code-review, security, correctness, delegation, adversarial-review, codegraph]
-allowed_tools:
-  - mcp__mcp-codegraph__codegraph_search
-  - mcp__mcp-codegraph__codegraph_callers
-  - mcp__mcp-codegraph__codegraph_callees
-  - mcp__mcp-codegraph__codegraph_impact
-  - mcp__mcp-codegraph__codegraph_node
-  - mcp__mcp-codegraph__codegraph_status
+  tags: [code-review, security, correctness, delegation, adversarial-review]
 framework_roles:
   - detector
   - planner
   - verifier
-framework_phase: 1
 framework_contracts:
   emits_findings: true
   consumes_findings: false
@@ -86,43 +78,45 @@ Then: preamble (Scope / Lenses / Omitted), verdict, findings grouped by lens, te
 
 ### Spawn-first pairing
 
-For broad/deep/PR-level review, spawn **at least one** parallel read-only reviewer (`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts, prefer **>=2** lanes split by disjoint lens bundles, before main-thread compact synthesis.
+For broad/deep/PR-level review, spawn **at least one** parallel read-only reviewer (`fork_context=false`, lane in `deep_gate_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts, prefer **>=2** lanes split by disjoint lens bundles, before main-thread compact synthesis.
 
 **Narrow scope** (single-file, `small_task`, or explicit「不用子代理」): no multi-lane requirement; hosts skip arming `review_required`.
+
+**I7 heterogeneous requirement** (when `ROUTER_RS_HETEROGENEOUS_ADVERSARIAL_REVIEW=1`): at least one spawned reviewer must use a different model family than the primary session. The framework injects a `heterogeneous_review_hint_for_lane()` nudge naming the primary family; the spawn orchestration should select a cross-family model. Same-family self-review findings do **not** satisfy the I7 adversarial contract.
 
 - **Task / subagents**: **omit** `model` (inherit parent session). Fail with `Model not available` → retry without model or fall back to main-thread.
 
 ### REVIEW_GATE clearance
 
-**单一清门规则（Claude canonical · 2026-06）**
+**Cursor**: countable reviewer evidence per wave-2 (`start_count>=1`, multiset drained, no compact-alone forgery). `lifecycle_profile: my-light` does **not** hard-block Stop.
 
-| 条件 | 行为 |
-|------|------|
-| Armed | review 信号且非 My 执行区入口，且未 narrow-skip / override |
-| 清门 | `independent_reviewer_seen`（registry `reviewer_lanes` + explicit `fork_context=false` via PostTool/subagent）**或** `review_override` |
-| Stop 出站 | **advisory-only**——hook 可 nudge，**不**硬拦 Stop；`my-light` / `ROUTER_RS_REVIEW_GATE_DISABLE` suppress nudge 链 |
-| 非清门条件 | phase≥3、compact-only bump、Cursor multiset unsettled、Codex `subagent_start_count` — **遥测/提示 only** |
+**Claude Code**: `PostToolUse` observes `claude_reviewer_lanes` (registry `review_gate.claude_reviewer_lanes`) with `fork_context` parsed as logical `false`. Stop hard-blocks before `independent_reviewer_seen`. `my-light` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` disables hard-block.
 
-**Hook hosts**：Claude Code 为参考实现；Cursor/Codex 仅 transport 差异（nudge 文案前缀、`rg_clear`/`reject_reason` 粘贴面、multiset/`subagent_start_count` 遥测）。实现：`core-policy::review_gate_satisfied`；见 [`docs/host_adapter_contract.md`](../../docs/host_adapter_contract.md) §0.1。
-
-**MCP hosts（Antigravity / OpenCode）**：review 缺口经 MCP **advisory**（`ADVISORY`）；`closeout_gate` / `goal_state_manage complete` 可在证据未满足时 **hard-block**（与 review 分层）。见 [`host_adapter_contract.md`](../../docs/host_adapter_contract.md) §0.1、`ROUTER_RS_CLOSEOUT_ENFORCEMENT`。
-
-**Host countable evidence**: subagent lane（normalize 后）须在 `RUNTIME_REGISTRY.json` → `review_gate.reviewer_lanes`。`explore`、`ci-investigator`、`cursor-guide` 与自定义 lane **不计**——即使 `fork_context=false`。
+**Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.deep_gate_lanes`. `explore`, `ci-investigator`, `cursor-guide`, and custom lane names **do not count** on Cursor — even with `fork_context=false`.
 
 Lane outputs must cite **locations** (paths + anchors / symbols).
 
-## CodeGraph MCP（可选 · CG-5）
+## Factcheck gate（source-level ground truth）
 
-宿主已注册独立 `mcp-codegraph` 进程（`configs/framework/RUNTIME_REGISTRY.json` → `managed_mcp_servers.mcp-codegraph`）。**只读**核对传播范围与调用链，再写 findings；review-only  posture 不变。
+Deep review workflow（`claude-chain-deep-review`、`deep-review-template`）在 Merge 和 Verify 之间插入独立 **Factcheck 阶段**，专门拦截幻觉 finding：
 
-| 审稿场景 | 何时用 | 首选工具 |
-|----------|--------|----------|
-| 变更集 / PR | findings 前 blast radius | `codegraph_impact` |
-| 单点缺陷 | 符号定义与引用锚点 | `codegraph_node` |
-| 安全 lens | 可达调用链、横向传播 | `codegraph_callers` / `codegraph_callees` |
-| 广度审稿 | 模块入口与 owner | `codegraph_search` |
+- **职责边界**：Factcheck agent **只核查事实**（代码是否存在、evidence 是否原文引用、行号是否准确、行为描述是否与代码一致），**不做判断**（是否是 bug、severity 如何）。
+- **幻觉分类**：`code_not_exist`（代码不存在）、`evidence_fabricated`（evidence 为捏造/复述）、`wrong_line`（行号偏差）、`behavior_misrepresented`（行为描述有误）、`partial_hallucination`（部分准确部分幻觉）、`none`（全部准确）。
+- **拦截规则**：`code_exists=false` 或 `evidence_accurate=false` 的 finding 标记为 hallucinated，**不进入 Verify 阶段**。`behavior_misrepresented` 附带修正描述后可选进入 Verify。
+- **独立性**：Factcheck agent 与 Scan agent 必须是不同的 agent 实例（pipeline 自动保证）。Factcheck 不复用 Scan 的上下文，避免循环确认。
+- **输出 schema**：`FACTCHECK_VERDICT_SCHEMA`（定义在 `workflow-helpers.js`），包含 `code_exists`、`evidence_accurate`、`line_accurate`、`behavior_accurate`、`hallucination_type`、`actual_code`、`actual_behavior`。
+- **Skill 层 spawn**：非 workflow 上下文（如主会话直接 spawn review subagent）可使用 `factcheck-verifier` agent 定义（`.claude/agents/factcheck-verifier.md`），工具限制为 Read + Bash（只读）。
 
-**Fallback**：MCP 不可用时 reviewer lane 用 `Grep` / `Read`；在首条 finding 或 `Caveat:` 注明索引未校验。**禁止**因 codegraph 失败转入 implement / 改代码。
+## I7: heterogeneous adversarial review (model-family diversity)
+
+When the environment flag `ROUTER_RS_HETEROGENEOUS_ADVERSARIAL_REVIEW=1` is set **and** the prompt qualifies as broad/deep review (not narrow/single-file), the framework enforces model-family diversity:
+
+- **Primary model family** is detected from `ROUTER_RS_MODEL_FAMILY` (or host-injected `CLAUDE_MODEL` / `OPENAI_MODEL`). At least **one** reviewer subagent must use a **different** model family (e.g., primary=`claude` requires a `gpt`/`gemini`/`llama` reviewer).
+- The `heterogeneous_review_hint_for_lane()` nudge is injected into the reviewer prompt automatically by the host hooks (Claude/Cursor/Codex). This hint names the primary model family so the spawn orchestration can select a cross-family reviewer.
+- **`deep_gate_lanes`** countable evidence: a reviewer lane that satisfies the heterogeneous requirement **and** has `fork_context=false` (or inferred false) counts toward REVIEW_GATE clearance. Same-family self-review does **not** satisfy the I7 requirement.
+- In the RFV loop, the `metadata.heterogeneous_adversarial_review` block records `primary_model_family` alongside the config so round-to-round auditing is possible.
+
+**Operator**: set `ROUTER_RS_MODEL_FAMILY=gpt-4o` (or equivalent) to declare the primary session's model family when the host does not inject it automatically.
 
 ## External / network research lane
 

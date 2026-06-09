@@ -11,7 +11,8 @@
       "description": "Explicit opt-in research harness: non-manuscript + manuscript + citation + stats + repro + deep research.",
       "tier_activation": "explicit_opt_in",
       "skill_slugs": [
-        "research-workbench",
+        "research-discovery",
+        "research-execution",
         "paper-workbench",
         "citation-management",
         "statistical-analysis",
@@ -22,7 +23,7 @@
         "pdf",
         "plan-mode"
       ],
-      "entry_map": "skills/research-workbench/references/RESEARCH_HARNESS_UNIFIED.md"
+      "entry_map": "skills/research-discovery/SKILL.md"
     },
     "implementation_loadout": {
       "description": "My execution stack: implementx, verifyx, code-review-deep, gitx.",

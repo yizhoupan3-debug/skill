@@ -131,13 +131,10 @@ cargo run --manifest-path core/router-rs/Cargo.toml -- framework host-integratio
 ```bash
 cargo test --test policy_contracts
 cargo test --test documentation_contracts
-cargo test --test policy_markdown_links
-cargo test --test policy_cursor_rules_links
 cargo test --test tracked_markdown_utf8_contract
 cargo test --test rust_cli_tools
 cargo test --test host_integration
 cargo test --test browser_mcp_scripts
-cargo test --test codex_aggregator_rustification
 ```
 
 可选外网套件：

@@ -1,15 +1,13 @@
 ---
-last_verified: "2026-06-09"
+last_verified: "2026-06-02"
 depends_on:
   - ../host_adapter_contract.md
-  - ../harness_architecture/index.md
+  - ../spec.md
 ---
 
 # Cursor 宿主操作手册
 
 **闭集 id**：`cursor` · **传输**：cursor-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.cursor`
-
-**策略注入（双文件）**：须同时可读 [`AGENTS.md`](../../AGENTS.md)（跨宿主内核）与 [`AGENTS_CURSOR.md`](../../AGENTS_CURSOR.md)（Cursor transport delta only）；禁止合并、禁止在 delta 复述内核。
 
 ## 代理身份与画风 (Agent Identity & Style)
 
@@ -23,22 +21,29 @@ depends_on:
 在 Cursor 环境下，Harness 和任务管理的核心入口与工作区定义如下：
 
 - **Harness 核心入口**：
-  - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `goal_state_manage` MCP / `framework_goal_drive` stdio 推进宏任务。
-  - **任务状态治理**：`goal_state_manage` MCP / `framework_goal_drive` stdio 写 `GOAL_STATE.json`；Cursor **Stop** hook 用同一 `resolve_cursor_continuity_frame` / hydration 指针选 task，**不**单独扫 orphan。
+  - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
+  - **任务状态治理**：`framework_goal_drive` stdio（及 MCP `goal_state_manage`）写 `GOAL_STATE.json`；Cursor **Stop** hook 用同一 `resolve_cursor_continuity_frame` / hydration 指针选 task，**不**单独扫 orphan。
 - **工作区及状态产物**：
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
   - 结合 `beforeSubmitPrompt`、`stop`、`subagentStart`/`subagentStop`、`postToolUse`、`sessionStart`/`sessionEnd` 等 7 个核心事件进行行为守卫。
-  - **默认 `lifecycle_profile: my-light`** 在 **My 生命周期入口**（本轮含 `/discussx|/planx|/implementx|/verifyx`）或磁盘 `GOAL_STATE.lifecycle_profile: my-light` 时生效：`beforeSubmitPrompt` **不**注入 spawn-first nudge，Stop **suppress** `REVIEW_GATE` / `AG_FOLLOWUP` nudge；findings-only review 仍可用。**非 my-light** 会话 Stop 仍可能见 **`REVIEW_GATE` advisory** nudge（全宿主不硬拦 Stop；见 [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1、[`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)）。
+  - **默认 `lifecycle_profile: my-light`** 在 **My 生命周期入口**（本轮含 `/discussx|/planx|/implementx|/verifyx`）或磁盘 `GOAL_STATE.lifecycle_profile: my-light` 时生效：Stop **不**硬拦 `REVIEW_GATE`，`beforeSubmitPrompt` **不**注入 spawn-first nudge；findings-only review 仍可用。其它会话 Stop 可走硬 `REVIEW_GATE`（见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)）。
+
+## Fail-open / Fail-closed 设计意图
+
+Cursor 采用 **fail-closed** 策略：hook 二进制缺失时，关键门控事件返回 `decision:block`。这与 Claude Code / Codex CLI 一致。
+
+**设计理由**：Cursor 的 7 事件 hook 紧密嵌入会话生命周期（`stop` 可阻断提交、`beforeSubmitPrompt` 可注入 spawn-first nudge）。二进制损坏意味着安全关键路径断裂，fail-closed 避免 agent 在无审查状态下执行不可逆操作。
+
 
 ## Hook 事件矩阵
 
-**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../../MIGRATION.md)）。项目 env：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env)；`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../../core/router-rs/src/hosts/cursor_hooks/handlers.rs)）。
+**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../../MIGRATION.md)）。项目 env：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env)；`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../../core/router-rs/src/hosts/cursor_hooks/handlers/mod.rs)）。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `review_gate::run_review_gate` → `dispatch_cursor_hook_event` | 清门 **Claude canonical**（`independent_reviewer_seen` 或 override）；`.cursor/hook-state/review-subagent-*.json`；multiset / review-lite **仅遥测**（`ROUTER_RS_CURSOR_REVIEW_GATE_MODE`=`strict`|`lite`）；Stop **advisory** nudge 降频 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
+| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `cursor_hooks::execute_cursor_hook` → `CursorHookHost::dispatch` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；**`ROUTER_RS_CURSOR_REVIEW_GATE_MODE`**=`strict`（默认 multiset）或 `lite`（仅 `id:` pending）；`framework doctor` 打印 mode；Stop 硬提示上限 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
 | Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../core/router-rs/src/hosts/cursor_hooks/mod.rs) | **my-light Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 my-light 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
 | **Paper prose L4** | beforeSubmit 命中 `has_paper_prose_edit_context` | `paper_prose_hook.rs` | 合并 `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK`，`0` 关）；对抗审稿 opt-in：`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` |
 | **SessionStart** | SessionStart | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` 单行（`ROUTER_RS_OPERATOR_INJECT=0` 时为空）；**无** digest / 无 pointer hint |
@@ -46,7 +51,7 @@ depends_on:
 
 **排障（短）**：
 
-- **`fork_context` 缺省**：**unset=关**（须 JSON 显式 `fork_context: false` 或 enable `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` / legacy `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE=1` 才可推断 `false`）。显式 `fork_context: true` 永不算。
+- **`fork_context` 缺省**：默认 **`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 开启**时可推断 `false`；关闭后仅布尔 `false` 计独立证据。显式 `fork_context: true` 永不算。
 - **磁盘 `GOAL_STATE` 与 pre-goal**：默认 strict；legacy 宽松设 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=0|false|off|no`。
 - **`cursor-router-rs-hook.sh` exit code**：critical 事件（beforeSubmit/Stop/postToolUse/subagentStart/subagentStop）在 `router-rs` 缺失时 **fail-closed**；其余 **fail-open**。
 - **fail-closed 出站字段（按事件）**：beforeSubmit / PostTool（review-armed 锁失败）/ Stop（部分路径）→ `"continue": false`；subagentStart（限额/锁失败）→ `"permission": "deny"`。launcher 缺 binary 时 PostTool 亦 `continue:false`。
@@ -67,7 +72,7 @@ depends_on:
 | 双聊天互相影响 | 同 `cwd` 共桶 | 各聊天设 **`ROUTER_RS_CURSOR_SESSION_NAMESPACE`**（见 `.cursor/router-rs-hook.env` 注释） |
 | `CLOSEOUT_FOLLOWUP`（my-light） | 无磁盘 goal 仍声称完成 | 仅 hydration 有 `GOAL_STATE` 时触发；口语「完成了」不应再拦 |
 
-**PostToolUse timeout**：门控事件默认 **20s**（`hooks.json`）；超时可能导致 `independent_reviewer_seen` 未落盘 → Stop **advisory** nudge 重复。慢盘先查 hook-state 体积与锁 stderr（`hook-state lock held`）。
+**PostToolUse timeout**：门控事件默认 **20s**（`hooks.json`）；`postToolUse` 超时会导致 review multiset 不完整 → Stop 循环。慢盘先查 hook-state 体积与锁 stderr（`hook-state lock held`）。
 
 **router-rs 缺失**：critical 事件 **fail-closed**（`continue:false` / 工具拒绝）；确保 `core/router-rs/target/release/router-rs` 存在或 `ROUTER_RS_BIN` 指向二进制。
 
@@ -83,9 +88,9 @@ depends_on:
   - **Framework 叙事**：**User only**，路径为 `~/.cursor/rules/framework.mdc`。
   - **Harness hooks**：**Project**，路径为 `<repo>/.cursor/hooks.json`、`.cursor/router-rs-hook.env`。
   - **Review / execution gate 规则**：**Project**，路径为 `<repo>/.cursor/rules/*.mdc`。
-  - **Framework slash commands / agents**：**Project**，路径为 `<repo>/.cursor/commands/*.md`（`discussx`、`planx`、`implementx`、`verifyx`、`gitx`、`update`、`deepinterview`）、`.cursor/agents/deep-reviewer.md`。
+  - **My lifecycle commands / agents**：**Project**，路径为 `<repo>/.cursor/commands/*.md`（含 `/discussx`、`/planx`、`/implementx`、`/verifyx`、**`/workflow`**）、`.cursor/agents/deep-reviewer.md`。
   - **Hook state**：**Project**，路径为 `<repo>/.cursor/hook-state/`。
-  - **说明**：上述 project L4 面 **不在** `GENERATED_ARTIFACTS` drift-gate 内（手维护）；`framework host-integration install --to cursor` **不**托管 hooks。完整清单见 [`harness_architecture/02-data-flows.md`](../harness_architecture/02-data-flows.md) §2.3。
+  - 说明：上述 project L4 面 不在 GENERATED_ARTIFACTS drift-gate 内（手维护）；framework host-integration install --to cursor 不托管 hooks。完整清单见 [`spec.md`](../spec.md) §13。
 - **环境安装命令**：
   ```bash
   cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
@@ -109,7 +114,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
 2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](../../skills/planx/SKILL.md)），明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
-   - **执行 Profile 调优**：`lifecycle_profile: my-light` 在 My 入口斜杠或磁盘 `GOAL_STATE` 时生效（suppress Stop 上 `REVIEW_GATE` / `AG_FOLLOWUP` nudge 与 `beforeSubmitPrompt` spawn-first；findings-only review 仍可用）。
+   - **执行 Profile 调优**：`lifecycle_profile: my-light` 在 My 入口斜杠或磁盘 `GOAL_STATE` 时生效（关闭 Stop 上 `REVIEW_GATE` 硬拦与 `beforeSubmitPrompt` spawn-first nudge；findings-only review 仍可用）。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
 
 ## Python 环境治理 (Python Environment)
