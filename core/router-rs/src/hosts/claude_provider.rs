@@ -77,7 +77,7 @@ impl HostProvider for ClaudeHostProvider {
         HostCapabilities {
             has_native_hook: true,
             supports_subagent: true,
-            supports_worktree: false,
+            supports_worktree: true,
             mcp_config_key: "",
             transport_type: "anthropic-claude-code",
             config_path: ".claude/settings.json",

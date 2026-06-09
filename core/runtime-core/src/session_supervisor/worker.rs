@@ -1,25 +1,20 @@
+use super::driver::{
+    build_driver_command, default_resume_mode, driver_id_for_host, ensure_lane_contract_metadata,
+};
+use super::runtime::{
+    add_seconds_rfc3339, launch_in_tmux, optional_bool, optional_i64, optional_non_empty_string,
+    parse_rfc3339, push_event, required_non_empty_string, run_tmux, sanitize_segment,
+    send_command_to_tmux, tmux_session_exists, upsert_worker,
+};
+use super::types::*;
 use chrono::Utc;
 use regex::Regex;
 use serde_json::{json, Map, Value};
-use std::path::Path;
 use std::sync::OnceLock;
 
-use super::driver::{build_driver_command, default_resume_mode, driver_id_for_host};
-use super::process::{launch_process, process_is_alive, terminate_process};
-use super::runtime::{
-    add_seconds_rfc3339, ensure_lane_contract_metadata, optional_i64,
-    optional_non_empty_string, push_event, required_non_empty_string, sanitize_segment,
-    upsert_worker, worker_log_path,
-};
-use super::types::{
-    BlockClassification, SessionSupervisorStore, WorkerSessionRecord,
-    DEFAULT_BACKOFF_SECONDS,
-};
-
-pub(crate) fn launch_worker(
+pub(super) fn launch_worker(
     payload: &Value,
     store: &mut SessionSupervisorStore,
-    state_path: &Path,
     dry_run: bool,
     now: &str,
 ) -> Result<WorkerSessionRecord, String> {
@@ -36,6 +31,9 @@ pub(crate) fn launch_worker(
             Utc::now().timestamp_millis()
         )
     });
+    let tmux_session = optional_non_empty_string(payload, "tmux_session")
+        .unwrap_or_else(|| format!("supervisor-{}", sanitize_segment(&worker_id)));
+    let native_tmux_requested = optional_bool(payload, "native_tmux").unwrap_or(false);
     let worktree_name_val = optional_non_empty_string(payload, "worktree_name");
     let worktree_path_val = optional_non_empty_string(payload, "worktree_path");
     let launch_command = build_driver_command(
@@ -45,6 +43,7 @@ pub(crate) fn launch_worker(
         resume_target.clone(),
         &resume_mode,
         false,
+        native_tmux_requested,
         worktree_name_val.clone(),
         worktree_path_val.clone(),
     )?;
@@ -55,15 +54,14 @@ pub(crate) fn launch_worker(
         resume_target.clone(),
         &resume_mode,
         true,
+        native_tmux_requested,
         worktree_name_val,
         worktree_path_val,
     )?);
     let retry_policy = payload
         .get("retry_policy")
         .cloned()
-        .unwrap_or_else(|| {
-            json!({"kind": "rate_limit_auto_resume", "default_backoff_seconds": DEFAULT_BACKOFF_SECONDS})
-        });
+        .unwrap_or_else(|| json!({"kind": "rate_limit_auto_resume", "default_backoff_seconds": DEFAULT_BACKOFF_SECONDS}));
     let mut metadata = payload
         .get("metadata")
         .cloned()
@@ -84,8 +82,8 @@ pub(crate) fn launch_worker(
         cwd: cwd.clone(),
         worktree_path: optional_non_empty_string(payload, "worktree_path"),
         status: "launching".to_string(),
-        pid: None,
-        log_path: None,
+        tmux_session: Some(tmux_session.clone()),
+        tmux_pane: None,
         attached_session_id: optional_non_empty_string(payload, "attached_session_id"),
         resume_target,
         resume_mode: Some(resume_mode),
@@ -95,6 +93,7 @@ pub(crate) fn launch_worker(
         prompt,
         launch_command,
         resume_command,
+        native_tmux_requested,
         last_error: None,
         created_at: now.to_string(),
         updated_at: now.to_string(),
@@ -112,11 +111,9 @@ pub(crate) fn launch_worker(
             Some("dry_run launch planned".to_string()),
         );
     } else {
-        let process_cwd = worker.worktree_path.as_deref().unwrap_or(&cwd);
-        let log_path = worker_log_path(state_path, &worker.worker_id);
-        let spawn = launch_process(&worker.launch_command, process_cwd, &log_path)?;
-        worker.pid = Some(spawn.pid);
-        worker.log_path = Some(spawn.log_path);
+        let tmux_cwd = worker.worktree_path.as_deref().unwrap_or(&cwd);
+        let spawn = launch_in_tmux(&worker.launch_command, &tmux_session, tmux_cwd)?;
+        worker.tmux_pane = Some(spawn.pane_id);
         worker.status = "running".to_string();
         worker.updated_at = now.to_string();
         push_event(
@@ -124,7 +121,7 @@ pub(crate) fn launch_worker(
             "launched",
             "running",
             now,
-            Some(format!("pid {}", spawn.pid)),
+            Some(format!("tmux session {}", tmux_session)),
         );
     }
 
@@ -132,7 +129,7 @@ pub(crate) fn launch_worker(
     Ok(worker)
 }
 
-pub(crate) fn mark_worker_blocked(
+pub(super) fn mark_worker_blocked(
     worker: &mut WorkerSessionRecord,
     payload: &Value,
     now: &str,
@@ -170,9 +167,8 @@ pub(crate) fn mark_worker_blocked(
     Ok(classification)
 }
 
-pub(crate) fn resume_worker(
+pub(super) fn resume_worker(
     worker: &mut WorkerSessionRecord,
-    state_path: &Path,
     dry_run: bool,
     now: &str,
 ) -> Result<String, String> {
@@ -180,6 +176,10 @@ pub(crate) fn resume_worker(
         .resume_command
         .clone()
         .ok_or_else(|| format!("Worker {} has no resume command", worker.worker_id))?;
+    let session_name = worker
+        .tmux_session
+        .clone()
+        .unwrap_or_else(|| format!("supervisor-{}", sanitize_segment(&worker.worker_id)));
 
     if dry_run {
         worker.status = "resume_scheduled".to_string();
@@ -194,17 +194,25 @@ pub(crate) fn resume_worker(
         return Ok("dry_run".to_string());
     }
 
-    if let Some(pid) = worker.pid {
-        if process_is_alive(pid) {
-            terminate_process(pid)?;
-        }
+    if tmux_session_exists(&session_name) {
+        send_command_to_tmux(&session_name, &command.shell_command)?;
+        worker.status = "running".to_string();
+        worker.blocked_reason = None;
+        worker.next_resume_at = None;
+        worker.updated_at = now.to_string();
+        push_event(
+            worker,
+            "resumed",
+            "running",
+            now,
+            Some("reused existing tmux session".to_string()),
+        );
+        return Ok("send_keys".to_string());
     }
 
-    let process_cwd = worker.worktree_path.as_deref().unwrap_or(&worker.cwd);
-    let log_path = worker_log_path(state_path, &worker.worker_id);
-    let spawn = launch_process(&command, process_cwd, &log_path)?;
-    worker.pid = Some(spawn.pid);
-    worker.log_path = Some(spawn.log_path.clone());
+    let spawn = launch_in_tmux(&command, &session_name, &worker.cwd)?;
+    worker.tmux_session = Some(session_name.clone());
+    worker.tmux_pane = Some(spawn.pane_id);
     worker.status = "running".to_string();
     worker.blocked_reason = None;
     worker.next_resume_at = None;
@@ -214,12 +222,12 @@ pub(crate) fn resume_worker(
         "resumed",
         "running",
         now,
-        Some(format!("respawned pid {}", spawn.pid)),
+        Some(format!("created tmux session {}", session_name)),
     );
-    Ok("respawn".to_string())
+    Ok("new_session".to_string())
 }
 
-pub(crate) fn terminate_worker(
+pub(super) fn terminate_worker(
     worker: &mut WorkerSessionRecord,
     dry_run: bool,
     now: &str,
@@ -237,9 +245,9 @@ pub(crate) fn terminate_worker(
         return Ok(true);
     }
 
-    if let Some(pid) = worker.pid {
-        if process_is_alive(pid) {
-            terminate_process(pid)?;
+    if let Some(session_name) = worker.tmux_session.clone() {
+        if tmux_session_exists(&session_name) {
+            run_tmux(["kill-session", "-t", session_name.as_str()])?;
         }
     }
     worker.status = "interrupted".to_string();
@@ -249,54 +257,12 @@ pub(crate) fn terminate_worker(
         "terminated",
         "interrupted",
         now,
-        Some("worker process terminated".to_string()),
+        Some("tmux session terminated".to_string()),
     );
     Ok(true)
 }
 
-/// Reap workers stuck in active statuses without a live PID past `stale_after_secs`.
-pub(crate) fn reap_stale_workers(
-    workers: &mut [WorkerSessionRecord],
-    now: &str,
-    stale_after_secs: i64,
-) -> Result<(), String> {
-    if stale_after_secs <= 0 {
-        return Ok(());
-    }
-    let now_dt = super::runtime::parse_rfc3339(now)?;
-    for worker in workers.iter_mut() {
-        if !matches!(
-            worker.status.as_str(),
-            "queued" | "launching" | "running" | "resume_scheduled"
-        ) {
-            continue;
-        }
-        if let Some(pid) = worker.pid {
-            if process_is_alive(pid) {
-                continue;
-            }
-        }
-        let updated = super::runtime::parse_rfc3339(&worker.updated_at)?;
-        let age = now_dt.signed_duration_since(updated).num_seconds();
-        if age <= stale_after_secs {
-            continue;
-        }
-        worker.status = "interrupted".to_string();
-        worker.updated_at = now.to_string();
-        push_event(
-            worker,
-            "stale_timeout",
-            "interrupted",
-            now,
-            Some(format!(
-                "worker stale after {age}s (threshold {stale_after_secs}s)"
-            )),
-        );
-    }
-    Ok(())
-}
-
-pub(crate) fn worker_ready_for_resume(worker: &WorkerSessionRecord, now: &str) -> Result<bool, String> {
+pub(super) fn worker_ready_for_resume(worker: &WorkerSessionRecord, now: &str) -> Result<bool, String> {
     if !matches!(
         worker.status.as_str(),
         "blocked_rate_limit" | "resume_scheduled"
@@ -306,8 +272,8 @@ pub(crate) fn worker_ready_for_resume(worker: &WorkerSessionRecord, now: &str) -
     let Some(next_resume_at) = worker.next_resume_at.as_deref() else {
         return Ok(false);
     };
-    let next_time = super::runtime::parse_rfc3339(next_resume_at)?;
-    Ok(super::runtime::parse_rfc3339(now)? >= next_time)
+    let next_time = parse_rfc3339(next_resume_at)?;
+    Ok(parse_rfc3339(now)? >= next_time)
 }
 
 pub fn classify_rate_limit_block(
@@ -316,10 +282,12 @@ pub fn classify_rate_limit_block(
 ) -> Result<BlockClassification, String> {
     let lowered = host.trim().to_ascii_lowercase();
     let mut matched = match lowered.as_str() {
-        "codex" | "codex-cli" => detect_rate_limit(evidence_text, codex_rate_limit_patterns()),
-        // Generic fallback: use common HTTP 429 / rate-limit patterns that
-        // apply to claude-code, cursor, and any future host.
-        _other => detect_rate_limit(evidence_text, generic_rate_limit_patterns()),
+        "codex" => detect_rate_limit(evidence_text, codex_rate_limit_patterns()),
+        other => {
+            return Err(format!(
+                "Unsupported session supervisor host for rate-limit classification: {other}"
+            ))
+        }
     };
     if let Some(classification) = matched.as_mut() {
         classification.host = lowered;
@@ -381,26 +349,6 @@ fn codex_rate_limit_patterns() -> &'static [Regex] {
                 Regex::new("(?i)too many requests").expect("valid regex"),
                 Regex::new("(?i)429").expect("valid regex"),
                 Regex::new("(?i)overloaded").expect("valid regex"),
-            ]
-        })
-        .as_slice()
-}
-
-/// Generic rate-limit patterns that work across hosts (claude-code, cursor,
-/// opencode, antigravity, and any future host).  These match the common HTTP
-/// 429 / rate-limit vocabulary that all LLM APIs share.
-fn generic_rate_limit_patterns() -> &'static [Regex] {
-    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
-    PATTERNS
-        .get_or_init(|| {
-            vec![
-                Regex::new("(?i)rate limit").expect("valid regex"),
-                Regex::new("(?i)too many (?:requests|queries)").expect("valid regex"),
-                Regex::new("(?i)\\b429\\b").expect("valid regex"),
-                Regex::new("(?i)overloaded").expect("valid regex"),
-                Regex::new("(?i)try again (?:later|in)").expect("valid regex"),
-                Regex::new("(?i)quota exceeded").expect("valid regex"),
-                Regex::new("(?i)usage limit").expect("valid regex"),
             ]
         })
         .as_slice()

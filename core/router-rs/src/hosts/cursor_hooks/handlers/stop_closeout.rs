@@ -116,11 +116,13 @@ fn stop_hard_closeout_followup_for_assistant_response(
         return None;
     }
     let frame = crate::task_state::resolve_cursor_continuity_frame(repo_root);
+    // Pointer 机制已移除：先尝试 frame，再回退到 task_registry.json
     let tid = frame
         .hydration_goal
         .map(|(_, task_id)| task_id)
         .or(frame.pointer_view.task_id)
-        .filter(|s| !s.is_empty())?;
+        .filter(|s| !s.is_empty())
+        .or_else(|| crate::framework_runtime::first_task_id_from_registry(repo_root))?;
     match closeout_followup_for_completion_claim(repo_root, &tid) {
         Ok(Some(msg)) => Some(msg),
         Ok(None) => None,

@@ -262,6 +262,40 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     Ok(result)
 }
 
+/// Read task pointer files directly from `artifacts/current/` (replaces removed `read_task_pointer_pair`).
+/// Tries `TASK_POINTERS.json` first, then falls back to individual `active_task.json` / `focus_task.json`.
+fn read_local_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<String>) {
+    let current = repo_root.join("artifacts/current");
+    // Phase 3C consolidated file
+    let pointers_path = current.join("TASK_POINTERS.json");
+    if pointers_path.is_file() {
+        if let Ok(raw) = fs::read_to_string(&pointers_path) {
+            if let Ok(data) = serde_json::from_str::<Value>(&raw) {
+                let active = parse_pointer_task_id(data.get("active_task_id"));
+                let focus = parse_pointer_task_id(data.get("focus_task_id"));
+                if active.is_some() || focus.is_some() {
+                    return (active, focus);
+                }
+            }
+        }
+    }
+    // Legacy individual files
+    let active = read_single_pointer(&current.join("active_task.json"));
+    let focus = read_single_pointer(&current.join("focus_task.json"));
+    (active, focus)
+}
+
+fn parse_pointer_task_id(value: Option<&Value>) -> Option<String> {
+    let s = value?.as_str()?.trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
+}
+
+fn read_single_pointer(path: &Path) -> Option<String> {
+    let raw = fs::read_to_string(path).ok()?;
+    let data: Value = serde_json::from_str(&raw).ok()?;
+    parse_pointer_task_id(data.get("task_id"))
+}
+
 /// Continuity audit: check task pointers, registry consistency, and orphan directories.
 pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
     let mut issues: Vec<String> = Vec::new();
@@ -277,8 +311,8 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
         }));
     }
 
-    // Check task pointers
-    let (active_task_id, focus_task_id) = read_task_pointer_pair(repo_root);
+    // Read task pointers directly from pointer files (pointer helpers removed from core_state)
+    let (active_task_id, focus_task_id) = read_local_task_pointer_pair(repo_root);
     let active_dir = active_task_id.as_ref().map(|id| current_dir.join(id));
     let focus_dir = focus_task_id.as_ref().map(|id| current_dir.join(id));
 
@@ -310,7 +344,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
         info.push("focus_task.json: not set".to_string());
     }
 
-    // Check for dangling focus pointer (points to non-existent task)
+    // Check for dangling focus pointer
     if let (Some(focus_id), false) = (
         &focus_task_id,
         focus_dir.as_ref().map_or(true, |d| d.is_dir()),
@@ -319,7 +353,6 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
             "DANGLING POINTER: focus_task.json references '{}' but directory does not exist",
             focus_id
         ));
-        // Suggest fix
         if active_task_id.is_some() {
             warnings.push(format!(
                 "Suggested fix: set focus_task.json to '{}' or clear it",

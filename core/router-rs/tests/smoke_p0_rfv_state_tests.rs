@@ -1,5 +1,5 @@
 //! Roadmap v5 §6.2 P0: `state_manager/rfv_state` coverage at router-rs boundary
-//! (physical module: `core/antigravity` → `core_state::state_manager`).
+//! (physical module: `core/core-state` → `core_state::state_manager`).
 
 use core_state::state_manager::{
     read_rfv_loop_state, rfv_loop_state_path, write_active_task_pointer,

@@ -596,6 +596,15 @@ fn write_active_task(repo: &Path, task_id: &str) {
     fs::create_dir_all(p.parent().unwrap()).expect("mkdir artifacts/current");
     fs::write(p, format!(r#"{{"task_id":"{task_id}"}}"#)).expect("write active_task");
     fs::create_dir_all(repo.join("artifacts/current").join(task_id)).expect("mkdir task dir");
+    // Pointer 机制已移除：同时写入 task_registry.json 供回退使用
+    let registry_path = repo.join("artifacts/current/task_registry.json");
+    let registry = serde_json::json!({
+        "schema_version": "task-registry-v1",
+        "focus_task_id": task_id,
+        "tasks": [{ "task_id": task_id }]
+    });
+    fs::write(&registry_path, serde_json::to_string(&registry).unwrap())
+        .expect("write task_registry");
 }
 
 fn write_closeout_record(repo: &Path, task_id: &str, body: &str) {
@@ -1113,6 +1122,12 @@ fn stop_closeout_uses_hydration_task_when_active_completed_and_focus_running() {
         r#"{"task_id":"drive-focus"}"#,
     )
     .expect("focus ptr");
+    // Pointer 机制已移除：写入 task_registry.json 供回退使用
+    fs::write(
+        repo.join("artifacts/current/task_registry.json"),
+        r#"{"schema_version":"task-registry-v1","focus_task_id":"drive-focus","tasks":[{"task_id":"done-active"},{"task_id":"drive-focus"}]}"#,
+    )
+    .expect("task registry");
     fs::write(
         repo.join("artifacts/current/done-active/GOAL_STATE.json"),
         r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"done","status":"completed","drive_until_done":false,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
@@ -1237,6 +1252,12 @@ fn my_skips_pre_goal_nag_when_goal_state_on_disk() {
         r#"{"task_id":"gt1"}"#,
     )
     .expect("active");
+    // Pointer 机制已移除：写入 task_registry.json 供回退使用
+    fs::write(
+        repo.join("artifacts/current/task_registry.json"),
+        r#"{"schema_version":"task-registry-v1","focus_task_id":"gt1","tasks":[{"task_id":"gt1"}]}"#,
+    )
+    .expect("task registry");
     crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
@@ -4241,6 +4262,12 @@ fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
         r#"{"task_id":"strict-stop"}"#,
     )
     .expect("active_task");
+    // Pointer 机制已移除：写入 task_registry.json 供回退使用
+    fs::write(
+        repo.join("artifacts/current/task_registry.json"),
+        r#"{"schema_version":"task-registry-v1","focus_task_id":"strict-stop","tasks":[{"task_id":"strict-stop"}]}"#,
+    )
+    .expect("task registry");
     crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": repo.display().to_string(),
         "operation": "start",
@@ -5089,6 +5116,12 @@ fn goal_stop_followup_is_short_code_only() {
         r#"{"task_id":"t-s17"}"#,
     )
     .expect("active");
+    // Pointer 机制已移除：写入 task_registry.json 供回退使用
+    fs::write(
+        repo.join("artifacts/current/task_registry.json"),
+        r#"{"schema_version":"task-registry-v1","focus_task_id":"t-s17","tasks":[{"task_id":"t-s17"}]}"#,
+    )
+    .expect("task registry");
     crate::autopilot_goal::framework_goal_drive(json!({
         "repo_root": cwd,
         "operation": "start",
@@ -6410,6 +6443,8 @@ fn cursor_launcher_fail_open_session_start_when_router_rs_missing() {
     let empty_ws =
         env::temp_dir().join(format!("cursor-launcher-fail-open-{}", std::process::id()));
     fs::create_dir_all(&empty_ws).expect("empty workspace");
+    let empty_target = empty_ws.join("no-cargo-target");
+    fs::create_dir_all(&empty_target).expect("empty target dir");
     let isolated_home = empty_ws.join("home");
     fs::create_dir_all(&isolated_home).expect("isolated home");
 
@@ -6417,17 +6452,22 @@ fn cursor_launcher_fail_open_session_start_when_router_rs_missing() {
         .arg(&launcher)
         .arg("SessionStart")
         .env_remove("ROUTER_RS_BIN")
+        .env("CARGO_TARGET_DIR", &empty_target)
         .env("HOME", &isolated_home)
         .env("PATH", "/usr/bin:/bin")
         .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
         .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
         .output()
         .expect("run launcher");
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
         output.status.code(),
         Some(0),
-        "telemetry SessionStart must fail-open; stderr={}",
-        String::from_utf8_lossy(&output.stderr)
+        "telemetry SessionStart must fail-open; stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("fail-open"),
+        "SessionStart must log fail-open when router-rs missing; stderr={stderr}"
     );
 }
 

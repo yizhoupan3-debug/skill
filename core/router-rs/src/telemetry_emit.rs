@@ -5,7 +5,7 @@ use framework_kernel::{emit_telemetry, PredictionOutcomeCheck, TelemetryEvent};
 use serde_json::{json, Value};
 use std::path::Path;
 
-use crate::autopilot_goal::{framework_goal_drive as goal_drive_inner, read_active_task_id, read_goal_state};
+use crate::autopilot_goal::{framework_goal_drive as goal_drive_inner, read_goal_state};
 use crate::route::RouteDecision;
 
 pub fn emit_route_decision(query: &str, decision: &RouteDecision, reroute: bool) {
@@ -158,10 +158,7 @@ pub fn hook_action_from_optional_output(output: Option<&Value>) -> &'static str 
 
 fn read_goal_phase(repo_root: Option<&str>, task_id: Option<&str>) -> Option<String> {
     let repo = Path::new(repo_root?);
-    let tid = task_id
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .or_else(|| read_active_task_id(repo))?;
+    let tid = task_id.filter(|s| !s.is_empty()).map(str::to_string)?;
     read_goal_state(repo, Some(&tid))
         .ok()
         .flatten()

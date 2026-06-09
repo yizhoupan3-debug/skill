@@ -136,9 +136,8 @@ pub(crate) fn dispatch_framework_command(command: FrameworkCommand) -> Result<()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(str::to_string)
-                .or_else(|| crate::autopilot_goal::read_active_task_id(&repo_root))
                 .ok_or_else(|| {
-                    "framework task-state-aggregate-sync requires --task-id or active_task.json"
+                    "framework task-state-aggregate-sync requires --task-id (pointer fallback removed)"
                         .to_string()
                 })?;
             crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id)?;

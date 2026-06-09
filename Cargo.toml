@@ -10,19 +10,23 @@ which = "8"
 regex = "1.11"
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde_json = "1.0"
-serde_yml = "=0.0.12"  # serde_yaml 0.9 已归档; serde_yml 0.0.12 是最后完整实现版本
+serde_yml = "=0.0.12"
 tempfile = "3.15"
 
 [workspace]
 members = [
     ".",
     "cli/antigravity-cli",
-    "core/antigravity",
+    "core/core-state",
     "core/framework-kernel",
     "core/core-policy",
     "core/core-math",
     "core/routing-engine",
     "core/router-rs",
+    "core/router-rs-cli",
+    "core/runtime-core",
+    "core/browser-mcp",
+    "core/host-projection",
     "core/autoresearch-rs",
     "core/evolution-rs",
     "core/codegraph-rs",
@@ -36,13 +40,16 @@ members = [
     "rust_tools/ref_corpus_tool_rs",
     "rust_tools/pptx_tool_rs",
     "rust_tools/pubmed_tool_rs",
-    "rust_tools/screenshot_rs",
-    "rust_tools/pdf_tool_rs"
+    "rust_tools/screenshot_rs"
 ]
 exclude = [
     "codex-aggregator"
 ]
 resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.80"
 
 [workspace.dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
@@ -53,4 +60,3 @@ codegen-units = 1
 opt-level = 3
 panic = "abort"
 strip = true
-

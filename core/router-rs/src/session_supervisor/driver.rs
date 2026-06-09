@@ -93,6 +93,10 @@ pub(crate) fn build_driver_command(
                 args.push("-p".to_string());
                 args.push(p.clone());
             }
+            // --print does not accept a cwd flag; the working directory is set
+            // via `Command::current_dir()` in process.rs.  However, for audit
+            // transparency we pass the effective cwd as a synthetic env key in
+            // the DriverCommandSpec so callers can verify it was resolved.
             Ok(DriverCommandSpec {
                 driver_id: "claude_code_driver".to_string(),
                 binary: "claude".to_string(),

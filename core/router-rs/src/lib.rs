@@ -8,7 +8,13 @@ pub mod goal_drive {
         read_active_task_id, read_focus_task_id, read_primary_task_id,
     };
 }
-mod background_state;
+// Re-exports from runtime-core (migrated modules)
+pub use runtime_core::background_state;
+pub use runtime_core::runtime_envelope_ids;
+pub use runtime_core::runtime_storage;
+pub use runtime_core::session_supervisor;
+pub use runtime_core::trace_runtime;
+
 mod browser_mcp;
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
@@ -63,10 +69,7 @@ mod router_rs_observation;
 pub mod router_self;
 mod schema_drift;
 mod ship_readiness;
-mod runtime_envelope_ids;
-mod runtime_storage;
 mod session_call_tracker;
-mod session_supervisor;
 mod skill_repo;
 mod stdio_payload_types;
 mod stdio_transport;
@@ -91,7 +94,6 @@ mod formal_toolchain {
     pub use core_math::ascii_lower_contains_formal_toolchain_tokens;
 }
 
-mod trace_runtime;
 mod web_fetch_guard;
 
 #[cfg(test)]
@@ -213,6 +215,10 @@ mod smoke_p0_trace_runtime_compaction_tests;
 #[cfg(test)]
 #[path = "../tests/smoke_p0_router_self_tests.rs"]
 mod smoke_p0_router_self_tests;
+
+#[cfg(test)]
+#[path = "../tests/smoke_workspace_dag_compliance_tests.rs"]
+mod smoke_workspace_dag_compliance_tests;
 
 #[cfg(test)]
 #[path = "../tests/hook_contract/mod.rs"]

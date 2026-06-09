@@ -65,7 +65,7 @@ fn mcp_closeout_gate_review_goal_without_evidence_advisory() {
         )
         .unwrap();
 
-        let out = call_closeout_gate(&repo, host, &json!({}));
+        let out = call_closeout_gate(&repo, host, &json!({"task_id": task_id}));
         assert!(
             out.contains("WARN: review_gate: GOAL suggests review work"),
             "{host} must WARN when review goal lacks evidence; got {out}"
@@ -108,7 +108,7 @@ fn mcp_closeout_gate_review_lanes_clear_review_warn() {
         .unwrap();
         std::fs::write(review_lanes.join("lane-a.md"), "[P2] example — ok").unwrap();
 
-        let out = call_closeout_gate(&repo, host, &json!({}));
+        let out = call_closeout_gate(&repo, host, &json!({"task_id": task_id}));
         assert!(
             !out.contains("WARN: review_gate: GOAL suggests review work"),
             "{host} review-lanes should clear review WARN; got {out}"

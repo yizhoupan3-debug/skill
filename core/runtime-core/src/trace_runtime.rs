@@ -3,7 +3,6 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use hex;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -33,7 +32,8 @@ pub struct TraceRecordEventRequestPayload {
     pub event_schema_version: String,
     pub generation: usize,
     pub seq: usize,
-    pub session_id: String,
+    #[serde(alias = "session_id")]
+    pub run_id: String,
     pub job_id: Option<String>,
     pub kind: String,
     pub stage: String,
@@ -63,7 +63,8 @@ pub struct TraceCompactRequestPayload {
     pub root_path: String,
     pub event_stream_path: Option<String>,
     pub output_path: Option<String>,
-    pub session_id: String,
+    #[serde(alias = "session_id")]
+    pub run_id: String,
     pub job_id: Option<String>,
     pub backend_family: Option<String>,
     #[serde(default = "default_true")]
@@ -87,7 +88,8 @@ pub struct TraceCompactResponsePayload {
     pub applied: bool,
     pub status: String,
     pub reason: Option<String>,
-    pub session_id: String,
+    #[serde(alias = "session_id")]
+    pub run_id: String,
     pub job_id: Option<String>,
     pub backend_family: Option<String>,
     pub current_generation: usize,
@@ -109,7 +111,7 @@ pub fn record_trace_event(
 ) -> Result<TraceRecordEventResponsePayload, String> {
     let event_id = build_event_id(
         payload.seq,
-        &payload.session_id,
+        &payload.run_id,
         payload.job_id.as_deref(),
         &payload.kind,
     );
@@ -121,8 +123,8 @@ pub fn record_trace_event(
     event.insert("cursor".to_string(), Value::String(cursor.clone()));
     event.insert("ts".to_string(), Value::String(Utc::now().to_rfc3339()));
     event.insert(
-        "session_id".to_string(),
-        Value::String(payload.session_id.clone()),
+        "run_id".to_string(),
+        Value::String(payload.run_id.clone()),
     );
     event.insert(
         "job_id".to_string(),
@@ -189,7 +191,7 @@ pub fn compact_trace_stream(
                 "storage backend does not advertise compaction + snapshot-delta support"
                     .to_string(),
             ),
-            session_id: payload.session_id,
+            run_id: payload.run_id,
             job_id: payload.job_id,
             backend_family: payload.backend_family,
             current_generation: payload.current_generation,
@@ -209,7 +211,7 @@ pub fn compact_trace_stream(
     };
     let source_events = load_trace_events_from_text(
         &stream_text,
-        Some(&payload.session_id),
+        Some(&payload.run_id),
         payload.job_id.as_deref(),
     )?;
     let active_generation = source_events
@@ -229,7 +231,7 @@ pub fn compact_trace_stream(
             applied: false,
             status: "no_events".to_string(),
             reason: Some("no matching events available for compaction".to_string()),
-            session_id: payload.session_id,
+            run_id: payload.run_id,
             job_id: payload.job_id,
             backend_family: payload.backend_family,
             current_generation: payload.current_generation,
@@ -242,7 +244,7 @@ pub fn compact_trace_stream(
 
     let paths = compaction_paths(
         &payload.root_path,
-        &payload.session_id,
+        &payload.run_id,
         payload.job_id.as_deref(),
     );
     let previous_manifest = previous_manifest_payload(&payload, &paths.manifest)?;
@@ -254,8 +256,8 @@ pub fn compact_trace_stream(
     let latest_cursor = latest_cursor_from_event(tail).unwrap_or(Value::Null);
     let mut state_payload = Map::new();
     state_payload.insert(
-        "session_id".to_string(),
-        Value::String(payload.session_id.clone()),
+        "run_id".to_string(),
+        Value::String(payload.run_id.clone()),
     );
     state_payload.insert(
         "job_id".to_string(),
@@ -362,8 +364,8 @@ pub fn compact_trace_stream(
             .unwrap_or(Value::Null),
     );
     snapshot.insert(
-        "session_id".to_string(),
-        Value::String(payload.session_id.clone()),
+        "run_id".to_string(),
+        Value::String(payload.run_id.clone()),
     );
     snapshot.insert(
         "job_id".to_string(),
@@ -412,7 +414,7 @@ pub fn compact_trace_stream(
     let next_generation = active_generation + 1;
     let manifest = json!({
         "schema_version": TRACE_COMPACTION_MANIFEST_SCHEMA_VERSION,
-        "session_id": payload.session_id,
+        "run_id": payload.run_id,
         "job_id": payload.job_id,
         "backend_family": payload.backend_family.clone().unwrap_or_else(|| "filesystem".to_string()),
         "compaction_supported": true,
@@ -462,8 +464,8 @@ pub fn compact_trace_stream(
         applied: true,
         status: "compacted".to_string(),
         reason: None,
-        session_id: manifest
-            .get("session_id")
+        run_id: manifest
+            .get("run_id").or_else(|| manifest.get("session_id"))
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string(),
@@ -535,7 +537,7 @@ fn maybe_append_compaction_delta(
         },
         "artifact_refs": [],
         "applies_to": {
-            "session_id": trace_event_string_field(event_object, "session_id").unwrap_or_default(),
+            "run_id": trace_event_string_field(event_object, "run_id").or_else(|| trace_event_string_field(event_object, "session_id")).unwrap_or_default(),
             "job_id": event_object.get("job_id").cloned().unwrap_or(Value::Null),
         },
     });
@@ -551,7 +553,7 @@ fn maybe_append_compaction_delta(
 
 fn load_trace_events_from_text(
     stream_text: &str,
-    session_id: Option<&str>,
+    run_id: Option<&str>,
     job_id: Option<&str>,
 ) -> Result<Vec<Map<String, Value>>, String> {
     let mut events = Vec::new();
@@ -562,7 +564,7 @@ fn load_trace_events_from_text(
         let payload = serde_json::from_str::<Value>(raw_line)
             .map_err(|err| format!("parse trace stream line {} failed: {err}", line_number + 1))?;
         let event = hydrate_trace_event(trace_event_object(payload)?, line_number + 1);
-        if trace_event_matches_scope(&event, session_id, job_id) {
+        if trace_event_matches_scope(&event, run_id, job_id) {
             events.push(event);
         }
     }
@@ -614,11 +616,13 @@ fn hydrate_trace_event(mut payload: Map<String, Value>, line_number: usize) -> M
 
 fn trace_event_matches_scope(
     payload: &Map<String, Value>,
-    session_id: Option<&str>,
+    run_id: Option<&str>,
     job_id: Option<&str>,
 ) -> bool {
-    if let Some(expected_session_id) = session_id {
-        if trace_event_string_field(payload, "session_id").as_deref() != Some(expected_session_id) {
+    if let Some(expected_run_id) = run_id {
+        let actual_run_id = trace_event_string_field(payload, "run_id")
+            .or_else(|| trace_event_string_field(payload, "session_id"));
+        if actual_run_id.as_deref() != Some(expected_run_id) {
             return false;
         }
     }
@@ -631,7 +635,8 @@ fn trace_event_matches_scope(
 }
 
 fn latest_cursor_from_event(payload: &Map<String, Value>) -> Option<Value> {
-    let session_id = trace_event_string_field(payload, "session_id")?;
+    let run_id = trace_event_string_field(payload, "run_id")
+        .or_else(|| trace_event_string_field(payload, "session_id"))?;
     let seq = trace_event_usize_field(payload, "seq")?;
     let generation = trace_event_usize_field(payload, "generation").unwrap_or(0);
     let event_id = trace_event_string_field(payload, "event_id")?;
@@ -639,7 +644,7 @@ fn latest_cursor_from_event(payload: &Map<String, Value>) -> Option<Value> {
         .unwrap_or_else(|| build_trace_cursor(generation, seq, &event_id));
     Some(json!({
         "schema_version": TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
-        "session_id": session_id,
+        "run_id": run_id,
         "job_id": trace_event_string_field(payload, "job_id"),
         "generation": generation,
         "seq": seq,
@@ -665,12 +670,12 @@ fn build_trace_cursor(generation: usize, seq: usize, event_id: &str) -> String {
     format!("g{generation}:s{seq}:{event_id}")
 }
 
-fn build_event_id(seq: usize, session_id: &str, job_id: Option<&str>, kind: &str) -> String {
+fn build_event_id(seq: usize, run_id: &str, job_id: Option<&str>, kind: &str) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    let seed = format!("{nanos}:{seq}:{session_id}:{}:{kind}", job_id.unwrap_or(""));
+    let seed = format!("{nanos}:{seq}:{run_id}:{}:{kind}", job_id.unwrap_or(""));
     build_prefixed_id("evt", &seed)
 }
 
@@ -724,10 +729,10 @@ struct CompactionPaths {
     state: PathBuf,
 }
 
-fn compaction_paths(root_path: &str, session_id: &str, job_id: Option<&str>) -> CompactionPaths {
+fn compaction_paths(root_path: &str, run_id: &str, job_id: Option<&str>) -> CompactionPaths {
     let root = PathBuf::from(root_path).join("trace_compaction");
     let artifacts_dir = root.join("artifacts");
-    let stream_key = build_compaction_stream_key(session_id, job_id);
+    let stream_key = build_compaction_stream_key(run_id, job_id);
     CompactionPaths {
         manifest: root.join(format!("{stream_key}.manifest.json")),
         snapshot: root.join(format!("{stream_key}.snapshot.json")),
@@ -737,8 +742,8 @@ fn compaction_paths(root_path: &str, session_id: &str, job_id: Option<&str>) -> 
     }
 }
 
-fn build_compaction_stream_key(session_id: &str, job_id: Option<&str>) -> String {
-    [session_id, job_id.unwrap_or("session")]
+fn build_compaction_stream_key(run_id: &str, job_id: Option<&str>) -> String {
+    [run_id, job_id.unwrap_or("session")]
         .iter()
         .map(|part| {
             let normalized: String = part
@@ -815,7 +820,7 @@ fn append_text(path: &Path, payload: &str) -> Result<(), String> {
         .lock()
         .map_err(|e| { eprintln!("[router-rs] trace append lock poisoned: {e}"); "trace append lock poisoned".to_string() })?;
     // Cross-process serialization: prevents JSONL line interleaving when
-    // codex-cli, cursor and parallel test harnesses all tail the same trace.
+    // codex, cursor and parallel test harnesses all tail the same trace.
     let _path_lock = acquire_runtime_path_lock(path)?;
     let mut file = fs::OpenOptions::new()
         .create(true)

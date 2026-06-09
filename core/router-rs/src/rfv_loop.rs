@@ -4,7 +4,7 @@ pub use core_state::state_manager::read_rfv_loop_state;
 
 use crate::atomic_write::write_atomic_json;
 use crate::autopilot_goal::{
-    read_active_task_id, validate_external_research_strict,
+    validate_external_research_strict,
     validate_external_research_structured,
 };
 use crate::framework_runtime::resolve_repo_root_arg;
@@ -532,11 +532,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
     match operation.as_str() {
         "status" => {
             let state = read_rfv_loop_state(&repo_root, task_id_override)?;
-            let tid = if let Some(t) = task_id_override {
-                t.to_string()
-            } else {
-                read_active_task_id(&repo_root).unwrap_or_default()
-            };
+            let tid = task_id_override
+                .map(|s| s.to_string())
+                .unwrap_or_default();
             let path = if tid.is_empty() {
                 PathBuf::new()
             } else {
@@ -557,9 +555,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
         "start" | "upsert" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
-                .or_else(|| read_active_task_id(&repo_root))
                 .ok_or_else(|| {
-                    "framework_rfv_loop start requires task_id in payload or active_task.json"
+                    "framework_rfv_loop start requires task_id in payload"
                         .to_string()
                 })?;
             crate::path_guard::validate_task_id_component(&task_id)?;
@@ -702,9 +699,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
         "append_round" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
-                .or_else(|| read_active_task_id(&repo_root))
                 .ok_or_else(|| {
-                    "framework_rfv_loop append_round requires task_id or active_task.json"
+                    "framework_rfv_loop append_round requires task_id"
                         .to_string()
                 })?;
             crate::path_guard::validate_task_id_component(&task_id)?;
@@ -978,6 +974,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr,
             "operation": "append_round",
+            "task_id": "rfv-task",
             "round": 1u64,
             "review_summary": "r1",
             "external_research_summary": "web: none",
@@ -1042,6 +1039,7 @@ mod tests {
         let err = framework_rfv_loop(json!({
             "repo_root": rr,
             "operation": "append_round",
+            "task_id": "t-vr",
             "round": 1u64,
             "verify_result": "kinda passed",
         }))
@@ -1083,6 +1081,7 @@ mod tests {
         let out = framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "t-cl",
             "round": 1u64,
             "verify_result": "PASS",
         }))
@@ -1104,6 +1103,7 @@ mod tests {
         let out2 = framework_rfv_loop(json!({
             "repo_root": rr,
             "operation": "append_round",
+            "task_id": "t-cl",
             "round": 2u64,
             "verify_result": "PASS",
         }))
@@ -1347,6 +1347,7 @@ mod tests {
         let err = framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "t-er-st",
             "round": 1u64,
             "external_research": minimal_external_research_loose_only(),
             "verify_result": "PASS",
@@ -1366,6 +1367,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "t-er-st",
             "round": 1u64,
             "external_research": minimal_external_research(),
             "verify_result": "PASS",
@@ -1412,6 +1414,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "t-leg",
             "round": 1u64,
             "external_research": minimal_external_research_loose_only(),
             "verify_result": "PASS",
@@ -1458,6 +1461,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "t-loose",
             "round": 1u64,
             "external_research": minimal_external_research_loose_only(),
             "verify_result": "PASS",
@@ -1538,6 +1542,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "t-er-bad",
             "round": 1u64,
             "external_research": {"claims":[],"contradiction_sweep":[],"retrieval_trace":{}},
             "verify_result": "PASS",
@@ -1577,6 +1582,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "t-er-good",
             "round": 1u64,
             "external_research": minimal_external_research(),
             "verify_result": "PASS",
@@ -1706,6 +1712,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "cg-task",
             "round": 1u64,
             "review_summary": "r",
             "fix_summary": "f",
@@ -1716,6 +1723,7 @@ mod tests {
         let err = framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "cg-task",
             "round": 2u64,
             "review_summary": "r",
             "fix_summary": "f",
@@ -1767,6 +1775,7 @@ mod tests {
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "cap-g",
             "round": 1u64,
             "verify_result": "PASS",
             "supervisor_decision": "continue",
@@ -1775,6 +1784,7 @@ mod tests {
         let err = framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "cap-g",
             "round": 2u64,
             "verify_result": "SKIPPED",
             "supervisor_decision": "continue",
@@ -1823,6 +1833,7 @@ mod tests {
         let out = framework_rfv_loop(json!({
             "repo_root": rr.clone(),
             "operation": "append_round",
+            "task_id": "cap-ok",
             "round": 1u64,
             "verify_result": "PASS",
             "supervisor_decision": "continue",

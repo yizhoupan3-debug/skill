@@ -9,16 +9,13 @@ build = "build.rs"
 name = "router_rs"
 path = "src/lib.rs"
 
-[[bin]]
-name = "router-rs"
-path = "src/main.rs"
-
 [dependencies]
-core-state = { path = "../../core/antigravity" }
+core-state = { path = "../core-state" }
 framework-kernel = { path = "../framework-kernel" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 core-math = { path = "../core-math" }
 routing-engine = { path = "../routing-engine" }
+runtime-core = { path = "../runtime-core" }
 libc = "0.2"
 chrono.workspace = true
 clap = { version = "4.5.38", features = ["derive"] }
@@ -33,11 +30,9 @@ hex = "0.4"
 tungstenite = "0.24.0"
 fs2 = "0.4"
 which = "8.0.0"
-mimalloc = "0.1"
 codegraph-rs = { path = "../codegraph-rs", optional = true }
 
 [features]
-# Default host features must mirror RUNTIME_REGISTRY.json → host_targets.host_providers.*.cargo_feature
 default = [
     "host-cursor",
     "host-claude-code",

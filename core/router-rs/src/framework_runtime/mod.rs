@@ -875,7 +875,7 @@ fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
     None
 }
 
-/// Task id resolution for evidence append helpers: explicit override wins, then active, then focus.
+/// Task id resolution for evidence append helpers: explicit override wins, then task_view pointers.
 fn resolve_evidence_append_task_id(
     repo_root: &Path,
     task_id_override: Option<&str>,
@@ -884,8 +884,10 @@ fn resolve_evidence_append_task_id(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
-        .or_else(|| crate::autopilot_goal::read_active_task_id(repo_root))
-        .or_else(|| crate::autopilot_goal::read_focus_task_id(repo_root))
+        .or_else(|| {
+            let view = crate::task_state::resolve_task_view(repo_root, None);
+            view.task_id.filter(|s| !s.is_empty())
+        })
 }
 
 pub(crate) fn append_evidence_index_merged_row(
@@ -1357,7 +1359,13 @@ pub fn try_append_post_tool_shell_evidence(
     } else {
         entry.insert("success".to_string(), json!(artifact_ok));
     }
-    append_evidence_index_merged_row(repo_root, None, entry)?;
+    // Pointer 机制已移除：从 event 中提取 task_id 显式传递
+    let task_id_from_event = event
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    append_evidence_index_merged_row(repo_root, task_id_from_event, entry)?;
     Ok(())
 }
 
@@ -1410,6 +1418,31 @@ pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<
     Ok(path)
 }
 
+/// 从 task_registry.json 中读取 task_id（pointer 机制移除后的回退）。
+/// 优先返回 focus_task_id，再返回 tasks 数组中第一个。
+pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
+    let registry_path = repo_root.join("artifacts/current/task_registry.json");
+    let raw = std::fs::read_to_string(&registry_path).ok()?;
+    let data: Value = serde_json::from_str(&raw).ok()?;
+    // 优先使用 focus_task_id
+    if let Some(focus) = data.get("focus_task_id").and_then(Value::as_str) {
+        let focus = focus.trim();
+        if !focus.is_empty() {
+            return Some(focus.to_string());
+        }
+    }
+    let tasks = data.get("tasks").and_then(Value::as_array)?;
+    for row in tasks {
+        if let Some(tid) = row.get("task_id").and_then(Value::as_str) {
+            let tid = tid.trim();
+            if !tid.is_empty() {
+                return Some(tid.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.
 /// Shared Stop/closeout guard when assistant or user text claims completion (Cursor/Codex parity).
 pub fn closeout_stop_followup_for_completion_text(
@@ -1419,9 +1452,12 @@ pub fn closeout_stop_followup_for_completion_text(
     if text.trim().is_empty() || !crate::hook_common::contains_completion_claim_token(text) {
         return None;
     }
+    // Pointer 机制已移除：先尝试 resolve_task_view，再回退到 task_registry.json
     let tid = crate::task_state::resolve_task_view(repo_root, None)
         .task_id
-        .filter(|s| !s.is_empty())?;
+        .filter(|s| !s.is_empty())
+        .or_else(|| first_task_id_from_registry(repo_root));
+    let Some(tid) = tid else { return None; };
     if !closeout_programmatic_enforcement_enabled() {
         return None;
     }

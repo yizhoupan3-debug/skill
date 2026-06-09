@@ -750,12 +750,17 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
     codex_hook_smoke_expect(
         &exe,
         &repo_root,
-        "PostToolUse",
-        r#"{"hook_event_name":"PostToolUse","session_id":"verify-session","prompt":"全面review","tool_name":"Task","tool_input":{"subagent_type":"general-purpose","fork_context":false}}"#,
+        "Stop",
+        r#"{"hook_event_name":"Stop","session_id":"verify-session","prompt":"继续"}"#,
         |stdout| {
-            if !stdout.trim().is_empty() && stdout.contains("block") {
+            if !stdout.contains("CODEX_REVIEW_GATE") {
                 return Err(format!(
-                    "verify_codex_hooks: PostTool deep lane unexpected block: {stdout}"
+                    "verify_codex_hooks: Stop without reviewer must emit CODEX_REVIEW_GATE advisory: {stdout}"
+                ));
+            }
+            if stdout.contains(r#""decision":"block"#) && stdout.contains("CODEX_REVIEW_GATE") {
+                return Err(format!(
+                    "verify_codex_hooks: review gate Stop must be advisory-only (no decision:block): {stdout}"
                 ));
             }
             Ok(())
@@ -764,12 +769,12 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
     codex_hook_smoke_expect(
         &exe,
         &repo_root,
-        "Stop",
-        r#"{"hook_event_name":"Stop","session_id":"verify-session","prompt":"继续"}"#,
+        "PostToolUse",
+        r#"{"hook_event_name":"PostToolUse","session_id":"verify-session","prompt":"全面review","tool_name":"Task","tool_input":{"subagent_type":"general-purpose","fork_context":false}}"#,
         |stdout| {
-            if !stdout.contains("CODEX_REVIEW_GATE") || !stdout.contains("decision") {
+            if !stdout.trim().is_empty() && stdout.contains("block") {
                 return Err(format!(
-                    "verify_codex_hooks: Stop without compact must block with CODEX_REVIEW_GATE: {stdout}"
+                    "verify_codex_hooks: PostTool deep lane unexpected block: {stdout}"
                 ));
             }
             Ok(())
@@ -1704,18 +1709,8 @@ fn clean_orphan_directories(repo_root: &Path, dry_run: bool, ttl_days: u64) -> R
         return Ok(());
     }
 
-    // Gather referenced task IDs from pointers and registry
+    // Gather referenced task IDs from registry
     let mut referenced_ids = std::collections::HashSet::new();
-
-    // From active_task.json
-    if let Some(active) = crate::autopilot_goal::read_active_task_id(repo_root) {
-        referenced_ids.insert(active);
-    }
-
-    // From focus_task.json
-    if let Some(focus) = crate::autopilot_goal::read_focus_task_id(repo_root) {
-        referenced_ids.insert(focus);
-    }
 
     // From task_registry.json
     let registry_path = current_dir.join("task_registry.json");

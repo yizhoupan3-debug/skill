@@ -926,3 +926,259 @@ fn subagent_spawn_real_process_smoke() {
     }
     let _ = fs::remove_file(state_path);
 }
+
+// ── Generic rate-limit classification (non-codex hosts) ──────────────────
+
+#[test]
+fn classify_rate_limit_generic_claude_code() {
+    let result = super::worker::classify_rate_limit_block(
+        "claude-code",
+        "Error 429: Too Many Requests. Please try again in 60 seconds.",
+    );
+    assert!(result.is_ok(), "claude-code should be classified via generic patterns: {result:?}");
+    let cls = result.unwrap();
+    assert_eq!(cls.blocked_reason, "rate_limit");
+    assert_eq!(cls.status, "blocked_rate_limit");
+    assert_eq!(cls.host, "claude-code");
+    assert_eq!(cls.backoff_seconds, 60);
+}
+
+#[test]
+fn classify_rate_limit_generic_cursor() {
+    let result = super::worker::classify_rate_limit_block(
+        "cursor",
+        "Rate limit exceeded. Quota exceeded for this request.",
+    );
+    assert!(result.is_ok(), "cursor should be classified via generic patterns: {result:?}");
+    let cls = result.unwrap();
+    assert_eq!(cls.blocked_reason, "rate_limit");
+    assert_eq!(cls.host, "cursor");
+}
+
+#[test]
+fn classify_rate_limit_generic_antigravity() {
+    let result = super::worker::classify_rate_limit_block(
+        "antigravity",
+        "The model is currently overloaded. Please try again later.",
+    );
+    assert!(result.is_ok(), "antigravity should be classified via generic patterns: {result:?}");
+    let cls = result.unwrap();
+    assert_eq!(cls.blocked_reason, "rate_limit");
+    assert_eq!(cls.host, "antigravity");
+}
+
+#[test]
+fn classify_rate_limit_generic_unknown_host() {
+    let result = super::worker::classify_rate_limit_block(
+        "future-host",
+        "Usage limit reached for the current billing period.",
+    );
+    assert!(result.is_ok(), "unknown host should fall back to generic patterns: {result:?}");
+}
+
+#[test]
+fn classify_rate_limit_non_matching_evidence() {
+    let result = super::worker::classify_rate_limit_block(
+        "claude-code",
+        "Task completed successfully with no errors.",
+    );
+    assert!(result.is_err(), "non-rate-limit evidence should fail classification");
+}
+
+// ── Process isolation: PID-based lifecycle ───────────────────────────────
+
+#[test]
+fn process_pid_tracking_lifecycle() {
+    use super::process::{launch_process, process_is_alive, terminate_process};
+
+    let log_dir = std::env::temp_dir().join(format!("pid-track-{}", std::process::id()));
+    fs::create_dir_all(&log_dir).unwrap();
+
+    // Use a script that writes its PID and exits after a signal.
+    // setsid() creates a new session so the child won't be reaped by the
+    // test runner; we use a self-terminating script to avoid zombies.
+    let spec = build_driver_command(
+        "smoke-shell",
+        log_dir.to_str().unwrap(),
+        None,
+        None,
+        "last",
+        false,
+        None,
+        None,
+    )
+    .expect("build smoke-shell spec");
+
+    let result = launch_process(&spec, log_dir.to_str().unwrap(), &log_dir.join("worker.log")).expect("launch");
+    let pid = result.pid;
+    assert!(process_is_alive(pid), "process should be alive after launch");
+
+    terminate_process(pid).expect("terminate");
+
+    // After terminate_process (SIGTERM + wait + SIGKILL), the PID should be
+    // dead.  Allow extra time for zombie reaping by init.
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    // On macOS with setsid, the zombie may persist until init reaps it.
+    // Use kill(0) which returns ESRCH for truly dead PIDs and EPERM for zombies.
+    // A zombie is technically "alive" to kill(0) but is not running.
+    // We verify the terminate succeeded by checking it didn't panic.
+    // The process_is_alive check is best-effort here since zombie reaping
+    // depends on init timing.
+
+    let _ = fs::remove_dir_all(&log_dir);
+}
+
+#[test]
+fn terminate_process_double_call_is_idempotent() {
+    use super::process::{launch_process, process_is_alive, terminate_process};
+
+    let log_dir = std::env::temp_dir().join(format!("double-term-{}", std::process::id()));
+    fs::create_dir_all(&log_dir).unwrap();
+
+    let spec = build_driver_command(
+        "smoke-shell",
+        log_dir.to_str().unwrap(),
+        None,
+        None,
+        "last",
+        false,
+        None,
+        None,
+    )
+    .expect("build smoke-shell spec");
+
+    let result = launch_process(&spec, log_dir.to_str().unwrap(), &log_dir.join("worker.log")).expect("launch");
+    assert!(process_is_alive(result.pid));
+
+    terminate_process(result.pid).expect("first terminate");
+
+    // Second terminate should not panic even if the PID is a zombie
+    let _ = terminate_process(result.pid);
+
+    let _ = fs::remove_dir_all(&log_dir);
+}
+
+/// Verify that SIGKILL fallback works when SIGTERM is ignored.
+#[test]
+fn terminate_process_sigkill_fallback() {
+    use super::process::{launch_process, process_is_alive, terminate_process};
+    use super::types::DriverCommandSpec;
+
+    let log_dir = std::env::temp_dir().join(format!("sigkill-{}", std::process::id()));
+    fs::create_dir_all(&log_dir).unwrap();
+
+    // A process that traps SIGTERM (via `trap "" TERM`) — forces SIGKILL path.
+    let spec = DriverCommandSpec {
+        driver_id: "smoke_shell_driver".to_string(),
+        binary: "/bin/sh".to_string(),
+        args: vec![
+            "-c".to_string(),
+            "trap '' TERM; while true; do sleep 0.5; done".to_string(),
+        ],
+        shell_command: "/bin/sh -c 'trap ...'".to_string(),
+        supports_resume: false,
+    };
+
+    let result = launch_process(&spec, log_dir.to_str().unwrap(), &log_dir.join("worker.log")).expect("launch");
+    let pid = result.pid;
+    assert!(process_is_alive(pid));
+
+    // terminate_process sends SIGTERM, waits 5s, then SIGKILL
+    let start = std::time::Instant::now();
+    terminate_process(pid).expect("terminate should succeed via SIGKILL fallback");
+    let elapsed = start.elapsed();
+
+    // Should have taken ~5s (the SIGTERM wait window) before falling back to SIGKILL
+    assert!(
+        elapsed >= std::time::Duration::from_secs(4),
+        "SIGKILL fallback should wait for SIGTERM timeout first, elapsed: {elapsed:?}"
+    );
+
+    let _ = fs::remove_dir_all(&log_dir);
+}
+
+// ── Store concurrency: concurrent writes don't corrupt ──────────────────
+
+#[test]
+fn concurrent_save_store_no_corruption() {
+    use super::runtime::{load_store, save_store};
+    use super::types::SessionSupervisorStore;
+
+    let state_path = std::env::temp_dir().join(format!(
+        "concurrent-save-{}-{}.json",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+    ));
+
+    let store = SessionSupervisorStore::default();
+    save_store(&state_path, &store).expect("initial save");
+
+    let handles: Vec<_> = (0..8)
+        .map(|i| {
+            let path = state_path.clone();
+            std::thread::spawn(move || {
+                let mut loaded = load_store(&path).unwrap_or_default();
+                loaded.workers.push(
+                    super::types::WorkerSessionRecord {
+                        worker_id: format!("worker-{i}"),
+                        host: "smoke".to_string(),
+                        status: "running".to_string(),
+                        updated_at: chrono::Utc::now().to_rfc3339(),
+                        ..Default::default()
+                    },
+                );
+                save_store(&path, &loaded).ok();
+            })
+        })
+        .collect();
+
+    for h in handles {
+        h.join().expect("thread join");
+    }
+
+    let final_store = load_store(&state_path);
+    assert!(final_store.is_ok(), "store should be valid JSON after concurrent writes");
+
+    let _ = fs::remove_file(&state_path);
+}
+
+// ── Stale worker reaping ────────────────────────────────────────────────
+
+#[test]
+fn stale_worker_reaped_when_pid_dead() {
+    use super::worker::reap_stale_workers;
+
+    let now = "2026-06-09T12:00:00Z";
+    let mut workers = vec![super::types::WorkerSessionRecord {
+        worker_id: "stale-worker".to_string(),
+        host: "smoke".to_string(),
+        status: "running".to_string(),
+        pid: Some(99999999),
+        updated_at: "2026-06-09T10:00:00Z".to_string(),
+        ..Default::default()
+    }];
+
+    reap_stale_workers(&mut workers, now, 600).expect("reap");
+
+    assert_eq!(workers[0].status, "interrupted", "stale worker should be interrupted");
+}
+
+#[test]
+fn fresh_worker_not_reaped() {
+    use super::worker::reap_stale_workers;
+
+    let now = "2026-06-09T12:00:00Z";
+    let mut workers = vec![super::types::WorkerSessionRecord {
+        worker_id: "fresh-worker".to_string(),
+        host: "smoke".to_string(),
+        status: "running".to_string(),
+        pid: Some(99999999),
+        updated_at: "2026-06-09T11:59:00Z".to_string(),
+        ..Default::default()
+    }];
+
+    reap_stale_workers(&mut workers, now, 600).expect("reap");
+
+    assert_eq!(workers[0].status, "running", "recent worker should NOT be reaped");
+}

@@ -1,6 +1,5 @@
 //! Task / harness schema drift: capture baselines and compare on verify.
 
-use crate::autopilot_goal::{read_active_task_id, read_focus_task_id};
 use crate::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION;
 use crate::cursor_hooks::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
 use crate::router_rs_observation::ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION;
@@ -114,13 +113,7 @@ pub fn resolve_task_id_for_schema_drift(repo_root: &Path, task_id: Option<&str>)
             .ok_or_else(|| format!("schema-drift: invalid task_id {:?}", id))?;
         return Ok(id.to_string());
     }
-    if let Some(id) = read_active_task_id(repo_root) {
-        return Ok(id);
-    }
-    read_focus_task_id(repo_root).ok_or_else(|| {
-        "schema-drift: provide --task-id or set artifacts/current/active_task.json or focus_task.json"
-            .to_string()
-    })
+    Err("schema-drift: provide --task-id (pointer fallback removed)".to_string())
 }
 
 pub fn baseline_path(repo_root: &Path, task_id: &str) -> PathBuf {
@@ -610,16 +603,15 @@ mod tests {
     }
 
     #[test]
-    fn resolve_task_id_falls_back_to_focus_task() {
-        let repo = temp_repo("focus-fallback");
-        let task = "focus-only";
+    fn resolve_task_id_requires_explicit_task_id() {
+        let repo = temp_repo("no-fallback");
         fs::create_dir_all(repo.join("artifacts/current")).unwrap();
         fs::write(
             repo.join("artifacts/current/focus_task.json"),
-            format!(r#"{{"task_id":"{task}"}}"#),
+            r#"{"task_id":"focus-only"}"#,
         )
         .unwrap();
-        let resolved = resolve_task_id_for_schema_drift(&repo, None).unwrap();
-        assert_eq!(resolved, task);
+        let err = resolve_task_id_for_schema_drift(&repo, None).unwrap_err();
+        assert!(err.contains("provide --task-id"), "unexpected err: {err}");
     }
 }

@@ -23,7 +23,7 @@ pub(crate) struct WorkerEvent {
     pub detail: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct WorkerSessionRecord {
     pub worker_id: String,
     pub host: String,
@@ -49,7 +49,7 @@ pub(crate) struct WorkerSessionRecord {
     pub events: Vec<WorkerEvent>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DriverCommandSpec {
     pub driver_id: String,
     pub binary: String,

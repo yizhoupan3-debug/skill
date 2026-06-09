@@ -398,6 +398,15 @@ pub fn write_matrix_active_task(repo: &Path, task_id: &str) {
     fs::create_dir_all(p.parent().expect("parent")).expect("mkdir artifacts/current");
     fs::write(p, format!(r#"{{"task_id":"{task_id}"}}"#)).expect("write active_task");
     fs::create_dir_all(repo.join("artifacts/current").join(task_id)).expect("mkdir task dir");
+    // Pointer 机制已移除：同时写入 task_registry.json 供回退使用
+    let registry_path = repo.join("artifacts/current/task_registry.json");
+    let registry = serde_json::json!({
+        "schema_version": "task-registry-v1",
+        "focus_task_id": task_id,
+        "tasks": [{ "task_id": task_id }]
+    });
+    fs::write(&registry_path, serde_json::to_string(&registry).expect("serialize registry"))
+        .expect("write task_registry");
 }
 
 fn session_payload(host: MatrixHost, repo: &Path, session_id: &str, prompt: &str) -> Value {

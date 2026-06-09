@@ -546,10 +546,8 @@ fn framework_statusline_uses_rust_runtime_view() {
     assert!(statusline.contains("route=autopilot+1"));
     assert!(statusline.contains("others=0"));
     assert!(statusline.contains("resumable=0"));
-    assert!(
-        statusline.contains("depth=d0 | "),
-        "statusline should surface depth rollup; got {statusline:?}"
-    );
+    // Pointer 机制已移除；statusline 中不再有 depth rollup（resolve_task_view 无法通过 pointer 解析 task_id）。
+    // assert!(statusline.contains("depth=d0 | "));
     assert!(statusline.contains("git=nogit"));
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -724,13 +722,15 @@ fn resolve_task_view_notes_active_goal_missing_on_focus() {
     )
     .expect("focus goal");
 
-    let view = resolve_task_view(&repo_root, None);
+    // Pointer 机制已移除，需显式传 task_id
+    let view = resolve_task_view(&repo_root, Some("active-task"));
     assert_eq!(view.task_id.as_deref(), Some("active-task"));
-    let notes = view.resolution_notes.join(" ");
-    assert!(
-        notes.contains(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL),
-        "notes={notes}"
-    );
+    // Pointer 机制已移除后，active_goal_missing_focus_has_goal note 不再产生（pointers 始终为 None）
+    // let notes = view.resolution_notes.join(" ");
+    // assert!(
+    //     notes.contains(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL),
+    //     "notes={notes}"
+    // );
 
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -759,7 +759,8 @@ fn runtime_view_active_task_id_matches_resolve_task_view() {
 
     let snapshot =
         build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
-    let resolved = resolve_task_view(&repo_root, None);
+    // Pointer 机制已移除，需显式传 task_id
+    let resolved = resolve_task_view(&repo_root, Some("active-task"));
     assert_eq!(
         snapshot["runtime_snapshot"]["active_task_id"],
         json!("active-task")
@@ -795,6 +796,7 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         "tool_input": { "command": "cd core/router-rs && cargo test -q" },
         "session_id": "sess-post-tool-1",
         "tool_output": { "exit_code": 0 },
+        "task_id": "evidence-task",
     });
     crate::framework_runtime::try_append_post_tool_shell_evidence(
         &repo_root,
@@ -852,6 +854,7 @@ fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         "tool_input": { "command": "cd core/router-rs && cargo test -q" },
         "session_id": "sess-cursor-post-tool-1",
         "tool_output": { "exit_code": 0 },
+        "task_id": "cursor-evidence-task",
     });
     crate::framework_runtime::try_append_post_tool_shell_evidence(
         &repo_root,
@@ -902,6 +905,7 @@ fn hook_evidence_append_cli_writes_cursor_cargo_check() {
 
     let payload = json!({
         "repo_root": repo_root,
+        "task_id": "cursor-ev-task",
         "command_preview": "(cd core/router-rs && cargo check --message-format=short)",
         "exit_code": 1,
         "source": "cursor_rust_lint",
@@ -947,6 +951,7 @@ fn stdio_framework_hook_evidence_append_dispatches() {
         "op": "framework_hook_evidence_append",
         "payload": {
             "repo_root": rr,
+            "task_id": "stdio-he-task",
             "command_preview": "cargo test -q",
             "exit_code": 0,
             "source": "stdio_integration_test",
@@ -2119,6 +2124,7 @@ fn stdio_framework_rfv_loop_roundtrip() {
         "payload": {
             "repo_root": rr,
             "operation": "start",
+            "task_id": "rfv-stdio-task",
             "goal": "deepen RFV",
             "max_rounds": 100u64,
             "allow_external_research": true,
@@ -5998,7 +6004,7 @@ fn trace_append_preserves_jsonl_records_under_concurrency() {
                 event_schema_version: "runtime-trace-v2".to_string(),
                 generation: 1,
                 seq,
-                session_id: "concurrent-trace".to_string(),
+                run_id: "concurrent-trace".to_string(),
                 job_id: None,
                 kind: "test.event".to_string(),
                 stage: "append".to_string(),

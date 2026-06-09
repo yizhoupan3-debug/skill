@@ -158,7 +158,8 @@ mod desktop_mcp_tests {
     #[test]
     fn closeout_gate_requires_session_summary_file() {
         let repo = test_repo_dir();
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({}), &repo, "antigravity")
+        // Pointer 机制已移除，需显式传 task_id
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": "no-summary-task"}), &repo, "antigravity")
             .expect("closeout_gate");
         assert!(
             out.contains("BLOCKED") || out.contains("checkpoint: missing"),
@@ -251,7 +252,7 @@ mod desktop_mcp_tests {
         )
         .unwrap();
 
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({}), &repo, "antigravity")
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "antigravity")
             .expect("closeout_gate");
         assert!(
             out.contains("no hook REVIEW_GATE"),
@@ -280,7 +281,7 @@ mod desktop_mcp_tests {
         std::fs::write(review_lanes.join("lane-a.md"), "[P2] example — ok").unwrap();
 
         let out =
-            crate::mcp_stdio_harness::tool_closeout_gate(&json!({}), &repo, "antigravity")
+            crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "antigravity")
                 .expect("closeout_gate");
         assert!(
             !out.contains("WARN: review_gate: GOAL suggests review work"),
@@ -311,7 +312,7 @@ mod desktop_mcp_tests {
         )
         .unwrap();
 
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({}), &repo, "antigravity")
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "antigravity")
             .expect("closeout_gate");
         assert!(
             out.contains("WARN: evidence: only self-attested"),
@@ -1169,13 +1170,14 @@ mod antigravity_hard_blocking_tests {
         )
         .unwrap();
 
+        // Pointer 机制已移除，需显式传 task_id
         let req = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
             "params": {
                 "name": "closeout_gate",
-                "arguments": {}
+                "arguments": { "task_id": task_id }
             }
         });
         let response = crate::mcp_stdio_harness::handle_mcp_request(
