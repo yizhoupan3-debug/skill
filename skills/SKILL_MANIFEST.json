@@ -182,7 +182,14 @@
         "opencode"
       ],
       "framework_command",
-      null,
+      [
+        "mcp__mcp-codegraph__codegraph_search",
+        "mcp__mcp-codegraph__codegraph_callers",
+        "mcp__mcp-codegraph__codegraph_callees",
+        "mcp__mcp-codegraph__codegraph_impact",
+        "mcp__mcp-codegraph__codegraph_node",
+        "mcp__mcp-codegraph__codegraph_status"
+      ],
       null
     ],
     [
@@ -209,7 +216,14 @@
         "opencode"
       ],
       "framework_command",
-      null,
+      [
+        "mcp__mcp-codegraph__codegraph_search",
+        "mcp__mcp-codegraph__codegraph_callers",
+        "mcp__mcp-codegraph__codegraph_callees",
+        "mcp__mcp-codegraph__codegraph_impact",
+        "mcp__mcp-codegraph__codegraph_node",
+        "mcp__mcp-codegraph__codegraph_status"
+      ],
       "sonnet"
     ],
     [
@@ -379,7 +393,14 @@
         "opencode"
       ],
       "framework_command",
-      null,
+      [
+        "mcp__mcp-codegraph__codegraph_search",
+        "mcp__mcp-codegraph__codegraph_callers",
+        "mcp__mcp-codegraph__codegraph_callees",
+        "mcp__mcp-codegraph__codegraph_impact",
+        "mcp__mcp-codegraph__codegraph_node",
+        "mcp__mcp-codegraph__codegraph_status"
+      ],
       null
     ],
     [
@@ -517,7 +538,13 @@
       [
         "Read",
         "Bash",
-        "Agent"
+        "Agent",
+        "mcp__mcp-codegraph__codegraph_search",
+        "mcp__mcp-codegraph__codegraph_callers",
+        "mcp__mcp-codegraph__codegraph_callees",
+        "mcp__mcp-codegraph__codegraph_impact",
+        "mcp__mcp-codegraph__codegraph_node",
+        "mcp__mcp-codegraph__codegraph_status"
       ],
       null
     ],
