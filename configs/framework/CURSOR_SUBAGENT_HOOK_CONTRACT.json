@@ -69,6 +69,6 @@
     "details": "docs/harness_architecture/03-hook-and-switches.md §5 env table; framework_operator_primer.md REVIEW_GATE"
   },
   "wave2_requires_live_evidence": {
-    "excludes": "compact bump alone without live subagent evidence; Stop hard gate uses independent_reviewer_seen (Claude model)"
+    "excludes": "compact bump alone without live subagent evidence; Stop advisory nudge uses independent_reviewer_seen (Claude canonical; pending/phase telemetry only)"
   }
 }

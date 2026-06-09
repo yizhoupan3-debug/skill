@@ -6,7 +6,7 @@ depends_on:
 
 # Opencode 宿主操作手册
 
-**闭集 id**: `opencode` · **传输**: opencode-native · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
+**闭集 id**: `opencode` · **传输**: opencode-cli · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
 
 ## 代理身份与画风
 

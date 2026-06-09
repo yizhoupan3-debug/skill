@@ -712,22 +712,10 @@ fn review_pending_both_empty(state: &ReviewGateState) -> bool {
         && state.review_subagent_pending_cycle_keys.is_empty()
 }
 
-/// Stop advisory nudge — Claude canonical armed gate + bounded `reject_reason_seen` escape.
-/// Unresolved pending multiset still nudges when `phase < 3` (partial cycle must not false-negative Stop).
+/// Stop advisory nudge — parity with `core_policy::hook_review_stop_advisory_needed`.
+/// Pending multiset / phase are telemetry-only, not gate inputs.
 fn review_stop_followup_needed(state: &ReviewGateState) -> bool {
-    if !review_hard_armed(state) || state.review_override {
-        return false;
-    }
-    if !review_pending_both_empty(state) && state.phase < 3 {
-        return true;
-    }
-    core_policy::hook_review_gate_fields_from_parts(
-        state.review_required,
-        state.review_override,
-        state.independent_reviewer_seen,
-        state.reject_reason_seen,
-    )
-    .review_stop_blocks()
+    core_policy::hook_review_stop_advisory_needed(&state.review_gate_fields(), "REVIEW_GATE").is_some()
 }
 
 /// Compact bump requires live cycle progress beyond orphan `subagent_start_count` (stale hygiene may clear pending).
