@@ -63,7 +63,7 @@ B0  → {core-state, core-policy, core-math, framework-kernel}
 | **CG W1–W4** | ✅ done | crate + 六工具 MCP + sync/watcher + rayon/prepared stmt/schema v2 | — |
 | **CG-5 skill 集成** | ✅ done | planx / implementx / verifyx / code-review-deep `allowed_tools` + 场景化 CodeGraph 节；`smoke_codegraph_semantic_dispatch_tests.rs` | — |
 | **CG E2E 五宿主 stdio** | ✅ done | `smoke_codegraph_five_host_stdio_e2e_tests.rs`；opt-in `ROUTER_RS_CODEGRAPH_STDIO_E2E=1`；闭集 5 宿主 tools/list + `codegraph_status` | CI 默认跳过（opt-in 约 157s） |
-| **EV-1 – EV-6** | ✅ done | TOML 配置、`evolution_observer`、RFV journal、`goal_prediction` closeout dry-run + **`PredictionOutcome` journal**（match/mismatch 均写） | closeout 仍 warn-only（不 block） |
+| **EV-1 – EV-6** | ✅ done | TOML 配置、`evolution_observer`、RFV journal、`goal_prediction` closeout dry-run + **`PredictionOutcome` journal**（match/mismatch 均写）+ **B11 journal 统一 slice 已落地**（`TelemetryJournal.events` → `TimestampedTelemetryEvent`；analyze 统一读路径 + `--days`） | alerts 未并入 analyze；OpenCode telemetry 缺位；closeout 仍 warn-only（不 block） |
 | **EV-7** | ✅ done | Codex/Claude hook journal + PostToolUse duration（五宿主含 Cursor）+ RFV 分桶 analyze + supervisor idle→evolution analyze dry-run | `phase-ev7-closeout.json` 旧 gap 已被 tail/full 覆盖 |
 | **P9 文档轨** | ✅ slice | ops 模块化 B0–B11；契约 / policy 链接 **24 passed**；manifest 快审（slides）；tmux schema 0；过期文件清扫 **82** 删 | 宽口径 30+ 路径；depends_on 全图校验 |
 | **P3 HostProvider** | ✅ done | trait + 五宿主 impl + routing aliases + pre_tool_use_guard 集成测 | `phase-p3-hostprovider-slice.json` 仍标 in_progress — **lane-note 过期** |
@@ -119,7 +119,7 @@ B0  → {core-state, core-policy, core-math, framework-kernel}
 
 ## 已确认落地（跨轨摘要）
 
-HostProvider 骨架 · Telemetry MPSC · PreToolUse Fallback · routing 热更新 · evolution_observer + idle 触发 · codegraph 六工具 + sync/watcher + **五宿主 stdio E2E** · session_supervisor（生产 native；runtime-core 副本已删）· P7 `runtime_ops.inc` 117L · P10 gap 0 · P0 smoke 收口 · CG-5 skill 集成 · **P4 handlers gap 0** · **EV-6 PredictionOutcome journal**
+HostProvider 骨架 · Telemetry MPSC · PreToolUse Fallback · routing 热更新 · evolution_observer + idle 触发 · codegraph 六工具 + sync/watcher + **五宿主 stdio E2E** · session_supervisor（生产 native；runtime-core 副本已删）· P7 `runtime_ops.inc` 117L · P10 gap 0 · P0 smoke 收口 · CG-5 skill 集成 · **P4 handlers gap 0** · **EV-6 PredictionOutcome journal** · **B11 journal 统一 slice**（`TimestampedTelemetryEvent` + analyze `--days`）
 
 ## 宿主真源
 
