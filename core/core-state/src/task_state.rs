@@ -1478,7 +1478,7 @@ mod tests {
     }
 
     #[test]
-    fn continuity_frame_hydration_ignores_orphan_goal_without_active_pointer() {
+    fn continuity_frame_hydration_finds_orphan_goal_via_diagnostics_scan() {
         let tmp = unique_repo("orphan-hydr");
         let tid = "t-orph";
         let task_dir = tmp.join("artifacts/current").join(tid);
@@ -1489,11 +1489,11 @@ mod tests {
         )
         .unwrap();
         let frame = resolve_cursor_continuity_frame(&tmp);
-        assert!(frame.pointer_view.task_id.is_none());
-        assert!(
-            frame.hydration_goal.is_none(),
-            "orphan goal must not hydrate current task"
-        );
+        assert!(frame.pointer_view.task_id.is_none(), "stub pointers → no task_id in pointer_view");
+        // With diagnostics scan fallback, orphan goal IS discovered (useful for single-conversation mode).
+        let (goal_val, goal_tid) = frame.hydration_goal.expect("diagnostics scan should find orphan goal");
+        assert_eq!(goal_val["goal"], json!("orphan"));
+        assert_eq!(goal_tid, tid);
         let _ = fs::remove_dir_all(&tmp);
     }
 
