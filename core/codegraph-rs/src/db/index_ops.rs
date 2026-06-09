@@ -70,8 +70,11 @@ impl<'conn> IngestStmts<'conn> {
                 "INSERT INTO edges (caller_id, callee_id) VALUES (?1, ?2)",
             )?,
             upsert_file: conn.prepare(
-                "INSERT INTO files (path, mtime_ns, language) VALUES (?1, ?2, ?3)
-                 ON CONFLICT(path) DO UPDATE SET mtime_ns = excluded.mtime_ns, language = excluded.language",
+                "INSERT INTO files (path, mtime_ns, language, content_hash) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(path) DO UPDATE SET
+                    mtime_ns = excluded.mtime_ns,
+                    language = excluded.language,
+                    content_hash = excluded.content_hash",
             )?,
             delete: DeleteFileStmts::prepare(conn)?,
         })
@@ -135,15 +138,30 @@ pub fn ingest_parsed_file_with_stmts(
     stmts.upsert_file.execute(params![
         parsed.path,
         parsed.mtime_ns,
-        parsed.language
+        parsed.language,
+        parsed.content_hash
     ])?;
     tx.commit()?;
     Ok((parsed.symbols.len() as u64, edge_count))
 }
 
-pub fn list_indexed_files(conn: &Connection) -> rusqlite::Result<Vec<(String, i64)>> {
-    let mut stmt = conn.prepare("SELECT path, mtime_ns FROM files ORDER BY path")?;
-    let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedFileMeta {
+    pub path: String,
+    pub mtime_ns: i64,
+    pub content_hash: String,
+}
+
+pub fn list_indexed_files(conn: &Connection) -> rusqlite::Result<Vec<IndexedFileMeta>> {
+    let mut stmt =
+        conn.prepare("SELECT path, mtime_ns, content_hash FROM files ORDER BY path")?;
+    let rows = stmt.query_map([], |row| {
+        Ok(IndexedFileMeta {
+            path: row.get(0)?,
+            mtime_ns: row.get(1)?,
+            content_hash: row.get(2)?,
+        })
+    })?;
     rows.collect()
 }
 
@@ -161,6 +179,7 @@ mod tests {
             path: "src/a.rs".to_string(),
             language: "rust".to_string(),
             mtime_ns: 1,
+            content_hash: "hash-a".to_string(),
             symbols: vec![ParsedSymbol {
                 symbol: "foo".to_string(),
                 kind: "fn".to_string(),
@@ -192,6 +211,7 @@ mod tests {
                 path: path.to_string(),
                 language: "rust".to_string(),
                 mtime_ns: 1,
+                content_hash: format!("hash-{path}"),
                 symbols: vec![ParsedSymbol {
                     symbol: sym.to_string(),
                     kind: "fn".to_string(),

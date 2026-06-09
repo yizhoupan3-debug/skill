@@ -4,6 +4,7 @@ use rusqlite::Connection;
 
 pub const META_SCHEMA_VERSION_KEY: &str = "schema_version";
 const LEGACY_SCHEMA_V1: &str = "codegraph-rs-v1";
+const LEGACY_SCHEMA_V2: &str = "codegraph-rs-v2";
 
 pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -16,7 +17,8 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE TABLE IF NOT EXISTS files (
             path TEXT PRIMARY KEY,
             mtime_ns INTEGER NOT NULL,
-            language TEXT NOT NULL
+            language TEXT NOT NULL,
+            content_hash TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS nodes (
             id TEXT PRIMARY KEY,
@@ -66,10 +68,16 @@ pub fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
     match get_meta(conn, META_SCHEMA_VERSION_KEY)?.as_deref() {
         None => {
             migrate_v1_to_v2(conn)?;
+            migrate_v2_to_v3(conn)?;
             set_meta(conn, META_SCHEMA_VERSION_KEY, SCHEMA_VERSION)?;
         }
         Some(LEGACY_SCHEMA_V1) => {
             migrate_v1_to_v2(conn)?;
+            migrate_v2_to_v3(conn)?;
+            set_meta(conn, META_SCHEMA_VERSION_KEY, SCHEMA_VERSION)?;
+        }
+        Some(LEGACY_SCHEMA_V2) => {
+            migrate_v2_to_v3(conn)?;
             set_meta(conn, META_SCHEMA_VERSION_KEY, SCHEMA_VERSION)?;
         }
         Some(v) if v == SCHEMA_VERSION => {}
@@ -86,6 +94,21 @@ fn migrate_v1_to_v2(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_edges_pair ON edges(caller_id, callee_id);",
     )?;
+    Ok(())
+}
+
+fn migrate_v2_to_v3(conn: &Connection) -> rusqlite::Result<()> {
+    let has_column: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('files') WHERE name = 'content_hash'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_column == 0 {
+        conn.execute(
+            "ALTER TABLE files ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
     Ok(())
 }
 
@@ -116,6 +139,40 @@ mod tests {
             get_meta(&conn, META_SCHEMA_VERSION_KEY).unwrap().as_deref(),
             Some(SCHEMA_VERSION)
         );
+    }
+
+    #[test]
+    fn legacy_v2_db_migrates_content_hash_column() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO meta (key, value) VALUES ('schema_version', 'codegraph-rs-v2');
+            CREATE TABLE files (path TEXT PRIMARY KEY, mtime_ns INTEGER NOT NULL, language TEXT NOT NULL);
+            CREATE TABLE nodes (
+                id TEXT PRIMARY KEY, symbol TEXT NOT NULL, kind TEXT NOT NULL,
+                language TEXT NOT NULL, file_path TEXT NOT NULL, line INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE edges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                caller_id TEXT NOT NULL, callee_id TEXT NOT NULL
+            );
+            "#,
+        )
+        .unwrap();
+        migrate_schema(&conn).unwrap();
+        assert_eq!(
+            get_meta(&conn, META_SCHEMA_VERSION_KEY).unwrap().as_deref(),
+            Some(SCHEMA_VERSION)
+        );
+        let has_hash: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('files') WHERE name = 'content_hash'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_hash, 1);
     }
 
     #[test]

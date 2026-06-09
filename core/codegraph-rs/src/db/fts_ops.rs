@@ -109,6 +109,7 @@ mod tests {
                 path: "a.rs".to_string(),
                 language: "rust".to_string(),
                 mtime_ns: 1,
+                content_hash: "hash-a".to_string(),
                 symbols: vec![ParsedSymbol {
                     symbol: "search_me".to_string(),
                     kind: "fn".to_string(),

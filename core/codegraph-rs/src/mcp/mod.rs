@@ -1,5 +1,6 @@
 //! MCP tool schema + dispatch (Roadmap v5 §2.8 W2 / CG-2).
 
+use crate::db::node_ops::{ResolveOutcome, SymbolFilter};
 use crate::CodeGraphIndex;
 use anyhow::Context;
 use serde_json::{json, Value};
@@ -27,11 +28,29 @@ pub fn run_stdio_mcp(repo_root: &Path) -> anyhow::Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     for line in stdin.lock().lines() {
-        let line = line?;
+        let line = match line {
+            Ok(line) => line,
+            Err(err) => {
+                eprintln!("codegraph MCP stdin read error: {err}");
+                break;
+            }
+        };
         if line.trim().is_empty() {
             continue;
         }
-        let request: Value = serde_json::from_str(&line)?;
+        let request: Value = match serde_json::from_str(&line) {
+            Ok(value) => value,
+            Err(err) => {
+                let response = json!({
+                    "jsonrpc": "2.0",
+                    "id": null,
+                    "error": {"code": -32700, "message": format!("Parse error: {err}")},
+                });
+                writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
+                stdout.flush()?;
+                continue;
+            }
+        };
         if let Some(response) = handle_request(&request, &index) {
             writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
             stdout.flush()?;
@@ -103,12 +122,14 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "codegraph_callers",
-            "Find callers of a symbol",
+            "Find callers of a symbol; use file_path or node_id when symbol is ambiguous",
             json!({
                 "type": "object",
                 "properties": {
                     "symbol": {"type": "string"},
-                    "depth": {"type": "integer", "minimum": 1, "maximum": 8}
+                    "depth": {"type": "integer", "minimum": 1, "maximum": 8},
+                    "file_path": {"type": "string", "description": "Disambiguate duplicate symbols"},
+                    "node_id": {"type": "string", "description": "Exact node id filter"}
                 },
                 "required": ["symbol"]
             }),
@@ -116,22 +137,28 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "codegraph_callees",
-            "Find callees of a symbol",
+            "Find callees of a symbol; use file_path or node_id when symbol is ambiguous",
             json!({
                 "type": "object",
-                "properties": {"symbol": {"type": "string"}},
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "file_path": {"type": "string", "description": "Disambiguate duplicate symbols"},
+                    "node_id": {"type": "string", "description": "Exact node id filter"}
+                },
                 "required": ["symbol"]
             }),
             node_array.clone(),
         ),
         tool_def(
             "codegraph_impact",
-            "Impact radius for a symbol",
+            "Impact radius for a symbol; use file_path or node_id when symbol is ambiguous",
             json!({
                 "type": "object",
                 "properties": {
                     "symbol": {"type": "string"},
-                    "depth": {"type": "integer", "minimum": 1, "maximum": 8}
+                    "depth": {"type": "integer", "minimum": 1, "maximum": 8},
+                    "file_path": {"type": "string", "description": "Disambiguate duplicate symbols"},
+                    "node_id": {"type": "string", "description": "Exact node id filter"}
                 },
                 "required": ["symbol"]
             }),
@@ -147,15 +174,23 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "codegraph_node",
-            "Resolve node by id or symbol",
+            "Resolve node by id or symbol; ambiguous symbol returns candidates",
             json!({
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
-                    "symbol": {"type": "string"}
+                    "symbol": {"type": "string"},
+                    "file_path": {"type": "string", "description": "Disambiguate duplicate symbols"},
+                    "node_id": {"type": "string", "description": "Exact node id filter"}
                 }
             }),
-            node_schema(),
+            json!({
+                "type": "object",
+                "properties": {
+                    "node": node_schema(),
+                    "candidates": {"type": "array", "items": node_schema()}
+                }
+            }),
         ),
         tool_def(
             "codegraph_status",
@@ -230,12 +265,16 @@ pub fn dispatch_tool_call(params: &Value, index: &CodeGraphIndex) -> anyhow::Res
                 .and_then(Value::as_u64)
                 .unwrap_or(1)
                 .clamp(1, 8) as u32;
-            let nodes = index.find_callers(symbol, depth)?;
+            let filter = symbol_filter_from_args(&args);
+            ensure_symbol_resolved(index, symbol, &filter)?;
+            let nodes = index.find_callers(symbol, depth, &filter)?;
             json!({"nodes": nodes})
         }
         "codegraph_callees" => {
             let symbol = require_str(&args, "symbol")?;
-            let nodes = index.find_callees(symbol)?;
+            let filter = symbol_filter_from_args(&args);
+            ensure_symbol_resolved(index, symbol, &filter)?;
+            let nodes = index.find_callees(symbol, &filter)?;
             json!({"nodes": nodes})
         }
         "codegraph_impact" => {
@@ -245,18 +284,25 @@ pub fn dispatch_tool_call(params: &Value, index: &CodeGraphIndex) -> anyhow::Res
                 .and_then(Value::as_u64)
                 .unwrap_or(2)
                 .clamp(1, 8) as u32;
-            let report = index.impact_radius(symbol, depth)?;
+            let filter = symbol_filter_from_args(&args);
+            ensure_symbol_resolved(index, symbol, &filter)?;
+            let report = index.impact_radius(symbol, depth, &filter)?;
             json!(report)
         }
         "codegraph_node" => {
-            let node = if let Some(id) = optional_str(&args, "id") {
-                index.get_node_by_id(id)?
-            } else if let Some(symbol) = optional_str(&args, "symbol") {
-                index.resolve_symbol(symbol)?
+            if let Some(id) = optional_str(&args, "id") {
+                let node = index.get_node_by_id(id)?;
+                json!({"node": node})
             } else {
-                anyhow::bail!("codegraph_node requires id or symbol");
-            };
-            json!({"node": node})
+                let symbol = optional_str(&args, "symbol")
+                    .ok_or_else(|| anyhow::anyhow!("codegraph_node requires id or symbol"))?;
+                let filter = symbol_filter_from_args(&args);
+                match index.resolve_symbol_filtered(symbol, &filter)? {
+                    ResolveOutcome::Found(node) => json!({"node": node}),
+                    ResolveOutcome::Ambiguous(candidates) => json!({"candidates": candidates}),
+                    ResolveOutcome::NotFound => json!({"node": null}),
+                }
+            }
         }
         "codegraph_status" => {
             let include_files = args
@@ -279,6 +325,37 @@ pub fn dispatch_tool_call(params: &Value, index: &CodeGraphIndex) -> anyhow::Res
         "content": [{"type": "text", "text": serde_json::to_string_pretty(&payload)?}],
         "structuredContent": payload,
     }))
+}
+
+fn symbol_filter_from_args(args: &Value) -> SymbolFilter {
+    SymbolFilter::from_options(
+        optional_str(args, "file_path"),
+        optional_str(args, "node_id"),
+    )
+}
+
+fn ensure_symbol_resolved(
+    index: &CodeGraphIndex,
+    symbol: &str,
+    filter: &SymbolFilter,
+) -> anyhow::Result<()> {
+    if filter.file_path.is_some() || filter.node_id.is_some() {
+        return Ok(());
+    }
+    match index.resolve_symbol_filtered(symbol, filter)? {
+        ResolveOutcome::Ambiguous(candidates) => {
+            let summary: Vec<String> = candidates
+                .iter()
+                .map(|node| format!("{} ({}, {})", node.id, node.file_path, node.kind))
+                .collect();
+            anyhow::bail!(
+                "ambiguous symbol '{symbol}': pass file_path or node_id; candidates: {}",
+                summary.join("; ")
+            );
+        }
+        ResolveOutcome::NotFound => anyhow::bail!("symbol not found: {symbol}"),
+        ResolveOutcome::Found(_) => Ok(()),
+    }
 }
 
 fn require_str<'a>(value: &'a Value, key: &str) -> anyhow::Result<&'a str> {
@@ -410,6 +487,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(node["structuredContent"]["node"]["symbol"], "caller");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn codegraph_node_returns_candidates_for_ambiguous_symbol() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codegraph-ambig-{suffix}"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("a.rs"), "fn shared() {}\n").unwrap();
+        std::fs::write(root.join("b.rs"), "fn shared() {}\n").unwrap();
+        let index = CodeGraphIndex::open(&root).unwrap();
+        index.build_full_index(&root).unwrap();
+
+        let result = dispatch_tool_call(
+            &json!({"name": "codegraph_node", "arguments": {"symbol": "shared"}}),
+            &index,
+        )
+        .unwrap();
+        let candidates = result["structuredContent"]["candidates"]
+            .as_array()
+            .expect("expected candidates for ambiguous symbol");
+        assert_eq!(candidates.len(), 2);
 
         let _ = std::fs::remove_dir_all(root);
     }

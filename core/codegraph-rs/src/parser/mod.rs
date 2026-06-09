@@ -25,6 +25,7 @@ pub struct ParsedFile {
     pub path: String,
     pub language: String,
     pub mtime_ns: i64,
+    pub content_hash: String,
     pub symbols: Vec<ParsedSymbol>,
     pub edges: Vec<ParsedEdge>,
 }
@@ -57,6 +58,7 @@ pub fn parse_file(path: &Path, contents: &str, mtime_ns: i64) -> Option<ParsedFi
         path: rel_path,
         language: language.to_string(),
         mtime_ns,
+        content_hash: String::new(),
         symbols,
         edges,
     })

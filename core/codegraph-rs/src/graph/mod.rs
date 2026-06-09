@@ -1,5 +1,6 @@
 pub mod sync;
 
+use crate::db::node_ops::SymbolFilter;
 use crate::{ImpactReport, Node};
 use rusqlite::{params, Connection};
 
@@ -7,17 +8,25 @@ pub use sync::{
     build_full_index, incremental_sync, IndexWatcher, SyncReport,
 };
 
-pub fn find_callers(conn: &Connection, symbol: &str, depth: u32) -> rusqlite::Result<Vec<Node>> {
+pub fn find_callers(
+    conn: &Connection,
+    symbol: &str,
+    depth: u32,
+    filter: &SymbolFilter,
+) -> rusqlite::Result<Vec<Node>> {
     let depth = depth.max(1);
     let mut seen = std::collections::HashSet::new();
-    let mut frontier = vec![symbol.to_string()];
+    let mut frontier = vec![(symbol.to_string(), filter.clone())];
     let mut out = Vec::new();
     for _ in 0..depth {
         let mut next = Vec::new();
-        for sym in frontier {
-            for node in direct_callers(conn, &sym)? {
+        for (sym, hop_filter) in frontier {
+            for node in direct_callers(conn, &sym, &hop_filter)? {
                 if seen.insert(node.id.clone()) {
-                    next.push(node.symbol.clone());
+                    next.push((
+                        node.symbol.clone(),
+                        SymbolFilter::from_options(Some(&node.file_path), None),
+                    ));
                     out.push(node);
                 }
             }
@@ -30,7 +39,11 @@ pub fn find_callers(conn: &Connection, symbol: &str, depth: u32) -> rusqlite::Re
     Ok(out)
 }
 
-fn direct_callers(conn: &Connection, symbol: &str) -> rusqlite::Result<Vec<Node>> {
+fn direct_callers(
+    conn: &Connection,
+    symbol: &str,
+    filter: &SymbolFilter,
+) -> rusqlite::Result<Vec<Node>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
@@ -38,14 +51,23 @@ fn direct_callers(conn: &Connection, symbol: &str) -> rusqlite::Result<Vec<Node>
         JOIN nodes callee ON callee.id = e.callee_id
         JOIN nodes n ON n.id = e.caller_id
         WHERE callee.symbol = ?1
+          AND (?2 IS NULL OR callee.file_path = ?2)
+          AND (?3 IS NULL OR callee.id = ?3)
         LIMIT 64
         "#,
     )?;
-    let rows = stmt.query_map(params![symbol], map_row)?;
+    let rows = stmt.query_map(
+        params![symbol, filter.file_path, filter.node_id],
+        map_row,
+    )?;
     rows.collect()
 }
 
-pub fn find_callees(conn: &Connection, symbol: &str) -> rusqlite::Result<Vec<Node>> {
+pub fn find_callees(
+    conn: &Connection,
+    symbol: &str,
+    filter: &SymbolFilter,
+) -> rusqlite::Result<Vec<Node>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
@@ -53,16 +75,26 @@ pub fn find_callees(conn: &Connection, symbol: &str) -> rusqlite::Result<Vec<Nod
         JOIN nodes caller ON caller.id = e.caller_id
         JOIN nodes n ON n.id = e.callee_id
         WHERE caller.symbol = ?1
+          AND (?2 IS NULL OR caller.file_path = ?2)
+          AND (?3 IS NULL OR caller.id = ?3)
         LIMIT 64
         "#,
     )?;
-    let rows = stmt.query_map(params![symbol], map_row)?;
+    let rows = stmt.query_map(
+        params![symbol, filter.file_path, filter.node_id],
+        map_row,
+    )?;
     rows.collect()
 }
 
-pub fn impact_radius(conn: &Connection, symbol: &str, depth: u32) -> rusqlite::Result<ImpactReport> {
-    let callers = find_callers(conn, symbol, depth)?;
-    let callees = find_callees(conn, symbol)?;
+pub fn impact_radius(
+    conn: &Connection,
+    symbol: &str,
+    depth: u32,
+    filter: &SymbolFilter,
+) -> rusqlite::Result<ImpactReport> {
+    let callers = find_callers(conn, symbol, depth, filter)?;
+    let callees = find_callees(conn, symbol, filter)?;
     Ok(ImpactReport {
         symbol: symbol.to_string(),
         depth,
@@ -84,7 +116,8 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_callers, impact_radius};
+    use super::{find_callers, find_callees, impact_radius};
+    use crate::db::node_ops::SymbolFilter;
     use crate::db::schema::init_schema;
 
     fn seed_graph(conn: &rusqlite::Connection) {
@@ -107,7 +140,8 @@ mod tests {
     fn find_callers_returns_direct_caller() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         seed_graph(&conn);
-        let callers = find_callers(&conn, "target", 1).unwrap();
+        let filter = SymbolFilter::from_options(None, None);
+        let callers = find_callers(&conn, "target", 1, &filter).unwrap();
         assert_eq!(callers.len(), 1);
         assert_eq!(callers[0].symbol, "caller");
     }
@@ -116,8 +150,52 @@ mod tests {
     fn impact_radius_includes_both_directions() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         seed_graph(&conn);
-        let report = impact_radius(&conn, "target", 2).unwrap();
+        let filter = SymbolFilter::from_options(None, None);
+        let report = impact_radius(&conn, "target", 2, &filter).unwrap();
         assert_eq!(report.callers.len(), 1);
         assert_eq!(report.callees.len(), 1);
+    }
+
+    #[test]
+    fn duplicate_symbol_callers_do_not_cross_files() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        for (id, path, caller) in [
+            ("a1", "a.rs", "caller_a"),
+            ("a2", "a.rs", "shared"),
+            ("b1", "b.rs", "caller_b"),
+            ("b2", "b.rs", "shared"),
+        ] {
+            conn.execute(
+                "INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES (?1, ?2, 'fn', 'rust', ?3, 1)",
+                rusqlite::params![id, caller, path],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO edges (caller_id, callee_id) VALUES ('a1', 'a2'), ('b1', 'b2')",
+            [],
+        )
+        .unwrap();
+
+        let a_callers = find_callers(
+            &conn,
+            "shared",
+            1,
+            &SymbolFilter::from_options(Some("a.rs"), None),
+        )
+        .unwrap();
+        assert_eq!(a_callers.len(), 1);
+        assert_eq!(a_callers[0].symbol, "caller_a");
+
+        let b_callees = find_callees(
+            &conn,
+            "caller_b",
+            &SymbolFilter::from_options(Some("b.rs"), None),
+        )
+        .unwrap();
+        assert_eq!(b_callees.len(), 1);
+        assert_eq!(b_callees[0].symbol, "shared");
+        assert_eq!(b_callees[0].file_path, "b.rs");
     }
 }

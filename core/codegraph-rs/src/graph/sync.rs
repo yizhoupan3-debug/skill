@@ -1,11 +1,15 @@
 //! Incremental index sync + filesystem watcher (Roadmap v5 §2.8 W3/W4).
 
-use crate::db::index_ops::{delete_file_index, ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IngestStmts};
+use crate::db::index_ops::{
+    delete_file_index, ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IndexedFileMeta,
+    IngestStmts,
+};
 use crate::parser::{self, parse_file, ParsedFile};
 use crate::CodeGraphIndex;
 use anyhow::Context;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,8 +50,9 @@ pub fn incremental_sync(
     let repo_root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
     let mut report = SyncReport::default();
     let mut seen = HashSet::new();
-    let indexed: HashMap<String, i64> = list_indexed_files(index.connection())?
+    let indexed: HashMap<String, IndexedFileMeta> = list_indexed_files(index.connection())?
         .into_iter()
+        .map(|meta| (meta.path.clone(), meta))
         .collect();
 
     let mut pending: Vec<FileWorkItem> = Vec::new();
@@ -56,13 +61,15 @@ pub fn incremental_sync(
         let rel = relative_path(&repo_root, &path);
         seen.insert(rel.clone());
         let mtime_ns = file_mtime_ns(&path)?;
-        if !force_all && file_is_current(&indexed, &rel, mtime_ns) {
+        let content_hash = file_content_hash(&path)?;
+        if !force_all && file_is_current(&indexed, &rel, &content_hash) {
             continue;
         }
         pending.push(FileWorkItem {
             path,
             rel,
             mtime_ns,
+            content_hash,
         });
     }
 
@@ -80,9 +87,9 @@ pub fn incremental_sync(
         report.edges_added += edges;
     }
 
-    for (path, _) in &indexed {
-        if !seen.contains(path) {
-            delete_file_index(conn, path)?;
+    for (path, _) in indexed {
+        if !seen.contains(&path) {
+            delete_file_index(conn, &path)?;
             report.files_removed += 1;
         }
     }
@@ -97,6 +104,7 @@ struct FileWorkItem {
     path: PathBuf,
     rel: String,
     mtime_ns: i64,
+    content_hash: String,
 }
 
 fn parse_work_item(item: &FileWorkItem) -> anyhow::Result<Option<ParsedFile>> {
@@ -106,13 +114,28 @@ fn parse_work_item(item: &FileWorkItem) -> anyhow::Result<Option<ParsedFile>> {
         return Ok(None);
     };
     parsed.path = item.rel.clone();
+    parsed.content_hash = item.content_hash.clone();
     Ok(Some(parsed))
 }
 
-fn file_is_current(indexed: &HashMap<String, i64>, rel_path: &str, mtime_ns: i64) -> bool {
+fn file_is_current(
+    indexed: &HashMap<String, IndexedFileMeta>,
+    rel_path: &str,
+    content_hash: &str,
+) -> bool {
     indexed
         .get(rel_path)
-        .is_some_and(|stored| *stored == mtime_ns)
+        .is_some_and(|stored| stored.content_hash == content_hash)
+}
+
+fn file_content_hash(path: &Path) -> anyhow::Result<String> {
+    let bytes = fs::read(path).with_context(|| format!("read file for hash {}", path.display()))?;
+    let digest = Sha256::digest(bytes);
+    Ok(hex_encode(digest.as_slice()))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn discover_source_files(repo_root: &Path) -> anyhow::Result<Vec<PathBuf>> {
@@ -202,7 +225,12 @@ impl IndexWatcher {
                         }
                         pending = false;
                         if let Ok(index) = CodeGraphIndex::open(&repo_root) {
-                            let _ = incremental_sync(&index, &repo_root, false);
+                            if let Err(err) = incremental_sync(&index, &repo_root, false) {
+                                eprintln!(
+                                    "codegraph IndexWatcher: incremental_sync failed for {}: {err}",
+                                    repo_root.display()
+                                );
+                            }
                         }
                     }
                     Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -265,6 +293,35 @@ mod tests {
         build_full_index(&index, &root).unwrap();
         let report = incremental_sync(&index, &root, false).unwrap();
         assert_eq!(report.files_updated, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sync_reindexes_when_content_hash_stale_despite_matching_mtime() {
+        let (root, index) = temp_repo();
+        build_full_index(&index, &root).unwrap();
+        let conn = index.connection();
+        let (mtime_ns, stale_hash): (i64, String) = conn
+            .query_row(
+                "SELECT mtime_ns, content_hash FROM files WHERE path = 'lib.rs'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        fs::write(root.join("lib.rs"), "fn gamma() {}\n").unwrap();
+        conn.execute(
+            "UPDATE files SET content_hash = ?1, mtime_ns = ?2 WHERE path = 'lib.rs'",
+            rusqlite::params![stale_hash, mtime_ns],
+        )
+        .unwrap();
+        let report = incremental_sync(&index, &root, false).unwrap();
+        assert!(
+            report.files_updated >= 1,
+            "expected re-index when on-disk content hash differs: {:?}",
+            report
+        );
+        let search = index.search_symbols("gamma", None, None, 10).unwrap();
+        assert!(search.iter().any(|n| n.symbol == "gamma"));
         let _ = fs::remove_dir_all(root);
     }
 

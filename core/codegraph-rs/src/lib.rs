@@ -6,9 +6,9 @@ pub mod parser;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const SCHEMA_VERSION: &str = "codegraph-rs-v2";
+pub const SCHEMA_VERSION: &str = "codegraph-rs-v3";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Node {
     pub id: String,
     pub symbol: String,
@@ -80,16 +80,30 @@ impl CodeGraphIndex {
         )?)
     }
 
-    pub fn find_callers(&self, symbol: &str, depth: u32) -> anyhow::Result<Vec<Node>> {
-        Ok(graph::find_callers(&self.conn, symbol, depth)?)
+    pub fn find_callers(
+        &self,
+        symbol: &str,
+        depth: u32,
+        filter: &db::node_ops::SymbolFilter,
+    ) -> anyhow::Result<Vec<Node>> {
+        Ok(graph::find_callers(&self.conn, symbol, depth, filter)?)
     }
 
-    pub fn find_callees(&self, symbol: &str) -> anyhow::Result<Vec<Node>> {
-        Ok(graph::find_callees(&self.conn, symbol)?)
+    pub fn find_callees(
+        &self,
+        symbol: &str,
+        filter: &db::node_ops::SymbolFilter,
+    ) -> anyhow::Result<Vec<Node>> {
+        Ok(graph::find_callees(&self.conn, symbol, filter)?)
     }
 
-    pub fn impact_radius(&self, symbol: &str, depth: u32) -> anyhow::Result<ImpactReport> {
-        Ok(graph::impact_radius(&self.conn, symbol, depth)?)
+    pub fn impact_radius(
+        &self,
+        symbol: &str,
+        depth: u32,
+        filter: &db::node_ops::SymbolFilter,
+    ) -> anyhow::Result<ImpactReport> {
+        Ok(graph::impact_radius(&self.conn, symbol, depth, filter)?)
     }
 
     pub fn get_node_by_id(&self, id: &str) -> anyhow::Result<Option<Node>> {
@@ -98,6 +112,14 @@ impl CodeGraphIndex {
 
     pub fn resolve_symbol(&self, symbol: &str) -> anyhow::Result<Option<Node>> {
         Ok(db::node_ops::resolve_symbol(&self.conn, symbol)?)
+    }
+
+    pub fn resolve_symbol_filtered(
+        &self,
+        symbol: &str,
+        filter: &db::node_ops::SymbolFilter,
+    ) -> anyhow::Result<db::node_ops::ResolveOutcome> {
+        Ok(db::node_ops::resolve_symbol_filtered(&self.conn, symbol, filter)?)
     }
 
     pub fn index_stats(&self) -> anyhow::Result<IndexStats> {

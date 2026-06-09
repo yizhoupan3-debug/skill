@@ -34,7 +34,12 @@ Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep`
 | MCP 工具不可用 | 确认 `--features codegraph` 构建；重装 host projection |
 | 索引空 / stale | 跑 sync + watcher；查 DB schema v1→v2 迁移日志 |
 | 性能问题 | W4：rayon 并行 parse + prepared stmt（见 roadmap CG-4） |
-| 测试失败 | `cargo test -p codegraph-rs`（当前基线 25 passed） |
+| 测试失败 | `cargo test -p codegraph-rs`（当前基线 29 passed） |
+
+## 索引失效与 symbol 消歧（v3）
+
+- **content hash**：`files.content_hash` 存 SHA256（hex）；`incremental_sync` 以 hash 判定文件是否 current（不再仅靠 `mtime_ns`）。v2 库经 `migrate_schema` 自动 `ALTER TABLE` 补列；首次 sync 会按新 hash 重索引变更文件。
+- **symbol 消歧**：`codegraph_node` 多匹配时返回 `candidates`（含 `file_path` + `kind`）；单匹配仍返回 `node`。`codegraph_callers` / `codegraph_callees` / `codegraph_impact` 在歧义且无过滤时返回 tool error，可传可选 `file_path` 或 `node_id` 限定范围。图查询按 `file_path`/`node_id` 过滤，避免跨文件同名 symbol 串边。
 
 ## 相关路径
 
