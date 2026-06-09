@@ -42,6 +42,16 @@ framework_contracts:
   emits_verification_results: true
 risk: medium
 source: local
+allowed_tools:
+  - Read
+  - Bash
+  - Agent
+  - mcp__mcp-codegraph__codegraph_search
+  - mcp__mcp-codegraph__codegraph_callers
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_impact
+  - mcp__mcp-codegraph__codegraph_node
+  - mcp__mcp-codegraph__codegraph_status
 ---
 
 # Code review (deep owner)
@@ -78,7 +88,7 @@ Then: preamble (Scope / Lenses / Omitted), verdict, findings grouped by lens, te
 
 ### Spawn-first pairing
 
-For broad/deep/PR-level review, spawn **at least one** parallel read-only reviewer (`fork_context=false`, lane in `deep_gate_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts, prefer **>=2** lanes split by disjoint lens bundles, before main-thread compact synthesis.
+For broad/deep/PR-level review, spawn **at least one** parallel read-only reviewer (`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts, prefer **>=2** lanes split by disjoint lens bundles, before main-thread compact synthesis.
 
 **Narrow scope** (single-file, `small_task`, or explicit「不用子代理」): no multi-lane requirement; hosts skip arming `review_required`.
 
@@ -92,7 +102,7 @@ For broad/deep/PR-level review, spawn **at least one** parallel read-only review
 
 **Claude Code**: `PostToolUse` observes `claude_reviewer_lanes` (registry `review_gate.claude_reviewer_lanes`) with `fork_context` parsed as logical `false`. Stop hard-blocks before `independent_reviewer_seen`. `my-light` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` disables hard-block.
 
-**Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.deep_gate_lanes`. `explore`, `ci-investigator`, `cursor-guide`, and custom lane names **do not count** on Cursor — even with `fork_context=false`.
+**Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.reviewer_lanes`. `explore`, `ci-investigator`, `cursor-guide`, and custom lane names **do not count** on Cursor — even with `fork_context=false`.
 
 Lane outputs must cite **locations** (paths + anchors / symbols).
 
@@ -113,7 +123,7 @@ When the environment flag `ROUTER_RS_HETEROGENEOUS_ADVERSARIAL_REVIEW=1` is set 
 
 - **Primary model family** is detected from `ROUTER_RS_MODEL_FAMILY` (or host-injected `CLAUDE_MODEL` / `OPENAI_MODEL`). At least **one** reviewer subagent must use a **different** model family (e.g., primary=`claude` requires a `gpt`/`gemini`/`llama` reviewer).
 - The `heterogeneous_review_hint_for_lane()` nudge is injected into the reviewer prompt automatically by the host hooks (Claude/Cursor/Codex). This hint names the primary model family so the spawn orchestration can select a cross-family reviewer.
-- **`deep_gate_lanes`** countable evidence: a reviewer lane that satisfies the heterogeneous requirement **and** has `fork_context=false` (or inferred false) counts toward REVIEW_GATE clearance. Same-family self-review does **not** satisfy the I7 requirement.
+- **`reviewer_lanes`** countable evidence: a reviewer lane that satisfies the heterogeneous requirement **and** has `fork_context=false` (or inferred false) counts toward REVIEW_GATE clearance. Same-family self-review does **not** satisfy the I7 requirement.
 - In the RFV loop, the `metadata.heterogeneous_adversarial_review` block records `primary_model_family` alongside the config so round-to-round auditing is possible.
 
 **Operator**: set `ROUTER_RS_MODEL_FAMILY=gpt-4o` (or equivalent) to declare the primary session's model family when the host does not inject it automatically.
@@ -153,6 +163,17 @@ Use when the user allows network/tools or scope touches third-party crates/servi
 **Compact (default)**: optional prefix (0-2 lines) -> Findings list (P0->P1->P2->caveats, evidence-gated) -> optional one-line verdict -> optional one-line test/repro gap.
 
 **Full report (explicit only)**: Scope/Lenses/Omitted -> verdict -> findings by lens (P0-P2) -> test/repro gap -> external calibration -> next move.
+
+## CodeGraph 场景
+
+Review lane **只读**；图谱用于定位与 call-chain 证据，不替代 Read/Grep。
+
+| 场景 | 工具 | 何时 |
+|------|------|------|
+| 索引就绪 | `codegraph_status` | 宽范围 review 前；索引 stale 时在 finding 中加 caveat |
+| 符号定位 | `codegraph_search` / `codegraph_node` | 消歧 FQN、核实 path:anchor 是否存在 |
+| 调用链 | `codegraph_callers` / `codegraph_callees` | P0/P1 需 concrete call chain 时优先于手工 rg |
+| 影响半径 | `codegraph_impact` | API/行为变更的 blast radius 与测试缺口 |
 
 ## Integration / boundaries
 

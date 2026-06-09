@@ -14,6 +14,13 @@ disable-model-invocation: true
 trigger_hints:
   - /verifyx
   - verifyx
+allowed_tools:
+  - mcp__mcp-codegraph__codegraph_search
+  - mcp__mcp-codegraph__codegraph_callers
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_impact
+  - mcp__mcp-codegraph__codegraph_node
+  - mcp__mcp-codegraph__codegraph_status
 metadata:
   version: "0.2.0"
   platforms: [supported]
@@ -56,10 +63,11 @@ Verify 阶段开始前，检查 EVIDENCE_INDEX 中的调试记录是否包含：
 
 ### 1.5 Sync lifecycle state (HARD)
 
-- Read 
-- Set  to 
+- Read `artifacts/current/<task_id>/WAVE_STATE.json`
+- Set `global_status` to `completed`（若 implement 已收尾但字段仍为 `running` / `in_progress`）
 - Write back the file
-- This prevents cross-session recovery from seeing a stale  state
+- **GOAL_STATE** 变更须经 `framework_goal_drive`（禁止直写；见 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-lifecycle-common/GOAL_STATE_CONTRACT.md) §禁止直写）
+- This prevents cross-session recovery from seeing a stale `running` state
 
 ### 2. Ship
 
@@ -106,6 +114,17 @@ Pointer cleanup：遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-l
 ### 4. Chat
 
 ≤5 lines: PASS/FAIL, closeout path, purge status (purged / deferred-24h / skipped-by-flag). No command dumps.
+
+## CodeGraph 场景
+
+验证收口阶段的只读交叉检查；结论写入 `EVIDENCE_INDEX` 或 `VERIFY_REPORT.md` 一行摘要。
+
+| 场景 | 工具 | 何时 |
+|------|------|------|
+| 索引就绪 | `codegraph_status` | 涉及符号/调用链断言前确认索引覆盖改动文件 |
+| 符号定位 | `codegraph_search` / `codegraph_node` | 核对 ROADMAP 中列出的 symbol 仍存在于预期路径 |
+| 调用链 | `codegraph_callers` | refactor 后确认无意外 orphan caller（与测试互补） |
+| 影响半径 | `codegraph_impact` | 公共 API 变更的 residual risk 一行记录 |
 
 ## Pre-conditions
 

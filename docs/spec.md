@@ -280,12 +280,14 @@ spawned → running → draining → completed
 
 ### 5.5 REVIEW_GATE 差异
 
-| 能力 | claude-code | cursor | codex | opencode | antigravity-app |
-|------|:-----------:|:------:|:-----:|:--------:|:---------------:|
-| 可数深度 lane | `claude_reviewer_lanes` | `deep_gate_lanes` | `deep_gate_lanes` | — | 物理 `review-lanes/` |
+> **清门真源（2026-06）**：`core-policy::review_gate_satisfied` — `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override。**全宿主 Stop advisory-only**（不 `permission: deny` / `decision:block`）。详见 [`host_adapter_contract.md`](host_adapter_contract.md) §0.1。
+
+| 能力 | claude-code | cursor | codex | opencode | antigravity |
+|------|:-----------:|:------:|:-----:|:--------:|:-----------:|
+| 可数深度 lane | `reviewer_lanes`（registry 共用闭集） | 同左 | 同左 | skill + `review-lanes/` | 同左 |
 | spawn-first | ✅ | ✅ | ✅ | — | — |
-| 清门机制 | 无 hook 硬拦 | Stop 清门 | Stop 清门 | 无 | MCP Hard Block |
-| my-light | advisory | advisory | advisory | advisory | advisory |
+| Stop 出站 | advisory nudge | advisory nudge | advisory nudge | MCP advisory | MCP advisory |
+| my-light | suppress nudge | suppress nudge | suppress nudge | suppress nudge | suppress nudge |
 
 ---
 

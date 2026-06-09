@@ -28,7 +28,7 @@ depends_on:
 - 可拆 ≥2 独立子问题时默认并行；通常 3–5 个 `fork_context=false` lane。
 - 写入 disjoint；不修改共享 continuity artifact。
 - `/workflow`：跨宿主 JS workflow 编排（`agent-swarm-orchestration`；Claude Code 可 native，其它宿主 supervisor）。
-- `/team`：通用多 agent 协作（同 owner）；仅显式调用或需 worker 协作时。
+- `/team` 已退役（2026-06）；多 agent 显式入口为 `/workflow`（`agent-swarm-orchestration`）。
 
 ## 执行循环
 

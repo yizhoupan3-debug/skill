@@ -16,7 +16,7 @@ depends_on:
 | **lifecycle_profile** | 生命周期配置档（如 `my` / `my-light`），控制门控强度与 closeout 行为；写于 `GOAL_STATE.json` |
 | **closeout_gate** | 完成前的收口检查门——校验 changed_files / verification / blockers 等项是否齐备；未满足时 advisory 提醒 `complete` |
 | **closeout_record** | 收口产物 JSON（`artifacts/closeout/<task_id>.json`），记录摘要、变更文件、风险与验证状态 |
-| **REVIEW_GATE** | Stop 事件上的深度审稿门控；lane 未收尾时 Cursor 输出 `router-rs REVIEW_GATE incomplete` 或 Codex `decision:block` |
+| **REVIEW_GATE** | Stop 事件上的深度审稿 advisory 门控；lane 未收尾时注入 `router-rs REVIEW_GATE incomplete` 等单行 nudge（**全宿主不硬拦 Stop**） |
 | **AG_FOLLOWUP** | Stop 事件上的 Goal 契约续跑提示；`router-rs AG_FOLLOWUP missing_parts=…` 表示 goal 阶段仍缺片段 |
 | **goal_drive** | 宏目标驱动模式——通过 `framework_goal_drive` stdio 或 MCP `goal_state_manage` 驱动 `/implementx`→`/verifyx` 连续执行 |
 | **goal_state_manage** | MCP 工具，管理 `GOAL_STATE.json` 的 start / checkpoint / pause / resume / complete / clear / block 操作 |
@@ -26,7 +26,7 @@ depends_on:
 | **spawn-first** | 审稿策略：首轮工具调用前先 spawn 可数 reviewer 子代理，减少 Stop 时 `REVIEW_GATE` nag |
 | **fork_context** | Cursor 子代理上下文标识；解析为 `false` 时视为独立 fork，满足深度 review lane 要求 |
 | **compact envelope** | 深度 review 输出的紧凑信封格式（含 lens 透镜），默认 findings-only 只读，详见 `skills/code-review-deep/SKILL.md` |
-| **deep_gate_lanes** | 深度审稿 lane 闭集（代码 / 安全 / 架构等），定义于 `RUNTIME_REGISTRY.json`；所有 lane 收尾方可清 `REVIEW_GATE` |
+| **reviewer_lanes** | 可数独立审稿 lane 闭集，定义于 `RUNTIME_REGISTRY.json` → `review_gate.reviewer_lanes`；`independent_reviewer_seen` 后 Stop nudge 可清 |
 | **hook-state** | 各宿主 hook 持久化状态目录（Cursor `.cursor/hook-state/`、Codex `.codex/hook-state/`、Claude `.claude/hook-state/` 等，见 `RUNTIME_REGISTRY`）；存储 review 进度、subagent 计数等；持久化失败时默认 fail-closed |
 | **projection** | 宿主投影——同一策略在不同宿主（Codex / Cursor / Claude Code）上的渲染文案与行为差异；配置于 `host_projection_narrative.json` |
 | **host_adapter** | 宿主适配层；将框架统一协议翻译为各宿主 hook 语义（Stop 硬拦 vs followup_message），契约见 `host_adapter_contract.md` |
@@ -126,7 +126,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 - **review-lite** ADR：[`adr/ADR-review-gate-lite.md`](adr/ADR-review-gate-lite.md)
 - 宿主差异 / `need=` 排障：[spec.md](spec.md) · [hosts/cursor.md](hosts/cursor.md)
 
-**快查**：独立 fork 须 `fork_context` 解析为 **`false`**（布尔、`0`、字符串 `"false"`/`"0"`/`"no"`/`"n"`）；Stop 硬行 `router-rs REVIEW_GATE incomplete` → 先 spawn `fork_context=false` 的 **deep_gate_lanes** lane。
+**快查**：独立 fork 须 `fork_context` 解析为 **`false`**（布尔、`0`、字符串 `"false"`/`"0"`/`"no"`/`"n"`）；Stop 见 `router-rs REVIEW_GATE incomplete` advisory nudge → 先 spawn `fork_context=false` 且 lane ∈ **`reviewer_lanes`** 的只读 reviewer。
 
 ## Hook 减法闭集与内存（2026-05-20）
 

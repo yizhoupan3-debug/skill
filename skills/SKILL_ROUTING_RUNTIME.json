@@ -32,7 +32,7 @@
       "gate",
       "delegation",
       "P1",
-      "Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundar",
+      "Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundar",
       "required",
       [
         "多 agent 协作",
@@ -50,8 +50,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -78,8 +76,6 @@
       "runtime",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -114,8 +110,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -153,8 +147,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -191,8 +183,6 @@
       "runtime",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -219,8 +209,6 @@
       "runtime",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -251,8 +239,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -292,8 +278,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -332,8 +316,6 @@
       "runtime",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -360,8 +342,6 @@
       "runtime",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -397,8 +377,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -427,8 +405,6 @@
       "runtime",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -463,8 +439,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -505,8 +479,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -537,8 +509,6 @@
       "runtime",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -591,8 +561,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -745,8 +713,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -785,8 +751,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -820,8 +784,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -860,8 +822,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -919,8 +879,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -953,8 +911,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -987,8 +943,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -1025,8 +979,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -1102,8 +1054,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -1258,8 +1208,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -1368,8 +1316,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
@@ -1409,8 +1355,6 @@
       "project",
       [
         "antigravity",
-        "antigravity-app",
-        "antigravity-cli",
         "claude-code",
         "codex",
         "codex",
