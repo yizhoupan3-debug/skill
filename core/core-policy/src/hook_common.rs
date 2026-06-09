@@ -296,18 +296,12 @@ pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) 
     if is_my_lifecycle_entry_prompt(text) {
         return true;
     }
-    let Some(root) = repo_root else {
+    let Some(_root) = repo_root else {
         return false;
     };
-    core_state::state_manager::read_goal_state_for_hydration(root)
-        .ok()
-        .flatten()
-        .and_then(|(goal, _)| {
-            goal.get("lifecycle_profile")
-                .and_then(|v| v.as_str())
-                .map(|p| p == "my-light")
-        })
-        .unwrap_or(false)
+    // Single-conversation mode: no pointer fallback for goal state lookup.
+    // lifecycle_profile is detected from prompt patterns above.
+    false
 }
 
 /// Hook nudge for my-* pre-execution (read-only product surface).

@@ -9,7 +9,7 @@ dev-exempt = []
 test-sync = []
 
 [dependencies]
-core-state = { path = "../../core/antigravity" }
+core-state = { path = "../../core/core-state" }
 framework-kernel = { path = "../framework-kernel" }
 regex = "1.11.1"
 serde = { version = "1.0.219", features = ["derive"] }

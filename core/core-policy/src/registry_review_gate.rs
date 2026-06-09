@@ -340,6 +340,7 @@ pub fn lifecycle_profile_disables_spawn_first_nudge(
 }
 
 /// Test helper shared with router-rs disk registry parity checks.
+#[cfg(any(test, feature = "test-sync"))]
 pub fn assert_reviewer_lane_matrix(repo_root: Option<&Path>) {
     assert!(is_reviewer_lane_from_registry("general-purpose", repo_root));
     assert!(is_reviewer_lane_from_registry("generalpurpose", repo_root));

@@ -23,7 +23,9 @@ use framework_kernel::{emit_telemetry, TelemetryEvent};
 use std::env;
 #[cfg(feature = "dev-exempt")]
 use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(feature = "dev-exempt")]
+use std::path::PathBuf;
+use std::path::Path;
 
 #[cfg(feature = "dev-exempt")]
 fn dev_exempt_enabled() -> bool {
@@ -52,9 +54,7 @@ fn path_matches_exempt_prefix(canonical: &Path, repo_root: &Path) -> bool {
         .unwrap_or_else(|| canonical.to_string_lossy().to_string());
     let rel_norm = rel_str.replace('\\', "/");
     EXEMPT_PATH_PREFIXES.iter().any(|prefix| {
-        rel_norm == *prefix
-            || rel_norm.starts_with(&format!("{prefix}/"))
-            || canonical.to_string_lossy().contains(&format!("/{prefix}/"))
+        rel_norm == *prefix || rel_norm.starts_with(&format!("{prefix}/"))
     })
 }
 
@@ -133,6 +133,30 @@ mod tests {
         fs::create_dir_all(repo.join("src")).unwrap();
         fs::write(&path, "fn main() {}").unwrap();
         assert!(!should_dev_exempt(&path, &repo));
+        env::remove_var(DEV_EXEMPT_ENV);
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn exempt_no_false_positive_when_repo_root_contains_prefix_name() {
+        // Safety: if repo_root path contains "artifacts" (e.g. /home/user/artifacts-workspace/),
+        // a file like src/main.rs should NOT be exempted. This was a bug before the fix
+        // that removed the absolute-path `contains` fallback.
+        let _lock = process_env_lock();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("artifacts-workspace-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("src")).unwrap();
+        fs::write(repo.join("src/main.rs"), "fn main() {}").unwrap();
+        env::set_var(DEV_EXEMPT_ENV, "1");
+        let path = repo.join("src/main.rs");
+        assert!(
+            !should_dev_exempt(&path, &repo),
+            "src/main.rs must not be exempt just because repo root contains 'artifacts'"
+        );
         env::remove_var(DEV_EXEMPT_ENV);
         let _ = fs::remove_dir_all(&repo);
     }
