@@ -240,6 +240,21 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
+
+    let pre_guard =
+        crate::mcp_pre_guard::evaluate_mcp_pre_guard_safe(&tool_name, &arguments, &runtime.repo_root);
+    if pre_guard.blocked {
+        let reason = pre_guard
+            .reason
+            .unwrap_or_else(|| "MCP pre-guard blocked this tool call.".to_string());
+        return tool_result(Err(browser_error(
+            "MCP_PRE_GUARD",
+            &reason,
+            &["review tool arguments and retry with safe inputs"],
+            true,
+        )));
+    }
+
     let structured = match tool_name.as_str() {
         "browser_open" => runtime.open(&arguments),
         "browser_tabs" => runtime.tabs(&arguments),

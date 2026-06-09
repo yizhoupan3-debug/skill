@@ -814,12 +814,27 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         }
     }
 
+    // HX-5: MCP pre-guard (mcp-tool-safety); panic → allow + log.
+    let pre_guard =
+        crate::mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool_name, arguments, repo_root);
+    if pre_guard.blocked {
+        let reason = pre_guard
+            .reason
+            .unwrap_or_else(|| "MCP pre-guard blocked this tool call.".to_string());
+        return json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "content": [{ "type": "text", "text": format!("Error: {reason}") }],
+                "isError": true,
+            },
+        });
+    }
+
     // Track every tool call for anomaly detection.
     if let Err(e) = record_tool_call(repo_root, tool_name, None) {
         eprintln!("[router-rs warning] record_tool_call failed: {e}");
     }
-
-
 
     let mut result = match tool_name {
         "framework_snapshot" => tool_framework_snapshot(repo_root),

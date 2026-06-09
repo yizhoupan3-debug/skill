@@ -79,6 +79,34 @@ mod desktop_mcp_tests {
     }
 
     #[test]
+    fn mcp_stdio_harness_pre_guard_blocks_session_resume_due() {
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "session_resume_due",
+                "arguments": { "workerId": "w1" }
+            }
+        });
+        let response = crate::mcp_stdio_harness::handle_mcp_request(
+            &req.to_string(),
+            &test_repo_dir(),
+            "antigravity",
+        )
+        .expect("pre-guard response");
+        let text = response_text(&response);
+        assert!(
+            text.contains("session_resume_due") || text.contains("stale"),
+            "expected pre-guard block, got: {text}"
+        );
+        assert!(
+            !text.contains("Unknown tool"),
+            "pre-guard must block before unknown-tool handler: {text}"
+        );
+    }
+
+    #[test]
     fn web_fetch_blocks_loopback() {
         let req = json!({
             "jsonrpc": "2.0",

@@ -24,7 +24,7 @@ depends_on:
 | `session_launch` | 可通过 prompt 注入执行任意远程代码 |
 | `session_resume_due` | 可能以陈旧状态重新触发已阻断的 worker |
 
-> 注：`session_launch` 本身是合法工具，仅在参数含危险内容时拦截（见 Layer 2）。
+> 注：`session_launch` 本身是合法工具，仅在参数含危险内容时拦截（见 Layer 2）。`tools/call` 路径已通过 `mcp_pre_guard` 接线（`browser_mcp`、`mcp_stdio_harness`）。
 
 ### Layer 2: 参数级风险模式
 
@@ -46,7 +46,7 @@ depends_on:
 - `git reset --hard`
 - `git push --force`
 
-**实现位置**：`core/router-rs/src/hook_policy/`（`dangerous_mcp_tool_reason` 函数）。
+**实现位置**：`core/core-policy/src/hook_policy.rs`（`dangerous_mcp_tool_reason`）；`tools/call` 接线：`core/router-rs/src/mcp_pre_guard.rs` → `browser_mcp` / `mcp_stdio_harness`。
 
 ## 1. 测试层次
 
