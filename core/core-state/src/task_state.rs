@@ -216,11 +216,11 @@ pub struct TaskPointers {
 }
 
 /// `active_task.json` / `focus_task.json` 一次成对读取（比两次独立 open 的半态窗口更小）。
-pub fn read_task_pointers(repo_root: &Path) -> TaskPointers {
-    let (active_task_id, focus_task_id) = crate::state_manager::read_task_pointer_pair(repo_root);
+/// 单对话模式：不再从文件读取 pointer，返回 None。
+pub fn read_task_pointers(_repo_root: &Path) -> TaskPointers {
     TaskPointers {
-        active_task_id,
-        focus_task_id,
+        active_task_id: None,
+        focus_task_id: None,
     }
 }
 
@@ -879,7 +879,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         assert_eq!(v.task_id.as_deref(), Some(tid));
         assert!(matches!(v.control_mode, TaskControlMode::Autopilot));
         let ev = v.evidence.as_ref().expect("evidence");
@@ -903,6 +903,7 @@ mod tests {
 
     #[test]
     fn promote_focus_to_active_when_active_lacks_goal() {
+        // Single-conversation mode: read_task_pointers returns None, so promotion is a no-op.
         let tmp = unique_repo("promote-focus");
         let active_tid = "t-no-goal";
         let focus_tid = "t-has-goal";
@@ -916,20 +917,19 @@ mod tests {
             r#"{"goal":"g","status":"planned","drive_until_done":false,"non_goals":["n"],"done_when":["a","b"],"validation_commands":["c"]}"#,
         )
         .unwrap();
-        assert!(maybe_promote_focus_to_active_pointer(&tmp));
-        let active_raw =
-            fs::read_to_string(tmp.join("artifacts/current/active_task.json")).unwrap();
-        assert!(active_raw.contains(focus_tid));
-        let frame = resolve_cursor_continuity_frame(&tmp);
-        assert_eq!(
-            frame.pointer_view.task_id.as_deref(),
-            Some(focus_tid)
-        );
+        assert!(!maybe_promote_focus_to_active_pointer(&tmp));
+        // In single-conversation mode, resolve with explicit override to the focus task.
+        let v = resolve_task_view(&tmp, Some(focus_tid));
+        assert_eq!(v.task_id.as_deref(), Some(focus_tid));
+        assert!(v.goal_state.is_some());
         let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn active_missing_goal_focus_has_goal_emits_continuity_note() {
+        // Single-conversation mode: pointers are always None, so the pointer-based
+        // mismatch note is never emitted. This test now verifies that passing an
+        // explicit override to the focus task loads its goal correctly.
         let tmp = unique_repo("af-focus");
         let active_tid = "t-no-goal";
         let focus_tid = "t-has-goal";
@@ -957,16 +957,16 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
-        assert_eq!(v.task_id.as_deref(), Some(active_tid));
-        assert!(v.goal_state.is_none());
-        let needle = format!(
-            "{} active={active_tid} focus={focus_tid}",
-            super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL
-        );
+        // Pass explicit override to the focus task (pointer fallback no longer works).
+        let v = resolve_task_view(&tmp, Some(focus_tid));
+        assert_eq!(v.task_id.as_deref(), Some(focus_tid));
+        assert!(v.goal_state.is_some());
+        // In single-conversation mode, pointers are None, so the mismatch note is not emitted.
         assert!(
-            v.resolution_notes.iter().any(|n| n == &needle),
-            "notes={:?}",
+            !v.resolution_notes.iter().any(|n| {
+                n.starts_with(super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL)
+            }),
+            "pointer-based mismatch note must not be emitted when pointers are None: {:?}",
             v.resolution_notes
         );
         let _ = fs::remove_dir_all(&tmp);
@@ -1014,7 +1014,7 @@ mod tests {
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(task_dir.join("GOAL_STATE.json"), "{\"not\": valid json").unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         assert_eq!(v.task_id.as_deref(), Some(tid));
         assert!(v.goal_state.is_none());
         assert!(
@@ -1065,7 +1065,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         assert!(matches!(v.control_mode, TaskControlMode::Conflict { .. }));
         assert!(!v.resolution_notes.is_empty());
         let _ = fs::remove_dir_all(&tmp);
@@ -1102,7 +1102,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("dc");
         assert_eq!(dc.rfv_pass_round_count, 1);
         assert_eq!(dc.rfv_adversarial_round_count, 1);
@@ -1150,7 +1150,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("dc");
         assert_eq!(dc.depth_score, 3, "strict third point via falsification");
         match prior {
@@ -1191,7 +1191,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.as_ref().expect("dc");
         assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
 
@@ -1241,7 +1241,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         let hint = depth_compliance_refresh_hint(&v).expect("hint");
         assert!(!hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
@@ -1303,7 +1303,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.as_ref().expect("dc");
         assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
         assert_eq!(dc.rfv_external_strict_ok_round_count, 1);
@@ -1363,7 +1363,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.as_ref().expect("dc");
         assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
         assert_eq!(dc.rfv_external_strict_ok_round_count, 0);
@@ -1446,7 +1446,7 @@ mod tests {
         )
         .unwrap();
 
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("depth_compliance present");
         assert_eq!(dc.rfv_pass_round_count, 1);
         assert_eq!(dc.rfv_unknown_round_count, 1);
@@ -1464,7 +1464,7 @@ mod tests {
         write_active(&tmp, "t-zero");
         let task_dir = tmp.join("artifacts/current/t-zero");
         fs::create_dir_all(&task_dir).unwrap();
-        let v = resolve_task_view(&tmp, None);
+        let v = resolve_task_view(&tmp, Some("t-zero"));
         let dc = v.depth_compliance.expect("depth_compliance present");
         assert_eq!(dc.depth_score, 0);
         assert_eq!(dc.rfv_pass_round_count, 0);
@@ -1569,6 +1569,71 @@ mod tests {
         assert_eq!(txs.len(), 1);
         let (goal, _, _, _) = hydrate_task_state_hybrid(&tmp, tid);
         assert_eq!(goal.expect("goal")["goal"], json!("good-line"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn read_task_pointers_stub_returns_none() {
+        // Single-conversation mode: stub always returns None regardless of disk state.
+        let tmp = unique_repo("pointers-stub");
+        let active_dir = tmp.join("artifacts/current");
+        fs::create_dir_all(&active_dir).unwrap();
+        // Write an active_task.json that the stub should IGNORE.
+        fs::write(
+            active_dir.join("active_task.json"),
+            r#"{"task_id":"should-not-be-read"}"#,
+        )
+        .unwrap();
+        fs::write(
+            active_dir.join("focus_task.json"),
+            r#"{"task_id":"also-ignored"}"#,
+        )
+        .unwrap();
+        let pointers = read_task_pointers(&tmp);
+        assert!(
+            pointers.active_task_id.is_none(),
+            "stub must return None for active_task_id"
+        );
+        assert!(
+            pointers.focus_task_id.is_none(),
+            "stub must return None for focus_task_id"
+        );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_task_view_idle_when_no_override_and_stub_pointers() {
+        let tmp = unique_repo("resolve-idle");
+        let active_dir = tmp.join("artifacts/current");
+        fs::create_dir_all(&active_dir).unwrap();
+        // With task_id_override = None and stub pointers, should return idle view.
+        let view = resolve_task_view(&tmp, None);
+        assert!(
+            view.task_id.is_none(),
+            "idle view: task_id should be None when no override and stub pointers"
+        );
+        assert!(
+            view.goal_state.is_none(),
+            "idle view: goal_state should be None"
+        );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_task_view_uses_explicit_override_even_with_stub() {
+        let tmp = unique_repo("resolve-override");
+        let tid = "explicit-task";
+        let task_dir = tmp.join("artifacts/current").join(tid);
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("GOAL_STATE.json"),
+            r#"{"status":"running","goal":"test-goal"}"#,
+        )
+        .unwrap();
+        // With explicit task_id_override, should resolve even though pointers are stubbed.
+        let view = resolve_task_view(&tmp, Some(tid));
+        assert_eq!(view.task_id.as_deref(), Some(tid));
+        assert!(view.goal_state.is_some(), "goal_state should resolve with explicit override");
         let _ = fs::remove_dir_all(&tmp);
     }
 }
